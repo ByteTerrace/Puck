@@ -6,93 +6,53 @@ using Puck.World.Protocol;
 
 namespace Puck.World;
 
-// A seat's edits to one placement run one at a time per world. An edit is based on the latest value the seat submitted
-// or queued for that placement, never on the document as this host last saw it, which trails every edit still in
-// flight (by a tick in the console's world, by a round trip in a world across a federation seam). While an edit is in
-// flight, the next is queued, and each further one supersedes the queued one, since it was composed on top of it. The
-// world's verdict settles the one in flight: applied, it becomes the confirmed value and the queued edit is submitted;
-// refused, the queued edit is dropped with it, the placement rolls back to the confirmed value, and the rollback is named.
-// So edits made faster than verdicts arrive all land, and a refused edit never reappears inside a later one.
+// A seat's edits to one placement run one at a time per world through WorldEditorEditQueue, which owns their order,
+// their base value and their settlement. An edit is validated and composed under its own principal before it enters
+// the queue, so a refused edit never does; the world's verdict, or a submission that throws, settles it through the
+// one path below.
 public sealed partial class WorldEditorCommandModule {
-    private readonly Lock m_pendingGate = new();
-    private readonly Dictionary<(string World, string Id), PendingEdit> m_pending = [];
+    private readonly WorldEditorEditQueue m_edits = new();
 
-    // One placement's edits in one world: the row before the first of them, the last value the world confirmed and the
-    // document it had delivered when it did, the edit in flight, and the edit queued behind it.
-    private sealed class PendingEdit {
-        public WorldPlacement? Confirmed { get; set; }
-        public WorldDefinition? ConfirmedUnder { get; set; }
-        public WorldPlacement? InFlight { get; set; }
-        public WorldPlacement? Origin { get; init; }
-        public WorldPlacement? Queued { get; set; }
-    }
-
-    // The row an edit to a placement is based on: the latest edit queued or in flight; else the value its world last
-    // confirmed, until the world delivers a document after that confirmation; else the delivered row.
-    private WorldPlacement? LatestOf(EditWorld world, string id) {
-        var delivered = WorldDefinitionRows.FindPlacement(id: id, placements: world.Definition.Placements);
-
-        lock (m_pendingGate) {
-            if (!m_pending.TryGetValue(key: (world.Name, id), value: out var edit)) {
-                return delivered;
-            }
-
-            if ((edit.Queued ?? edit.InFlight) is { } latest) {
-                return latest;
-            }
-
-            if (ReferenceEquals(objA: edit.ConfirmedUnder, objB: world.Definition)) {
-                return (edit.Confirmed ?? delivered);
-            }
-
-            _ = m_pending.Remove(key: (world.Name, id));
-
-            return delivered;
-        }
-    }
-    // Submits an edit, or queues it behind the one in flight, and makes the placement the seat's current one there.
+    // The row an edit to a placement is based on (WorldEditorEditQueue.Latest).
+    private WorldPlacement? LatestOf(EditWorld world, string id) => m_edits.Latest(
+        delivered: WorldDefinitionRows.FindPlacement(id: id, placements: world.Definition.Placements),
+        id: id,
+        world: world.Name
+    );
+    // Whether a new placement may take an id: none in the delivered document, and none an edit holds.
+    private bool IsTaken(EditWorld world, string id) => (
+        (WorldDefinitionRows.FindPlacement(id: id, placements: world.Definition.Placements) is not null) ||
+        m_edits.IsReserved(id: id, world: world.Name)
+    );
+    // Validates and composes an edit under the issuing principal, then submits it, or queues it behind the one in
+    // flight, and makes the placement the seat's current one there.
     private CommandResult SubmitPlacement(CommandContext context, EditWorld world, WorldPlacement placement, WorldPlacement? from, string verb, int slot) {
-        var key = (world.Name, placement.Id);
-        var identity = WorldRowCommandModule.RowIdentityOf(key: placement.Id, path: PlacementsPath);
-
-        lock (m_pendingGate) {
-            if (m_pending.TryGetValue(key: key, value: out var edit) && (edit.InFlight is not null)) {
-                edit.Queued = placement;
-                seats.SetCurrent(placement: placement.Id, slot: slot, world: world.Name);
-
-                return Echo(context: context, pending: "queued", placement: placement, slot: slot, verb: verb, world: world);
-            }
-        }
-
-        if (world.Guard?.IsClaimed(rowIdentity: identity, window: world.Window) is true) {
-            return CommandResult.Error(output: $"[{verb}: '{placement.Id}' already has an edit buffered this tick in '{world.Name}'; fence with world.wait]");
+        if (!WorldDefinitionValidator.TryValidatePlacementGeometry(placement: placement, reason: out var invalid)) {
+            return CommandResult.Error(output: $"[{verb}: '{placement.Id}' in '{world.Name}' refused: {invalid}]");
         }
 
         if (!TryCompose(context: context, mutation: out var mutation, placement: placement, refusal: out var refusal, verb: verb)) {
             return refusal;
         }
 
-        lock (m_pendingGate) {
-            if (!m_pending.TryGetValue(key: key, value: out var edit)) {
-                edit = new PendingEdit { Origin = from };
-                m_pending[key] = edit;
-            }
+        var identity = WorldRowCommandModule.RowIdentityOf(key: placement.Id, path: PlacementsPath);
 
-            edit.InFlight = placement;
+        if (
+            !m_edits.IsInFlight(id: placement.Id, world: world.Name) &&
+            (world.Guard?.IsClaimed(rowIdentity: identity, window: world.Window) is true)
+        ) {
+            return CommandResult.Error(output: $"[{verb}: '{placement.Id}' already has an edit buffered this tick in '{world.Name}'; fence with world.wait]");
         }
 
-        var submitted = world.Link.Submit(
-            echoes: echoes,
-            mutation: mutation,
-            observe: result => Settle(context: context, id: placement.Id, result: result, verb: verb, world: world),
-            verb: verb
-        );
+        if (m_edits.Offer(edit: new WorldEditorEditQueue.Edit(Mutation: mutation, Row: placement, Verb: verb, World: world.Name), origin: from) is not { } submission) {
+            seats.SetCurrent(placement: placement.Id, slot: slot, world: world.Name);
+
+            return Echo(context: context, pending: "queued", placement: placement, slot: slot, verb: verb, world: world);
+        }
+
+        var submitted = Dispatch(submission: submission, world: world);
 
         if (submitted.IsError) {
-            lock (m_pendingGate) {
-                _ = m_pending.Remove(key: key);
-            }
-
             return submitted;
         }
 
@@ -101,61 +61,48 @@ public sealed partial class WorldEditorCommandModule {
 
         return Echo(context: context, pending: "submitted", placement: placement, slot: slot, verb: verb, world: world);
     }
-    // Settles the edit in flight with its world's verdict, on whatever thread the link completes on: applied, it is
-    // confirmed and the queued edit goes next; refused, the queued edit is dropped and the placement rolls back, named.
-    private void Settle(CommandContext context, EditWorld world, string id, WorldSubmissionResult result, string verb) {
-        WorldPlacement? next = null;
-        WorldPlacement? rolledBackTo = null;
-        var refused = false;
+    // Hands a submission to its world's link. Its verdict settles it, on whatever thread the link completes on, inline
+    // or later; a link that throws settles it refused, so no submission stays in flight without a verdict.
+    private CommandResult Dispatch(EditWorld world, WorldEditorEditQueue.Submission submission) {
+        var edit = submission.Edit;
 
-        lock (m_pendingGate) {
-            if (!m_pending.TryGetValue(key: (world.Name, id), value: out var edit) || (edit.InFlight is not { } settled)) {
-                return;
-            }
+        try {
+            return world.Link.Submit(
+                echoes: echoes,
+                mutation: edit.Mutation,
+                observe: result => Conclude(applied: (result is WorldSubmissionResult.Mutation { Outcome.Applied: true }), submission: submission, world: world),
+                verb: edit.Verb
+            );
+        } catch (Exception exception) {
+            Conclude(applied: false, submission: submission, world: world);
 
-            if (result is WorldSubmissionResult.Mutation { Outcome.Applied: true }) {
-                edit.Confirmed = settled;
-                edit.ConfirmedUnder = world.Delivered();
-                edit.InFlight = next = edit.Queued;
-                edit.Queued = null;
-            } else {
-                refused = true;
-                rolledBackTo = (edit.Confirmed ?? edit.Origin);
-                edit.InFlight = null;
-                edit.Queued = null;
-                edit.ConfirmedUnder = world.Delivered();
-                edit.Confirmed = rolledBackTo;
-            }
+            return CommandResult.Error(output: $"[{edit.Verb}: '{edit.Row.Id}' in '{world.Name}' was not submitted: {exception.Message}]");
+        }
+    }
+    // Settles a submission: refused, names the rollback; applied, submits the edit queued next. A settlement for a
+    // submission no longer in flight changes nothing.
+    private void Conclude(EditWorld world, WorldEditorEditQueue.Submission submission, bool applied) {
+        var edit = submission.Edit;
+        var settlement = m_edits.Settle(applied: applied, id: edit.Row.Id, token: submission.Token, world: world.Name);
+
+        if (settlement.RolledBack) {
+            var to = ((settlement.RolledBackTo is { } row) ? Format(value: ((Vector3)row.Position)) : "nothing: it was never placed");
+            var dropped = ((settlement.Dropped > 0) ? $", dropping {settlement.Dropped} queued edit{((settlement.Dropped == 1) ? string.Empty : "s")}" : string.Empty);
+
+            echoes.Publish(result: CommandResult.Error(output: $"[{edit.Verb}: '{edit.Row.Id}' in '{world.Name}' rolled back to {to}{dropped}]"));
         }
 
-        if (refused) {
-            echoes.Publish(result: CommandResult.Error(output: $"[{verb}: '{id}' in '{world.Name}' rolled back to {((rolledBackTo is { } row) ? Format(value: ((Vector3)row.Position)) : "nothing: it was never placed")}]"));
-
+        if (settlement.Next is not { } next) {
             return;
         }
 
-        if (next is not { } queued) {
-            return;
-        }
-
-        if (!TryCompose(context: context, mutation: out var mutation, placement: queued, refusal: out var composeRefusal, verb: verb)) {
-            Settle(context: context, id: id, result: new WorldSubmissionResult.Refusal(Code: "world.editor.compose", Detail: composeRefusal.Output), verb: verb, world: world);
-
-            return;
-        }
-
-        var submitted = world.Link.Submit(
-            echoes: echoes,
-            mutation: mutation,
-            observe: late => Settle(context: context, id: id, result: late, verb: verb, world: world),
-            verb: verb
-        );
+        var submitted = Dispatch(submission: next, world: world);
 
         if (!string.IsNullOrEmpty(value: submitted.Output)) {
             echoes.Publish(result: submitted);
         }
     }
-    private bool TryCompose(CommandContext context, WorldPlacement placement, string verb, out WorldMutation mutation, out CommandResult refusal) {
+    private static bool TryCompose(CommandContext context, WorldPlacement placement, string verb, out WorldMutation mutation, out CommandResult refusal) {
         if (!WorldRowCommandModule.TryComposeRoutedSet(
             error: out var reason,
             json: JsonSerializer.Serialize(value: placement, jsonTypeInfo: WorldJsonContext.Default.WorldPlacement),

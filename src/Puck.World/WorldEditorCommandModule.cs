@@ -38,11 +38,11 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
     /// <summary>The verb that moves a seat's snapping.</summary>
     public const string SnapCommand = "world.snap";
 
-    // The world a verb edits: its instance name as the seat's route names it, its document as this host sees it and the
-    // read of whatever document it delivers next, the link an edit is submitted through, the input window an edit
-    // targets, and the guard its console's other row-editing doors claim rows in, which only the console's own world has:
-    // a routed world's rows are edited here by this module alone, one edit in flight per placement.
-    private readonly record struct EditWorld(string Name, WorldDefinition Definition, Func<WorldDefinition> Delivered, IServerLink Link, ulong Window, WorldRowStepWindowGuard? Guard);
+    // The world a verb edits: its instance name as the seat's route names it, its document as this host sees it, the
+    // link an edit is submitted through, the input window an edit targets, and the guard its console's other row-editing
+    // doors claim rows in, which only the console's own world has: a routed world's rows are edited here by this module
+    // alone, one edit in flight per placement.
+    private readonly record struct EditWorld(string Name, WorldDefinition Definition, IServerLink Link, ulong Window, WorldRowStepWindowGuard? Guard);
 
     private static string Format(float value) => value.ToString(
         format: "0.####",
@@ -107,7 +107,6 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
 
             world = new EditWorld(
                 Definition: endpoint.Definition,
-                Delivered: () => endpoint.Definition,
                 Guard: null,
                 Link: endpoint.Submissions,
                 Name: endpoint.Identity,
@@ -119,7 +118,6 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
 
         world = new EditWorld(
             Definition: instance.Server.Definition,
-            Delivered: () => instance.Server.Definition,
             Guard: stepGuard,
             Link: link,
             Name: instance.Name,

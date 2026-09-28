@@ -471,13 +471,23 @@ drawn in that world's frame (`GridOverlayState.WorldOrigin` and `WorldFrame`), s
 the lines, the plane height it follows and the reference's lattice lie where its
 edits snap.
 
-A seat's edits to one placement run one at a time. Each is based on the value
-the seat last submitted, not on the document as it last arrived, which trails
-every edit still in flight. Edits made faster than the world answers queue, the
-newest superseding the rest, and go when the one in flight is answered, so
-holding a nudge key moves the placement once per press. When the world refuses
-an edit, the one queued on it is dropped and the placement rolls back to the
-value the world last confirmed, with a `rolled back to` line naming it.
+Edits to one placement run one at a time (`WorldEditorEditQueue`). Each is based
+on the latest value submitted or queued for it, not on the document as it last
+arrived, which trails every edit still in flight. An edit is checked (finite
+position and yaw, positive scale) and composed under the principal that issued
+it before it queues, so a refused edit never enters the queue and a queued edit
+goes out as its own issuer's. Edits made faster than the world answers queue
+behind the one in flight: a newer edit from the same principal supersedes the
+last queued one, and another principal's queues after it. Holding a nudge key
+therefore moves the placement once per press. When the world refuses an edit,
+or its link fails to take it, every edit queued on it is dropped and the
+placement rolls back to the value the world last confirmed, with a
+`rolled back to` line naming it. A new placement's id is never one an edit in
+flight or queued holds.
+
+The world stamps no version on the documents it delivers, so a confirmed value
+is held until a delivered document shows it. A document that arrives late, from
+before the edit applied, never moves the placement back.
 
 The grid rides each view's pass block (`SdfViewSnapshot.Grid`), so one seat can
 build on a grid while another plays. [The editor plan](../../docs/plans/editor.md)

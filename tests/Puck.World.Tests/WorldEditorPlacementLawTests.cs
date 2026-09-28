@@ -27,12 +27,12 @@ public sealed class WorldEditorPlacementLawTests {
         }
     }
 
-    private const float Pitch = 0.5f;
+    internal const float Pitch = 0.5f;
 
     private static WorldPrototype Crate { get; } = CreationFixtures.UnitSphere(id: "crate");
 
     // One crate, standing a tenth off the half-unit lattice on x.
-    private static HostRow Build() {
+    internal static HostRow Build() {
         var document = Fixtures.BuildDocument();
 
         return HostRow.Build(
@@ -51,7 +51,7 @@ public sealed class WorldEditorPlacementLawTests {
             name: "boot"
         );
     }
-    private static CommandRegistry BuildRegistry(HostRow row, WorldEditorSeats seats, WorldSeatAuthorityRouter? routes = null, WorldDeferredVerbEchoes? echoes = null) => new(modules: [
+    internal static CommandRegistry BuildRegistry(HostRow row, WorldEditorSeats seats, WorldSeatAuthorityRouter? routes = null, WorldDeferredVerbEchoes? echoes = null) => new(modules: [
         new WorldEditorCommandModule(
             authority: new FakeConsoleAuthority(instance: row.Instance),
             echoes: (echoes ?? new WorldDeferredVerbEchoes()),
@@ -61,6 +61,7 @@ public sealed class WorldEditorPlacementLawTests {
             stepGuard: new WorldRowStepWindowGuard()
         ),
     ]);
+
     private static WorldPlacement Placement(HostRow row, string id) => WorldDefinitionRows.FindPlacement(
         id: id,
         placements: row.Server.Definition.Placements
@@ -128,7 +129,13 @@ public sealed class WorldEditorPlacementLawTests {
     }
 
     // The world a seat crosses into: its own crate1, somewhere else.
-    private static readonly Vector3 AwayCrate = new(x: -3f, y: 0f, z: 2f);
+    internal static readonly Vector3 AwayCrate = new(x: -3f, y: 0f, z: 2f);
+
+    // The document of the world a seat crosses into: the boot world's, with its crate1 at AwayCrate.
+    internal static WorldDefinition AwayDocument(HostRow row) => (row.Server.Definition with {
+        DocumentId = "away",
+        PlacementRowsRaw = [(Placement(id: "crate1", row: row) with { Position = AwayCrate })],
+    });
 
     [Fact]
     public void AfterACrossingANudgeEditsTheWorldTheSeatIsInAndNeverTheWorldItLeft() {
@@ -136,10 +143,7 @@ public sealed class WorldEditorPlacementLawTests {
         var seats = new WorldEditorSeats();
         var routes = new WorldSeatAuthorityRouter();
         var registry = BuildRegistry(routes: routes, row: row, seats: seats);
-        var awayDocument = (row.Server.Definition with {
-            DocumentId = "away",
-            PlacementRowsRaw = [(Placement(id: "crate1", row: row) with { Position = AwayCrate })],
-        });
+        var awayDocument = AwayDocument(row: row);
         var awayLink = new RecordingLink(definition: awayDocument);
         using var away = EditorEndpoints.Of(definition: awayDocument, identity: "away", link: awayLink, pose: AwayCrate);
 
@@ -185,10 +189,7 @@ public sealed class WorldEditorPlacementLawTests {
         var lines = new List<string>();
         var routes = new WorldSeatAuthorityRouter();
         var registry = BuildRegistry(echoes: echoes, routes: routes, row: row, seats: new WorldEditorSeats());
-        var awayDocument = (row.Server.Definition with {
-            DocumentId = "away",
-            PlacementRowsRaw = [(Placement(id: "crate1", row: row) with { Position = AwayCrate })],
-        });
+        var awayDocument = AwayDocument(row: row);
         var awayLink = new RecordingLink(definition: awayDocument);
         using var away = EditorEndpoints.Of(definition: awayDocument, identity: "away", link: awayLink, pose: AwayCrate);
         var step = new Vector3(x: Pitch, y: 0f, z: 0f);
@@ -219,7 +220,7 @@ public sealed class WorldEditorPlacementLawTests {
         awayLink.Complete(index: 2, result: RecordingLink.Refused);
         Assert.Equal(actual: awayLink.Submitted.Count, expected: 3);
         Assert.Contains(collection: lines, expected: "[world.nudge: world.grant.denied the seat may not mutate placements here]");
-        Assert.Contains(collection: lines, expected: "[world.nudge: 'crate1' in 'away' rolled back to -1.5,0,2]");
+        Assert.Contains(collection: lines, expected: "[world.nudge: 'crate1' in 'away' rolled back to -1.5,0,2, dropping 1 queued edit]");
 
         // The next edit starts from the confirmed value: the refused step never reappears.
         Submit(line: "world.nudge crate1 x 1", registry: registry);
