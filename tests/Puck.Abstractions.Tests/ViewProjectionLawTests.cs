@@ -175,7 +175,27 @@ public sealed class ViewProjectionLawTests {
         Assert.Equal(expected: first.WorldToClip, actual: moved.PreviousWorldToClip);
         Assert.Equal(expected: first.WorldToView, actual: moved.PreviousWorldToView);
         Assert.Equal(expected: second.WorldToClip, actual: moved.WorldToClip);
-        Assert.Equal(expected: Vector2.Zero, actual: ViewProjection.Jitter);
+        Assert.Equal(expected: Vector2.Zero, actual: first.Jitter);
+    }
+    [Fact]
+    public void JitteredProjectionMatchesTheShiftedMarchRay() {
+        foreach (var camera in Cameras) {
+            foreach (var offset in FrustumOffsets) {
+                foreach (var jitter in ((Vector2[])[new(x: 0.00025f, y: -0.0004f), new(x: -0.001f, y: 0.0008f)])) {
+                    var view = ViewProjection.Create(camera: camera with { FrustumOffset = offset }, near: Near, jitter: jitter);
+                    var ndc = new Vector2(x: 0.37f, y: -0.64f);
+                    var direction = MarchDirection(camera: camera, ndc: (ndc + jitter), offset: offset);
+                    var world = (camera.Position + (direction * 17f));
+                    var clip = view.ToClip(world: world);
+
+                    Assert.Equal(actual: (clip.X / clip.W), expected: ndc.X, tolerance: 1e-5f);
+                    Assert.Equal(actual: (clip.Y / clip.W), expected: ndc.Y, tolerance: 1e-5f);
+                    Assert.Equal(expected: 17f, actual: view.RayParameter(depth: (clip.Z / clip.W), ndc: ndc), tolerance: 1e-4f);
+                    Near3(expected: world, actual: view.Unproject(depth: (clip.Z / clip.W), ndc: ndc), tolerance: 1e-4f);
+                    Assert.Equal(expected: jitter, actual: view.Jitter);
+                }
+            }
+        }
     }
     [Fact]
     public void ANonPositiveOrNonFiniteNearIsRefused() {

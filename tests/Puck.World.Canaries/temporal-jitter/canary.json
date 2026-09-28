@@ -1,0 +1,103 @@
+{
+  "id": "temporal-jitter",
+  "title": "Frozen convergence captures advance a centered eight-sample Halton sequence and repeat identical geometry pixels after one period",
+  "binding": "The still counters geometry is captured after one, two, nine and ten frozen samples at separate held ticks. The first and ninth are identical pixel-center rays; the second and tenth are identical shifted rays and differ from the center along geometry edges. The source presentation is frozen for every capture, including its camera and animation. The discriminating leg takes nine samples for the final capture, so the second-sample agreement fails while the center repeat still holds. Every leg reads counted GPU work after the captures.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/temporal-jitter/fixture.world.json",
+    "script": "capture.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "framesAgree",
+        "name": "first-sample-is-pixel-center-after-a-full-period",
+        "before": "state/captures/center~60.png",
+        "after": "state/captures/wrap~70.png",
+        "agree": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "offset-moves-the-geometry-edges",
+        "before": "state/captures/center~60.png",
+        "after": "state/captures/offset~65.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "the-second-sample-repeats-after-eight",
+        "before": "state/captures/offset~65.png",
+        "after": "state/captures/offset-wrap~75.png",
+        "agree": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/temporal-jitter/discriminating.world.json",
+    "script": "capture.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "framesAgree",
+        "name": "first-sample-is-pixel-center-after-a-full-period",
+        "before": "state/captures/center~60.png",
+        "after": "state/captures/wrap~70.png",
+        "agree": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "offset-moves-the-geometry-edges",
+        "before": "state/captures/center~60.png",
+        "after": "state/captures/offset~65.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "the-second-sample-repeats-after-eight",
+        "before": "state/captures/offset~65.png",
+        "after": "state/captures/offset-wrap~75.png",
+        "agree": false
+      }
+    ]
+  }
+}

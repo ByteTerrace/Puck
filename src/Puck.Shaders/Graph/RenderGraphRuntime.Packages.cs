@@ -114,6 +114,7 @@ public sealed partial class RenderGraphRuntime {
         for (var index = 0; (index < m_nodes.Length); index++) {
             if (
                 (index != captured) &&
+                !IsConverging(index: index) &&
                 (m_sources[index] is null) &&
                 (m_inputs[index].Length == 0) &&
                 (m_graphs[index] is { } graph) &&

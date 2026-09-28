@@ -4269,6 +4269,10 @@ export type WorldCaptureRow = {
    * The index of the screen whose source the station captures, before any screen shows it: the source instance the screen reads, which a machine output, a producer or a probe source is. Mutually exclusive with Instance; null (the default) captures by instance.
    */
   screen?: number | null;
+  /**
+   * The number of frozen presentation frames to compose at the armed tick before capturing; zero captures normally. A positive count resets each contributing view's temporal history and advances only its sample index.
+   */
+  converge?: number;
 };
 
 export type WorldCapturesSection = {

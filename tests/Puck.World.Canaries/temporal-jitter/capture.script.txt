@@ -1,0 +1,3 @@
+world.wait ready 45
+world.wait 100
+world.counters gpu
