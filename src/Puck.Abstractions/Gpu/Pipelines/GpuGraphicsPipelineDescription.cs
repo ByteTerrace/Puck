@@ -35,17 +35,29 @@ public sealed record GpuGraphicsPipelineDescription(
 
         return Layout;
     }
-    /// <summary>Refuses a description whose depth test disagrees with the render pass it is created for: a depth
-    /// attachment needs a depth test, and a depth test needs a depth attachment.</summary>
+    /// <summary>Refuses a description that disagrees with the render pass it is created for: a depth attachment needs a
+    /// depth test, a depth test needs a depth attachment, and a layout whose shaders may write through a binding
+    /// (<see cref="GpuPipelineLayoutDescription.ShaderWrites"/>) needs a pass that allows shader writes
+    /// (<see cref="GpuRenderPassDescription.ShaderWrites"/>).</summary>
     /// <param name="renderPass">The render pass the pipeline draws in.</param>
     /// <exception cref="ArgumentException">The render pass has a depth attachment and the description no depth test, or
-    /// the reverse.</exception>
+    /// the reverse, or the layout lets the shaders write and the render pass does not allow it.</exception>
     public void ValidateAgainst(IGpuRenderPass renderPass) {
         ArgumentNullException.ThrowIfNull(renderPass);
 
         if ((renderPass.Description.Depth is null) != (DepthCompare is null)) {
             throw new ArgumentException(
                 message: $"Graphics pipeline '{Name}' declares a depth test exactly when its render pass has a depth attachment.",
+                paramName: nameof(renderPass)
+            );
+        }
+
+        if (
+            (Layout?.ShaderWrites == true) &&
+            !renderPass.Description.ShaderWrites
+        ) {
+            throw new ArgumentException(
+                message: $"Graphics pipeline '{Name}' binds a read-write buffer or storage image, so its render pass must allow shader writes ({nameof(GpuRenderPassDescription)}.{nameof(GpuRenderPassDescription.ShaderWrites)}).",
                 paramName: nameof(renderPass)
             );
         }

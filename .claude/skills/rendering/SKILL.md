@@ -880,7 +880,14 @@ These are one-line cautions; the owning pages hold the derivations.
   `sdfWorkSteps` beside the evaluation, never inside the interpreter; a texel
   counts only where one is written (`sdfVisibilityStoreWord`, the output writes),
   and `SdfWorkCountingLawTests` hold both. Vulkan devices are created with
-  `fragmentStoresAndAtomics` for the fragment stages' counts. `GpuKernelCountersLawTests`
+  `fragmentStoresAndAtomics` for the fragment stages' counts. A graphics
+  pipeline whose layout binds a read-write buffer or storage image
+  (`GpuPipelineLayoutDescription.ShaderWrites`) draws in a render pass that
+  allows shader writes: `GpuPassPipelineKey.OfGraphics` derives
+  `GpuRenderPassDescription.ShaderWrites` from the layout, Direct3D 12 then
+  opens the pass with `D3D12_RENDER_PASS_FLAG_ALLOW_UAV_WRITES`
+  (`DirectXGpuRenderPass.Flags`), and `ValidateAgainst` refuses a writing
+  pipeline against a pass that does not allow it. `GpuKernelCountersLawTests`
   read a modeled slot back through the ledger over `UploadModelGpu` and hold
   the three barriers, `RenderGraphFragmentLawTests` hold the clear and copy
   around the passes and a skipping pass counted skipped, and the
