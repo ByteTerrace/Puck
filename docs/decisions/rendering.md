@@ -27,7 +27,11 @@ claimed as simulation-state determinism.
 
 **Performance is judged by deterministic counts.** Code, disassembly, and
 counts of the work a pass records decide performance questions; wall-clock and
-GPU timing are deferred with no date. Work counts extend one shared read
+GPU timing are deferred with no date as evidence. The one planned use of GPU
+timing is the editor's live per-pass readout
+([E9](../plans/editor.md#e9--cost-per-object-and-gpu-pass-timing)), shown to the
+person at the screen and never read by a counter report, a ceiling, a canary
+or a law. Work counts extend one shared read
 contract: a completed sample carries identity, labels, pass states, and counts
 together, there is no parallel pipeline-only counting interface, and no label
 is borrowed from the currently installed graph.
