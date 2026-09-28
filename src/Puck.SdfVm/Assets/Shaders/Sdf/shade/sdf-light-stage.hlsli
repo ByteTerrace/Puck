@@ -35,6 +35,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
         // screen is its own light source, like a real display), but shaped by the CRT glass face before the shared
         // distance fog. The screen also lights the room: see the screen lights below.
         sampledScreen = sampleScreenSurface(material, surfacePoint, p.rayDirection, (p.pixelFootprint * s.t), color);
+#ifdef SDF_TEMPORAL_VIEWS
+        if (sampledScreen) sdfReactivity = 1.0;
+#endif
     }
 #endif
 
@@ -125,6 +128,13 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
                 calculateNormalCurvature(surfacePoint, p.instanceMaskBase, s.terminalRadius, curvature, unusedMagnitude);
             }
             applyWeathering(layerPoint, layerNormal, normal.y, curvature, p.pixelFootprint * s.t, hitLanes, shadeMaterial);
+#ifdef SDF_TEMPORAL_VIEWS
+            // Value lanes can change color or emission without rigid motion. Static material palettes remain eligible;
+            // replacing their scene program starts a new history epoch on the host.
+            if (hitFrameSlot >= 0 && any(asuint(hitLanes) != asuint(sdfPreviousDynamicTransforms[3u * (uint)hitFrameSlot + 2u]))) {
+                sdfReactivity = 1.0;
+            }
+#endif
 
             // The shading-normal soften (SdfMaterial.Soften) widens the lit normal toward a wide-stencil field gradient;
             // occlusion and the normal debug view keep the geometric normal.

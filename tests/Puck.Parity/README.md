@@ -18,6 +18,19 @@ The world boots with soft shadows at `High` and ambient occlusion on
 (`render.shadows`, `render.ambientOcclusion`), so every SDF station passes
 through the shadow and ambient stages under the cross-backend pixel gate.
 
+Ordinary stations explicitly start with temporal reconstruction and sharpening
+turned off. The parity runner stages one ordinary `schedule` row at the absolute
+tick immediately after their last capture and arms it through `--schedule-dir`.
+The existing seat1 render grant admits `world.temporal on` for the additive `temporal-sky` and `temporal-materials` rows. Each states
+`converge: 8`: the armed tick holds one presentation snapshot while all eight
+jitter samples accumulate. The runner derives its switch boundary from the
+capture rows and refuses overlapping intervals, a missing gap, or an already
+authored schedule. It requires the schedule's exact on echo and refuses any
+rejected edit; ingress acceptance alone cannot prove a lever applied. This is
+a parity-runner convention; ordinary World captures never toggle render levers.
+The temporal stations retain their scene's existing per-tile pixel envelope and
+content census floor.
+
 The SDF stations' `captures` rows name the `world` instance, the SDF world as the
 station camera sees it. The layout also shows two instances of the binding graph
 (`binding.graph.json`, each a `views.graphs` row), `binding` and `bound`, in

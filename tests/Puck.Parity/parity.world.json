@@ -357,6 +357,42 @@
           1195,
           1215
         ]
+      },
+      {
+        "palette": [
+          {
+            "color": "#000000",
+            "material": 0
+          },
+          {
+            "color": "#FFFFFF",
+            "material": 1
+          }
+        ],
+        "instance": "world",
+        "station": "temporal-sky",
+        "ticks": [
+          1280
+        ],
+        "converge": 8
+      },
+      {
+        "palette": [
+          {
+            "color": "#2E333D",
+            "material": 0
+          },
+          {
+            "color": "#EBC74C",
+            "material": 1
+          }
+        ],
+        "instance": "world",
+        "station": "temporal-materials",
+        "ticks": [
+          1380
+        ],
+        "converge": 8
       }
     ]
   },
@@ -1089,7 +1125,9 @@
           }
         }
       ]
-    }
+    },
+    "temporal": false,
+    "upscaleSharpness": 0
   },
   "rules": [
     {
@@ -1243,6 +1281,44 @@
           "value": 0.75
         }
       ]
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "station",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": {
+          "channel": "tick"
+        },
+        "value": 1260
+      },
+      "mode": "Edge",
+      "name": "to-temporal-sky"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "station",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": {
+          "channel": "tick"
+        },
+        "value": 1360
+      },
+      "mode": "Edge",
+      "name": "to-temporal-materials"
     }
   ],
   "schema": "puck.world.definition.v1",

@@ -355,6 +355,7 @@ internal sealed partial class WorldScreenBinder {
                     Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
                 ) {
                     Quality = WorldSessionSceneEmitter.ReducedQuality,
+                    Temporal = scene.Endpoint.Mirror.Definition.Render.Temporal,
                 }
                 : null);
         }

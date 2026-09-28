@@ -34,6 +34,9 @@ public sealed class DirectXGpuFormatsLawTests {
             expected: expected,
             actual: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format)
         );
+    [Fact]
+    public void ScalarFloatImagesUseR32Float() =>
+        Assert.Equal(expected: DXGI_FORMAT.DXGI_FORMAT_R32_FLOAT, actual: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: GpuPixelFormat.R32Float));
     [InlineData(DisplayColorSpace.Srgb, DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709)]
     [InlineData(DisplayColorSpace.Hdr10, DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020)]
     [InlineData(DisplayColorSpace.ScRgb, DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709)]

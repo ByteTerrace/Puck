@@ -291,7 +291,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
         );
         Assert.Equal(
             actual: waitTick,
-            expected: 1255UL
+            expected: 1410UL
         );
     }
     /// <summary>The <c>bound</c> station's grain seed is bound to a state row the world's rules move from 0 to 13 at

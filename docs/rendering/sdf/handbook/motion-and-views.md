@@ -124,8 +124,8 @@ greater depth. The pass block carries the camera's own near plane
 from that plane but never nearer than `SdfFrameBlock.MinimumNear`
 (`SdfFrameBlock.NearOf`, `SDF_MINIMUM_NEAR` in the kernels): every surface
 march starts where its ray crosses it, and the mesh pass clips there. Normalized device coordinates put +Y
-up and a view's UV origin is its top-left corner. Ordinary rendering samples
-the pixel center. A capture with a positive `converge` count samples a repeating
+up and a view's UV origin is its top-left corner. Rendering with temporal reconstruction off samples
+the pixel center. Temporal reconstruction, or a capture with a positive `converge` count, samples a repeating
 eight-position Halton (2, 3) sequence whose first position is the center.
 `ViewProjection.Jitter` carries the offset in normalized device coordinates;
 the SDF pass block carries it in render pixels, with positive Y down.
@@ -142,10 +142,11 @@ animation poses, camera followers and frame values remain fixed, and the
 presentation interval is zero. Only the view's sample index advances.
 A capture can request up to 256 samples; zero retains ordinary capture behavior.
 The `temporal-jitter` canary checks the center and offset samples repeating
-after eight renders on each backend. Color reconstruction is not enabled yet.
+after eight renders on each backend. [Temporal reconstruction](frame-rendering.md#temporal-reconstruction)
+uses the same sequence and capture hold.
 
 Each instance keeps its own history epoch. A camera cut, resolved-view change
-(including a follow in place), output extent or render ceiling change, debug
+(including a follow in place), scene-program replacement, output extent or render ceiling change, debug
 mode change, sampling switch, or discontinuity in the residency's consumed
 frames resets the sample count. Resetting changes CPU state without clearing
 or reallocating GPU storage.

@@ -73,6 +73,7 @@ public static class VulkanGpuFormats {
         GpuPixelFormat.B8G8R8A8Unorm => VulkanFormat.B8G8R8A8Unorm,
         GpuPixelFormat.R16G16B16A16Float => VulkanFormat.R16G16B16A16Sfloat,
         GpuPixelFormat.R32G32B32A32Float => VulkanFormat.R32G32B32A32Sfloat,
+        GpuPixelFormat.R32Float => VulkanFormat.R32Sfloat,
         GpuPixelFormat.D32Float => VulkanFormat.D32Sfloat,
         GpuPixelFormat.Bc4Unorm => VulkanFormat.Bc4UnormBlock,
         GpuPixelFormat.Bc5Unorm => VulkanFormat.Bc5UnormBlock,

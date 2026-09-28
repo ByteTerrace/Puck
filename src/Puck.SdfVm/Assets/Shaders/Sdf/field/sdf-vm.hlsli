@@ -9,7 +9,11 @@
 #include "../isa/sdf-isa.hlsli"
 #include "sdf-hash.hlsli"
 // Every resource and world value the world kernels read, generated from SdfWorldInterfaces.World.
+#ifdef SDF_TEMPORAL_VIEWS
+#include "../isa/sdf-temporal-views.interface.hlsli"
+#else
 #include "../isa/sdf-world.interface.hlsli"
+#endif
 
 // The field modules, in the order the interpreter declares them: each reads only what the modules before it declare.
 #include "sdf-program.hlsli"

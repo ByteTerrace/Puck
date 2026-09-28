@@ -250,6 +250,15 @@ slot or mesh triangle to recover the previous pixel and ray distance.
 are 0.5 plus the displacement in pixels divided by 32, blue marks valid history,
 and invalid history is black.
 
+Temporal reconstruction is opt-in per view (`SdfViewSnapshot.Temporal`). It
+selects the temporal fragment, whose output color and uint2 surface use ordinary
+graph history resources. A transient render-grid R32Float image carries
+reactivity separately from premultiplied coverage. The final resolve uses
+previous camera/shape/mesh transforms and rejects identity or depth mismatches;
+a reset's first sample reads no history. Each instance renders eight unchanged
+samples before cadence stands. See [temporal reconstruction](../../docs/rendering/sdf/handbook/frame-rendering.md#temporal-reconstruction)
+for settings scope, reset behavior, and costs.
+
 ## Pipelines build off the frame thread
 
 Creating a compute pipeline is where the driver translates a kernel to native
@@ -264,8 +273,10 @@ engine records through the services of the device context it renders on
 (`IGpuDeviceContext.Services`). The first lease on an entry starts its build on
 the thread pool through `Puck.Hosting.BackgroundBuild`, and every other holder of
 the same kernel on the device shares it, so a world with many camera views
-builds each kernel once for all of them, and a view without the world's brick
-pool leases every kernel but the baker. The catalog also reads each backend's
+builds each requested kernel once for all of them. Native views lease the native
+set, excluding the baker when they have no brick pool. Spatial resolve and
+temporal shading/resolve slots are acquired only by the matching fragment; all
+remain part of the immutable kernel set and its reload transaction. The catalog also reads each backend's
 deployed kernels once, and the cache counts the pipelines and shader modules it
 creates under its own `gpu.pass-pipelines` source rather than in any residency's
 or node's ledger.

@@ -1,5 +1,6 @@
 using Puck.Hosting;
 using Puck.Shaders;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -87,10 +88,16 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
         try {
             view.Residency.WaitReady(cancellationToken: cancellationToken);
+            if (context.Parameters.Interface.Members.Any(static member => member.Name == SdfWorldPackage.Reactivity && member.Kind == ShaderInterfaceMemberKind.StorageImage)) {
+                using var temporalReflector = new ShaderBytecodeReflector(toolchain: new ShaderToolchain());
+                foreach (var kernel in new[] { SdfKernel.TemporalViews, SdfKernel.TemporalViewsCore, SdfKernel.TemporalViewsFolds }) {
+                    view.Residency.Tables!.Pipelines.BuildOptional(kernel: kernel, cache: context.Pipelines, device: context.Device, reflector: temporalReflector, cancellationToken: cancellationToken);
+                }
+            }
             if (context.Part == SdfWorldPackage.Resolve) {
                 using var reflector = new ShaderBytecodeReflector(toolchain: new ShaderToolchain());
 
-                view.Residency.Tables!.Pipelines.BuildResolve(cache: context.Pipelines, device: context.Device, reflector: reflector, cancellationToken: cancellationToken);
+                view.Residency.Tables!.Pipelines.BuildOptional(kernel: (context.Parameters.Interface.Members.Any(static member => member.Name == SdfWorldPackage.HistoryColor) ? SdfKernel.TemporalResolve : SdfKernel.Resolve), cache: context.Pipelines, device: context.Device, reflector: reflector, cancellationToken: cancellationToken);
             }
         } catch {
             view.Residency.Release();
@@ -141,7 +148,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     public bool IsUnchanged(string instance, in FrameContext context) {
         var entry = Refresh(instance: instance);
 
-        return (
+        var unchanged = (
             !entry.Picker.Pending &&
             (entry.View is { } view) &&
             view.Residency.IsUnchanged(
@@ -150,8 +157,12 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             ) &&
             (entry.RenderedBindings == entry.Bindings) &&
             (entry.RenderedScale == entry.CurrentScale) &&
-            (entry.RenderedSharpness == entry.CurrentSharpness)
+            (entry.RenderedSharpness == entry.CurrentSharpness) &&
+            (entry.RenderedCut == entry.CurrentCut) &&
+            (entry.RenderedTemporal == entry.TemporalEnabled)
         );
+        if (!unchanged) { entry.Temporal.Changed(); }
+        return unchanged && (!entry.TemporalEnabled || entry.Temporal.Converged);
     }
     /// <inheritdoc/>
     public void BeginConvergence(string instance, Puck.Abstractions.Presentation.FrameCaptureRequest request) {
@@ -173,6 +184,12 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                 entry.Temporal.Reset();
             }
             entry.TemporalFrame = m_frame;
+            var program = view.Residency.Frame!.Program;
+
+            if (!ReferenceEquals(objA: entry.TemporalProgram, objB: program)) {
+                entry.Temporal.Reset();
+                entry.TemporalProgram = program;
+            }
             var views = view.Residency.Frame!.Views;
             var snapshot = views[Math.Min(val1: view.View, val2: (views.Count - 1))];
 
@@ -184,7 +201,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                     Width: width,
                     Height: height,
                     Ceiling: snapshot.RenderScale,
-                    Enabled: (entry.Convergence is { Completion.IsCompleted: false }),
+                    Enabled: (snapshot.Temporal || (entry.Convergence is { Completion.IsCompleted: false })),
                     Debug: debug
                 ),
                 frame: view.Residency.CapturedFrame,
@@ -207,6 +224,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             entry.RenderedBindings = entry.Bindings;
             entry.RenderedScale = entry.CurrentScale;
             entry.RenderedSharpness = entry.CurrentSharpness;
+            entry.RenderedCut = entry.CurrentCut;
+            entry.RenderedTemporal = entry.TemporalEnabled;
             entry.Temporal.Rendered();
         }
     }
@@ -444,6 +463,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
         public long TemporalFrame { get; set; } = -1;
         public SdfTemporalHistory Temporal { get; } = new();
+        public SdfProgram? TemporalProgram { get; set; }
 
         public Puck.Abstractions.Presentation.FrameCaptureRequest? Convergence { get; set; }
         // The residency last resolved.

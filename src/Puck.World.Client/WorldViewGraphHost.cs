@@ -256,9 +256,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private readonly List<RenderGraphFootprint> m_footprints = [];
     private readonly Dictionary<string, RenderGraphPlacement> m_placements = new(comparer: StringComparer.Ordinal);
 
-    // Whether this frame's lone whole-display view is shown only so its place pass applies the tonemap: the display shows
+    // Whether this frame's lone whole-display view is shown only so its place pass applies tonemapping or sharpness: the display shows
     // the world itself, as it does when the root stands for the view, so no pane is published for it.
-    private bool m_loneTonemapped;
+    private bool m_loneFiltered;
     private Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldTonemap, WorldRootGraph>? m_compose;
     private bool m_disposed;
     // The source and view instances the running set was composed with, the footprints its screen-rendering instance shows
@@ -563,7 +563,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// nothing the root shows waits on it.</summary>
     /// <param name="instance">The <c>views.graphs</c> instance the slot names.</param>
     /// <param name="region">The slot's normalized rect.</param>
-    /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
+    /// <param name="sharpness">The reconstruction blend from 0 (bilinear) to 1 (clamped Catmull-Rom); at equal extent,
+    /// 0 copies exactly and positive values apply contrast-adaptive sharpening.</param>
     /// <returns><see langword="true"/> when the root places the instance this frame.</returns>
     public bool Place(string instance, NormalizedRect region, float sharpness) {
         if (
@@ -605,7 +606,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// graph that places none) is ignored.</summary>
     /// <param name="view">The 0-based view.</param>
     /// <param name="region">The view's normalized rect.</param>
-    /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
+    /// <param name="sharpness">The reconstruction blend from 0 (bilinear) to 1 (clamped Catmull-Rom); at equal extent,
+    /// 0 copies exactly and positive values apply contrast-adaptive sharpening.</param>
     /// <param name="shown">Whether the root draws the view's output into its rect this frame.</param>
     /// <param name="uncovered">Whether part of the display lies outside everything the root shows this frame, so the
     /// first view's place pass, when the view is not shown, writes the letterbox color everywhere rather than standing
@@ -639,15 +641,16 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         return true;
     }
     /// <summary>Places every view a composed frame of the world rendered (<see cref="PlaceView"/>), each in its output rect, and records each view's camera for its producer (<see cref="SetCamera"/>). A view is shown once the world has rendered it, except a lone view covering the whole display at
-    /// any render scale with no tonemap, which is never shown, so the root stands for the world itself; a tonemapped lone view
-    /// is shown, since its place pass applies the tonemap. Before the world has composed a frame
+    /// any render scale with no tonemap and zero sharpness, which is never shown, so the root stands for the world itself; a
+    /// tonemapped or sharpened lone view is shown, since its place pass applies that filter. Before the world has composed a frame
     /// there are no views, but the world must still be scheduled, since it composes inside its own frame, so the first
     /// view is placed, not shown, over the whole display at native scale, which it renders at until its first frame names
     /// its views. The display counts as covered only when one rect covers it whole: a lone view standing for the world, a shown
     /// view over the whole display, or a pane that covers it (<paramref name="panesCover"/>); otherwise pixels no rect
     /// covers show the letterbox color, even while the first view is not shown.</summary>
     /// <param name="views">The views of the world's last composed frame, in view order.</param>
-    /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
+    /// <param name="sharpness">The reconstruction blend from 0 (bilinear) to 1 (clamped Catmull-Rom); at equal extent,
+    /// 0 copies exactly and positive values apply contrast-adaptive sharpening.</param>
     /// <param name="rendered">Whether the world has rendered a view into its output, by 0-based view, or
     /// <see langword="null"/> when no view has an output yet.</param>
     /// <param name="panesCover">Whether a pane the root shows this frame covers the whole display.</param>
@@ -657,7 +660,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         var whole = new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f);
 
-        m_loneTonemapped = false;
+        m_loneFiltered = false;
         if (views.Count == 0) {
             _ = PlaceView(
                 region: whole,
@@ -675,11 +678,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             (views[0].Region == whole)
         );
         // The lone view stands for the world itself, unshown, only when its place pass has nothing to do; a tonemap is
-        // applied by the view's place pass, so a tonemapped lone view is shown like any other.
-        var standsFor = (lone && (m_synthesized?.Tonemap != WorldTonemap.Filmic));
+        // or positive sharpness is applied by the view's place pass, so either makes a lone view shown like any other.
+        var standsFor = (lone && (sharpness == 0f) && (m_synthesized?.Tonemap != WorldTonemap.Filmic));
         var covered = (panesCover || standsFor);
 
-        m_loneTonemapped = (lone && !standsFor);
+        m_loneFiltered = (lone && !standsFor);
 
         for (var view = 0; (view < views.Count); view++) {
             covered |= (

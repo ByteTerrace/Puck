@@ -66,7 +66,7 @@ public static class WorldApplicationDefaults {
     public const string WindowTitle = "Puck: World";
 }
 /// <summary>One graphics-quality preset — the bundle of render levers the <c>world.quality</c> verb writes for a named
-/// tier (the individual <c>world.shadows</c>/<c>.ao</c>/<c>.render-scale</c> verbs still override afterward).</summary>
+/// tier (the individual <c>world.shadows</c>/<c>.ao</c>/<c>.render-scale</c>/<c>.temporal</c> verbs still override afterward).</summary>
 /// <param name="Shadows">The soft-shadow tier the preset selects.</param>
 /// <param name="AmbientOcclusion">Whether the preset enables ambient occlusion.</param>
 /// <param name="RenderScale">The render-scale tier the preset selects.</param>
@@ -74,7 +74,10 @@ public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
     bool AmbientOcclusion,
     WorldRenderScaleTier RenderScale
-);
+) {
+    /// <summary>Whether the preset enables temporal reconstruction. Defaults off.</summary>
+    public bool Temporal { get; init; }
+}
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
 /// scale, the crowd radius), the graphics-menu defaults a server-pulled world would carry.</summary>
@@ -82,7 +85,8 @@ public readonly record struct WorldQualityPreset(
 /// <param name="ShadowCrowdRadius">The boot soft-shadow crowd radius (world units).</param>
 /// <param name="AmbientOcclusion">Whether ambient occlusion boots on.</param>
 /// <param name="RenderScale">The boot render-scale tier.</param>
-/// <param name="UpscaleSharpness">The boot reduced-resolution reconstruction blend (0 bilinear .. 1 Catmull-Rom).</param>
+/// <param name="UpscaleSharpness">The boot reconstruction blend (0 bilinear .. 1 Catmull-Rom), also the equal-extent placement
+/// sharpening strength; 0 copies exactly.</param>
 /// <param name="LowRaw">The <c>world.quality low</c> preset.</param>
 /// <param name="MediumRaw">The <c>world.quality medium</c> preset.</param>
 /// <param name="HighRaw">The <c>world.quality high</c> preset.</param>
@@ -123,6 +127,9 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTonemap? Tonemap = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FarDistance = null
 ) {
+    /// <summary>Whether this world's views accumulate temporal reconstruction history. Absent is off.</summary>
+    public bool Temporal { get; init; }
+
     /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units. The march advances a
     /// float depth against a 0.001-unit surface epsilon; 8192 is the largest power of two at which a float's spacing
     /// (2^13 · 2^-23 = 0.00098) still resolves that epsilon, so every sample along the whole ray can still land within

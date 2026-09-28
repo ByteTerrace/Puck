@@ -57,12 +57,18 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.station {stationReason}.");
             }
 
-            // A capture names the root by omitting the name, a views.graphs row by its name, and, in the render graph
-            // composition synthesizes, the SDF world beneath whatever is drawn over it.
+            // A capture names the root by omitting the name, a views.graphs row or non-seat-relative camera by its name,
+            // and, in a synthesized composition, the SDF world beneath its post passes. A camera must already be
+            // demanded by a screen, HUD frame or export; a capture does not register a new view instance.
             if (
                 (row.Instance is { } instance) &&
                 !(definition.Views.Graphs ?? []).Any(predicate: graph => string.Equals(
                     a: graph?.Name,
+                    b: instance,
+                    comparisonType: StringComparison.Ordinal
+                )) &&
+                !definition.Cameras.Any(predicate: camera => (camera is not null) && !camera.IsSeatRelative && string.Equals(
+                    a: camera.Name,
                     b: instance,
                     comparisonType: StringComparison.Ordinal
                 )) &&
@@ -72,7 +78,7 @@ public static partial class WorldDefinitionValidator {
                     comparisonType: StringComparison.Ordinal
                 ))
             ) {
-                errors.Add(item: $"{path}.instance '{instance}' names no render-graph instance a capture can read: name a views.graphs row, '{WorldViewGraphs.WorldInstance}' for the SDF world before its post passes and overlay in a world that names no root, or omit it for the root.");
+                errors.Add(item: $"{path}.instance '{instance}' names no render-graph instance a capture can read: name a views.graphs row or a demanded non-seat-relative camera, '{WorldViewGraphs.WorldInstance}' for the SDF world before its post passes and overlay in a world that names no root, or omit it for the root.");
             }
 
             // A screen's capture reads the source instance its row's source is, which only a machine, producer or probe

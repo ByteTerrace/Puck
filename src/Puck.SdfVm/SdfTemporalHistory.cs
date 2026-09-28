@@ -35,6 +35,12 @@ public sealed class SdfTemporalHistory {
 
     /// <summary>Gets the number of preceding samples in the current epoch.</summary>
     public uint Frames { get; private set; }
+    /// <summary>The consecutive accumulated frames since the presented content last changed.</summary>
+    public uint StableFrames { get; private set; }
+    /// <summary>Whether this epoch needs no more unchanged samples, including a spatial debug view.</summary>
+    public bool Converged => !m_epoch.Enabled || m_epoch.Debug != 0 || StableFrames >= Period;
+    /// <summary>Restarts convergence after content changes without discarding valid per-pixel history.</summary>
+    public void Changed() => StableFrames = 0;
     /// <summary>Gets the current offset in render pixels, positive Y down; the first sample is the pixel center.</summary>
     public Vector2 Jitter => ((m_epoch.Enabled && (m_epoch.Debug == 0)) ? Sample(index: Frames) : Vector2.Zero);
 
@@ -63,6 +69,7 @@ public sealed class SdfTemporalHistory {
     /// <summary>Discards history while retaining its storage.</summary>
     public void Reset() {
         Frames = 0;
+        StableFrames = 0;
         HasPreviousView = false;
     }
     /// <summary>Accounts for one rendered frame.</summary>
@@ -71,6 +78,7 @@ public sealed class SdfTemporalHistory {
         HasPreviousView = true;
         if (m_epoch.Enabled && (m_epoch.Debug == 0) && (Frames < uint.MaxValue)) {
             Frames++;
+            if (StableFrames < Period) { StableFrames++; }
         }
     }
 

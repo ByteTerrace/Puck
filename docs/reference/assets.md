@@ -17,7 +17,7 @@ The library carries five codec families. `PngEncoder` and `PngDecoder` round-tri
 RGBA stills and APNG animations for capture frames and baked font atlases.
 `RgbaFrameDifference` measures equally sized RGBA8 captures for editor comparisons
 and canaries. It counts a pixel when any RGB channel changes by at least two
-channel units, ignores alpha, and also reports the largest RGB change.
+channel units, ignores alpha, and also reports the largest and mean absolute RGB changes.
 `Puck.Assets.Textures` compresses texture levels to BC4, BC5, BC6H and BC7 and
 builds their tile-aware mip chains, with an exact decoder beside each encoder.
 `QrEncoder` goes the other direction—a payload string in, a scannable module

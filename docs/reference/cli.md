@@ -971,7 +971,8 @@ extraction (from the response's first line, or with `"line"` from the first
 indented line of its record that starts with that text), equality/inequality, strict ordering of two extracted numbers
 (`greater`: left above right), inclusive bounds, minimum margins,
 byte-level file equality/inequality (`filesDiffer`), per-channel bounds over a
-region of one capture (`imageRegion`), and image agreement
+region of one capture (`imageRegion`), bounded error against a box-filtered
+reference (`imageComparison`), and image agreement
 between two captured frames (`framesAgree`, stating `agree` explicitly—
 `RgbaFrameDifference` counts the pixels that moved by at least 2 LSB; `CanaryFrameNoise` compares
 that against a 64-pixel noise budget). Two live windowed captures of identical
@@ -990,6 +991,19 @@ center lies inside), `reduce` (`every` pixel or the per-channel `mean`), a
 `toleranceCodes` widening in 8-bit codes, and an explicit `holds`. Bounds come
 from the author's arithmetic, never from a recorded run. A missing capture, a
 wrong extent, or a region with no pixel center fails in either direction.
+An `imageComparison` names run-relative `capture` and `reference` paths, the
+capture's `extent` and a normalized `region` with the same pixel-center rule.
+`referenceScale` is a positive integer: the reference must be exactly that many
+times wider and taller. Its corresponding square blocks are averaged in captured
+8-bit RGB codes, rounded to the nearest code with half codes rounded up; alpha
+is ignored. Both `maxErrorCodes` and `meanErrorCodes` must be stated in 0..255.
+The latter is the mean absolute error over all selected RGB channels. `holds`
+states whether both bounds must hold or at least one must fail. Missing or
+malformed captures and wrong extents fail either direction. A scale of one and
+zero error limits prove exact RGB equality without a noise allowance.
+
+`referenceLeg: "other"` selects the opposite leg of the same proof and backend. The runner defers that assertion until both legs exit, then resolves the reference only under the other run's artifact directory. Omitted or `"current"` selects this leg. A missing counterpart or capture fails in either `holds` direction; relative paths cannot escape either run.
+
 A leg's `world` is a repository-relative `.world.json` document or `.puck`
 source; a leg booting a composition source may name the declared world it boots
 with `entry`, passed to the World as `--entry`. A manifest may start a companion authority
@@ -1320,6 +1334,15 @@ with bakes on, drew none. The static creations draw their bakes, as a world
 that carries its `BAKE` chunk does by default; with `--bakes off` they draw
 through their fields, and `puck parity compare` of an on run against an off
 run holds every capture's state hash, since bakes are presentation only.
+A capture can name a declared non-seat-relative camera through `instance`. Its
+view must already be demanded by a screen, HUD frame or export. Capturing does
+not create that demand; a missing live instance produces a named refusal.
+Ordinary parity captures keep temporal reconstruction off. Convergence rows run
+in a later temporal interval: the runner stages one `world.temporal on` row
+through the existing absolute scheduler, strictly between the two intervals.
+It refuses an existing schedule or overlapping intervals and requires the
+recorded on echo with no rejected edit. Ordinary World captures do not change
+presentation levers.
 The offscreen host never steps past an armed capture's tick until the capture
 is served or refused, so a cold driver shader cache lengthens a leg instead of
 losing its first capture. After 60 seconds of holding in all, a capture the

@@ -41,6 +41,16 @@ public sealed class WorldSessionViewLawTests {
         );
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SessionHistoryUsesTheDestinationsOwnRenderSetting(bool temporal) {
+        var definition = AuthoredGameFixtures.Load(relativePath: SessionWorld);
+        var frame = SessionFrame(definition: definition with { RenderRaw = definition.Render with { Temporal = temporal } });
+
+        Assert.Equal(expected: temporal, actual: Assert.Single(collection: frame.Views).Temporal);
+    }
+
     [InlineData(160, 144)]
     [InlineData(2048, 256)]
     [Theory]

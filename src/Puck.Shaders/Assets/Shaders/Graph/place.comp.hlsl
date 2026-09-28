@@ -1,5 +1,6 @@
 // The frame graph's one placement pass: reconstructs its source image into a destination rect over its base image.
-// Outside the rect the destination is the base, or, with letterbox set, the letterbox color. Inside it, a source of the rect's own extent is an exact copy; otherwise
+// Outside the rect the destination is the base, or, with letterbox set, the letterbox color. At equal extent, zero
+// sharpness copies exactly and positive sharpness applies a contrast-adaptive, range-clamped five-tap sharpen. Otherwise
 // sharpness 0 is bilinear over the four nearest texels, and sharpness 1 is Catmull-Rom over the sixteen nearest, clamped
 // to the central four texels' range so its negative lobes cannot ring; a sharpness between blends the two. A rect of the
 // whole destination resamples the whole source. Every tap is a formatted load clamped to its image's edge, so no sampler
@@ -21,6 +22,27 @@ float3 filmicTonemap(float3 color) {
 }
 
 #include "../Shared/reconstruction.hlsli"
+
+// Equal-extent sharpening belongs to placement, after resolve. A shared RGB gain falls as local contrast rises;
+// clipping to the five taps' channel ranges prevents ringing and preserves flat colors, including HDR values.
+float3 sharpenColor(uint2 pixel, uint2 sourceDims) {
+    float3 center = source.Load(int3(pixel, 0)).rgb;
+    if (passGroup.sharpness == 0.0) {
+        return center;
+    }
+    int2 high = int2(sourceDims) - 1;
+    int2 p = int2(pixel);
+    float3 left = source.Load(int3(clamp(p + int2(-1, 0), int2(0, 0), high), 0)).rgb;
+    float3 right = source.Load(int3(clamp(p + int2(1, 0), int2(0, 0), high), 0)).rgb;
+    float3 above = source.Load(int3(clamp(p + int2(0, -1), int2(0, 0), high), 0)).rgb;
+    float3 below = source.Load(int3(clamp(p + int2(0, 1), int2(0, 0), high), 0)).rgb;
+    float3 lowColor = min(center, min(min(left, right), min(above, below)));
+    float3 highColor = max(center, max(max(left, right), max(above, below)));
+    float3 span = highColor - lowColor;
+    float contrast = saturate(max(span.r, max(span.g, span.b)) / max(0.0001, max(highColor.r, max(highColor.g, highColor.b))));
+    float gain = passGroup.sharpness / (1.0 + contrast);
+    return clamp(center + (center - (left + right + above + below) * 0.25) * gain, lowColor, highColor);
+}
 
 // A comparison source already contains its held seat crop. The base still contains the whole live display.
 // All reads clamp inside their own crop, including split's resampling at a nonzero seat origin.
@@ -82,7 +104,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     } else {
         source.GetDimensions(sourceDims.x, sourceDims.y);
 
-        float3 color = puckReconstruct(source, (id.xy - rectMin), (rectMax - rectMin), sourceDims, passGroup.sharpness).rgb;
+        uint2 rectDims = rectMax - rectMin;
+        float3 color = all(rectDims == sourceDims)
+            ? sharpenColor((id.xy - rectMin), sourceDims)
+            : puckReconstruct(source, (id.xy - rectMin), rectDims, sourceDims, passGroup.sharpness).rgb;
 
         written = float4(((passGroup.tonemap != 0u) ? filmicTonemap(color) : color), 1.0);
     }

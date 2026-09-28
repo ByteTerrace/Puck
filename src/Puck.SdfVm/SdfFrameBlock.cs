@@ -112,7 +112,7 @@ public static class SdfFrameBlock {
         rows[4] = camera.Right.X; rows[5] = camera.Right.Y; rows[6] = camera.Right.Z; rows[7] = camera.TanHalfFieldOfView;
         rows[8] = camera.Up.X; rows[9] = camera.Up.Y; rows[10] = camera.Up.Z; rows[11] = camera.AspectRatio;
         rows[12] = camera.Forward.X; rows[13] = camera.Forward.Y; rows[14] = camera.Forward.Z;
-        rows[16] = view.Width; rows[17] = view.Height;
+        rows[16] = view.Width; rows[17] = view.Height; rows[18] = view.Jitter.X; rows[19] = view.Jitter.Y;
         rows[20] = camera.Near;
         rows[21] = (camera.FrustumOffset.X + ((((2f * view.Jitter.X) / view.Width) * camera.AspectRatio) * camera.TanHalfFieldOfView));
         rows[22] = (camera.FrustumOffset.Y - (((2f * view.Jitter.Y) / view.Height) * camera.TanHalfFieldOfView));

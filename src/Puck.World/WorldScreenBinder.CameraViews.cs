@@ -588,7 +588,8 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
     /// <remarks>Each camera view is a view of the frame after the presentation's own, at the quality of its first view
     /// with ambient occlusion and soft shadows off (<see cref="CameraViewQuality"/>): a low-resolution diegetic display
     /// may add restrictions to the world's quality but never lift one. The view's instance renders it from the world's
-    /// residency (<see cref="TryResolveView"/>), and the registration's export is set on its node.</remarks>
+    /// residency (<see cref="TryResolveView"/>), and the registration's export is set on its node. Temporal reconstruction
+    /// reads the residency's authored render setting, independently of the presentation viewer's live lever.</remarks>
     public void FilmViews(DynamicTransform[] transforms, ulong authoritativeTick, float presentationSeconds, List<SdfViewSnapshot> views) {
         ArgumentNullException.ThrowIfNull(argument: transforms);
         ArgumentNullException.ThrowIfNull(argument: views);
@@ -615,6 +616,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
             ) {
                 CutRevision = registration.CutRevision,
                 Quality = quality,
+                Temporal = (m_anchors is WorldClient client) && client.Definition.Render.Temporal,
             });
 
             if (Runtime?.NodeOf(instance: name) is { } node) {
