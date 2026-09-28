@@ -966,7 +966,7 @@ indented line of its record that starts with that text), equality/inequality, st
 byte-level file equality/inequality (`filesDiffer`), per-channel bounds over a
 region of one capture (`imageRegion`), and image agreement
 between two captured frames (`framesAgree`, stating `agree` explicitly—
-`CanaryFrameNoise` counts the pixels that moved by at least 2 LSB and compares
+`RgbaFrameDifference` counts the pixels that moved by at least 2 LSB; `CanaryFrameNoise` compares
 that against a 64-pixel noise budget). Two live windowed captures of identical
 simulation state are never bit-equal: silhouette shading carries ±1-LSB
 variance, so a byte comparison of two live frames reports a difference on

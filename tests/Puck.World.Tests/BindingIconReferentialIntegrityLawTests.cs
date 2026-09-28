@@ -98,12 +98,12 @@ public sealed class BindingIconReferentialIntegrityLawTests {
                         Entries: [
                             new BindingPageEntryDefinition(
                                 Sources: null,
-                                Command: "act.a",
+                                Command: WorldEditorCommandModule.GridCommand,
                                 Id: sectorId
                             ),
                             new BindingPageEntryDefinition(
                                 Sources: null,
-                                Command: "act.b",
+                                Command: WorldEditorCommandModule.SnapCommand,
                                 Id: "other"
                             ),
                         ]

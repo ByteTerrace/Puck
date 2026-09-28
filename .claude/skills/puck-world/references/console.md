@@ -383,6 +383,18 @@ generator is the authoring surface. An engine-generated duplicate needs an
 authored name before source can spell it. A JSON target declaring the source as
 its `basis` can retain a refused edit as a delta.
 
+`world.watch on|off` shares `DependencyWatch` with `pipeline.watch`. It records
+`CompileInputs` across both compilation and document composition, including
+composed-image cache hits, and queues the existing `world.reload` through a
+session stamped by the enabling local console or seat ingress. Never reload
+by mutating the server directly. A new accepted origin schedules one reload
+after adoption, so an edit between the load's read and adoption is not lost.
+Failed reads retain their missing-input facts for recovery. `WorldSourceWatch`
+keeps the last reload diagnostic for the inspector; the normal command path
+and the editor report fan-out cover the terminal and toast. An accepted rebuild
+drops removed placement ids from editor selection and snap references while
+retaining the other editor settings.
+
 ## The document has ONE door — do not add a per-section verb
 
 `world.row.set <path> <json>` and `world.row.remove <path> <key>`

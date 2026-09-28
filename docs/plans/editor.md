@@ -616,9 +616,10 @@ readback for step 3.
 
 ### E10 — Live reload and before-and-after
 
-**Problem:** a builder who saves a `.puck` file must still type `world.reload`,
-loses their place when they do, and cannot compare the world before and after a
-change.
+**Status:** the source watch uses the graph watch's shared debounce and the
+existing reload command. It covers compile and document-composition inputs,
+keeps the latest reload diagnostic for the inspector and toast, and reconciles
+selection ids after a rebuild. Before-and-after presentation remains open.
 
 **Delivers:**
 
@@ -634,8 +635,8 @@ change.
 3. **Before and after.** `world.compare hold` keeps the seat's current frame;
    `world.compare wipe|split|diff|off` shows it against the live view in a pane
    the `place` package draws, with a bindable wipe position. The echo includes
-   the changed-pixel count (pixels moving at least 2 LSB, as `CanaryFrameNoise`
-   counts them).
+   the changed-pixel count (pixels moving at least 2 LSB, measured by the shared
+   `RgbaFrameDifference` used by the canaries).
 
 **Touches:** `src/Puck.World` (the watch, the compare verbs, the capture path),
 `Puck.World.Client` (`WorldViewGraphHost`, editor state retention).

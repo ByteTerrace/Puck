@@ -210,7 +210,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
             );
 
             if (!(WorldDocumentName.IsSourceFile(path: path) || WorldDocumentName.IsDocumentFile(path: path))) {
-                return File.ReadAllBytes(path: path).AsSpan().SequenceEqual(other: content);
+                return CompileInputs.ReadAllBytes(path: path).AsSpan().SequenceEqual(other: content);
             }
 
             var slash = path.LastIndexOf(value: '/');
@@ -245,7 +245,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
 
                 if (found.IsSource
                     ? ((compiled?.DocumentNamed(name: found.Name) is { } document) && document.AsSpan().SequenceEqual(other: content))
-                    : File.ReadAllBytes(path: path).AsSpan().SequenceEqual(other: content)) {
+                    : CompileInputs.ReadAllBytes(path: path).AsSpan().SequenceEqual(other: content)) {
                     return true;
                 }
             }

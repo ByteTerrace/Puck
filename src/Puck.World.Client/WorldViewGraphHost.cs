@@ -41,7 +41,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
     /// <summary>One instance's presentation controls, pending compilation, and dependency watch.</summary>
     public sealed partial class Entry {
-        private readonly Dictionary<string, (DateTime Time, long Length)> m_stamps = new(comparer: PuckPaths.Comparer);
+        private readonly DependencyWatch<string, (DateTime Time, long Length)> m_watch = new(read: ReadStamp, comparer: PuckPaths.Comparer);
 
         /// <summary>The currently requested document-relative source.</summary>
         public string Source { get; internal set; } = string.Empty;
@@ -71,9 +71,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         private double m_clockSeconds;
         private double m_presentedSeconds;
-        private long m_changedAt;
-        private long m_lastPolledAt;
-        private long m_retryAt;
 
         internal BackgroundBuild<CompileOutcome> Compilation { get; } = new();
 
@@ -141,58 +138,21 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             }
         }
         /// <summary>The number of dependency changes observed.</summary>
-        public int SourceChangeCount { get; private set; }
+        public int SourceChangeCount => m_watch.ChangeCount;
         /// <summary>The root source being watched, or null when watching is disabled.</summary>
         public string? WatchPath { get; private set; }
 
         internal void CancelPending() =>
             Compilation.Cancel();
-        internal bool PollWatch(long debounceTicks, long pollTicks) {
-            var now = Stopwatch.GetTimestamp();
-
-            if ((now - m_lastPolledAt) >= pollTicks) {
-                m_lastPolledAt = now;
-                // Bound filesystem metadata reads independently of the host's presentation frame rate.
-                // Replacing values is safe while enumerating Dictionary on the supported runtime.
-                foreach (var (path, before) in m_stamps) {
-                    var after = ReadStamp(path: path);
-
-                    if (before == after) { continue; }
-                    m_stamps[path] = after;
-                    SourceChangeCount++;
-                    m_changedAt = now;
-                }
-            }
-            var queuedAt = Math.Max(
-                val1: m_changedAt,
-                val2: m_retryAt
-            );
-
-            if (
-                (queuedAt == 0) ||
-                ((now - queuedAt) < debounceTicks)
-            ) { return false; }
-            m_retryAt = 0;
-            m_changedAt = 0;
-            return true;
-        }
+        internal bool PollWatch(long debounceTicks, long pollTicks) => m_watch.Poll(now: Stopwatch.GetTimestamp(), debounceTicks: debounceTicks, pollTicks: pollTicks);
         internal void RefreshDependencies() {
             if (WatchPath is not { } root) { return; }
             var retained = new HashSet<string>(comparer: PuckPaths.Comparer) { root };
 
             if (LastCompile is { } compiled) { retained.UnionWith(other: compiled.Dependencies); }
-            foreach (var path in retained) {
-                m_stamps.TryAdd(
-                key: path,
-                value: ReadStamp(path: path)
-            );
-            }
-            foreach (var path in m_stamps.Keys.ToArray()) {
-                if (!retained.Contains(item: path)) { m_stamps.Remove(key: path); }
-            }
-            // Preserve existing stamps and debounce state: an edit during compilation must schedule another load.
+            m_watch.Refresh(dependencies: retained);
         }
-        internal void ScheduleRetry() => m_retryAt = Stopwatch.GetTimestamp();
+        internal void ScheduleRetry() => m_watch.Retry(now: Stopwatch.GetTimestamp());
 
         // Re-anchors the time mapping at the frame last presented, holding the time it showed.
         private void Rebase() {
@@ -270,9 +230,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         /// <summary>Stops watching and discards any pending debounce event.</summary>
         public void Unwatch() {
             WatchPath = null;
-            m_stamps.Clear();
-            m_lastPolledAt = 0;
-            m_changedAt = 0;
+            m_watch.Clear();
         }
         /// <summary>Watches the source and the last compilation's dependencies.</summary>
         public void Watch(string path) {
