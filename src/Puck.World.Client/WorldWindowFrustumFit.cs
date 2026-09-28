@@ -101,6 +101,83 @@ public static class WorldWindowFrustumFit {
             Up: up
         );
     }
+    /// <summary>Returns the eye a window fits against: the position of the camera the primary local seat's view
+    /// rendered with in the frame just dressed — chase or first person, whatever rig the seat renders through — the same
+    /// camera a pointer ray through that view is cast from (<see cref="Commands.SourceRay.Through"/>), so the texel the window
+    /// shows at a glass point and a click at that point look along one line into the destination. A window renders one
+    /// image, so it fits against one eye.</summary>
+    /// <param name="viewports">The seats' views for the frame just dressed.</param>
+    /// <returns>The eye, or <see langword="null"/> while the primary seat resolved no view.</returns>
+    public static Vector3? ViewerEye(WorldSeatViewports viewports) {
+        ArgumentNullException.ThrowIfNull(argument: viewports);
+
+        return ((viewports.Seat(slot: 0) is { Present: true } view)
+            ? view.Camera.Position
+            : null);
+    }
+    /// <summary>Returns the fit a window session renders through (<see cref="WorldSessionSceneEmitter.SetWindowFit"/>):
+    /// asked as each frame is dressed, it reads the documents and the screen row at that moment and fits against the
+    /// viewer's eye in that frame (<see cref="TryFitFromView"/>), so a placement mutation or a camera move reaches the
+    /// very next frame. A transient gap (no seat view yet, no local document or row, a destination that has not delivered
+    /// the counterpart, an eye behind the glass) yields <see langword="null"/>, the ordinary session projection for the
+    /// frame.</summary>
+    /// <param name="viewports">The seats' views, which the world's own capture publishes each frame.</param>
+    /// <param name="local">Reads the local document, whose face catalog seats the screen, or <see langword="null"/>.</param>
+    /// <param name="destination">Reads the destination's document, as its session mirror last delivered it.</param>
+    /// <param name="screen">Reads the screen row the window shows on, or <see langword="null"/>.</param>
+    /// <returns>The fit.</returns>
+    public static Func<CameraSnapshot?> FitFrom(WorldSeatViewports viewports, Func<WorldDefinition?> local, Func<WorldDefinition> destination, Func<WorldScreen?> screen) {
+        ArgumentNullException.ThrowIfNull(argument: viewports);
+        ArgumentNullException.ThrowIfNull(argument: local);
+        ArgumentNullException.ThrowIfNull(argument: destination);
+        ArgumentNullException.ThrowIfNull(argument: screen);
+
+        return () => (
+            ((local() is { } document) &&
+            (screen() is { } row) &&
+            TryFitFromView(
+                camera: out var camera,
+                destination: destination(),
+                local: document,
+                screen: row,
+                viewports: viewports
+            ))
+                ? camera
+                : null);
+    }
+    /// <summary>Fits a window screen's camera for the frame being dressed: the local face the screen shows on and its
+    /// counterpart in the destination (<see cref="TryResolveApertures"/>), the glass its row draws (<see cref="Glass"/>),
+    /// and the viewer's eye (<see cref="ViewerEye"/>).</summary>
+    /// <param name="viewports">The seats' views for the frame just dressed.</param>
+    /// <param name="local">The local document, whose face catalog seats the screen.</param>
+    /// <param name="destination">The destination's document, as its session mirror last delivered it.</param>
+    /// <param name="screen">The screen row the window shows on.</param>
+    /// <param name="camera">The fitted camera, on success.</param>
+    /// <returns><see langword="true"/> when every part resolves and the eye stands in front of the glass;
+    /// <see langword="false"/> otherwise, when the session renders its ordinary projection for the frame.</returns>
+    public static bool TryFitFromView(WorldSeatViewports viewports, WorldDefinition local, WorldDefinition destination, WorldScreen screen, out CameraSnapshot camera) {
+        ArgumentNullException.ThrowIfNull(argument: screen);
+
+        camera = default;
+
+        return (
+            (ViewerEye(viewports: viewports) is { } eye) &&
+            TryResolveApertures(
+                counterpart: out var counterpart,
+                destination: destination,
+                local: local,
+                screenIndex: screen.Index,
+                source: out var source
+            ) &&
+            TryFitWindow(
+                camera: out camera,
+                destination: counterpart,
+                glass: Glass(screen: screen),
+                localEye: eye,
+                source: source
+            )
+        );
+    }
     /// <summary>Maps the viewer's eye and the glass through the border pair's isometry and fits an off-axis frustum
     /// against the mapped glass from the mapped eye — the one call a window projection needs per produced frame.</summary>
     /// <param name="localEye">The viewer's eye, in the source world's space.</param>

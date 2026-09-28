@@ -14,7 +14,7 @@ namespace Puck.World.Tests;
 /// THE LAW: a window shows what a traveller at the eye would see through the door. For the <c>portal-window</c>
 /// canary's documents, <see cref="WorldWindowFrustumFit.TryResolveApertures"/> resolves the door's two apertures and
 /// <see cref="WorldPrototypeFacets"/> derives the glass the door's screen draws, the three frames
-/// <c>WorldScreenBinder.UpdateWindowCameras</c> fits every frame, and the camera
+/// <c>WorldScreenBinder.FitWindow</c> fits every frame, and the camera
 /// <see cref="WorldWindowFrustumFit.TryFitWindow"/> fits from an eye casts, through the image point at the glass's
 /// <c>(x, y)</c>, the isometry's image of the ray from that eye through the same point of the glass: the rays pass
 /// through the mapped glass point (a mirrored fit passes through its reflection instead), and cast through
@@ -272,7 +272,7 @@ public sealed class WorldWindowFrustumFitLawTests {
         foreach (var eye in Eyes[..2]) {
             var fitted = Fit(eye: eye);
 
-            emitter.SetWindowCamera(camera: fitted);
+            emitter.SetWindowFit(fit: () => fitted);
 
             var frame = composition.CaptureFrame(
                 deltaSeconds: 0f,
@@ -362,7 +362,7 @@ public sealed class WorldWindowFrustumFitLawTests {
             );
             var camera = Fit(eye: eye);
 
-            emitter.SetWindowCamera(camera: camera);
+            emitter.SetWindowFit(fit: () => camera);
             _ = new SdfCompositionFrameSource(
                 dresser: emitter,
                 emitters: [emitter]
@@ -404,7 +404,7 @@ public sealed class WorldWindowFrustumFitLawTests {
         foreach (var eye in Eyes[..2]) {
             var camera = Fit(eye: eye);
 
-            emitter.SetWindowCamera(camera: camera);
+            emitter.SetWindowFit(fit: () => camera);
             _ = composition.CaptureFrame(
                 deltaSeconds: 0f,
                 height: 120,

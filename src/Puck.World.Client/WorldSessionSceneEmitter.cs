@@ -96,7 +96,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.Publish (the one place with access
     // to both the local eye and the border pair's two face rows) before the render graph renders this view.
     // Null (the default, and every non-window session's steady state) leaves Dress on the ordinary camera path below.
-    private CameraSnapshot? m_windowOverride;
+    private Func<CameraSnapshot?>? m_windowFit;
     // The camera the last dressed frame renders from, which a hit on the session's image continues through.
     private CameraSnapshot? m_dressedCamera;
     // The last dressed program's fixed-point field, built when a pick first asks for it, and the far distance a pick
@@ -336,7 +336,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         // The pool's replay cursors advance on this view's own produced-frame interval, latched for the next pack.
         m_pool.Tick(deltaSeconds: deltaSeconds);
 
-        var camera = (m_windowOverride ?? ResolveCamera(
+        var camera = (m_windowFit?.Invoke() ?? ResolveCamera(
             height: height,
             width: width
         ));
@@ -535,15 +535,13 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             transforms: slots
         );
     }
-    /// <summary>Sets (or clears) this frame's window camera override — the off-axis frustum
-    /// <see cref="WorldWindowFrustumFit.TryFitWindow"/> fit against the border pair's two face rows and the local
-    /// viewer's eye, its shear carried as <see cref="CameraSnapshot.FrustumOffset"/>. Called once per produced frame by
-    /// <c>WorldScreenBinder.Publish</c>, before the render graph renders this session's view; <see langword="null"/> (no
-    /// eye/aperture available yet, or the fit refused — see <c>SdfAsymmetricFrustum.TryFit</c>) falls back to
-    /// <see cref="ResolveCamera"/>'s ordinary named/default projection for that one frame.</summary>
-    /// <param name="camera">The fitted camera apexed at the mapped eye, or <see langword="null"/> to use the
-    /// ordinary projection.</param>
-    public void SetWindowCamera(CameraSnapshot? camera) => m_windowOverride = camera;
+    /// <summary>Sets (or clears) the fit a window session renders through: asked once as each frame is dressed, it returns
+    /// the off-axis frustum fit against the border pair's two face rows and the viewer's eye in that same frame, its
+    /// shear carried as <see cref="CameraSnapshot.FrustumOffset"/>. A fit returning <see langword="null"/> (no eye or
+    /// aperture yet, or the fit refused — see <c>SdfAsymmetricFrustum.TryFit</c>) falls back to
+    /// <see cref="ResolveCamera"/>'s ordinary named/default projection for that frame.</summary>
+    /// <param name="fit">The window's fit, or <see langword="null"/> for a session that is not a window.</param>
+    public void SetWindowFit(Func<CameraSnapshot?>? fit) => m_windowFit = fit;
     /// <summary>Finds the camera the last frame <see cref="Dress"/> dressed renders from, in the destination's own
     /// space: a window's fitted camera, its shear included, or the named or default projection. A hit on the session's
     /// image continues through it into the destination.</summary>
