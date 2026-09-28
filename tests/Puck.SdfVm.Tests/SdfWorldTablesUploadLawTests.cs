@@ -414,6 +414,213 @@ public sealed class SdfWorldTablesUploadLawTests {
             actual: Table()
         );
     }
+    // A screen's glyph decal reaches the device's decal table: its descriptor (columns, rows, the first cell, the distance
+    // range's bits) in the screen's descriptor row and its cells in the screen's run of the cell region. The same decal
+    // again owes nothing, clearing it zeroes its descriptor alone, clearing a clear slot owes nothing, and a grid past the
+    // per-screen budget is refused.
+    [Fact]
+    public void AScreensGlyphDecalReachesTheDecalTableAndAnUnchangedDecalOwesNothing() {
+        const int Screen = 5;
+        const int Columns = 3;
+        const int Rows = 2;
+        const float DistanceRange = 4f;
+        using var rig = new Rig(slots: 1);
+        var cells = new uint[((Columns * Rows) * 4)];
+
+        for (var index = 0; (index < cells.Length); index++) {
+            cells[index] = (0x01000000u + ((uint)index));
+        }
+
+        var table = new uint[((SdfWorldTables.MaxScreenSurfaces + (SdfWorldTables.MaxScreenSurfaces * SdfWorldTables.MaxScreenDecalCells)) * 4)];
+        var cellBase = (SdfWorldTables.MaxScreenSurfaces + (Screen * SdfWorldTables.MaxScreenDecalCells));
+
+        uint[] Table() => MemoryMarshal.Cast<byte, uint>(span: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(uint))))).ToArray();
+
+        rig.Warm();
+        rig.Engine.SetScreenDecal(
+            cellWords: cells,
+            columns: Columns,
+            distanceRange: DistanceRange,
+            rows: Rows,
+            screenIndex: Screen
+        );
+        rig.Render(time: 0f);
+        ((uint[])[Columns, Rows, ((uint)cellBase), BitConverter.SingleToUInt32Bits(value: DistanceRange)]).CopyTo(array: table, index: (Screen * 4));
+        cells.CopyTo(array: table, index: (cellBase * 4));
+        Assert.Equal(expected: table, actual: Table());
+
+        rig.Engine.SetScreenDecal(
+            cellWords: cells,
+            columns: Columns,
+            distanceRange: DistanceRange,
+            rows: Rows,
+            screenIndex: Screen
+        );
+        rig.Render(time: 0f);
+        Assert.Equal(expected: 0L, actual: rig.Gpu.HostBytes());
+
+        rig.Engine.ClearScreenDecal(screenIndex: Screen);
+        rig.Render(time: 0f);
+        Array.Clear(array: table, index: (Screen * 4), length: 4);
+        Assert.Equal(expected: table, actual: Table());
+
+        rig.Engine.ClearScreenDecal(screenIndex: Screen);
+        rig.Render(time: 0f);
+        Assert.Equal(expected: 0L, actual: rig.Gpu.HostBytes());
+
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => rig.Engine.SetScreenDecal(
+            cellWords: new uint[((SdfWorldTables.MaxScreenDecalCells + 1) * 4)],
+            columns: (SdfWorldTables.MaxScreenDecalCells + 1),
+            distanceRange: 0f,
+            rows: 1,
+            screenIndex: Screen
+        ));
+    }
+    // A frame's bounded volumes reach the device's volume table, SdfVolume.VectorsPerEntry float4 rows each in list
+    // order (shade/shade-volumes.hlsli's layout), every later entry zero. The same list again owes nothing, an emptied list
+    // zeroes the table, and a list past MaxVolumes is refused.
+    [Fact]
+    public void AFramesBoundedVolumesReachTheVolumeTableRowForRow() {
+        using var rig = new Rig(slots: 2);
+        var flow = new SdfVolume(
+            Axis: 1f,
+            DynamicSlot: 1,
+            Extinction: 0.5f,
+            HalfExtent: new Vector3(x: 0.5f, y: 1f, z: 0.5f),
+            Intensity: 3f,
+            IntensityLane: 2,
+            Kind: SdfVolumeKind.Flow,
+            Position: new Vector3(x: 1f, y: 2f, z: 3f),
+            PulseAmplitude: 0.25f,
+            PulseFrequency: 2f,
+            Ramp: [new SdfDensityStop(Color: new Vector3(x: 1f, y: 0.5f, z: 0f), Density: 0.5f)],
+            Rotation: Quaternion.Identity,
+            Seed: 7u,
+            Speed: 2f,
+            Steps: 16,
+            Width: 0.25f
+        );
+        var cloud = new SdfVolume(
+            Axis: 2f,
+            Coverage: 0.4f,
+            DynamicSlot: -1,
+            Extinction: 2f,
+            HalfExtent: new Vector3(x: 3f, y: 1f, z: 2f),
+            Intensity: 1f,
+            Kind: SdfVolumeKind.Cloud,
+            Position: new Vector3(x: -4f, y: 5f, z: -6f),
+            Ramp: [
+                new SdfDensityStop(Color: new Vector3(x: 1f, y: 1f, z: 1f), Density: 0.1f),
+                new SdfDensityStop(Color: new Vector3(x: 0.5f, y: 0.5f, z: 0.6f), Density: 0.9f),
+            ],
+            Rotation: new Quaternion(w: 0.8f, x: 0f, y: 0.6f, z: 0f),
+            Seed: 11u,
+            Softness: 0.3f,
+            Speed: 0.5f,
+            Steps: 32,
+            Width: 1f
+        );
+        const int EntryFloats = (SdfVolume.VectorsPerEntry * 4);
+        var table = new float[(SdfWorldTables.MaxVolumes * EntryFloats)];
+        // Each entry's rows: position and dynamic slot; rotation; half extent and axis; width, speed, the seed's bits and
+        // the steps; intensity, extinction and the pulse; the intensity lane, the ramp's length and the kind; four ramp
+        // rows, color and density; then coverage and softness.
+        float[] flowRows = [
+            1f, 2f, 3f, 1f,
+            0f, 0f, 0f, 1f,
+            0.5f, 1f, 0.5f, 1f,
+            0.25f, 2f, BitConverter.UInt32BitsToSingle(value: 7u), 16f,
+            3f, 0.5f, 0.25f, 2f,
+            2f, 1f, ((float)SdfVolumeKind.Flow), 0f,
+            1f, 0.5f, 0f, 0.5f,
+            0f, 0f, 0f, 0f,
+            0f, 0f, 0f, 0f,
+            0f, 0f, 0f, 0f,
+            0.55f, 0.18f, 0f, 0f,
+        ];
+        float[] cloudRows = [
+            -4f, 5f, -6f, -1f,
+            0f, 0.6f, 0f, 0.8f,
+            3f, 1f, 2f, 2f,
+            1f, 0.5f, BitConverter.UInt32BitsToSingle(value: 11u), 32f,
+            1f, 2f, 0f, 0f,
+            -1f, 2f, ((float)SdfVolumeKind.Cloud), 0f,
+            1f, 1f, 1f, 0.1f,
+            0.5f, 0.5f, 0.6f, 0.9f,
+            0f, 0f, 0f, 0f,
+            0f, 0f, 0f, 0f,
+            0.4f, 0.3f, 0f, 0f,
+        ];
+
+        byte[] Table() => rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(float))));
+
+        rig.Warm();
+        rig.Render(time: 0f, volumes: [flow, cloud]);
+        flowRows.CopyTo(array: table, index: 0);
+        cloudRows.CopyTo(array: table, index: EntryFloats);
+        Assert.Equal(
+            expected: MemoryMarshal.AsBytes(span: table.AsSpan()).ToArray(),
+            actual: Table()
+        );
+
+        rig.Render(time: 0f, volumes: [flow, cloud]);
+        Assert.Equal(expected: 0L, actual: rig.Gpu.HostBytes());
+
+        rig.Render(time: 0f, volumes: []);
+        Assert.Equal(
+            expected: new byte[(table.Length * sizeof(float))],
+            actual: Table()
+        );
+
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => rig.Render(
+            time: 0f,
+            volumes: [.. Enumerable.Repeat(count: (SdfWorldTables.MaxVolumes + 1), element: cloud)]
+        ));
+    }
+    // A host-baked brick (a height field's, WorldFieldEmitter) reaches the device's brick pool: queued, its slot reads
+    // Baking at its serial; the next upload lands the voxels at the slot's word offset and reads Ready with the serial
+    // moved on; two uploads to one slot before a frame land only the newer; and pool-less tables refuse an upload.
+    [Fact]
+    public void AHostBakedBrickLandsInItsPoolSlotAndTheSlotTurnsReady() {
+        const int Slot = 1;
+        const int Dim = 4;
+        const int VoxelCount = ((Dim * Dim) * Dim);
+        const int Capacity = (SdfBrickPoolLayout.VoxelsPerBrick + VoxelCount);
+        using var rig = new Rig(brickPoolVoxelCapacity: Capacity, slots: 1);
+        using var poolless = new Rig(slots: 1);
+
+        static float[] Voxels(float bias) => [.. Enumerable.Range(count: VoxelCount, start: 0).Select(selector: index => (bias + (index * 0.125f)))];
+        float[] SlotVoxels() => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(sizeBytes: (Capacity * sizeof(float))).AsSpan(
+            length: (VoxelCount * sizeof(float)),
+            start: (SdfBrickPoolLayout.SlotWordOffset(slot: Slot) * sizeof(float))
+        )).ToArray();
+
+        rig.Warm();
+
+        var before = rig.Engine.GetBrickState(slot: Slot);
+        var first = Voxels(bias: 1f);
+
+        Assert.True(condition: rig.Engine.BrickBakeAvailable);
+        Assert.Equal(expected: BrickBakeState.Empty, actual: before.State);
+
+        rig.Engine.UploadBrick(dimX: Dim, dimY: Dim, dimZ: Dim, slot: Slot, voxels: first);
+        Assert.Equal(expected: new BrickBakeStatus(Serial: before.Serial, State: BrickBakeState.Baking), actual: rig.Engine.GetBrickState(slot: Slot));
+
+        rig.Render(time: 0f);
+        Assert.Equal(expected: new BrickBakeStatus(Serial: (before.Serial + 1), State: BrickBakeState.Ready), actual: rig.Engine.GetBrickState(slot: Slot));
+        Assert.Equal(expected: first, actual: SlotVoxels());
+
+        var newest = Voxels(bias: 20f);
+
+        rig.Engine.UploadBrick(dimX: Dim, dimY: Dim, dimZ: Dim, slot: Slot, voxels: Voxels(bias: 10f));
+        rig.Engine.UploadBrick(dimX: Dim, dimY: Dim, dimZ: Dim, slot: Slot, voxels: newest);
+        rig.Render(time: 0f);
+        Assert.Equal(expected: new BrickBakeStatus(Serial: (before.Serial + 2), State: BrickBakeState.Ready), actual: rig.Engine.GetBrickState(slot: Slot));
+        Assert.Equal(expected: newest, actual: SlotVoxels());
+
+        Assert.False(condition: poolless.Engine.BrickBakeAvailable);
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => poolless.Engine.UploadBrick(dimX: Dim, dimY: Dim, dimZ: Dim, slot: 0, voxels: first));
+    }
     [Fact]
     public void TheMeshRegionHoldsAKnownDrawSetAndOwesOnlyTheWordsANewSetChanges() {
         using var rig = new Rig(slots: 1);
@@ -716,6 +923,7 @@ public sealed class SdfWorldTablesUploadLawTests {
         private readonly SdfMovedTransforms m_moved = new();
         private readonly List<int> m_pendingMoves = [];
 
+        private readonly int m_brickPoolVoxelCapacity;
         private readonly SdfProgram m_program;
         private readonly int m_programWordReserve;
         private readonly DynamicTransform[] m_transforms;
@@ -724,11 +932,12 @@ public sealed class SdfWorldTablesUploadLawTests {
         private GpuPassPipeline m_meshRaster = null!;
         private GpuPassPipeline m_regionCopy = null!;
 
-        public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default, GpuDescriptorHeapBudget? heap = null) {
+        public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default, GpuDescriptorHeapBudget? heap = null, int brickPoolVoxelCapacity = 0) {
             Gpu = new UploadModelGpu() {
                 DescriptorHeap = heap,
                 MemoryProfile = profile,
             };
+            m_brickPoolVoxelCapacity = brickPoolVoxelCapacity;
             m_programWordReserve = programWordReserve;
             m_program = Program(albedo: Vector3.One);
             m_transforms = Transforms(slots: slots);
@@ -767,7 +976,7 @@ public sealed class SdfWorldTablesUploadLawTests {
             Engine = Build();
         }
         // Renders one frame at the given time, by default resetting the tallies first so they read that frame's writes.
-        public void Render(float time, bool resetTallies = true, IReadOnlyList<SdfMeshDraw>? meshDraws = null) {
+        public void Render(float time, bool resetTallies = true, IReadOnlyList<SdfMeshDraw>? meshDraws = null, IReadOnlyList<SdfVolume>? volumes = null) {
             if (resetTallies) {
                 Gpu.ResetTallies();
             }
@@ -792,6 +1001,7 @@ public sealed class SdfWorldTablesUploadLawTests {
             ) with {
                 MeshDraws = (meshDraws ?? []),
                 MovedTransforms = m_moved,
+                Volumes = (volumes ?? []),
             });
             Engine.SubmitUpload();
         }
@@ -817,16 +1027,24 @@ public sealed class SdfWorldTablesUploadLawTests {
                 device: Gpu,
                 ledger: ledger
             );
-            m_pipelines = SdfTestPipelines.Build(
-                device: Gpu,
-                kernels: SdfTestPipelines.Kernels(),
-                cache: new GpuPassPipelineCache()
-            );
+            // A brick pool needs its bake pipeline, so its set is built with a one-byte brick kernel.
+            m_pipelines = ((m_brickPoolVoxelCapacity == 0)
+                ? SdfTestPipelines.Build(
+                    device: Gpu,
+                    kernels: SdfTestPipelines.Kernels(),
+                    cache: new GpuPassPipelineCache()
+                )
+                : SdfTestPipelines.Build(
+                    device: Gpu,
+                    includeBrickPipelines: true,
+                    kernels: SdfTestPipelines.Kernels().With(bytecode: new byte[] { 1 }, kernel: SdfKernel.BrickBake),
+                    cache: new GpuPassPipelineCache()
+                ));
 
             return new SdfWorldTables(
                 device: Gpu,
                 options: new SdfWorldTablesOptions(
-                    BrickPoolVoxelCapacity: 0,
+                    BrickPoolVoxelCapacity: m_brickPoolVoxelCapacity,
                     DynamicTransformCapacity: m_transforms.Length,
                     Program: m_program,
                     ProgramWordCapacity: m_programWordReserve,
