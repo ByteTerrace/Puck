@@ -161,6 +161,17 @@ public interface IRenderGraphPackageFactory {
     /// <param name="instance">The instance's name.</param>
     /// <returns>The counter, or <see langword="null"/>.</returns>
     IShaderPipelineStorageCounter? CounterOf(string instance) => null;
+    /// <summary>Returns the instance's render extent inside its output, or null when both extents are the same.
+    /// Render-relative resources allocate at its ceiling; unsized package passes and render-relative passes record at
+    /// its current grid. A ceiling revision rebuilds beside the installed graph.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The render-extent provider, or null.</returns>
+    IShaderPipelineRenderExtent? RenderExtentOf(string instance) => null;
+    /// <summary>Selects an implicit package instance's fragment, or null for the catalog's fragment. Returning another
+    /// immutable fragment rebuilds its graph beside the installed one; unchanged frames return the same object.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The selected fragment, or null.</returns>
+    RenderGraphPackageFragment? FragmentOf(string instance) => null;
     /// <summary>Returns whether nothing an instance's passes of the package render from has changed since the instance's
     /// latest completed render, so that render stands for the frame. The runtime asks on the frame thread before it
     /// schedules each frame, for every instance whose graph binds no input and runs only package passes, and declares an

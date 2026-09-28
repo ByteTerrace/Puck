@@ -111,4 +111,6 @@ public enum ShaderPipelineCountBasis : byte {
     InstanceGridWords = 8,
     /// <summary>Per voxel of the SDF brick pool the host provisions for its world.</summary>
     BrickPoolVoxels = 9,
+    /// <summary>Per pixel of the package's allocated render extent.</summary>
+    RenderExtent = 10,
 }
