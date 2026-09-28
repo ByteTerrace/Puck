@@ -65,10 +65,10 @@ public sealed class AuthorityCompanion : IDisposable {
             if (!m_process.HasExited) {
                 try {
                     m_process.StandardInput.Write(value: m_quitInput);
-                    m_process.StandardInput.Close();
                 } catch (IOException) {
                     // The companion already closed its end; the wait below observes its exit.
                 }
+                ChildProcess.CloseInput(input: m_process.StandardInput);
                 if (!m_process.WaitForExit(timeout: TimeSpan.FromSeconds(value: QuitGraceSeconds))) {
                     Kill();
                 }

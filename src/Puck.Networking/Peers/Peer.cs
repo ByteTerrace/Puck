@@ -31,7 +31,7 @@ public sealed class Peer : IAsyncDisposable {
     private const int IncomingLinksRetained = 64;
 
     private readonly PeerIdentity m_local;
-    private readonly Func<DateTimeOffset>? m_now;
+    private readonly Func<DateTimeOffset> m_now;
     private readonly TimeProvider m_timeProvider;
     private readonly IPeerTransport m_transport;
 
@@ -65,7 +65,9 @@ public sealed class Peer : IAsyncDisposable {
     /// <summary>Initializes a peer over an identity and a transport it owns and disposes.</summary>
     /// <param name="identity">This peer's identity.</param>
     /// <param name="transport">The transport every dial and listen goes through.</param>
-    /// <param name="now">The verification-boundary clock read, overridable for tests.</param>
+    /// <param name="now">The instant every identity proof and message claim is signed at and verified against, or
+    /// <see langword="null"/> for <paramref name="timeProvider"/>'s own reading, so one peer has one clock for its
+    /// deadlines and its claim windows alike.</param>
     /// <param name="timeProvider">The control-stream, handshake, and send deadline clock; defaults to system time.</param>
     public Peer(PeerIdentity identity, IPeerTransport transport, Func<DateTimeOffset>? now = null, TimeProvider? timeProvider = null) {
         m_timeProvider = (timeProvider ?? TimeProvider.System);
@@ -74,7 +76,7 @@ public sealed class Peer : IAsyncDisposable {
 
         m_local = identity;
         m_transport = transport;
-        m_now = now;
+        m_now = (now ?? m_timeProvider.GetUtcNow);
     }
 
     private bool IsDisposed => (Volatile.Read(location: ref m_disposed) != 0);

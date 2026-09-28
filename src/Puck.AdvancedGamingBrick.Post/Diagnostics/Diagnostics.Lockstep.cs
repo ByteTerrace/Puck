@@ -49,7 +49,7 @@ internal sealed partial class Diagnostics {
 
             // The oracle reads no input, and its diagnostics pass through to this console as they arrive, so a
             // chatty error stream never fills its pipe and stalls the trace this loop reads.
-            cosim.StandardInput.Close();
+            ChildProcess.CloseInput(input: cosim.StandardInput);
             cosim.ErrorDataReceived += static (_, line) => {
                 if (line.Data is not null) { Console.Error.WriteLine(value: line.Data); }
             };

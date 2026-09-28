@@ -167,26 +167,11 @@ internal static class CliProcess {
             ?? throw new InvalidOperationException(message: $"Failed to start {fileName}."));
         using var inputStream = process.StandardInput.BaseStream;
         // A World treats a pipe still empty at its first read as idle and starts stepping, so the input's first bytes are
-        // written here, before any await can yield to a busy thread pool. The head stays under a pipe buffer, so this
-        // write never blocks on a child that has not started reading.
-        var head = Math.Min(
-            val1: input.Length,
-            val2: InputHeadCharacters
+        // written here, before any await can yield to a busy thread pool.
+        input = WriteInputHead(
+            input: input,
+            writer: process.StandardInput
         );
-
-        if (head != 0) {
-            try {
-                process.StandardInput.Write(buffer: input.AsSpan(
-                    length: head,
-                    start: 0
-                ));
-                process.StandardInput.Flush();
-            } catch (IOException) {
-                // An early-exiting child closes its pipe; the writer below meets the same pipe and settles it.
-            }
-
-            input = input[head..];
-        }
 
         // A caller's cancellation takes the timeout's path: the whole tree is killed and both streams drained.
         using var cancellation = new OperationDeadline(
@@ -260,7 +245,7 @@ internal static class CliProcess {
             }
 
             await process.WaitForExitAsync(cancellationToken: CancellationToken.None).ConfigureAwait(continueOnCapturedContext: false);
-            try { process.StandardInput.Close(); } catch (IOException) { /* The killed child's pipe is already gone. */ }
+            ChildProcess.CloseInput(input: process.StandardInput);
         }
 
         var streams = await ChildProcess.DrainAfterExitAsync(
@@ -280,7 +265,33 @@ internal static class CliProcess {
             TimedOut: timedOut
         );
     }
-    private static async Task WriteInputAsync(StreamWriter writer, string input, CancellationToken cancellationToken,
+
+    // Writes the input's first characters synchronously and returns the rest. The head stays under a pipe buffer, so the
+    // write never blocks on a child that has not started reading; a child that has already exited or closed its input
+    // fails it, and the rest of the input meets the same pipe.
+    internal static string WriteInputHead(StreamWriter writer, string input) {
+        var head = Math.Min(
+            val1: input.Length,
+            val2: InputHeadCharacters
+        );
+
+        if (head == 0) {
+            return input;
+        }
+
+        try {
+            writer.Write(buffer: input.AsSpan(
+                length: head,
+                start: 0
+            ));
+            writer.Flush();
+        } catch (IOException) {
+            // An early-exiting child closes its pipe; the child's exit, not the write, is the run's answer.
+        }
+
+        return input[head..];
+    }
+    internal static async Task WriteInputAsync(StreamWriter writer, string input, CancellationToken cancellationToken,
         Task? continueAfter, string continuationInput) {
         try {
             if (input.Length != 0) {
@@ -300,7 +311,7 @@ internal static class CliProcess {
         }
         // EOF is the one-shot contract's final input, sent only when the input completed. A timeout leaves stdin open
         // so the kill, not an EOF the child might treat as its cue to proceed, is what ends the child.
-        writer.Close();
+        ChildProcess.CloseInput(input: writer);
     }
 
     /// <summary>Gets what remains of a suite-wide time budget after a running clock's elapsed time. The result is

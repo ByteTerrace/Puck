@@ -84,10 +84,10 @@ public static class ChildProcess {
                         buffer: input.AsMemory(),
                         cancellationToken: deadline.Token
                     ).ConfigureAwait(continueOnCapturedContext: false);
-                    process.StandardInput.Close();
                 } catch (IOException) {
                     // A child that exits early closes its pipe; its exit code, not the write, is the run's answer.
                 }
+                CloseInput(input: process.StandardInput);
             }
             await process.WaitForExitAsync(cancellationToken: deadline.Token).ConfigureAwait(continueOnCapturedContext: false);
         } catch (OperationCanceledException) when (deadline.Token.IsCancellationRequested) {
@@ -110,6 +110,20 @@ public static class ChildProcess {
             Stdout: drained[0],
             TimedOut: timedOut
         );
+    }
+    /// <summary>Closes a child's standard input, which sends it end of stream. A child that has exited, or closed its own
+    /// input, fails the write that flushes what is still buffered; that failure ends the input and never the run, since
+    /// the child's own exit and output decide the outcome.</summary>
+    /// <param name="input">The child's redirected standard input.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="input"/> is <see langword="null"/>.</exception>
+    public static void CloseInput(StreamWriter input) {
+        ArgumentNullException.ThrowIfNull(argument: input);
+
+        try {
+            input.Close();
+        } catch (IOException) {
+            // The pipe's reader is gone; the bytes it never read have no one to reach.
+        }
     }
     /// <summary>Finishes reading the streams of a child that has exited. Waits for every pump to reach end of stream
     /// for at most <see cref="ExitDrainGrace"/> on <paramref name="clock"/>, then cancels <paramref name="release"/>,
