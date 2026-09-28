@@ -33,6 +33,23 @@ public sealed class SdfWorldTablesWorkLawTests {
             actual: SdfWorldTables.PassClasses.ToArray()
         );
     }
+    [Fact]
+    public void AViewsCadenceSignatureTracksOnlyItsOwnQuality() {
+        using var rig = new Rig();
+        var views = new[] { rig.Frame.Views[0], rig.Frame.Views[0] };
+        var frame = rig.Frame with { Views = views };
+        var first = rig.Engine.ViewSignature(frame: frame, view: 0);
+
+        Assert.Equal(actual: rig.Engine.ViewSignature(frame: frame, view: 1), expected: first);
+        views[1] = views[1] with { Quality = new SdfViewQuality { DisableAmbientOcclusion = true } };
+        var second = rig.Engine.ViewSignature(frame: frame, view: 1);
+
+        Assert.NotEqual(actual: second, expected: first);
+        Assert.Equal(actual: rig.Engine.ViewSignature(frame: frame, view: 0), expected: first);
+        views[0] = views[0] with { Quality = new SdfViewQuality { UseFastSoftShadowMarch = true } };
+        Assert.NotEqual(actual: rig.Engine.ViewSignature(frame: frame, view: 0), expected: first);
+        Assert.Equal(actual: rig.Engine.ViewSignature(frame: frame, view: 1), expected: second);
+    }
     [InlineData(0)]
     [InlineData(SdfWorldTables.DefaultBrickPoolVoxelCapacity)]
     [Theory]

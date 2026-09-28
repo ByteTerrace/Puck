@@ -81,8 +81,9 @@ misses included. **surface** adds the geometric normal and curvature to it.
 **ambient** evaluates contact occlusion along those normals into the record.
 **shadow** marches the key light's soft shadow from each lit surface into the
 record. **views** reads the record and computes materials, lighting and
-volumes. A frame whose levers turn ambient occlusion or soft shadows off skips
-that pass. Compare all five passes when measuring per-pixel field cost: moving
+volumes. A view whose quality (`SdfViewSnapshot.Quality`) turns ambient occlusion or
+soft shadows off skips that pass; quality is each view's, so views of one frame
+render at different cost. Compare all five passes when measuring per-pixel field cost: moving
 work between kernels can reduce register pressure but adds buffer traffic.
 
 No pass assembles views. Each view's output is its instance's own image, sized

@@ -217,6 +217,8 @@ internal static class NuGetCommand {
                 throw new InvalidDataException(message: $"{id} overrides the shared version {version}.");
             }
             if (!expected.Add(item: id)) { throw new InvalidDataException(message: $"Duplicate package ID: {id}."); }
+            // The package batch streams its builds to the console and deliberately reuses nodes across the shared
+            // project graph. Metadata and release smoke probes disable build servers to keep children scoped to the verb.
             if (!noBuild) {
                 await CliProcess.RunCheckedAsync(
                     arguments: ["restore", project, "--locked-mode"],

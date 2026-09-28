@@ -86,11 +86,11 @@ public sealed partial class SdfWorldPassesLawTests {
             expected: (true, true)
         );
         Assert.Equal(
-            actual: StagesOf(frame: (frame with { DisableAmbientOcclusion = true })),
+            actual: StagesOf(frame: (frame with { Views = [(frame.Views[0] with { Quality = new SdfViewQuality { DisableAmbientOcclusion = true } })] })),
             expected: (false, true)
         );
         Assert.Equal(
-            actual: StagesOf(frame: (frame with { DisableSoftShadows = true })),
+            actual: StagesOf(frame: (frame with { Views = [(frame.Views[0] with { Quality = new SdfViewQuality { DisableSoftShadows = true } })] })),
             expected: (true, false)
         );
         // Soft shadows on, but no light casts them.
