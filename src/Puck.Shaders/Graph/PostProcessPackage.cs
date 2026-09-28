@@ -7,7 +7,8 @@ namespace Puck.Shaders;
 /// fullscreen draw of the package's vertex and fragment stages that samples the pass's one input image and writes its one
 /// output. It binds the package's interface, which the plan lays out for the pass from the catalog's declaration
 /// (<see cref="ShaderPipelineParameterLayout.ForPackage"/>): the frame group, and the pass group holding the extent, the
-/// package's config, the input image and its samplers. One type serves every post-process package, registered once per
+/// package's config, the input image, its samplers and the work counters its fragments count the texels they write into
+/// (<see cref="RenderGraphPackageWorkCounters"/>). One type serves every post-process package, registered once per
 /// package under its <see cref="Id"/>.
 /// <para>
 /// Its build reads and validates the stages' deployed bytecode for the backend, then leases the graphics pipeline, its two
@@ -35,7 +36,8 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
     /// directory beside the executable.</param>
     /// <exception cref="ArgumentNullException"><paramref name="package"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException"><paramref name="package"/> is not a post-process package, or declares
-    /// anything but one sampled image (the input) and the samplers it is read through.</exception>
+    /// anything but one sampled image (the input), the samplers it is read through and the work counters
+    /// (<see cref="ShaderWorkCounters.Members"/>), which it must declare.</exception>
     public PostProcessPackage(RenderGraphPackage package, string? root = null) {
         ArgumentNullException.ThrowIfNull(argument: package);
 
@@ -47,9 +49,13 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
 
         if (
             (images.Length != 1) ||
-            package.Members.Any(predicate: static member => (member.Kind is not (ShaderInterfaceMemberKind.SampledImage or ShaderInterfaceMemberKind.Sampler)))
+            !package.CountsKernelWork ||
+            package.Members.Any(predicate: static member => (
+                (member.Kind is not (ShaderInterfaceMemberKind.SampledImage or ShaderInterfaceMemberKind.Sampler)) &&
+                !ShaderWorkCounters.Members.Any(predicate: counter => (counter == member))
+            ))
         ) {
-            throw new InvalidDataException(message: $"Package '{package.Id}' must declare exactly one sampled image (the input) and only samplers beside it to run as a post-process package.");
+            throw new InvalidDataException(message: $"Package '{package.Id}' must declare exactly one sampled image (the input), samplers beside it and the work counters its fragments count the texels they write into ({nameof(ShaderWorkCounters)}.{nameof(ShaderWorkCounters.Members)}) to run as a post-process package.");
         }
 
         Package = package;
@@ -196,6 +202,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
         private readonly nint[] m_samplers;
         private readonly GpuDeviceServices m_services;
         private readonly RenderGraphPackageSets? m_sets;
+        private readonly RenderGraphPackageWorkCounters? m_workCounters;
 
         private bool m_disposed;
 
@@ -239,6 +246,10 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                     groups: groups
                 );
                 m_input = m_sets.BindingOf(member: input);
+                m_workCounters = new RenderGraphPackageWorkCounters(
+                    context: context,
+                    sets: m_sets
+                );
 
                 for (var slot = 0; (slot < inFlight); slot++) {
                     m_samplers[slot] = m_services.Bindings.CreateSampler();
@@ -297,6 +308,10 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                 binding: m_input,
                 descriptorSetHandle: sets.PassSet(slot: recording.Slot),
                 imageViewHandle: input.Image.ImageViewHandle
+            );
+            m_workCounters!.Write(
+                passSet: sets.PassSet(slot: recording.Slot),
+                recording: recording
             );
             recorder.BeginRenderPass(
                 command,

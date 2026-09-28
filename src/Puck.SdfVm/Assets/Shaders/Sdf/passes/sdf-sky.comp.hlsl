@@ -43,4 +43,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     color = shadeVolumes(color, view.position.xyz, rayDirection, worldRayDistanceAt(view, rayDirection, worldNearDistance(view)), worldFarDistance(view), id.xy);
 
     output[id.xy] = float4(color, 1.0);
+    sdfWorkTexels = 1u;
+    puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

@@ -22,6 +22,7 @@ float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStar
     [loop]
     for (int step = 0; (step < MaxSteps); step++) {
         float radius = mapDistanceMasked(rayOrigin + (rayDirection * traveled), instanceMaskBase);
+        sdfWorkSteps += 1u;
         float hitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
 
         // Accept on the CLAMPED field (production-consistent), so a landed-inside sample (radius < threshold, incl.

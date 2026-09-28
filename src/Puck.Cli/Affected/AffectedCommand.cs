@@ -269,7 +269,7 @@ internal static class AffectedCommand {
     // sources build/WorldAssets.targets passes: every .puck and .world.json under the shipped tree.
     private static int CheckCatalog(string repositoryRoot) {
         var build = CliProcess.RunCaptured(
-            arguments: ["build", "src/Puck.World/Puck.World.csproj", "-c", "Release", "-v", "q", "-nologo"],
+            arguments: ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", "-v", "q", "-nologo"],
             fileName: "dotnet",
             input: string.Empty,
             timeout: TimeSpan.FromMinutes(minutes: 30),
@@ -300,7 +300,9 @@ internal static class AffectedCommand {
         var failed = new List<string>();
 
         // dotnet test builds each suite and applies the settings its project binds (RunSettingsFilePath), so an
-        // opt-in tier such as Maths' Deep and Exhaustive stays out exactly as it does in CI.
+        // opt-in tier such as Maths' Deep and Exhaustive stays out exactly as it does in CI. The suites build one after
+        // another over a shared project graph, so build servers stay enabled for the next suite to reuse; the capture's
+        // post-exit drain bounds a server that inherited its pipes.
         foreach (var suite in plan.Suites) {
             var run = CliProcess.RunCaptured(
                 arguments: ["test", Path.Combine(path1: repositoryRoot, path2: "tests", path3: suite, path4: $"{suite}.csproj"), "-c", "Release", "-v", "q", "-nologo"],

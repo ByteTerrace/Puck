@@ -15,6 +15,8 @@ pipeline.wait overlay compiled 40
 pipeline.wait overlay installed 10
 pipeline.wait sdf-world compiled 40
 pipeline.wait sdf-world installed 10
+pipeline.wait source compiled 40
+pipeline.wait source installed 10
 world.row.set views.graphs {"name":"ink-simulation","source":"{fixtures}/ink-simulation-perturbed.graph.json"}
 pipeline.reload ink-simulation
 pipeline.wait ink-simulation compiled 40
@@ -47,6 +49,10 @@ world.row.set views.graphs {"name":"sdf-world","source":"{fixtures}/sdf-world-pe
 pipeline.reload sdf-world
 pipeline.wait sdf-world compiled 40
 pipeline.wait sdf-world installed 10
+world.row.set views.graphs {"name":"source","source":"{fixtures}/source-perturbed.graph.json"}
+pipeline.reload source
+pipeline.wait source compiled 40
+pipeline.wait source installed 10
 pipeline.sentinels ink-simulation on
 pipeline.reset ink-simulation
 pipeline.wait ink-simulation submitted 1 10
@@ -87,3 +93,8 @@ pipeline.reset sdf-world
 pipeline.wait sdf-world submitted 1 10
 pipeline.capture sdf-world {run}/sdf-world.png
 pipeline.wait sdf-world captured 10
+pipeline.sentinels source on
+pipeline.reset source
+pipeline.wait source submitted 1 10
+pipeline.capture source {run}/source.png
+pipeline.wait source captured 10

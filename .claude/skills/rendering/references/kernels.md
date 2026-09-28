@@ -60,16 +60,27 @@ graph the runtime makes for the instance, and `world.counters gpu` lists its
 ten passes under the instance's name as `sdf.world$sky` through
 `sdf.world$views`. The frame's first pass to record submits its residency's one
 upload ahead of the instance's submission (`SdfWorldResidency.Submit`), counted
-under the residency as `sdf:<name>` with one pass, `upload`
-(`SdfWorldTables.PassLabels`); the brick staging copy and bake dispatches are
-recorded in that upload when work is pending, and count outside every pass. The
+under the residency as `sdf:<name>` with three passes (`SdfWorldTables.PassLabels`):
+`fillers`, the fillers' first transitions and clears on the first upload;
+`bricks`, the brick staging copy, the bake dispatches and the pool's barriers
+when that work is pending; and `upload`, the region copies. An upload skips a
+pass it has no work for. Every pass of the view counts its own march steps
+(`sdfWorkSteps`: each field evaluation of a march or a query, and each bounded
+volume sample) and the pixels it writes an output for (`sdfWorkTexels`: set by
+`sdfVisibilityStoreWord` and the output writes; the mesh pass one per fragment)
+into its node's kernel counters through the generated `puckCountWork` (one
+wave-summed atomic a wave into the row `workCounterRow` names,
+`GpuKernelCounters`), which the node clears ahead of the first pass and copies
+to the slot's readback behind the last; `world.counters gpu` reads them as
+`march.steps` and `texels.written`, per-backend deterministic. A new counting
+site adds to `sdfWorkSteps` beside the evaluation it counts. The
 runtime declares a view unchanged when nothing it renders from moved
 (`SdfWorldResidency.IsUnchanged`, `RenderGraphFrame.Unchanged`) and records none
 of its passes. The upload and the view's passes, in order:
 
 | Label | Kernel | Does |
 |---|---|---|
-| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, frame grid, screen surfaces, screen mappings, screen lights, volumes, decals, mesh draws) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, levers and environment are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
+| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, frame grid, screen surfaces, screen mappings, screen lights, volumes, decals, mesh draws) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, quality, levers and environment are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
 | `sky` | `sdf-sky.comp` | Fills every pixel of the view's output image with sky before any tile is culled. Binds the same frame and pass groups as every per-view pass. |
 | `mask` | `sdf-instance-cull.comp` | Builds each tile's instance mask from the `SdfInstanceGrid` CSR grid. Deliberately not fused into the beam. |
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |

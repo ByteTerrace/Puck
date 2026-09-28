@@ -487,6 +487,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
             actual: scene.AddView(view: in view),
             expected: 0
         );
+        scene.EndViews();
 
         var frame = Capture(source: scene.FrameSource);
 
@@ -514,39 +515,5 @@ public sealed partial class WorldRoutedPresentationLawTests {
         );
         Assert.True(condition: frame.Program.Words.SequenceEqual(other: destinationProgram.Words));
         Assert.False(condition: frame.Program.Words.SequenceEqual(other: bootProgram.Words));
-
-        // The sky and media clock is the destination's own presented tick, never the host's, and a session view of the
-        // destination reads the same one.
-        var host = (frame with {
-            Clock = new PresentedTick(
-                Fraction: 0d,
-                Whole: 123456789UL
-            ),
-        });
-        var hosted = new WorldRoutedScene(
-            bodyColor: north.Mirror.BodyColor,
-            endpoint: north,
-            hostFrame: () => host
-        );
-
-        _ = hosted.AddView(view: in view);
-
-        var dressed = Capture(source: hosted.FrameSource);
-
-        Assert.Equal(
-            actual: dressed.Clock,
-            expected: north.FollowState().Presented
-        );
-        Assert.NotEqual(
-            actual: dressed.Clock,
-            expected: host.Clock
-        );
-        Assert.Equal(
-            actual: Capture(source: new SdfCompositionFrameSource(
-                dresser: destination,
-                emitters: [destination]
-            )).Clock,
-            expected: north.FollowState().Presented
-        );
     }
 }

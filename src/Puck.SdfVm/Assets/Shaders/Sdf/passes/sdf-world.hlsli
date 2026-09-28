@@ -10,6 +10,7 @@
 #include "../frame/sdf-mesh.hlsli"
 
 // The world modules, in the order the kernels declare them: each reads only what the modules before it declare.
+#include "../frame/sdf-work.hlsli"
 #include "../frame/sdf-frame.hlsli"
 #include "../shade/sdf-environment.hlsli"
 #include "../shade/sdf-lighting.hlsli"

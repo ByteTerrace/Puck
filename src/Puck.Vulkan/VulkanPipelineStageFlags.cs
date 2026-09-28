@@ -18,6 +18,8 @@ public static class VulkanPipelineStageFlags {
     public const uint EarlyFragmentTests = 0x00000100;
     /// <summary>The <c>VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT</c> value.</summary>
     public const uint FragmentShader = 0x00000080;
+    /// <summary>The <c>VK_PIPELINE_STAGE_HOST_BIT</c> value.</summary>
+    public const uint Host = 0x00004000;
     /// <summary>The <c>VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT</c> value.</summary>
     public const uint LateFragmentTests = 0x00000200;
     /// <summary>The <c>VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT</c> value.</summary>

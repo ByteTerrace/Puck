@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'sdf-world-perturbed' (sha256/70dd8f1c48deba110069fccf738055f96b656be25c94a984b0db5e8925d649f7), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
+// The echo pass of shader interface 'sdf-world-perturbed' (sha256/e9bd970b03d6931a892e3f5d2eaa200efc3616d462a8551d532f55718e7f46ba), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "sdf-world-perturbed.interface.hlsli"
 
@@ -59,5 +59,6 @@ void main(uint3 id : SV_DispatchThreadID) {
     echo[uint2(49, 0)] = ((asuint(passGroup.viewPosition.x) == 0x4010D3A5u) && (asuint(passGroup.viewPosition.y) == 0x4010E3A5u) && (asuint(passGroup.viewPosition.z) == 0x4010F3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(50, 0)] = ((asuint(passGroup.viewRight.x) == 0x401113A5u) && (asuint(passGroup.viewRight.y) == 0x401123A5u) && (asuint(passGroup.viewRight.z) == 0x401133A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(51, 0)] = ((asuint(passGroup.viewUp.x) == 0x401153A5u) && (asuint(passGroup.viewUp.y) == 0x401163A5u) && (asuint(passGroup.viewUp.z) == 0x401173A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(52, 0)] = ((asuint(passGroup.viewportCount) == 0x401193A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(52, 0)] = ((asuint(passGroup.viewportCount) == 0x401183A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(53, 0)] = ((asuint(passGroup.workCounterRow) == 0x4011A3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
 }

@@ -45,8 +45,20 @@ public sealed partial class SdfWorldTables {
             commandBufferHandle: commandBuffer,
             label: DebugLabel
         );
-        InitializeFillers(commandBuffer: commandBuffer);
-        RecordBrickWrites(commandBuffer: commandBuffer);
+        if (m_fillersInitialized) {
+            m_work.SkipPass(pass: FillersPass);
+        } else {
+            m_work.EnterPass(pass: FillersPass);
+            InitializeFillers(commandBuffer: commandBuffer);
+            m_work.LeavePass();
+        }
+        if (WritesBricks()) {
+            m_work.EnterPass(pass: BricksPass);
+            RecordBrickWrites(commandBuffer: commandBuffer);
+            m_work.LeavePass();
+        } else {
+            m_work.SkipPass(pass: BricksPass);
+        }
         m_work.EnterPass(pass: UploadPass);
         RecordRegionCopies();
         m_work.LeavePass();
@@ -69,10 +81,6 @@ public sealed partial class SdfWorldTables {
     // bind them: the sampled filler shader-readable and the storage filler General, both cleared, so a screen whose source
     // is missing from a frame samples black.
     private void InitializeFillers(nint commandBuffer) {
-        if (m_fillersInitialized) {
-            return;
-        }
-
         var recorder = m_gpu.Recorder;
 
         foreach (var filler in ((ReadOnlySpan<IGpuImage>)[m_sampledFiller, m_storageFiller])) {
@@ -115,16 +123,14 @@ public sealed partial class SdfWorldTables {
         );
         m_fillersInitialized = true;
     }
+    // Whether this upload writes the brick pool: a queued host-baked brick, or a carve bake in progress.
+    private bool WritesBricks() => (
+        ((m_brickRegion is not null) && (m_brickUploads.Count > 0)) ||
+        AnyBrickBaking()
+    );
     // The brick pool's writes this upload, bracketed by its barriers: every earlier view's read of the pool before the
     // writes, and the writes before every later view's read.
     private void RecordBrickWrites(nint commandBuffer) {
-        if (
-            ((m_brickRegion is null) || (m_brickUploads.Count == 0)) &&
-            !AnyBrickBaking()
-        ) {
-            return;
-        }
-
         var recorder = m_gpu.Recorder;
 
         recorder.TransitionBuffer(

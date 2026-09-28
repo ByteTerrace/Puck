@@ -14,7 +14,8 @@ namespace Puck.Shaders;
 /// <c>RWStructuredBuffer&lt;T&gt;</c>, and one without is a <c>ByteAddressBuffer</c> or <c>RWByteAddressBuffer</c>. A
 /// pushed index (<see cref="ShaderInterface.PushesIndex"/>) follows the groups as a one-member struct carrying
 /// <c>[[vk::push_constant]]</c> paired with <c>register(b0, space4)</c>, the space
-/// <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/> names.
+/// <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/> names. An interface declaring the work counters
+/// (<see cref="ShaderWorkCounters"/>) ends with the functions its kernels count their own work through.
 /// <para>The text is a pure function of the interface: the same interface generates the same bytes, with LF line
 /// endings, on every host.</para>
 /// </summary>
@@ -163,6 +164,10 @@ public static class ShaderInterfaceHlsl {
                 line: $"{type} {ShaderInterface.AccessorName(member: member)}(uint index) {{ return ((index < {Number(value: member.Length!.Value)}u) ? {member.Name}[index] : (({type})0)); }}",
                 text: text
             );
+        }
+
+        if (ShaderWorkCounters.IsDeclaredBy(shaderInterface: shaderInterface)) {
+            ShaderWorkCounters.AppendHlsl(text: text);
         }
 
         Line(

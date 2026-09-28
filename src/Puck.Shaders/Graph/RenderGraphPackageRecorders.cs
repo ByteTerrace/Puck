@@ -46,7 +46,12 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// takes the lease of each image it samples (<see cref="RenderGraphExternalReads.Take"/>) and holds it in
 /// <paramref name="Leases"/>; the runtime retires the rest once the frame is produced. Each image rests in its producer's
 /// published layout, shader-readable, and the planner plans no barrier for it.</param>
-public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null) {
+/// <param name="WorkCounters">Where the pass's kernels count their own work this frame: the frame slot's counter
+/// buffer and the pass's row, which the node clears before its first pass and copies after its last, or
+/// <see langword="null"/> for a pass whose fragment does not count (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>).
+/// A recording binds the buffer read-write at every dispatch and tells its kernels the row; it records no barrier for
+/// it, since every pass only adds to it atomically.</param>
+public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null, GpuKernelCounterRow? WorkCounters = null) {
     /// <summary>Gets the command buffer to record into.</summary>
     public nint CommandBuffer { get; } = CommandBuffer;
     /// <summary>Gets the instance's counting recorder.</summary>
@@ -74,6 +79,8 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     /// <summary>Gets the images of the instances the pass's instance reads that its graph binds to no version, or
     /// <see langword="null"/>.</summary>
     public RenderGraphExternalReads? Reads { get; } = Reads;
+    /// <summary>Gets where the pass's kernels count their own work this frame, or <see langword="null"/>.</summary>
+    public GpuKernelCounterRow? WorkCounters { get; } = WorkCounters;
 }
 /// <summary>What a package pass's recording did with its outputs this frame.</summary>
 public enum RenderGraphPackageOutcome : byte {

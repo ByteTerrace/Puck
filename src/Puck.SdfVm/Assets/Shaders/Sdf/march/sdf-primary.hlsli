@@ -78,6 +78,7 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
         SdfHit hit = sdfPrimarySample(rayOrigin + (rayDirection * traveled), instanceMaskBase, part, localPart);
 
         sdfEvalCount += 1.0; // one primary-march sample
+        sdfWorkSteps += 1u;
 
         // FOLD-SAFE split: STEP (sizing, unbounding spheres, the slope EMA) on min(value, sdfMapStepBound) —
         // the sound marchable field near a fold boundary — but TERMINATE on the raw value (exact in the owning
@@ -249,6 +250,7 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
         SdfHit candidate = sdfPrimarySample(rayOrigin + (rayDirection * traveled), instanceMaskBase, part, localPart);
 
         sdfEvalCount += 1.0;
+        sdfWorkSteps += 1u;
         hitSurface = true;
         material = candidate.material;
         hitLanes = candidate.lanes;
@@ -360,6 +362,7 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
         // Independent sampling can choose a different accepted point from the full-scene march.
         SdfHit resolved = mapMasked(rayOrigin + rayDirection * best.traveled, instanceMaskBase);
         sdfEvalCount += 1.0;
+        sdfWorkSteps += 1u;
         result.radius = resolved.distance;
         result.threshold = max(SurfaceEpsilon, pixelFootprint * best.traveled);
         result.material = resolved.material;

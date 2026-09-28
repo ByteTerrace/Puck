@@ -10,8 +10,8 @@ namespace Puck.Overlays;
 /// pass over its one input image into its one output, through <see cref="OverlayFrameComposer"/> and
 /// <c>overlay-unified.frag.hlsl</c>, which reads the package's interface as the plan lays it out: the frame group, and the
 /// pass group holding the extent, the three per-frame values the recorder writes, the input image, the frame slot
-/// images, the one sampler they are all read through and the storage buffer
-/// (<see cref="RenderGraphPackageCatalog.OverlayMembers"/>).
+/// images, the one sampler they are all read through, the storage buffer and the work counters each fragment counts its
+/// texel into (<see cref="RenderGraphPackageCatalog.OverlayMembers"/>, <see cref="RenderGraphPackageWorkCounters"/>).
 /// <para>
 /// Its build leases the graphics pipeline, its two shader modules and the render pass it draws in, through the pass's
 /// pipeline layout, from the pass-pipeline cache on the thread pool. It states one region (<see cref="Regions"/>), the
@@ -179,6 +179,7 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
         private readonly RenderGraphPackageSets m_sets;
         private readonly uint m_source;
         private readonly int m_values;
+        private readonly RenderGraphPackageWorkCounters m_workCounters;
 
         private bool m_disposed;
         private int m_themeRevision;
@@ -232,6 +233,10 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                     groups: groups
                 );
                 m_source = m_sets.BindingOf(member: RenderGraphPackageCatalog.OverlaySource);
+                m_workCounters = new RenderGraphPackageWorkCounters(
+                    context: context,
+                    sets: m_sets
+                );
 
                 for (var slot = 0; (slot < m_frameSlots.Length); slot++) {
                     m_frameSlots[slot] = m_sets.BindingOf(member: RenderGraphPackageCatalog.OverlayFrameSlot(slot: slot));
@@ -339,6 +344,10 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
             WriteImages(
                 set: m_sets.PassSet(slot: recording.Slot),
                 worldView: input.Image.ImageViewHandle
+            );
+            m_workCounters.Write(
+                passSet: m_sets.PassSet(slot: recording.Slot),
+                recording: recording
             );
             m_composer.WritePassValues(values: recording.PassBlock.Slice(
                 length: OverlayFrameComposer.PassValueBytes,

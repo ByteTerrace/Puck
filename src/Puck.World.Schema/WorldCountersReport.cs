@@ -64,4 +64,7 @@ public sealed record WorldCount(string Source, string? Node, string? Pass, strin
 /// <param name="Node">The render node.</param>
 /// <param name="Label">The pass's label.</param>
 /// <param name="State">What the pass did.</param>
-public sealed record WorldCountersPass(string Node, string Label, GpuPassState State);
+/// <param name="Class">What two runs of the pass may be held to agree on, as its node declared it:
+/// <see cref="WorkClass.Deterministic"/> or <see cref="WorkClass.PerBackendDeterministic"/>, which a deterministic kind counted
+/// in it is loosened to.</param>
+public sealed record WorldCountersPass(string Node, string Label, GpuPassState State, WorkClass Class);

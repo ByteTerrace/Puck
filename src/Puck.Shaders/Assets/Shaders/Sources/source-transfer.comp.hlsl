@@ -4,8 +4,9 @@
 // The header's transfer function decides the decode: sRGB, linear, or the perceptual quantizer divided by the reference
 // white's luminance. Alpha passes through unchanged.
 
-// The generated interface declares the frame group and the pass group: the extent, the region read at binding 1 and the
-// image written at binding 2.
+// The generated interface declares the frame group and the pass group: the extent, the region read at binding 1, the
+// image written at binding 2, and the work counters each written pixel counts its texel into (puckCountWork). A document
+// pass compiling the kernel declares no work counters, so it counts nothing.
 #include "source-transfer.interface.hlsli"
 #include "image-source.hlsli"
 
@@ -24,4 +25,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         : imageSourceUnpackRgba8(word));
 
     image[id.xy] = float4(imageSourceDecode(transfer, encoded.r), imageSourceDecode(transfer, encoded.g), imageSourceDecode(transfer, encoded.b), encoded.a);
+#if defined(PUCK_WORK_COUNTERS)
+    puckCountWork(0u, 1u);
+#endif
 }

@@ -330,6 +330,7 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
             );
             packagePasses.Add(item: new ShaderPipelinePackagePass(
                 Config: config,
+                CountsKernelWork: package.CountsKernelWork,
                 InputAccesses: [.. package.Inputs.Select(selector: static port => port.Access)],
                 Inputs: pass.InputReferences,
                 Members: package.Members,
@@ -430,6 +431,7 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
             );
             packagePasses.Add(item: new ShaderPipelinePackagePass(
                 Config: config,
+                CountsKernelWork: part.CountsKernelWork,
                 Dispatch: ((part.Dispatch is { Arguments: { } arguments } dispatch)
                     ? dispatch with { Arguments = names[arguments].Name }
                     : part.Dispatch),

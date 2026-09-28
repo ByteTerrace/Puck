@@ -1,10 +1,13 @@
 using System.Numerics;
+using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions.Cameras;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SignedDistance.Queries;
+using Puck.Testing;
 using Puck.World.Client;
+using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
 
@@ -14,7 +17,7 @@ namespace Puck.World.Tests;
 /// THE LAW: a window shows what a traveller at the eye would see through the door. For the <c>portal-window</c>
 /// canary's documents, <see cref="WorldWindowFrustumFit.TryResolveApertures"/> resolves the door's two apertures and
 /// <see cref="WorldPrototypeFacets"/> derives the glass the door's screen draws, the three frames
-/// <c>WorldScreenBinder.UpdateWindowCameras</c> fits every frame, and the camera
+/// <c>WorldScreenBinder.FitWindow</c> fits every frame, and the camera
 /// <see cref="WorldWindowFrustumFit.TryFitWindow"/> fits from an eye casts, through the image point at the glass's
 /// <c>(x, y)</c>, the isometry's image of the ray from that eye through the same point of the glass: the rays pass
 /// through the mapped glass point (a mirrored fit passes through its reflection instead), and cast through
@@ -38,9 +41,10 @@ public sealed class WorldWindowFrustumFitLawTests {
     // arch's glass.
     private static readonly Vector3 Occluder = new(x: 0f, y: 1.5f, z: 4f);
 
+    // The first two are the canary's eyes: the camera its seat's view renders with at each of its two body poses.
     internal static readonly Vector3[] Eyes = [
-        new(x: 1f, y: 1.6f, z: 9f),
-        new(x: -1f, y: 1.6f, z: 9f),
+        new(x: 1f, y: 1.6f, z: 6f),
+        new(x: -1f, y: 1.6f, z: 6f),
         new(x: 0.4f, y: 2.1f, z: 3f),
     ];
 
@@ -272,7 +276,7 @@ public sealed class WorldWindowFrustumFitLawTests {
         foreach (var eye in Eyes[..2]) {
             var fitted = Fit(eye: eye);
 
-            emitter.SetWindowCamera(camera: fitted);
+            emitter.SetWindowFit(fit: () => fitted);
 
             var frame = composition.CaptureFrame(
                 deltaSeconds: 0f,
@@ -349,7 +353,7 @@ public sealed class WorldWindowFrustumFitLawTests {
     }
     // A pick through the window reaches exactly as far as the window renders: the far distance is measured from the
     // mapped eye, as the view pass measures it, not from the glass the ray starts on. The marker's near surface lies
-    // about 14.5 units from the first eye; a far distance of 14 ends the view short of it, and one of 15 reaches it.
+    // about 11.5 units from the first eye; a far distance of 11 ends the view short of it, and one of 12 reaches it.
     [Fact]
     public void AWindowPickEndsAtTheFarDistanceMeasuredFromTheMappedEye() {
         var destination = AuthoredGameFixtures.Load(relativePath: Destination);
@@ -362,7 +366,7 @@ public sealed class WorldWindowFrustumFitLawTests {
             );
             var camera = Fit(eye: eye);
 
-            emitter.SetWindowCamera(camera: camera);
+            emitter.SetWindowFit(fit: () => camera);
             _ = new SdfCompositionFrameSource(
                 dresser: emitter,
                 emitters: [emitter]
@@ -383,9 +387,9 @@ public sealed class WorldWindowFrustumFitLawTests {
 
         var surface = (Vector3.Distance(value1: Fit(eye: eye).Position, value2: Marker) - 0.5f);
 
-        Assert.InRange(actual: surface, high: 15f, low: 14f);
-        Assert.False(condition: Picks(farDistance: 14f));
-        Assert.True(condition: Picks(farDistance: 15f));
+        Assert.InRange(actual: surface, high: 12f, low: 11f);
+        Assert.False(condition: Picks(farDistance: 11f));
+        Assert.True(condition: Picks(farDistance: 12f));
     }
     // A pick through the window sees only what lies beyond the aperture: the destination's occluder stands on the ray
     // between the mapped eye and the glass, so a ray from the eye itself meets it, while the window's ray, which starts
@@ -404,7 +408,7 @@ public sealed class WorldWindowFrustumFitLawTests {
         foreach (var eye in Eyes[..2]) {
             var camera = Fit(eye: eye);
 
-            emitter.SetWindowCamera(camera: camera);
+            emitter.SetWindowFit(fit: () => camera);
             _ = composition.CaptureFrame(
                 deltaSeconds: 0f,
                 height: 120,
@@ -437,5 +441,140 @@ public sealed class WorldWindowFrustumFitLawTests {
                 tolerance: 0.02f
             );
         }
+    }
+    // The canary moves the viewer with body.pose, and a window fits its eye to the camera the seat's view renders with
+    // in the same frame (WorldWindowFrustumFit.FitFrom), so the canary's seat renders through a rig that rides its body:
+    // the eye the presenter publishes for seat 0 moves with the body, and the window fitted from it shows the marker on
+    // the side of the glass the body stepped toward. A seat bound to a fixed camera would fit both poses from one eye
+    // and frame the marker at the glass's centre each time.
+    [Fact]
+    public void TheCanarysSeatViewRidesItsBody_SoAStepReframesTheWindow() {
+        using var state = new TemporaryDirectory(prefix: "puck-portal-window-eye-");
+        using var host = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: state,
+            world: Local
+        ).Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var client = host.Services.GetRequiredService<WorldClient>();
+        var viewports = host.Services.GetRequiredService<WorldSeatViewports>();
+        var destination = AuthoredGameFixtures.Load(relativePath: Destination);
+        var row = DoorRow();
+        var fit = WorldWindowFrustumFit.FitFrom(
+            destination: () => destination,
+            local: () => client.Definition,
+            screen: () => row,
+            viewports: viewports
+        );
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            _ = client.Roster.VacateSeat(slot: slot);
+        }
+        _ = client.Roster.OccupySeat(profile: null, slot: 0);
+
+        foreach (var side in ((ReadOnlySpan<float>)[1f, -1f])) {
+            client.DeliverSnapshot(snapshot: new WorldSnapshot(
+                Authority: WorldInstanceHost.BootInstanceName,
+                EngineTick: 1680UL,
+                Entries: new[] { new EntitySnapshot(
+                    Active: true,
+                    BodyColor: Vector3.One,
+                    CatalogRig: 0,
+                    Continuity: EntityContinuity.Continuous,
+                    Generation: 1,
+                    Index: 0,
+                    Kit: 0,
+                    Look: 0,
+                    Orientation: Quaternion.Identity,
+                    Position: new Vector3(x: side, y: 0f, z: 9f)
+                ) },
+                Revision: 0,
+                StepTicks: 1680UL,
+                Tick: 1UL
+            ));
+            _ = presenter.CaptureFrame(
+                deltaSeconds: 0f,
+                height: 144U,
+                interpolationAlpha: 1f,
+                width: 256U
+            );
+
+            var seat = viewports.Seat(slot: 0);
+
+            Assert.True(condition: seat.Present);
+            Assert.Equal(
+                expected: side,
+                actual: seat.Camera.Position.X,
+                tolerance: Tolerance
+            );
+
+            var camera = fit();
+
+            Assert.NotNull(@object: camera);
+            Assert.Equal(expected: MathF.Sign(x: side), actual: MathF.Sign(x: (ImageOf(camera: camera.Value, point: Marker).X - 0.5f)));
+        }
+    }
+    // A world with no seat joined renders the frame through its spectator camera, and the window fits its eye to that
+    // camera, the one the frame renders with, rather than falling back to the ordinary session projection. The spectator
+    // stands over the seat spawns' centroid, so moving the spawn moves the camera, and the window fitted from it moves
+    // the marker's image toward the side the camera moved to.
+    [Fact]
+    public void ANoSeatWorldsWindowFitsFromTheSpectator_AndMovingItReframesTheWindow() {
+        using var state = new TemporaryDirectory(prefix: "puck-portal-window-spectator-");
+        using var host = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: state,
+            world: Local
+        ).Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var client = host.Services.GetRequiredService<WorldClient>();
+        var viewports = host.Services.GetRequiredService<WorldSeatViewports>();
+        var destination = AuthoredGameFixtures.Load(relativePath: Destination);
+        var row = DoorRow();
+        var fit = WorldWindowFrustumFit.FitFrom(
+            destination: () => destination,
+            local: () => client.Definition,
+            screen: () => row,
+            viewports: viewports
+        );
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            _ = client.Roster.VacateSeat(slot: slot);
+        }
+
+        (CameraSnapshot Spectator, CameraSnapshot Window) Dress() {
+            var frame = presenter.CaptureFrame(
+                deltaSeconds: 0f,
+                height: 144U,
+                interpolationAlpha: 1f,
+                width: 256U
+            );
+
+            Assert.False(condition: viewports.Seat(slot: 0).Present);
+
+            var spectator = Assert.Single(collection: frame.Views).Camera;
+            var window = fit();
+
+            Assert.NotNull(@object: window);
+            Assert.Equal(expected: Fit(eye: spectator.Position), actual: window.Value);
+
+            return (spectator, window.Value);
+        }
+
+        var (before, beforeWindow) = Dress();
+        var spawns = client.Definition.SpawnPoints;
+
+        client.DeliverDefinition(definition: (client.Definition with {
+            SpawnPointsRaw = [.. spawns.Select(selector: static spawn => (spawn with { Position = (((Vector3)spawn.Position) + new Vector3(x: 4f, y: 0f, z: 0f)) }))],
+        }));
+
+        var (after, afterWindow) = Dress();
+
+        Assert.Equal(
+            expected: 4f,
+            actual: (after.Position.X - before.Position.X),
+            tolerance: Tolerance
+        );
+        Assert.True(condition: (ImageOf(camera: afterWindow, point: Marker).X > ImageOf(camera: beforeWindow, point: Marker).X));
     }
 }

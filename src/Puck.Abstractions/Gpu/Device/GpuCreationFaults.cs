@@ -422,6 +422,14 @@ file sealed class FaultingBufferFactory(IGpuBufferFactory inner, GpuCreationFaul
             usage: usage
         );
     }
+    public IGpuReadbackBuffer CreateReadback(ulong sizeBytes, in GpuObjectName name) {
+        Enter(kind: GpuCreationKind.Buffer);
+
+        return inner.CreateReadback(
+            name: name,
+            sizeBytes: sizeBytes
+        );
+    }
 }
 file sealed class FaultingCommandPoolFactory(IGpuCommandPoolFactory inner, GpuCreationFaults faults) : FaultingWrapper(faults: faults), IGpuCommandPoolFactory {
     public IGpuCommandPool Create(in GpuObjectName name) {

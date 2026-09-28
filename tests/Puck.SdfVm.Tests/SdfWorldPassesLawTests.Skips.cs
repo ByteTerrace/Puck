@@ -62,9 +62,16 @@ public sealed partial class SdfWorldPassesLawTests {
             var pass = sample.PassLabels.IndexOf(value: $"{RenderGraphPackageCatalog.SdfWorld}${part}");
 
             Assert.True(condition: (pass >= 0), userMessage: $"no {part} pass line");
-            Assert.True(condition: sample.TryGetPassCount(column: binds, pass: pass, value: out var bound));
 
-            return (bound > 0L);
+            // A part the frame skips is counted skipped and has no counts; one that ran binds its pipeline.
+            if (sample.GetPassState(pass: pass) == GpuPassState.Skipped) {
+                return false;
+            }
+
+            Assert.True(condition: sample.TryGetPassCount(column: binds, pass: pass, value: out var bound));
+            Assert.True(condition: (bound > 0L), userMessage: $"{part} ran but bound no pipeline");
+
+            return true;
         }
 
         return (Ran(part: SdfWorldPackage.Parts.Ambient), Ran(part: SdfWorldPackage.Parts.Shadow));
@@ -79,11 +86,11 @@ public sealed partial class SdfWorldPassesLawTests {
             expected: (true, true)
         );
         Assert.Equal(
-            actual: StagesOf(frame: (frame with { DisableAmbientOcclusion = true })),
+            actual: StagesOf(frame: (frame with { Views = [(frame.Views[0] with { Quality = new SdfViewQuality { DisableAmbientOcclusion = true } })] })),
             expected: (false, true)
         );
         Assert.Equal(
-            actual: StagesOf(frame: (frame with { DisableSoftShadows = true })),
+            actual: StagesOf(frame: (frame with { Views = [(frame.Views[0] with { Quality = new SdfViewQuality { DisableSoftShadows = true } })] })),
             expected: (true, false)
         );
         // Soft shadows on, but no light casts them.

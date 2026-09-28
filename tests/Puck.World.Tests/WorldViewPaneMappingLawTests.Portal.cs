@@ -51,7 +51,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
             mirror: new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: WorldWindowFrustumFitLawTests.Destination))
         );
 
-        session.SetWindowCamera(camera: WorldWindowFrustumFitLawTests.Fit(eye: eye));
+        session.SetWindowFit(fit: () => WorldWindowFrustumFitLawTests.Fit(eye: eye));
 
         if (dress) {
             _ = new SdfCompositionFrameSource(

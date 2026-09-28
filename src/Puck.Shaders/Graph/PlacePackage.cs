@@ -163,6 +163,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
         private readonly RenderGraphPackageSets m_sets = null!;
         private readonly int m_sharpnessOffset;
         private readonly uint m_source;
+        private readonly RenderGraphPackageWorkCounters m_workCounters = null!;
 
         private bool m_disposed;
         private nint m_sampler;
@@ -188,6 +189,10 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 m_base = m_sets.BindingOf(member: RenderGraphPackageCatalog.PlaceBase);
                 m_source = m_sets.BindingOf(member: RenderGraphPackageCatalog.PlaceSource);
                 m_destination = m_sets.BindingOf(member: RenderGraphPackageCatalog.PlaceDestination);
+                m_workCounters = new RenderGraphPackageWorkCounters(
+                    context: context,
+                    sets: m_sets
+                );
                 m_sampler = m_services.Bindings.CreateSampler();
 
                 for (var slot = 0; (slot < context.InFlightFrames); slot++) {
@@ -274,6 +279,11 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
             var recorder = recording.Recorder;
             var pipeline = m_built.Pipeline;
             var set = m_sets.PassSet(slot: recording.Slot);
+
+            m_workCounters.Write(
+                passSet: set,
+                recording: recording
+            );
 
             m_services.Bindings.WriteStorageImage(
                 arrayElement: 0,

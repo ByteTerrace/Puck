@@ -62,8 +62,8 @@ public sealed class WorldRenderSettings {
     }
 
     /// <summary>Whether ambient occlusion is on. Boots at the definition's default (<see langword="false"/> in the built-in
-    /// world); the <c>world.ao</c> verb toggles it live (it rides the per-frame
-    /// <see cref="Puck.SdfVm.SdfFrame.DisableAmbientOcclusion"/> lane, so no rebuild).</summary>
+    /// world); the <c>world.ao</c> verb toggles it live (it rides each view's
+    /// <see cref="Puck.SdfVm.SdfViewQuality.DisableAmbientOcclusion"/> lane, so no rebuild).</summary>
     public bool AmbientOcclusion { get => m_ambientOcclusion; set { m_ambientOcclusion = value; m_revision++; } }
     /// <summary>The live ambient-occlusion sampling policy. Auto selects the one-sample contact approximation at 16 or
     /// more simulated stand-ins; exact and fast are explicit visual/performance A/B overrides.</summary>
@@ -71,8 +71,8 @@ public sealed class WorldRenderSettings {
     /// <summary>Whether the per-tile far-field bound is active (default <see langword="true"/>). Set
     /// <see langword="false"/> (via <c>world.far-field bound off</c>) to march far-field sky rays to the far
     /// distance (<c>render.farDistance</c>) exactly — a pure performance isolator (output-identical when on), so it is session state, never
-    /// durable config. Rides the per-frame <see cref="Puck.SdfVm.SdfFrame.DisableFarBound"/> lane
-    /// <c>WorldFramePresenter</c> inverts each frame, so no rebuild.</summary>
+    /// durable config. Rides each view's <see cref="Puck.SdfVm.SdfViewQuality.DisableFarBound"/> lane,
+    /// which <c>WorldFramePresenter</c> inverts each frame, so no rebuild.</summary>
     public bool FarBound { get => m_farBound; set { m_farBound = value; m_revision++; } }
     /// <summary>Whether a prototype whose bake is ready draws its baked mesh, textured, in place of its field
     /// (<c>world.bakes on|off</c>), or <see langword="null"/>, the default, for the world's own answer: its bakes draw
@@ -93,6 +93,7 @@ public sealed class WorldRenderSettings {
     /// <returns><see langword="true"/> when ready bakes draw.</returns>
     public bool DrawsBakes(Client.WorldBakeSchedule? schedule) =>
         (Bakes ?? (schedule?.Ships ?? false));
+
     /// <summary>Whether a frame whose render inputs match the previous one re-composites the retained image instead of
     /// re-rendering (default <see langword="true"/>; pixel-identical either way). Set <see langword="false"/> (via
     /// <c>world.cadence off</c>) to render every frame, so <c>world.counters gpu</c> measures a still scene. Session state, never
@@ -121,9 +122,9 @@ public sealed class WorldRenderSettings {
     /// simulated stand-ins; exact and camera-tile are explicit A/B overrides.</summary>
     public ShadowMaskMode ShadowMask { get => m_shadowMask; set { m_shadowMask = value; m_revision++; } }
     /// <summary>The engine-wide soft-shadow reach fraction from 0 (off) through 1 (full reach). Named tiers are facades
-    /// over this continuous value. The <c>world.shadows</c> verb moves it live through the per-frame
-    /// <see cref="Puck.SdfVm.SdfFrame.DisableSoftShadows"/> / <see cref="Puck.SdfVm.SdfFrame.ShadowDistanceScale"/> lanes,
-    /// so no rebuild).</summary>
+    /// over this continuous value. The <c>world.shadows</c> verb moves it live through each view's
+    /// <see cref="Puck.SdfVm.SdfViewQuality.DisableSoftShadows"/> and <see cref="Puck.SdfVm.SdfViewQuality.ShadowDistanceScale"/>
+    /// lanes, so no rebuild.</summary>
     public float ShadowReach { get => m_shadowReach; set { m_shadowReach = value; m_revision++; } }
     /// <summary>The continuous reduced-resolution reconstruction blend: 0 is bilinear, 1 is clamped Catmull-Rom, and
     /// intermediate values blend between them. Native render scale ignores it.</summary>

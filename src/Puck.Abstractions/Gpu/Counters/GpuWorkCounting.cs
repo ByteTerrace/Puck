@@ -332,6 +332,15 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         );
         Tally(column: GpuWork.CopiesColumn);
     }
+    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes) {
+        inner.CopyBuffer(
+            commandBufferHandle: commandBufferHandle,
+            destinationBufferHandle: destinationBufferHandle,
+            sizeBytes: sizeBytes,
+            sourceBufferHandle: sourceBufferHandle
+        );
+        Tally(column: GpuWork.CopiesColumn);
+    }
     public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
         inner.ClearStorageBuffer(
             bufferHandle: bufferHandle,
@@ -582,6 +591,14 @@ file sealed class CountingBufferFactory(IGpuBufferFactory inner, GpuWorkLedger l
 
         return buffer;
     }
+    public IGpuReadbackBuffer CreateReadback(ulong sizeBytes, in GpuObjectName name) =>
+        Created(
+            created: inner.CreateReadback(
+                name: name,
+                sizeBytes: sizeBytes
+            ),
+            lifetimeIndex: GpuWork.BuffersCreatedIndex
+        );
 
     private CountingStorageBuffer WrapHostVisible(IGpuStorageBuffer buffer) =>
         Created(

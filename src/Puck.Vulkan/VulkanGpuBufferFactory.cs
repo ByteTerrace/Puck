@@ -85,6 +85,26 @@ public sealed class VulkanGpuBufferFactory(IVulkanDeviceContext deviceContext, I
 
         return buffer;
     }
+    /// <inheritdoc/>
+    public IGpuReadbackBuffer CreateReadback(ulong sizeBytes, in GpuObjectName name) {
+        ArgumentOutOfRangeException.ThrowIfZero(sizeBytes);
+
+        var buffer = VulkanBuffer.Create(
+            bufferApi: bufferApi,
+            device: deviceContext,
+            memory: VulkanBufferMemory.HostCoherent,
+            sizeBytes: sizeBytes,
+            usage: VulkanBufferUsageFlags.TransferDestination
+        );
+
+        naming.Name(
+            handle: buffer.BufferHandle,
+            kind: GpuObjectKind.Buffer,
+            name: in name
+        );
+
+        return buffer;
+    }
 
     private VulkanBuffer Create(VulkanBufferMemory memory, ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
         GpuBufferUsages.Validate(

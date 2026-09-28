@@ -73,6 +73,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     if (p.active) {
         // The float working color; the display encode dithers and quantizes it.
         output[pixel] = float4(color, 1.0);
+        sdfWorkTexels = 1u;
     }
 #endif
+
+    // A hit pass counts a pixel whose visibility record it stored and views a pixel whose texel it wrote.
+    puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

@@ -49,4 +49,13 @@ public interface IGpuBufferFactory {
     /// <exception cref="ArgumentException"><paramref name="data"/> is empty.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="usage"/> is empty or undefined.</exception>
     IGpuStorageBuffer CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name);
+    /// <summary>Creates a readback buffer: host memory the GPU writes only as a copy's destination
+    /// (<see cref="IGpuRecorder.CopyBuffer"/>) and the host reads once the copying submission has completed. It is a
+    /// Vulkan <c>HOST_COHERENT</c> allocation created as a transfer destination, or a Direct3D 12 readback-heap buffer
+    /// permanently in <c>COPY_DEST</c>; both stay mapped for the buffer's life.</summary>
+    /// <param name="sizeBytes">The size, in bytes, of the buffer; not zero.</param>
+    /// <param name="name">The object's debug name, from its creator's identity (<see cref="GpuObjectName"/>); the default value names nothing.</param>
+    /// <returns>A new, owning <see cref="IGpuReadbackBuffer"/>, its contents undefined until a copy writes them.</returns>
+    /// <exception cref="ArgumentException"><paramref name="sizeBytes"/> is zero.</exception>
+    IGpuReadbackBuffer CreateReadback(ulong sizeBytes, in GpuObjectName name);
 }

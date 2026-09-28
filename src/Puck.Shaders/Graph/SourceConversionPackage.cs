@@ -8,7 +8,8 @@ namespace Puck.Shaders;
 /// region bound to its input port and writing the image bound to its output.
 /// <para>
 /// The kernel reads the pass group the catalog declares (<see cref="RenderGraphPackageCatalog.SourceMembers"/>): the
-/// region at binding 1 and the image at binding 2 of set 3, eight by eight threads a group, one thread a pixel. Its build
+/// region at binding 1, the image at binding 2 and the work counters at binding 3 of set 3, eight by eight threads a
+/// group, one thread a pixel, each pixel it writes counting one texel (<see cref="RenderGraphPackageWorkCounters"/>). Its build
 /// leases the compute pipeline, one for every conversion of its kind on the device, from the pass-pipeline cache on the
 /// thread pool; its recorder allocates its sets from the
 /// instance's pool. Its ports are a compute read and a compute write, so the node's planned barriers leave the region
@@ -147,6 +148,7 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
         private readonly uint m_region;
         private readonly GpuDeviceServices m_services;
         private readonly RenderGraphPackageSets m_sets = null!;
+        private readonly RenderGraphPackageWorkCounters m_workCounters = null!;
 
         private bool m_disposed;
 
@@ -162,6 +164,10 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
                 );
                 m_region = m_sets.BindingOf(member: RenderGraphPackageCatalog.SourceRegion);
                 m_image = m_sets.BindingOf(member: RenderGraphPackageCatalog.SourceImage);
+                m_workCounters = new RenderGraphPackageWorkCounters(
+                    context: context,
+                    sets: m_sets
+                );
             } catch {
                 Dispose();
 
@@ -184,6 +190,10 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
             var set = m_sets.PassSet(slot: recording.Slot);
             var region = recording.Inputs[0].Buffer!;
 
+            m_workCounters.Write(
+                passSet: set,
+                recording: recording
+            );
             m_services.Bindings.WriteBuffer(
                 binding: m_region,
                 bufferHandle: region.BufferHandle,

@@ -1,0 +1,9 @@
+# Every frame renders every pass, so each read's newest completed submission is a whole frame of the view.
+world.cadence off
+world.wait ready 45
+world.wait 30
+world.counters gpu
+# The placement takes its own sixteen-sample cloud again: the edit alone moves no count.
+world.row.set placements cloud prototypeId "cloud"
+world.wait 30
+world.counters gpu

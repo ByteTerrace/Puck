@@ -12,6 +12,8 @@ public static class VulkanAccessFlags {
     public const uint DepthStencilAttachmentRead = 0x00000200;
     /// <summary>The <c>VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT</c> value.</summary>
     public const uint DepthStencilAttachmentWrite = 0x00000400;
+    /// <summary>The <c>VK_ACCESS_HOST_READ_BIT</c> value.</summary>
+    public const uint HostRead = 0x00002000;
     /// <summary>The <c>VK_ACCESS_INDIRECT_COMMAND_READ_BIT</c> value.</summary>
     public const uint IndirectCommandRead = 0x00000001;
     /// <summary>The <c>VK_ACCESS_SHADER_READ_BIT</c> value.</summary>

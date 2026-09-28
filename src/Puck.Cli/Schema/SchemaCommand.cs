@@ -25,6 +25,7 @@ namespace Puck.Cli.Schema;
 // by package.
 // Exit 0 wrote/matched, 1 check found drift, 2 usage error or missing repository root.
 internal static class SchemaCommand {
+    private const string CountersCeilingsRelativePath = "tests/Puck.Counters/puck.counters.ceilings.v1.schema.json";
     private const string CountersReportRelativePath = "tests/Puck.Counters/puck.counters.report.v1.schema.json";
     private const string ProjectionRelativePath = "src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json";
     private const string ReleaseProfileRelativePath = "tests/Puck.Qualification/puck.release.profile.v1.schema.json";
@@ -57,6 +58,8 @@ internal static class SchemaCommand {
                 return [typeof(RenderGraphDefinition)];
             case CountersReportRelativePath:
                 return [typeof(WorldCountersReport)];
+            case CountersCeilingsRelativePath:
+                return [typeof(WorldCountersCeilings)];
             case ReleaseProfileRelativePath:
                 return [typeof(ReleaseProfile)];
         }
@@ -314,6 +317,11 @@ internal static class SchemaCommand {
                 text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportCountersReport())
             ),
             At(
+                relativePath: CountersCeilingsRelativePath,
+                repositoryRoot: repositoryRoot,
+                text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportCountersCeilings())
+            ),
+            At(
                 relativePath: ReleaseProfileRelativePath,
                 repositoryRoot: repositoryRoot,
                 text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportDocument(
@@ -442,6 +450,7 @@ internal static class SchemaCommand {
               src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json (the egress document)
               src/Puck.World.Silo/Assets/puck.silo.configuration.v1.schema.json (the silo document)
               tests/Puck.Counters/puck.counters.report.v1.schema.json (the report puck counters writes)
+              tests/Puck.Counters/puck.counters.ceilings.v1.schema.json (the ceilings puck counters checks)
               tests/Puck.Qualification/puck.release.profile.v1.schema.json (the profile puck qualify reads)
               src/Puck.Shaders/Assets/puck.render.graph.v1.schema.json (the frame-graph document)
               src/Puck.Dashboard/src/portal/src/document/worldDefinition.generated.ts (the portal's

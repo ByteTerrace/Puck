@@ -62,6 +62,14 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     private readonly SdfViewSnapshot[] m_views = new SdfViewSnapshot[1];
 
+    /// <summary>Gets the quality a session screen's view renders at: a budgeted panel image skips soft shadows, ambient
+    /// occlusion and the far bound, whose cost buys little in a small screen-space result.</summary>
+    public static SdfViewQuality ReducedQuality { get; } = new() {
+        DisableAmbientOcclusion = true,
+        DisableFarBound = true,
+        DisableSoftShadows = true,
+    };
+
     private readonly Vector3[]? m_bodyColors;
 
     private int m_bodyColorRevision;
@@ -96,7 +104,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.Publish (the one place with access
     // to both the local eye and the border pair's two face rows) before the render graph renders this view.
     // Null (the default, and every non-window session's steady state) leaves Dress on the ordinary camera path below.
-    private CameraSnapshot? m_windowOverride;
+    private Func<CameraSnapshot?>? m_windowFit;
     // The camera the last dressed frame renders from, which a hit on the session's image continues through.
     private CameraSnapshot? m_dressedCamera;
     // The last dressed program's fixed-point field, built when a pick first asks for it, and the far distance a pick
@@ -105,6 +113,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private SdfProgram? m_dressedFieldProgram;
     private float m_dressedFarDistance;
 
+    // The mirrored world's environment, resolved each dressed frame. The track double-buffers its output, so the frame
+    // the residency holds keeps its environment through the next dress, as the boot presentation's does.
+    private readonly WorldRenderCycleTrack m_cycle = new();
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
     // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
     // interpolated (not host-supplied) positions.
@@ -336,7 +347,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         // The pool's replay cursors advance on this view's own produced-frame interval, latched for the next pack.
         m_pool.Tick(deltaSeconds: deltaSeconds);
 
-        var camera = (m_windowOverride ?? ResolveCamera(
+        var camera = (m_windowFit?.Invoke() ?? ResolveCamera(
             height: height,
             width: width
         ));
@@ -346,7 +357,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_views[0] = new SdfViewSnapshot(
             Camera: camera,
             Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
-        );
+        ) {
+            Quality = ReducedQuality,
+        };
 
         return new SdfFrame(
             Program: program,
@@ -354,26 +367,26 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             Time: 0f,
             Views: m_views
         ) {
-            // The destination's own presented tick, so its sky and media show its authority's time.
+            // The destination's own presented tick, never the viewer's, so its sky and media show its authority's time.
             Clock = m_mirror.FollowState().Presented,
             DynamicTransforms = transforms,
             MovedTransforms = moved,
-            // A budgeted 160x144-class panel image: re-marching full soft shadows/AO/far-bound here costs real GPU
-            // time for a tiny screen-space result no player is closely scrutinizing — the same cost posture a camera
-            // view already takes.
-            DisableAmbientOcclusion = true,
-            DisableSoftShadows = true,
-            DisableFarBound = true,
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
             FarDistance = m_dressedFarDistance,
+            // The mirrored world's own sky and lighting, along its render.cycle when it authors one.
+            Environment = m_cycle.Resolve(
+                definition: m_mirror.Definition,
+                mirror: m_mirror.FollowState(),
+                revision: m_mirror.DefinitionRevision
+            ),
             // The mirrored world's static placements' meshes, then its stamp pool's.
             MeshDraws = meshDraws,
             MeshDrawsRevision = meshDrawsRevision,
         };
     }
     /// <inheritdoc/>
-    /// <remarks>The placement branch is unchanged (static reservation vs. static emission). The avatar branch is
+    /// <remarks>The placement branch chooses static reservation or emission. The avatar branch is
     /// appended after it, in both the probe and the live arm: <see cref="WorldRigCatalog.Emit"/> already owns its
     /// own probe-vs-live split internally (see <see cref="EmitAvatars"/>), so this call site never branches on
     /// <see cref="SdfEmitContext.Probe"/> a second time for it.</remarks>
@@ -537,15 +550,13 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             transforms: slots
         );
     }
-    /// <summary>Sets (or clears) this frame's window camera override — the off-axis frustum
-    /// <see cref="WorldWindowFrustumFit.TryFitWindow"/> fit against the border pair's two face rows and the local
-    /// viewer's eye, its shear carried as <see cref="CameraSnapshot.FrustumOffset"/>. Called once per produced frame by
-    /// <c>WorldScreenBinder.Publish</c>, before the render graph renders this session's view; <see langword="null"/> (no
-    /// eye/aperture available yet, or the fit refused — see <c>SdfAsymmetricFrustum.TryFit</c>) falls back to
-    /// <see cref="ResolveCamera"/>'s ordinary named/default projection for that one frame.</summary>
-    /// <param name="camera">The fitted camera apexed at the mapped eye, or <see langword="null"/> to use the
-    /// ordinary projection.</param>
-    public void SetWindowCamera(CameraSnapshot? camera) => m_windowOverride = camera;
+    /// <summary>Sets (or clears) the fit a window session renders through: asked once as each frame is dressed, it returns
+    /// the off-axis frustum fit against the border pair's two face rows and the viewer's eye in that same frame, its
+    /// shear carried as <see cref="CameraSnapshot.FrustumOffset"/>. A fit returning <see langword="null"/> (no eye or
+    /// aperture yet, or the fit refused — see <c>SdfAsymmetricFrustum.TryFit</c>) falls back to
+    /// <see cref="ResolveCamera"/>'s ordinary named/default projection for that frame.</summary>
+    /// <param name="fit">The window's fit, or <see langword="null"/> for a session that is not a window.</param>
+    public void SetWindowFit(Func<CameraSnapshot?>? fit) => m_windowFit = fit;
     /// <summary>Finds the camera the last frame <see cref="Dress"/> dressed renders from, in the destination's own
     /// space: a window's fitted camera, its shear included, or the named or default projection. A hit on the session's
     /// image continues through it into the destination.</summary>

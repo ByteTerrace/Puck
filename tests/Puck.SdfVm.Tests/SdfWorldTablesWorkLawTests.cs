@@ -13,7 +13,7 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>
 /// Laws for the GPU work <see cref="SdfWorldTables"/> counts, driven over <see cref="FakeGpuDevice"/> so the tables' whole
-/// CPU path runs without a device: the one pass an upload counts, the exact counts of a first and of a still upload, that
+/// CPU path runs without a device: the passes an upload counts, the exact counts of a first and of a still upload, that
 /// the descriptor pools the tables state are the ones they create and that a device heap that cannot hold them refuses the
 /// tables by name before they allocate, that a frame with no view is refused by name, what moves the revision, that
 /// submission identity keeps increasing across a rebuild on the owner's ledger, and that a steady-state upload allocates
@@ -23,10 +23,33 @@ public sealed class SdfWorldTablesWorkLawTests {
     private const uint Extent = 64;
 
     [Fact]
-    public void TheUploadPassIsPinned() => Assert.Equal(
-        expected: ["upload"],
-        actual: SdfWorldTables.PassLabels.ToArray()
-    );
+    public void TheUploadPassesArePinned() {
+        Assert.Equal(
+            expected: ["fillers", "bricks", "upload"],
+            actual: SdfWorldTables.PassLabels.ToArray()
+        );
+        Assert.Equal(
+            expected: [WorkClass.Deterministic, WorkClass.PerBackendDeterministic, WorkClass.PerBackendDeterministic],
+            actual: SdfWorldTables.PassClasses.ToArray()
+        );
+    }
+    [Fact]
+    public void AViewsCadenceSignatureTracksOnlyItsOwnQuality() {
+        using var rig = new Rig();
+        var views = new[] { rig.Frame.Views[0], rig.Frame.Views[0] };
+        var frame = rig.Frame with { Views = views };
+        var first = rig.Engine.ViewSignature(frame: frame, view: 0);
+
+        Assert.Equal(actual: rig.Engine.ViewSignature(frame: frame, view: 1), expected: first);
+        views[1] = views[1] with { Quality = new SdfViewQuality { DisableAmbientOcclusion = true } };
+        var second = rig.Engine.ViewSignature(frame: frame, view: 1);
+
+        Assert.NotEqual(actual: second, expected: first);
+        Assert.Equal(actual: rig.Engine.ViewSignature(frame: frame, view: 0), expected: first);
+        views[0] = views[0] with { Quality = new SdfViewQuality { UseFastSoftShadowMarch = true } };
+        Assert.NotEqual(actual: rig.Engine.ViewSignature(frame: frame, view: 0), expected: first);
+        Assert.Equal(actual: rig.Engine.ViewSignature(frame: frame, view: 1), expected: second);
+    }
     [InlineData(0)]
     [InlineData(SdfWorldTables.DefaultBrickPoolVoxelCapacity)]
     [Theory]
@@ -117,6 +140,29 @@ public sealed class SdfWorldTablesWorkLawTests {
         rig.Render();
         Assert.Equal(
             expected: StillUpload,
+            actual: rig.Report()
+        );
+    }
+    // A queued host-baked brick is written under the bricks pass: its staging region's host writes and copy, and the
+    // pool's barrier on either side of it, none of which the upload pass or the work outside every pass counts.
+    [Fact]
+    public void AQueuedBrickCountsUnderTheBricksPass() {
+        using var rig = new Rig(brickPoolVoxelCapacity: SdfWorldTables.DefaultBrickPoolVoxelCapacity);
+
+        rig.Render();
+        rig.Render();
+        rig.Engine.UploadBrick(
+            dimX: 2,
+            dimY: 2,
+            dimZ: 2,
+            slot: 0,
+            voxels: new float[8]
+        );
+        rig.Render();
+        rig.Render();
+
+        Assert.Equal(
+            expected: BrickUpload,
             actual: rig.Report()
         );
     }
@@ -240,14 +286,20 @@ public sealed class SdfWorldTablesWorkLawTests {
     // screen mappings and the one-record mesh region) behind one barrier ordering the earlier views' reads of their
     // destinations before the copies write them, each binding the copy pipeline and its set with no push constants, then
     // transitions each copied buffer for its readers; the still upload repeats the first's inputs, so it owes no copy and
-    // binds nothing. Outside the pass: the command buffer, and on the first upload alone the fillers' first transitions and
-    // clears and the first write of both ring slots' World sets. The upload pass counts the regions' host-visible writes too:
+    // binds nothing. The fillers pass runs on the first upload alone, the fillers' first transitions and clears, and the
+    // bricks pass on neither, since the tables have no brick pool. Outside every pass: the command buffer, and on the first
+    // upload the first write of both ring slots' World sets. The upload pass counts the regions' host-visible writes too:
     // on the first upload every region's whole first copy (the 820 KB decal table among them), each with its header and one
     // run-table entry.
     private const string FirstUpload =
-        "work submission=1 revision=1\nwork upload executed: dispatches=9 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=9 binds.pipeline=9 binds.descriptor-set=9 push-constants=0 descriptor-writes=0 uploads.host-visible=837716 clears=0 copies=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=4 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=36 uploads.host-visible=0 clears=2 copies=0\n";
+        "work submission=1 revision=1\nwork fillers executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=4 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=2 copies=0 march.steps=0 texels.written=0\nwork bricks skipped\nwork upload executed: dispatches=9 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=9 binds.pipeline=9 binds.descriptor-set=9 push-constants=0 descriptor-writes=0 uploads.host-visible=837716 clears=0 copies=0 march.steps=0 texels.written=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=36 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0\n";
+    // A still upload that writes one queued 2x2x2 brick: the bricks pass binds the copy pipeline and the brick staging's
+    // set and dispatches its copy between the pool's two barriers, and counts the staging's host writes, the eight voxels
+    // behind their header and one run-table entry.
+    private const string BrickUpload =
+        "work submission=3 revision=1\nwork fillers skipped\nwork bricks executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=2 binds.pipeline=1 binds.descriptor-set=1 push-constants=0 descriptor-writes=0 uploads.host-visible=56 clears=0 copies=0 march.steps=0 texels.written=0\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0\n";
     private const string StillUpload =
-        "work submission=2 revision=1\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0\n";
+        "work submission=2 revision=1\nwork fillers skipped\nwork bricks skipped\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0\n";
 
     private sealed class Rig : IDisposable {
         public Rig(GpuWorkLedger? ledger = null, int brickPoolVoxelCapacity = 0) {

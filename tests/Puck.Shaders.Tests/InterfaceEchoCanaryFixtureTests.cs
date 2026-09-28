@@ -11,7 +11,7 @@ namespace Puck.Shaders.Tests;
 /// <see cref="SdfWorldInterfaces"/> rather than the catalog, is a target by name. Where DXC is on the search path, compiler reflection holds each echo to its layout.</summary>
 public sealed class InterfaceEchoCanaryFixtureTests {
     // The echo documents, one per row of the canary's world, in its row order.
-    private static readonly string[] Echoes = ["ink-simulation", "ink-visualize", "ink-finish", "tint", "sdf-film-grain", "place", "overlay", "sdf-world"];
+    private static readonly string[] Echoes = ["ink-simulation", "ink-visualize", "ink-finish", "tint", "sdf-film-grain", "place", "overlay", "sdf-world", "source"];
 
     private static string FixturePath(string fileName) => RepositoryPaths.Resolve(relativePath: $"tests/Puck.World.Canaries/interface-echo/{fileName}");
     private static ShaderPipelinePlannedPass[] PassesOf(string path) =>
@@ -45,8 +45,9 @@ public sealed class InterfaceEchoCanaryFixtureTests {
         ("sdf-film-grain", "package sdf.film-grain", static () => PackageOf(id: RenderGraphPackageCatalog.SdfFilmGrain)),
         ("place", "package place", static () => PackageOf(id: RenderGraphPackageCatalog.Place)),
         ("overlay", "package overlay", static () => PackageOf(id: RenderGraphPackageCatalog.Overlay)),
-        // Each source conversion package binds its region and image beside a pass block of the extent alone, ink finish's.
-        .. RenderGraphPackageCatalog.SourceConversions.Select(selector: static id => ("ink-finish", $"package {id}", ((Func<ShaderInterfaceLayout>)(() => PackageOf(id: id))))),
+        // Each source conversion package binds its region, its image and the work counters beside a pass block of the
+        // extent and its work counter row.
+        .. RenderGraphPackageCatalog.SourceConversions.Select(selector: static id => ("source", $"package {id}", ((Func<ShaderInterfaceLayout>)(() => PackageOf(id: id))))),
         // The SDF engine's two pass interfaces: every per-view dispatch's, and the brick baker's, whose pass block is its
         // slice extent alone, ink finish's.
         ("sdf-world", $"package {RenderGraphPackageCatalog.SdfWorld}", static () => PackageOf(id: RenderGraphPackageCatalog.SdfWorld)),
