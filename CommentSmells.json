@@ -71,7 +71,6 @@
         "src/Puck.State/CompiledTopology.cs": 2,
         "src/Puck.State/Expressions/Runtime/ExpressionSpelling.cs": 1,
         "src/Puck.Storage/AzureBlobObjectBlobStoreBackend.cs": 1,
-        "src/Puck.Vulkan/VulkanSurfaceReadback.cs": 1,
         "src/Puck.World.Addons/WorldAddonMutationDecoder.cs": 2,
         "src/Puck.World.Addons/WorldAddonRuntime.Lifecycle.cs": 8,
         "src/Puck.World.Addons/WorldAddonRuntime.Pump.cs": 1,

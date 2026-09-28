@@ -420,7 +420,10 @@ Two design points worth knowing:
 For the simpler "record, then read the results back" case (offscreen rendering, headless
 work), `VulkanQueueSubmitter.SubmitAndWait` batches command buffers into a single submit plus
 one `vkQueueWaitIdle`, and `VulkanSurfaceReadback` copies the rendered image into a
-host-coherent `VulkanBuffer` and reads it back to the CPU.
+host-coherent `VulkanBuffer` and reads it back to the CPU. Behind the copy it records a
+barrier to the host (`GpuStage.Host`, `GpuAccess.HostRead`) through `VulkanGpuRecorder`,
+since a completed submission alone makes no device write visible to the host;
+`VulkanSurfaceReadbackLawTests` holds it.
 
 ---
 
@@ -554,6 +557,19 @@ Beyond the factory/API/interop triads in [Capabilities](#capabilities):
 `VulkanMarshalHelpers` and `Utf8StringArray` (see [Marshalling](#marshalling)),
 `VulkanPipelineLayouts`, and the small value types `VulkanQueueFamilySelection`,
 `VulkanPushConstantBinding`, `VulkanVertexBufferBinding`, `VulkanShaderStageFlags`.
+
+## Validation
+
+`--debug-layers` creates the instance with `VK_LAYER_KHRONOS_validation`, and
+the same flag turns on the layer's synchronization validation: the create-info
+chains a `VkValidationFeaturesEXT` enabling
+`VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT`, declared by the
+layer's `VK_EXT_validation_features`, ahead of the debug-utils messenger
+(`VulkanNativeInstanceApi.LinkCreateChain`). A missing barrier, or one whose
+stages or accesses do not cover a read-after-write, write-after-read or
+write-after-write, then prints a `[vulkan-debug] validation` line naming the
+`SYNC-HAZARD-*` it found. `VulkanInstanceCreateChainLawTests` holds the chain
+and the extension without a loader.
 
 ## Debug names
 

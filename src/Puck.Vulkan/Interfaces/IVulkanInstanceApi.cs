@@ -14,13 +14,16 @@ public interface IVulkanInstanceApi {
     /// <see langword="null"/> when creation failed or returned no handle.</param>
     /// <returns>A <see cref="VkResult"/> indicating whether the instance was created successfully.</returns>
     VkResult CreateInstance(VulkanInstanceCreateRequest request, out VulkanInstanceCommands? instance);
-    /// <summary>Reports whether the Vulkan loader advertises the named instance extension (queried across the core
-    /// and implicit-layer extensions via <c>vkEnumerateInstanceExtensionProperties</c>). Lets the factory enable an
-    /// optional instance extension only when it is present. Best-effort: returns <see langword="false"/> when the
-    /// enumeration entry point is unavailable.</summary>
+    /// <summary>Reports whether the Vulkan loader, or one layer, advertises the named instance extension (queried via
+    /// <c>vkEnumerateInstanceExtensionProperties</c>). Lets the factory enable an optional instance extension only when
+    /// it is present. Best-effort: returns <see langword="false"/> when the enumeration entry point is unavailable or
+    /// the named layer is not installed.</summary>
     /// <param name="extensionName">The extension name to probe (e.g. <c>VK_EXT_debug_utils</c>).</param>
+    /// <param name="layerName">The layer whose own extensions to query, such as the validation layer's
+    /// <c>VK_EXT_validation_features</c>; <see langword="null"/> queries the loader's core and implicit-layer
+    /// extensions.</param>
     /// <returns><see langword="true"/> when the extension is supported; otherwise <see langword="false"/>.</returns>
-    bool HasInstanceExtension(string extensionName);
+    bool HasInstanceExtension(string extensionName, string? layerName);
     /// <summary>Destroys a Vulkan instance.</summary>
     /// <param name="instance">The command table of the instance to destroy.</param>
     void DestroyInstance(VulkanInstanceCommands instance);

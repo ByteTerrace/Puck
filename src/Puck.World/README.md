@@ -145,7 +145,8 @@ flag surface (backend, size, world, recording, user id, present mode, listen,
 connect, federation key) is declared in `Program.cs`; the graphics API is the boot-time
 choice `--backend directx|vulkan` (Direct3D 12 is the Windows default),
 because changing APIs rebuilds the whole render host. `--debug-layers` creates
-the device with its backend's validation layer, printing `[vulkan-debug]` or
+the device with its backend's validation layer (on Vulkan with synchronization
+validation), printing `[vulkan-debug]` or
 `[d3d12-debug]` lines; `puck canary --debug-layers` and `puck qualify` pass it.
 
 `--help` (or `-h`) and `--version` exit before host setup: they do not load a
