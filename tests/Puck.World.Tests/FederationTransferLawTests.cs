@@ -1,7 +1,6 @@
 using Puck.Commands;
 using System.Net;
 using System.Numerics;
-using System.Security.Cryptography;
 using System.Text;
 
 using Puck.Attestation;
@@ -18,12 +17,6 @@ namespace Puck.World.Tests;
 
 /// <summary>Adversarial laws for the authority boundary and source-scoped transfer escrow.</summary>
 public sealed partial class FederationTransferLawTests {
-    /// <summary>A fresh, throwaway <see cref="LocalKeySigningOracle"/> for one test's own SignsDirectly identity.</summary>
-    private static LocalKeySigningOracle LocalOracle(string subject) => new(
-        key: ECDsa.Create(curve: ECCurve.NamedCurves.nistP256),
-        subject: subject,
-        validity: TimeSpan.FromMinutes(value: 5)
-    );
     private static WorldMobilityIdentity Mobility(int index, ulong epoch = 0) =>
         new(
             DepartedFrom: new WorldEntityAddress(
@@ -894,7 +887,7 @@ public sealed partial class FederationTransferLawTests {
         );
 
         using var oracle = LocalOracle(subject: SourceAuthority);
-        var security = new WorldAttestedAuthenticator(
+        var security = Authenticator(
             trustEntries: () => [TrustEntryFor(oracle: oracle)],
             oracle: oracle
         );
@@ -1169,7 +1162,7 @@ public sealed partial class FederationTransferLawTests {
         using var oracleY = LocalOracle(subject: "authority-y");
         // The door trusts BOTH keys' own pinned subjects — a claim genuinely signed by Y's key still only ever
         // verifies as "authority-y", never as "authority-x", regardless of what an attacker might wish it named.
-        var security = new WorldAttestedAuthenticator(
+        var security = Authenticator(
             trustEntries: () => [TrustEntryFor(oracle: oracleX), TrustEntryFor(oracle: oracleY)],
             oracle: oracleX
         );
@@ -1274,7 +1267,7 @@ public sealed partial class FederationTransferLawTests {
     public async Task FederationDoor_RefusesAReplayedProofAgainstAFreshChallenge() {
         using var fixture = Fixtures.FreshServer();
         using var oracle = LocalOracle(subject: "machine-a/boot");
-        var security = new WorldAttestedAuthenticator(
+        var security = Authenticator(
             trustEntries: () => [TrustEntryFor(oracle: oracle)],
             oracle: oracle
         );
@@ -1368,7 +1361,7 @@ public sealed partial class FederationTransferLawTests {
     public async Task FederationDoor_RejectsBadProof_AndAuthorityRebinding() {
         using var fixture = Fixtures.FreshServer();
         using var oracle = LocalOracle(subject: "machine-a/boot");
-        var security = new WorldAttestedAuthenticator(
+        var security = Authenticator(
             trustEntries: () => [TrustEntryFor(oracle: oracle)],
             oracle: oracle
         );
@@ -1850,7 +1843,7 @@ public sealed partial class FederationTransferLawTests {
         var clock = new VirtualClock();
         using var fixture = Fixtures.FreshServer();
         using var oracle = LocalOracle(subject: "machine-a/boot");
-        var hostSecurity = new WorldAttestedAuthenticator(
+        var hostSecurity = Authenticator(
             trustEntries: () => [TrustEntryFor(oracle: oracle)],
             oracle: oracle
         );
@@ -1862,7 +1855,7 @@ public sealed partial class FederationTransferLawTests {
         );
 
         host.Start(listen: "127.0.0.1:0");
-        var verifyOnly = new WorldAttestedAuthenticator(trustEntries: () => [TrustEntryFor(oracle: oracle)]);
+        var verifyOnly = Authenticator(trustEntries: () => [TrustEntryFor(oracle: oracle)]);
 
         Assert.True(condition: verifyOnly.IsConfigured);
 

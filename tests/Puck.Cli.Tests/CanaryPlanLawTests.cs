@@ -219,14 +219,16 @@ public sealed class CanaryPlanLawTests {
         try {
             var artifact = Path.Combine(path1: root, path2: "Puck.World.dll");
 
-            File.WriteAllBytes(path: artifact, bytes: []);
+            File.WriteAllBytes(bytes: [], path: artifact);
 
             var (exitCode, output, error) = ConsoleCapture.RunSplit(run: () => PuckRootCommand.Invoke(args: ["canary", "sdf-mesh-motion", "--backend", "vulkan", "--world-artifact", artifact]));
+            // Every assertion names the whole run, so a failure shows what the verb wrote instead of what it did not.
+            var transcript = $"exit {exitCode}{Environment.NewLine}--- stdout ---{Environment.NewLine}{output}--- stderr ---{Environment.NewLine}{error}";
 
-            Assert.Equal(expected: CliExit.Refused, actual: exitCode);
-            Assert.Contains(expectedSubstring: "ERROR: the pipeline-cache warm on vulkan from sdf-mesh-motion's positive world exited", actualString: error);
-            Assert.Contains(expectedSubstring: "The selection fails without starting a leg.", actualString: error);
-            Assert.DoesNotContain(expectedSubstring: "sdf-mesh-motion on vulkan positive", actualString: output);
+            Assert.True(condition: (exitCode == CliExit.Refused), userMessage: transcript);
+            Assert.True(condition: error.Contains(comparisonType: StringComparison.Ordinal, value: "ERROR: the pipeline-cache warm on vulkan from sdf-mesh-motion's positive world exited"), userMessage: transcript);
+            Assert.True(condition: error.Contains(comparisonType: StringComparison.Ordinal, value: "The selection fails without starting a leg."), userMessage: transcript);
+            Assert.False(condition: output.Contains(comparisonType: StringComparison.Ordinal, value: "sdf-mesh-motion on vulkan positive"), userMessage: transcript);
         } finally {
             Directory.Delete(path: root, recursive: true);
         }
@@ -251,7 +253,7 @@ public sealed class CanaryPlanLawTests {
             Assert.False(condition: seed.TrySeed(stateDirectory: Path.Combine(path1: root, path2: "empty")));
             seed.Capture(directory: warmed);
 
-            string[] legs = [.. Enumerable.Range(start: 0, count: 3).Select(selector: index => Path.Combine(path1: root, path2: $"leg{index}", path3: "state"))];
+            string[] legs = [.. Enumerable.Range(count: 3, start: 0).Select(selector: index => Path.Combine(path1: root, path2: $"leg{index}", path3: "state"))];
 
             foreach (var leg in legs) {
                 Assert.True(condition: seed.TrySeed(stateDirectory: leg));
