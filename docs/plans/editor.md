@@ -635,8 +635,8 @@ selection ids after a rebuild. Before-and-after presentation remains open.
 3. **Before and after.** `world.compare hold` keeps the seat's current frame;
    `world.compare wipe|split|diff|off` shows it against the live view in a pane
    the `place` package draws, with a bindable wipe position. The echo includes
-   the changed-pixel count (pixels moving at least 2 LSB, as `CanaryFrameNoise`
-   counts them).
+   the changed-pixel count (pixels moving at least 2 LSB, measured by the shared
+   `RgbaFrameDifference` used by the canaries).
 
 **Touches:** `src/Puck.World` (the watch, the compare verbs, the capture path),
 `Puck.World.Client` (`WorldViewGraphHost`, editor state retention).

@@ -1,6 +1,8 @@
 # Puck.Assets.Tests
 
 This suite checks the asset codecs and content helpers in `Puck.Assets`.
+`RgbaFrameDifferenceLawTests` checks the shared capture difference threshold,
+alpha exclusion, symmetry, and packed-buffer refusal.
 `PngCodecLawTests`, `QrCodecLawTests`, and `AutomaticSequenceCodecTests` cover
 round trips, bounded and malformed input, and deterministic encoded output;
 `TextureCodecLawTests` and `TextureMipChainLawTests` cover the block codecs
