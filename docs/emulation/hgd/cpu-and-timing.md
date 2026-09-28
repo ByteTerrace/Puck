@@ -153,15 +153,27 @@ reference log's last line, which checks the CPU and PPU clocks against each
 other. `nestest-boot` boots the same image through its reset vector and runs
 both menu pages from the controller, verifying the menu identity and absence
 of a prior result before each page runs, then requiring OK beside "Run all
-tests". The stages
-skip an absent corpus and reject an incomplete corpus supplied as present.
+tests".
+
+`accuracy-coin` runs every test of
+[AccuracyCoin](https://github.com/100thCoin/AccuracyCoin), the suite that
+separates today's most accurate emulators, by pressing Start on its menu, and
+reads each test's result byte from RAM page 4; the ROM's own test table names
+them. It is a ratchet: `AccuracyCoinExpectations.json`, beside the battery,
+records every test's outcome, and any test whose outcome changes, better or
+worse, fails the stage. The failures it records are the NTSC accuracy
+package's work list. A run writes `accuracy-coin.candidate.json` to the
+artifacts directory, and a fix lands by copying that file over the ledger in
+the same change. The Tier B stages skip an absent corpus and reject an
+incomplete corpus supplied as present.
 
 The corpus manifest uses the shared
 [per-file form](../../../src/Puck.Machines.Post/README.md#individually-pinned-corpus-files)
 for the instruction vectors, avoiding the much larger upstream repository
 archive. The reference image and log use the `nes-test-roms` archive.
 Downloads belong in the per-user corpus cache and never in source control.
-`--corpus-cache`, `--sst`, and `--roms` supply explicit paths. The manifest's
+`--corpus-cache`, `--sst`, `--roms`, and `--accuracy-coin` supply explicit
+paths. The manifest's
 hashes are the authority for downloaded bytes; a hash mismatch is refused.
 
 The battery writes `post-report.txt`, `summary.json`, and `results.junit.xml`

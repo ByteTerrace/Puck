@@ -1042,5 +1042,19 @@
     "License": "MIT",
     "Revision": "2f6980a2d95757486c7bee24355c360e40e2a224",
     "Hardware": "NES 6502; flat 64 KiB CPU bus; no BCD arithmetic"
+  },
+  {
+    "Name": "accuracy-coin",
+    "Version": "673ef550db296136d52229961e7d39366116882a",
+    "UrlPrefix": "https://raw.githubusercontent.com/100thCoin/AccuracyCoin/673ef550db296136d52229961e7d39366116882a/",
+    "Files": [
+      {
+        "Path": "AccuracyCoin.nes",
+        "Sha256": "4fe8c2bc9abc6f4d418da47b73f62cba89fcacd950fae763097a1681d650e839"
+      }
+    ],
+    "License": "MIT",
+    "Revision": "673ef550db296136d52229961e7d39366116882a",
+    "Hardware": "RP2A03G CPU and RP2C02G PPU; NROM"
   }
 ]
