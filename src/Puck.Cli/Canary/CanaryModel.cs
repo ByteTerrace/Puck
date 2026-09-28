@@ -174,6 +174,15 @@ internal sealed record CanaryImageRegionAssertion(
     double Top,
     int Width
 ) : CanaryAssertion(Name: Name);
+/// <summary>Compares the selected RGB pixels to an integer box-reduced reference capture. Both maximum and mean
+/// absolute error must satisfy their stated code-unit limits. A malformed pair fails either Holds direction.</summary>
+internal sealed record CanaryImageComparisonAssertion(
+    double Bottom, string Capture, int Height, bool Holds, double Left, double MaxErrorCodes,
+    double MeanErrorCodes, string Name, string Reference, int ReferenceScale, double Right, double Top, int Width
+) : CanaryAssertion(Name: Name) {
+    /// <summary>Whether the reference is relative to the runner-owned opposite leg directory.</summary>
+    public bool ReferenceOtherLeg { get; init; }
+}
 internal sealed record CanaryResponseSelector(string Verb, int Occurrence, int Count);
 // Line, when set, reads the field from the first continuation line of the selected response that starts with it
 // (after the transcript's indent) instead of from the response's own first line.

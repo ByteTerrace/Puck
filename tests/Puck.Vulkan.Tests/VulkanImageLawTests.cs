@@ -18,6 +18,7 @@ public sealed class VulkanImageLawTests {
     [InlineData(GpuPixelFormat.R8G8B8A8Unorm, GpuImageUsage.Storage | GpuImageUsage.Sampled, 0x0000000Fu, 0x1u)]
     [InlineData(GpuPixelFormat.R8G8B8A8Unorm, GpuImageUsage.ColorAttachment | GpuImageUsage.Sampled, 0x00000017u, 0x1u)]
     [InlineData(GpuPixelFormat.R16G16B16A16Float, GpuImageUsage.ColorAttachment | GpuImageUsage.Sampled | GpuImageUsage.Storage, 0x0000001Fu, 0x1u)]
+    [InlineData(GpuPixelFormat.R32Float, GpuImageUsage.Storage | GpuImageUsage.Sampled, 0x0000000Fu, 0x1u)]
     [InlineData(GpuPixelFormat.D32Float, GpuImageUsage.DepthAttachment, 0x00000020u, 0x2u)]
     [Theory]
     public void AnImageIsCreatedWithTheVulkanUsageAndAspectItsDeclaredUsagesNeed(GpuPixelFormat format, GpuImageUsage usage, uint vulkanUsage, uint aspect) {
@@ -41,6 +42,9 @@ public sealed class VulkanImageLawTests {
             expected: (Usage: vulkanUsage, Aspect: aspect, format, usage, Image, View)
         );
     }
+    [Fact]
+    public void ScalarFloatImagesUseR32Sfloat() =>
+        Assert.Equal(expected: 100U, actual: VulkanGpuFormats.ToVkFormat(gpuPixelFormat: GpuPixelFormat.R32Float));
     [Fact]
     public void AnImageWhoseViewFailsIsDestroyedWithItsMemory() {
         var images = new RecordingOffscreenImageApi();

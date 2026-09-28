@@ -18,6 +18,13 @@ public sealed class GpuPixelFormatsLawTests {
         Assert.Equal(expected: ((3UL * 2UL) * 2UL), actual: GpuPixelFormats.LevelByteLength(format: GpuPixelFormat.R8G8Unorm, height: 2U, width: 3U));
     }
     [Fact]
+    public void ScalarFloatImagesKeepOneUnclampedFourByteChannel() {
+        Assert.Equal(expected: 4U, actual: GpuPixelFormats.UnitBytes(format: GpuPixelFormat.R32Float));
+        Assert.Equal(expected: 0U, actual: GpuPixelFormats.ColorCodeMaximum(format: GpuPixelFormat.R32Float));
+        Assert.Equal(expected: 60UL, actual: GpuPixelFormats.LevelByteLength(format: GpuPixelFormat.R32Float, height: 3, width: 5));
+        GpuImageUsages.Validate(format: GpuPixelFormat.R32Float, height: 3, width: 5, usage: GpuImageUsage.Sampled | GpuImageUsage.Storage);
+    }
+    [Fact]
     public void EveryFormatStatesItsUnitBytes() {
         foreach (var format in Enum.GetValues<GpuPixelFormat>()) {
             Assert.True(condition: (GpuPixelFormats.UnitBytes(format: format) > 0U), userMessage: $"{format}");

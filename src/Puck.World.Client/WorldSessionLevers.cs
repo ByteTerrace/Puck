@@ -42,6 +42,8 @@ public static partial class WorldSessionLevers {
     public const string TargetHertz = "target";
     /// <summary>The upscale sharpness (<c>world.upscale-sharpness</c>).</summary>
     public const string UpscaleSharpness = "upscale-sharpness";
+    /// <summary>The temporal reconstruction toggle (<c>world.temporal</c>), folding into <c>render</c>.</summary>
+    public const string Temporal = "temporal";
 
     private static bool Flag(WorldSessionLever lever) => (lever.A != 0.0);
 
@@ -102,6 +104,10 @@ public static partial class WorldSessionLevers {
         sink.Register(
             name: RenderScale,
             setter: lever => settings.RenderScale = ((float)lever.A)
+        );
+        sink.Register(
+            name: Temporal,
+            setter: lever => settings.Temporal = Flag(lever: lever)
         );
         sink.Register(
             name: UpscaleSharpness,

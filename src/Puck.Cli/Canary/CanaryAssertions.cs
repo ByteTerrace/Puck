@@ -7,7 +7,8 @@ namespace Puck.Cli.Canary;
 internal sealed record CanaryTranscript(string RunDirectory, IReadOnlyList<string> Stderr, IReadOnlyList<string> Stdout);
 internal sealed record CanaryAssertionResult(string Detail, bool Passed);
 internal sealed record CanaryEvaluation(IReadOnlyList<CanaryAssertionResult> Results) {
-    public bool Passed => Results.All(predicate: static result => result.Passed);
+    public int Deferred { get; init; }
+    public bool Passed => Deferred == 0 && Results.All(predicate: static result => result.Passed);
 }
 /// <summary>The live-capture noise floor a <c>framesAgree</c> assertion measures against.</summary>
 /// <remarks>
@@ -708,12 +709,13 @@ internal static partial class CanaryAssertions {
         );
 
     // authorityTranscripts resolves an assertion's optional authority id to that authority's own transcript; a null
-    // authority (the ordinary, non-federated shape) always reads primaryTranscript. filesDiffer, framesAgree, and imageRegion always
+    // authority (the ordinary, non-federated shape) always reads primaryTranscript. filesDiffer, framesAgree, imageRegion, and imageComparison always
     // read primaryTranscript.RunDirectory regardless of authority, since capture paths are leg-scoped, not per-process.
     // authorityEndpoint substitutes {authority} in a line assertion's text: the runner binds a companion authority to
     // a free loopback port per leg, so a manifest names the endpoint by token rather than pinning a port the runner
     // owns. An empty value leaves the token unsubstituted, which fails a "present" check rather than matching.
-    public static CanaryEvaluation Evaluate(CanaryLeg leg, CanaryTranscript primaryTranscript, IReadOnlyDictionary<string, CanaryTranscript>? authorityTranscripts = null, string authorityEndpoint = "") {
+    public static CanaryEvaluation Evaluate(CanaryLeg leg, CanaryTranscript primaryTranscript, IReadOnlyDictionary<string, CanaryTranscript>? authorityTranscripts = null, string authorityEndpoint = "", CanaryTranscript? otherLeg = null, bool deferPairedCaptures = false) {
+        var deferred = 0;
         var results = new List<CanaryAssertionResult>(capacity: leg.Assertions.Count);
         var values = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
@@ -780,6 +782,13 @@ internal static partial class CanaryAssertions {
                         transcript: primaryTranscript
                     ));
                     break;
+                case CanaryImageComparisonAssertion comparison:
+                    if (comparison.ReferenceOtherLeg && deferPairedCaptures) {
+                        deferred++;
+                        break;
+                    }
+                    results.Add(item: EvaluateImageComparison(assertion: comparison, transcript: primaryTranscript, otherLeg: otherLeg));
+                    break;
                 case CanaryImageRegionAssertion region:
                     results.Add(item: EvaluateImageRegion(
                         assertion: region,
@@ -789,7 +798,7 @@ internal static partial class CanaryAssertions {
             }
         }
 
-        return new CanaryEvaluation(Results: results);
+        return new CanaryEvaluation(Results: results) { Deferred = deferred };
     }
     public static IReadOnlyList<string> ResponseLines(CanaryTranscript transcript, CanaryStream stream, string verb) {
         var prefix = $"[{verb}:";

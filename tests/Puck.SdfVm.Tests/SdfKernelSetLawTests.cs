@@ -20,6 +20,7 @@ public sealed class SdfKernelSetLawTests {
         "sdf-world-ambient", "sdf-beam", "sdf-brick-bake", "sdf-cull-args",
         "sdf-instance-cull", "sdf-world-primary", "sdf-world-shadow", "sdf-sky", "sdf-world-surface", "sdf-world-views",
         "sdf-world-views-core", "sdf-world-views-folds", "sdf-resolve",
+        "sdf-world-temporal-views", "sdf-world-temporal-views-core", "sdf-world-temporal-views-folds", "sdf-temporal-resolve",
     ];
 
     private static WorkCounterSet Work() =>

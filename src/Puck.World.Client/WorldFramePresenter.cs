@@ -1447,6 +1447,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         Quality = quality,
                         RenderScale = (m_settings.RenderScale * transitionScale),
                         UpscaleSharpness = m_settings.UpscaleSharpness,
+                        Temporal = m_settings.Temporal,
                     });
                     if (!hasSeatViewFallback) {
                         hasSeatViewFallback = true;
@@ -1508,6 +1509,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 Quality = quality,
                 RenderScale = (m_settings.RenderScale * transitionScale),
                 UpscaleSharpness = m_settings.UpscaleSharpness,
+                        Temporal = m_settings.Temporal,
             });
             // A seat presented elsewhere keeps its place among the views, so every view keeps its index, and its view
             // is latched into the scene of the world it is presented in, which renders it instead.
@@ -1599,6 +1601,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 Quality = quality,
                 RenderScale = m_settings.RenderScale,
                 UpscaleSharpness = m_settings.UpscaleSharpness,
+                        Temporal = m_settings.Temporal,
             });
         } else {
             m_noLocalSeatsNarrated = false;

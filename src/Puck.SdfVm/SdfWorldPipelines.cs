@@ -206,7 +206,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
                 var slot = m_slots[index];
                 var kernel = ((SdfKernel)index);
 
-                if ((slot is null) && (kernel != SdfKernel.Resolve)) {
+                if ((slot is null) && !SdfKernelSet.IsOptional(kernel)) {
                     continue;
                 }
                 var bytecode = kernels[kernel];

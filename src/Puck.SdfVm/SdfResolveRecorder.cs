@@ -17,6 +17,8 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
     private readonly SdfWorldPasses m_owner;
     private readonly RenderGraphPackageSets m_sets;
     private readonly RenderGraphPackageWorkCounters m_work;
+    private readonly bool m_temporal;
+    private readonly SdfKernel m_kernel;
 
     private SdfWorldView m_view;
     private bool m_disposed;
@@ -25,7 +27,9 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         m_context = context;
         m_owner = owner;
         m_view = view;
-        m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: SdfKernel.Resolve).GroupLayoutHandles);
+        m_temporal = context.Parameters.Interface.Members.Any(static member => member.Name == SdfWorldPackage.HistoryColor);
+        m_kernel = m_temporal ? SdfKernel.TemporalResolve : SdfKernel.Resolve;
+        m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: m_kernel).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
 
     }
@@ -77,10 +81,22 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         WriteBuffer(set: set, member: SdfWorldPackage.VisibilityRecords, buffer: recording.Inputs[1].Buffer!);
         WriteBuffer(set: set, member: SdfWorldPackage.CullBounds, buffer: recording.Inputs[2].Buffer!);
         WriteBuffer(set: set, member: SdfWorldPackage.ResolvedSurface, buffer: recording.Outputs[1].Buffer!);
-        var pipeline = tables.Pipeline(kernel: SdfKernel.Resolve);
+        if (m_temporal) {
+            bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(SdfWorldPackage.Reactivity),
+                descriptorSetHandle: set, imageViewHandle: recording.Inputs[3].Image.ImageViewHandle);
+            bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(SdfWorldPackage.HistoryColor),
+                descriptorSetHandle: set, imageViewHandle: recording.Inputs[4].Image.ImageViewHandle);
+            WriteBuffer(set: set, member: SdfWorldPackage.HistorySurface, buffer: recording.Inputs[5].Buffer!);
+        }
+        var pipeline = tables.Pipeline(kernel: m_kernel);
 
         recording.Recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer, pipelineHandle: pipeline.Handle);
         m_sets.Bind(bindPoint: GpuBindPoint.Compute, commandBuffer: recording.CommandBuffer, pipelineLayout: pipeline.LayoutHandle, recorder: recording.Recorder, slot: recording.Slot);
+        if (m_temporal) {
+            recording.Recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer,
+                descriptorSetHandle: tables.WorldSet(slot: tables.CurrentSlot), group: ((uint)ShaderInterfaceGroup.World),
+                pipelineLayoutHandle: pipeline.LayoutHandle);
+        }
         recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: ((recording.Width + 7) / 8), groupCountY: ((recording.Height + 7) / 8), groupCountZ: 1);
         residency.MarkRendered(view: index);
         m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);

@@ -365,6 +365,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
         ) {
             Quality = ReducedQuality,
+            Temporal = m_mirror.Definition.Render.Temporal,
         };
 
         return new SdfFrame(

@@ -137,7 +137,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
     // The texel size of a storage image format, stated here independently of the node's own table.
     private static ulong TexelBytes(GpuPixelFormat format) => format switch {
-        GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm or GpuPixelFormat.D32Float => 4UL,
+        GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm or GpuPixelFormat.D32Float or GpuPixelFormat.R32Float => 4UL,
         GpuPixelFormat.R16G16B16A16Float => 8UL,
         GpuPixelFormat.R32G32B32A32Float => 16UL,
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, "The fake has no texel size for this format."),

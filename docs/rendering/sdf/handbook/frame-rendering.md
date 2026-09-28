@@ -166,7 +166,7 @@ filter's taps, without filtering either; coverage remains the color's alpha.
 `place` copies that output into the view's rect. A lone whole-display view can
 stand directly, including at a reduced internal render scale.
 
-A fixed native view keeps the original ten-pass fragment and writes its output
+A fixed native view with temporal reconstruction off keeps the original ten-pass fragment and writes its output
 directly. It allocates no resolve resources. A reduced or variable view adds one
 output-sized dispatch; its memory account includes the output beside the render
 ceiling, and its scheduling price sums the passes' current grids.
@@ -174,6 +174,43 @@ Render scale is *presentation only*: it never touches simulation state, and whic
 tier a view uses is a host decision, not baked into the content. In `Puck.World`,
 `world.render-scale` sets it for every player view and `world.upscale-sharpness`
 sets the reconstruction blend.
+
+## Temporal reconstruction
+
+`world.temporal on` lets each local view combine samples from its own earlier
+renders. It is off by default, including in the shipped quality presets. Camera
+screens read their world's authored `render.temporal`; session and window
+screens read the destination world's setting. Toggling the viewer's live lever
+does not turn those screens' histories on. Routed player views retain the
+player's live preference.
+
+An enabled view renders an eight-position jitter sequence, starting at the
+pixel center. Its final resolve removes that offset and keeps output-sized
+color and surface histories through the render graph's ordinary history
+resources. The surface stores the exact visibility identity and ray distance.
+The resolver follows the preceding camera and the winning shape or mesh
+transform, rejects a different identity or depth, and clamps surviving history
+to the current neighborhood before blending it. Background pixels follow the
+camera's direction without scene translation.
+
+Screens, bounded volumes, and hits with changing dynamic value lanes write a
+separate render-sized reactivity image. Such color changes cannot be explained
+by rigid motion, so the resolver reduces their history contribution. Coverage
+stays in premultiplied color alpha. The reactivity image uses one R32Float
+channel, four bytes per render pixel, and exists only while temporal
+reconstruction is enabled.
+
+A cut, view follow, scene-program replacement, output or ceiling change, debug
+change, toggle, or gap in the residency's consumed frames resets the sample
+count. The first sample reads no history and produces the spatial result.
+Resetting does not clear or reallocate the retained storage; graph history is
+initialized only when its storage is created. Ordinary motion keeps valid
+history and restarts the eight unchanged samples needed before the view stands.
+
+Temporal shading and resolve use optional pipeline slots in the same kernel
+reload transaction as the spatial path. Kernel bytecode is loaded and counted
+with the immutable set, including when temporal reconstruction is off. Off
+views create no temporal pipelines, reactivity image, or history resources.
 
 ## Frames in flight
 

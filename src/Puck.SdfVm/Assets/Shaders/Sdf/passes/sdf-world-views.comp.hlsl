@@ -35,6 +35,9 @@
 // pass through cullBounds (sdf-cull-args.comp): its group origin, then its exclusive group end. The dispatch is
 // origin-anchored, so the origin offsets each invocation onto the box's pixels, and the all-empty margins outside the box
 // are never dispatched; the whole box is where this frame wrote visibility records, which worldVisibilityCurrent reads.
+#ifdef SDF_TEMPORAL_VIEWS
+static float sdfReactivity = 0.0;
+#endif
 #include "sdf-world.hlsli"
 
 [numthreads(8, 8, 1)]
@@ -74,6 +77,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         // The float working color; the display encode dithers and quantizes it.
         output[pixel] = float4(color, 1.0);
         sdfWorkTexels = 1u;
+#ifdef SDF_TEMPORAL_VIEWS
+        reactivity[pixel] = sdfReactivity;
+        sdfWorkTexels += 1u;
+#endif
     }
 #endif
 

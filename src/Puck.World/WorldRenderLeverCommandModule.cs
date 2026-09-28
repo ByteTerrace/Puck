@@ -42,7 +42,7 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
     private string DescribeQuality() {
         return $"[world.quality: shadows={ShadowTiers.Name(reach: settings.ShadowReach)} ao={(settings.AmbientOcclusion
             ? "on"
-            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]";
+            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} temporal={(settings.Temporal ? "on" : "off")}]";
     }
     private string DescribeShadowMarch() =>
         DescribeAdaptiveQuality(
@@ -435,6 +435,36 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.temporal",
+            description: "Toggles temporal reconstruction on the world's own views: world.temporal [on|off]. Each enabled view keeps its own history, rejects disocclusions, and stops after eight unchanged samples. Defaults off; no argument echoes the current state.",
+            handler: (context, args) => {
+                if (args.Count == 0) {
+                    return new CommandResult(Output: $"[world.temporal: {(settings.Temporal
+                        ? "on"
+                        : "off")}]");
+                }
+
+                var on = ParseOnOff(token: args[0]);
+
+                if (on is not { } resolved) {
+                    return CommandResult.Error(output: $"[world.temporal: unknown state '{args[0]}' — on|off]");
+                }
+
+                return SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.Temporal,
+                    a: (resolved
+                    ? 1.0
+                    : 0.0),
+                    formatEcho: () => new CommandResult(Output: $"[world.temporal: {(settings.Temporal
+                    ? "on"
+                    : "off")}]")
+                );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.bakes",
             description: "Draws each prototype's ready bake in place of its field, or its field again: world.bakes [on|off|status]. Presentation only (the field still answers contact, casts shadows and occludes); a prototype whose bake is not ready yet draws its field and switches when it is (world.counters counts the switch as sdf.bakes.drawn). Ships off.",
             handler: (context, args) => {
@@ -705,14 +735,14 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.quality",
-            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion and render-scale levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.render-scale still override afterward).",
+            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, render-scale and temporal levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.render-scale/.temporal still override afterward).",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeQuality());
                 }
 
                 // The preset table is world data (WorldDefinition.Render), read off the LIVE definition so a mutated
-                // preset table applies immediately: look the named tier up and write its three levers into the live
+                // preset table applies immediately: look the named tier up and write its levers into the live
                 // settings.
                 if (QualityTiers.Parse(name: args[0].ToString()) is not { } tier) {
                     return CommandResult.Error(output: $"[world.quality: unknown preset '{args[0]}' — {string.Join(separator: "|", values: QualityTiers.Names)}]");
@@ -738,7 +768,14 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                     : 0.0)
                 );
 
-                // The echo formats INSIDE the LAST lever's completion — all three have applied (or the last was
+                SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.Temporal,
+                    a: (preset.Temporal ? 1.0 : 0.0)
+                );
+
+                // The echo formats INSIDE the LAST lever's completion — every lever has applied (or the last was
                 // refused) by the time formatEcho runs, since loopback drains each inline before its Submit* returns.
                 return SubmitLever(
                     link: link,
