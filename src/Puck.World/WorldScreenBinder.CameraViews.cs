@@ -614,6 +614,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
                 Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
             ) {
                 CutRevision = registration.CutRevision,
+                ResolvedRenderScale = ResolveDynamicScale(controller: ref registration.Resolution, name: name, width: registration.Row.RenderWidth, height: registration.Row.RenderHeight, enabled: m_anchors is WorldClient client && client.Definition.Render.DynamicResolution),
                 Quality = quality,
             });
 
@@ -714,6 +715,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
     // ReconcileCameras works against — the 1-based seat a seat-relative registration resolves for (1 for a shared
     // registration), the rig and anchor that pose it, and the probe export its view's node renders into.
     private sealed class CameraRegistration {
+        public WorldDynamicResolutionController? Resolution;
         public Func<int>? AnchorIdSource { get; set; }
         public ISdfAnchorSource? AnchorSource { get; set; }
         public long CutRevision { get; set; }

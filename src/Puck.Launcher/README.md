@@ -17,6 +17,12 @@ Platform presentation registration lives in
 separate lets the composition root choose a platform without making this
 library depend on a GPU backend.
 
+The host context inherits `IPresentTimingFeedback`. By default it reads the
+windowed presenter's confirmed-present count and timestamp; an offscreen or
+headless host reports `PresentTimingSample.Unavailable`. A composition root may
+register an injected source before terminal registration. Render controllers
+and the window loop's timing diagnostics read the same capability. These
+observations affect presentation only.
 `FixedStepPump` drives every host loop: windowed, headless, and offscreen. It
 drains the console before each step. It holds the first step until a piped
 script reaches its first tick wait, or standard input ends. The

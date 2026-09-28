@@ -136,6 +136,9 @@ internal sealed partial class WorldScreenBinder {
             ? FitWindow(feed: feed)
             : null);
         emitter.SetWindowFit(fit: feed.WindowFit);
+        emitter.ResolveRenderScale = (outputWidth, outputHeight) => ResolveDynamicScale(
+            controller: ref feed.ResolutionController, name: feed.RegistrationName, width: outputWidth, height: outputHeight,
+            enabled: feed.Mirror.Definition.Render.DynamicResolution);
 
         if (isWindow) {
             feed.SetWindowLease(lease: WorldSessionWindowLeases.Acquire(
@@ -349,12 +352,15 @@ internal sealed partial class WorldScreenBinder {
                 continue;
             }
 
+            // Film settles camera readiness even during convergence. Only the scene's unfrozen Dress consumes load.
+            window.ResolveRenderScale = feed.Emitter?.ResolveRenderScale;
             window.View = ((feed.WindowFit?.Invoke() is { } camera)
                 ? new SdfViewSnapshot(
                     Camera: camera,
                     Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
                 ) {
                     Quality = WorldSessionSceneEmitter.ReducedQuality,
+
                 }
                 : null);
         }
@@ -504,6 +510,7 @@ internal sealed partial class WorldScreenBinder {
         public string RegistrationName { get; } = registrationName;
         public WorldScreenProjection Projection { get; } = projection;
         public WorldScreenResolution? Resolution { get; } = resolution;
+        public WorldDynamicResolutionController? ResolutionController;
 
         // The session the screen observes as, replaced by the authority when the destination ends it and admits
         // another; null once the destination refused another.

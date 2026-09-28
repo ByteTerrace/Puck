@@ -38,7 +38,7 @@ internal sealed class WorldOverlayGlyphs {
 /// instances — its <c>views.graphs</c> rows beside the default graph composition synthesizes, or the rows alone under an
 /// authored <c>views.root</c> — behind the node the host produces frames from. The <see cref="WorldViewGraphHost"/>
 /// drives the runtime from then on, frame by frame.</summary>
-internal static class WorldRenderRoot {
+public static class WorldRenderRoot {
     /// <summary>Builds the render root and records it, and the world's residency, on the <see cref="WorldRenderProbe"/>.</summary>
     /// <param name="sp">The composed services.</param>
     /// <param name="overlay">The overlay package the root graph draws, or <see langword="null"/> when it draws

@@ -90,6 +90,7 @@ public static partial class WorldSessionLevers {
             Shadows = ShadowTiers.Tier(reach: settings.ShadowReach),
             ShadowCrowdRadius = settings.ShadowCrowdRadius,
             AmbientOcclusion = settings.AmbientOcclusion,
+            DynamicResolution = settings.DynamicResolution,
             RenderScale = WorldRenderScaleTiers.Nearest(scale: settings.RenderScale),
             UpscaleSharpness = settings.UpscaleSharpness,
         });

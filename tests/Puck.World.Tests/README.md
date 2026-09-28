@@ -36,6 +36,14 @@ the real instance host: a body inside the deadband retains its authority, and on
 beyond it transfers within a bounded number of ticks. `AuthoredAdjacencyHysteresisLawTests`
 checks that reciprocal documents cannot disagree about that deadband.
 
+`WorldDynamicResolutionLawTests` drives confirmed-present intervals and
+completed march counters through the same presentation controller. It pins
+continuous demand, shared extent quantization, fresh-sample gating, and
+allocation-free steady updates. `WorldDynamicResolutionBudgetLawTests` reads
+the committed backend recordings and checks their quantized pixel-area
+normalization. `WorldDynamicResolutionLeverLawTests` checks boot defaults,
+console and quality writes, and session-save folding without a device.
+
 ## Keep the feedback loop short
 
 Use the smallest fixture that exercises the behavior under test:
@@ -165,6 +173,10 @@ dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-build
 Review slow TRX cases before reducing workloads. Do not make the default run
 fast by silently excluding functional coverage.
 
+The dynamic-resolution frame laws exercise the live presenter, independently
+scoped filming cameras, session output extents, and routed windows with fitted
+or default cameras. Fresh injected timing changes active scale; convergence
+holds both the snapshot and the controller's demand until capture completes.
 ## Documentation
 
 📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)

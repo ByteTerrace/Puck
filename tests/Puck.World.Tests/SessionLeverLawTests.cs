@@ -279,6 +279,7 @@ public sealed class SessionLeverLawTests {
             WorldSessionLevers.Bakes,
             WorldSessionLevers.BindingBar,
             WorldSessionLevers.CadenceGate,
+            WorldSessionLevers.DynamicResolution,
             WorldSessionLevers.FarBound,
             WorldSessionLevers.MasterVolume,
             WorldSessionLevers.RenderScale,
