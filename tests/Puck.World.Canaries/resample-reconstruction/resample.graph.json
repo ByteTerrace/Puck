@@ -67,6 +67,13 @@
         }
       ],
       "config": {
+        "compareMode": {
+          "default": 0,
+          "max": 3,
+          "description": "0 places normally; comparison modes use a held source and the base image's current rect.",
+          "min": 0,
+          "type": "uint"
+        },
         "letterbox": {
           "default": 0,
           "max": 1,
@@ -99,6 +106,13 @@
           "description": "1 puts the reconstructed source through the filmic tonemap inside the rect; the base and the letterbox color are never tonemapped.",
           "min": 0,
           "type": "uint"
+        },
+        "wipe": {
+          "default": 0.5,
+          "max": 1,
+          "description": "The held image's fraction of the rect in wipe mode.",
+          "min": 0,
+          "type": "float"
         }
       }
     }

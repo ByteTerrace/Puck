@@ -190,7 +190,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] E7 gizmos and pointer dragging.
 - [ ] E8 editor camera.
 - [ ] E9 cost per object and GPU pass timing (startable today).
-- [ ] E10 live reload and before-and-after: watched source and import changes use ordinary authenticated reloads, preserve editor state and report refusals; before-and-after presentation remains open, with its image-difference metric shared with the canaries.
+- [x] E10 live reload and before-and-after: watched source and import changes use ordinary authenticated reloads, preserve editor state and report refusals. Per-seat held frames support split, bindable wipe and difference through ordinary capture and `place`, with the image-difference metric shared with the canaries. `editor-compare` checks both backends, including cropped sampling and return to the live view.
 - [ ] E11 source-preserving save for authored rows has landed, with named generated-row refusals; E3's live duplicate and rename workflow remains.
 - [ ] E12 the shape gallery as a world, retiring `Puck.SdfVm.Debug` once the gallery reaches parity with it.
 - [ ] E13 carving and the brick bake: a carve brush whose dabs are document rows.

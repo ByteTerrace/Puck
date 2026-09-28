@@ -1,4 +1,4 @@
-// Generated from shader interface 'place' (sha256/8205e9681a582a4f384d396c495c4874d6c5e20408f2efa881fe61e6f4610cb6). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'place' (sha256/adbb0239e20020e798dfd195d27c22a4c38bcea0146a1b32b058513e6ffcf379). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_PLACE
 #define PUCK_SHADER_INTERFACE_PLACE
 
@@ -25,12 +25,13 @@ struct PlaceFrame {
 // The Pass group: descriptor set 3, register space 3.
 struct PlacePass {
     [[vk::offset(0)]] uint2 extent;
-    [[vk::offset(8)]] uint letterbox;
-    [[vk::offset(12)]] uint _pad12;
+    [[vk::offset(8)]] uint compareMode;
+    [[vk::offset(12)]] uint letterbox;
     [[vk::offset(16)]] float4 rect;
     [[vk::offset(32)]] float sharpness;
     [[vk::offset(36)]] uint tonemap;
-    [[vk::offset(40)]] uint workCounterRow;
+    [[vk::offset(40)]] float wipe;
+    [[vk::offset(44)]] uint workCounterRow;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<PlacePass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] Texture2D<float4> base : register(t1, space3);

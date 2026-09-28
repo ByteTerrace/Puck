@@ -1,0 +1,38 @@
+# A playing seat never draws the requested grid, leaving held and live images equal.
+world.wait ready 45
+pipeline.wait crop compiled 40
+pipeline.wait crop installed 10
+pipeline.time crop pause
+pipeline.set crop crop {"sharpness":0}
+pipeline.reset crop
+pipeline.wait crop submitted 1 10
+pipeline.capture crop {run}/crop-expanded.png
+pipeline.wait crop captured 10
+pipeline.output crop exact
+pipeline.capture crop {run}/crop-exact.png
+pipeline.wait crop captured 10
+world.cadence off
+world.grid pitch 1
+world.grid surface
+world.grid off
+world.wait 1
+world.screenshot {run}/plain.png
+world.wait captures 30
+world.compare hold
+world.grid on
+world.wait 1
+world.compare split
+world.screenshot {run}/split.png
+world.wait captures 30
+world.compare wipe 0.5
+world.screenshot {run}/wipe.png
+world.wait captures 30
+world.compare diff
+world.screenshot {run}/diff.png
+world.wait captures 30
+world.compare off
+world.screenshot {run}/off.png
+world.wait captures 30
+world.grid off
+world.screenshot {run}/restored.png
+world.wait captures 30

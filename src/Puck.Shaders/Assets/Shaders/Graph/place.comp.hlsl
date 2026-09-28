@@ -7,7 +7,7 @@
 // and only it, goes through the filmic curve: a world's root places its SDF views this way, so the scene is tonemapped
 // where it enters the frame and the letterbox color, the base and every pane reach the display as they are.
 // The generated interface declares the frame group and the pass group: the extent, the config (letterbox, rect,
-// sharpness, tonemap) and the images base, source and destination, each image input with a sampler it never reads. rect
+// sharpness, tonemap, compareMode, wipe) and the images base, source and destination, each image input with a sampler it never reads. rect
 // is the destination rect as fractions of the destination's extent: left, top, width, height.
 #include "place.interface.hlsli"
 
@@ -21,6 +21,32 @@ float3 filmicTonemap(float3 color) {
 }
 
 #include "../Shared/reconstruction.hlsli"
+
+// A comparison source already contains its held seat crop. The base still contains the whole live display.
+// All reads clamp inside their own crop, including split's resampling at a nonzero seat origin.
+float3 compareColor(uint2 pixel, uint2 rectDims, uint2 baseDims, uint2 sourceDims) {
+    float4 rect = passGroup.rect;
+    uint2 liveMin = (uint2)clamp(floor((rect.xy * float2(baseDims)) + 0.5), float2(0.0, 0.0), float2(baseDims - 1));
+    uint2 liveMax = (uint2)clamp(floor(((rect.xy + rect.zw) * float2(baseDims)) + 0.5), float2(liveMin + 1), float2(baseDims));
+    uint2 liveDims = liveMax - liveMin;
+
+    if (passGroup.compareMode == 2u) {
+        uint leftWidth = rectDims.x / 2u;
+        if (pixel.x < leftWidth) {
+            return puckReconstruct(source, pixel, uint2(leftWidth, rectDims.y), sourceDims, 0.0).rgb;
+        }
+        return puckReconstructRegion(base, uint2(pixel.x - leftWidth, pixel.y),
+            uint2(rectDims.x - leftWidth, rectDims.y), liveDims, liveMin, 0.0).rgb;
+    }
+
+    float3 held = puckReconstruct(source, pixel, rectDims, sourceDims, 0.0).rgb;
+    float3 live = puckReconstructRegion(base, pixel, rectDims, liveDims, liveMin, 0.0).rgb;
+    if (passGroup.compareMode == 3u) {
+        // The held PNG is SDR. Compare it against the same clamped display range, retaining no HDR headroom.
+        return abs(held - saturate(live));
+    }
+    return ((float(pixel.x) + 0.5) < (passGroup.wipe * float(rectDims.x))) ? held : live;
+}
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
@@ -45,8 +71,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             written = LetterboxColor;
         } else {
             base.GetDimensions(baseDims.x, baseDims.y);
-            written = base.Load(int3(min(id.xy, (baseDims - 1)), 0));
+            written = (passGroup.compareMode == 0u)
+                ? base.Load(int3(min(id.xy, (baseDims - 1)), 0))
+                : puckReconstruct(base, id.xy, destinationDims, baseDims, 0.0);
         }
+    } else if (passGroup.compareMode != 0u) {
+        base.GetDimensions(baseDims.x, baseDims.y);
+        source.GetDimensions(sourceDims.x, sourceDims.y);
+        written = float4(compareColor((id.xy - rectMin), (rectMax - rectMin), baseDims, sourceDims), 1.0);
     } else {
         source.GetDimensions(sourceDims.x, sourceDims.y);
 

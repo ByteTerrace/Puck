@@ -9,6 +9,17 @@ public sealed partial class RenderGraphRuntime {
 
     private readonly HashSet<int> m_convergenceInstances = [];
 
+    private bool CanConverge(int index) => ((m_producers[index] is null) && (m_sources[index] is null));
+    // An encoder already owns the Nth image. Keep its existing dependency closure frozen across index changes,
+    // without restarting the samples or transferring that request to the new display root.
+    private void RemapForwardedConvergence(Puck.Hosting.RenderGraphInstanceSet set) {
+        if (m_convergence is not { Converge: > 0, Completion.IsCompleted: false }) { return; }
+        var retained = m_convergenceInstances.Select(selector: index => set.IndexOf(name: m_set.Instances[index].Name))
+            .Where(predicate: index => (index >= 0)).ToArray();
+
+        m_convergenceInstances.Clear();
+        foreach (var index in retained) { m_convergenceInstances.Add(item: index); }
+    }
     private void BeginConvergence(int captured, FrameCaptureRequest request) {
         m_convergence = request;
         m_convergenceFrames = 0;

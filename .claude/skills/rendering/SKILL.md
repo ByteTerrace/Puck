@@ -1475,6 +1475,22 @@ letterboxes the whole output when `RenderGraphPlacement.Uncovered` says part of
 the display lies outside every shown rect (`WorldViewGraphHost.PlaceViews`
 counts it covered only when one shown view or pane covers it whole).
 
+Editor comparisons wrap the live root through `WorldComparisonGraph`: one
+ordinary static `source-rgba` upload per active hold and ordered `place` passes
+compose the result. `WorldCompareCapture` captures the live root's existing
+instance target, never the wrapper, and latches viewport metadata only when
+the completed frame counter advances. Preserve that boundary when changing
+capture or graph composition; a paused capture must use the last rendered
+layout. `WorldFrameComparison` owns cropped CPU pixels while the mode is off;
+off removes the wrapper and upload instances. Mode and wipe edits write the
+existing pass parameters; bound axis input must neither capture nor rebuild.
+The comparison branches in `place.comp.hlsl` and ordinary reconstruction use
+`Assets/Shaders/Shared/reconstruction.hlsli`. A live seat crop carries its
+nonzero source origin and clamps each tap within its own crop. Keep the
+zero-origin reconstruction laws and the `editor-compare` canary on both
+backends when changing that helper. The command and pixel-difference contract
+belongs to `src/Puck.World/README.md` under The world as data.
+
 Camera views and sessions are instances too (`WorldViewInstances`,
 `src/Puck.World.Client/Sources`): each camera a screen, a HUD frame or a probe
 export shows (named by its registration, `WorldSeatAnchors.RegistrationName`,

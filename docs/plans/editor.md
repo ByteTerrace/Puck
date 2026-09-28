@@ -619,7 +619,10 @@ readback for step 3.
 **Status:** the source watch uses the graph watch's shared debounce and the
 existing reload command. It covers compile and document-composition inputs,
 keeps the latest reload diagnostic for the inspector and toast, and reconciles
-selection ids after a rebuild. Before-and-after presentation remains open.
+selection ids after a rebuild. A seat can hold its displayed frame and compare
+it with the live view through the ordinary capture and `place` paths. Split,
+wipe, difference, cropped sampling and return to the live view are checked on
+both backends by `editor-compare`.
 
 **Delivers:**
 
@@ -633,10 +636,19 @@ selection ids after a rebuild. Before-and-after presentation remains open.
    editor camera and the selection (by id) survive a reload; an id the reload
    removed leaves the selection.
 3. **Before and after.** `world.compare hold` keeps the seat's current frame;
-   `world.compare wipe|split|diff|off` shows it against the live view in a pane
-   the `place` package draws, with a bindable wipe position. The echo includes
+   `world.compare wipe [position]|split|diff|off` shows it against the live view in a pane
+   the `place` package draws. A bound `Axis1D` value controls the wipe position
+   in `0..1` without capturing or rebuilding the graph. The echo includes
    the changed-pixel count (pixels moving at least 2 LSB, measured by the shared
-   `RgbaFrameDifference` used by the canaries).
+   `RgbaFrameDifference` used by the canaries). Captures use the existing live
+   instance target before the comparison wrapper, so a comparison never holds
+   itself. The captured frame carries its last rendered viewport even while
+   paused. Active comparisons add ordinary static uploads and `place` passes;
+   off removes those resources and retains the CPU hold. A changed crop extent
+   requires a new hold before measuring differences. Completed typed commands
+   report once through the terminal, tape and toast; late refusals enter
+   `wire.errors`. A root screenshot follows the next composed root across a
+   comparison mode change, while a named instance capture keeps its target.
 
 **Touches:** `src/Puck.World` (the watch, the compare verbs, the capture path),
 `Puck.World.Client` (`WorldViewGraphHost`, editor state retention).
@@ -645,7 +657,10 @@ selection ids after a rebuild. Before-and-after presentation remains open.
 reload; red leg: touching an unrelated file submits none);
 `WorldEditorReloadRetentionLawTests` (selection and camera survive a reload, and
 a removed id drops out). Canary `editor-compare`: hold a frame, move a render
-lever, and the split view's halves differ.
+lever, and the split view's halves differ. `WorldFrameComparisonLawTests`
+checks crop rounding and authored root extents, owned pixels, the shared
+difference threshold, graph revision, refusal atomicity, capture settlement,
+paused metadata and the existing axis binding contract.
 
 **Depends on:** E2 and E8 for what a reload keeps; the compare needs nothing.
 

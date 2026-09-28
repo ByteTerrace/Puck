@@ -665,6 +665,9 @@ public static class WorldBootComposition {
             watch: sp.GetRequiredService<WorldSourceWatch>(),
             source: () => sp.GetRequiredService<TextCommandSource>(),
             router: sp.GetRequiredService<Func<InputRouter>>()));
+        services.AddSingleton<WorldFrameComparison>();
+        services.AddSingleton<WorldCompareCapture>();
+        services.AddSingleton<ICommandModule, WorldCompareCommandModule>();
         // Launcher owns the one TextCommandSource and its stdout/stderr + operator-tape result fan-out. World
         // contributes only this wait gate; AddLauncherTerminalShared composes every contributed gate into that
         // source, so adding world.wait cannot sever the launcher's administrative mirror or deferred observers.

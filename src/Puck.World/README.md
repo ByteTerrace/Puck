@@ -1010,6 +1010,24 @@ and requests one reload, covering edits made while that load was being accepted.
 Grid and snap overrides and build mode survive reload. The current placement
 and snap reference survive by id; a removed id is cleared.
 
+`world.compare hold` keeps the acting seat's displayed pixels for a before-and-after
+comparison. `world.compare wipe [position]`, `split` and `diff` show that hold
+beside the current view. Wipe shows the held image left of a position in `0..1`
+and the current image to its right; split fits each whole image into half of
+the seat; diff shows their absolute RGB difference. An `Axis1D` binding to
+`world.compare` controls the wipe position without taking another capture.
+`world.compare off` releases the comparison's graph resources and retains its
+CPU image for reuse.
+A following `world.screenshot` captures the next composed display, including
+when switching comparison on or off changes its render graph root.
+
+A typed comparison captures the live view and reports the number of pixels
+whose RGB differs by at least two byte codes, using the same measurement as
+the canaries. The text session waits for that capture before its next command.
+A different seat extent requires a new hold before counting differences.
+Bare `world.compare` reports the latest result. Holds and controls belong to
+the session and do not enter the world document or its simulation state.
+
 The root `state` section is the one authoring inventory for every ownership
 mode: `world` rows are document cells, `body` rows are ephemeral per-body
 counters/timers, and `identity` rows use the durable identity seam. Body and

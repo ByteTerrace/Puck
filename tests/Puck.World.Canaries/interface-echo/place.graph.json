@@ -8,7 +8,7 @@
       "format": "R8G8B8A8Unorm",
       "dimensions": {
         "mode": "Absolute",
-        "width": 18,
+        "width": 20,
         "height": 1
       }
     }
@@ -25,10 +25,12 @@
         }
       ],
       "config": {
+        "compareMode": { "type": "uint", "default": 0, "min": 0, "max": 3, "description": "The placement comparison mode." },
         "letterbox": { "type": "uint", "default": 0, "min": 0, "max": 1, "description": "1 fills the destination outside the rect with the letterbox color rather than the base." },
         "rect": { "type": "float4", "default": [0, 0, 1, 1], "min": 0, "max": 1, "description": "The destination rect as fractions of the destination extent: left, top, width, height." },
         "sharpness": { "type": "float", "default": 0, "min": 0, "max": 1, "description": "Reconstruction sharpness: 0 is bilinear, 1 clamped Catmull-Rom." },
         "tonemap": { "type": "uint", "default": 0, "min": 0, "max": 1, "description": "1 puts the reconstructed source through the filmic tonemap inside the rect; the base and the letterbox color are never tonemapped." },
+        "wipe": { "type": "float", "default": 0.5, "min": 0, "max": 1, "description": "The held image's fraction of the rect in wipe mode." },
         "workCounterRow": { "type": "uint", "default": 0, "description": "The place pass's row of the work counters." }
       }
     }
