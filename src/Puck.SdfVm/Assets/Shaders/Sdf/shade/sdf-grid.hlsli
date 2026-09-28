@@ -9,6 +9,9 @@
 static const float GridMajorEvery = 4.0;
 static const float3 GridWorldLineColor = float3(0.34, 0.56, 0.95);
 static const float3 GridObjectLineColor = float3(0.96, 0.66, 0.28);
+// How far a line fully on its lattice covers the lit color: strong enough to read on any lit material.
+static const float GridWorldLineOpacity = 0.85;
+static const float GridObjectLineOpacity = 0.9;
 
 // The coverage of one axis's lattice lines at `coordinate`: 1 on a line, 0 a line width away. `width` is the line width
 // in world units at the surface. A pitch at or below zero draws nothing; a pitch under eight widths fades to nothing at
@@ -68,7 +71,7 @@ float3 sdfApplyGrid(float3 color, float3 surfacePoint, float3 normal, float3 ray
     if ((flags & SDF_GRID_SURFACE) != 0u) {
         float coverage = sdfGridProjected(surfacePoint, normal, passGroup.gridWorldPitch, width);
 
-        color = lerp(color, GridWorldLineColor, ((coverage * graze) * 0.6));
+        color = lerp(color, GridWorldLineColor, ((coverage * graze) * GridWorldLineOpacity));
     } else if ((flags & SDF_GRID_WORLD) != 0u) {
         // The working plane: a surface at the plane's height, within a band as wide as the drawn line and never under a
         // hundredth of a unit, facing up or down.
@@ -77,7 +80,7 @@ float3 sdfApplyGrid(float3 color, float3 surfacePoint, float3 normal, float3 ray
         if ((abs(surfacePoint.y - passGroup.gridPlaneY) <= band) && (abs(normal.y) > 0.5)) {
             float coverage = sdfGridPlane(surfacePoint.xz, passGroup.gridWorldPitch.xz, width);
 
-            color = lerp(color, GridWorldLineColor, ((coverage * graze) * 0.6));
+            color = lerp(color, GridWorldLineColor, ((coverage * graze) * GridWorldLineOpacity));
         }
     }
 
@@ -94,7 +97,7 @@ float3 sdfApplyGrid(float3 color, float3 surfacePoint, float3 normal, float3 ray
             float coverage = sdfGridProjected(local, localNormal, passGroup.gridObjectPitch, width);
             float fade = saturate((1.0 - (distanceFromOrigin / radius)));
 
-            color = lerp(color, GridObjectLineColor, (((coverage * fade) * graze) * 0.75));
+            color = lerp(color, GridObjectLineColor, (((coverage * fade) * graze) * GridObjectLineOpacity));
         }
     }
 

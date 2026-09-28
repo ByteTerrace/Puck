@@ -179,7 +179,7 @@ Every package below carries its own check on the programme page; tick it there a
 
 Every package below carries its own check on the programme page; tick it there and here in the same change.
 
-- [ ] E1 build mode, the grid and snapping (startable today).
+- [x] E1 build mode, the grid and snapping, checked by the `editor-grid` canary.
 - [ ] E2 selection, a visibility identity per drawn instance, GPU and CPU picking, and highlight.
 - [ ] E3 undo, redo, duplicate, delete and measure.
 - [ ] E4 debug views everywhere (startable today).
