@@ -64,7 +64,7 @@ public sealed class WorldArtifactClosureLawTests {
             text: CollectProject
         );
         var evaluation = CliProcess.RunCaptured(
-            arguments: ["msbuild", project, "-nologo", "-v:q", $"-p:PuckWorldProject={Path.Combine(path1: root, path2: WorldArtifactClosure.WorldProject)}"],
+            arguments: ["msbuild", "--disable-build-servers", project, "-nologo", "-v:q", $"-p:PuckWorldProject={Path.Combine(path1: root, path2: WorldArtifactClosure.WorldProject)}"],
             cancellationToken: TestContext.Current.CancellationToken,
             fileName: "dotnet",
             input: string.Empty,

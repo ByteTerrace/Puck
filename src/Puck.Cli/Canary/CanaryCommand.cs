@@ -391,7 +391,7 @@ internal static partial class CanaryCommand {
 
             var stubBuild = CliProcess.RunCaptured(
                 fileName: "dotnet",
-                arguments: ["build", stubProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
+                arguments: ["build", "--disable-build-servers", stubProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
                 input: string.Empty,
                 timeout: CliProcess.RemainingBudget(
                     budget: BuildBudget,
@@ -916,6 +916,7 @@ internal static partial class CanaryCommand {
             if (authorityExecutionWorld is { } authorityWorld) {
                 budget.Tally.WorldStarted();
                 authority = AuthorityCompanion.Start(
+                    quitInput: RunnerQuit,
                     artifact: artifact,
                     cancellationToken: budget.Cancellation,
                     exitAfterSeconds: ((manifest.TimeoutSeconds + AuthorityCompanion.ListenSeconds) + AuthorityCompanion.QuitGraceSeconds),

@@ -37,7 +37,7 @@ public sealed class ReferencesUnresolvedAnalyzerLawTests {
                 )
             );
             _ = await CliProcess.RunCheckedAsync(
-                arguments: ["restore", project],
+                arguments: ["restore", "--disable-build-servers", project],
                 cancellationToken: TestContext.Current.CancellationToken,
                 capture: true,
                 fileName: "dotnet",

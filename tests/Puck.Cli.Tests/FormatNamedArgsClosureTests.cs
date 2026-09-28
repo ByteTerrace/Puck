@@ -89,8 +89,8 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
                 capture: false,
                 fileName: "dotnet",
                 arguments: (restore
-                    ? ["build", project, "-c", configuration]
-                    : ["build", project, "-c", configuration, "--no-restore"])
+                    ? ["build", "--disable-build-servers", project, "-c", configuration]
+                    : ["build", "--disable-build-servers", project, "-c", configuration, "--no-restore"])
             ).GetAwaiter().GetResult().ExitCode,
             expected: 0
         );
