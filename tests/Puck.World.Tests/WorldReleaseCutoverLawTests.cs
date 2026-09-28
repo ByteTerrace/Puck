@@ -1146,6 +1146,12 @@ public sealed partial class WorldReleaseCutoverLawTests {
         private readonly DirectoryObjectStorageTarget m_target;
 
         public WorldAuthorityBlobStore Authority { get; }
+
+        // Every silo and authority store of the scenario runs on this clock, which no law advances: a silo's progress
+        // window, its persistence health and every storage deadline are decided by the law's steps and never by how long
+        // the machine took between them.
+        public VirtualClock Clock { get; } = new();
+
         public WorldReleaseFixtureArchive FixtureArchive { get; }
         public WorldReleaseGroupStore Groups { get; }
         public WorldAuthorityIdentity[] Identities { get; }
@@ -1168,7 +1174,8 @@ public sealed partial class WorldReleaseCutoverLawTests {
                 )];
             Authority = new(
                 store: m_store,
-                target: m_target
+                target: m_target,
+                timeProvider: Clock
             );
             Groups = new(
                 owner: m_owner,
@@ -1259,7 +1266,8 @@ public sealed partial class WorldReleaseCutoverLawTests {
                 definition,
                 m_store,
                 routing,
-                m_target
+                m_target,
+                timeProvider: Clock
             ), routing);
         }
         public async Task InitializeAsync(string activeRelease = "release-a") {

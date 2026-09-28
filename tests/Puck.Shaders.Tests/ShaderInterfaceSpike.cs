@@ -215,8 +215,8 @@ internal static class ShaderInterfaceSpike {
             )
         );
 
-    // Stages the sources into a fresh directory, then compiles the named one with the flags the shared shader recipe
-    // (build/Shaders.targets) passes.
+    // Stages the sources into a fresh directory, then compiles the named one with the one shader recipe
+    // (ShaderCompiler.StepsOf, which the build runs through build/ShaderRecipe.props).
     private static async Task<Build> CompileInAsync(string sourceFileName, string profile, string entryPoint, Func<string, CancellationToken, Task> stage, CancellationToken cancellationToken) {
         var dxc = (Dxc ?? throw new ShaderToolMissingException(
             directory: null,
@@ -255,13 +255,22 @@ internal static class ShaderInterfaceSpike {
                 path2: "out.dxil"
             );
 
+            var steps = ShaderCompiler.StepsOf(
+                entryPoint: entryPoint,
+                stage: profile[..2] switch {
+                    "vs" => ShaderStage.Vertex,
+                    "ps" => ShaderStage.Fragment,
+                    _ => ShaderStage.Compute,
+                }
+            );
+
             await RunAsync(
-                arguments: ["-spirv", "-fspv-target-env=vulkan1.3", "-fspv-entrypoint-name=main", "-enable-16bit-types", "-O3", "-T", profile, "-E", entryPoint, include, "-Fo", spirvPath, source],
+                arguments: [.. steps[0].Options, include, "-Fo", spirvPath, source],
                 cancellationToken: cancellationToken,
                 dxc: dxc
             );
             await RunAsync(
-                arguments: ["-Wno-ignored-attributes", "-enable-16bit-types", "-O3", "-T", profile, "-E", entryPoint, include, "-Fo", dxilPath, source],
+                arguments: [.. steps[1].Options, include, "-Fo", dxilPath, source],
                 cancellationToken: cancellationToken,
                 dxc: dxc
             );

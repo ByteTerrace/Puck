@@ -9,8 +9,8 @@ namespace Puck.Cli.Tests;
 /// Laws for <c>puck shaders generate</c>: it owns every generated shader interface, not only <c>sdf-isa.hlsli</c>.
 /// Over a tree whose includes match, the check passes; a drifted package include fails by name; an interface include
 /// no package or engine kernel owns fails by name; a package whose include is missing fails by name; a drifted or missing
-/// SDF engine kernel include fails by name; and on the real tree the overlay, place, film-grain and SDF engine interfaces
-/// are among the includes it checks.
+/// SDF engine kernel include fails by name; and on the real tree the overlay, place, film-grain and SDF engine interfaces,
+/// and the build's shader recipe, are among the files it checks.
 /// </summary>
 public sealed class ShadersGenerateLawTests {
     private const string FilmGrainPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-film-grain.interface.hlsli";
@@ -19,11 +19,12 @@ public sealed class ShadersGenerateLawTests {
     private const string PlacePath = "src/Puck.Shaders/Assets/Shaders/Graph/place.interface.hlsli";
     private const string WorldPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-world.interface.hlsli";
 
-    // The SDF engine kernels' includes, each with the text its interface generates, and the instruction set's recorded
-    // fingerprint: owned whatever the tree holds.
+    // The SDF engine kernels' includes, each with the text its interface generates, the instruction set's recorded
+    // fingerprint and the build's shader recipe: owned whatever the tree holds.
     private static readonly (string Path, string Text)[] EngineKernels = [
         .. SdfWorldInterfaces.Includes.Select(selector: static include => (include.Path, ShaderInterfaceHlsl.Generate(shaderInterface: include.Interface))),
         (SdfIsaHlsl.FingerprintSourcePath, SdfIsaHlsl.GenerateFingerprintSource(fingerprint: SdfIsaHlsl.Fingerprint)),
+        (ShaderCompiler.BuildRecipePath, ShaderCompiler.GenerateBuildRecipe()),
     ];
 
     // Each conversion package's interface include, beside its kernel.
@@ -168,7 +169,7 @@ public sealed class ShadersGenerateLawTests {
         Assert.Empty(collection: problems);
         Assert.Equal(
             actual: includes.Select(selector: static include => include.Path),
-            expected: [IsaPath, SdfIsaHlsl.FingerprintSourcePath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-bricks.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-mesh.interface.hlsli", WorldPath, FilmGrainPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path)]
+            expected: [IsaPath, SdfIsaHlsl.FingerprintSourcePath, ShaderCompiler.BuildRecipePath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-bricks.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-mesh.interface.hlsli", WorldPath, FilmGrainPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path)]
         );
     }
 }

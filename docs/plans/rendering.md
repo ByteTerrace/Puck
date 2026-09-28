@@ -4339,7 +4339,22 @@ item 2 landed.
     bytecode reflects the instruction set it was compiled against, and a reload
     reflects each changed kernel and holds it to the host's interface
     (`ShaderInterfaceLayout.Mismatch`), refusing another stamp or a binding the
-    host does not place, which keeps the previous kernels. The parity world boots with soft shadows at
+    host does not place, which keeps the previous kernels. The instruction
+    set's decode has a device law (`SdfFieldDeviceLawTests`): the shipped
+    interpreter, on Vulkan and Direct3D 12 hardware, answers within 1e-3 of
+    `SdfFieldEvaluator` over every probe program the evaluator accepts, and of
+    the evaluator over an equivalent at each point for every plane rotation
+    (each plane driven by each axis), polar repeat, shear, Gaussian push, domain
+    warp and displacement; programs with two lanes exchanged miss. Wallpaper
+    folds, log-spheres, cell jitter, axial profiles, lane erosion, dynamic
+    transforms, non-uniform scales and the shapes the evaluator refuses (regular
+    polygons, stars, ellipses, glyphs, sampled regions, paths and multi-strand
+    sweeps) have no device reference yet. A reload reads only the kernels a
+    tree carries and compiles each carried `.comp.hlsl` source with the World's
+    `ShaderCompiler` (`SdfKernelSet.Overlaid`), so editing a kernel and
+    reloading is one step; the `sdf-shader-reload` canary installs a baker
+    that reads the host's stamped include and refuses one declaring another
+    stamp, on both backends. The parity world boots with soft shadows at
     `High` and ambient occlusion on, so every SDF station passes through the
     shadow and ambient stages under the cross-backend pixel gate.
 

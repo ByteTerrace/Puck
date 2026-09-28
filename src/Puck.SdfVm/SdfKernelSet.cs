@@ -187,6 +187,121 @@ public sealed class SdfKernelSet {
 
         return new SdfKernelSet(bytecode: copy);
     }
+    /// <summary>Returns a copy of the set with each kernel a directory carries replaced, and every other kernel kept:
+    /// what a reload reads from a tree that holds only the kernels it changes. A kernel is carried as its source,
+    /// <c>{stem}.comp.hlsl</c> named by <see cref="StemOf"/>, which <paramref name="compiler"/> compiles, or as its
+    /// bytecode, <c>{stem}.comp</c> completed by <paramref name="bytecodeExtension"/>, which is read as it stands; a
+    /// source wins over bytecode beside it. The carried sources compile together, each a cache hit when unchanged.
+    /// Counts the load and the bytes it installs into <see cref="LoadWork"/>.</summary>
+    /// <param name="bytecodeExtension">The compiled-kernel extension (<c>".spv"</c> for Vulkan, <c>".dxil"</c> for
+    /// Direct3D 12), which also selects which of a compiled source's two binaries the set takes.</param>
+    /// <param name="directory">The directory holding the kernels it replaces.</param>
+    /// <param name="compiler">The compiler a carried source compiles with.</param>
+    /// <param name="cancellationToken">The token that cancels the compiles.</param>
+    /// <returns>The overlaid set.</returns>
+    /// <exception cref="ArgumentException"><paramref name="bytecodeExtension"/> or <paramref name="directory"/> is
+    /// empty.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="compiler"/> is <see langword="null"/>.</exception>
+    /// <exception cref="DirectoryNotFoundException"><paramref name="directory"/> does not exist.</exception>
+    /// <exception cref="IOException"><paramref name="directory"/> carries no kernel, or a kernel file cannot be
+    /// read.</exception>
+    /// <exception cref="InvalidDataException">A carried source does not compile; the message names each error's file,
+    /// line and column.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public SdfKernelSet Overlaid(string bytecodeExtension, string directory, ShaderCompiler compiler, CancellationToken cancellationToken = default) {
+        ArgumentException.ThrowIfNullOrEmpty(bytecodeExtension);
+        ArgumentException.ThrowIfNullOrEmpty(directory);
+        ArgumentNullException.ThrowIfNull(compiler);
+
+        if (!Directory.Exists(path: directory)) {
+            throw new DirectoryNotFoundException(message: $"The kernel directory '{directory}' does not exist.");
+        }
+
+        var work = LoadWork;
+        var copy = m_bytecode.ToArray();
+        var compiles = new List<(SdfKernel Kernel, Task<CompiledShader> Compile)>();
+        var carried = 0;
+
+        work.Count(kind: Loads);
+
+        foreach (var kernel in Kernels) {
+            var stem = Path.Combine(
+                path1: directory,
+                path2: $"{StemOf(kernel: kernel)}.comp"
+            );
+            var source = $"{stem}.hlsl";
+
+            if (File.Exists(path: source)) {
+                compiles.Add(item: (kernel, compiler.CompileAsync(
+                    cancellationToken: cancellationToken,
+                    descriptor: new ShaderCompilationRequest(
+                        name: StemOf(kernel: kernel),
+                        stages: [new ShaderStageSource(
+                            EntryPoint: "CSMain",
+                            Path: source,
+                            Source: File.ReadAllText(path: source),
+                            Stage: ShaderStage.Compute
+                        )]
+                    )
+                )));
+                carried++;
+
+                continue;
+            }
+
+            var bytecode = $"{stem}{bytecodeExtension}";
+
+            if (!File.Exists(path: bytecode)) {
+                continue;
+            }
+
+            var bytes = File.ReadAllBytes(path: bytecode);
+
+            work.Add(
+                amount: bytes.LongLength,
+                kind: BytecodeBytes
+            );
+            copy[((int)kernel)] = bytes;
+            carried++;
+        }
+
+        if (carried == 0) {
+            throw new IOException(message: $"The kernel directory '{directory}' carries no kernel: no sdf-*.comp.hlsl source and no sdf-*.comp{bytecodeExtension} bytecode.");
+        }
+
+        var errors = new List<string>();
+
+        foreach (var (kernel, compile) in compiles) {
+            var compiled = compile.GetAwaiter().GetResult();
+
+            if (!compiled.IsSuccess) {
+                var reported = compiled.Diagnostics.Where(predicate: static diagnostic => diagnostic.IsError).Select(selector: diagnostic => $"{(diagnostic.Path ?? compiled.SourcePath)}:{diagnostic.Line}:{diagnostic.Column}: {diagnostic.Message}").ToArray();
+
+                errors.AddRange(collection: ((reported.Length != 0)
+                    ? reported
+                    : [$"{compiled.SourcePath}: the compile produced no bytecode"]));
+
+                continue;
+            }
+
+            var bytes = ((bytecodeExtension == ".dxil")
+                ? compiled.Dxil
+                : compiled.Spirv
+            );
+
+            work.Add(
+                amount: bytes.Length,
+                kind: BytecodeBytes
+            );
+            copy[((int)kernel)] = bytes;
+        }
+
+        if (errors.Count != 0) {
+            throw new InvalidDataException(message: $"A kernel source does not compile: {string.Join(separator: "; ", values: errors)}");
+        }
+
+        return new SdfKernelSet(bytecode: copy);
+    }
 
     // A nested holder initializes after every kind above, whatever order the members are declared in.
     private static class LoadCounts {

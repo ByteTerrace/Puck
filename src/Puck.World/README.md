@@ -173,10 +173,11 @@ every step. A step that fails then is logged and never replaces the original
 failure. Each GPU consumer releases only what it allocated, so after a failed
 bring-up nothing asks for the device.
 
-Compiled SDF shaders can change within that running host: finish `CompileShaders`,
-then issue `world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf` and inspect
-`world.shaders.status`. The request swaps changed compute pipelines at a frame
-boundary while retaining world and GPU scene state. Failed validation keeps the
+SDF kernels can change within that running host: edit a kernel's HLSL, then
+issue `world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf`, which compiles
+the kernel sources the tree carries, and inspect `world.shaders.status`. The
+request swaps changed compute pipelines at a frame boundary while retaining
+world and GPU scene state. A compile error or failed validation keeps the
 previous set. See the [shader reload contract](../Puck.SdfVm/README.md#reload-compiled-shaders)
 for scope and binding-layout limits; `world.reload` remains the world-document verb.
 

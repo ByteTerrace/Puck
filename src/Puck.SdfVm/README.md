@@ -293,18 +293,23 @@ build writes the cache to disk from its own thread when it finishes.
 
 ## Reload compiled shaders
 
-After compiling HLSL, a running `Puck.World` accepts:
+After editing HLSL, a running `Puck.World` accepts:
 
 ```text
 world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf
 world.shaders.status
 ```
 
-Omit the directory to read the deployed assets. The request stays pending while
-the bytecode loads and the changed pipelines are created on the thread pool;
-status then reports `applied`, `unchanged`, or `failed`, with a generation and
-changed pipeline count. Compile before issuing the command. Source edits alone
-do not change a running GPU pipeline.
+The reload reads the kernels the tree's `passes` directory carries and keeps
+the rest (`SdfKernelSet.Overlaid`). A kernel carried as its `sdf-*.comp.hlsl`
+source compiles with the World's shader compiler, whose cache makes an
+unchanged source a hit; a kernel carried only as bytecode loads as it stands.
+Omit the directory to read the deployed bytecode. The request stays pending
+while the sources compile, the bytecode loads and the changed pipelines are
+created on the thread pool; status then reports `applied`, `unchanged`, or
+`failed`, with a generation and changed pipeline count, and a compile error
+names its file and line. The issuing text session's later lines wait for the
+request to settle.
 
 `SdfWorldResidency.RequestShaderReload` queues the work. `SdfWorldPipelines.PrepareReload`
 creates replacements for the kernels whose bytecode changed, using the existing

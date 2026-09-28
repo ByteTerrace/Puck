@@ -276,7 +276,8 @@ public sealed class WorldHostedOriginLawTests {
         var store = PuckStorageTestComposition.BuildStore();
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
         var owner = Guid.NewGuid();
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -302,7 +303,8 @@ public sealed class WorldHostedOriginLawTests {
             containerId: owner,
             @namespace: WorldStorageNamespace.Hosted,
             store: store,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
 
         // Every reference resolves BY ID to exactly the neighbour that was published under it.
@@ -330,7 +332,8 @@ public sealed class WorldHostedOriginLawTests {
                 owner: owner,
                 store: store,
                 target: target,
-                world: SafeName.Parse(candidate: id)
+                world: SafeName.Parse(candidate: id),
+                timeProvider: new VirtualClock()
             );
 
             Assert.True(
@@ -357,7 +360,8 @@ public sealed class WorldHostedOriginLawTests {
         ));
         Assert.True(condition: (await new WorldAuthorityBlobStore(
             store: store,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         ).PublishDefinitionAsync(
             new(
                 Owner: owner,
@@ -370,7 +374,8 @@ public sealed class WorldHostedOriginLawTests {
             containerId: owner,
             @namespace: WorldStorageNamespace.Hosted,
             store: store,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
 
         Assert.Equal(
@@ -381,7 +386,8 @@ public sealed class WorldHostedOriginLawTests {
             owner,
             SafeName.Parse(candidate: "quilt-island"),
             store,
-            target
+            target,
+            timeProvider: new VirtualClock()
         );
         var loaded = await origin.LoadAsync(
             "quilt-island",

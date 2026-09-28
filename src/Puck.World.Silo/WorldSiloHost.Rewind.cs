@@ -35,7 +35,8 @@ public sealed partial class WorldSiloHost {
         await new WorldReleaseRestore(
             m_blobStore,
             m_storageTarget,
-            m_releaseManagement.Owner
+            m_releaseManagement.Owner,
+            m_clock
         ).ApplyAsync(
             operation: operation,
             token: token

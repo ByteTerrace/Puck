@@ -31,7 +31,8 @@ public sealed class WorldSiloLifecycleLawTests {
                 source: () => source,
                 tagging: new SiloConsoleTagging(output: output)
             ),
-            new DirectoryObjectStorageTarget(directory)
+            new DirectoryObjectStorageTarget(directory),
+            timeProvider: new VirtualClock()
         );
     }
     private static async Task PublishAsync(WorldSiloHost host, WorldAuthorityIdentity identity, WorldDefinition definition) {
@@ -109,7 +110,8 @@ public sealed class WorldSiloLifecycleLawTests {
         var store = PuckStorageTestComposition.BuildStore();
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: new DirectoryObjectStorageTarget(directory.RootPath)
+            target: new DirectoryObjectStorageTarget(directory.RootPath),
+            timeProvider: new VirtualClock()
         );
         var definition = Fixtures.BuildDocument() with {
             HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Listen = endpoint, Presentation = WorldHostPresentation.None },
@@ -230,7 +232,8 @@ public sealed class WorldSiloLifecycleLawTests {
         var store = PuckStorageTestComposition.BuildStore();
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: new DirectoryObjectStorageTarget(directory.RootPath)
+            target: new DirectoryObjectStorageTarget(directory.RootPath),
+            timeProvider: new VirtualClock()
         );
         var definition = Fixtures.BuildDocument() with {
             HostRaw = Fixtures.StandardHost with {
@@ -384,7 +387,8 @@ public sealed class WorldSiloLifecycleLawTests {
         var target = new DirectoryObjectStorageTarget(directory.RootPath);
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
         var definition = Fixtures.BuildDocument();
 
@@ -475,7 +479,8 @@ public sealed class WorldSiloLifecycleLawTests {
         var target = new DirectoryObjectStorageTarget(directory.RootPath);
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: target
+            target: target,
+            timeProvider: new VirtualClock()
         );
         var definition = Fixtures.BuildDocument();
 
@@ -737,7 +742,8 @@ public sealed class WorldSiloLifecycleLawTests {
         var store = PuckStorageTestComposition.BuildStore();
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: new DirectoryObjectStorageTarget(directory.RootPath)
+            target: new DirectoryObjectStorageTarget(directory.RootPath),
+            timeProvider: new VirtualClock()
         );
         var definition = Fixtures.BuildDocument();
 
@@ -903,7 +909,8 @@ public sealed class WorldSiloLifecycleLawTests {
             var store = PuckStorageTestComposition.BuildStore();
             var backend = new WorldAuthorityBlobStore(
                 store: store,
-                target: new DirectoryObjectStorageTarget(directory.RootPath)
+                target: new DirectoryObjectStorageTarget(directory.RootPath),
+                timeProvider: new VirtualClock()
             );
 
             async Task<(bool Activated, WorldSiloHost Host, WorldAuthorityIdentity Identity)> TryActivateAsync(string worldName, double exposure, string? source = null) {

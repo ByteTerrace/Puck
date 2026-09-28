@@ -305,7 +305,7 @@ public static class SdfEncodingProbe {
                     }
 
                     if (IsInteger(word: baseline[index]) && IsInteger(word: moved[index])) {
-                        var change = (baseline[index] ^ moved[index]);
+                        var change = baseline[index] ^ moved[index];
 
                         text.Append(provider: CultureInfo.InvariantCulture, handler: $" {index}[{BitOperations.TrailingZeroCount(value: change)}..{(31 - BitOperations.LeadingZeroCount(value: change))}]");
 

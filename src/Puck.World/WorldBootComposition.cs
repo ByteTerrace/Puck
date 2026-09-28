@@ -1073,6 +1073,7 @@ public static class WorldBootComposition {
         services.AddSingleton<ICommandModule, WorldRenderLeverCommandModule>();
         // world.resize: an offscreen display has no window to follow, so a script resizes it here.
         services.AddSingleton<ICommandModule, WorldOffscreenCommandModule>();
+        services.AddSingleton<ICommandModule, WorldShaderReloadCommandModule>();
 
         services.AddOptions<NativeWindowOptions>().Configure<WorldHostSettings, WorldDefinitionSource>(configureOptions: static (options, hostSettings, source) => {
             options.Height = ((uint)hostSettings.Height);
@@ -1250,6 +1251,7 @@ public static class WorldBootComposition {
         // options (shadows, ambient occlusion, render scale, an FPS target, a quality preset). Refuses as unknown
         // over headless stdin because this whole method never runs there.
         services.AddSingleton<ICommandModule, WorldCommandModule>();
+        services.AddSingleton<ICommandModule, WorldShaderReloadCommandModule>();
         services.AddSingleton<ICommandModule, WorldRenderLeverCommandModule>();
         // The host-section READ-BACK — world.host, the DOCUMENT/RESOLVED/LIVE three-way read; the section is
         // written through world.row.set host <json>. Presentation-only: window/backend/present/pacing knobs.

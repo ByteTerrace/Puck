@@ -1,0 +1,4 @@
+world.wait ready 60
+world.shaders.reload {fixtures}/foreign
+world.shaders.reload {fixtures}/applied
+world.shaders.status

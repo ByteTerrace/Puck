@@ -180,7 +180,7 @@ public sealed class SdfKernelSetLawTests {
             Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: otherEncoding, include: include)));
         }
         // A packer that writes a rigid leaf's rotation X and Y, or a stroked path edge's two radii, in each other's places.
-        foreach (var wordsOf in (ReadOnlySpan<Func<SdfProgram, uint[]>>)[SdfEncodingTrades.RigidLeafRotationXySwapped, SdfEncodingTrades.PathRadiiSwapped]) {
+        foreach (var wordsOf in ((ReadOnlySpan<Func<SdfProgram, uint[]>>)[SdfEncodingTrades.RigidLeafRotationXySwapped, SdfEncodingTrades.PathRadiiSwapped])) {
             Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: SdfEncodingProbe.Describe(calls: calls, wordsOf: wordsOf), include: include)));
         }
     }

@@ -26,9 +26,13 @@ public sealed partial class WorldReleaseCutoverLawTests {
             store: blobs,
             target: target
         );
+        // Every silo and the authority store run on this clock, which the probe never advances: a silo's progress window,
+        // its persistence health and every storage deadline are decided by the probe's steps, never by machine load.
+        var clock = new VirtualClock();
         var authority = new WorldAuthorityBlobStore(
             store: blobs,
-            target: target
+            target: target,
+            timeProvider: clock
         );
         var archive = new WorldReleaseArchive(
             blobs,
@@ -43,7 +47,8 @@ public sealed partial class WorldReleaseCutoverLawTests {
         var restores = new WorldReleaseRestore(
             blobs: blobs,
             owner: owner,
-            target: target
+            target: target,
+            timeProvider: clock
         );
         var identities = new[] { new WorldAuthorityIdentity(
             Owner: owner,
@@ -182,7 +187,8 @@ public sealed partial class WorldReleaseCutoverLawTests {
                 ),
                 blobs,
                 routing,
-                target
+                target,
+                timeProvider: clock
             );
         }
         var source = Host();
@@ -463,7 +469,10 @@ public sealed partial class WorldReleaseCutoverLawTests {
             actualString: externalReason,
             expectedSubstring: "closed rewind group"
         );
-        using (var closedNetwork = new WorldPeerNetwork(allowOutbound: false)) {
+        using (var closedNetwork = new WorldPeerNetwork(
+            allowOutbound: false,
+            timeProvider: clock
+        )) {
             await Assert.ThrowsAsync<InvalidOperationException>(testCode: async () => await closedNetwork.ConnectAsync(
                 new System.Net.IPEndPoint(
                     address: System.Net.IPAddress.Loopback,
