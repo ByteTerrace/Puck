@@ -141,7 +141,7 @@ internal static class ParityCommand {
 
         try {
             return ShipWorld(artifact: artifact, repositoryRoot: repositoryRoot, runDirectory: runDirectory, suiteClock: suiteClock, world: out world);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)) {
             Console.Error.WriteLine(value: $"ERROR: the parity tree could not ship: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
 
             return false;
@@ -164,15 +164,15 @@ internal static class ParityCommand {
             path2: Path.GetFileName(path: WorldPath)
         );
 
-        foreach (var file in Directory.EnumerateFiles(path: tree, searchPattern: "*", searchOption: SearchOption.AllDirectories)) {
+        foreach (var file in Directory.EnumerateFiles(path: tree, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
             var name = Path.GetFileName(path: file);
 
-            if (name.EndsWith(value: WorldDocumentName.DocumentSuffix, comparisonType: StringComparison.OrdinalIgnoreCase) || name.EndsWith(value: ".puck", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            if (name.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: WorldDocumentName.DocumentSuffix) || name.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck")) {
                 sources.Add(item: file);
             } else {
                 var destination = Path.Combine(
                     path1: output,
-                    path2: Path.GetRelativePath(relativeTo: tree, path: file)
+                    path2: Path.GetRelativePath(path: file, relativeTo: tree)
                 );
 
                 _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: destination)!);

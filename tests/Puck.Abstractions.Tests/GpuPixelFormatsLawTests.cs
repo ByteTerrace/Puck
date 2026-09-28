@@ -65,14 +65,14 @@ public sealed class GpuPixelFormatsLawTests {
             Store: GpuAttachmentStore.Discard
         );
 
-        GpuImageUsages.ValidateDepth(attachment: Depth(format: GpuPixelFormat.D32Float, clear: 0f), height: 4U, width: 4U);
-        GpuImageUsages.ValidateDepth(attachment: Depth(format: GpuPixelFormat.D32Float, clear: 1f), height: 4U, width: 4U);
+        GpuImageUsages.ValidateDepth(attachment: Depth(clear: 0f, format: GpuPixelFormat.D32Float), height: 4U, width: 4U);
+        GpuImageUsages.ValidateDepth(attachment: Depth(clear: 1f, format: GpuPixelFormat.D32Float), height: 4U, width: 4U);
         Assert.StartsWith(
             actualString: Assert.Throws<ArgumentException>(testCode: () => GpuImageUsages.ValidateCreate(format: GpuPixelFormat.D32Float, height: 4U, usage: GpuImageUsage.DepthAttachment, width: 4U)).Message,
             expectedStartString: "A depth attachment image is created from its attachment (IGpuImageFactory.CreateDepth)"
         );
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GpuImageUsages.ValidateDepth(attachment: Depth(format: GpuPixelFormat.D32Float, clear: 1.5f), height: 4U, width: 4U));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GpuImageUsages.ValidateDepth(attachment: Depth(format: GpuPixelFormat.D32Float, clear: float.NaN), height: 4U, width: 4U));
-        _ = Assert.Throws<ArgumentException>(testCode: () => GpuImageUsages.ValidateDepth(attachment: Depth(format: GpuPixelFormat.R8G8B8A8Unorm, clear: 0f), height: 4U, width: 4U));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GpuImageUsages.ValidateDepth(attachment: Depth(clear: 1.5f, format: GpuPixelFormat.D32Float), height: 4U, width: 4U));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => GpuImageUsages.ValidateDepth(attachment: Depth(clear: float.NaN, format: GpuPixelFormat.D32Float), height: 4U, width: 4U));
+        _ = Assert.Throws<ArgumentException>(testCode: () => GpuImageUsages.ValidateDepth(attachment: Depth(clear: 0f, format: GpuPixelFormat.R8G8B8A8Unorm), height: 4U, width: 4U));
     }
 }

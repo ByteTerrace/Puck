@@ -13,6 +13,7 @@ internal sealed partial class ExitDrainStream : Stream {
     // Process uses a 4096-byte FileStream buffer on Windows. Full-sized reads bypass its read-ahead buffer, so
     // every unread byte remains either here, in the text decoder, or in the kernel buffer we can measure.
     private readonly byte[] m_buffer = new byte[4096];
+
     private int m_offset;
     private int m_count;
     private int? m_remaining;
@@ -28,19 +29,21 @@ internal sealed partial class ExitDrainStream : Stream {
     public override bool CanWrite => false;
     public override long Length => throw new NotSupportedException();
     public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
     public override void Flush() { }
     public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
     public override void SetLength(long value) => throw new NotSupportedException();
     public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
     protected override void Dispose(bool disposing) {
         if (disposing) { m_reader.Dispose(); }
         base.Dispose(disposing: disposing);
     }
-    public override int Read(byte[] buffer, int offset, int count) =>
-        ReadAsync(buffer: buffer.AsMemory(start: offset, length: count)).AsTask().GetAwaiter().GetResult();
-    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
-        ReadAsync(buffer: buffer.AsMemory(start: offset, length: count), cancellationToken: cancellationToken).AsTask();
 
+    public override int Read(byte[] buffer, int offset, int count) =>
+        ReadAsync(buffer: buffer.AsMemory(length: count, start: offset)).AsTask().GetAwaiter().GetResult();
+    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+        ReadAsync(buffer: buffer.AsMemory(length: count, start: offset), cancellationToken: cancellationToken).AsTask();
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) {
         cancellationToken.ThrowIfCancellationRequested();
         if (buffer.IsEmpty) { return 0; }
@@ -65,7 +68,7 @@ internal sealed partial class ExitDrainStream : Stream {
         }
         var copied = Math.Min(val1: buffer.Length, val2: m_count);
 
-        m_buffer.AsMemory(start: m_offset, length: copied).CopyTo(destination: buffer);
+        m_buffer.AsMemory(length: copied, start: m_offset).CopyTo(destination: buffer);
         m_offset += copied;
         m_count -= copied;
         return copied;
@@ -74,7 +77,8 @@ internal sealed partial class ExitDrainStream : Stream {
     private int AvailableBytes() {
         if (OperatingSystem.IsWindows()) {
             var handle = ((FileStream)m_pipe).SafeFileHandle;
-            if (PeekNamedPipe(handle: handle, buffer: 0, bufferSize: 0, bytesRead: 0, available: out var available, bytesLeft: 0) != 0) {
+
+            if (PeekNamedPipe(available: out var available, buffer: 0, bufferSize: 0, bytesLeft: 0, bytesRead: 0, handle: handle) != 0) {
                 return checked((int)available);
             }
             var error = Marshal.GetLastPInvokeError();
@@ -84,12 +88,11 @@ internal sealed partial class ExitDrainStream : Stream {
         }
         var pipeHandle = ((PipeStream)m_pipe).SafePipeHandle;
         // FIONREAD is an int-sized result on Unix; Linux and the BSD family assign different request numbers.
-        var request = (OperatingSystem.IsLinux() || OperatingSystem.IsAndroid()) ? 0x541Bu : 0x4004667Fu;
+        var request = ((OperatingSystem.IsLinux() || OperatingSystem.IsAndroid()) ? 0x541Bu : 0x4004667Fu);
 
-        if (Ioctl(handle: pipeHandle, request: request, available: out var count) == 0) { return count; }
+        if (Ioctl(available: out var count, handle: pipeHandle, request: request) == 0) { return count; }
         throw new IOException(message: "Cannot inspect the child's output pipe.", innerException: new Win32Exception(error: Marshal.GetLastPInvokeError()));
     }
-
     [LibraryImport("kernel32.dll", SetLastError = true)]
     private static partial int PeekNamedPipe(Microsoft.Win32.SafeHandles.SafeFileHandle handle, nint buffer, uint bufferSize, nint bytesRead, out uint available, nint bytesLeft);
     [LibraryImport("libc", EntryPoint = "ioctl", SetLastError = true)]

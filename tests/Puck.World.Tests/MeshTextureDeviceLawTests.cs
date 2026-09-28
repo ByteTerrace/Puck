@@ -93,7 +93,7 @@ public sealed class MeshTextureDeviceLawTests {
     private static float SrgbToLinear(byte code) {
         var encoded = (code / 255.0);
 
-        return (float)((encoded <= 0.04045) ? (encoded / 12.92) : Math.Pow(x: ((encoded + 0.055) / 1.055), y: 2.4));
+        return ((float)((encoded <= 0.04045) ? (encoded / 12.92) : Math.Pow(x: ((encoded + 0.055) / 1.055), y: 2.4)));
     }
     private static void Resolve(string backend, byte[] kernel, GpuDeviceServices services) {
         var spheres = Bake(emit: static builder => {
@@ -142,8 +142,8 @@ public sealed class MeshTextureDeviceLawTests {
             var bake = bakes[draw];
             var vertex = bake.Mesh.Vertices[bake.Mesh.Indices[((3 * triangle) + corner)]];
             var textures = draws[draw].Mesh.Textures!;
-            var x = (int)MathF.Floor(x: (vertex.Uv.X * textures.Width));
-            var y = (int)MathF.Floor(x: (vertex.Uv.Y * textures.Height));
+            var x = ((int)MathF.Floor(x: (vertex.Uv.X * textures.Width)));
+            var y = ((int)MathF.Floor(x: (vertex.Uv.Y * textures.Height)));
             var at = ((y * textures.Width) + x);
             var albedo = textures.Textures[0].Decode(level: 0);
             var normal = textures.Textures[1].Decode(level: 0);
@@ -155,18 +155,19 @@ public sealed class MeshTextureDeviceLawTests {
             var surface = results[((TexelsPerCase * index) + 1)];
             var light = results[((TexelsPerCase * index) + 2)];
             var expectedAlbedo = new Vector3(x: SrgbToLinear(code: albedo[(at * 4)]), y: SrgbToLinear(code: albedo[((at * 4) + 1)]), z: SrgbToLinear(code: albedo[((at * 4) + 2)]));
+
             var (normalX, normalY, normalZ) = OctahedralNormal.Decode(u: normal[(at * 2)], v: normal[((at * 2) + 1)]);
             var expectedEmission = new Vector3(
-                x: (float)BitConverter.UInt16BitsToHalf(value: BinaryPrimitives.ReadUInt16LittleEndian(source: emission.AsSpan(start: (at * 8)))),
-                y: (float)BitConverter.UInt16BitsToHalf(value: BinaryPrimitives.ReadUInt16LittleEndian(source: emission.AsSpan(start: ((at * 8) + 2)))),
-                z: (float)BitConverter.UInt16BitsToHalf(value: BinaryPrimitives.ReadUInt16LittleEndian(source: emission.AsSpan(start: ((at * 8) + 4))))
+                x: ((float)BitConverter.UInt16BitsToHalf(value: BinaryPrimitives.ReadUInt16LittleEndian(source: emission.AsSpan(start: (at * 8))))),
+                y: ((float)BitConverter.UInt16BitsToHalf(value: BinaryPrimitives.ReadUInt16LittleEndian(source: emission.AsSpan(start: ((at * 8) + 2))))),
+                z: ((float)BitConverter.UInt16BitsToHalf(value: BinaryPrimitives.ReadUInt16LittleEndian(source: emission.AsSpan(start: ((at * 8) + 4)))))
             );
 
             Assert.True(condition: (light.W == 0f), userMessage: $"{label}: read level {light.W}, not the finest");
             Assert.True(condition: (Vector3.Distance(value1: new Vector3(x: shaded.X, y: shaded.Y, z: shaded.Z), value2: expectedAlbedo) < 0.01f), userMessage: $"{label}: albedo ({shaded.X}, {shaded.Y}, {shaded.Z}), not {expectedAlbedo}");
             Assert.True(condition: (shaded.W == (draws[draw].Material + material[at])), userMessage: $"{label}: material {shaded.W}, not {draws[draw].Material} + {material[at]}");
-            Assert.True(condition: (Vector3.Dot(vector1: Vector3.Normalize(value: new Vector3(x: surface.X, y: surface.Y, z: surface.Z)), vector2: new Vector3(x: (float)normalX, y: (float)normalY, z: (float)normalZ)) > 0.999f), userMessage: $"{label}: normal ({surface.X}, {surface.Y}, {surface.Z}), not ({normalX}, {normalY}, {normalZ})");
-            Assert.True(condition: (MathF.Abs(x: (surface.W - (occlusion[at] / 255f))) <= (1.5f / 255f)), userMessage: $"{label}: occlusion {surface.W}, not {occlusion[at] / 255f}");
+            Assert.True(condition: (Vector3.Dot(vector1: Vector3.Normalize(value: new Vector3(x: surface.X, y: surface.Y, z: surface.Z)), vector2: new Vector3(x: ((float)normalX), y: ((float)normalY), z: ((float)normalZ))) > 0.999f), userMessage: $"{label}: normal ({surface.X}, {surface.Y}, {surface.Z}), not ({normalX}, {normalY}, {normalZ})");
+            Assert.True(condition: (MathF.Abs(x: (surface.W - (occlusion[at] / 255f))) <= (1.5f / 255f)), userMessage: $"{label}: occlusion {surface.W}, not {(occlusion[at] / 255f)}");
             Assert.True(condition: (Vector3.Distance(value1: new Vector3(x: light.X, y: light.Y, z: light.Z), value2: expectedEmission) <= (0.002f * (1f + expectedEmission.Length()))), userMessage: $"{label}: emission ({light.X}, {light.Y}, {light.Z}), not {expectedEmission}");
         }
     }

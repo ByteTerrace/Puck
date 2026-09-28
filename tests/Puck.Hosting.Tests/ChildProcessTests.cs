@@ -71,7 +71,7 @@ public sealed class ChildProcessTests {
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
         // The red leg never returns stdout. Keep the inheritor's PID outside the pipe so cleanup still kills it.
         var pidFile = Path.GetTempFileName();
-        var quotedPidFile = pidFile.Replace(oldValue: "'", newValue: OperatingSystem.IsWindows() ? "''" : "'\"'\"'", comparisonType: StringComparison.Ordinal);
+        var quotedPidFile = pidFile.Replace(oldValue: "'", newValue: (OperatingSystem.IsWindows() ? "''" : "'\"'\"'"), comparisonType: StringComparison.Ordinal);
 
         var (executable, arguments) = (OperatingSystem.IsWindows()
             ? ("powershell.exe", new[] { "-NoProfile", "-NonInteractive", "-Command", $"$held = Start-Process -FilePath powershell.exe -ArgumentList '-NoProfile','-NonInteractive','-Command','Start-Sleep -Seconds {InheritorSeconds}' -NoNewWindow -PassThru; [IO.File]::WriteAllText('{quotedPidFile}', [string]$held.Id); [Console]::Out.Write($held.Id); [Console]::Error.Write('exited')" })
@@ -82,6 +82,7 @@ public sealed class ChildProcessTests {
             clock: clock,
             fileName: executable
         );
+
         try {
             if (cancel) {
                 await clock.WhenArmedAsync(count: 1, ct: Token, dueTime: ChildProcess.ExitDrainGrace).WaitAsync(timeout: HangGuard, cancellationToken: Token);
@@ -140,17 +141,17 @@ public sealed class ChildProcessTests {
             try { await run.WaitAsync(timeout: HangGuard, cancellationToken: Token); } catch (OperationCanceledException) { }
         }
     }
-
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    [Theory]
     public async Task RunAsync_TimeoutOrCancellationKillsAChildWithABlockedInputWrite(bool cancel) {
         var clock = new VirtualClock();
         var timeout = TimeSpan.FromSeconds(seconds: 3);
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
-        var (executable, arguments) = OperatingSystem.IsWindows()
+
+        var (executable, arguments) = (OperatingSystem.IsWindows()
             ? ("powershell.exe", new[] { "-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 180" })
-            : ("/bin/sh", new[] { "-c", "sleep 180" });
+            : ("/bin/sh", new[] { "-c", "sleep 180" }));
         var run = ChildProcess.RunAsync(fileName: executable, arguments: arguments, input: new string(c: 'i', count: StreamLength),
             clock: clock, timeout: timeout, cancellationToken: cancellation.Token);
 
@@ -161,6 +162,7 @@ public sealed class ChildProcessTests {
             } else {
                 await clock.ExpireAsync(dueTime: timeout, pending: run, ct: Token).WaitAsync(timeout: HangGuard, cancellationToken: Token);
                 var result = await run.WaitAsync(timeout: HangGuard, cancellationToken: Token);
+
                 Assert.True(condition: result.TimedOut);
                 Assert.NotEqual(expected: 0, actual: result.ExitCode);
             }

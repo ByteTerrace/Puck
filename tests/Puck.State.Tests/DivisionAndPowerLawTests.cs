@@ -288,7 +288,7 @@ public sealed class DivisionAndPowerLawTests {
         var folded = Eval(text: $"extendedGreatestCommonDivisor({a}, {b})");
         var live = Eval(text: $"extendedGreatestCommonDivisor({a} + $tick, {b})");
 
-        Assert.Equal(folded, live);
+        Assert.Equal(actual: live, expected: folded);
         Assert.Equal(x, Eval(text: $"pairX({folded})"));
         Assert.Equal(y, Eval(text: $"pairY({folded})"));
     }

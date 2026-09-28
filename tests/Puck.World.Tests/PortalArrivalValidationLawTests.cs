@@ -35,6 +35,7 @@ public sealed class PortalArrivalValidationLawTests {
         faceNamesShape: true,
         faceShapeType: SdfSolidPrimitive.Box
     );
+
     private static WorldPrototype BuildDoorCreation(SdfSolidPrimitive faceShapeType, bool faceNamesShape) {
         var shape = new ShapeDocument(
             Id: 0,

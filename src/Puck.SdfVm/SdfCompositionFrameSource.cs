@@ -102,9 +102,12 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
     // allocates nothing once the list has grown.
     private readonly IReadOnlyList<SdfMeshDraw>?[] m_meshDrawSources;
     private readonly long[] m_meshDrawRevisions;
+
     private readonly List<SdfMeshDraw> m_composedMeshDraws = [];
     private IReadOnlyList<SdfMeshDraw> m_meshDraws = [];
+
     private long m_meshDrawsRevision;
+
     // The shared table: it keeps every slot's last packed transform across frames, so an owner at rest costs nothing.
     private readonly DynamicTransform[] m_transforms;
 

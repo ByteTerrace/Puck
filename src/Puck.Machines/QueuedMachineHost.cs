@@ -216,6 +216,7 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
             input: in declared
         );
     }
+
     // Neutralizes the seats this host declares no port for, so the replay ring and a checkpoint record the same image.
     private MachinePads Declared(in MachinePads inputs) {
         var declared = inputs;
@@ -226,6 +227,7 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
 
         return declared;
     }
+
     /// <inheritdoc/>
     public long WriteFrame(Span<byte> region) =>
         m_worker.WriteFrame(region: region);

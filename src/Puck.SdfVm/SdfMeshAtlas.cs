@@ -89,18 +89,18 @@ public sealed class SdfMeshAtlas {
             .OrderByDescending(keySelector: static entry => entry.Height)
             .ThenBy(keySelector: static entry => entry.Index)
             .ToArray();
-        var area = order.Sum(selector: static entry => ((long)entry.Width * entry.Height));
+        var area = order.Sum(selector: static entry => (((long)entry.Width) * entry.Height));
 
-        if (area > ((long)MaxExtent * MaxExtent)) {
+        if (area > (((long)MaxExtent) * MaxExtent)) {
             throw new ArgumentException(
                 message: $"An atlas spans at most {MaxExtent} texels on either axis; these meshes' rectangles cover {area} texels.",
                 paramName: nameof(textures)
             );
         }
-        var width = (int)BitOperations.RoundUpToPowerOf2(value: (uint)Math.Max(
+        var width = ((int)BitOperations.RoundUpToPowerOf2(value: ((uint)Math.Max(
             val1: order.Max(selector: static entry => entry.Width),
-            val2: (int)Math.Ceiling(a: Math.Sqrt(d: area))
-        ));
+            val2: ((int)Math.Ceiling(a: Math.Sqrt(d: area)))
+        ))));
         var origins = new (int X, int Y)[distinct.Length];
         var x = 0;
         var y = 0;
@@ -132,7 +132,7 @@ public sealed class SdfMeshAtlas {
         for (var usage = 0; (usage < chains.Length); usage++) {
             var format = SdfMeshTextures.FormatOf(usage: SdfMeshTextures.Usages[usage]);
 
-            chains[usage] = new byte[checked((int)GpuPixelFormats.ChainByteLength(format: format, height: (uint)height, levels: (uint)levels, width: (uint)width))];
+            chains[usage] = new byte[checked((int)GpuPixelFormats.ChainByteLength(format: format, height: ((uint)height), levels: ((uint)levels), width: ((uint)width)))];
 
             for (var index = 0; (index < distinct.Length); index++) {
                 Copy(
@@ -152,10 +152,10 @@ public sealed class SdfMeshAtlas {
             var set = distinct[index];
 
             placements[set] = new Vector4(
-                x: ((float)set.Width / width),
-                y: ((float)set.Height / height),
-                z: ((float)origins[index].X / width),
-                w: ((float)origins[index].Y / height)
+                x: (((float)set.Width) / width),
+                y: (((float)set.Height) / height),
+                z: (((float)origins[index].X) / width),
+                w: (((float)origins[index].Y) / height)
             );
         }
 
@@ -167,7 +167,6 @@ public sealed class SdfMeshAtlas {
             width: width
         );
     }
-
     /// <summary>Returns where a packed texture set sits: the scale and then the offset that move its texture coordinates
     /// into the atlases, <c>atlas = (uv * (X, Y)) + (Z, W)</c>, each a ratio of whole texels.</summary>
     /// <param name="textures">A set the atlases hold.</param>
@@ -187,18 +186,18 @@ public sealed class SdfMeshAtlas {
     // block of a block-compressed format and a texel of any other.
     private static void Copy(byte[] atlas, int atlasWidth, int atlasHeight, GpuPixelFormat format, (int X, int Y) origin, Puck.SignedDistance.Baking.SdfBakedTexture texture) {
         var compressed = GpuPixelFormats.IsBlockCompressed(format: format);
-        var unit = (int)GpuPixelFormats.UnitBytes(format: format);
+        var unit = ((int)GpuPixelFormats.UnitBytes(format: format));
         var unitTexels = (compressed
             ? (int)GpuPixelFormats.BlockTexels
             : 1);
         var atlasLevel = 0;
 
         for (var level = 0; (level < texture.Levels.Count); level++) {
-            var (levelWidth, levelHeight) = GpuPixelFormats.LevelExtent(height: (uint)atlasHeight, level: (uint)level, width: (uint)atlasWidth);
-            var (sourceWidth, sourceHeight) = GpuPixelFormats.LevelExtent(height: (uint)texture.Height, level: (uint)level, width: (uint)texture.Width);
-            var atlasColumns = UnitsAcross(texels: (int)levelWidth, unitTexels: unitTexels);
-            var sourceColumns = UnitsAcross(texels: (int)sourceWidth, unitTexels: unitTexels);
-            var sourceRows = UnitsAcross(texels: (int)sourceHeight, unitTexels: unitTexels);
+            var (levelWidth, levelHeight) = GpuPixelFormats.LevelExtent(height: ((uint)atlasHeight), level: ((uint)level), width: ((uint)atlasWidth));
+            var (sourceWidth, sourceHeight) = GpuPixelFormats.LevelExtent(height: ((uint)texture.Height), level: ((uint)level), width: ((uint)texture.Width));
+            var atlasColumns = UnitsAcross(texels: ((int)levelWidth), unitTexels: unitTexels);
+            var sourceColumns = UnitsAcross(texels: ((int)sourceWidth), unitTexels: unitTexels);
+            var sourceRows = UnitsAcross(texels: ((int)sourceHeight), unitTexels: unitTexels);
             var column = ((origin.X >> level) / unitTexels);
             var row = ((origin.Y >> level) / unitTexels);
             var source = texture.Levels[level];

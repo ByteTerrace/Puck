@@ -43,7 +43,6 @@ internal static partial class CanaryCommand {
     // package or hidden compiler.
     private static bool IsPlainLeg(CanaryLeg leg) =>
         ((leg.Authorities.Count == 0) && (leg.AuthorityWorldPath is null) && !leg.Connect && (leg.Entry is null) && (leg.Package is null) && !leg.HideShaderCompiler);
-
     // Boots the warm world once per backend into one shared state directory, each boot waiting for the engine to be
     // ready and reading its pipeline-cache counts, then hands the cache it persisted to the seed. The first boot that
     // fails (WarmRefusal) ends the warm with its refusal, and the selection fails without starting a leg.
@@ -117,6 +116,7 @@ internal static partial class CanaryCommand {
 
         return null;
     }
+
     /// <summary>Names how one warm boot failed, or returns <see langword="null"/> when it succeeded: it exited 0 before
     /// its timeout, after narrating the engine ready on standard error and printing its backend's pipeline-cache
     /// counts on standard output.</summary>
@@ -143,6 +143,7 @@ internal static partial class CanaryCommand {
 
         return null;
     }
+
     // The value of the last `<kind> <value>` line a counters readout printed for kind, or null.
     private static long? CountOf(IReadOnlyList<string> lines, string kind) {
         for (var index = (lines.Count - 1); (index >= 0); index--) {

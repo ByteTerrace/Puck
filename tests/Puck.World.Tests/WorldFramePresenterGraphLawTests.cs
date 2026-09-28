@@ -210,7 +210,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
         Assert.DoesNotContain(collection: frame.Views.Take(count: own), filter: view => (view == filmed));
 
         presenter.ViewRendered = view => {
-            Assert.InRange(actual: view, low: 0, high: (own - 1));
+            Assert.InRange(actual: view, high: (own - 1), low: 0);
 
             return true;
         };
@@ -241,7 +241,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
 
             Assert.Equal(
                 actual: view.Camera.AspectRatio,
-                expected: (width / (float)height)
+                expected: (width / ((float)height))
             );
         }
     }

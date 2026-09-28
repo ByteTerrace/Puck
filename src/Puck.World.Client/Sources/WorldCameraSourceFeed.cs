@@ -36,7 +36,6 @@ public interface IWorldSeatCameras {
     /// <returns>The light, or zero while the sensor shows nothing.</returns>
     Vector3 Light(int seat, WorldCameraSensor sensor);
 }
-
 /// <summary>
 /// One camera source's feed: a reference to the sensor of the camera a seat holds, which the seat's cameras serve
 /// (<see cref="IWorldSeatCameras"/>). Its descriptor states the extent the sensor delivers — the one the device

@@ -7,7 +7,7 @@ public static partial class ExpressionArithmetic {
     // 3,037,000,498; a component folds to 2|c| or 2|c| − 1, so a signed component admits this magnitude.
     private const long MaxPairComponent = 1_518_500_249L;
     // All admitted folded pairs fill complete shells through (2·max + 1)² − 1.
-    private const ulong MaxPairCode = (((2UL * MaxPairComponent) + 1UL) * ((2UL * MaxPairComponent) + 1UL)) - 1UL;
+    private const ulong MaxPairCode = ((((2UL * MaxPairComponent) + 1UL) * ((2UL * MaxPairComponent) + 1UL)) - 1UL);
     private const long MaxMortonComponent = ((1L << 31) - 1L);
     private const int MaxHilbertOrder = 31;
     private const int HexDirections = HexagonalCoordinate.NeighborCount;

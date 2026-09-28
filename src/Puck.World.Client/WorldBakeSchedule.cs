@@ -122,6 +122,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     /// <c>BAKE</c> chunk does when the world loads. A bake this machine made or kept in its cache never counts, so the
     /// answer is the same on every machine. False before the first pump. Safe to read from any thread.</summary>
     public bool Ships => ((m_progress & Progress.Ships) != 0);
+
     /// <summary>Reads one published pump state to decide whether the draw rule can be served: the schedule has
     /// reconciled and, when bakes draw, has settled. Safe to read from any thread.</summary>
     /// <param name="bakes">The render lever, or <see langword="null"/> to draw only shipped bakes.</param>
@@ -134,6 +135,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
             (!(bakes ?? ((progress & Progress.Ships) != 0)) || ((progress & Progress.Settled) != 0))
         );
     }
+
     /// <summary>Gets the revision of what the schedule can hand out: one more whenever a bake lands or the definition it
     /// reconciled to changed.</summary>
     public long Revision => m_revision;
@@ -167,7 +169,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
             m_build.Start(build: token => Resolve(batch: batch, store: store, token: token));
         }
 
-        m_progress = (Progress.Reconciled | (m_ships ? Progress.Ships : Progress.None) | (IsBusy ? Progress.None : Progress.Settled));
+        m_progress = Progress.Reconciled | (m_ships ? Progress.Ships : Progress.None) | (IsBusy ? Progress.None : Progress.Settled);
     }
     /// <summary>Returns where a prototype of the definition last pumped stands.</summary>
     /// <param name="prototypeId">The prototype row's id.</param>
@@ -257,12 +259,12 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
                 var x = Math.Clamp(
                     max: (identity.Width - 1),
                     min: 0,
-                    value: (int)(centroid.X * identity.Width)
+                    value: ((int)(centroid.X * identity.Width))
                 );
                 var y = Math.Clamp(
                     max: (identity.Height - 1),
                     min: 0,
-                    value: (int)(centroid.Y * identity.Height)
+                    value: ((int)(centroid.Y * identity.Height))
                 );
 
                 materials[triangle] = texels[((y * identity.Width) + x)];

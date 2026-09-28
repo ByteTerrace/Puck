@@ -62,10 +62,10 @@ public static class ChildProcess {
         using var process = (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: $"Cannot start {fileName}."));
         // Process.Dispose leaves streams that callers accessed open. Close stdin's handle even when a cancelled
         // write bypasses StreamWriter.Close; disposing its buffer would otherwise try to flush into a dead child.
-        using var inputStream = (input is not null) ? process.StandardInput.BaseStream : null;
+        using var inputStream = ((input is not null) ? process.StandardInput.BaseStream : null);
         using var release = new CancellationTokenSource();
-        using var output = capture ? OpenOutputReader(reader: process.StandardOutput, release: release.Token) : null;
-        using var errors = capture ? OpenOutputReader(reader: process.StandardError, release: release.Token) : null;
+        using var output = (capture ? OpenOutputReader(reader: process.StandardOutput, release: release.Token) : null);
+        using var errors = (capture ? OpenOutputReader(reader: process.StandardError, release: release.Token) : null);
         using var deadline = new OperationDeadline(
             caller: cancellationToken,
             timeProvider: runClock,
@@ -127,7 +127,7 @@ public static class ChildProcess {
         var expired = Task.Delay(delay: ExitDrainGrace, timeProvider: clock, cancellationToken: grace.Token);
 
         try {
-            if (await Task.WhenAny(drained, expired).ConfigureAwait(continueOnCapturedContext: false) != drained) {
+            if (await Task.WhenAny(task1: drained, task2: expired).ConfigureAwait(continueOnCapturedContext: false) != drained) {
                 try {
                     await release.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
                 } finally {

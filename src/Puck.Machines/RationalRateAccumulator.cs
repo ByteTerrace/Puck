@@ -80,7 +80,7 @@ public struct RationalRateAccumulator {
     public long TakeCycleBudget(ulong ticks, MachineCycleRate rate) =>
         Advance(
             period: PhasePeriod(rate: rate),
-            weight: checked((long)checked(ticks * rate.Cycles))
+            weight: checked((long)checked((ticks * rate.Cycles)))
         );
     /// <summary>Gets the phase units in one machine cycle at <paramref name="rate"/>: a carried phase is always below
     /// it, which is how a restored phase is validated.</summary>
@@ -88,7 +88,7 @@ public struct RationalRateAccumulator {
     /// <returns><see cref="EngineTicks.PerSecond"/> × <see cref="MachineCycleRate.Seconds"/>.</returns>
     /// <exception cref="OverflowException">The product exceeds <see cref="long.MaxValue"/>.</exception>
     public static long PhasePeriod(MachineCycleRate rate) =>
-        checked((long)checked(EngineTicks.PerSecond * rate.Seconds));
+        checked((long)checked((EngineTicks.PerSecond * rate.Seconds)));
     /// <summary>Resets the phase, starting a fresh stream.</summary>
     public void Reset() =>
         m_phase = 0L;

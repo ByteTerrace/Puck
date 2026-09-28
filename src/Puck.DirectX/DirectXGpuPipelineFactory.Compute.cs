@@ -163,6 +163,7 @@ public sealed unsafe partial class DirectXGpuPipelineFactory {
                 ? D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV
                 : D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_UAV
             );
+
             ranges[index] = new D3D12_DESCRIPTOR_RANGE {
                 BaseShaderRegister = binding.Binding,
                 NumDescriptors = count,

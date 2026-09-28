@@ -104,7 +104,7 @@ internal sealed class AccuracyCoinStage : IPostStage<PostContext> {
             }
             cases.Add(item: new(Detail: $"${address:X4}: {outcome}", Duration: TimeSpan.Zero,
                 Name: name, Verdict: (!matches ? PostCaseVerdict.Mismatch
-                    : ((result & 3) == 1) ? PostCaseVerdict.Pass : PostCaseVerdict.ExpectedFail)));
+                    : (((result & 3) == 1) ? PostCaseVerdict.Pass : PostCaseVerdict.ExpectedFail))));
         }
         foreach (var name in expected.Keys.Where(predicate: name => !outcomes.ContainsKey(key: name))) {
             _ = changes.Append(provider: CultureInfo.InvariantCulture, handler: $"{name}: recorded but absent; ");

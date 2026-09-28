@@ -94,7 +94,7 @@ public sealed class MeshSurfaceDeviceLawTests {
             condition: (Vector3.Distance(value1: new Vector3(x: slanted.X, y: slanted.Y, z: slanted.Z), value2: expected) < 1e-4f),
             userMessage: $"{backend}: the slanted triangle under CreateScale(2, 1, 1) resolved ({slanted.X}, {slanted.Y}, {slanted.Z}), not {expected}"
         );
-        Assert.Equal(expected: 8f, actual: slanted.W);
+        Assert.Equal(actual: slanted.W, expected: 8f);
 
         var normal = new Vector3(x: tilted.X, y: tilted.Y, z: tilted.Z);
 

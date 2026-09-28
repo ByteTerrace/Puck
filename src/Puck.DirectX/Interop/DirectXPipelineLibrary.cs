@@ -25,6 +25,7 @@ namespace Puck.DirectX.Interop;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXPipelineLibrary : IDisposable {
     private readonly GpuPipelineCacheFile m_file;
+
     private readonly Lock m_gate = new();
     // The names this library stored since it was created: two threads that both missed one name each create its
     // pipeline, and only the first stores it, since storing a name twice is a debug-layer warning.

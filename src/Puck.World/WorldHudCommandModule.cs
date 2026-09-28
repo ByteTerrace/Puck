@@ -49,8 +49,8 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
             (element.Binding is { Length: > 0 } binding) &&
             bindings.TryResolve(
             binding: binding,
-            seat: slot,
             fraction: out var fraction,
+            seat: slot,
             text: out var text
         )
         ) {

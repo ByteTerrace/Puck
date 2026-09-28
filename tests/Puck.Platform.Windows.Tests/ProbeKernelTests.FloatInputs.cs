@@ -20,9 +20,9 @@ public sealed partial class ProbeKernelTests {
         var targets = bench.CreateSharedRing(slots: 2);
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
-            AccumulateBytecode: Bytecode(kernel: "src/Puck.Shaders/Assets/Probes/average", entry: "accumulate"),
+            AccumulateBytecode: Bytecode(entry: "accumulate", kernel: "src/Puck.Shaders/Assets/Probes/average"),
             AccumulateEntry: "accumulate",
-            FinalizeBytecode: Bytecode(kernel: "src/Puck.Shaders/Assets/Probes/average", entry: "finalize"),
+            FinalizeBytecode: Bytecode(entry: "finalize", kernel: "src/Puck.Shaders/Assets/Probes/average"),
             FinalizeEntry: "finalize",
             Constants: PackConstants(values: [1f, 0.5f, 0.5f]),
             ChannelCount: 3,
@@ -56,9 +56,9 @@ public sealed partial class ProbeKernelTests {
         var (input, view) = FloatInput(bench: bench, color: [1024f, 0f, 0f, 1f]);
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
-            AccumulateBytecode: Bytecode(kernel: "src/Puck.Shaders/Assets/Probes/ir-blob", entry: "accumulate"),
+            AccumulateBytecode: Bytecode(entry: "accumulate", kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"),
             AccumulateEntry: "accumulate",
-            FinalizeBytecode: Bytecode(kernel: "src/Puck.Shaders/Assets/Probes/ir-blob", entry: "finalize"),
+            FinalizeBytecode: Bytecode(entry: "finalize", kernel: "src/Puck.Shaders/Assets/Probes/ir-blob"),
             FinalizeEntry: "finalize",
             Constants: IrBlobConstants(),
             ChannelCount: 4,
@@ -77,9 +77,9 @@ public sealed partial class ProbeKernelTests {
         AssertClose(expected: 1.0, actual: ((double)reading[3]), tolerance: 0.001);
         AssertClose(expected: 1.0, actual: ((double)reading.Confidence), tolerance: 0.001);
     }
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    [Theory]
     public void Shipped_faerie_kernel_reads_float_color_and_painting_as_display_values(bool paintingBound) {
         using var bench = KernelBench.TryCreate();
 
@@ -93,9 +93,9 @@ public sealed partial class ProbeKernelTests {
         var targets = bench.CreateSharedRing(slots: 2);
         var ring = new ProbeReadingRing();
         var request = new ProbeKernelRequest(
-            AccumulateBytecode: Bytecode(kernel: "src/Puck.Shaders/Assets/Probes/faerie", entry: "accumulate"),
+            AccumulateBytecode: Bytecode(entry: "accumulate", kernel: "src/Puck.Shaders/Assets/Probes/faerie"),
             AccumulateEntry: "accumulate",
-            FinalizeBytecode: Bytecode(kernel: "src/Puck.Shaders/Assets/Probes/faerie", entry: "finalize"),
+            FinalizeBytecode: Bytecode(entry: "finalize", kernel: "src/Puck.Shaders/Assets/Probes/faerie"),
             FinalizeEntry: "finalize",
             Constants: FaerieConstants(
                 ambient: 1f,
@@ -131,13 +131,13 @@ public sealed partial class ProbeKernelTests {
     }
 
     private static void AssertPixelClose((int R, int G, int B) expected, (int R, int G, int B) actual) {
-        Assert.InRange(actual: actual.R, low: (expected.R - 1), high: (expected.R + 1));
-        Assert.InRange(actual: actual.G, low: (expected.G - 1), high: (expected.G + 1));
-        Assert.InRange(actual: actual.B, low: (expected.B - 1), high: (expected.B + 1));
+        Assert.InRange(actual: actual.R, high: (expected.R + 1), low: (expected.R - 1));
+        Assert.InRange(actual: actual.G, high: (expected.G + 1), low: (expected.G - 1));
+        Assert.InRange(actual: actual.B, high: (expected.B + 1), low: (expected.B - 1));
     }
     private static (ProbeKernelInput.Ring Input, nint View) FloatInput(KernelBench bench, ReadOnlySpan<float> color) {
         var target = bench.CreateSharedTarget(format: DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT);
-        var pixels = new Half[(FrameWidth * FrameHeight * 4)];
+        var pixels = new Half[((FrameWidth * FrameHeight) * 4)];
 
         for (var index = 0; (index < pixels.Length); index++) {
             pixels[index] = ((Half)color[(index % 4)]);

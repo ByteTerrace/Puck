@@ -112,6 +112,7 @@ internal sealed record QueuedMachineCheckpoint(string Identity, byte[] CoreState
         buffer.Write(buffer: hash);
         return buffer.ToArray();
     }
+
     private static MachinePadState ReadPad(BinaryReader reader) {
         var buttons = ((MachineButtons)reader.ReadUInt32());
         var left = new Vector2(

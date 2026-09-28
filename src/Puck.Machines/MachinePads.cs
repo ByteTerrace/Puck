@@ -53,6 +53,7 @@ public struct MachinePads : IEquatable<MachinePads> {
 
         return pads;
     }
+
     /// <summary>Returns whether two seat images hold equal pads in every seat.</summary>
     /// <param name="left">The first image.</param>
     /// <param name="right">The second image.</param>

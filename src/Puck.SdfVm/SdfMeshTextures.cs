@@ -81,9 +81,9 @@ public sealed record SdfMeshTextures {
             }
             for (var level = 0; (level < texture.Levels.Count); level++) {
                 var (width, height) = texture.LevelExtent(level: level);
-                var required = GpuPixelFormats.LevelByteLength(format: texture.Format, height: (uint)height, width: (uint)width);
+                var required = GpuPixelFormats.LevelByteLength(format: texture.Format, height: ((uint)height), width: ((uint)width));
 
-                if ((texture.Levels[level] is not { } bytes) || ((ulong)bytes.LongLength != required)) {
+                if ((texture.Levels[level] is not { } bytes) || (((ulong)bytes.LongLength) != required)) {
                     throw new ArgumentException(
                         message: $"A mesh's {texture.Usage} level {level} requires exactly {required} bytes.",
                         paramName: nameof(textures)

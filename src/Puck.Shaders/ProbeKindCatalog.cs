@@ -46,7 +46,6 @@ public sealed class ProbeKindCatalog {
 
         return new ProbeKindCatalog(pathsById: pathsById);
     }
-
     /// <summary>Determines whether a probe kind with an id is shipped.</summary>
     /// <param name="id">The id.</param>
     /// <returns><see langword="true"/> when a manifest with that id was found.</returns>
