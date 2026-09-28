@@ -4456,11 +4456,22 @@ resolution, and stay there.
   pixel is resolved from the current frame alone. Surviving history is
   rectified against the current frame's neighbourhood before it blends.
 - **Content that motion cannot describe is reactive.** The views stage writes
-  each pixel's reactivity into the working color's alpha: a screen, a pixel a
-  bounded volume covers, and animated emission are reactive, and `resolve`
-  weights history down by it. The output's alpha is one, as today. Once P18-5
-  moves bounded volumes into the composite after `resolve`, a volume is never
-  reconstructed and is no longer reactive.
+  each pixel's reactivity into a one-channel `reactivity` image of its own at
+  the render extent, never into the working color's alpha, which P18 gives to
+  coverage: a screen, a pixel a bounded volume covers, and animated emission
+  are reactive. `resolve` weights history down by it for color and coverage
+  alike, and consumes it: nothing after `resolve` reads it, and a view with
+  reconstruction off writes none. Once P18-5 moves bounded volumes into the
+  composite after `resolve`, a volume is never reconstructed and is no longer
+  reactive.
+- **`resolve` writes a resolved surface in both modes.** Beside the color it
+  writes, at the output extent, the pixel's ray distance, chosen as the
+  nearest of the render-extent samples it reads and never filtered, so fog
+  never blends two depths, and carries coverage in the color's alpha, filtered
+  and reprojected with the color as premultiplied alpha. The spatial mode
+  writes it too, so a view with reconstruction off still hands P18's
+  `composite` a depth and a coverage at the output extent. Before P18-5 lands
+  the coverage is one everywhere.
 - **Sharpening is `place`'s.** With a source at its rect's extent, `place`
   applies a contrast-adaptive sharpen by `world.upscale-sharpness` instead of
   its exact copy, so sharpening adds no pass and no texel written. At sharpness
@@ -4610,7 +4621,9 @@ counted rows recorded in the same change.
    - Delivers: a fragment resource dimension resolved from a render extent the
      package states per instance (as it states counts through `CounterOf`),
      every pass before `resolve` running at that extent, the `resolve` pass in
-     its spatial mode writing the output, and a view's footprint at its rect's
+     its spatial mode writing the output and the resolved surface (the
+     nearest-sample ray distance, with coverage in the color's alpha), and a
+     view's footprint at its rect's
      native extent (`WorldViewGraphHost.PlaceView`). The render extent is a
      ceiling allocation and a per-frame extent inside it; a change of the ceiling
      rebuilds beside the installed graph as a resize does. At native scale with
@@ -4634,8 +4647,8 @@ counted rows recorded in the same change.
 5. **P15-5, the temporal resolve.** Reconstruction on.
    - Delivers: the history color and history surface as the fragment's history
      versions at output extent; reprojection through `sdfReprojection`, rejected
-     by identity and depth; neighbourhood rectification; the reactive alpha from
-     the views stage; the convergence rule in `IsUnchanged`; `place`'s
+     by identity and depth; neighbourhood rectification; the `reactivity` image
+     from the views stage; the convergence rule in `IsUnchanged`; `place`'s
      contrast-adaptive sharpen at equal extent; and the `world.temporal` lever
      with its presets, which a camera or session view's residency reads only
      when its levers ask for reconstruction.
@@ -4968,16 +4981,32 @@ The sky's work moves out of the view's hit shading. With every step landed an
 upload → mask → beam → cull-args → mesh → primary → surface → ambient → shadow → views → sky → composite
 ```
 
-`views` shades hits only, into a `lit` image whose alpha is the pixel's
-coverage (one for a solid hit, the silhouette weight on an edge, zero on a
-miss). `sky` evaluates the sky's field layers only where coverage is below one.
-`composite` writes the instance's output: the sky under the lit image by its
-coverage, the sky's point layers and bodies on the uncovered pixels, then the
-atmosphere along each pixel's ray distance and the bounded media. Once P15-4
-lands, `resolve` sits between `views` and `sky`, and `sky` and `composite` run
-at the output extent. Once per sky change, a shared `sky.environment` instance
-per world renders the environment map and its ambient coefficients, which every
-view of that world reads.
+`views` shades hits only, into a `lit` image whose color is premultiplied by
+the pixel's coverage and whose alpha is that coverage (one for a solid hit, the
+silhouette weight on an edge, zero on a miss). Coverage and P15's reactivity are
+two channels: reactivity is a one-channel image of its own, which only
+`resolve` reads and consumes, while coverage stays in `lit`'s alpha and is
+reprojected and filtered with the color through `resolve`. `sky` evaluates the
+sky's field layers only where coverage is below one. `composite` writes the
+instance's output: the sky's layers in their authored order, the lit image over
+them by its coverage, then the atmosphere along each pixel's ray distance and
+the bounded media.
+
+Once P15-4 lands, the order is:
+
+```text
+… → shadow → views → resolve → sky → composite
+```
+
+`resolve`, in its spatial mode (reconstruction off) and its temporal mode alike,
+writes the resolved surface at the output extent: `lit` with its coverage, and
+the ray distance of the nearest render-extent sample it read. `sky` and
+`composite` then run at the output extent and read only that surface, never the
+render-extent record. Before P15-4 they run at the render extent and read the
+visibility record's ray distance and `lit` directly. Once per change of a
+lighting-visible sky value, a shared `sky.environment` instance per world
+renders the environment map and its ambient coefficients, which every view of
+that world reads.
 
 **Authoring, before and after.** Today a day-night courtyard is spelled in
 lanes a key must address by slot and index:
@@ -5126,9 +5155,11 @@ target; each step settles its own vocabulary rows in
   screen glass's tint, `sdfMaterialShade`'s light direction) walks the lights
   through `sdfLightResponse` instead, or reads the sky's ambient.
 - **Many shadowed lights, shadowed by slot.** Every light-casting body has
-  `shadows: always`, `auto` (the default) or `never`. Each frame the host fills
-  up to K shadow slots: `always` bodies first, in list order, then `auto` bodies
-  by their resolved luminance at that frame, with ties broken by list order.
+  `shadows: always`, `auto` (the default) or `never`. At each delivered engine
+  tick (the mirror's integer tick, never a frame and never the presented
+  fraction) the host fills up to K shadow slots: `always` bodies first, in list
+  order, then `auto` bodies by their luminance resolved at that tick, with ties
+  broken by list order.
   The rest light unshadowed, scaled by ambient occlusion as an unshadowed
   directional is today. K comes from the tier: `low` 0 (today's floor already
   turns shadows off), `medium` 1, `high` 2, and the lever allows up to 4. The
@@ -5136,16 +5167,30 @@ target; each step settles its own vocabulary rows in
   slots, one gather and one march per slot, so its march steps scale with K and
   are counted per slot. The visibility record's K row packs four 8-bit
   visibilities into its one word, so the record keeps sixteen words.
-- **A shadow slot changes hands by a crossfade.** When two `auto` bodies cross
-  in luminance, the body losing the last slot keeps it for a fixed, counted
-  number of frames while the body gaining it marches in a temporary extra slot,
-  and the two visibilities blend across those frames, so no shadow pops. The
-  extra slot's march steps are counted under `shadow` like any slot's, and the
-  fade length is a tier value that a tier may set to `instant`. The fade is a
-  function of the frames since the crossing, which is a function of the tick,
-  so a capture and its replay agree. An `always` body still pins its slot and
-  never fades out. The reason is that an artist sees a pop as a bug in their
-  sky, and one extra slot's march for a few frames is a small, counted price.
+- **A shadow slot changes hands by a crossfade on the tick.** A crossing is
+  detected at a tick boundary: the slot assignment computed at a delivered tick
+  differs from the one at the tick before it, both from tick-state luminance.
+  The body losing a slot keeps it while the body gaining it marches in a fade
+  slot, and the two visibilities blend by the fade weight
+  `(presented tick − crossing tick) / fade ticks`, clamped to one. The weight is
+  a function of the presented tick alone, never of frames rendered, so the N
+  frames a `converge` capture composes at one frozen tick carry identical
+  weights, and a replay that delivers the same ticks detects the same crossings
+  at the same ticks. A discontinuity in delivered ticks (a seek, a clock
+  scrubbed by a lever, a reload) completes every fade at once. The fade length
+  is a tier value in engine ticks, which a tier may set to `instant`. An
+  `always` body still pins its slot and never fades out. The reason is that an
+  artist sees a pop as a bug in their sky, and a fade slot's march is a small,
+  counted price.
+- **Fades are bounded.** At most F fades run at once, a tier value: `low` has
+  K = 0 and F = 0, `medium` K = 1 and F = 1, `high` K = 2 and F = 1, and the
+  lever allows K up to 4 and F up to 2. A crossing detected while F fades run
+  waits in a queue, and starts when a fade ends if the assignment it would make
+  still differs from the current one; a tier may instead resolve an overflowing
+  crossing instantly (`fadeOverflow: queue | instant`, `queue` by default). The
+  shadow stage therefore marches at most K + F slots on any frame, and the
+  ceilings file records K + F per tier: 0 at `low`, 2 at `medium`, 3 at
+  `high`.
 - **An open, ordered layer stack.** Layers composite in the order they are
   authored, each by its blend mode (`over`, `add`, `multiply`, `screen`), and a
   kind may appear more than once. Kinds are an extensible set: a kind is a
@@ -5156,14 +5201,31 @@ target; each step settles its own vocabulary rows in
   `noise`, `pattern`, `panorama` (an image source sampled by direction),
   `panel` (a bright rectangle, which replaces the studio softboxes), `view` and
   `far`.
-- **Three evaluation classes, chosen by the kind.** A **field** kind (gradient,
-  clouds, aurora, noise, pattern, panorama) is band-limited, so `sky` evaluates
-  it at the sky's field extent and `composite` samples it bilinearly. A
-  **point** kind (stars, panels, and every body's disc, crescent and rings) has
-  features smaller than a field texel, so `composite` evaluates it analytically
-  at its own extent, which keeps stars and discs sharp. A **screen** kind
-  (`view`, and `far` and a body whose shape is `far` or `view`) samples another
-  instance's image by the pixel's direction.
+- **Three evaluation classes, chosen by the kind, in the authored order.** A
+  **field** kind (gradient, clouds, aurora, noise, pattern, panorama) is
+  band-limited, so it can be evaluated at the sky's field extent and sampled
+  bilinearly. A **point** kind (stars, panels, and every body's disc, crescent
+  and rings) has features smaller than a field texel, so `composite` evaluates
+  it analytically at its own extent, which keeps stars and discs sharp. A
+  **screen** kind (`view`, and `far` and a body whose shape is `far` or `view`)
+  samples another instance's image by the pixel's direction. Bodies are drawn
+  at the position the stack names for them (a `bodies` entry in `layers`,
+  directly above the lowest layer when it is not named).
+- **The class split never reorders the stack.** The stack is cut into runs:
+  maximal sequences of consecutive field layers, and the point and screen
+  layers between them. Every blend mode is affine in the color beneath it, per
+  channel (`over` is `a·c + (1 − a)·d`, `add` is `c + d`, `multiply` is `c·d`,
+  `screen` is `c + (1 − c)·d`), and a composition of affine maps is affine, so
+  a field run is summarized exactly as a per-channel scale M and offset B with
+  `d' = M·d + B`. `sky` writes each field run's summary at the field extent:
+  the lowest run, which composes over nothing, writes B alone, and every run
+  above it writes M and B, two half-float images. `composite` then walks the
+  runs in the authored order, applying each field run's sampled M and B and
+  evaluating each point or screen run's layers at its own extent, so stars
+  beneath clouds are dimmed by them exactly as authored, and a `multiply` field
+  over an `add` point layer multiplies it. Each run's texels written and each
+  layer's evaluations are counted under `sky` and `composite`, named by the run
+  and the layer.
 - **A data-driven layer loop, not a pipeline per sky.** The layer table is the
   same for every pixel of a dispatch, so the kind switch is a uniform branch
   that costs a scalar test per layer, and a pixel that no layer's mask admits
@@ -5187,7 +5249,11 @@ target; each step settles its own vocabulary rows in
 - **Environment lighting samples the same sky.** `sky.environment` renders the
   lighting-visible layers, bodies excluded, into a 64 by 64 octahedral map and
   reduces it to nine second-order spherical-harmonic coefficients per colour
-  channel, once per change of the sky's resolved values. Ambient is the
+  channel, once per change of a lighting-visible value (a value of a layer the
+  environment map draws). A change whose irradiance differs from the rendered
+  coefficients by less than one 8-bit display code in every direction counts as
+  no change, so a slow day cycle re-lights in display-code steps rather than on
+  every tick; the skipped re-renders are counted. Ambient is the
   harmonic irradiance at the normal, scaled by `environment.ambient`. A
   reflection samples the map and adds the `panel` layers analytically along the
   reflected direction, widened by roughness as `worldStudioReflection` does
@@ -5216,8 +5282,25 @@ target; each step settles its own vocabulary rows in
   unchanged records nothing; its outputs are fragment resources declared
   retained, which keep their contents across frames and are never aliased, and
   the planner records the barriers from their prior state as it does for a
-  skipped pass. A cloud drifting over a still camera runs `sky` and
-  `composite` and marches nothing.
+  skipped pass. A change falls in one of four classes, each with its own
+  counted gate:
+  - **Visual-only**: a value only the camera sees (a camera-only layer, stars,
+    a body's disc, the atmosphere, the media). It runs `sky` and `composite`;
+    nothing is marched, shaded or reconstructed.
+  - **Lighting-visible**: a value the environment map draws, or a light's
+    colour or intensity. It runs `sky.environment` (unless the display-code
+    rule above counts it unchanged), `views`, `resolve` when reconstruction is
+    on, `sky` and `composite`. The march group and `shadow` stand. With
+    reconstruction on, `resolve` blends the re-shaded image into history
+    through its rectification without new jitter samples; the identity and
+    depth the history was validated by have not moved.
+  - **Shadow direction**: a shadowed light's direction moved (a body on an
+    orbit). It adds `shadow` to the lighting-visible class; the march group
+    stands.
+  - **Geometry or camera**: the camera, the program, the transforms, the
+    meshes or a march lever. Every pass runs, as today.
+
+  A cloud drifting over a still camera is visual-only and marches nothing.
 - **One clock family, on the tick.** Every clock is exact integer arithmetic on
   the state mirror's presented engine tick, the one presentation clock, as an
   unsigned 64-bit count: a period is a whole number of engine ticks (the
@@ -5237,9 +5320,14 @@ target; each step settles its own vocabulary rows in
   layer's or body's presence and the order of the stack are not keyable, and
   the validator refuses a key that states one. The hand classification in
   `BlendOf`, and the `Hold` blend with it, are gone. Keys address layers and
-  bodies by name, never by slot or index. One resolver
-  (`Puck.World.Protocol`, beside the state mirror) both validates keys and
-  resolves them; the validator runs it with no mirror.
+  bodies by name, never by slot or index. One pure resolver lives in
+  `Puck.World.Schema`, the lowest project that holds both the key records and
+  the validator: it computes clock phases from a tick, selects and eases keys,
+  and blends by field type, reading live values only through a value source it
+  is handed. `WorldDefinitionValidator` calls it with no source. The state
+  mirror (`Puck.World.Protocol`, which references Schema) hands it the mirror's
+  ticks and slots, and the client, the theme and the views reach it through the
+  mirror. Schema never references Protocol, so no cycle forms.
 - **Motion never jumps.** A rate (cloud drift, shear, spin, a layer's rotation)
   is integrated in closed form: a literal rate over a tick clock is `rate ×
   time` reduced exactly per period; a keyed rate is the sum of each key
@@ -5288,8 +5376,10 @@ target; each step settles its own vocabulary rows in
   by its layer or body. Both kinds are `PerBackendDeterministic`, like the march
   steps. The ceilings file records a ceiling per row at the floor tier, and a
   required zero wherever no work is allowed: every sky row of a frame that
-  covers the whole view, every march-group row of a sky-only frame, every row of
-  a layer below its tier, and every shadow row at `low`.
+  covers the whole view, every march-group row of a visual-only,
+  lighting-visible or shadow-direction frame, every `shadow` row of a
+  visual-only or lighting-visible frame, every row of a layer below its tier,
+  every shadow row past K + F, and every shadow row at `low`.
 - **Every costed layer has an off switch.** Each layer states the lowest tier
   it draws at, and each kind states its reduced form below `high` (clouds: one
   thickness tap and three octaves at `low`, shaded flat; stars: no twinkle at
@@ -5298,10 +5388,10 @@ target; each step settles its own vocabulary rows in
   and a `shadowLights` row per tier.
 - **History holds no sky.** With P15's reconstruction on, the sky and the air
   are composited after `resolve`, so jitter never touches a star, a drifting
-  cloud never ghosts, and a sky-only change neither resets nor dirties any
+  cloud never ghosts, and a visual-only change neither resets nor dirties any
   history: a converged view keeps standing while its sky moves, because only
   `sky` and `composite` run. Bounded media move out of the views stage with
-  this, so P15's reactive alpha covers screens and animated emission only.
+  this, so P15's reactivity image covers screens and animated emission only.
 
 **Build sequence.** Each step lands alone, in order, with its counted rows and
 its re-recorded parity stations or canaries in the same change. Every step adds
@@ -5360,14 +5450,17 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
    - Delivers: the keyed form of every bindable value (`keys(clock: …)`), the
      angle and direction bindables, section keys whose values are partial
      records addressed by name, blends by field type with per-key ease, the
-     refusal of keys on structure, one resolver beside the state mirror that
-     the validator and the client share, and the courtyard migrated.
+     refusal of keys on structure, the one pure resolver in
+     `Puck.World.Schema` that the validator calls with no value source and the
+     state mirror calls with its own, and the courtyard migrated.
    - Deletes: `render.cycle`, `WorldRenderCycle` and `WorldRenderCycleKey`,
      `WorldRenderCycleTrack`, `ValidateRenderCycleResolution`,
      `SdfEnvironment.Blend`, `BlendOf`, `Slerp` and `SdfEnvironmentBlend`.
-   - Touches: `BindableValue.cs`, `WorldStateMirror`, `WorldThemeResolve`,
+   - Touches: `BindableValue.cs` and the resolver in `src/Puck.World.Schema`,
+     `WorldDefinitionValidator`, `WorldStateMirror`, `WorldThemeResolve`,
      `WorldCameraRigCompiler`, `WorldViewGraphHost.Parameters.cs`, the world
-     vocabulary, `moth-courtyard.puck`, `puck schema`.
+     vocabulary, `moth-courtyard.puck`, `puck schema`, and
+     `build/Architecture.props` only to confirm that Schema gains no reference.
    - Done when: `KeyedValueLawTests` hold each field type's blend (a colour in
      linear light, an angle across 0 and 360 degrees by the short arc, a
      direction along the arc) and each ease (red leg: a seed keyed is refused
@@ -5399,14 +5492,25 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      holds every decoded value equal (red leg: a swapped pair of members
      fails); parity is unchanged on both backends, every station byte for
      byte; `puck shaders generate --check` passes.
-   - Counted-cost gate: pass-block bytes per view per frame fall from 11,200 to
-     about 2,720; a still sky and still lights owe zero bytes, counted under
-     `upload`.
+   - Counted-cost gate: the win is block size and binding, not upload bytes.
+     Every region already writes only the words that changed, so the new
+     tables upload what changed, as the rest do. The generated pass block
+     shrinks from 1,120 bytes to about 272, so the constant data the host writes
+     into the ten pass blocks of a view each frame falls from 11,200 bytes to
+     about 2,720, and each dispatch binds a block a quarter of the size. The sky
+     group is bound by 3 of the 10 passes (`views`, `sky`, `composite`) and the
+     lights table by 2 (`shadow`, `views`). A law holds the block size and each
+     pass's bound groups to the generated interface.
 5. **P18-5, the sky once, and a composite last.**
-   - Delivers: `views` shading hits only into `lit` with coverage; `sky`
-     evaluating the sky where coverage is below one, with a one-pixel
-     dilation; `composite` putting sky, lit image, fog and bounded media
-     together; the default look in data.
+   - Delivers: `views` shading hits only into `lit`, premultiplied, with
+     coverage in its alpha; `sky` evaluating the sky's field runs where
+     coverage is below one, with a one-pixel dilation, into their scale and
+     offset images; `composite` walking the runs in the authored order (today's
+     gradient, stars, disc and clouds are already three runs: a field run, a
+     point run and a field run), then the lit image by its coverage, the fog
+     and the bounded media, reading the record's ray distance at the render
+     extent before P15-4 and the resolved surface after it; the default look in
+     data.
    - Deletes: the sky pre-pass (`sdf-sky.comp.hlsl`), `skyColor` and both
      `skyGradient` calls in `sdfLightStage`, the media in the sky pre-pass and
      the views stage, and the `SkyEnabled` branch with its pinned HLSL
@@ -5417,36 +5521,58 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `tests/Puck.Parity`, `docs/rendering/sdf/handbook/frame-rendering.md`.
    - Done when: `SdfPassPlanLawTests` plans `sky` and `composite` after `views`;
      a device law counts zero sky evaluations for a pixel that hits and one for
-     a pixel that misses (red leg: a hit pixel evaluated fails); a
+     a pixel that misses (red leg: a hit pixel evaluated fails);
+     `SkyRunCompositionLawTests` hold the run composition to one ordered
+     evaluation of the whole stack, on a CPU reference within a stated float
+     tolerance, for stars beneath clouds and for a mixed stack (`over`, `add`,
+     `multiply` and `screen` field layers interleaved with point layers) (red
+     leg: composing the field runs before the point layers dims no star); a
      `sky-coverage` canary holds a silhouette edge's blend to the sky at its
      pixel; parity holds on both backends after its explained re-record.
    - Counted-cost gate: `gpu.sky.evaluations` falls from (1 + L) × P to about
-     (1 − h) × P per view (see the expected wins), and every hit reads zero.
+     (1 − h) × P per view (see the expected wins), and every hit reads zero;
+     each field run's texels written are a row of their own under `sky`.
 6. **P18-6, a cadence per pass.**
    - Delivers: the pass-group signatures, retained fragment resources, the
-     planner's barriers for a standing pass, and the rule that a pass stands
-     only when its group signature and its inputs do.
+     planner's barriers for a standing pass, the rule that a pass stands only
+     when its group signature and its inputs do, and the four change classes
+     (visual-only, lighting-visible, shadow direction, geometry or camera),
+     which `world.lighting` reports for each keyed value.
    - Touches: `SdfWorldTables.Cadence.cs`, `SdfWorldPasses`,
      `SdfWorldPassRecorder`, `IRenderGraphPackageRecorder`,
      `src/Puck.Shaders/Pipeline` (retained resources), `RenderGraphRuntime`.
-   - Done when: a law over the fake device drives a cloud drift, a twinkle, a
-     fog edit and a moving volume over a still camera and holds each frame to
-     exactly `sky` and `composite` dispatches, with the barriers the plan
-     states (red leg: a light colour change must also run `views`, and a
-     camera move every pass); `RenderGraphRuntimeLawTests` hold a standing
-     pass's retained output to its last write; a `sky-cadence` canary reads
-     zero march steps on the sky leg's drift frames.
-   - Counted-cost gate: on a sky-only frame, 2 dispatches instead of 10, zero
-     `gpu.march.steps` in the march group and `shadow`, and texels written
-     only by `sky` and `composite`; recorded as required zeros.
+   - Done when: a law over the fake device drives one change of each class
+     over a still camera and holds each frame to exactly its class's
+     dispatches, with the barriers the plan states: a cloud drift, a twinkle, a
+     fog edit and a moving volume to `sky` and `composite`; a keyed light
+     colour to `views`, `sky` and `composite` (and, from P18-9, a keyed colour
+     on a lighting-visible layer to those and `sky.environment`); an orbiting
+     shadowed body to those and `shadow` (red leg:
+     a lighting-visible change that skips `views` fails, and a camera move
+     runs every pass); `RenderGraphRuntimeLawTests` hold a standing pass's
+     retained output to its last write; a `sky-cadence` canary reads zero march
+     steps on the sky leg's drift frames.
+   - Counted-cost gate, per class, against the baseline P18-1 records: a
+     meshless view at the floor tier runs 7 SDF compute dispatches today (`sky`,
+     `mask`, `beam`, `cull-args`, `primary`, `surface`, `views`; `ambient` and
+     `shadow` skip at `low`, and the mesh pass is a draw that a meshless frame
+     skips), and 9 plus the mesh draw at `high`. A visual-only frame runs 2
+     (`sky`, `composite`). A lighting-visible frame runs 3 (`views`, `sky`,
+     `composite`), plus `sky.environment`'s two (the map and its reduction)
+     when it re-renders and `resolve` when reconstruction is on. A
+     shadow-direction frame adds `shadow` at a tier that shadows. Each class
+     records required zeros for the march group, and the visual-only and
+     lighting-visible classes for `shadow`.
 7. **P18-7, celestial bodies and many shadowed lights.**
    - Delivers: `render.sky.bodies` with shapes `disc`, `crescent` and rings,
      motions (direction, orbit, keys, a state row), light binding,
      illumination by other bodies, the shadow slots and their tier policy,
      four packed visibilities in the K row, the shadow stage's loop over
-     slots, the counted crossfade when a slot changes hands (a tier's fade
-     length, `instant` among them), and `world.lighting`'s slot report (which
-     body holds which slot this frame, why, and any fade in progress).
+     slots, the crossfade when a slot changes hands (crossings detected at tick
+     boundaries, weights from the presented tick, at most F fades with the
+     queue or instant overflow, a tier's fade length in ticks, `instant` among
+     them), and `world.lighting`'s slot report (which body holds which slot at
+     this tick, why, and any fade or queued crossing).
    - Deletes: `WorldRenderSkyLayer.SunDisc`, directional lights authored apart
      from a body, `worldSunDirection`, `worldSunColor`,
      `worldShadowPenumbraSlope`, `SdfSunDirection`, `DefaultSunDirection`, the
@@ -5457,16 +5583,21 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `surface/sdf-shadow-gather.hlsli`, `shade/sdf-light.hlsli`, the sky's
      point-kind modules, `quality.puck`, `WorldSessionLevers`.
    - Done when: `ShadowSlotLawTests` hold the slot order (red leg: an `auto`
-     body brighter than an `always` one does not take its slot) and a crossing
-     of two `auto` bodies to a fade of exactly the tier's frames, identical on
-     a replay (red leg: an `instant` tier swaps in one frame); a device law
+     body brighter than an `always` one does not take its slot); a crossing of
+     two `auto` bodies to a fade whose weights are a function of the presented
+     tick alone, identical on a replay and across the N frames of a `converge`
+     capture at one frozen tick (red leg: weights advanced per rendered frame
+     differ between two frame rates); a second crossing during a fade at F = 1
+     to the queue, and to an instant swap under `fadeOverflow: instant`; a
+     seek to complete every fade; a device law
      packs and unpacks four visibilities exactly to 8 bits; a `sky-bodies`
      canary's binary suns cast two shadows at `high` and one at `medium`,
      each disc tinted by its light, and a moon lit by two suns shows two lit
      limbs.
-   - Counted-cost gate: `shadow`'s march steps per slot, K slots at a tier,
-     the one extra slot's steps only on a fade's frames, and required zeros past
-     K otherwise; at `low` every shadow row is zero, as today.
+   - Counted-cost gate: `shadow`'s march steps per slot, at most K + F slots
+     marched on any frame (0 at `low`, 2 at `medium`, 3 at `high`), fade slots'
+     steps only while a fade runs, and required zeros past K + F; at `low`
+     every shadow row is zero, as today.
 8. **P18-8, the open layer stack.**
    - Delivers: the layer record (kind, blend, mask, transform, clock, opacity,
      visibility, tier), the generated kind table and one module per kind for
@@ -5485,14 +5616,17 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      generated HLSL struct (red leg: a member out of order); a law adds a kind
      in a fixture and shows no other kind's module or any pass changed; the
      `sky-layers` canary covers every kind, a tilted frame and each blend mode;
-     the layer kernel's disassembly is read and its register count stated in
+     `SkyRunCompositionLawTests` gain the new kinds, repeated kinds, and a stack
+     whose bodies sit between two cloud layers; the layer kernel's disassembly is read and its register count stated in
      the change, deciding the light variant.
-   - Counted-cost gate: per-layer evaluation rows, a zero for an absent or
-     zero-opacity layer, a zero for a layer below its tier, and clouds at `low`
-     at a quarter or less of their `high` hashes per covered pixel.
+   - Counted-cost gate: per-layer evaluation rows and per-run texel rows, a
+     zero for an absent or zero-opacity layer, a zero for a layer below its
+     tier, and clouds at `low` at a quarter or less of their `high` hashes per
+     covered pixel.
 9. **P18-9, lighting derived from the sky.**
    - Delivers: `sky.environment` (the environment map and its coefficients,
-     re-rendered only when the resolved sky moves), ambient from the
+     re-rendered only on a lighting-visible change larger than one display
+     code, with the skipped re-renders counted), ambient from the
      coefficients, reflection from the map plus analytic `panel` layers,
      `render.environment`'s `ambient` and `reflection` gains, and the moth
      studio and mirror worlds' softboxes rewritten as `panel` layers.
@@ -5505,7 +5639,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
    - Done when: a law holds the coefficients of a constant sky to its
      irradiance exactly and of a two-colour sky to the analytic result within
      a stated tolerance (red leg: a layer marked camera-only must add no
-     light, and one marked lighting-only must add light it never draws); `ambient-from-sky` holds a
+     light, and one marked lighting-only must add light it never draws); a law
+     holds a keyed colour moving by less than a display code of irradiance to
+     no re-render and the next that crosses one to a re-render (red leg: a
+     camera-only change re-renders the map); `ambient-from-sky` holds a
      surface's ambient changing with a keyed sky colour; parity re-recorded,
      explained.
    - Counted-cost gate: `sky.environment`'s 4,096 texel evaluations and one
@@ -5569,17 +5706,37 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
 13. **P18-13, temporal amortization of secondary shadows.** After P15-5.
     - Delivers: with reconstruction on, each shadow slot after the first marches
       a quarter of its pixels per frame, interleaved by the jitter index, and
-      reprojects the rest from a history of the K row validated by P15's
-      identity and depth test; a rejected pixel marches. The first slot marches
-      every pixel. `world.shadow-amortize` is a session lever with a preset
-      row.
-    - Touches: `surface/sdf-shadow.hlsli`, `SdfWorldPackage.Fragment` (the K
-      history), `frame/sdf-reprojection.hlsli`, `quality.puck`.
+      reprojects the rest from a history of the K row. A receiver's identity
+      and depth, P15's test, are necessary but not enough, because a shadow
+      also moves with its light and its occluders. A history sample is
+      therefore rejected, and its pixel marched, when any of these holds:
+      - **Ownership:** the slot's body at the history's tick is not its body
+        now. The history stores each slot's owner, and a slot reassigned or
+        fading marches all its pixels until its history is rebuilt.
+      - **Light motion:** the slot's light direction has turned since the
+        history's tick by more than a stated fraction of its penumbra angle.
+      - **Occluder motion:** the group's gathered occluder set (the shadow
+        gather's per-group list) holds a dynamic-transform slot whose row
+        differs between P15-3's previous dynamic-transform table and the
+        current one, so a moving body re-marches every group whose shadow it
+        can touch.
+      - **Receiver:** P15's identity and depth test fails.
+
+      The first slot marches every pixel. `world.shadow-amortize` is a session
+      lever with a preset row.
+    - Touches: `surface/sdf-shadow.hlsli`, `surface/sdf-shadow-gather.hlsli`
+      (the moved-occluder test), `SdfWorldPackage.Fragment` (the K history and
+      its owners), `frame/sdf-reprojection.hlsli`, `quality.puck`.
     - Done when: a `temporal-shadows` canary's converged binary-star scene is
-      within a stated tolerance of the unamortized one, and a body crossing a
-      shadow shows no trail past the rejection rule.
+      within a stated tolerance of the unamortized one; a body moving through a
+      still receiver's shadow, a light turning on its orbit, and a slot changing
+      hands each show no trail past the frame the rule rejects them on (red leg:
+      with only the receiver test, the moving occluder's old shadow lingers);
+      a law counts each rejection reason.
     - Counted-cost gate: each secondary slot's march steps at about a quarter
-      of the unamortized row plus its rejections, re-recorded lower.
+      of the unamortized row plus its rejections, counted by reason and
+      re-recorded lower; zero reprojected pixels on a frame where a slot
+      changes hands.
 14. **P18-14, the floor tier's sky defaults.** The lead's call from the
     counted rows.
     - Delivers: the sky leg recorded at each tier and field scale in the
@@ -5599,15 +5756,25 @@ fraction in live tiles, at least h.
   (1 − h) × P plus the dilated edge. At h = 0.6 and L = 0.75, from 907,200 to
   about 210,000, a fall of 77%. A hit reads zero sky evaluations instead of one
   full sky and up to two gradients. A view that hits nothing is unchanged at P.
-- **Sky-only frames** (a drift, a twinkle, a keyed colour, an atmosphere edit, a
-  moving volume). Today every pass of the view: 10 dispatches and the whole
-  march. After P18-6, 2 dispatches and zero march steps.
+- **Visual-only frames** (a drift, a twinkle, a camera-only keyed colour, an
+  atmosphere edit, a moving volume). Today every pass the view runs: 7 SDF
+  compute dispatches for a meshless view at the floor tier, 9 and the mesh draw
+  at `high`, with the whole march. After P18-6, 2 dispatches and zero march
+  steps.
+- **Lighting-visible frames** (a keyed light or lighting-visible colour). Today
+  the same 7 or 9 dispatches and the march. After P18-6, 3 (`views`, `sky`,
+  `composite`), plus `sky.environment`'s 2 when a change crosses a display code
+  and `resolve` with reconstruction on, and zero march steps.
 - **Bounded media.** Today a single volume re-renders every view every frame.
   After P18-2 and P18-6, `composite` alone, and only on frames whose presented
   tick moves.
-- **Pass-block bytes.** Today 848 environment bytes in each of 10 blocks, 11,200
-  bytes per view per frame. After P18-4, about 2,720, and zero upload bytes for
-  a still sky or still lights.
+- **Pass-block size and binding.** Today the pass block is 1,120 bytes, 848 of
+  them the environment, written into each of 10 blocks: 11,200 bytes of
+  constant data per view per frame, every dispatch binding the whole block.
+  After P18-4 the block is about 272 bytes (about 2,720 per view per frame), and
+  the sky group and lights table are bound only by the passes that read them.
+  This is not an upload win: every region already uploads only the words that
+  changed, and the new tables do the same.
 - **Clouds.** Today 128 hash evaluations per covered pixel (four thickness taps,
   two fractal sums of four octaves, four lattice corners) and 32 per clear one.
   At `low`, 24 per covered pixel, a fall of 81%.
@@ -5618,9 +5785,13 @@ fraction in live tiles, at least h.
 - **Shadows.** One slot costs what the one shadow light costs today, each more
   slot about as much again; the floor tier stays at zero. With P18-13 each
   secondary slot falls to about a quarter plus its rejections.
-- **Environment lighting.** 4,096 texel evaluations and one reduction per sky
-  change, zero on a still sky; one harmonic evaluation per lit pixel in place
-  of the hemisphere term.
+- **Environment lighting.** 4,096 texel evaluations and one reduction per
+  lighting-visible change larger than a display code, zero on a still sky or a
+  visual-only change; one harmonic evaluation per lit pixel in place of the
+  hemisphere term.
+- **Shadow fades.** At most F fade slots beside the K held ones, and fade slots
+  march only while a fade runs: at most 2 slots at `medium` and 3 at `high` on
+  any frame.
 - **Many views of one world.** Every camera view of a world reads that world's
   one environment map, so its sky lighting costs it nothing of its own.
 
@@ -5628,11 +5799,16 @@ fraction in live tiles, at least h.
 
 - **P15.** P18-1 needs P15-1's counter buffer and ceilings file. P18-2 to P18-12
   land before or after P15-2 to P15-7: before P15-4, `sky` and `composite` run at
-  the render extent after `views`; from P15-4 they follow `resolve` at the
-  output extent, and the sky's field extent follows the output extent scaled by
-  the sky tier. P15-5's convergence rule and P18-6's cadence compose: a
-  converging view renders every pass for one jitter period, and a converged one
-  runs only `sky` and `composite` while only its sky moves. P18-13 follows
+  the render extent after `views` and read the record; from P15-4 they follow
+  `resolve` at the output extent and read only the resolved surface, the depth
+  and coverage P15-4's `resolve` writes in both modes, and the sky's field
+  extent follows the output extent scaled by the sky tier. P15's reactivity is
+  its own image, which `resolve` consumes, and P18's coverage is `lit`'s alpha,
+  which `resolve` carries through; P15's text states both. P15-5's convergence
+  rule and P18-6's cadence compose: a converging view renders every pass for
+  one jitter period; a converged one runs only `sky` and `composite` on a
+  visual-only change, and `views`, `resolve`, `sky` and `composite` on a
+  lighting-visible one. P18-13 follows
   P15-5. P18-14 records beside P15-8, and the two decisions are best taken
   together.
 - **S27 and S28.** P18-11's `view` layer and body shape ride S27's
@@ -5685,7 +5861,9 @@ fraction in live tiles, at least h.
 **Check:** every step's own check above, and together: an artist can author,
 key and live-edit a sky of any number of bodies and layers in any frame, from
 `.puck` and in the running World, and the three worlds above render on both
-backends; a hit pays no sky evaluation and a sky-only frame no march step;
+backends; a hit pays no sky evaluation, and a visual-only or lighting-visible
+frame no march step; the authored layer order holds across evaluation classes;
+shadow fades follow the tick;
 every clock is exact at any tick and replays; parity's sky stations hold on both
 backends, and each re-record in this package is explained in the change that
 makes it; the counted-cost ceilings over the sky leg at the floor tier on the

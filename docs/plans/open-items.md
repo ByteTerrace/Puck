@@ -149,8 +149,8 @@ Every package below carries its own check on the programme page; tick it there a
   - [ ] P15-1: counted march steps and texels written, the brick writes' upload bytes attributed to a pass, and the ceilings file of per-pass ceilings and required zeros that `puck counters --check` holds at the floor tier on the RTX 2060.
   - [ ] P15-2: jitter from a Halton sequence of period eight indexed by each instance's history, history epochs that reset on a view change, a follow or portal crossing, a cut, an extent change or a view shown again, and the `converge` capture row over a frozen presentation snapshot in which only the jitter index advances.
   - [ ] P15-3: motion derived from the visibility record, with the previous view in the pass block and a device-local previous dynamic-transform table each residency's upload keeps.
-  - [ ] P15-4: each view renders a render extent inside its output extent, and a spatial `resolve` pass replaces `place`'s upsample of a view.
-  - [ ] P15-5: the temporal resolve, with history per instance validated by identity and depth, a reactive alpha, `place`'s sharpen, and `converge` stations in the parity world.
+  - [ ] P15-4: each view renders a render extent inside its output extent, and a spatial `resolve` pass replaces `place`'s upsample of a view, writing a resolved surface (nearest-sample depth, coverage in the color's alpha) in both modes.
+  - [ ] P15-5: the temporal resolve, with history per instance validated by identity and depth, a reactivity image of its own (coverage keeps the color's alpha), `place`'s sharpen, and `converge` stations in the parity world.
   - [ ] P15-6: dynamic resolution inside the render extent's ceiling, never reallocating, driven by present timing through an injectable timing source, with a counted march-step budget where present timing is unavailable.
   - [ ] P15-7: march seeding from the previous frame's depth, taken only where a Lipschitz ball test proves the skipped segment empty.
   - [ ] P15-8: the floor tier's defaults for reconstruction, dynamic resolution and seeding, the lead's call from the counted rows.
