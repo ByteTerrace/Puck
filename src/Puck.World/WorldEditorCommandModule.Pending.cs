@@ -7,7 +7,8 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 // Edits to placements run through one WorldEditorEditQueue per world activation, which owns their order, their base,
-// their dispatch and their settlement. Every endpoint that reaches the world attaches to its queue; each edit carries its
+// their claims and their settlement; this module hands each claimed submission to its link after the queue returns, never
+// under the queue's lock, since a link's submit can wait on a world authority whose tick settles verdicts through it. Every endpoint that reaches the world attaches to its queue; each edit carries its
 // own endpoint's link. An endpoint detaches when it closes (its instance stops or is reaped, it is disposed) or starts
 // delivering another activation's documents (a crossing onward, a recreated world): the edits that go out through it,
 // with everything queued behind them, are abandoned by name. The queue retires, and keeps nothing, when its last
@@ -46,10 +47,7 @@ public sealed partial class WorldEditorCommandModule {
             if (!m_targets.TryGetValue(key: key, value: out var existing)) {
                 var opened = new EditTarget();
 
-                opened.Queue = new WorldEditorEditQueue(
-                    activation: world.Version.Activation,
-                    send: submission => Send(submission: submission, target: opened)
-                );
+                opened.Queue = new WorldEditorEditQueue(activation: world.Version.Activation);
                 existing = opened;
                 m_targets[key] = existing;
             }
@@ -149,23 +147,24 @@ public sealed partial class WorldEditorCommandModule {
             Verb: verb
         );
     }
-    // Carries out what an offer admitted: the placement becomes the seat's current one there.
-    private CommandResult Admit(CommandContext context, EditWorld world, WorldEditorEditQueue.Admission admission, int slot) {
+    // Carries out what an offer admitted: a claimed submission goes to its link, and the placement becomes the seat's
+    // current one there.
+    private CommandResult Admit(CommandContext context, EditWorld world, EditTarget target, WorldEditorEditQueue.Admission admission, int slot) {
         if (admission.Admitted is not { } edit) {
-            return admission.Result;
+            return admission.Refusal;
         }
 
-        if (!admission.Queued && admission.Result.IsError) {
-            return admission.Result;
+        if ((admission.Claimed is { } claimed) && (Send(submission: claimed, target: target) is { IsError: true } sent)) {
+            return sent;
         }
 
         seats.SetCurrent(placement: edit.Row.Id, slot: slot, world: world.Name);
 
         return Echo(context: context, pending: (admission.Queued ? "queued" : "submitted"), placement: edit.Row, slot: slot, verb: edit.Verb, world: world);
     }
-    // The queue's sender: hands a submission to its source's link, under the queue's lock. Its verdict settles it, on
-    // whatever thread the link completes on, inline or later; a link that throws settles it refused, so no submission
-    // stays in flight without a verdict.
+    // Hands a claimed submission to its source's link, outside the queue's lock. Its verdict settles it by its token, on
+    // whatever thread the link completes on, inline or later; a link that throws settles it refused the same way, so no
+    // submission stays in flight without a verdict.
     private CommandResult Send(EditTarget target, WorldEditorEditQueue.Submission submission) {
         var edit = submission.Edit;
 
@@ -184,7 +183,7 @@ public sealed partial class WorldEditorCommandModule {
 
             return submitted;
         } catch (Exception exception) {
-            Report(edit: edit, settlement: target.Queue.Settle(applied: false, id: edit.Row.Id, token: submission.Token, version: default));
+            Report(edit: edit, settlement: target.Queue.Settle(applied: false, id: edit.Row.Id, token: submission.Token, version: default), target: target);
 
             return CommandResult.Error(output: $"[{edit.Verb}: '{edit.Row.Id}' in '{edit.Source.World}' was not submitted: {exception.Message}]");
         }
@@ -197,10 +196,12 @@ public sealed partial class WorldEditorCommandModule {
             id: submission.Edit.Row.Id,
             token: submission.Token,
             version: ((result is WorldSubmissionResult.Mutation mutation) ? mutation.Outcome.Version : default)
-        )
+        ),
+        target: target
     );
-    // Names what a settlement did: a rollback, the edits it abandoned, and what the link answered the next edit with.
-    private void Report(WorldEditorEditQueue.Edit edit, WorldEditorEditQueue.Settlement settlement) {
+    // Names what a settlement did (a rollback, the edits it abandoned), then hands the next claimed edit to its link and
+    // names what the link answered it with.
+    private void Report(EditTarget target, WorldEditorEditQueue.Edit edit, WorldEditorEditQueue.Settlement settlement) {
         if (settlement.RolledBack) {
             var position = ((settlement.RolledBackTo is { } row) ? Format(value: ((Vector3)row.Position)) : "nothing: it is not placed");
             var dropped = ((settlement.Dropped > 0) ? $", dropping {settlement.Dropped} queued edit{((settlement.Dropped == 1) ? string.Empty : "s")}" : string.Empty);
@@ -212,8 +213,8 @@ public sealed partial class WorldEditorCommandModule {
             echoes.Publish(result: CommandResult.Error(output: $"[{abandoned.Verb}: '{abandoned.Row.Id}' in '{abandoned.Source.World}' abandoned: its link now delivers another world]"));
         }
 
-        if (!string.IsNullOrEmpty(value: settlement.NextSent.Output)) {
-            echoes.Publish(result: settlement.NextSent);
+        if ((settlement.Next is { } next) && (Send(submission: next, target: target) is { Output.Length: > 0 } sent)) {
+            echoes.Publish(result: sent);
         }
     }
     private static CommandResult Echo(CommandContext context, EditWorld world, WorldPlacement placement, string pending, string verb, int slot) => new(Output: CommandEcho.Open(verb: verb)

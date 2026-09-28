@@ -16,7 +16,10 @@ namespace Puck.World.Tests;
 /// and a submission that throws is settled like a refusal. A new placement's id is minted against the delivered
 /// document and every edit in flight or queued. An undone edit is never restored by the next nudge. One path settles a
 /// refusal, inline or late. A crossing onward or a closed endpoint abandons its edits by name and sends nothing more; a
-/// stopped world answers its edits with the stop, and its successor takes edits at once. Each claim has a red leg./// </summary>
+/// stopped world answers its edits with the stop, and its successor takes edits at once. A verdict that settles off a
+/// world's tick, sending the next edit into that world, never deadlocks the tick settling its own verdicts. Each claim
+/// has a red leg.
+/// </summary>
 public sealed class WorldEditorEditQueueLawTests {
     private const string Nudge = "world.nudge crate1 x 1";
 
@@ -68,6 +71,8 @@ public sealed class WorldEditorEditQueueLawTests {
         }
     }
 
+    // Whether a task completes within a bound, which only turns a hang into a failure.
+    private static async Task<bool> Within(Task task, TimeSpan bound) => (await Task.WhenAny(task1: task, task2: Task.Delay(delay: bound, cancellationToken: TestContext.Current.CancellationToken)) == task);
     private static WorldDefinition At(WorldDefinition definition, Vector3 crate) => (definition with {
         PlacementRowsRaw = [(WorldDefinitionRows.FindPlacement(id: "crate1", placements: definition.Placements)! with { Position = crate })],
     });
@@ -334,5 +339,65 @@ public sealed class WorldEditorEditQueueLawTests {
         ));
         second.Server.Advance(stepTicks: Fixtures.StepTicks);
         Assert.Equal(actual: CrateIn(world: second), expected: (WorldEditorPlacementLawTests.AwayCrate + Step));
+    }
+    [Fact]
+    public async Task AVerdictSettlingOffTheTickNeverDeadlocksTheTickSettlingItsOwn() {
+        // One world reached through two endpoints on its one activation: a local one over the world's own link, whose
+        // submissions wait on its authority and whose verdicts its tick answers inside that authority, and a federated one
+        // whose verdicts the law answers from a thread of its own, as a traveler lane does.
+        var row = WorldEditorPlacementLawTests.Build();
+        var version = row.Server.DocumentVersion;
+        var definition = row.Server.Definition;
+        var local = new GatedLink(target: row.Instance.Link);
+        var federated = new RecordingLink(definition: definition) { Activation = version.Activation, Sequence = version.Sequence };
+        var near = EditorEndpoints.Of(definition: definition, identity: "near", link: local, pose: Vector3.Zero, version: version);
+        var far = EditorEndpoints.Of(definition: definition, identity: "far", link: federated, pose: Vector3.Zero, version: version);
+        var routes = new WorldSeatAuthorityRouter();
+        var seats = new WorldEditorSeats { AimProbe = static _ => new WorldEditorRay(Direction: Vector3.UnitZ, Origin: Vector3.Zero) };
+        var registry = WorldEditorPlacementLawTests.BuildRegistry(routes: routes, row: row, seats: seats);
+        var seat = new TextCommandSource(registry: registry).CreateSession(principal: Principal.Seat(slot: 1), slot: 1);
+        var entity = near.Mirror.Address(index: 0);
+        var bound = TimeSpan.FromSeconds(value: 60);
+
+        _ = routes.Publish(endpoint: near, entity: entity, slot: 0);
+        _ = routes.Publish(endpoint: far, entity: (entity with { Index = 1 }), slot: 1);
+        Assert.False(condition: registry.Submit(line: $"world.grid pitch {WorldEditorPlacementLawTests.Pitch}").IsError);
+        Assert.False(condition: registry.SubmitSession(line: $"world.grid pitch {WorldEditorPlacementLawTests.Pitch}", session: seat).IsError);
+
+        // A local edit in flight on one line; on another, a federated edit in flight with a local edit queued behind it.
+        Assert.False(condition: registry.Submit(line: "world.place crate").IsError);
+        Assert.False(condition: registry.SubmitSession(line: Nudge, session: seat).IsError);
+        Assert.Contains(expectedSubstring: "edit=queued", actualString: registry.Submit(line: Nudge).Output);
+
+        // The tick answers the local edit inside the world's authority, and is held there.
+        var held = local.ArmHold();
+        var tick = new Thread(start: () => row.Server.Advance(stepTicks: Fixtures.StepTicks)) { IsBackground = true };
+
+        tick.Start();
+        Assert.True(condition: await Within(bound: bound, task: held), userMessage: "the tick never answered the local edit");
+
+        // Meanwhile the federated verdict settles off the tick and hands the queued edit to the local link, which waits
+        // on the authority the held tick holds.
+        var entered = local.ArmEntering();
+        var verdict = new Thread(start: () => federated.Complete(index: 0, result: federated.Applied())) { IsBackground = true };
+
+        verdict.Start();
+        Assert.True(condition: await Within(bound: bound, task: entered), userMessage: "the federated verdict never sent the queued edit");
+
+        // Red leg: the queued edit's thread is inside the local link while the tick holds the authority and has its own
+        // verdict still to settle, so a queue that called the link under its lock would hold that lock against the tick
+        // for good. The bound turns such a deadlock into a failure; both threads are background ones and nothing is
+        // disposed on that path, so a stuck pair never holds the run open.
+        local.Release();
+        Assert.True(condition: (tick.Join(timeout: bound) && verdict.Join(timeout: bound)), userMessage: "the tick and the federated verdict deadlocked");
+
+        // The queued edit, composed on the federated one, applies at the next tick; the placement applied at the first.
+        row.Server.Advance(stepTicks: Fixtures.StepTicks);
+        Assert.Equal(actual: ((Vector3)WorldDefinitionRows.FindPlacement(id: "crate1", placements: row.Server.Definition.Placements)!.Position).X, expected: (1.1f + (2f * WorldEditorPlacementLawTests.Pitch)), tolerance: 1e-5);
+        Assert.NotNull(@object: WorldDefinitionRows.FindPlacement(id: "crate2", placements: row.Server.Definition.Placements));
+        seat.Dispose();
+        far.Dispose();
+        near.Dispose();
+        row.Dispose();
     }
 }

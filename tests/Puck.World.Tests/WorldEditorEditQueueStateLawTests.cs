@@ -11,9 +11,9 @@ namespace Puck.World.Tests;
 /// THE LAW: <see cref="WorldEditorEditQueue"/> is a state machine every transition of which happens under its lock,
 /// against the document its source delivers at that moment and against its retirement state. A confirmed value is
 /// ordered by the world's document versions: a late document never replaces it, a newer one always does, and a
-/// malformed version changes nothing. A base is read, its edit composed and admitted, and the edit sent, in one step,
-/// so no verdict, delivery or retirement lands in between; a retired queue never sends, and an edit whose source no
-/// longer reaches the world is abandoned rather than sent. Each claim has a red leg, and a seeded random interleaving
+/// malformed version changes nothing. A base is read, its edit composed and admitted, and the edit claimed in flight, in
+/// one step, so no verdict, delivery or retirement lands in between; a retired queue never claims, and an edit whose
+/// source no longer reaches the world is abandoned rather than claimed. Each claim has a red leg, and a seeded random interleaving
 /// of offers from two endpoints, verdicts, stale verdicts, deliveries, malformed deliveries, other doors' installs,
 /// endpoint closings and teardowns checks every invariant after every step.
 /// </summary>
@@ -50,14 +50,23 @@ public sealed class WorldEditorEditQueueStateLawTests {
         }
         public WorldEditorEditQueue.Source SourceFor(IServerLink link) => new(Delivered: () => Document, Link: link, World: "w");
     }
-    // Records what a queue sends, in order.
+    // Records each submission a queue claims in flight, in order, as its caller hands them to their links.
     private sealed class Sent {
         public List<WorldEditorEditQueue.Submission> Submissions { get; } = [];
 
-        public CommandResult Send(WorldEditorEditQueue.Submission submission) {
-            Submissions.Add(item: submission);
+        public WorldEditorEditQueue.Admission Of(WorldEditorEditQueue.Admission admission) {
+            if (admission.Claimed is { } claimed) {
+                Submissions.Add(item: claimed);
+            }
 
-            return CommandResult.None;
+            return admission;
+        }
+        public WorldEditorEditQueue.Settlement Of(WorldEditorEditQueue.Settlement settlement) {
+            if (settlement.Next is { } next) {
+                Submissions.Add(item: next);
+            }
+
+            return settlement;
         }
     }
 
@@ -75,7 +84,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
         Verb: WorldEditorCommandModule.NudgeCommand
     );
     // An offer whose composer writes a fixed row whatever the base, as a law drives the queue directly.
-    private static WorldEditorEditQueue.Admission Offer(WorldEditorEditQueue queue, WorldEditorEditQueue.Source source, WorldPlacement row, Principal principal) => queue.Offer(
+    private static WorldEditorEditQueue.Admission Offer(WorldEditorEditQueue queue, Sent sent, WorldEditorEditQueue.Source source, WorldPlacement row, Principal principal) => sent.Of(admission: queue.Offer(
         compose: (WorldDeliveredDocument document, WorldPlacement? basis, bool queues, out CommandResult refusal) => {
             refusal = CommandResult.None;
 
@@ -84,7 +93,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
         id: row.Id,
         source: source,
         verb: WorldEditorCommandModule.NudgeCommand
-    );
+    ));
     private static IServerLink LinkOf(WorldDefinition definition) => new RecordingLink(definition: definition);
     // A document that carries nothing but its version.
     private static WorldDeliveredDocument At(WorldDocumentVersion version) => new(Definition: Basis, Version: version);
@@ -93,7 +102,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
     public void ADocumentOlderThanAConfirmedValueNeverReplacesItAndANewerOneAlwaysDoes() {
         var world = new World();
         var sent = new Sent();
-        var queue = new WorldEditorEditQueue(activation: world.Activation, send: sent.Send);
+        var queue = new WorldEditorEditQueue(activation: world.Activation);
         var source = world.SourceFor(link: LinkOf(definition: Basis));
         var origin = Row(id: "a", x: 0f);
         var first = Row(id: "a", x: 1f);
@@ -102,10 +111,10 @@ public sealed class WorldEditorEditQueueStateLawTests {
         WorldDocumentVersion Installed(long sequence) => new(Activation: world.Activation, Sequence: sequence);
 
         world.Deliver(rows: [origin], sequence: 0L);
-        _ = Offer(principal: Principal.Console, queue: queue, row: first, source: source);
-        _ = queue.Settle(applied: true, id: "a", token: sent.Submissions[^1].Token, version: Installed(sequence: 1L));
-        _ = Offer(principal: Principal.Console, queue: queue, row: second, source: source);
-        _ = queue.Settle(applied: true, id: "a", token: sent.Submissions[^1].Token, version: Installed(sequence: 2L));
+        _ = Offer(principal: Principal.Console, queue: queue, sent: sent, row: first, source: source);
+        _ = sent.Of(settlement: queue.Settle(applied: true, id: "a", token: sent.Submissions[^1].Token, version: Installed(sequence: 1L)));
+        _ = Offer(principal: Principal.Console, queue: queue, sent: sent, row: second, source: source);
+        _ = sent.Of(settlement: queue.Settle(applied: true, id: "a", token: sent.Submissions[^1].Token, version: Installed(sequence: 2L)));
 
         // The world confirmed both, at 1 and 2. A document from before either, or between them, never replaces the
         // confirmed value; nor does a malformed version.
@@ -126,7 +135,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
     public void ABaseIsReadFromTheDocumentDeliveredAtAdmissionNeverOneCapturedBefore() {
         var world = new World();
         var sent = new Sent();
-        var queue = new WorldEditorEditQueue(activation: world.Activation, send: sent.Send);
+        var queue = new WorldEditorEditQueue(activation: world.Activation);
         var source = world.SourceFor(link: LinkOf(definition: Basis));
         var moved = Row(id: "a", x: 1f);
         WorldPlacement? basis = null;
@@ -136,8 +145,8 @@ public sealed class WorldEditorEditQueueStateLawTests {
 
         var before = world.Document;
 
-        _ = Offer(principal: Principal.Console, queue: queue, row: moved, source: source);
-        _ = queue.Settle(applied: true, id: "a", token: sent.Submissions[^1].Token, version: world.Version with { Sequence = 1L });
+        _ = Offer(principal: Principal.Console, queue: queue, sent: sent, row: moved, source: source);
+        _ = sent.Of(settlement: queue.Settle(applied: true, id: "a", token: sent.Submissions[^1].Token, version: world.Version with { Sequence = 1L }));
 
         // The confirming document, which also holds a placement another door put down, arrives before the next offer.
         world.Deliver(rows: [moved, Row(id: "a1", x: 5f)], sequence: 1L);
@@ -171,57 +180,43 @@ public sealed class WorldEditorEditQueueStateLawTests {
         Assert.Null(@object: WorldDefinitionRows.FindPlacement(id: "a1", placements: before.Definition.Placements));
     }
     [Fact]
-    public void ARetiredQueueNeverSendsAndAMovedSourceAbandonsRatherThanSends() {
+    public void ARetiredQueueNeverClaimsAndAMovedSourceAbandonsRatherThanClaims() {
         var world = new World();
         var other = new World();
         var sent = new Sent();
-        Thread? retiring = null;
-        IReadOnlyList<WorldEditorEditQueue.Edit>? abandoned = null;
-        WorldEditorEditQueue queue = null!;
-
-        queue = new WorldEditorEditQueue(activation: world.Activation, send: submission => {
-            _ = sent.Send(submission: submission);
-
-            // A retirement from another thread while the next edit is being sent waits until the send is done.
-            if (sent.Submissions.Count == 2) {
-                retiring = new Thread(start: () => abandoned = queue.Retire());
-                retiring.Start();
-                Assert.False(condition: retiring.Join(millisecondsTimeout: 100));
-            }
-
-            return CommandResult.None;
-        });
-
+        var queue = new WorldEditorEditQueue(activation: world.Activation);
         var source = world.SourceFor(link: LinkOf(definition: Basis));
 
         world.Deliver(rows: [Row(id: "a", x: 0f)], sequence: 0L);
-        _ = Offer(principal: Principal.Console, queue: queue, row: Row(id: "a", x: 1f), source: source);
-        _ = Offer(principal: Principal.Seat(slot: 0), queue: queue, row: Row(id: "a", x: 2f), source: source);
+        _ = Offer(principal: Principal.Console, queue: queue, sent: sent, row: Row(id: "a", x: 1f), source: source);
+        _ = Offer(principal: Principal.Seat(slot: 0), queue: queue, sent: sent, row: Row(id: "a", x: 2f), source: source);
 
-        var settled = queue.Settle(applied: true, id: "a", token: sent.Submissions[0].Token, version: world.Version with { Sequence = 1L });
+        // The verdict claims the queued edit; the world retires before its caller hands that claim to the link. The claim
+        // is abandoned by name with the rest of the queue.
+        var settled = sent.Of(settlement: queue.Settle(applied: true, id: "a", token: sent.Submissions[0].Token, version: world.Version with { Sequence = 1L }));
+        var abandoned = queue.Retire();
 
-        retiring!.Join();
         Assert.NotNull(@object: settled.Next);
-        Assert.Contains(collection: abandoned!, expected: settled.Next);
+        Assert.Contains(collection: abandoned, expected: settled.Next.Value.Edit);
 
-        // Retired: a verdict for the edit it sent answers nothing and sends nothing; nothing is admitted.
-        Assert.False(condition: queue.Settle(applied: true, id: "a", token: sent.Submissions[1].Token, version: world.Version with { Sequence = 2L }).Answered);
-        Assert.Null(@object: Offer(principal: Principal.Console, queue: queue, row: Row(id: "a", x: 3f), source: source).Admitted);
+        // Retired: a verdict for the edit it claimed answers nothing and claims nothing; nothing is admitted.
+        Assert.False(condition: sent.Of(settlement: queue.Settle(applied: true, id: "a", token: sent.Submissions[1].Token, version: world.Version with { Sequence = 2L })).Answered);
+        Assert.Null(@object: Offer(principal: Principal.Console, queue: queue, sent: sent, row: Row(id: "a", x: 3f), source: source).Admitted);
         Assert.Equal(actual: sent.Submissions.Count, expected: 2);
 
-        // A queued edit whose endpoint now reaches another world is abandoned when its turn comes, never sent.
+        // A queued edit whose endpoint now reaches another world is abandoned when its turn comes, never claimed.
         var moving = new World { Activation = world.Activation };
         var fresh = new Sent();
-        var live = new WorldEditorEditQueue(activation: world.Activation, send: fresh.Send);
+        var live = new WorldEditorEditQueue(activation: world.Activation);
         var near = world.SourceFor(link: LinkOf(definition: Basis));
         var far = moving.SourceFor(link: LinkOf(definition: Basis));
 
         moving.Deliver(rows: [Row(id: "a", x: 0f)], sequence: 0L);
-        _ = Offer(principal: Principal.Console, queue: live, row: Row(id: "a", x: 1f), source: near);
-        _ = Offer(principal: Principal.Seat(slot: 0), queue: live, row: Row(id: "a", x: 2f), source: far);
+        _ = Offer(principal: Principal.Console, queue: live, sent: fresh, row: Row(id: "a", x: 1f), source: near);
+        _ = Offer(principal: Principal.Seat(slot: 0), queue: live, sent: fresh, row: Row(id: "a", x: 2f), source: far);
         moving.Activation = other.Activation;
 
-        var turned = live.Settle(applied: true, id: "a", token: fresh.Submissions[0].Token, version: world.Version with { Sequence = 1L });
+        var turned = fresh.Of(settlement: live.Settle(applied: true, id: "a", token: fresh.Submissions[0].Token, version: world.Version with { Sequence = 1L }));
 
         Assert.Null(@object: turned.Next);
         _ = Assert.Single(collection: turned.Abandoned);
@@ -234,14 +229,14 @@ public sealed class WorldEditorEditQueueStateLawTests {
     public void ARefusalCannotSettleBetweenABaseReadAndItsAdmission() {
         var world = new World();
         var sent = new Sent();
-        var queue = new WorldEditorEditQueue(activation: world.Activation, send: sent.Send);
+        var queue = new WorldEditorEditQueue(activation: world.Activation);
         var source = world.SourceFor(link: LinkOf(definition: Basis));
         var origin = Row(id: "a", x: 0f);
         Thread? refusal = null;
         WorldEditorEditQueue.Settlement settled = default;
 
         world.Deliver(rows: [origin], sequence: 0L);
-        _ = Offer(principal: Principal.Seat(slot: 0), queue: queue, row: Row(id: "a", x: 1f), source: source);
+        _ = Offer(principal: Principal.Seat(slot: 0), queue: queue, sent: sent, row: Row(id: "a", x: 1f), source: source);
 
         var first = sent.Submissions[0];
 
@@ -249,7 +244,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
         // console is composing. The refusal waits for the admission, then drops the console's edit composed on it.
         var admission = queue.Offer(
             compose: (WorldDeliveredDocument document, WorldPlacement? basis, bool queues, out CommandResult composeRefusal) => {
-                refusal = new Thread(start: () => settled = queue.Settle(applied: false, id: "a", token: first.Token, version: world.Version));
+                refusal = new Thread(start: () => settled = sent.Of(settlement: queue.Settle(applied: false, id: "a", token: first.Token, version: world.Version)));
                 refusal.Start();
                 Assert.False(condition: refusal.Join(millisecondsTimeout: 100));
                 composeRefusal = CommandResult.None;
@@ -270,15 +265,15 @@ public sealed class WorldEditorEditQueueStateLawTests {
 
         // Red leg: with the read and the admission apart, the refusal lands between them and the console's edit, composed
         // on the refused one, goes out on its own under the console.
-        var apart = new WorldEditorEditQueue(activation: world.Activation, send: sent.Send);
+        var apart = new WorldEditorEditQueue(activation: world.Activation);
 
-        _ = Offer(principal: Principal.Seat(slot: 0), queue: apart, row: Row(id: "a", x: 1f), source: source);
+        _ = Offer(principal: Principal.Seat(slot: 0), queue: apart, sent: sent, row: Row(id: "a", x: 1f), source: source);
 
         var seat = sent.Submissions[^1];
         var read = apart.Latest(id: "a", source: source)!;
 
-        _ = apart.Settle(applied: false, id: "a", token: seat.Token, version: world.Version);
-        Assert.False(condition: Offer(principal: Principal.Console, queue: apart, row: (read with { Position = new Vector3(x: 2f, y: 0f, z: 0f) }), source: source).Queued);
+        _ = sent.Of(settlement: apart.Settle(applied: false, id: "a", token: seat.Token, version: world.Version));
+        Assert.False(condition: Offer(principal: Principal.Console, queue: apart, sent: sent, row: (read with { Position = new Vector3(x: 2f, y: 0f, z: 0f) }), source: source).Queued);
         Assert.Equal(actual: sent.Submissions[^1].Edit.Row.Position.X, expected: 2f);
     }
     [Fact]
@@ -286,7 +281,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
         var fast = new World();
         var slow = new World { Activation = fast.Activation };
         var sent = new Sent();
-        var queue = new WorldEditorEditQueue(activation: fast.Activation, send: sent.Send);
+        var queue = new WorldEditorEditQueue(activation: fast.Activation);
         var near = fast.SourceFor(link: LinkOf(definition: Basis));
         var far = slow.SourceFor(link: LinkOf(definition: Basis));
         var origin = Row(id: "a", x: 0f);
@@ -295,8 +290,8 @@ public sealed class WorldEditorEditQueueStateLawTests {
 
         fast.Deliver(rows: [origin], sequence: 0L);
         slow.Deliver(rows: [origin], sequence: 0L);
-        _ = Offer(principal: Principal.Console, queue: queue, row: moved, source: near);
-        _ = queue.Settle(applied: true, id: "a", token: sent.Submissions[^1].Token, version: fast.Version with { Sequence = 1L });
+        _ = Offer(principal: Principal.Console, queue: queue, sent: sent, row: moved, source: near);
+        _ = sent.Of(settlement: queue.Settle(applied: true, id: "a", token: sent.Submissions[^1].Token, version: fast.Version with { Sequence = 1L }));
 
         // The fast endpoint delivers the confirming document; the slow one has not yet.
         fast.Deliver(rows: [moved], sequence: 1L);
@@ -335,7 +330,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
         var activation = Guid.NewGuid();
         World[] views = [new World { Activation = activation }, new World { Activation = activation }];
         var sent = new Sent();
-        var queue = new WorldEditorEditQueue(activation: activation, send: sent.Send);
+        var queue = new WorldEditorEditQueue(activation: activation);
         var documents = new List<Dictionary<string, WorldPlacement>> { ids.ToDictionary(elementSelector: id => Row(id: id, x: 0f), keySelector: id => id) };
         int[] delivered = [0, 0];
         var newest = 0;
@@ -381,7 +376,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
                         var source = sources[random.Next(maxValue: sources.Length)];
                         var row = Row(id: id, x: ++value);
                         var count = sent.Submissions.Count;
-                        var admission = Offer(principal: principal, queue: queue, row: row, source: source);
+                        var admission = Offer(principal: principal, queue: queue, row: row, sent: sent, source: source);
 
                         if (!inFlight.ContainsKey(key: id)) {
                             Assert.False(condition: admission.Queued);
@@ -414,7 +409,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
 
                         var at = (documents.Count - 1);
                         var count = sent.Submissions.Count;
-                        var settlement = queue.Settle(applied: true, id: id, token: submission.Token, version: new WorldDocumentVersion(Activation: activation, Sequence: at));
+                        var settlement = sent.Of(settlement: queue.Settle(applied: true, id: id, token: submission.Token, version: new WorldDocumentVersion(Activation: activation, Sequence: at)));
 
                         settled.Add(item: submission);
                         confirms++;
@@ -423,7 +418,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
                         confirmed[id] = (submission.Edit.Row, at);
 
                         if (queued[id].Count > 0) {
-                            Assert.Same(actual: settlement.Next, expected: queued[id][0]);
+                            Assert.Same(actual: settlement.Next?.Edit, expected: queued[id][0]);
                             Assert.Same(actual: sent.Submissions[^1].Edit, expected: queued[id][0]);
                             queued[id].RemoveAt(index: 0);
                             inFlight[id] = sent.Submissions[^1];
@@ -439,7 +434,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
                             break;
                         }
 
-                        var settlement = queue.Settle(applied: false, id: id, token: submission.Token, version: views[0].Version);
+                        var settlement = sent.Of(settlement: queue.Settle(applied: false, id: id, token: submission.Token, version: views[0].Version));
 
                         settled.Add(item: submission);
                         refusalsDropping += ((queued[id].Count > 0) ? 1 : 0);
@@ -478,7 +473,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
                             var old = settled[random.Next(maxValue: settled.Count)];
 
                             stale++;
-                            Assert.False(condition: queue.Settle(applied: (random.Next(maxValue: 2) == 0), id: old.Edit.Row.Id, token: old.Token, version: views[0].Version).Answered);
+                            Assert.False(condition: sent.Of(settlement: queue.Settle(applied: (random.Next(maxValue: 2) == 0), id: old.Edit.Row.Id, token: old.Token, version: views[0].Version)).Answered);
                         }
 
                         break;
@@ -518,17 +513,17 @@ public sealed class WorldEditorEditQueueStateLawTests {
                         }
 
                         // A crossing onward or a teardown: the world goes, every edit it held is abandoned, nothing is kept or
-                        // sent, and a new activation starts from its own documents.
+                        // claimed, and a new activation starts from its own documents.
                         var expected = ids.SelectMany(selector: EditsOf).ToHashSet();
                         var retired = queue.Retire();
                         var count = sent.Submissions.Count;
 
                         Assert.Equal(actual: retired.ToHashSet(), expected: expected);
                         Assert.Equal(actual: queue.Lines, expected: 0);
-                        Assert.Null(@object: Offer(principal: Principal.Console, queue: queue, row: Row(id: id, x: 0f), source: sources[0]).Admitted);
+                        Assert.Null(@object: Offer(principal: Principal.Console, queue: queue, sent: sent, row: Row(id: id, x: 0f), source: sources[0]).Admitted);
 
                         foreach (var flying in inFlight.Values) {
-                            Assert.False(condition: queue.Settle(applied: true, id: flying.Edit.Row.Id, token: flying.Token, version: views[0].Version).Answered);
+                            Assert.False(condition: sent.Of(settlement: queue.Settle(applied: true, id: flying.Edit.Row.Id, token: flying.Token, version: views[0].Version)).Answered);
                         }
 
                         Assert.Equal(actual: sent.Submissions.Count, expected: count);
@@ -538,7 +533,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
                         activation = Guid.NewGuid();
                         views[0].Activation = activation;
                         views[1].Activation = activation;
-                        queue = new WorldEditorEditQueue(activation: activation, send: sent.Send);
+                        queue = new WorldEditorEditQueue(activation: activation);
                         documents = [ids.ToDictionary(elementSelector: each => Row(id: each, x: -(++value)), keySelector: each => each)];
                         newest = 0;
                         inFlight.Clear();

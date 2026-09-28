@@ -115,7 +115,7 @@ public sealed partial class WorldEditorCommandModule {
         return true;
     }
     // Edits one placement: its base is read, the edit composed on it against the world's newest known state, and
-    // the edit admitted and sent, as one step under its world's queue (WorldEditorEditQueue.Offer).
+    // the edit admitted, as one step under its world's queue (WorldEditorEditQueue.Offer), then sent outside it.
     private CommandResult EditPlacement(CommandContext context, EditWorld world, string id, string verb, Func<WorldDefinition, WorldPlacement, WorldPlacement> change) {
         if (!TryTargetOf(refusal: out var refusal, source: out var source, target: out var target, verb: verb, world: world)) {
             return refusal;
@@ -130,7 +130,7 @@ public sealed partial class WorldEditorCommandModule {
             verb: verb
         );
 
-        return Admit(admission: admission, context: context, slot: context.Slot, world: world);
+        return Admit(admission: admission, context: context, slot: context.Slot, target: target, world: world);
     }
     private CommandResult NudgeHandler(CommandContext context, WireArgs args) {
         if (args.Count is not (2 or 3)) {
@@ -280,7 +280,7 @@ public sealed partial class WorldEditorCommandModule {
             verb: PlaceCommand
         );
 
-        return Admit(admission: admission, context: context, slot: slot, world: world);
+        return Admit(admission: admission, context: context, slot: slot, target: target, world: world);
     }
     private IEnumerable<CommandDefinition> PlacementVerbs() {
         yield return CommandDefinition.WithWireArgs(

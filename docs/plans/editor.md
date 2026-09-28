@@ -249,7 +249,12 @@ document never moves a placement back
 authority and activation; every transition happens under its lock against the
 world's newest known state (the newest document any of its endpoints delivered)
 and its retirement state,
-and each edit goes out through its own endpoint. A crossing onward or a closed
+and each edit goes out through its own endpoint. The queue only claims an edit in
+flight under its lock; the editor hands the claim to its link after the lock is
+released, since a local link's submit waits on the world's authority while that
+world's tick settles verdicts through the queue, so a verdict settling off the
+tick never deadlocks the tick settling its own
+(`AVerdictSettlingOffTheTickNeverDeadlocksTheTickSettlingItsOwn`). A crossing onward or a closed
 endpoint abandons that endpoint's edits by name, a stopped or reaped instance
 answers its pending edits with `world.authority.stopped`, and a malformed
 version is refused at the wire and ignored by the queue. Every edit carries the

@@ -47,9 +47,10 @@ internal sealed class RecordingLink(WorldDefinition definition) : IServerLink {
         PayloadDigest: "digest",
         PersistenceStatus: WorldMutationPersistenceStatus.NotRequested,
         Version: new WorldDocumentVersion(Activation: Activation, Sequence: ++Sequence)
-    ));    /// <summary>Answers one submitted envelope with a verdict.</summary>
-           /// <param name="index">The envelope's submission index.</param>
-           /// <param name="result">The verdict.</param>
+    ));
+    /// <summary>Answers one submitted envelope with a verdict.</summary>
+    /// <param name="index">The envelope's submission index.</param>
+    /// <param name="result">The verdict.</param>
     public void Complete(int index, WorldSubmissionResult result) => Completions[index]?.Invoke(obj: result);
     /// <summary>Returns the placement one submitted envelope upserts.</summary>
     /// <param name="index">The envelope's submission index.</param>
@@ -168,4 +169,50 @@ internal sealed class SwitchingLink(IServerLink target) : IServerLink {
     );
     public void SubmitIntent(in IntentSubmission submission) => Target.SubmitIntent(submission: in submission);
     public void SubmitSession(SessionRequest request, Action<SessionReply> completion) => Target.SubmitSession(completion: completion, request: request);
+}
+/// <summary>A link that forwards to a world's own link and makes two moments of a race observable: a submission entering
+/// it, before it reaches the world, and a verdict the world hands back, which it holds on the thread the world answers it
+/// on until the law releases it. A world's tick answers its verdicts inside its authority, so a held verdict holds that
+/// authority too.</summary>
+/// <param name="target">The world's own link.</param>
+internal sealed class GatedLink(IServerLink target) : IServerLink {
+    private readonly TaskCompletionSource m_released = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private TaskCompletionSource? m_entering;
+    private TaskCompletionSource? m_holding;
+
+    /// <summary>Arms the link to signal the next submission that enters it.</summary>
+    /// <returns>A task that completes when that submission enters, before it reaches the world.</returns>
+    public Task ArmEntering() => (m_entering = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+    /// <summary>Arms the link to hold the next verdict the world hands back until <see cref="Release"/>.</summary>
+    /// <returns>A task that completes when that verdict is held.</returns>
+    public Task ArmHold() => (m_holding = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+    /// <summary>Releases a held verdict to its completion, and every later one.</summary>
+    public void Release() => m_released.TrySetResult();
+    public void Query(WorldQuery query, Action<QueryAnswer> completion) => target.Query(completion: completion, query: query);
+    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => SubmitEnvelope(
+        completion: null,
+        operationId: Guid.Empty,
+        payload: payload,
+        principal: principal
+    );
+    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion) {
+        _ = Interlocked.Exchange(location1: ref m_entering, value: null)?.TrySetResult();
+
+        return target.SubmitEnvelope(
+            completion: ((completion is null) ? null : result => {
+                if (Interlocked.Exchange(location1: ref m_holding, value: null) is { } holding) {
+                    holding.SetResult();
+                    m_released.Task.Wait();
+                }
+
+                completion(obj: result);
+            }),
+            operationId: operationId,
+            payload: payload,
+            principal: principal
+        );
+    }
+    public void SubmitIntent(in IntentSubmission submission) => target.SubmitIntent(submission: in submission);
+    public void SubmitSession(SessionRequest request, Action<SessionReply> completion) => target.SubmitSession(completion: completion, request: request);
 }
