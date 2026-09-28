@@ -4016,8 +4016,10 @@ splices into the graph, so `ShaderPipelineCompiler` orders, versions and
 barriers its passes: sky, mask, beam, cull arguments (indirect arguments and
 bounds), mesh, primary (dispatched indirectly, writing visibility version 0),
 surface (version 1), ambient (version 2), shadow (version 3), then views, the
-light stage with the volumes composited last, into the view's color. Brick upload and brick bake form `sdf.bricks`, a world-scoped
-instance joined to the views by buffer edges. The view writes its float working
+light stage with the volumes composited last, into the view's color. A host-baked brick (a height field's,
+`WorldFieldEmitter`) reaches the brick pool in the residency's own upload (`SdfWorldTables.UploadBrick`), which the
+views read; no live instance renders `sdf.bricks`, and the GPU brick bake (`RequestBrickBake`, the bake kernel,
+`SdfCarveBakePlanner`) has no live producer, both pending a design decision. The view writes its float working
 color; the root graph tonemaps and the display encode quantizes (step 10). There is no upload pass, because uploads go
 through `GpuRegion`, and no composite, because the engine has none. Group 0 is the
 frame, group 1 the world (program words and every per-world table, screens,
@@ -4040,7 +4042,7 @@ item 2 landed.
    `SdfWorldRenderSpec`, to exactly one capability row, named each row's graph
    equivalent and check, mapped every pass label to the graph pass that
    replaces it, and held the rows without a check to a named list of gaps,
-   which the open items carry. A console verb is covered
+   each of which now has a check or is recorded as unwired in the open items. A console verb is covered
    through the member it drives rather than enumerated, because the verbs live
    in `Puck.World`, which the SDF tests do not reach. The members nothing
    called are gone: the pipelined preview path, the cadence diagnostics and the
