@@ -1,0 +1,137 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "grid": {
+      "description": "The grid; absent takes every grid default.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "visible": {
+          "description": "Whether the grid draws.",
+          "type": "boolean",
+          "default": false
+        },
+        "mode": {
+          "description": "Where the world grid draws.",
+          "enum": [
+            "Surface",
+            "Follow",
+            "Plane"
+          ],
+          "default": "Surface",
+          "title": "WorldEditorGridMode"
+        },
+        "pitch": {
+          "$ref": "./common.schema.json#/$defs/DocumentVector3",
+          "description": "The world lattice\u0027s pitch on X, Y and Z, in world units; every component positive.",
+          "default": null
+        },
+        "planeY": {
+          "description": "The working plane\u0027s height, in world units, when the mode is Plane.",
+          "type": "number",
+          "default": 0
+        },
+        "lineWidth": {
+          "description": "The drawn line\u0027s width, in pixels; positive.",
+          "type": "number",
+          "default": 1.5
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldEditorGrid"
+    },
+    "snap": {
+      "description": "The snapping; absent takes every snapping default.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "enabled": {
+          "description": "Whether positions snap to the grid.",
+          "type": "boolean",
+          "default": false
+        },
+        "angleStepDegrees": {
+          "description": "The angle a turn steps and a rotation snaps to, in degrees; in (0, 180].",
+          "type": "number",
+          "default": 15
+        },
+        "surface": {
+          "description": "Whether a placement rests on the surface under the pointer.",
+          "type": "boolean",
+          "default": true
+        },
+        "objectPatchRadius": {
+          "description": "How far a captured reference\u0027s own grid reaches around it, in multiples of its largest half extent; positive.",
+          "type": "number",
+          "default": 2.5
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldEditorSnap"
+    },
+    "camera": {
+      "description": "The editor camera\u0027s feel; absent takes every camera default.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "orbitRate": {
+          "description": "The orbit rate at full input, in radians per second; positive.",
+          "type": "number",
+          "default": 2.4
+        },
+        "panRate": {
+          "description": "The pan rate at full input, in world units per second; positive.",
+          "type": "number",
+          "default": 3
+        },
+        "zoomRate": {
+          "description": "The exponential dolly rate at full input, per second; positive.",
+          "type": "number",
+          "default": 1.2
+        },
+        "flyRate": {
+          "description": "The fly rate at full input, in world units per second; positive.",
+          "type": "number",
+          "default": 6
+        },
+        "minPitch": {
+          "description": "The lowest orbit pitch, in radians; above -\u03C0/2 and below MaxPitch.",
+          "type": "number",
+          "default": 0.05
+        },
+        "maxPitch": {
+          "description": "The highest orbit pitch, in radians; below \u03C0/2.",
+          "type": "number",
+          "default": 1.35
+        },
+        "minDistance": {
+          "description": "The nearest orbit distance, in world units; positive and below MaxDistance.",
+          "type": "number",
+          "default": 0.5
+        },
+        "maxDistance": {
+          "description": "The farthest orbit distance, in world units.",
+          "type": "number",
+          "default": 14
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldEditorCamera"
+    }
+  },
+  "additionalProperties": false,
+  "default": null,
+  "title": "WorldEditorDefaults"
+}

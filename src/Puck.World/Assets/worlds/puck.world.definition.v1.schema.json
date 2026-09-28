@@ -201,6 +201,9 @@
     "sets": {
       "$ref": "./schema/sets.schema.json"
     },
+    "editor": {
+      "$ref": "./schema/editor.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },
