@@ -35,7 +35,7 @@ public sealed record SdfMesh {
         }
         if ((indices.Length / 3) > MaxTriangles) {
             throw new ArgumentException(
-                message: $"A mesh holds at most {MaxTriangles} triangles, each numbered by a value the mesh target's float holds exactly; this one has {indices.Length / 3}.",
+                message: $"A mesh holds at most {MaxTriangles} triangles, each numbered by a value the mesh target's float holds exactly; this one has {(indices.Length / 3)}.",
                 paramName: nameof(indices)
             );
         }
@@ -246,7 +246,7 @@ public static class SdfMeshRegion {
             }
         }
 
-        _ = checked((((draws.Count * DrawWords) + (vertices * VertexWords)) + materials + indices));
+        _ = checked(((((draws.Count * DrawWords) + (vertices * VertexWords)) + materials) + indices));
 
         return new SdfMeshRegionLayout(
             DrawCount: draws.Count,
@@ -305,7 +305,7 @@ public static class SdfMeshRegion {
             record[17] = ((uint)(layout.IndexWordOffset + placement.FirstIndex));
             record[18] = ((uint)placement.IndexCount);
             record[19] = ((uint)(layout.VertexWordOffset + (placement.BaseVertex * VertexWords)));
-            record[20] = ((mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag) | (Textured(atlas: atlas, mesh: mesh) ? TexturesFlag : 0u));
+            record[20] = (mesh.Normals.IsEmpty ? 0u : NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : MaterialsFlag) | (Textured(atlas: atlas, mesh: mesh) ? TexturesFlag : 0u);
             record[21] = ((uint)(layout.MaterialWordOffset + placement.FirstMaterial));
             WriteNormalMatrix(
                 matrix: matrix,
@@ -320,7 +320,7 @@ public static class SdfMeshRegion {
             var vertexWords = destination[(layout.VertexWordOffset + (placement.BaseVertex * VertexWords))..];
             var atlasPlacement = (Textured(atlas: atlas, mesh: mesh)
                 ? atlas!.Placement(textures: mesh.Textures!)
-                : new Vector4(x: 1f, y: 1f, z: 0f, w: 0f));
+                : new Vector4(w: 0f, x: 1f, y: 1f, z: 0f));
             var uvScale = new Vector2(x: atlasPlacement.X, y: atlasPlacement.Y);
             var uvOffset = new Vector2(x: atlasPlacement.Z, y: atlasPlacement.W);
 
@@ -346,6 +346,7 @@ public static class SdfMeshRegion {
             mesh.Indices.Span.CopyTo(destination: destination[(layout.IndexWordOffset + placement.FirstIndex)..]);
         }
     }
+
     // Whether a mesh's textures are in the atlases a frame binds.
     private static bool Textured(SdfMesh mesh, SdfMeshAtlas? atlas) =>
         ((mesh.Textures is not null) && (atlas is not null) && atlas.Holds(textures: mesh.Textures));

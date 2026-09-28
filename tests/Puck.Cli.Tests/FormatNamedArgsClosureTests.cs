@@ -58,10 +58,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         """;
     private const string NamedForTheObjectOverload = "Xunit.Assert.NotNull(@object: found);";
 
-    private readonly string m_root = Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: $"puck-cli-tests-named-args-{Guid.NewGuid():N}"
-    );
+    private readonly string m_root = CliScratchDirectories.CreateProject(prefix: "puck-cli-tests-named-args-");
 
     private string Source => Path.Combine(
         path1: m_root,
@@ -88,9 +85,10 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
             actual: CliProcess.RunAsync(
                 capture: false,
                 fileName: "dotnet",
+                workingDirectory: Path.GetDirectoryName(path: project),
                 arguments: (restore
-                    ? ["build", project, "-c", configuration]
-                    : ["build", project, "-c", configuration, "--no-restore"])
+                    ? ["build", "--disable-build-servers", project, "-c", configuration]
+                    : ["build", "--disable-build-servers", project, "-c", configuration, "--no-restore"])
             ).GetAwaiter().GetResult().ExitCode,
             expected: 0
         );
@@ -501,7 +499,6 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
     public void ASourceLinkedInFromOutsideTheProjectDirectoryBinds() {
         var shared = $"{m_root}-shared";
 
-        Directory.CreateDirectory(path: m_root);
         Directory.CreateDirectory(path: shared);
 
         try {
@@ -637,10 +634,7 @@ public sealed class BuiltSampleProject : IDisposable {
     public const string NeverBuilt = "Checked";
 
     /// <summary>Gets the project directory.</summary>
-    public string Root { get; } = Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: $"puck-cli-tests-named-args-sample-{Guid.NewGuid():N}"
-    );
+    public string Root { get; } = CliScratchDirectories.CreateProject(prefix: "puck-cli-tests-named-args-sample-");
     /// <summary>Gets the one source file the cases rewrite.</summary>
     public string Source => Path.Combine(
         path1: Root,
@@ -654,7 +648,6 @@ public sealed class BuiltSampleProject : IDisposable {
             path2: "Sample.csproj"
         );
 
-        Directory.CreateDirectory(path: Root);
         File.WriteAllText(
             contents: $"""
                 <Project Sdk="Microsoft.NET.Sdk">

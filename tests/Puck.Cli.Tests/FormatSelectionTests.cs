@@ -7,13 +7,9 @@ using Xunit;
 namespace Puck.Cli.Tests;
 
 public sealed class FormatSelectionTests : IDisposable {
-    private readonly string m_root = Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: $"puck-format-selection-{Guid.NewGuid():N}"
-    );
+    private readonly string m_root = CliScratchDirectories.CreateProject(prefix: "puck-format-selection-");
 
     public FormatSelectionTests() {
-        Directory.CreateDirectory(path: m_root);
         File.WriteAllText(
             path: Path.Combine(
                 path1: m_root,

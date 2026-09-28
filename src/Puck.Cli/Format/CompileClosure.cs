@@ -92,7 +92,7 @@ internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string
             return closures;
         }
 
-        var scratch = Directory.CreateTempSubdirectory(prefix: "puck-format-closures-").FullName;
+        var scratch = CliScratchDirectories.CreateProject(prefix: "puck-format-closures-");
         var targets = Path.Combine(
             path1: scratch,
             path2: "closure.targets"
@@ -123,6 +123,7 @@ internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string
             );
 
             var result = CliProcess.RunAsync(
+                workingDirectory: scratch,
                 arguments: ["msbuild", traversal, "-nologo", "--disable-build-servers", "-t:Closures", $"-getItem:{ClosureItem}"],
                 fileName: "dotnet"
             ).GetAwaiter().GetResult();
@@ -243,7 +244,8 @@ internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string
                 "-p:BuildProjectReferences=false",
                 "-p:DesignTimeBuild=true",
             ],
-            fileName: "dotnet"
+            fileName: "dotnet",
+            workingDirectory: Path.GetDirectoryName(path: project)
         ).GetAwaiter().GetResult();
 
         return ((result.ExitCode == 0)

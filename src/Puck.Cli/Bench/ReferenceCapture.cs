@@ -214,6 +214,7 @@ internal static class ReferenceCapture {
         var run = await ReferenceTools.RunAsync(
             arguments: [
                 "build",
+                "--disable-build-servers",
                 Path.Combine(
                     path1: repositoryRoot,
                     path2: StateProject
