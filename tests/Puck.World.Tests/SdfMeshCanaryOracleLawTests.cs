@@ -34,7 +34,7 @@ namespace Puck.World.Tests;
 /// nor over the background of a view that draws no mesh, which shows the sky outside the tiles the beam could not prove
 /// empty.
 /// </summary>
-public sealed class SdfMeshCanaryOracleLawTests {
+public sealed partial class SdfMeshCanaryOracleLawTests {
     // The visibility debug view's colors (debug/sdf-debug-views.hlsli's sdfDebugView, mode 11), background first.
     // A pixel whose fixed-point march ended without proving its answer: no region may be judged over one.
     private const int Inconclusive = 3;
@@ -134,7 +134,9 @@ public sealed class SdfMeshCanaryOracleLawTests {
 
     // The state each capture the script names is taken under: the leg's world with every placement position and camera
     // row the script set before that screenshot, the layout it last selected, and the render scale it last set.
-    private static Dictionary<string, CaptureState> Captures(WorldDefinition definition, string script) {
+    private static Dictionary<string, CaptureState> Captures(WorldDefinition definition, string script) =>
+        Captures(definition: definition, lines: File.ReadLines(path: script));
+    private static Dictionary<string, CaptureState> Captures(WorldDefinition definition, IEnumerable<string> lines) {
         var captures = new Dictionary<string, CaptureState>(comparer: StringComparer.Ordinal);
         var current = new CaptureState(
             Definition: definition,
@@ -142,7 +144,7 @@ public sealed class SdfMeshCanaryOracleLawTests {
             RenderScale: 1f
         );
 
-        foreach (var raw in File.ReadLines(path: script)) {
+        foreach (var raw in lines) {
             var line = raw.Trim();
 
             if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.screenshot ")) {

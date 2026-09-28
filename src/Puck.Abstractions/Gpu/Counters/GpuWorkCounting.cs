@@ -9,7 +9,8 @@ namespace Puck.Abstractions.Gpu;
 /// <para>
 /// Per-submission counts go to the pass the ledger is in: dispatches, indirect dispatches, draws, render passes,
 /// command buffers begun, image, memory, and buffer barriers, pipeline and descriptor-set binds, push-constant bytes,
-/// descriptor writes, bytes written to host-visible storage buffers, and storage image and buffer clears. Lifetime
+/// descriptor writes, bytes written to host-visible storage buffers, storage image and buffer clears, copies and
+/// buffer-copy bytes. Lifetime
 /// counts are the compute and graphics pipelines, shader modules, images, storage buffers, descriptor pools,
 /// and descriptor sets created. See <see cref="GpuWork"/> for the kinds.
 /// </para>
@@ -332,15 +333,17 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         );
         Tally(column: GpuWork.CopiesColumn);
     }
-    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0) {
+    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0, ulong destinationOffsetBytes = 0) {
         inner.CopyBuffer(
             commandBufferHandle: commandBufferHandle,
             destinationBufferHandle: destinationBufferHandle,
+            destinationOffsetBytes: destinationOffsetBytes,
             sizeBytes: sizeBytes,
             sourceBufferHandle: sourceBufferHandle,
             sourceOffsetBytes: sourceOffsetBytes
         );
         Tally(column: GpuWork.CopiesColumn);
+        Tally(amount: checked((long)sizeBytes), column: GpuWork.BufferCopyBytesColumn);
     }
     public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
         inner.ClearStorageBuffer(

@@ -16,6 +16,7 @@ namespace Puck.Abstractions.Gpu;
 /// </summary>
 public static class GpuWork {
     internal const int BufferBarriersColumn = 7;
+    internal const int BufferCopyBytesColumn = 17;
     internal const int BuffersCreatedIndex = 3;
     internal const int ClearsColumn = 13;
     internal const int CommandBuffersColumn = 4;
@@ -38,7 +39,7 @@ public static class GpuWork {
     internal const int PushConstantBytesColumn = 10;
     internal const int RenderPassesColumn = 3;
     internal const int ShaderModulesCreatedIndex = 1;
-    internal const int SubmissionColumnCount = 17;
+    internal const int SubmissionColumnCount = 18;
     internal const int TexelsWrittenColumn = 16;
 
     /// <summary>Gets the kind counting compute dispatches whose group counts the CPU supplies.</summary>
@@ -69,8 +70,11 @@ public static class GpuWork {
     public static WorkKind HostVisibleUploadBytes { get; } = new(name: "gpu.uploads.host-visible", unit: "bytes", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting whole-resource clears of storage images and buffers.</summary>
     public static WorkKind Clears { get; } = new(name: "gpu.clears", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting whole-image and whole-buffer copies.</summary>
+    /// <summary>Gets the kind counting whole-image copies and buffer-range copies.</summary>
     public static WorkKind Copies { get; } = new(name: "gpu.copies", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the bytes each buffer-range copy transfers, including readback and
+    /// device-local history copies. Image copies have no buffer-byte count; host writes have their own kind.</summary>
+    public static WorkKind BufferCopyBytes { get; } = new(name: "gpu.copies.buffer-bytes", unit: "bytes", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the field evaluations a pass's kernels make: each sample of a march (the beam's,
     /// primary's, the ambient occlusion's and the soft shadow's) and each query (a normal's taps). The kernels count it on
     /// the GPU, so it is per-backend-deterministic: the marches run in floats, and an indirect pass runs only the tiles
@@ -155,6 +159,7 @@ public static class GpuWork {
             kinds[CopiesColumn] = Copies;
             kinds[MarchStepsColumn] = MarchSteps;
             kinds[TexelsWrittenColumn] = TexelsWritten;
+            kinds[BufferCopyBytesColumn] = BufferCopyBytes;
 
             return kinds;
         }

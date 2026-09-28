@@ -236,15 +236,16 @@ public interface IVulkanCommandBufferRecordingApi {
     );
     /// <summary>Records vkCmdFillBuffer with a zero pattern.</summary>
     void FillBuffer(VulkanDeviceCommands device, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes);
-    /// <summary>Records <c>vkCmdCopyBuffer</c> with one range of the source into the start of the destination.</summary>
+    /// <summary>Records <c>vkCmdCopyBuffer</c> with one range of the source into a range of the destination.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
     /// <param name="sourceBufferHandle">The native <c>VkBuffer</c> copied, created as a transfer source.</param>
     /// <param name="destinationBufferHandle">The native <c>VkBuffer</c> written, created as a transfer destination.</param>
     /// <param name="sizeBytes">The bytes copied; positive.</param>
     /// <param name="sourceOffsetBytes">The byte offset where the source range begins.</param>
+    /// <param name="destinationOffsetBytes">The first destination byte written; the range must fit the destination buffer.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="sizeBytes"/> is zero.</exception>
-    void CopyBuffer(VulkanDeviceCommands device, nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0);
+    void CopyBuffer(VulkanDeviceCommands device, nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0, ulong destinationOffsetBytes = 0);
     /// <summary>Records a copy of a width × height region between two 2D, single-layer color images, from origin to origin.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>

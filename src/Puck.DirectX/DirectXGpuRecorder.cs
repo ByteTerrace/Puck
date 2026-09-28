@@ -250,16 +250,16 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
     }
     /// <inheritdoc/>
     /// <remarks>A <c>CopyBufferRegion</c>: the source in <c>COPY_SOURCE</c>, which the barrier into
-    /// <see cref="GpuAccess.TransferRead"/> moves it to, and the destination a readback-heap buffer, which is always in
-    /// <c>COPY_DEST</c>.</remarks>
-    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0) {
+    /// <see cref="GpuAccess.TransferRead"/> moves it to, and the destination in <c>COPY_DEST</c>: either a readback
+    /// buffer's permanent state or a storage buffer transitioned through <see cref="GpuAccess.CopyWrite"/>.</remarks>
+    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0, ulong destinationOffsetBytes = 0) {
         ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
         ArgumentOutOfRangeException.ThrowIfZero(sourceBufferHandle);
         ArgumentOutOfRangeException.ThrowIfZero(destinationBufferHandle);
         ArgumentOutOfRangeException.ThrowIfZero(sizeBytes);
 
         ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList)->CopyBufferRegion(
-            DstOffset: 0UL,
+            DstOffset: destinationOffsetBytes,
             NumBytes: sizeBytes,
             SrcOffset: sourceOffsetBytes,
             pDstBuffer: ((ID3D12Resource*)destinationBufferHandle),

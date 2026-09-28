@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Cameras;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -6,6 +7,36 @@ namespace Puck.SdfVm.Tests;
 public sealed class SdfTemporalHistoryLawTests {
     private static readonly SdfTemporalEpoch Epoch = new(Binding: 1, Ceiling: 0.5f, Cut: 1, Debug: 0, Enabled: true, Height: 360, Width: 640);
 
+    [Fact]
+    public void PreviousCameraTracksCompletedRendersWithoutTemporalSamplingAndCutsInvalidateIt() {
+        var history = new SdfTemporalHistory();
+        var camera = new CameraSnapshot(Position: new Vector3(x: 1f, y: 2f, z: 3f),
+            Right: Vector3.UnitX, Up: Vector3.UnitY, Forward: Vector3.UnitZ, TanHalfFieldOfView: 0.5f, AspectRatio: 1.5f) {
+            FrustumOffset = new Vector2(x: 0.125f, y: -0.25f),
+        };
+        var next = new CameraSnapshot(Position: new Vector3(x: 4f, y: 5f, z: 6f),
+            Right: camera.Right, Up: camera.Up, Forward: camera.Forward,
+            TanHalfFieldOfView: camera.TanHalfFieldOfView, AspectRatio: camera.AspectRatio) {
+            FrustumOffset = camera.FrustumOffset,
+        };
+        var epoch = Epoch with { Enabled = false };
+
+        history.Prepare(camera: camera, epoch: epoch, frame: 1);
+        Assert.False(condition: history.HasPreviousView);
+        history.Rendered();
+        history.Prepare(camera: next, epoch: epoch, frame: 2);
+        Assert.True(condition: history.HasPreviousView);
+        Assert.Equal(expected: new SdfReprojectionView(Camera: camera, Jitter: Vector2.Zero, Width: epoch.Width, Height: epoch.Height), actual: history.PreviousView);
+        Assert.Equal(expected: 0u, actual: history.Frames);
+        history.Rendered();
+        history.Prepare(camera: camera, epoch: epoch, frame: 3);
+        Assert.Equal(expected: next, actual: history.PreviousView.Camera);
+        history.Prepare(epoch: epoch with { Cut = 2 }, frame: 4, camera: camera);
+        Assert.False(condition: history.HasPreviousView);
+        history.Rendered();
+        history.Prepare(epoch: epoch with { Cut = 2 }, frame: 6, camera: next);
+        Assert.False(condition: history.HasPreviousView);
+    }
     [Fact]
     public void EightSamplesBeginAtTheCenterAndRepeat() {
         Vector2[] expected = [
@@ -28,20 +59,20 @@ public sealed class SdfTemporalHistoryLawTests {
         foreach (var next in changes) {
             var history = new SdfTemporalHistory();
 
-            history.Prepare(epoch: Epoch, frame: 1);
+            history.Prepare(camera: default, epoch: Epoch, frame: 1);
             history.Rendered();
-            history.Prepare(epoch: Epoch, frame: 2);
+            history.Prepare(camera: default, epoch: Epoch, frame: 2);
             Assert.Equal(expected: 1u, actual: history.Frames);
             history.Rendered();
-            history.Prepare(epoch: next, frame: 3);
+            history.Prepare(camera: default, epoch: next, frame: 3);
             Assert.Equal(expected: 0u, actual: history.Frames);
             Assert.Equal(expected: Vector2.Zero, actual: history.Jitter);
         }
         var gap = new SdfTemporalHistory();
 
-        gap.Prepare(epoch: Epoch, frame: 1);
+        gap.Prepare(camera: default, epoch: Epoch, frame: 1);
         gap.Rendered();
-        gap.Prepare(epoch: Epoch, frame: 3);
+        gap.Prepare(camera: default, epoch: Epoch, frame: 3);
         Assert.Equal(expected: 0u, actual: gap.Frames);
     }
     [Fact]
@@ -50,7 +81,7 @@ public sealed class SdfTemporalHistoryLawTests {
             var history = new SdfTemporalHistory();
 
             for (var frame = 1; (frame <= 16); frame++) {
-                history.Prepare(epoch: epoch, frame: frame);
+                history.Prepare(camera: default, epoch: epoch, frame: frame);
                 Assert.Equal(expected: Vector2.Zero, actual: history.Jitter);
                 history.Rendered();
                 Assert.Equal(expected: 0u, actual: history.Frames);

@@ -137,6 +137,13 @@ public static class SdfWorldPackage {
     public const string ProgramWords = "sdfWords";
     /// <summary>The dynamic-transform table, three float4 rows per slot.</summary>
     public const string DynamicTransforms = "sdfDynamicTransforms";
+    /// <summary>The preceding consumed frame's rigid transforms, copied entirely on the device.</summary>
+    public const string PreviousDynamicTransforms = "sdfPreviousDynamicTransforms";
+    /// <summary>The preceding consumed frame's mesh matrices, four float4 rows per draw.</summary>
+    public const string PreviousMeshTransforms = "sdfPreviousMeshTransforms";
+    /// <summary>The preceding rendered camera: position and validity, right and tangent, up and aspect, forward,
+    /// extent, and near distance with jittered frustum offset.</summary>
+    public const string PreviousView = "previousView";
     /// <summary>The frame-local instance grid.</summary>
     public const string FrameInstanceGrid = "sdfFrameInstanceGrid";
     /// <summary>The per-tile instance masks, read by the beam and the hit passes.</summary>
@@ -263,6 +270,7 @@ public static class SdfWorldPackage {
         Value(name: FrustumOffset, type: ShaderValueType.Float2),
         Value(name: Jitter, type: ShaderValueType.Float2),
         Value(name: HistoryFrames, type: ShaderValueType.Uint),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: 6, name: PreviousView, type: ShaderValueType.Float4),
         Value(name: NearDistance, type: ShaderValueType.Float),
         Value(name: FarDistance, type: ShaderValueType.Float),
         Value(name: DebugMode, type: ShaderValueType.Uint),
@@ -305,6 +313,8 @@ public static class SdfWorldPackage {
     public static IReadOnlyList<ShaderInterfaceMember> Tables { get; } = [
         Table(element: ShaderValueType.Uint4, name: ProgramWords),
         Table(element: ShaderValueType.Float4, name: DynamicTransforms),
+        Table(element: ShaderValueType.Float4, name: PreviousDynamicTransforms),
+        Table(element: ShaderValueType.Float4, name: PreviousMeshTransforms),
         Table(element: ShaderValueType.Uint, name: FrameInstanceGrid),
         Table(element: ShaderValueType.Float4, name: ScreenSurfaces),
         Table(element: ShaderValueType.Float4, name: ScreenMappings),

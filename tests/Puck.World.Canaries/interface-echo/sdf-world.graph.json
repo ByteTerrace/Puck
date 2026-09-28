@@ -8,7 +8,7 @@
       "format": "R8G8B8A8Unorm",
       "dimensions": {
         "mode": "Absolute",
-        "width": 59,
+        "width": 60,
         "height": 1
       }
     }
@@ -59,6 +59,7 @@
         "jitter": { "type": "float2", "default": [0, 0], "description": "The sdf.world pass's pixel jitter." },
         "meshDraws": { "type": "uint", "default": 0, "description": "The sdf.world pass's mesh draw count." },
         "nearDistance": { "type": "float", "default": 0, "description": "The sdf.world pass's near distance." },
+        "previousView": { "type": "float4", "length": 6, "default": [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], "description": "The sdf.world pass's previous camera rows." },
         "screenCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's screen-light bound." },
         "shadowDistanceScale": { "type": "float", "default": 0, "description": "The sdf.world pass's shadow distance scale." },
         "sunScale": { "type": "float", "default": 0, "description": "The sdf.world pass's sun scale." },
