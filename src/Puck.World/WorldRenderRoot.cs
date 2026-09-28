@@ -128,8 +128,7 @@ internal static class WorldRenderRoot {
         binder.ViewHost = residency;
         binder.Presenter = frameSource;
         binder.CrossingCapture = sp.GetService<WorldCrossingCapture>();
-        packages.Register(
-            factory: new SdfWorldPasses(
+        host.Pickers = new SdfWorldPasses(
                 host: residency,
                 resolve: instance => (binder.TryResolveView(
                     name: instance,
@@ -145,9 +144,8 @@ internal static class WorldRenderRoot {
                             Residency: residency,
                             View: binder.HostView(view: (WorldViewNames.ViewOf(instance: instance) ?? 0))
                         )))
-            ),
-            package: RenderGraphPackageCatalog.SdfWorld
-        );
+            );
+        packages.Register(factory: host.Pickers, package: RenderGraphPackageCatalog.SdfWorld);
         // The root places each pane where the host's composer shows it this frame.
         packages.Register(
             factory: new PlacePackage(placements: host),

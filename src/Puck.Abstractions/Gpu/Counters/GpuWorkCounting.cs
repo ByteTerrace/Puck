@@ -332,12 +332,13 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         );
         Tally(column: GpuWork.CopiesColumn);
     }
-    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes) {
+    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0) {
         inner.CopyBuffer(
             commandBufferHandle: commandBufferHandle,
             destinationBufferHandle: destinationBufferHandle,
             sizeBytes: sizeBytes,
-            sourceBufferHandle: sourceBufferHandle
+            sourceBufferHandle: sourceBufferHandle,
+            sourceOffsetBytes: sourceOffsetBytes
         );
         Tally(column: GpuWork.CopiesColumn);
     }

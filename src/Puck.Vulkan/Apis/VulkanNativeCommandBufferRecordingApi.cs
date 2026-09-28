@@ -718,11 +718,11 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
-    public void CopyBuffer(VulkanDeviceCommands device, nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes) {
+    public void CopyBuffer(VulkanDeviceCommands device, nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0) {
         ArgumentOutOfRangeException.ThrowIfZero(sizeBytes);
 
         // VkBufferCopy: srcOffset, dstOffset, size.
-        var region = stackalloc ulong[3] { 0UL, 0UL, sizeBytes };
+        var region = stackalloc ulong[3] { sourceOffsetBytes, 0UL, sizeBytes };
         var copyBuffer = device.CmdCopyBuffer;
 
         copyBuffer(

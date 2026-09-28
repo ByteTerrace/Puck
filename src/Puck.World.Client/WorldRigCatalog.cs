@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.World.Authoring;
+using Puck.World.Client;
 using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SignedDistance;
@@ -402,6 +403,7 @@ public static class WorldRigCatalog {
     /// <param name="rigFor">The catalog rig each body sources its leaves from, or null for the default catalog pick.</param>
     /// <param name="scaleFor">Each avatar's uniform render scale, or <see langword="null"/> for 1.</param>
     /// <param name="probeAvatarLimit">Bounds a worst-case probe to that many bodies. Null reserves every material-span entry.</param>
+    /// <param name="picks">The optional presentation identity table populated for emitted bodies.</param>
     public static void Emit(
         SdfProgramBuilder builder,
         Func<int, bool> isActive,
@@ -411,7 +413,8 @@ public static class WorldRigCatalog {
         int slotBase,
         Func<int, int>? rigFor = null,
         Func<int, float>? scaleFor = null,
-        int? probeAvatarLimit = null
+        int? probeAvatarLimit = null,
+        WorldPickMapBuilder? picks = null
     ) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(isActive);
@@ -437,6 +440,7 @@ public static class WorldRigCatalog {
                 continue;
             }
 
+            var firstInstance = builder.InstanceCount;
             var firstSlot = BodySlotBase(avatar: avatar);
             var scale = (probeWorstCase
                 ? 1f
@@ -476,6 +480,9 @@ public static class WorldRigCatalog {
                     material: material
                 );
                 builder.EndInstance();
+                if (picks is not null) {
+                    picks.Instances(first: firstInstance, end: builder.InstanceCount, target: new WorldPickTarget(BodyIndex: avatar, Placement: null));
+                }
                 continue;
             }
             var rigRange = (probeWorstCase
@@ -543,6 +550,9 @@ public static class WorldRigCatalog {
                 };
 
                 builder.EndInstance();
+            }
+            if (picks is not null) {
+                picks.Instances(first: firstInstance, end: builder.InstanceCount, target: new WorldPickTarget(BodyIndex: avatar, Placement: null));
             }
         }
     }

@@ -152,4 +152,9 @@ public interface ISdfSceneEmitter {
     /// <summary>Gets the revision of <see cref="MeshDraws"/>' content: moved whenever the emitter rewrote its list in
     /// place. An emitter that supplies a new list instead may leave it 0.</summary>
     long MeshDrawsRevision => 0;
+    /// <summary>Gets the immutable host identity table for this emitter's latest emitted instances (program ordinals)
+    /// and current mesh draws (emitter-local ordinals), or null when none are named. Reuse its reference while only
+    /// poses change; replace it when identities or ordinal membership change.</summary>
+    ISdfPickMap? PickMap => null;
+
 }
