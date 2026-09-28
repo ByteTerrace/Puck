@@ -19,7 +19,7 @@ the project table in the main `SKILL.md`).
 - The stdin drain barrier and `world.wait`
 - The mirror
 - Screenshots
-- `.puck`-booted worlds: `world.reload` recompiles, `world.save` refuses the source
+- `.puck`-booted worlds: reload and source-preserving save
 - The document has ONE door — do not add a per-section verb
 - Grammar conventions for new verbs
 
@@ -365,7 +365,7 @@ headroom, dynamic transforms and the frame grid; use the current `SdfProgram`
 layout to inspect it. It is a CPU-side diagnostic copy, not a GPU readback or
 loadable asset, and leaves simulation and rendering unchanged.
 
-## `.puck`-booted worlds: `world.reload` recompiles, `world.save` refuses the source
+## `.puck`-booted worlds: reload and source-preserving save
 
 A world booted from `.puck` source (`--world <x>.puck`, compiled by
 `src/Puck.World/PuckWorldLoader.cs`) reloads from that source: `world.reload`
@@ -374,10 +374,14 @@ lowers to, so an edit that lowers identically keeps the pin. `world.load` and
 `world.reload` read through the boot's own door,
 `WorldDefinitionLoader.TryLoadFileForAdmission`, with the host's machine
 catalog and the running instance's identity, so the document's boot draws
-refill exactly as the boot drew them before it is admitted and embedded. `world.save` with
-no argument, or to any `.puck` target, is refused by name because canonical
-JSON would overwrite the source; name a JSON path instead. The artist loop for
-a `.puck`-booted world is: edit the `.puck` file, then `world.reload`.
+refill exactly as the boot drew them before it is admitted and embedded.
+`world.save` with no argument updates the loaded source through
+`WorldSourceSave`: it prints changed authored nodes and proves the composed
+snapshot before an atomic write, retaining every unrelated source span.
+Template, compile-time `for` and module-generated rows refuse by name; their
+generator is the authoring surface. An engine-generated duplicate needs an
+authored name before source can spell it. A JSON target declaring the source as
+its `basis` can retain a refused edit as a delta.
 
 ## The document has ONE door — do not add a per-section verb
 

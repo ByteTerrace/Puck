@@ -88,7 +88,7 @@ public sealed class WorldSaveAuthoredDocumentLawTests(WorldSaveAuthoredDocumentL
     // the note naming why when it did not.
     private static (bool Preserved, string Note) SaveAndReload(string source, WorldDefinition loaded) {
         var original = File.ReadAllBytes(path: source);
-        // A .puck source is never overwritten: world.save refuses one and a save names a JSON target instead.
+        // This corpus law exercises JSON snapshot persistence. Source-span preservation has its own transpiler laws.
         var target = (WorldDocumentName.IsSourceFile(path: source)
             ? Path.Combine(
                 path1: Path.GetDirectoryName(path: source)!,

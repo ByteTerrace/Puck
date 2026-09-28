@@ -990,6 +990,15 @@ it composed under (see
 [`Puck.World.Schema`](../Puck.World.Schema/README.md)'s document-composition
 section).
 
+For a `.puck` origin, `world.save` prints changed authored nodes into the source
+and retains the surrounding text, including constants, comments and templates.
+It recompiles and composes the result before replacing the file. A template,
+compile-time `for` or module-generated row refuses by name; edit its generator
+or save a JSON target whose `basis` names the source. A live duplicate must
+receive an authored id before it can be saved as source.
+An explicit new `.puck` target is printed from the snapshot. A refused save
+leaves the file and undo journal intact.
+
 The root `state` section is the one authoring inventory for every ownership
 mode: `world` rows are document cells, `body` rows are ephemeral per-body
 counters/timers, and `identity` rows use the durable identity seam. Body and
