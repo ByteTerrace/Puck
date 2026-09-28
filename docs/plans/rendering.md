@@ -5130,10 +5130,17 @@ target; each step settles its own vocabulary rows in
   validator refuses more `always` bodies than 4. The shadow stage loops over the
   slots, one gather and one march per slot, so its march steps scale with K and
   are counted per slot. The visibility record's K row packs four 8-bit
-  visibilities into its one word, so the record keeps sixteen words. A slot
-  that changes hands at a luminance crossing changes on that frame, with no
-  hysteresis: the choice is a function of the tick, and an artist who needs a
-  shadow to stay pins `always`.
+  visibilities into its one word, so the record keeps sixteen words.
+- **A shadow slot changes hands by a crossfade.** When two `auto` bodies cross
+  in luminance, the body losing the last slot keeps it for a fixed, counted
+  number of frames while the body gaining it marches in a temporary extra slot,
+  and the two visibilities blend across those frames, so no shadow pops. The
+  extra slot's march steps are counted under `shadow` like any slot's, and the
+  fade length is a tier value that a tier may set to `instant`. The fade is a
+  function of the frames since the crossing, which is a function of the tick,
+  so a capture and its replay agree. An `always` body still pins its slot and
+  never fades out. The reason is that an artist sees a pop as a bug in their
+  sky, and one extra slot's march for a few frames is a small, counted price.
 - **An open, ordered layer stack.** Layers composite in the order they are
   authored, each by its blend mode (`over`, `add`, `multiply`, `screen`), and a
   kind may appear more than once. Kinds are an extensible set: a kind is a
@@ -5432,8 +5439,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      motions (direction, orbit, keys, a state row), light binding,
      illumination by other bodies, the shadow slots and their tier policy,
      four packed visibilities in the K row, the shadow stage's loop over
-     slots, and `world.lighting`'s slot report (which body holds which slot
-     this frame, and why).
+     slots, the counted crossfade when a slot changes hands (a tier's fade
+     length, `instant` among them), and `world.lighting`'s slot report (which
+     body holds which slot this frame, why, and any fade in progress).
    - Deletes: `WorldRenderSkyLayer.SunDisc`, directional lights authored apart
      from a body, `worldSunDirection`, `worldSunColor`,
      `worldShadowPenumbraSlope`, `SdfSunDirection`, `DefaultSunDirection`, the
@@ -5444,13 +5452,16 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `surface/sdf-shadow-gather.hlsli`, `shade/sdf-light.hlsli`, the sky's
      point-kind modules, `quality.puck`, `WorldSessionLevers`.
    - Done when: `ShadowSlotLawTests` hold the slot order (red leg: an `auto`
-     body brighter than an `always` one does not take its slot); a device law
+     body brighter than an `always` one does not take its slot) and a crossing
+     of two `auto` bodies to a fade of exactly the tier's frames, identical on
+     a replay (red leg: an `instant` tier swaps in one frame); a device law
      packs and unpacks four visibilities exactly to 8 bits; a `sky-bodies`
      canary's binary suns cast two shadows at `high` and one at `medium`,
      each disc tinted by its light, and a moon lit by two suns shows two lit
      limbs.
-   - Counted-cost gate: `shadow`'s march steps per slot, K slots at a tier and
-     required zeros past K; at `low` every shadow row is zero, as today.
+   - Counted-cost gate: `shadow`'s march steps per slot, K slots at a tier,
+     the one extra slot's steps only on a fade's frames, and required zeros past
+     K otherwise; at `low` every shadow row is zero, as today.
 8. **P18-8, the open layer stack.**
    - Delivers: the layer record (kind, blend, mask, transform, clock, opacity,
      visibility, tier), the generated kind table and one module per kind for
@@ -5508,12 +5519,16 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       explained.
     - Counted-cost gate: atmosphere evaluations counted under `composite`, zero
       on a covered pixel with no atmosphere authored.
-11. **P18-11, infinity views: other worlds and far geometry.**
+11. **P18-11, infinity views: other worlds and far geometry.** After S27 and
+    S28.
     - Delivers: the `view` and `far` kinds and the `far` and `view` body
       shapes, each an `sdf.world` instance (`sky$<layer>`) scheduled by demand
       from the previous frame's uncovered pixels, rendered in its mask's rect,
       dressed by `scale`, `refresh` and its levers; nesting to the graph's
-      depth with the layer's fallback beyond it.
+      depth with the layer's fallback beyond it; and a per-world cap on
+      infinity views, a counted ceiling that `world.budget` reports the live
+      count against, with a world over it refused by name at validation and at
+      a live edit.
     - Touches: `WorldViewInstances`, `WorldViewNames` and
       `GeneratedNameReversalLawTests`, `WorldScreenBinder`,
       `WorldSessionSceneEmitter`, `composite`, `WorldCaptureGate`.
@@ -5522,10 +5537,12 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       translated camera); a view the viewer's sky no longer shows stops
       rendering on the next frame; a capture of a world whose sky shows a
       tainted view is withheld as a screen's is; a far planet's instance
-      renders only its angular rect.
+      renders only its angular rect; a world authoring one infinity view past
+      the cap is refused by name, and one at the cap boots.
     - Counted-cost gate: the infinity instance's rows at its dressed quality,
       zero when no uncovered pixel shows it, and its dispatches' extent within
-      its rect; its residency's aperture bytes in `world.budget`.
+      its rect; its residency's aperture bytes and the live count against the
+      cap in `world.budget`.
 12. **P18-12, the artist's surface in the running World.**
     - Delivers: the sky, air and timeline in the editor's inspector
       ([E5](editor.md#e5--the-inspector), through its one formatter); clock
@@ -5562,7 +5579,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
     counted rows.
     - Delivers: the sky leg recorded at each tier and field scale in the
       configurations the first open decision lists, and `quality.puck`'s
-      `sky`, `shadowLights` and `shadowAmortize` rows as the lead decides.
+      `sky`, `shadowLights`, `shadowAmortize` and shadow-fade rows as the lead
+      decides beside P15-8.
     - Done when: the chosen defaults' ceilings are recorded and
       `puck counters --check` passes on the RTX 2060.
 
@@ -5612,10 +5630,12 @@ fraction in live tiles, at least h.
   runs only `sky` and `composite` while only its sky moves. P18-13 follows
   P15-5. P18-14 records beside P15-8, and the two decisions are best taken
   together.
-- **S27.** P18-11's `view` layer and body shape ride S27's per-endpoint
-  residency and per-view quality levers, and follow it. Every other step is
-  independent of it; P18-2 moves a routed scene onto its own clock, which S27's
-  sky fix reads.
+- **S27 and S28.** P18-11's `view` layer and body shape ride S27's
+  per-endpoint residency and per-view quality levers, and follow it. P18-11
+  also follows S28, which folds camera views into the host residency and so
+  attacks the aperture open item before infinity views add residencies. Every
+  other step is independent of both; P18-2 moves a routed scene onto its own
+  clock, which S27's sky fix reads.
 - **The editor.** P18-12 follows E5 for the panel, E10 for reload and compare,
   and E11 for saving, and adds only the sky's rows to each; it does not
   reimplement them.
@@ -5623,34 +5643,39 @@ fraction in live tiles, at least h.
   binding path, so a later styling package keys on the same clocks with no
   mechanism of its own.
 - **The aperture open item.** Each infinity view is a residency, so P18-11
-  reports its tables' bytes in `world.budget` and is measured against the RTX
-  2060 aperture open item before it lands.
+  reports its tables' bytes in `world.budget`, lands after S28, and carries a
+  per-world cap on infinity views (see the settled decisions below).
 
-**Open decisions for the lead.**
+**Settled by the lead.** Each of these is a decision, recorded with its reason.
+
+- **The clock family is a top-level `timeline` section.** Clocks are a
+  world-level concept that render, the theme and views all read, so none of
+  those sections owns them. P18-2 sweeps every shipped world to carry the
+  section, which the strict-parse rule requires and zero legacy welcomes.
+- **A shadow slot changes hands by a counted crossfade**, as the decision
+  above states. Artists should not see a pop when two `auto` bodies cross.
+  The extra slot's march during the fade is counted, a tier may choose
+  `instant`, and `always` still pins a slot.
+- **Specular has one spelling.** A light-casting body's glint lives only in its
+  light's lobe, and the reflection path leaves every light-casting body out, so
+  no body's highlight is counted twice. Crescents and rings are therefore not
+  reflected in their true shape; the analytic lobe is kept.
+- **Infinity views wait for the aperture work and are capped.** P18-11 follows
+  S28, which reduces the residencies the aperture holds. It also carries a
+  per-world cap on infinity views as a counted ceiling (`world.budget` reports
+  the live count against it), and a world that exceeds the cap is refused by
+  name at validation and at a live edit. The RTX 2060's host-visible heap is
+  already near full, so the fix and the cap land together.
+
+**Open decision for the lead.**
 
 - **The floor tier's sky defaults (P18-14).** Gather, at 1920 by 1080 on the
   RTX 2060's floor tier, each sky and shadow row for: the sky leg's drift,
   twinkle and keyed frames at field scale 1 and 0.5; clouds at each reduced
   form; shadow slots 0, 1 and 2 over the binary-star leg, each with P18-13's
   amortization off and on where P15-5 has landed. Choose `low`, `medium` and
-  `high`'s `sky`, `shadowLights` and `shadowAmortize`.
-- **Where the clock family lives.** P18-2 proposes a top-level `timeline`
-  section, because the theme, views and render all read it; that sweeps every
-  shipped world under the strict-parse rule. The alternative is `views.timeline`,
-  which avoids the sweep but puts clocks under a section the theme does not
-  otherwise read.
-- **A shadow slot changing hands.** The design accepts a switch at the frame two
-  `auto` bodies cross in luminance, with `always` to hold a shadow. A crossfade
-  of the last slot over a few frames would hide the switch but marches one more
-  slot while it fades. Confirm the switch.
-- **One spelling of specular.** A light-casting body's glint stays in its
-  light's lobe, and the reflection path leaves bodies out. Moving every
-  body's specular into the reflection path would give crescents and rings
-  their true reflected shape at the cost of the lobe's analytic highlight.
-  Confirm the lobe.
-- **The order against the aperture item.** P18-11 adds residencies on a card
-  whose host-visible heap is already near full. Decide whether the aperture
-  item lands first or P18-11 lands with a cap on infinity views per world.
+  `high`'s `sky`, `shadowLights`, `shadowAmortize` and shadow-fade length. This
+  is decided beside P15-8, from the counted rows of both packages.
 
 **Check:** every step's own check above, and together: an artist can author,
 key and live-edit a sky of any number of bodies and layers in any frame, from
@@ -5666,7 +5691,7 @@ wall-clock or GPU timing.
 **Depends on:** P14 for the pass package and its plan; P15-1 for the counted
 march steps, texels and ceilings; P11's graph instances and history for the
 shared environment instance and retained resources; P12's image sources for
-`panorama`; S27 for P18-11; P15-5 for P18-13; and E5, E9, E10 and E11 for
+`panorama`; S27 and S28 for P18-11; P15-5 for P18-13; and E5, E9, E10 and E11 for
 P18-12.
 
 ## Sequencing
@@ -5740,7 +5765,7 @@ bake's textures (P17) come before P6's choice between a bake and the field.
 **The sky.** P18 follows P14. Its baseline (P18-1) needs P15-1's counted march
 steps and ceilings; its clocks, keys, sky block, passes and cadence (P18-2 to
 P18-6) land before or after P15-2 to P15-7, and move behind `resolve` once P15-4
-has landed. Its views of other worlds (P18-11) follow S27, its shadow
+has landed. Its views of other worlds (P18-11) follow S27 and S28, its shadow
 amortization (P18-13) follows P15-5, its editor surface (P18-12) follows the
 editor's E5, E10 and E11, and its floor defaults (P18-14) are best decided
 beside P15-8.
