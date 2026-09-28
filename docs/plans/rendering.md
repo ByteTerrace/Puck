@@ -4414,8 +4414,9 @@ place:
   the mesh projection and the march agree on every pixel, `Jitter` is zero, and
   `WithPrevious` carries a previous frame's matrices that nothing reads yet.
 - The visibility record: each pixel's ray parameter, its identity (an SDF hit's
-  dynamic-transform slot plus one, a mesh hit's draw), its material, and its
-  march steps and queries in the V row's flags.
+  instance ordinal plus one, a mesh hit's draw), its material, and its march
+  steps and queries in the V row's flags. The L row retains the winning shape's
+  dynamic-transform slot, which can differ from the instance's bounding slot.
 - Graph history: a version declared `History` is read by a later frame through
   `ResourceReference.PreviousFrame`, carried into a replacement graph when its
   extent is unchanged, and restarted from its declared initialization when it
@@ -4470,17 +4471,17 @@ resolution, and stay there.
   it, projected with the instance's previous view. A background pixel moves with
   the camera alone. This spends one small computation per resolved pixel instead
   of a full-extent target written and read every frame.
-- **Previous transforms stay on the GPU.** Each residency keeps a device-local
-  previous dynamic-transform table that its own upload maintains: before the
-  frame's owed rows land in the current table, the rows its last two uploads
-  owed are copied from the current table into the previous one. The table then
-  holds the transforms of the residency's last consumed frame, which is the
-  previous frame of the view it renders. No host bytes move, and the
-  residencies' host-visible aperture on the RTX 2060 (see the open item on it)
-  does not grow. A transform table the upload owes whole, after a program
-  rebuild or a park change, copies the current table into the previous one, so
-  a reassigned slot reports no object motion. A mesh draw's record carries its
-  previous object-to-world beside its current one.
+- **Previous transforms stay on the GPU.** Each residency keeps device-local
+  previous dynamic-transform and mesh-matrix tables that its upload maintains.
+  Before changed rows land in the current tables, the rows owed by this upload
+  or the preceding upload are copied into the previous tables. One still
+  upload therefore settles the last movement; later still uploads copy nothing.
+  Initial loads and program rebuilds seed both tables from the new current
+  poses. No host bytes move, and the residencies' host-visible aperture on the
+  RTX 2060 (see the open item on it) does not grow. The mesh table stores one
+  compact previous matrix per draw, leaving the current draw record unchanged.
+  Cuts, parked views and broken frame correspondence invalidate the affected
+  view's reprojection without resetting shared residency tables.
 - **Jitter.** A Halton (2, 3) sequence with a period of eight, the lead's
   choice over sixteen, which converges finer but keeps a still view rendering
   twice as long. It is in pixels of the render extent, starts at the pixel
@@ -4694,8 +4695,8 @@ counted rows recorded in the same change.
      reads keep dispatches, binds, barriers, steps, texels, uploads and
      allocations unchanged; compiled kernel bytes rise by 140 on DirectX and
      1456 on Vulkan. The floor-machine recording remains owner-assisted.
-3. **P15-3, motion.** Every visible pixel's previous position, derived from the
-   record.
+3. **P15-3, motion.** Landed. Every visible pixel's previous position is derived
+   from the record.
    - Delivers: the previous view in the pass block (the instance's last render's
      camera, frustum offset and jitter), the residency's previous
      dynamic-transform table maintained by its upload, a mesh draw's previous
@@ -4704,18 +4705,23 @@ counted rows recorded in the same change.
      debug view.
    - Touches: `SdfWorldPackage` (a World-group table for the previous
      transforms), `SdfWorldTables.Regions.cs` and `SdfWorldTables.Upload.cs`,
-     `SdfMovedTransforms`, `SdfMesh` (`SdfMeshDraw`, the draw record's words),
+     `SdfMovedTransforms`, the compact previous mesh-matrix table,
      `DebugViewModes`, `debug/sdf-debug-views.hlsli`, a new
      `frame/sdf-reprojection.hlsli`.
    - Done when: a law holds the previous table's rows to the residency's last
-     consumed frame over `UploadModelGpu`, a still frame copying nothing; a device
+     consumed frame over `UploadModelGpu`, with one still upload settling the
+     last moved rows and later still uploads copying nothing; a device
      law holds `sdfReprojection` to a C# reference over `ViewProjection` for a
      static hit under a panning camera, a moved slot and a moved mesh draw; a
      `temporal-motion` canary reads the `motion` view of `sdf-mesh-motion`'s
      scenes, a body moved across tile boundaries by a row edit and a panned
      camera, at the analytic motion within a stated tolerance.
-   - Counted-cost gate: host upload bytes unchanged; the previous-table copies
-     count as copies with the bytes of the owed rows, zero on a still frame.
+   - Counted-cost gate: transform host upload bytes unchanged; the previous-table copies
+     count as copies with the bytes of the owed rows, zero after the settling
+     upload. `gpu.copies.buffer-bytes` counts successful device-buffer copies
+     alongside their existing copy count. The temporal-motion canary measures
+     motion against its analytic reference and rejects a same-path positive
+     control whose edits occur one tick earlier.
 4. **P15-4, render extent inside the output.** Render scale moves into the
    view's instance, and the spatial resolve replaces `place`'s upsample of a
    view.
