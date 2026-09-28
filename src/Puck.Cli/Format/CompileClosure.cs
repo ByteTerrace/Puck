@@ -92,7 +92,10 @@ internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string
             return closures;
         }
 
-        var scratch = CliScratchDirectories.CreateProject(prefix: "puck-format-closures-");
+        // The traversal names no SDK, so the scratch directory only holds it; the SDK context is the formatted projects'
+        // own, taken by running from the first one's directory as `Evaluate` runs from its project's.
+        var scratch = Directory.CreateTempSubdirectory(prefix: "puck-format-closures-").FullName;
+        var context = Path.GetDirectoryName(path: projects.Min(comparer: StringComparer.OrdinalIgnoreCase));
         var targets = Path.Combine(
             path1: scratch,
             path2: "closure.targets"
@@ -123,7 +126,7 @@ internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string
             );
 
             var result = CliProcess.RunAsync(
-                workingDirectory: scratch,
+                workingDirectory: context,
                 arguments: ["msbuild", traversal, "-nologo", "--disable-build-servers", "-t:Closures", $"-getItem:{ClosureItem}"],
                 fileName: "dotnet"
             ).GetAwaiter().GetResult();

@@ -227,7 +227,8 @@ internal static class ReferenceCapture {
             cancellationToken: cancellationToken,
             executable: "dotnet",
             standardInput: null,
-            timeout: TimeSpan.FromMinutes(value: 20D)
+            timeout: TimeSpan.FromMinutes(value: 20D),
+            workingDirectory: repositoryRoot
         ).ConfigureAwait(continueOnCapturedContext: false);
 
         return (run.Success

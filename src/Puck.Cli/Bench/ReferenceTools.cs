@@ -47,13 +47,16 @@ internal static class ReferenceTools {
     /// <param name="timeout">How long, on <paramref name="clock"/>, the tool may run before it is killed.</param>
     /// <param name="clock">The clock the timeout runs on.</param>
     /// <param name="cancellationToken">Cancels the run.</param>
+    /// <param name="workingDirectory">The directory the tool starts in, or null for the caller's own; an SDK command
+    /// against a checkout project names the checkout so its <c>global.json</c> selects the SDK.</param>
     public static async Task<(bool Success, string Output, string Error)> RunAsync(
         string executable,
         IReadOnlyList<string> arguments,
         string? standardInput,
         TimeSpan timeout,
         TimeProvider clock,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        string? workingDirectory = null
     ) {
         ChildProcessResult run;
 
@@ -64,7 +67,8 @@ internal static class ReferenceTools {
                 clock: clock,
                 fileName: executable,
                 input: standardInput,
-                timeout: timeout
+                timeout: timeout,
+                workingDirectory: workingDirectory
             ).ConfigureAwait(continueOnCapturedContext: false);
         } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
             return (false, string.Empty, "cancelled");
