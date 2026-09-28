@@ -62,6 +62,14 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     private readonly SdfViewSnapshot[] m_views = new SdfViewSnapshot[1];
 
+    /// <summary>Gets the quality a session screen's view renders at: a budgeted panel image skips soft shadows, ambient
+    /// occlusion and the far bound, whose cost buys little in a small screen-space result.</summary>
+    public static SdfViewQuality ReducedQuality { get; } = new() {
+        DisableAmbientOcclusion = true,
+        DisableFarBound = true,
+        DisableSoftShadows = true,
+    };
+
     private readonly Vector3[]? m_bodyColors;
 
     private int m_bodyColorRevision;
@@ -105,6 +113,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private SdfProgram? m_dressedFieldProgram;
     private float m_dressedFarDistance;
 
+    // The mirrored world's environment, resolved each dressed frame. The track double-buffers its output, so the frame
+    // the residency holds keeps its environment through the next dress, as the boot presentation's does.
+    private readonly WorldRenderCycleTrack m_cycle = new();
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
     // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
     // interpolated (not host-supplied) positions.
@@ -346,7 +357,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_views[0] = new SdfViewSnapshot(
             Camera: camera,
             Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
-        );
+        ) {
+            Quality = ReducedQuality,
+        };
 
         return new SdfFrame(
             Program: program,
@@ -356,22 +369,24 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         ) {
             DynamicTransforms = transforms,
             MovedTransforms = moved,
-            // A budgeted 160x144-class panel image: re-marching full soft shadows/AO/far-bound here costs real GPU
-            // time for a tiny screen-space result no player is closely scrutinizing — the same cost posture a camera
-            // view already takes.
-            DisableAmbientOcclusion = true,
-            DisableSoftShadows = true,
-            DisableFarBound = true,
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
             FarDistance = m_dressedFarDistance,
+            // The mirrored world's own sky and lighting, along its render.cycle when it authors one, on its own clock: the
+            // destination's delivered engine tick, never the viewer's.
+            Environment = m_cycle.Resolve(
+                definition: m_mirror.Definition,
+                mirror: m_mirror.FollowState(),
+                revision: m_mirror.DefinitionRevision
+            ),
+            SampleIndex = unchecked((uint)m_mirror.EngineTick),
             // The mirrored world's static placements' meshes, then its stamp pool's.
             MeshDraws = meshDraws,
             MeshDrawsRevision = meshDrawsRevision,
         };
     }
     /// <inheritdoc/>
-    /// <remarks>The placement branch is unchanged (static reservation vs. static emission). The avatar branch is
+    /// <remarks>The placement branch chooses static reservation or emission. The avatar branch is
     /// appended after it, in both the probe and the live arm: <see cref="WorldRigCatalog.Emit"/> already owns its
     /// own probe-vs-live split internally (see <see cref="EmitAvatars"/>), so this call site never branches on
     /// <see cref="SdfEmitContext.Probe"/> a second time for it.</remarks>

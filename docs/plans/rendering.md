@@ -4176,12 +4176,21 @@ item 2 landed.
      the `portal-walk` canary's crossing capture). A change the passes cannot
      follow still rebuilds them and holds the last image
      (`RenderGraphRuntimeLawTests.ResidencySwitchHeldFrames`).
-   Open work: let a routed seat view and a portal window's session view of the
-   same destination share one residency. They cannot share it: a frame's quality
-   levers (ambient occlusion, soft shadows, the far bound) are the frame's,
-   not each view's, and the window is dressed at the session's reduced cost;
-   and each reads its own mirror of the destination (the endpoint's, and the
-   window's own observation).
+   Quality is each view's: `SdfViewSnapshot.Quality` carries ambient
+   occlusion, soft shadows and their reach, the far bound and the fast
+   approximations into the view's own pass block, and the recorder skips the
+   ambient and shadow parts per view, so views of one frame, and of one
+   residency, render at different cost
+   (`SdfFrameBlockLawTests.EachViewOfOneFrameWritesItsOwnQualityAndSharesEverythingElse`).
+   An endpoint's scene (`WorldRoutedScene`) takes its seats' views and the
+   views of windows attached through `WorldFramePresenter.AttachWindow`, each
+   at its own quality, and the binder resolves a window into the scene's one
+   residency (`WorldScreenBinder.TryResolveWindowView`;
+   `WorldRoutedPresentationLawTests.AWindowIsAViewOfTheSceneItsWorldsSeatsRenderAtItsOwnQuality`).
+   Open work: session screens attach through that door. Each reads its
+   own observation of the destination and renders its own residency, so a
+   portal window and a traveller's routed view of one destination keep two
+   residencies until the window reads the endpoint's mirror.
 9. Landed with step 6, the cadence as the scheduler's: `SdfWorldPasses` asks
    each residency whether a view's latest render stands
    (`IRenderGraphPackageFactory.IsUnchanged`), and the runtime declares that
