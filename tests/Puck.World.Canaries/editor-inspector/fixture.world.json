@@ -1,0 +1,216 @@
+{
+  "bodies": {
+    "capacity": 1,
+    "localSeats": 1,
+    "networkPlayers": 0,
+    "seatSpawns": [
+      "builder"
+    ]
+  },
+  "bodyMotionPrograms": [
+    {
+      "kind": "Motion",
+      "name": "traverse",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputePlanarTargetVelocity",
+        "SnapYawToPlanarIntent",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ],
+      "version": "puck.body.program.v1"
+    }
+  ],
+  "channels": [
+    {
+      "name": "forward",
+      "role": "MoveAdvance",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "strafe",
+      "role": "MoveStrafe",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "turn",
+      "role": "Turn",
+      "shape": "Bipolar"
+    }
+  ],
+  "collision": {
+    "contactSkin": 0.02,
+    "gradientProbe": 0,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "requirements": []
+  },
+  "defaultSeatKit": "stander",
+  "documentId": "editor-inspector",
+  "host": {
+    "authority": null,
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "genlock": null,
+    "height": 540,
+    "journalDepth": 2000,
+    "listen": null,
+    "presentMode": "Immediate",
+    "presentation": "windowed",
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 0,
+    "width": 960
+  },
+  "kits": {
+    "rows": [
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "traverse",
+        "collider": {
+          "$type": "sphere",
+          "radius": 0.5
+        },
+        "motion": {
+          "holds": [
+            {
+              "bond": "Free",
+              "hold": "None",
+              "name": "air"
+            }
+          ],
+          "speed": {
+            "value": 4
+          },
+          "turn": {
+            "rate": 2.5
+          }
+        },
+        "name": "stander"
+      }
+    ]
+  },
+  "placements": {
+    "policy": {
+      "authoringHeadroomPlacements": 0,
+      "authoringHeadroomScreens": 0,
+      "candidateCap": 1,
+      "candidateRadius": 1,
+      "derivedFaceScreens": 0,
+      "maxPlacementScale": 1,
+      "minPlacementScale": 1,
+      "previewDeadlineFrames": 1
+    },
+    "rows": [
+      {
+        "id": "inspected",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "cube",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "id": "cube",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "cube",
+        "palette": [
+          {
+            "color": "#B03020"
+          }
+        ],
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "block",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      }
+    }
+  ],
+  "schema": "puck.world.definition.v1",
+  "simulation": {
+    "rateHz": 30
+  },
+  "spawnPoints": [
+    {
+      "id": "builder",
+      "position": [
+        0,
+        0,
+        20
+      ],
+      "yawDegrees": 0
+    }
+  ],
+  "views": {
+    "seatControl": {
+      "maxPitch": 1.2,
+      "minPitch": -0.35,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "builder-seat",
+      "operations": [
+        {
+          "$type": "anchor",
+          "subject": {
+            "$type": "worldPoint",
+            "point": [
+              0,
+              0,
+              7
+            ]
+          }
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "worldPoint",
+            "point": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "$type": "fieldOfView",
+          "fieldOfViewRadians": 0.9
+        }
+      ],
+      "version": "puck.camera.program.v1"
+    }
+  },
+  "basis": "../../../src/Puck.World/Assets/worlds/standard"
+}
