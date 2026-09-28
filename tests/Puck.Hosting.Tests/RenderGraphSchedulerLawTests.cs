@@ -461,6 +461,9 @@ public sealed partial class RenderGraphSchedulerLawTests {
         Assert.Equal(expected: 0.5, actual: RenderGraphExtent.Quantize(allocated: 0.5, fraction: 0.46));
         Assert.Equal(expected: 0.40625, actual: RenderGraphExtent.Quantize(allocated: 0.5, fraction: 0.4));
         Assert.Equal(expected: 0.5625, actual: RenderGraphExtent.Quantize(allocated: 0.5, fraction: 0.55));
+        // A need exactly at the threshold shrinks, so a step from a full allocation to 0.875 reallocates.
+        Assert.Equal(expected: 0.875, actual: RenderGraphExtent.Quantize(allocated: 1.0, fraction: 0.87));
+        Assert.Equal(expected: 1.0, actual: RenderGraphExtent.Quantize(allocated: 1.0, fraction: 0.9));
     }
     [Fact]
     public void AWorldScopedBufferRendersOnceBeforeEveryViewThatReadsIt() {

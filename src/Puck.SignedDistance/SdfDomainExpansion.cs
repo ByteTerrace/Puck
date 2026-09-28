@@ -74,10 +74,10 @@ public static class SdfDomainExpansion {
     // from u toward v into a right-handed rotation about the axis: (x, z) is left-handed about +Y, the other two pairs
     // right-handed. KEEP IN SYNC with SDF_OP_REPEAT_POLAR's plane selection in Assets/Shaders/Sdf/field/sdf-map.hlsli
     // and field/sdf-map-grad.hlsli.
-    private static (int U, int V, int W, double Sign) PlaneAxes(SdfPolarAxis axis) {
+    private static (int U, int V, int W, double Sign) PlaneAxes(SdfAxis axis) {
         return axis switch {
-            SdfPolarAxis.X => (U: 1, V: 2, W: 0, Sign: 1d),
-            SdfPolarAxis.Z => (U: 0, V: 1, W: 2, Sign: 1d),
+            SdfAxis.X => (U: 1, V: 2, W: 0, Sign: 1d),
+            SdfAxis.Z => (U: 0, V: 1, W: 2, Sign: 1d),
             _ => (U: 0, V: 2, W: 1, Sign: -1d),
         };
     }

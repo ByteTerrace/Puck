@@ -1745,7 +1745,7 @@ public static partial class WorldModelShape {
             [],
             [
                 M("count", typeof(global::System.Int32), typeof(global::Puck.World.Authoring.ShapeDomainOp.Polar), "Count", Read | Write),
-                M("axis", typeof(global::System.Nullable<global::Puck.SignedDistance.SdfPolarAxis>), typeof(global::Puck.World.Authoring.ShapeDomainOp.Polar), "Axis", Read | Write),
+                M("axis", typeof(global::System.Nullable<global::Puck.SignedDistance.SdfAxis>), typeof(global::Puck.World.Authoring.ShapeDomainOp.Polar), "Axis", Read | Write),
                 M("mirror", typeof(global::System.Nullable<global::System.Boolean>), typeof(global::Puck.World.Authoring.ShapeDomainOp.Polar), "Mirror", Read | Write),
                 M("materialStride", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.Authoring.ShapeDomainOp.Polar), "MaterialStride", Read | Write),
                 M("origin", typeof(global::Puck.Assets.Documents.DocumentVector3), typeof(global::Puck.World.Authoring.ShapeDomainOp.Polar), "Origin", Read | Write),
@@ -1772,7 +1772,7 @@ public static partial class WorldModelShape {
                 M("group", typeof(global::Puck.SignedDistance.SdfWallpaperGroup), typeof(global::Puck.World.Authoring.ShapeDomainOp.Wallpaper), "Group", Read | Write),
                 M("cell", typeof(global::Puck.Assets.Documents.DocumentVector2), typeof(global::Puck.World.Authoring.ShapeDomainOp.Wallpaper), "Cell", Read | Write),
                 M("limit", typeof(global::Puck.Assets.Documents.DocumentVector2), typeof(global::Puck.World.Authoring.ShapeDomainOp.Wallpaper), "Limit", Read | Write),
-                M("plane", typeof(global::System.Nullable<global::Puck.SignedDistance.SdfWallpaperPlane>), typeof(global::Puck.World.Authoring.ShapeDomainOp.Wallpaper), "Plane", Read | Write),
+                M("plane", typeof(global::System.Nullable<global::Puck.SignedDistance.SdfPlane>), typeof(global::Puck.World.Authoring.ShapeDomainOp.Wallpaper), "Plane", Read | Write),
                 M("materialStride", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.Authoring.ShapeDomainOp.Wallpaper), "MaterialStride", Read | Write),
                 M("lodDistance", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.ShapeDomainOp.Wallpaper), "LodDistance", Read | Write),
             ],

@@ -5,13 +5,14 @@ namespace Puck.Hosting;
 /// A footprint fraction is rounded up to one of sixteen steps inside its power-of-two octave, so a fraction in
 /// [2^e, 2^(e+1)) rounds up to a multiple of 2^(e-3): at most one sixteenth of the octave's top above the need, and
 /// exact at every power of two, so a view occupying half of each axis renders at exactly half of each axis. Every step
-/// is a power of two times an integer, so the arithmetic is exact in binary floating point. A shrink smaller than
+/// is a power of two times an integer, so the arithmetic is exact in binary floating point. A need above
 /// <see cref="ShrinkThreshold"/> of the allocated fraction keeps the allocation, so a footprint wavering across a step
-/// boundary does not reallocate its targets on every frame.
+/// boundary does not reallocate its targets on every frame; a need at or below it shrinks, so a render-scale tier
+/// landing on the threshold (three-quarter, 0.875 of a native allocation) renders at its own extent.
 /// </para>
 /// </summary>
 public static class RenderGraphExtent {
-    /// <summary>The fraction of its allocated extent a footprint must fall below before the allocation shrinks.</summary>
+    /// <summary>The fraction of its allocated extent a footprint must fall to before the allocation shrinks.</summary>
     public const double ShrinkThreshold = 0.875;
     /// <summary>The steps each power-of-two octave is divided into.</summary>
     public const int StepsPerOctave = 16;
@@ -50,7 +51,7 @@ public static class RenderGraphExtent {
         );
     }
     /// <summary>Quantizes a footprint fraction against the fraction already allocated: grows to the quantized need at
-    /// once, and shrinks only when the need falls below <see cref="ShrinkThreshold"/> of the allocation.</summary>
+    /// once, and shrinks only when the need falls to <see cref="ShrinkThreshold"/> of the allocation or below.</summary>
     /// <param name="fraction">The fraction of the display axis the footprint needs.</param>
     /// <param name="allocated">The quantized fraction currently allocated, or zero for none.</param>
     /// <returns>The fraction to render at.</returns>
@@ -59,7 +60,7 @@ public static class RenderGraphExtent {
         var needed = Quantize(fraction: fraction);
 
         return (
-            ((needed < allocated) && (needed >= (allocated * ShrinkThreshold)))
+            ((needed < allocated) && (needed > (allocated * ShrinkThreshold)))
                 ? allocated
                 : needed
         );

@@ -143,21 +143,21 @@ bool sdfInstanceMaskHasSummary(uint instanceMaskBase) {
 uint sdfSegmentDirectoryOffset() {
     uint4 header = sdfWords[0];
 
-    return ((header.w + (SDF_MATERIAL_VECTORS_PER_ENTRY * header.y)) + (2u * header.x));
+    return ((SDF_PROGRAM_MATERIAL_OFFSET(header) + (SDF_MATERIAL_VECTORS_PER_ENTRY * SDF_PROGRAM_MATERIAL_COUNT(header))) + (SDF_BOUND_RECORD_VECTORS * SDF_PROGRAM_INSTRUCTION_COUNT(header)));
 }
 // The INSTANCE directory's element offset, given a caller that ALREADY resolved the segment directory
 // (sdfLoadProgramLayout has both in hand). DXC's SPIR-V backend runs no GVN over StructuredBuffer loads, so
 // re-deriving them costs a real reload of sdfWords[0] on Vulkan — the reason sdfLoadProgramLayout exists: mapCore/
 // mapGradCore used to re-run this whole chain on EVERY call, and marchers call them once per march step.
 uint sdfInstanceDirectoryOffsetFrom(uint segmentOffset, uint segmentCount) {
-    return (segmentOffset + 1u + (2u * segmentCount));
+    return (segmentOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * segmentCount));
 }
 // The INSTANCE directory's element offset in sdfWords — the ONE resolution of the packed offset chain for callers that
 // hold nothing yet. Every consumer that touches the directory locates it through this or its `From` sibling.
 uint sdfInstanceDirectoryOffset() {
     uint segmentOffset = sdfSegmentDirectoryOffset();
 
-    return sdfInstanceDirectoryOffsetFrom(segmentOffset, sdfWords[segmentOffset].x);
+    return sdfInstanceDirectoryOffsetFrom(segmentOffset, SDF_SEGMENT_COUNT(sdfWords[segmentOffset]));
 }
 // The per-PROGRAM Lipschitz STEP SCALE (1/L in (0, 1]), baked HOST-SIDE into the segment-directory header's otherwise-
 // free .y lane (SdfProgram.AnalyzeLipschitz). mapCore multiplies EVERY returned distance by it, so a consumer that
@@ -166,18 +166,18 @@ uint sdfInstanceDirectoryOffset() {
 // bit for every finite x), so those scenes stay byte-identical. The `> 0` guard keeps a pre-writer all-zero stream
 // rendering as before.
 float sdfStepScale() {
-    float stepScale = asfloat(sdfWords[sdfSegmentDirectoryOffset()].y);
+    float stepScale = asfloat(SDF_SEGMENT_STEP_SCALE(sdfWords[sdfSegmentDirectoryOffset()]));
 
     return ((stepScale > 0.0) ? stepScale : 1.0);
 }
 // The element offset of instance `index`'s directory entry (i0 = bound, i1 = meta at +1) within the directory at
 // `instanceOffset` — the ONE statement of the 2-uint4-per-instance entry stride.
 uint sdfInstanceEntryOffset(uint instanceOffset, uint index) {
-    return (instanceOffset + 1u + (2u * index));
+    return (instanceOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * index));
 }
 // The packed instance count (the directory's header lane).
 uint sdfInstanceCount() {
-    return sdfWords[sdfInstanceDirectoryOffset()].x;
+    return SDF_INSTANCE_COUNT(sdfWords[sdfInstanceDirectoryOffset()]);
 }
 
 // The ceiling-clamped instance count. The mask-buffer indexing contract itself (entry width, tile base) lives in
@@ -213,9 +213,9 @@ uint sdfWordAt(uint wordIndex) {
 // instance count the caller already holds (mapCore and the beam both resolve them). The block sits one uint4 (the
 // world-segment header) plus the world-segment entries past the instance directory's own span.
 uint sdfGridBaseWord(uint instanceOffset, uint instanceCount) {
-    uint worldSegmentOffset = (instanceOffset + 1u + (2u * instanceCount)); // uint4 index of the world-segment header
-    uint worldSegmentCount = sdfWords[worldSegmentOffset].x;
-    uint gridBaseVector = (worldSegmentOffset + 1u + worldSegmentCount);    // uint4 index of the grid block
+    uint worldSegmentOffset = (instanceOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * instanceCount)); // uint4 index of the world-segment header
+    uint worldSegmentCount = SDF_WORLD_SEGMENT_COUNT(sdfWords[worldSegmentOffset]);
+    uint gridBaseVector = (worldSegmentOffset + SDF_DIRECTORY_HEADER_VECTORS + worldSegmentCount);    // uint4 index of the grid block
 
     return (gridBaseVector << 2u); // the grid block is uint-granular from here
 }
@@ -341,9 +341,9 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 #endif
 // SDF_OP_CELL_JITTER's Blend lane (instructionHeader.z) is an SDF_NOISE_* flavor: how the per-cell POSITION offset is
 // distributed. It reshapes ONLY r0 — tumble and material variant are unaffected.
-// SDF_OP_REPEAT_POLAR's Shape lane (instructionHeader.y) is an SDF_POLAR_AXIS_* rotation axis: the angular fold acts in
+// SDF_OP_REPEAT_POLAR's Shape lane (instructionHeader.y) is an SDF_AXIS_* rotation axis: the angular fold acts in
 // the plane PERPENDICULAR to it (the axial coordinate is untouched).
-// SDF_OP_WALLPAPER_FOLD's group is an SDF_WPG_* wallpaper group in IUC order, and its plane an SDF_WPG_PLANE_* pair.
+// SDF_OP_WALLPAPER_FOLD's group is an SDF_WPG_* wallpaper group in IUC order, and its plane an SDF_PLANE_* pair.
 
 // === Shared numeric constants ========================================================================================
 // Written at full double precision: each rounds to the SAME float32 the shorter literal did, so naming them is

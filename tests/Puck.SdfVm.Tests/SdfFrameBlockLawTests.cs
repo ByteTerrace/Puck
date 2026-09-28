@@ -137,6 +137,74 @@ public sealed class SdfFrameBlockLawTests {
             expected: ((300u + (SdfWorldPackage.TileSize - 1u)) / SdfWorldPackage.TileSize)
         );
     }
+    // Each shading lever lands in its own pass-block member and nowhere else: from a frame with every lever at its
+    // default, turning one lever on changes exactly that member's bytes, so no two levers share or swap a member.
+    [Fact]
+    public void EachShadingLeverWritesItsOwnMemberAlone() {
+        var defaults = (Frame() with {
+            DisableAmbientOcclusion = false,
+            DisableFarBound = false,
+            DisableScreenLights = false,
+            DisableShadowCull = false,
+            DisableSoftShadows = false,
+            EnableShadowProxy = false,
+            ShadowDistanceScale = 0f,
+            UseCameraTileShadowMask = false,
+            UseFastAmbientOcclusion = false,
+            UseFastSoftShadowMarch = false,
+            UseFiniteDifferenceNormals = false,
+        });
+        (string Member, SdfFrame Frame)[] levers = [
+            (SdfWorldPackage.DisableAmbientOcclusion, (defaults with { DisableAmbientOcclusion = true })),
+            (SdfWorldPackage.DisableFarBound, (defaults with { DisableFarBound = true })),
+            (SdfWorldPackage.DisableScreenLights, (defaults with { DisableScreenLights = true })),
+            (SdfWorldPackage.DisableShadowCull, (defaults with { DisableShadowCull = true })),
+            (SdfWorldPackage.DisableSoftShadows, (defaults with { DisableSoftShadows = true })),
+            (SdfWorldPackage.EnableShadowProxy, (defaults with { EnableShadowProxy = true })),
+            (SdfWorldPackage.ShadowDistanceScale, (defaults with { ShadowDistanceScale = 0.5f })),
+            (SdfWorldPackage.CameraTileShadowMask, (defaults with { UseCameraTileShadowMask = true })),
+            (SdfWorldPackage.FastAmbientOcclusion, (defaults with { UseFastAmbientOcclusion = true })),
+            (SdfWorldPackage.FastSoftShadowMarch, (defaults with { UseFastSoftShadowMarch = true })),
+            (SdfWorldPackage.FiniteDifferenceNormals, (defaults with { UseFiniteDifferenceNormals = true })),
+        ];
+
+        static byte[] Block(SdfFrame frame) {
+            var block = new byte[SdfFrameBlock.SizeBytes];
+
+            SdfFrameBlock.Write(
+                block: block,
+                frame: frame,
+                height: 200u,
+                sceneTime: frame.Time,
+                tables: new SdfPassValues(
+                    DebugMode: 0,
+                    Environment: new float[SdfEnvironment.LaneCount],
+                    InstanceMaskWordCount: 1u,
+                    MeshDraws: 0u,
+                    SampleIndex: 0u,
+                    ScreenCount: 0u
+                ),
+                view: 0,
+                width: 300u
+            );
+
+            return block;
+        }
+
+        var baseline = Block(frame: defaults);
+
+        foreach (var (member, frame) in levers) {
+            var block = Block(frame: frame);
+            var offset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member));
+            var changed = Enumerable.Range(count: block.Length, start: 0).Where(predicate: index => (block[index] != baseline[index])).ToArray();
+
+            Assert.NotEmpty(collection: changed);
+            Assert.All(
+                action: index => Assert.InRange(actual: index, high: (offset + 3), low: offset),
+                collection: changed
+            );
+        }
+    }
     // The pass block carries the camera's own near plane, so the bounded volumes start at the eye of a camera whose image
     // begins there (a cloud around the camera stays visible), and the surfaces render from that plane, never nearer than
     // the floor the mesh pass's depth needs, which the kernels read as the generated SDF_MINIMUM_NEAR.

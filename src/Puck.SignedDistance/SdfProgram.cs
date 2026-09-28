@@ -317,13 +317,13 @@ public sealed partial class SdfProgram {
             )
         );
 
-        var dataOffsetVectors = (1 + instructionCount);
-        var materialOffsetVectors = (dataOffsetVectors + (2 * instructionCount));
+        var dataOffsetVectors = (ProgramHeaderVectors + instructionCount);
+        var materialOffsetVectors = (dataOffsetVectors + (InstructionDataVectors * instructionCount));
         var boundsOffsetVectors = (materialOffsetVectors + (MaterialVectorsPerEntry * materialCount));
-        var segmentOffsetVectors = (boundsOffsetVectors + (2 * instructionCount));
-        var instanceOffsetVectors = ((segmentOffsetVectors + 1) + (2 * segments.Count));
-        var worldSegmentOffsetVectors = ((instanceOffsetVectors + 1) + (2 * m_instances.Length));
-        var gridOffsetVectors = ((worldSegmentOffsetVectors + 1) + worldSegmentCount);
+        var segmentOffsetVectors = (boundsOffsetVectors + (BoundRecordVectors * instructionCount));
+        var instanceOffsetVectors = ((segmentOffsetVectors + DirectoryHeaderVectors) + (BoundRecordVectors * segments.Count));
+        var worldSegmentOffsetVectors = ((instanceOffsetVectors + DirectoryHeaderVectors) + (BoundRecordVectors * m_instances.Length));
+        var gridOffsetVectors = ((worldSegmentOffsetVectors + DirectoryHeaderVectors) + worldSegmentCount);
         var rigidPlanOffsetVectors = (gridOffsetVectors + (gridBlock.Length / WordsPerVector));
         var convexPolygonOffsetVectors = ((rigidPlanOffsetVectors + segments.Count) + (3 * rigidPlan.Leaves.Count));
         var convexPolygonProfileOffsets = new int[m_convexPolygonProfiles.Length];
@@ -400,23 +400,23 @@ public sealed partial class SdfProgram {
             });
         }
 
-        m_words[0] = ((uint)instructionCount);
-        m_words[1] = ((uint)materialCount);
-        m_words[2] = ((uint)dataOffsetVectors);
-        m_words[3] = ((uint)materialOffsetVectors);
+        m_words[ProgramInstructionCountLane] = ((uint)instructionCount);
+        m_words[ProgramMaterialCountLane] = ((uint)materialCount);
+        m_words[ProgramDataOffsetLane] = ((uint)dataOffsetVectors);
+        m_words[ProgramMaterialOffsetLane] = ((uint)materialOffsetVectors);
 
         for (var index = 0; (index < instructionCount); index++) {
             var instruction = m_instructions[index];
-            var headerBase = ((1 + index) * WordsPerVector);
+            var headerBase = ((ProgramHeaderVectors + index) * WordsPerVector);
 
-            m_words[headerBase] = ((uint)instruction.Op);
-            m_words[(headerBase + 1)] = ((instruction.Op == SdfOp.ShapeBlend)
+            m_words[(headerBase + InstructionOpLane)] = ((uint)instruction.Op);
+            m_words[(headerBase + InstructionShapeLane)] = ((instruction.Op == SdfOp.ShapeBlend)
                 ? instruction.Shape | (instruction.Detail ? ShapeDetailFlag : 0u) | (instruction.Secondary ? 0u : ShapeNoSecondaryFlag)
                 : instruction.Shape);
-            m_words[(headerBase + 2)] = instruction.Blend;
-            m_words[(headerBase + 3)] = instruction.Material;
+            m_words[(headerBase + InstructionBlendLane)] = instruction.Blend;
+            m_words[(headerBase + InstructionMaterialLane)] = instruction.Material;
 
-            var dataBase = ((dataOffsetVectors + (2 * index)) * WordsPerVector);
+            var dataBase = ((dataOffsetVectors + (InstructionDataVectors * index)) * WordsPerVector);
 
             WriteVector4(
                 words: m_words,
@@ -515,7 +515,7 @@ public sealed partial class SdfProgram {
     /// (<c>m_words[1]</c>), which is the single source of truth. Exposed so a caller rebuilding a similar program (a
     /// live composition rebuild, say) can use the previous program's material count as a <see cref="SdfProgramBuilder"/>
     /// list-capacity hint without needing its own copy of the material table.</summary>
-    public int MaterialCount => ((int)m_words[1]);
+    public int MaterialCount => ((int)m_words[ProgramMaterialCountLane]);
     /// <summary>Gets the minimum dynamic-transform slot capacity required to render this program without a shader reading
     /// past the supplied per-frame transform table. Equals one plus the highest <see cref="SdfOp.TransformDynamic"/>
     /// or dynamic-instance slot, or 0 for a static program.</summary>
@@ -551,8 +551,8 @@ public sealed partial class SdfProgram {
             // Mirror the shader's segment-directory offset chain (field/sdf-map.hlsli mapCore): materialOffset (m_words[3])
             // + MaterialVectorsPerEntry*materialCount (m_words[1]) = boundsOffset; + 2*instructionCount =
             // segmentOffset. The step scale is the header uvec4's .y lane.
-            var segmentOffsetVectors = ((((int)m_words[3]) + (MaterialVectorsPerEntry * ((int)m_words[1]))) + (2 * InstructionCount));
-            var raw = BitConverter.UInt32BitsToSingle(value: m_words[((segmentOffsetVectors * WordsPerVector) + 1)]);
+            var segmentOffsetVectors = ((((int)m_words[ProgramMaterialOffsetLane]) + (MaterialVectorsPerEntry * ((int)m_words[ProgramMaterialCountLane]))) + (BoundRecordVectors * InstructionCount));
+            var raw = BitConverter.UInt32BitsToSingle(value: m_words[((segmentOffsetVectors * WordsPerVector) + SegmentStepScaleLane)]);
 
             return ((raw > 0f)
                 ? raw
@@ -1697,20 +1697,20 @@ public sealed partial class SdfProgram {
     private void PackBounds(int boundsOffsetVectors, int segmentOffsetVectors, List<BoundRecord> shapeBounds, List<BoundRecord> segments, float stepScale, int rigidPlanOffsetVectors, RigidSegmentPlan[] rigidSegments) {
         foreach (var record in shapeBounds) {
             WriteBound(
-                entryBase: ((boundsOffsetVectors + (2 * record.Instruction)) * WordsPerVector),
+                entryBase: ((boundsOffsetVectors + (BoundRecordVectors * record.Instruction)) * WordsPerVector),
                 record: record
             );
         }
 
         var segmentHeaderBase = (segmentOffsetVectors * WordsPerVector);
 
-        m_words[segmentHeaderBase] = ((uint)segments.Count);
+        m_words[(segmentHeaderBase + SegmentCountLane)] = ((uint)segments.Count);
         // The header's .y carries the final field's Lipschitz correction; .z locates the rigid plan directory.
         // KEEP IN SYNC with sdfLoadProgramLayout in field/sdf-layout.hlsli.
-        m_words[(segmentHeaderBase + 1)] = BitConverter.SingleToUInt32Bits(value: stepScale);
+        m_words[(segmentHeaderBase + SegmentStepScaleLane)] = BitConverter.SingleToUInt32Bits(value: stepScale);
         // Absolute uint4 offset of the plan directory. The table is appended after the instance grid so the grid's
         // long-settled offset chain stays byte-for-byte unchanged.
-        m_words[(segmentHeaderBase + 2)] = ((uint)rigidPlanOffsetVectors);
+        m_words[(segmentHeaderBase + SegmentRigidPlanLane)] = ((uint)rigidPlanOffsetVectors);
 
         for (var index = 0; (index < segments.Count); index++) {
             var record = segments[index];
@@ -1720,7 +1720,7 @@ public sealed partial class SdfProgram {
             }
 
             WriteBound(
-                entryBase: (((segmentOffsetVectors + 1) + (2 * index)) * WordsPerVector),
+                entryBase: (((segmentOffsetVectors + DirectoryHeaderVectors) + (BoundRecordVectors * index)) * WordsPerVector),
                 record: record
             );
         }
@@ -1728,8 +1728,8 @@ public sealed partial class SdfProgram {
     // Packs the header and two vectors per instance: bound sphere, then mode/slot/segment range.
     // Detail admission covers the entire stream, including uninstanced and parked shapes.
     private void PackInstances(SdfInstanceGridInput[] binning, int instanceOffsetVectors, List<BoundRecord> segments) {
-        m_words[(instanceOffsetVectors * WordsPerVector)] = ((uint)m_instances.Length);
-        m_words[((instanceOffsetVectors * WordsPerVector) + 2)] = (m_instructions.Any(predicate: static instruction => instruction.Detail)
+        m_words[((instanceOffsetVectors * WordsPerVector) + InstanceCountLane)] = ((uint)m_instances.Length);
+        m_words[((instanceOffsetVectors * WordsPerVector) + InstanceFlagsLane)] = (m_instructions.Any(predicate: static instruction => instruction.Detail)
             ? 0u : NoDetailShapesFlag);
 
         // Resolve every instance's contiguous [segmentFirst, segmentEnd) directory range in ONE pass over the segment
@@ -1764,7 +1764,7 @@ public sealed partial class SdfProgram {
 
         for (var instanceIndex = 0; (instanceIndex < m_instances.Length); instanceIndex++) {
             var instance = m_instances[instanceIndex];
-            var entryBase = (((instanceOffsetVectors + 1) + (2 * instanceIndex)) * WordsPerVector);
+            var entryBase = (((instanceOffsetVectors + DirectoryHeaderVectors) + (BoundRecordVectors * instanceIndex)) * WordsPerVector);
 
             // The packed radius (float-safety-padded live radius + soft-blend halo + scoped-field reach, or the
             // unmaskable/parked sentinel) is the one ClassifyInstances derived — the same value the grid binned from.
@@ -1794,7 +1794,7 @@ public sealed partial class SdfProgram {
                 val2: 0
             )) & SegmentEndMask;
 
-            m_words[((entryBase + WordsPerVector) + 3)] = (segmentEndPacked | InstanceFlagsOf(instance: instance));
+            m_words[((entryBase + WordsPerVector) + 3)] = segmentEndPacked | InstanceFlagsOf(instance: instance);
         }
     }
     // Packs the world-segment list: a count header (worldSegmentCount — the ctor already counted the unowned
@@ -1803,7 +1803,7 @@ public sealed partial class SdfProgram {
     // segment-directory order — the always-evaluated side of mapCore's world/visible-instance merge, enumerated
     // directly instead of owner-testing every segment per map() call.
     private void PackWorldSegments(List<BoundRecord> segments, int worldSegmentCount, int worldSegmentOffsetVectors) {
-        m_words[(worldSegmentOffsetVectors * WordsPerVector)] = ((uint)worldSegmentCount);
+        m_words[((worldSegmentOffsetVectors * WordsPerVector) + WorldSegmentCountLane)] = ((uint)worldSegmentCount);
 
         var next = 0;
 
@@ -1812,7 +1812,7 @@ public sealed partial class SdfProgram {
                 continue;
             }
 
-            m_words[(((worldSegmentOffsetVectors + 1) + next) * WordsPerVector)] = ((uint)segment);
+            m_words[(((worldSegmentOffsetVectors + DirectoryHeaderVectors) + next) * WordsPerVector)] = ((uint)segment);
             next++;
         }
     }

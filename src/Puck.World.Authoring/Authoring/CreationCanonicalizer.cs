@@ -1775,9 +1775,9 @@ public static partial class CreationCanonicalizer {
                 Spacing: NormalizeSpacing(value: repeat.Spacing)
             ),
             ShapeDomainOp.Polar polar => new ShapeDomainOp.Polar(
-                Axis: (Enum.IsDefined(value: (polar.Axis ?? SdfPolarAxis.Y))
-                ? (polar.Axis ?? SdfPolarAxis.Y)
-                : SdfPolarAxis.Y),
+                Axis: (Enum.IsDefined(value: (polar.Axis ?? SdfAxis.Y))
+                ? (polar.Axis ?? SdfAxis.Y)
+                : SdfAxis.Y),
                 Count: Math.Clamp(value: polar.Count, min: 1, max: SdfProgramBuilder.MaxExactFloatSectorCount),
                 MaterialStride: Math.Max(val1: (polar.MaterialStride ?? 0), val2: 0),
                 Mirror: (polar.Mirror ?? false),
@@ -1797,9 +1797,9 @@ public static partial class CreationCanonicalizer {
                 ),
                 LodDistance: Math.Max(val1: (wallpaper.LodDistance ?? 0f), val2: 0f),
                 MaterialStride: Math.Max(val1: (wallpaper.MaterialStride ?? 0), val2: 0),
-                Plane: (Enum.IsDefined(value: (wallpaper.Plane ?? SdfWallpaperPlane.XZ))
-                ? (wallpaper.Plane ?? SdfWallpaperPlane.XZ)
-                : SdfWallpaperPlane.XZ)
+                Plane: (Enum.IsDefined(value: (wallpaper.Plane ?? SdfPlane.XZ))
+                ? (wallpaper.Plane ?? SdfPlane.XZ)
+                : SdfPlane.XZ)
             ),
             _ => op,
         };

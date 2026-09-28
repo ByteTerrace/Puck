@@ -246,6 +246,82 @@ public sealed class RenderGraphDocumentLawTests {
             }
         }
     }
+    // A checked-in document may run a shipped package's kernel as a shader pass of its own, compiled from the kernel's
+    // source through the interface the pass's config generates. That config restates the package's, so it must restate
+    // all of it: a field the package has and the document lacks leaves the kernel reading a member the pass block does
+    // not declare, and the pass fails to compile. Every such pass, its kernel's file named for its package, declares
+    // exactly the package's config.
+    [Fact]
+    public void EveryCheckedInPassCompilingAShippedPackageKernelDeclaresThatPackagesConfig() {
+        var root = RepositoryPaths.RequireRoot();
+        var kernels = Path.Combine(
+            path1: root,
+            path2: "src"
+        );
+        var matched = 0;
+
+        foreach (var path in Directory.EnumerateFiles(
+            path: Path.Combine(
+                path1: root,
+                path2: "tests"
+            ),
+            searchOption: SearchOption.AllDirectories,
+            searchPattern: "*.graph.json"
+        ).Order(comparer: StringComparer.Ordinal)) {
+            var definition = ShaderPipelineLoader.ParseDefinition(
+                name: Path.GetFileNameWithoutExtension(path: path),
+                path: path,
+                text: File.ReadAllText(path: path)
+            );
+
+            foreach (var pass in (definition.Passes ?? [])) {
+                var source = Path.GetFullPath(path: Path.Combine(
+                    path1: Path.GetDirectoryName(path: path)!,
+                    path2: pass.Source
+                ));
+                var stem = Path.GetFileName(path: source).Split(separator: '.')[0];
+
+                if (
+                    !source.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: kernels) ||
+                    !RenderGraphPackageCatalog.Engine.TryGet(
+                        id: stem,
+                        package: out var package
+                    )
+                ) {
+                    continue;
+                }
+
+                matched++;
+
+                var expected = (package.Config ?? new Dictionary<string, ShaderConfigField>());
+                var actual = (pass.Config ?? new Dictionary<string, ShaderConfigField>());
+                var where = $"{Path.GetRelativePath(path: path, relativeTo: root)} pass '{pass.Name}' ({package.Id})";
+
+                Assert.True(
+                    condition: expected.Keys.Order(comparer: StringComparer.Ordinal).SequenceEqual(second: actual.Keys.Order(comparer: StringComparer.Ordinal)),
+                    userMessage: $"{where} declares [{string.Join(separator: ", ", values: actual.Keys.Order(comparer: StringComparer.Ordinal))}] where the package declares [{string.Join(separator: ", ", values: expected.Keys.Order(comparer: StringComparer.Ordinal))}]"
+                );
+
+                foreach (var (name, field) in expected) {
+                    var declared = actual[name];
+
+                    Assert.True(
+                        condition: (
+                            (declared.Type == field.Type) &&
+                            (declared.Length == field.Length) &&
+                            (declared.Min == field.Min) &&
+                            (declared.Max == field.Max) &&
+                            (declared.Default.HasValue == field.Default.HasValue) &&
+                            (!field.Default.HasValue || JsonElement.DeepEquals(element1: declared.Default!.Value, element2: field.Default.Value))
+                        ),
+                        userMessage: $"{where} field '{name}' differs from the package's"
+                    );
+                }
+            }
+        }
+
+        Assert.True(condition: (matched > 0), userMessage: "no checked-in document runs a shipped package kernel");
+    }
     [Fact]
     public void TheEngineCatalogOffersTheFilmGrainPostProcessPackage() {
         var catalog = RenderGraphPackageCatalog.Engine;
