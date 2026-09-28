@@ -25,7 +25,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         : imageSourceUnpackRgba8(word));
 
     image[id.xy] = float4(imageSourceDecode(transfer, encoded.r), imageSourceDecode(transfer, encoded.g), imageSourceDecode(transfer, encoded.b), encoded.a);
-#if defined(PUCK_WORK_COUNTERS)
     puckCountWork(0u, 1u);
-#endif
 }

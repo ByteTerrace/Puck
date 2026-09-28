@@ -37,4 +37,11 @@ struct SdfBricksPushedIndex {
 };
 [[vk::push_constant]] ConstantBuffer<SdfBricksPushedIndex> pushedIndex : register(b0, space4);
 
+// This interface declares no work counters, so its passes count nothing: the counting functions a kernel calls
+// are declared empty, and a kernel written for a counting package compiles here unchanged.
+void puckCountWork(uint steps, uint texels) {
+}
+void puckCountFragmentWork(uint steps, uint texels) {
+}
+
 #endif // PUCK_SHADER_INTERFACE_SDF_BRICKS

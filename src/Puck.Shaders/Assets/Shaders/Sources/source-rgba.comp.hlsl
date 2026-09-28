@@ -19,7 +19,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float4 pixel = imageSourceUnpackRgba8(region.Load(header.plane0 + (id.y * header.stride0) + (id.x * 4u)));
 
     image[id.xy] = ((header.format == IMAGE_FORMAT_B8G8R8A8) ? pixel.bgra : pixel);
-#if defined(PUCK_WORK_COUNTERS)
     puckCountWork(0u, 1u);
-#endif
 }

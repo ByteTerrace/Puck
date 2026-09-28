@@ -22,7 +22,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float3 rgb = imageSourceYuvToRgb(luma, imageSourceByte(region, chroma), imageSourceByte(region, (chroma + 1u)), header.color);
 
     image[id.xy] = float4(saturate(rgb), 1.0);
-#if defined(PUCK_WORK_COUNTERS)
     puckCountWork(0u, 1u);
-#endif
 }

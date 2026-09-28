@@ -1565,14 +1565,17 @@ or `RenderGraphPackage.CountsKernelWork` for a package whose members declare
 the work counters: every pass of `sdf.world`, `place`, `overlay`, the source
 conversions and every post-process package, which must) declares the work
 counters in its interface (`ShaderWorkCounters`), whose generated include
-carries the functions its shaders count through and defines
-`PUCK_WORK_COUNTERS`, and keeps a counter buffer and a readback buffer per frame
-slot, one row a pass (`GpuKernelCounters`). A compute kernel counts through
-`puckCountWork`, one wave sum added by the wave's first active lane, and a
-fragment stage through `puckCountFragmentWork`, the same over the wave's lanes
-that are not helper lanes. A kernel a document pass also compiles, such as a
-source conversion, counts inside `#if defined(PUCK_WORK_COUNTERS)`, so under a
-document's interface it counts nothing. The node clears the slot's counters
+carries the functions its shaders count through, and keeps a counter buffer and
+a readback buffer per frame slot, one row a pass (`GpuKernelCounters`). A
+compute kernel counts through `puckCountWork`, one wave sum added by the wave's
+first active lane, and a fragment stage through `puckCountFragmentWork`, the
+same over the wave's lanes that are not helper lanes. Every generated include
+declares both functions, and one whose interface declares no work counters
+declares them empty. A kernel therefore counts unguarded: a package's kernel
+that a document pass compiles by naming its source, such as `place` or a source
+conversion, reads the declarations the loader generates for the document's
+interface, and there it counts nothing. `DocumentPassPackageKernelLawTests`
+compiles every package kernel that way. The node clears the slot's counters
 ahead of the first pass and copies them to its readback behind the last, which
 counts one clear, one copy and three buffer barriers outside every pass: the
 clear before the compute and fragment stages that add, those stages before the

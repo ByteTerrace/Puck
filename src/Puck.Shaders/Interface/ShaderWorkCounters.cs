@@ -7,11 +7,13 @@ namespace Puck.Shaders;
 /// <summary>
 /// The members a pass interface declares when its kernels count their own work (<see cref="GpuWork.KernelKinds"/>) into
 /// their node's kernel counters (<see cref="GpuKernelCounters"/>): the pass's row, a pass-block value, and the frame
-/// slot's counter buffer, bound read-write in the pass group. An interface that declares both gets the counting functions
-/// in its generated include (<see cref="ShaderInterfaceHlsl"/>): <c>puckCountWork(steps, texels)</c>, which sums a wave's
-/// counts and adds them with its first active lane, and <c>puckCountFragmentWork(steps, texels)</c>, which does the same
-/// for a fragment stage over the wave's lanes that are not helper lanes, since a helper lane's atomics have no effect.
-/// Both lay the row out as <see cref="GpuKernelCounters"/> reads it back, from the constants generated beside them.
+/// slot's counter buffer, bound read-write in the pass group. Every generated include (<see cref="ShaderInterfaceHlsl"/>)
+/// declares the counting functions: <c>puckCountWork(steps, texels)</c>, which sums a wave's counts and adds them with its
+/// first active lane, and <c>puckCountFragmentWork(steps, texels)</c>, which does the same for a fragment stage over the
+/// wave's lanes that are not helper lanes, since a helper lane's atomics have no effect. An interface that declares both
+/// members gets their counting bodies, laid out as <see cref="GpuKernelCounters"/> reads the row back from the constants
+/// generated beside them; any other interface, a document pass's among them, gets them empty. So a kernel counts
+/// unguarded, and a package's kernel compiles as a document pass naming its source.
 /// </summary>
 public static class ShaderWorkCounters {
     /// <summary>The pass-block value holding the pass's row: its index in its node's planned passes
@@ -56,17 +58,32 @@ public static class ShaderWorkCounters {
         return Members.All(predicate: member => members.Any(predicate: declared => (declared == member)));
     }
 
-    // The counting functions an interface declaring the work counters generates, after its declarations.
-    internal static void AppendHlsl(StringBuilder text) {
+    // The counting functions every generated interface declares, after its declarations: an interface declaring the work
+    // counters adds to them, and any other, a document pass's among them, declares the same two functions empty. A kernel
+    // therefore counts unguarded, and compiles alike as its package's pass and as a document pass naming its source.
+    internal static void AppendHlsl(StringBuilder text, bool counts) {
+        if (!counts) {
+            _ = text.Append(value: """
+
+                // This interface declares no work counters, so its passes count nothing: the counting functions a kernel calls
+                // are declared empty, and a kernel written for a counting package compiles here unchanged.
+                void puckCountWork(uint steps, uint texels) {
+                }
+                void puckCountFragmentWork(uint steps, uint texels) {
+                }
+
+                """);
+
+            return;
+        }
+
         var number = static (int value) => value.ToString(provider: CultureInfo.InvariantCulture);
 
         _ = text.Append(value: $$"""
 
             // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
             // back): each counted kind in GpuWork.KernelKinds order, march steps then texels written, as a 64-bit count in
-            // two words, low word first. A kernel that also compiles under an interface declaring no work counters (a
-            // document pass's) counts inside #if defined(PUCK_WORK_COUNTERS).
-            #define PUCK_WORK_COUNTERS 1
+            // two words, low word first. An interface declaring no work counters declares the same two functions empty.
             static const uint PuckWorkRowWords = {{number(GpuKernelCounters.RowWords)}}u;
             static const uint PuckWorkStepsWord = 0u;
             static const uint PuckWorkTexelsWord = {{number(GpuKernelCounters.CountWords)}}u;
