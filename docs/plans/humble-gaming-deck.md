@@ -39,7 +39,20 @@ of scope here.
   `Puck.HumbleGamingDeck.Post`, passes every SingleStepTests `nes6502` vector
   bus cycle by bus cycle and nestest's log from `$C000`; the
   [Deck manual](../emulation/hgd/README.md) describes it.
-- **Not started:** every package below.
+- **Landed:** a complete NTSC machine. A dot-exact RP2C02G PPU with its
+  background and sprite pipelines, the APU's five channels and frame counter as
+  integer levels, the DMA unit for OAM and DMC transfers, two standard
+  controllers, and console nametable RAM routed through the board; the
+  `humble-gaming-deck` engine, `DeckMachineHost` with two controller ports, and a
+  synchronous core with a palette decoded from the composite signal and a
+  presentation-side mixer. The battery adds the shared host-contract probes, a
+  rendered picture compared pixel for pixel with an independent reference
+  renderer, controller, OAM DMA and APU fixtures, nestest's PPU column, and a
+  nestest boot driven through the controller.
+- **In progress:** NTSC accuracy. AccuracyCoin runs in the battery against a
+  recorded outcome ledger, so no passing test can regress, and its recorded
+  failures are the package's work list.
+- **Not started:** every package below NTSC accuracy.
 
 ## What state of the art means here
 
@@ -209,28 +222,20 @@ understood discrepancy becomes an original Tier A regression.
 
 ## Packages
 
-### 1. A complete NTSC machine
+### 1. NTSC accuracy
 
-**Owns:** the PPU, the integer APU, standard controllers, reset, and the video
-and audio host adapter.
-
-**Delivers:** a machine that boots cartridges through the reset vector and
-presents picture and sound.
-
-**Check:** nestest's menu from a normal boot; raw-pixel, integer-audio, and
-replay gates; mid-cycle snapshot and fork replay.
-
-### 2. NTSC accuracy
-
-**Owns:** the DMA arbiter, unstable-opcode behaviour, PPU races, open bus and
-decay, and the co-simulation trace.
+**Owns:** the timing details the complete machine leaves open: DMA get/put
+parity at power-on, DMC load and reload timings, aborts, and the 2A03's partial
+address decoding during halted reads; the PPU's sub-dot register timing, the
+$2002 race windows, the $2006 delay and OAMADDR corruption; open-bus decay; and
+the co-simulation trace.
 
 **Delivers:** accuracy at the state of the art on NROM.
 
 **Check:** every applicable AccuracyCoin verdict, the blargg suites, and every
 disagreement with an oracle explained and pinned.
 
-### 3. Common boards
+### 2. Common boards
 
 **Owns:** MMC1, UxROM, CNROM, AxROM, MMC3 and MMC6, board RAM, and bus
 conflicts.
@@ -240,7 +245,7 @@ conflicts.
 **Check:** the board suites, IRQ traces per MMC3 revision, and save and fork
 restoration.
 
-### 4. Regional hardware
+### 3. Regional hardware
 
 **Owns:** PAL and Dendy console models and every supported alignment phase.
 
@@ -249,7 +254,7 @@ restoration.
 **Check:** the regional corpora and clock, pixel, and audio gates; no NTSC
 pass is extrapolated to another region.
 
-### 5. Long-tail boards
+### 4. Long-tail boards
 
 **Owns:** the boards past the common set, and the refusal of every board outside
 the committed set.
@@ -297,7 +302,7 @@ A board is accepted when all four of these hold:
 meets criteria 1 to 4; and a Tier A stage loads one header for each mapper and
 submapper outside the set and sees each refused by name.
 
-### 6. Expansion audio
+### 5. Expansion audio
 
 **Owns:** VRC6, VRC7, MMC5, Namco 163, and Sunsoft 5B generators, with
 presentation gains.
@@ -306,7 +311,7 @@ presentation gains.
 
 **Check:** integer transition gates plus independent waveform evidence.
 
-### 7. The Famicom Disk System
+### 6. The Famicom Disk System
 
 **Owns:** the RAM adapter, drive timing, its IRQ, writable disk overlays, FDS
 audio, and a user-supplied BIOS.
@@ -316,7 +321,7 @@ audio, and a user-supplied BIOS.
 **Check:** disk operations and mid-transfer snapshot and fork replay; firmware
 identity checks.
 
-### 8. Peripherals
+### 7. Peripherals
 
 **Owns:** the Four Score, the Zapper, the Famicom microphone, then selected
 paddles, mats, and keyboards.
@@ -328,7 +333,7 @@ sensor response, never from the presented image.
 **Check:** serial-protocol fixtures, beam-response fixtures, and replay across
 attachment changes.
 
-### 9. World cabinets
+### 8. World cabinets
 
 **Owns:** engine and content-provider registration, multi-port routing, ordered
 operations, and replay receipts.
@@ -347,7 +352,7 @@ provider operations are refused while recording.
   Regional hardware adds the RP2A07 and RP2C07 (PAL) and the UA6527P and UA6538
   (Dendy). The boards are the common set (mappers 0 to 4, MMC6 as MMC3
   submapper 1, and 7) and the long-tail table in
-  [package 5](#5-long-tail-boards). The peripherals are the standard controller,
+  [package 4](#4-long-tail-boards). The peripherals are the standard controller,
   the Four Score and the Hori four-player adapter, the Zapper, the Famicom
   microphone, the Arkanoid controller, the Power Pad, and the Family BASIC
   keyboard. Anything outside the matrix is refused by name.

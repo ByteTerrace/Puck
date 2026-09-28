@@ -31,9 +31,9 @@ public sealed class ClockTimingTests {
             clock.SaveState(writer: writer);
             twin.LoadState(reader: new StateReader(buffer: writer.ToArray()));
             Assert.Equal(expected: 36UL, actual: twin.RunTargetCycles);
-            var edge = clock.StepTick(edgeHalfTick: out var halfTick);
+            var edge = clock.StepTick(edgeHalfTick: out var halfTick, ppuDot: out _);
 
-            Assert.Equal(expected: edge, actual: twin.StepTick(edgeHalfTick: out var twinHalfTick));
+            Assert.Equal(expected: edge, actual: twin.StepTick(edgeHalfTick: out var twinHalfTick, ppuDot: out _));
             Assert.Equal(actual: twinHalfTick, expected: halfTick);
             Assert.Equal(expected: ((((tick + alignment) % 12) < 6) ? HgdCpuSubphase.Phi1 : HgdCpuSubphase.Phi2), actual: clock.Subphase);
             if (edge != HgdM2Edge.None) {

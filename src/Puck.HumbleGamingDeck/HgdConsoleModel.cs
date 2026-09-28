@@ -27,6 +27,16 @@ public static class HgdConsoleModelExtensions {
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(model), actualValue: model, message: "Unimplemented Deck console model."),
         };
     }
+    /// <summary>Gets the master ticks in one PPU dot.</summary>
+    /// <param name="model">The implemented hardware revision.</param>
+    /// <returns>The PPU clock divider.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The model is unimplemented.</exception>
+    public static int PpuDivider(this HgdConsoleModel model) {
+        return model switch {
+            HgdConsoleModel.NtscRp2A03G => 4,
+            _ => throw new ArgumentOutOfRangeException(paramName: nameof(model), actualValue: model, message: "Unimplemented Deck console model."),
+        };
+    }
     /// <summary>Gets the M2 rising-edge offset from the beginning of a CPU cycle.</summary>
     /// <param name="model">The implemented hardware revision.</param>
     /// <returns>The offset in half master ticks.</returns>

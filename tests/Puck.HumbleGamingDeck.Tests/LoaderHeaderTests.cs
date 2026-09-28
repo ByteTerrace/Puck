@@ -168,7 +168,9 @@ public sealed class LoaderHeaderTests {
         Assert.Equal(expected: 0x12, actual: mapper.CpuPeek(address: 0x8000, openBus: 0));
         Assert.Equal(expected: 0x34, actual: mapper.CpuPeek(address: 0xC000, openBus: 0));
         Assert.Equal(expected: HgdMirroring.Vertical, actual: mapper.Header.Mirroring);
-        mapper.PpuWrite(address: 0, value: 0x77);
-        Assert.Equal(expected: 0, actual: mapper.PpuRead(address: 0));
+        var nametables = new HgdNametableRam();
+
+        mapper.PpuWrite(address: 0, nametables: nametables, value: 0x77);
+        Assert.Equal(expected: 0, actual: mapper.PpuRead(address: 0, nametables: nametables));
     }
 }
