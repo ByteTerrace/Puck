@@ -6,30 +6,32 @@ using Puck.World.Protocol;
 
 namespace Puck.World;
 
-// Edits to placements run through one WorldEditorEditQueue per world activation, which owns their order, their base
-// and their settlement. A queue lives exactly as long as its world does here: it is retired, and every edit it holds
-// abandoned by name, when the world's link goes away (its instance stops or is reaped, its endpoint is disposed) or
-// when the link starts delivering another activation's documents (a crossing onward, a recreated world).
+// Edits to placements run through one WorldEditorEditQueue per world activation, which owns their order, their base,
+// their dispatch and their settlement. Every endpoint that reaches the world attaches to its queue; each edit carries its
+// own endpoint's link. An endpoint detaches when it closes (its instance stops or is reaped, it is disposed) or starts
+// delivering another activation's documents (a crossing onward, a recreated world): the edits that go out through it,
+// with everything queued behind them, are abandoned by name. The queue retires, and keeps nothing, when its last
+// endpoint detaches.
 public sealed partial class WorldEditorCommandModule {
     private readonly Lock m_targetGate = new();
     private readonly Dictionary<(string Authority, Guid Activation), EditTarget> m_targets = [];
 
-    // One world activation's queue, the link its edits go through, the read of the document it last delivered here,
-    // and the registrations that retire it with its world.
-    private sealed class EditTarget(string name, WorldEditorEditQueue queue, IServerLink link, Func<WorldDeliveredDocument> delivered) {
-        public Func<WorldDeliveredDocument> Delivered => delivered;
+    // One world activation's queue and the endpoints attached to it, each with the registrations that detach it.
+    private sealed class EditTarget {
+        public Dictionary<IServerLink, Attachment> Attachments { get; } = new(comparer: ReferenceEqualityComparer.Instance);
+        public WorldEditorEditQueue Queue { get; set; } = null!;
+    }
+    private sealed class Attachment {
         public Action<WorldDocumentVersion>? Handler { get; set; }
         public CancellationTokenRegistration Lifetime { get; set; }
-        public IServerLink Link => link;
-        public WorldSessionMirror? Mirror { get; set; }
-        public string Name => name;
-        public WorldEditorEditQueue Queue => queue;
+        public WorldSessionMirror? Mirror { get; init; }
     }
 
-    // The queue of the world activation a verb edits, opened on first use and tied to that world's lifetime. A world no
-    // authority has delivered a document of yet is refused: nothing it shows could be edited.
-    private bool TryTargetOf(EditWorld world, string verb, out EditTarget target, out CommandResult refusal) {
+    // The queue of the world activation a verb edits, opened on first use, with the verb's endpoint attached to it. A
+    // world no authority has delivered a document of yet is refused: nothing it shows could be edited.
+    private bool TryTargetOf(EditWorld world, string verb, out EditTarget target, out WorldEditorEditQueue.Source source, out CommandResult refusal) {
         target = null!;
+        source = new WorldEditorEditQueue.Source(Delivered: world.Delivered, Link: world.Link, World: world.Name);
         refusal = CommandResult.None;
 
         if (!world.Version.IsDelivered) {
@@ -39,75 +41,87 @@ public sealed partial class WorldEditorCommandModule {
         }
 
         var key = (world.Authority, world.Version.Activation);
-        bool opened;
 
         lock (m_targetGate) {
-            opened = !m_targets.TryGetValue(key: key, value: out var existing);
-            target = (existing ?? new EditTarget(
-                delivered: world.Delivered,
-                link: world.Link,
-                name: world.Name,
-                queue: new WorldEditorEditQueue(activation: world.Version.Activation)
-            ));
+            if (!m_targets.TryGetValue(key: key, value: out var existing)) {
+                var opened = new EditTarget();
 
-            if (opened) {
-                m_targets[key] = target;
+                opened.Queue = new WorldEditorEditQueue(
+                    activation: world.Version.Activation,
+                    send: submission => Send(submission: submission, target: opened)
+                );
+                existing = opened;
+                m_targets[key] = existing;
             }
-        }
 
-        if (opened) {
-            var opening = target;
+            target = existing;
+
+            if (target.Attachments.ContainsKey(key: world.Link)) {
+                return true;
+            }
+
+            var attaching = target;
+            var link = world.Link;
+            var attachment = new Attachment { Mirror = world.Mirror };
+
+            target.Attachments[link] = attachment;
 
             if (world.Mirror is { } mirror) {
-                opening.Mirror = mirror;
-                opening.Handler = version => {
-                    if (!opening.Queue.Deliver(version: version)) {
-                        Retire(key: key, reason: "its link now delivers another world", target: opening);
+                attachment.Handler = version => {
+                    if (!attaching.Queue.Deliver(version: version)) {
+                        Detach(key: key, link: link, reason: "its link now delivers another world", target: attaching);
                     }
                 };
-                mirror.DocumentDelivered += opening.Handler;
+                mirror.DocumentDelivered += attachment.Handler;
             }
 
-            opening.Lifetime = world.Lifetime.Register(callback: () => Retire(key: key, reason: "its world stopped", target: opening));
+            attachment.Lifetime = world.Lifetime.Register(callback: () => Detach(key: key, link: link, reason: "its link closed", target: attaching));
         }
 
         return true;
     }
-    // Ends a world activation's queue: it leaves the registry, stops listening, and every edit it held is abandoned by
-    // name. Total and idempotent, since it runs inside a disposal or a delivery.
-    private void Retire((string Authority, Guid Activation) key, EditTarget target, string reason) {
+    // Detaches one endpoint from a world's queue: the edits that go out through it, with everything queued behind them,
+    // are abandoned by name; the last endpoint to go retires the queue. Total and idempotent, since it runs inside a
+    // disposal or a delivery.
+    private void Detach((string Authority, Guid Activation) key, EditTarget target, IServerLink link, string reason) {
+        Attachment? attachment;
+        bool last;
+
         lock (m_targetGate) {
-            if (!m_targets.TryGetValue(key: key, value: out var current) || !ReferenceEquals(objA: current, objB: target)) {
+            if (!target.Attachments.Remove(key: link, value: out attachment)) {
                 return;
             }
 
-            _ = m_targets.Remove(key: key);
+            last = (target.Attachments.Count == 0);
+
+            if (last && m_targets.TryGetValue(key: key, value: out var current) && ReferenceEquals(objA: current, objB: target)) {
+                _ = m_targets.Remove(key: key);
+            }
         }
 
-        _ = target.Lifetime.Unregister();
+        _ = attachment.Lifetime.Unregister();
 
-        if ((target.Mirror is { } mirror) && (target.Handler is { } handler)) {
+        if ((attachment.Mirror is { } mirror) && (attachment.Handler is { } handler)) {
             mirror.DocumentDelivered -= handler;
         }
 
-        foreach (var edit in target.Queue.Retire()) {
-            echoes.Publish(result: CommandResult.Error(output: $"[{edit.Verb}: '{edit.Row.Id}' in '{target.Name}' abandoned: {reason}]"));
+        foreach (var edit in (last ? target.Queue.Retire() : target.Queue.Abandon(link: link))) {
+            echoes.Publish(result: CommandResult.Error(output: $"[{edit.Verb}: '{edit.Row.Id}' in '{edit.Source.World}' abandoned: {reason}]"));
         }
     }
     // Validates a composed row and composes its upsert under the issuing principal: a refused edit never enters the
     // queue. An edit that goes out now (rather than queuing behind one in flight) is refused while another door holds its
-    // row in this tick's window.
-    private static WorldEditorEditQueue.Edit? ComposeEdit(CommandContext context, EditWorld world, WorldPlacement row, string verb, bool queues, out CommandResult refusal) {
+    // row in the world's current window, and claims that row once it is handed to its link.
+    private static WorldEditorEditQueue.Edit? ComposeEdit(CommandContext context, EditWorld world, WorldEditorEditQueue.Source source, WorldPlacement row, string verb, bool queues, out CommandResult refusal) {
         if (!WorldDefinitionValidator.TryValidatePlacementGeometry(placement: row, reason: out var invalid)) {
             refusal = CommandResult.Error(output: $"[{verb}: '{row.Id}' in '{world.Name}' refused: {invalid}]");
 
             return null;
         }
 
-        if (
-            !queues &&
-            (world.Guard?.IsClaimed(rowIdentity: WorldRowCommandModule.RowIdentityOf(key: row.Id, path: PlacementsPath), window: world.Window) is true)
-        ) {
+        var identity = WorldRowCommandModule.RowIdentityOf(key: row.Id, path: PlacementsPath);
+
+        if (!queues && (world.Guard is { } guard) && guard.Guard.IsClaimed(rowIdentity: identity, window: guard.Window())) {
             refusal = CommandResult.Error(output: $"[{verb}: '{row.Id}' already has an edit buffered this tick in '{world.Name}'; fence with world.wait]");
 
             return null;
@@ -127,84 +141,78 @@ public sealed partial class WorldEditorCommandModule {
 
         refusal = CommandResult.None;
 
-        return new WorldEditorEditQueue.Edit(Mutation: mutation!, Row: row, Verb: verb);
+        return new WorldEditorEditQueue.Edit(
+            Mutation: mutation!,
+            Row: row,
+            Sent: ((world.Guard is { } claims) ? () => claims.Guard.Claim(rowIdentity: identity, window: claims.Window()) : null),
+            Source: source,
+            Verb: verb
+        );
     }
-    // Carries out what an offer admitted: a submitted edit goes to the world's link, a queued one waits; either makes
-    // the placement the seat's current one there.
-    private CommandResult Admit(CommandContext context, EditWorld world, EditTarget target, WorldEditorEditQueue.Admission admission, int slot) {
-        if (admission.Queued is { } queued) {
-            seats.SetCurrent(placement: queued.Row.Id, slot: slot, world: world.Name);
-
-            return Echo(context: context, pending: "queued", placement: queued.Row, slot: slot, verb: queued.Verb, world: world);
+    // Carries out what an offer admitted: the placement becomes the seat's current one there.
+    private CommandResult Admit(CommandContext context, EditWorld world, WorldEditorEditQueue.Admission admission, int slot) {
+        if (admission.Admitted is not { } edit) {
+            return admission.Result;
         }
 
-        if (admission.Submitted is not { } submission) {
-            return admission.Refusal;
+        if (!admission.Queued && admission.Result.IsError) {
+            return admission.Result;
         }
 
-        var edit = submission.Edit;
-        var submitted = Dispatch(submission: submission, target: target);
-
-        if (submitted.IsError) {
-            return submitted;
-        }
-
-        world.Guard?.Claim(rowIdentity: WorldRowCommandModule.RowIdentityOf(key: edit.Row.Id, path: PlacementsPath));
         seats.SetCurrent(placement: edit.Row.Id, slot: slot, world: world.Name);
 
-        return Echo(context: context, pending: "submitted", placement: edit.Row, slot: slot, verb: edit.Verb, world: world);
+        return Echo(context: context, pending: (admission.Queued ? "queued" : "submitted"), placement: edit.Row, slot: slot, verb: edit.Verb, world: world);
     }
-    // Hands a submission to its world's link. Its verdict settles it, on whatever thread the link completes on, inline
-    // or later; a link that throws settles it refused, so no submission stays in flight without a verdict.
-    private CommandResult Dispatch(EditTarget target, WorldEditorEditQueue.Submission submission) {
+    // The queue's sender: hands a submission to its source's link, under the queue's lock. Its verdict settles it, on
+    // whatever thread the link completes on, inline or later; a link that throws settles it refused, so no submission
+    // stays in flight without a verdict.
+    private CommandResult Send(EditTarget target, WorldEditorEditQueue.Submission submission) {
         var edit = submission.Edit;
 
         try {
-            return target.Link.Submit(
+            var submitted = edit.Source.Link.Submit(
                 echoes: echoes,
                 mutation: edit.Mutation,
                 observe: result => Conclude(result: result, submission: submission, target: target),
                 verb: edit.Verb
             );
-        } catch (Exception exception) {
-            Conclude(result: null, submission: submission, target: target);
 
-            return CommandResult.Error(output: $"[{edit.Verb}: '{edit.Row.Id}' in '{target.Name}' was not submitted: {exception.Message}]");
+            if (!submitted.IsError) {
+                edit.Sent?.Invoke();
+            }
+
+            return submitted;
+        } catch (Exception exception) {
+            Report(edit: edit, settlement: target.Queue.Settle(applied: false, id: edit.Row.Id, token: submission.Token, version: default));
+
+            return CommandResult.Error(output: $"[{edit.Verb}: '{edit.Row.Id}' in '{edit.Source.World}' was not submitted: {exception.Message}]");
         }
     }
-    // Settles a submission with its verdict (null for a submission that never reached the link): applied, the document
-    // this host already holds releases what it reflects and the queued edit goes next; refused, the rollback is named. A
-    // settlement for a submission no longer in flight changes nothing.
-    private void Conclude(EditTarget target, WorldEditorEditQueue.Submission submission, WorldSubmissionResult? result) {
-        var edit = submission.Edit;
-        var applied = (result is WorldSubmissionResult.Mutation { Outcome.Applied: true });
-        var settlement = target.Queue.Settle(
-            applied: applied,
-            id: edit.Row.Id,
+    // Settles a submission with its verdict. A settlement for a submission no longer in flight changes nothing.
+    private void Conclude(EditTarget target, WorldEditorEditQueue.Submission submission, WorldSubmissionResult result) => Report(
+        edit: submission.Edit,
+        settlement: target.Queue.Settle(
+            applied: (result is WorldSubmissionResult.Mutation { Outcome.Applied: true }),
+            id: submission.Edit.Row.Id,
             token: submission.Token,
             version: ((result is WorldSubmissionResult.Mutation mutation) ? mutation.Outcome.Version : default)
-        );
-
-        if (applied) {
-            _ = target.Queue.Deliver(version: target.Delivered().Version);
-        }
-
+        )
+    );
+    // Names what a settlement did: a rollback, the edits it abandoned, and what the link answered the next edit with.
+    private void Report(WorldEditorEditQueue.Edit edit, WorldEditorEditQueue.Settlement settlement) {
         if (settlement.RolledBack) {
-            var to = (settlement.RolledBackTo ?? WorldDefinitionRows.FindPlacement(id: edit.Row.Id, placements: target.Delivered().Definition.Placements));
-            var position = ((to is { } row) ? Format(value: ((Vector3)row.Position)) : "nothing: it is not placed");
+            var position = ((settlement.RolledBackTo is { } row) ? Format(value: ((Vector3)row.Position)) : "nothing: it is not placed");
             var dropped = ((settlement.Dropped > 0) ? $", dropping {settlement.Dropped} queued edit{((settlement.Dropped == 1) ? string.Empty : "s")}" : string.Empty);
 
-            echoes.Publish(result: CommandResult.Error(output: $"[{edit.Verb}: '{edit.Row.Id}' in '{target.Name}' rolled back to {position}{dropped}]"));
+            echoes.Publish(result: CommandResult.Error(output: $"[{edit.Verb}: '{edit.Row.Id}' in '{edit.Source.World}' rolled back to {position}{dropped}]"));
         }
 
-        if (settlement.Next is not { } next) {
-            return;
+        foreach (var abandoned in settlement.Abandoned) {
+            echoes.Publish(result: CommandResult.Error(output: $"[{abandoned.Verb}: '{abandoned.Row.Id}' in '{abandoned.Source.World}' abandoned: its link now delivers another world]"));
         }
 
-        var submitted = Dispatch(submission: next, target: target);
-
-        if (!string.IsNullOrEmpty(value: submitted.Output)) {
-            echoes.Publish(result: submitted);
+        if (!string.IsNullOrEmpty(value: settlement.NextSent.Output)) {
+            echoes.Publish(result: settlement.NextSent);
         }
     }
     private static CommandResult Echo(CommandContext context, EditWorld world, WorldPlacement placement, string pending, string verb, int slot) => new(Output: CommandEcho.Open(verb: verb)

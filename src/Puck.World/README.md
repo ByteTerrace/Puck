@@ -483,17 +483,24 @@ therefore moves the placement once per press. When the world refuses an edit,
 or its link fails to take it, every edit queued on it is dropped and the
 placement rolls back to the value the world last confirmed, with a
 `rolled back to` line naming it. A new placement's id is never one an edit in
-flight or queued holds. Reading the base, composing the edit on it and admitting
-it happen as one step, so no verdict lands in between.
+flight or queued holds. Reading the base from the document the seat's endpoint
+delivers now, composing the edit on it, admitting it and sending it happen as one
+step, so no verdict, delivery or retirement lands in between.
 
 Every verdict and every delivered document carries the world's document version
 (`WorldDocumentVersion`), so a confirmed value is held until a delivered document
 at or past its verdict arrives, and released to that document whatever it shows:
 a late document never moves the placement back, and an undo is simply a newer
-document. The queue belongs to one activation of one world and lives as long as
-that world's link here. When the seat crosses onward, or the instance stops or is
-reaped, every edit still in flight or queued is abandoned with an `abandoned` line
-naming it, and nothing is kept.
+document. The queue belongs to one activation of one world: seats that reach it
+through different endpoints share its order, and each edit goes out through its
+own seat's endpoint. When an endpoint closes, or starts delivering another world
+(a crossing onward), the edits that go out through it, with every edit queued
+behind them, are abandoned with an `abandoned` line naming each; a closed
+endpoint refuses anything sent through it afterwards (`world.endpoint.retired`).
+When an instance stops or is reaped, its server answers every submission still
+pending, from any submitter, with `world.authority.stopped`, so an edit in
+flight there rolls back by name. The queue keeps nothing once its last endpoint
+is gone.
 
 The grid rides each view's pass block (`SdfViewSnapshot.Grid`), so one seat can
 build on a grid while another plays. [The editor plan](../../docs/plans/editor.md)

@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using System.Numerics;
@@ -15,6 +16,62 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     private readonly Func<ulong> m_nextInputTick;
     private readonly IDisposable m_observationLease;
     private readonly CancellationTokenSource m_retired = new();
+
+    // The endpoint's submission door: its link while the endpoint is open, and a door that refuses every submission by
+    // name once it is disposed, so nothing composed for the world this endpoint reached is sent through it afterwards.
+    private sealed class RetiringLink(IServerLink inner, CancellationToken retired) : IServerLink {
+        private static WorldSubmissionResult.Refusal Closed { get; } = new(Code: "world.endpoint.retired", Detail: "the endpoint this submission was made through is closed");
+
+        public void Query(WorldQuery query, Action<QueryAnswer> completion) => inner.Query(
+            completion: completion,
+            query: query
+        );
+        public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => (retired.IsCancellationRequested
+            ? 0L
+            : inner.SubmitEnvelope(
+                payload: payload,
+                principal: principal
+            ));
+        public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId) => (retired.IsCancellationRequested
+            ? 0L
+            : inner.SubmitEnvelope(
+                operationId: operationId,
+                payload: payload,
+                principal: principal
+            ));
+        public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion) {
+            if (retired.IsCancellationRequested) {
+                completion?.Invoke(obj: Closed);
+
+                return 0L;
+            }
+
+            return inner.SubmitEnvelope(
+                completion: completion,
+                operationId: operationId,
+                payload: payload,
+                principal: principal
+            );
+        }
+        public void SubmitIntent(in IntentSubmission submission) {
+            if (!retired.IsCancellationRequested) {
+                inner.SubmitIntent(submission: in submission);
+            }
+        }
+        public void SubmitSession(SessionRequest request, Action<SessionReply> completion) {
+            if (retired.IsCancellationRequested) {
+                completion(obj: new SessionReply(Accepted: false, AssignedIndex: -1, Reason: Closed.Detail, RosterEcho: string.Empty));
+
+                return;
+            }
+
+            inner.SubmitSession(
+                completion: completion,
+                request: request
+            );
+        }
+    }
+
     private readonly Func<IClientSink, IDisposable> m_observe;
 
     public WorldAuthorityEndpoint(
@@ -35,7 +92,10 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: nextInputTick);
 
         Identity = identity;
-        Submissions = submissions;
+        Submissions = new RetiringLink(
+            inner: submissions,
+            retired: m_retired.Token
+        );
         m_observe = observe;
         m_adjacencies = adjacencies;
         m_nextInputTick = nextInputTick;
@@ -69,7 +129,7 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     public ulong NextInputTick => m_nextInputTick();
     /// <summary>The endpoint's ordinary submission door.</summary>
     public IServerLink Submissions { get; }
-    /// <summary>Cancelled when this endpoint is disposed: nothing submitted through it afterwards is answered.</summary>
+    /// <summary>Cancelled when this endpoint is disposed: <see cref="Submissions"/> then refuses every submission by name.</summary>
     public CancellationToken Retired => m_retired.Token;
 
     public void Dispose() {

@@ -372,16 +372,7 @@ public sealed partial class WorldDocument {
     // reset around — this closes that loudly, by construction, rather than by omission). A Load/Reload candidate was
     // drawn and admitted by WorldDefinitionLoader.TryLoadFileForAdmission; this is the apply-time gate every install passes.
     internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null) {
-        var verb = request.Kind switch {
-            WorldRebuildKind.Reset => "world.reset",
-            WorldRebuildKind.Load => "world.load",
-            WorldRebuildKind.Reload => "world.reload",
-            _ => throw new ArgumentOutOfRangeException(
-            paramName: nameof(request),
-            actualValue: request.Kind,
-            message: $"no {nameof(ApplyRebuild)} verb for rebuild kind '{request.Kind}'."
-        ),
-        };
+        var verb = RebuildVerb(kind: request.Kind);
 
         // THE CAS RESOLUTION, FIRST — before any refusal gate, so a rebuild the door goes on to refuse below is
         // still taped and reproduces as the identical refusal on replay (RebuildTap's own remarks).

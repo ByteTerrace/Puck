@@ -956,7 +956,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
 
         if (m_stepGuard.IsClaimed(
             rowIdentity: rowIdentity,
-            window: server.NextInputTick
+            window: WorldRowStepWindow.Of(server: server)
         )) {
             return CommandResult.Error(output: $"[world.row.add: {path}: row '{rowIdentity}' already has an edit buffered this tick — fence with world.wait]");
         }
@@ -1040,7 +1040,10 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             return CommandResult.Error(output: $"[world.row.add: {path}: {listPath}: {upsertError}]");
         }
 
-        m_stepGuard.Claim(rowIdentity: rowIdentity);
+        m_stepGuard.Claim(
+            rowIdentity: rowIdentity,
+            window: WorldRowStepWindow.Of(server: server)
+        );
 
         return link.Submit(
             mutation: outcome.Mutation!,
@@ -1133,7 +1136,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
 
         if (m_stepGuard.IsClaimed(
             rowIdentity: rowIdentity,
-            window: server.NextInputTick
+            window: WorldRowStepWindow.Of(server: server)
         )) {
             return CommandResult.Error(output: $"[world.row.remove: {path}: row '{rowIdentity}' already has an edit buffered this tick — fence with world.wait]");
         }
@@ -1196,7 +1199,10 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             return CommandResult.Error(output: $"[world.row.remove: {path}: {listPath}: {upsertError}]");
         }
 
-        m_stepGuard.Claim(rowIdentity: rowIdentity);
+        m_stepGuard.Claim(
+            rowIdentity: rowIdentity,
+            window: WorldRowStepWindow.Of(server: server)
+        );
 
         return link.Submit(
             mutation: outcome.Mutation!,
@@ -1262,7 +1268,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
 
         if (m_stepGuard.IsClaimed(
             rowIdentity: rowIdentity,
-            window: server.NextInputTick
+            window: WorldRowStepWindow.Of(server: server)
         )) {
             return CommandResult.Error(output: $"[world.row.set: {path}: row '{rowIdentity}' already has an edit buffered this tick — a second edit composes from the same pre-drain base and would revert the first; fence with world.wait, or compose one JSON row with world.row.set {path} <json>{(keyed
                 ? " (the key rides inside the JSON)"
@@ -1335,7 +1341,10 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             return CommandResult.Error(output: $"[world.row.set: {path}: {fieldPath}: {upsertError}]");
         }
 
-        m_stepGuard.Claim(rowIdentity: rowIdentity);
+        m_stepGuard.Claim(
+            rowIdentity: rowIdentity,
+            window: WorldRowStepWindow.Of(server: server)
+        );
 
         return link.Submit(
             mutation: outcome.Mutation!,
@@ -1669,7 +1678,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
 
         if (m_stepGuard.IsClaimed(
             rowIdentity: rowIdentity,
-            window: server.NextInputTick
+            window: WorldRowStepWindow.Of(server: server)
         )) {
             return CommandResult.Error(output: $"[world.row.step: {path}: row '{rowIdentity}' already has a step buffered this tick — a second step composes from the same pre-drain base and would revert the first; fence with world.wait, or use world.row.set for the final value]");
         }
@@ -1713,7 +1722,10 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
 
         // Claim the row for this window only once the upsert is genuinely buffered — a step that refused above never
         // blocks a later well-formed one.
-        m_stepGuard.Claim(rowIdentity: rowIdentity);
+        m_stepGuard.Claim(
+            rowIdentity: rowIdentity,
+            window: WorldRowStepWindow.Of(server: server)
+        );
 
         // A buffered mutation verb (echo model 3): no synchronous applied-result line — the whole-row upsert composes
         // and revalidates at the tick boundary, where WorldServer.EchoTap narrates the accept/reject. Asserting
@@ -2371,45 +2383,5 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             Error: null,
             Row: row
         );
-    }
-}
-/// <summary>
-/// The read-your-writes guard for <c>world.row.step</c> within one tick window. A step reads a WHOLE row off the live
-/// definition, mutates one field, and submits a whole-row upsert; two steps to the SAME row inside one window (before
-/// the buffered mutations drain) both compose from the same pre-drain base and drain FIFO, so the later upsert reverts
-/// the earlier's field — both would echo success. The window is the tick every pre-drain submission targets
-/// (<see cref="Server.WorldServer.NextInputTick"/>); the guard remembers which rows a step has already claimed in the
-/// current window and refuses a second claim on one of them, emptying its set the moment the window advances. Steps in
-/// DIFFERENT windows (a held chord repeating once per tick) never collide — the set is empty each new window. Not
-/// thread-safe by design: the command pump is single-threaded, and this is console-side control state off every hashed
-/// simulation path.
-/// </summary>
-public sealed class WorldRowStepWindowGuard {
-    private readonly HashSet<string> m_claimed = new(comparer: StringComparer.Ordinal);
-
-    private bool m_seenWindow;
-    private ulong m_window;
-
-    /// <summary>Records <paramref name="rowIdentity"/> as buffered in the current window — called only once a step's
-    /// upsert is genuinely submitted, so a step refused for any other reason never blocks a retry.</summary>
-    /// <param name="rowIdentity">The row the submitted step addresses.</param>
-    public void Claim(string rowIdentity) => _ = m_claimed.Add(item: rowIdentity);
-    /// <summary>Gets a value indicating whether a step to <paramref name="rowIdentity"/> collides with one already
-    /// buffered in <paramref name="window"/> — advancing to (and emptying) a new window first. The whole-row upsert
-    /// stomps at the row grain, so the addressed field is not part of the identity.</summary>
-    /// <param name="window">The tick every pre-drain submission targets (<see cref="Server.WorldServer.NextInputTick"/>).</param>
-    /// <param name="rowIdentity">The row a step addresses (a section path, or a section path plus row key).</param>
-    /// <returns><see langword="true"/> when the row already has a step buffered this window; otherwise <see langword="false"/>.</returns>
-    public bool IsClaimed(ulong window, string rowIdentity) {
-        if (
-            !m_seenWindow ||
-            (window != m_window)
-        ) {
-            m_seenWindow = true;
-            m_window = window;
-            m_claimed.Clear();
-        }
-
-        return m_claimed.Contains(item: rowIdentity);
     }
 }

@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Commands;
 using Puck.World.Authoring;
 using Puck.World.Client;
+using Puck.World.Protocol;
 
 namespace Puck.World;
 
@@ -89,10 +90,10 @@ public sealed partial class WorldEditorCommandModule {
 
         return false;
     }
-    // Whether a nudge or turn may act on its base (the placement as its line holds it): refused when there is none, and
-    // when its position is resolved through something else (a parent, an attachment, a board), which is what to move
-    // instead.
-    private static bool TryMovable(EditWorld world, string id, WorldPlacement? basis, string verb, out CommandResult refusal) {
+    // Whether a nudge or turn may act on its base (the placement as its line holds it, against the document its source
+    // delivers now): refused when there is none, and when its position is resolved through something else (a parent, an
+    // attachment, a board), which is what to move instead.
+    private static bool TryMovable(EditWorld world, WorldDefinition definition, string id, WorldPlacement? basis, string verb, out CommandResult refusal) {
         refusal = CommandResult.None;
 
         if (basis is null) {
@@ -103,8 +104,8 @@ public sealed partial class WorldEditorCommandModule {
 
         if (
             (basis.Position.Reference is not null) ||
-            ((WorldDefinitionRows.FindPlacement(id: id, placements: world.Definition.Placements) is { } delivered) &&
-            (WorldDefinitionRows.ResolvedPosition(definition: world.Definition, placement: delivered) != ((Vector3)delivered.Position)))
+            ((WorldDefinitionRows.FindPlacement(id: id, placements: definition.Placements) is { } delivered) &&
+            (WorldDefinitionRows.ResolvedPosition(definition: definition, placement: delivered) != ((Vector3)delivered.Position)))
         ) {
             refusal = CommandResult.Error(output: $"[{verb}: '{id}' is positioned through another row; move that instead]");
 
@@ -113,24 +114,23 @@ public sealed partial class WorldEditorCommandModule {
 
         return true;
     }
-    // Edits one placement: its base is read, the edit composed on it, and the edit admitted, as one step under its world's
-    // queue (WorldEditorEditQueue.Offer), so no verdict settles in between.
-    private CommandResult EditPlacement(CommandContext context, EditWorld world, string id, string verb, Func<WorldPlacement, WorldPlacement> change) {
-        if (!TryTargetOf(refusal: out var refusal, target: out var target, verb: verb, world: world)) {
+    // Edits one placement: its base is read, the edit composed on it against the document its source delivers now, and
+    // the edit admitted and sent, as one step under its world's queue (WorldEditorEditQueue.Offer).
+    private CommandResult EditPlacement(CommandContext context, EditWorld world, string id, string verb, Func<WorldDefinition, WorldPlacement, WorldPlacement> change) {
+        if (!TryTargetOf(refusal: out var refusal, source: out var source, target: out var target, verb: verb, world: world)) {
             return refusal;
         }
 
         var admission = target.Queue.Offer(
-            compose: (WorldPlacement? basis, bool queues, out CommandResult composeRefusal) => (TryMovable(basis: basis, id: id, refusal: out composeRefusal, verb: verb, world: world)
-                ? ComposeEdit(context: context, queues: queues, refusal: out composeRefusal, row: change(arg: basis!), verb: verb, world: world)
+            compose: (WorldDeliveredDocument document, WorldPlacement? basis, bool queues, out CommandResult composeRefusal) => (TryMovable(basis: basis, definition: document.Definition, id: id, refusal: out composeRefusal, verb: verb, world: world)
+                ? ComposeEdit(context: context, queues: queues, refusal: out composeRefusal, row: change(arg1: document.Definition, arg2: basis!), source: source, verb: verb, world: world)
                 : null),
-            delivered: WorldDefinitionRows.FindPlacement(id: id, placements: world.Definition.Placements),
             id: id,
-            verb: verb,
-            version: world.Version
+            source: source,
+            verb: verb
         );
 
-        return Admit(admission: admission, context: context, slot: context.Slot, target: target, world: world);
+        return Admit(admission: admission, context: context, slot: context.Slot, world: world);
     }
     private CommandResult NudgeHandler(CommandContext context, WireArgs args) {
         if (args.Count is not (2 or 3)) {
@@ -148,36 +148,34 @@ public sealed partial class WorldEditorCommandModule {
         }
 
         var slot = context.Slot;
-        var definition = world.Definition;
 
         if (!TryTargetId(id: out var id, named: ((at == 1) ? args[0].ToString() : null), refusal: out var refusal, slot: slot, verb: NudgeCommand, world: world)) {
             return refusal;
         }
 
-        var pitch = seats.GridOf(document: definition.Editor, slot: slot).ResolvedPitch;
-        var snap = seats.SnapOf(document: definition.Editor, slot: slot);
         var unit = axis switch {
             0 => Vector3.UnitX,
             1 => Vector3.UnitY,
             _ => Vector3.UnitZ,
         };
-        var reference = ReferenceFor(definition: definition, world: world.Name, excluding: id, pitch: pitch, slot: slot);
 
         return EditPlacement(
-            change: placement => {
+            change: (definition, placement) => {
+                var pitch = seats.GridOf(document: definition.Editor, slot: slot).ResolvedPitch;
+                var snap = seats.SnapOf(document: definition.Editor, slot: slot);
                 var position = ((Vector3)placement.Position);
                 Vector3 moved;
 
-                if (reference is { } captured) {
-                    var local = Vector3.Transform(rotation: Quaternion.Inverse(value: captured.Frame), value: (position - captured.Origin));
+                if (ReferenceFor(definition: definition, world: world.Name, excluding: id, pitch: pitch, slot: slot) is { } reference) {
+                    var local = Vector3.Transform(rotation: Quaternion.Inverse(value: reference.Frame), value: (position - reference.Origin));
 
-                    local += (unit * (steps * Component(axis: axis, value: captured.Pitch)));
+                    local += (unit * (steps * Component(axis: axis, value: reference.Pitch)));
 
                     if (snap.Enabled) {
-                        local = GridSnap.SnapToWorldLattice(p: local, pitch: (captured.Pitch * unit));
+                        local = GridSnap.SnapToWorldLattice(p: local, pitch: (reference.Pitch * unit));
                     }
 
-                    moved = (captured.Origin + Vector3.Transform(rotation: captured.Frame, value: local));
+                    moved = (reference.Origin + Vector3.Transform(rotation: reference.Frame, value: local));
                 } else {
                     moved = (position + (unit * (steps * Component(axis: axis, value: pitch))));
 
@@ -203,78 +201,86 @@ public sealed partial class WorldEditorCommandModule {
             return editRefusal;
         }
 
-        if (!TryTargetOf(refusal: out var targetRefusal, target: out var target, verb: PlaceCommand, world: world)) {
+        if (!TryTargetOf(refusal: out var targetRefusal, source: out var source, target: out var target, verb: PlaceCommand, world: world)) {
             return targetRefusal;
         }
 
         var slot = context.Slot;
-        var definition = world.Definition;
-        var current = ((seats.CurrentOf(slot: slot, world: world.Name) is { } currentId)
-            ? target.Queue.Latest(
-                delivered: WorldDefinitionRows.FindPlacement(id: currentId, placements: definition.Placements),
-                id: currentId,
-                version: world.Version
-            )
-            : null);
-        var prototype = ((args.Count >= 1) ? args[0].ToString() : current?.PrototypeId);
+        var currentId = seats.CurrentOf(slot: slot, world: world.Name);
+        var named = ((args.Count >= 1) ? args[0].ToString() : null);
+        var namedId = ((args.Count == 2) ? args[1].ToString() : null);
 
-        if (prototype is null) {
-            return CommandResult.Error(output: $"[{PlaceCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} has no current placement to copy; name a creation]");
-        }
-
-        if (!definition.Creations.Any(predicate: creation => string.Equals(a: creation.Id.Value, b: prototype, comparisonType: StringComparison.Ordinal))) {
-            return CommandResult.Error(output: $"[{PlaceCommand}: no creation '{prototype}']");
-        }
-
-        if (seats.AimProbe?.Invoke(arg: slot) is not { } aim) {
-            return CommandResult.Error(output: $"[{PlaceCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} presents no view to aim from]");
-        }
-
-        // A new placement copies the scale, yaw and solidity of the seat's current placement when that is the same
-        // creation, else of the first placement of the creation, so a builder stamps out another like it.
-        var template = (((current is not null) && string.Equals(a: current.PrototypeId, b: prototype, comparisonType: StringComparison.Ordinal))
-            ? current
-            : definition.Placements.FirstOrDefault(predicate: placement => string.Equals(a: placement.PrototypeId, b: prototype, comparisonType: StringComparison.Ordinal)));
-        var scale = (template?.Scale ?? 1f);
-        var pitch = seats.GridOf(document: definition.Editor, slot: slot).ResolvedPitch;
-        var snap = seats.SnapOf(document: definition.Editor, slot: slot);
-        var yaw = (template?.YawDegrees ?? 0f);
-        var position = Land(
-            aim: aim,
-            definition: definition,
-            halfExtents: new Vector3(value: (0.5f * scale)),
-            pitch: pitch,
-            reference: ReferenceFor(definition: definition, world: world.Name, excluding: null, pitch: pitch, slot: slot),
-            slot: slot,
-            snap: snap
-        );
-
-        // The id, asked for or minted as the creation's name and the first number neither the delivered document nor any
-        // edit holds, is chosen with the edit's admission, so two places before any verdict never share one.
+        // The id, asked for or minted as the creation's name and the first number neither the document the source delivers
+        // now nor any edit holds, is chosen with the edit's admission, so two places before any verdict never share one.
         var admission = target.Queue.OfferNew(
-            compose: (string id, out CommandResult refusal) => ComposeEdit(
-                context: context,
-                queues: false,
-                refusal: out refusal,
-                row: new WorldPlacement(
-                    Id: id,
-                    Position: position,
-                    PrototypeId: prototype,
-                    Scale: scale,
-                    Solid: (template?.Solid ?? new WorldSolid(Margin: 0f)),
-                    YawDegrees: (snap.Enabled ? GridSnap.SnapYawDegrees(stepDegrees: snap.AngleStepDegrees, yawDegrees: yaw) : yaw)
-                ),
-                verb: PlaceCommand,
-                world: world
-            ),
-            inDocument: id => (WorldDefinitionRows.FindPlacement(id: id, placements: definition.Placements) is not null),
-            named: ((args.Count == 2) ? args[1].ToString() : null),
-            prefix: prototype,
-            verb: PlaceCommand,
-            version: world.Version
+            compose: (WorldDeliveredDocument document, Func<string, WorldPlacement?> latest, Func<string, bool> taken, Func<string, string> mint, out CommandResult refusal) => {
+                var definition = document.Definition;
+                var current = ((currentId is not null) ? latest(arg: currentId) : null);
+
+                if ((named ?? current?.PrototypeId) is not { } prototype) {
+                    refusal = CommandResult.Error(output: $"[{PlaceCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} has no current placement to copy; name a creation]");
+
+                    return null;
+                }
+
+                if (!definition.Creations.Any(predicate: creation => string.Equals(a: creation.Id.Value, b: prototype, comparisonType: StringComparison.Ordinal))) {
+                    refusal = CommandResult.Error(output: $"[{PlaceCommand}: no creation '{prototype}']");
+
+                    return null;
+                }
+
+                if ((namedId is not null) && taken(arg: namedId)) {
+                    refusal = CommandResult.Error(output: $"[{PlaceCommand}: a placement '{namedId}' already exists]");
+
+                    return null;
+                }
+
+                if (seats.AimProbe?.Invoke(arg: slot) is not { } aim) {
+                    refusal = CommandResult.Error(output: $"[{PlaceCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} presents no view to aim from]");
+
+                    return null;
+                }
+
+                // A new placement copies the scale, yaw and solidity of the seat's current placement when that is the
+                // same creation, else of the first placement of the creation, so a builder stamps out another like it.
+                var template = (((current is not null) && string.Equals(a: current.PrototypeId, b: prototype, comparisonType: StringComparison.Ordinal))
+                    ? current
+                    : definition.Placements.FirstOrDefault(predicate: placement => string.Equals(a: placement.PrototypeId, b: prototype, comparisonType: StringComparison.Ordinal)));
+                var scale = (template?.Scale ?? 1f);
+                var pitch = seats.GridOf(document: definition.Editor, slot: slot).ResolvedPitch;
+                var snap = seats.SnapOf(document: definition.Editor, slot: slot);
+                var yaw = (template?.YawDegrees ?? 0f);
+
+                return ComposeEdit(
+                    context: context,
+                    queues: false,
+                    refusal: out refusal,
+                    row: new WorldPlacement(
+                        Id: (namedId ?? mint(arg: prototype)),
+                        Position: Land(
+                            aim: aim,
+                            definition: definition,
+                            halfExtents: new Vector3(value: (0.5f * scale)),
+                            pitch: pitch,
+                            reference: ReferenceFor(definition: definition, world: world.Name, excluding: null, pitch: pitch, slot: slot),
+                            slot: slot,
+                            snap: snap
+                        ),
+                        PrototypeId: prototype,
+                        Scale: scale,
+                        Solid: (template?.Solid ?? new WorldSolid(Margin: 0f)),
+                        YawDegrees: (snap.Enabled ? GridSnap.SnapYawDegrees(stepDegrees: snap.AngleStepDegrees, yawDegrees: yaw) : yaw)
+                    ),
+                    source: source,
+                    verb: PlaceCommand,
+                    world: world
+                );
+            },
+            source: source,
+            verb: PlaceCommand
         );
 
-        return Admit(admission: admission, context: context, slot: slot, target: target, world: world);
+        return Admit(admission: admission, context: context, slot: slot, world: world);
     }
     private IEnumerable<CommandDefinition> PlacementVerbs() {
         yield return CommandDefinition.WithWireArgs(
@@ -314,10 +320,9 @@ public sealed partial class WorldEditorCommandModule {
             return refusal;
         }
 
-        var snap = seats.SnapOf(document: world.Definition.Editor, slot: slot);
-
         return EditPlacement(
-            change: placement => {
+            change: (definition, placement) => {
+                var snap = seats.SnapOf(document: definition.Editor, slot: slot);
                 var yaw = (placement.YawDegrees + (steps * snap.AngleStepDegrees));
 
                 if (snap.Enabled) {

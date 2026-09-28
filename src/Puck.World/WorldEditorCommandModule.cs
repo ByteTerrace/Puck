@@ -42,9 +42,9 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
     // The world a verb edits: its name as the seat's route names it, the authority identity it answers as, its document
     // and that document's version as this host last saw them, the read of whatever it delivers next, the link an edit is
     // submitted through, the token cancelled when that link's world goes away, the mirror its documents arrive on (none
-    // for the console's own world, whose live document is read directly), the input window an edit targets, and the guard
-    // its console's other row-editing doors claim rows in, which only the console's own world has.
-    private readonly record struct EditWorld(string Name, string Authority, WorldDefinition Definition, WorldDocumentVersion Version, Func<WorldDeliveredDocument> Delivered, IServerLink Link, CancellationToken Lifetime, WorldSessionMirror? Mirror, ulong Window, WorldRowStepWindowGuard? Guard);
+    // for the console's own world, whose live document is read directly), and the guard its console's other row-editing
+    // doors claim rows in with the read of the world's current window, which only the console's own world has.
+    private readonly record struct EditWorld(string Name, string Authority, WorldDefinition Definition, WorldDocumentVersion Version, Func<WorldDeliveredDocument> Delivered, IServerLink Link, CancellationToken Lifetime, WorldSessionMirror? Mirror, (WorldRowStepWindowGuard Guard, Func<WorldRowStepWindow> Window)? Guard);
 
     private static string Format(float value) => value.ToString(
         format: "0.####",
@@ -117,8 +117,7 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
                 Link: endpoint.Submissions,
                 Mirror: endpoint.Mirror,
                 Name: endpoint.Identity,
-                Version: document.Version,
-                Window: endpoint.NextInputTick
+                Version: document.Version
             );
 
             return true;
@@ -130,13 +129,12 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
             Authority: server.AuthorityIdentity,
             Definition: server.Definition,
             Delivered: () => new WorldDeliveredDocument(Definition: server.Definition, Version: server.DocumentVersion),
-            Guard: stepGuard,
+            Guard: (stepGuard, () => WorldRowStepWindow.Of(server: server)),
             Lifetime: instance.Retired,
             Link: (instance.ConsoleLink ?? instance.Link),
             Mirror: null,
             Name: instance.Name,
-            Version: server.DocumentVersion,
-            Window: server.NextInputTick
+            Version: server.DocumentVersion
         );
 
         return true;

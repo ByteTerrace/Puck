@@ -393,8 +393,10 @@ changes one field, and submits the whole row back is a stale read against the
 same batch's own composing writes — a defect class, not a shortcut. The general
 literal field/list doors below do exactly this shape, safely, because they share
 ONE window guard (`WorldRowStepWindowGuard`) that refuses a second read-modify-
-whole-row-write against the same row inside one tick window rather than letting
-the later one silently revert the earlier; a bespoke verb reinventing the shape
+whole-row-write against the same row inside one tick window of one world (a
+`WorldRowStepWindow`: authority, activation and tick, so another world or a
+recreated one never inherits a claim) rather than letting the later one silently
+revert the earlier; a bespoke verb reinventing the shape
 without that guard is the regression this rule still targets.
 
 **`creation.sculpt(s)` is not a second door.** `creation.sculpts` lists the

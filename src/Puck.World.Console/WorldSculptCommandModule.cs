@@ -176,7 +176,7 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, I
                 // Compose every row first (all-or-nothing): a refusal here names the row and submits nothing.
                 var touched = SculptPatch.TouchedRows(results: results);
                 var composed = new List<(string Identity, WorldMutation Mutation)>(capacity: touched.Count);
-                var window = server.NextInputTick;
+                var window = WorldRowStepWindow.Of(server: server);
 
                 foreach (var row in touched) {
                     var verb = PathToVerb.GetValueOrDefault(
@@ -248,7 +248,7 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, I
                         mutation: mutation,
                         verb: "creation.sculpt"
                     );
-                    stepGuard.Claim(rowIdentity: identity);
+                    stepGuard.Claim(rowIdentity: identity, window: window);
                     _ = output.Append(value: '\n').Append(value: $"[creation.sculpt: {name}: {identity} {(IsRemove(mutation: mutation)
                         ? "remove"
                         : "set")} submitted as {principal.Describe()}]");

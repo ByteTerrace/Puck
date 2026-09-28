@@ -134,7 +134,12 @@ so a reader orders a verdict against a delivered document exactly, whichever
 arrives first: a document at or past a verdict's version reflects that edit.
 `WorldSessionMirror` publishes a delivered definition and its version as one
 `WorldDeliveredDocument` and raises `DocumentDelivered` after each delivery.
-The version is delivery metadata; no hash, checkpoint or replay reads it.
+The version is delivery metadata; no hash, checkpoint or replay reads it. The
+federation decoder refuses a version with a negative sequence, or a sequence and
+no activation, and a live route or definition with no delivered version; only a
+reservation's preview carries the empty version. A disposed
+`WorldAuthorityEndpoint` refuses every submission through its `Submissions`
+(`world.endpoint.retired`) and cancels `Retired`.
 `IWorldStateView.cs` is the state half of the
 presentation view: the narrow reader, one cell by row ordinal, that the state
 mirror reads every presentation read of state through. `WorldStateMirror.cs` is

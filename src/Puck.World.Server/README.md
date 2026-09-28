@@ -1271,7 +1271,11 @@ expected authority identity. No connection or held-input lease is stored in the
 checkpoint. Replacing a local route releases its old held-input lease, and that
 retired lease cannot publish again. An empty source authority with forwarding
 routes is not automatically reaped. Explicitly stopping a destination unbinds
-incoming routes; admitting the same authority later binds them again.
+incoming routes; admitting the same authority later binds them again. Stopping or
+reaping an instance stops its server (`WorldServer.Stop`): admission closes, and
+every submission still pending is answered at once with a refusal naming the stop
+(`world.authority.stopped`), through the typed completion and the edit echo a
+refusal at the tick boundary uses, as is every submission after it.
 
 The route follows later transfers whether a hop is local or reached over QUIC.
 Each hop checks its own source-scoped credential before following the next route,

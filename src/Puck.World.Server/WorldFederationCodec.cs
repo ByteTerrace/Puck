@@ -1083,6 +1083,18 @@ public static partial class WorldFederationCodec {
             Sequence: BinaryPrimitives.ReadInt64LittleEndian(source: body[17..])
         );
 
+        // A delivered document names its activation and a non-negative install ordinal; only a document that is not a
+        // delivery (a reservation's preview) carries the empty version, whole.
+        if ((version.Sequence < 0L) || (!version.IsDelivered && (version != default))) {
+            failure = new WireFailure(
+                Detail: $"document version {version.Activation}/{version.Sequence} is malformed",
+                Refusal: WireRefusal.PayloadMalformed
+            );
+            version = default;
+
+            return false;
+        }
+
         var payload = body[DocumentHeaderBytes..];
 
         if (tier == WorldDisclosureTier.Replica) {
@@ -1350,6 +1362,15 @@ public static partial class WorldFederationCodec {
         ) ||
             (definition is null)
         ) {
+            return false;
+        }
+
+        if (!version.IsDelivered) {
+            failure = new WireFailure(
+                Detail: "a route's document carries no delivered version",
+                Refusal: WireRefusal.PayloadMalformed
+            );
+
             return false;
         }
 

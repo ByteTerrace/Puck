@@ -776,12 +776,13 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                             failure: out var definitionFailure,
                             version: out var definitionVersion
                         ) ||
-                            (definition is null)
+                            (definition is null) ||
+                            !definitionVersion.IsDelivered
                         ) {
                             if (m_narrationHub is { HasNarrationSink: true }) {
                                 m_narrationHub?.Narrate(
                                     channel: "world.projection",
-                                    text: $"[world.projection: remote observer '{Endpoint}' refused a definition record ({definitionFailure})]"
+                                    text: $"[world.projection: remote observer '{Endpoint}' refused a definition record ({(definitionFailure.IsRefusal ? definitionFailure.ToString() : "a live definition carries no delivered version")})]"
                                 );
                             }
 

@@ -144,9 +144,12 @@ public sealed class WorldInstance : IDisposable {
     /// on the desktop, a no-op for a row nothing is waiting on.</summary>
     public Action<ulong> PublishTick { get; set; } = static _ => { };
 
-    /// <summary>Disposes what this instance owns. A no-op for a boot instance, whose machine host belongs to the
-    /// container and outlives any retirement of the entry.</summary>
+    /// <summary>Retires this instance: its server stops, answering every submission still pending with a refusal that
+    /// names the stop (<see cref="WorldServer.Stop"/>), <see cref="Retired"/> is cancelled, and what the instance owns
+    /// is disposed. A boot instance's machine host belongs to the container and outlives the entry.</summary>
     public void Dispose() {
+        Server.Stop(reason: $"instance '{Name}' stopped");
+
         // Cancelled, never disposed, so a late reader of Retired still gets the cancelled token.
         if (!m_retired.IsCancellationRequested) {
             m_retired.Cancel();

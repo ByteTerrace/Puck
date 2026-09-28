@@ -246,9 +246,14 @@ another editor's write in the same batch is simply a newer document and a late
 document never moves a placement back
 (`ADocumentOlderThanAConfirmedValueNeverReplacesItAndANewerOneAlwaysDoes`,
 `AnUndoneEditIsNeverRestoredByTheNextNudge`). A queue is keyed by its world's
-authority and activation and lives as long as that world's link here: a
-crossing onward, a stopped or reaped instance, or a disposed endpoint abandons
-its edits by name.
+authority and activation; every transition happens under its lock against the
+document the edit's endpoint delivers at that moment and its retirement state,
+and each edit goes out through its own endpoint. A crossing onward or a closed
+endpoint abandons that endpoint's edits by name, a stopped or reaped instance
+answers its pending edits with `world.authority.stopped`, and a malformed
+version is refused at the wire and ignored by the queue
+(`WorldEditorEditQueueStateLawTests`, `DocumentVersionWireLawTests`,
+`WorldInstanceStopLawTests`).
 
 ### E2 — Selection, picking and highlight
 

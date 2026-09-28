@@ -224,10 +224,7 @@ public sealed partial class WorldTick {
                 (entry is WorldOrderedEntry.Submission retiringSubmission) &&
                 Host.AuthorityRetiring
             ) {
-                retiringSubmission.Completion?.Invoke(new WorldSubmissionResult.Refusal(
-                    Code: "world.authority.retiring",
-                    Detail: "authority is retiring and no longer admits submissions"
-                ));
+                retiringSubmission.Completion?.Invoke(Host.RetiredRefusal());
                 return;
             }
             m_ordered.Enqueue(item: entry);
