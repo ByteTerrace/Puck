@@ -91,18 +91,32 @@ public sealed class WorldRowStepWindowGuardLawTests {
         ));
     }
     [Fact]
-    public void AnotherWorldOrAWorldRecreatedUnderTheSameNameNeverInheritsAClaim() {
+    public void AnotherWorldOrActivationNeverInheritsAClaimNorErasesOne() {
         var guard = new WorldRowStepWindowGuard();
+        var other = Guid.NewGuid();
 
         guard.Claim(rowIdentity: "placements.crate1", window: At(tick: 1UL));
 
-        // Red leg: the same world, at the same tick, holds the claim.
-        Assert.True(condition: guard.IsClaimed(rowIdentity: "placements.crate1", window: At(tick: 1UL)));
-
-        // Another world at the same tick, and the world recreated under the same name at the same tick, hold none; the
-        // first world's claim stands beside the other world's window.
+        // Another world, and another activation of the same authority (a world recreated under its name, or two instances
+        // declaring one authority), at the same tick, hold none of the claim.
         Assert.False(condition: guard.IsClaimed(rowIdentity: "placements.crate1", window: At(authority: "north", tick: 1UL)));
+        Assert.False(condition: guard.IsClaimed(rowIdentity: "placements.crate1", window: At(activation: other, tick: 1UL)));
+
+        // Red leg: seeing another activation of the same authority leaves the first activation's claim standing.
         Assert.True(condition: guard.IsClaimed(rowIdentity: "placements.crate1", window: At(tick: 1UL)));
-        Assert.False(condition: guard.IsClaimed(rowIdentity: "placements.crate1", window: At(activation: Guid.NewGuid(), tick: 1UL)));
+    }
+    [Fact]
+    public void AStoppedActivationsClaimsAreDropped() {
+        var guard = new WorldRowStepWindowGuard();
+        using var stopping = new CancellationTokenSource();
+        var window = At(tick: 1UL) with { Retired = stopping.Token };
+
+        guard.Claim(rowIdentity: "placements.crate1", window: window);
+        guard.Claim(rowIdentity: "placements.crate1", window: At(authority: "north", tick: 1UL));
+
+        // Red leg: while the activation runs, its claim set is held.
+        Assert.Equal(actual: guard.Worlds, expected: 2);
+        stopping.Cancel();
+        Assert.Equal(actual: guard.Worlds, expected: 1);
     }
 }

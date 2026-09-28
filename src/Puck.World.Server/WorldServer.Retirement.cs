@@ -6,9 +6,14 @@ public sealed partial class WorldServer {
     /// <summary>The refusal code every submission a stopped activation answers carries.</summary>
     public const string StoppedCode = "world.authority.stopped";
 
+    // Cancelled, never disposed, by Stop: a late reader of Stopped still gets the cancelled token.
+    private readonly CancellationTokenSource m_stopped = new();
+
     private bool m_authorityRetiring;
     private string? m_stopReason;
 
+    /// <summary>Gets a token cancelled when this activation stops (<see cref="Stop"/>).</summary>
+    public CancellationToken Stopped => m_stopped.Token;
     /// <summary>Whether this activation has permanently closed admission and simulation for retirement.
     /// A failed final save does not reopen it; only a new server activation can accept work again.</summary>
     public bool IsRetiring { get { lock (m_authorityGate) { return m_authorityRetiring; } } }
@@ -50,6 +55,8 @@ public sealed partial class WorldServer {
             m_authorityRetiring = true;
             m_document.RefusePending(reason: reason);
         }
+
+        m_stopped.Cancel();
     }
 
     /// <summary>Returns the refusal a submission to this activation meets once it has frozen for retirement or stopped.</summary>

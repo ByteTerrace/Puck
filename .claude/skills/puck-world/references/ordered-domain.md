@@ -175,7 +175,9 @@ rejection and on stdout for an acceptance.
 - `IClientSink` — 6 deliveries: `DeliverSnapshot`, `DeliverAnswer`,
   `DeliverDefinition` (a shape change), `DeliverState` (a value-only write),
   both carrying the definition's `WorldDocumentVersion` (activation plus install
-  ordinal, also on every `WorldMutationOutcome`),
+  ordinal, also on every `WorldMutationOutcome`; a mutation payload composed on a
+  read carries that activation as `ExpectedActivation`, refused on mismatch as
+  `world.mutation.activation_mismatch`),
   `DeliverComposition`, `DeliverSessionLever`.
 - `AttachSink` is a subscribe (multi-sink via `WorldOutputHub`, with a primer
   snapshot to the newly attached sink only).

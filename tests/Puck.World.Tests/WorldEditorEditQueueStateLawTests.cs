@@ -86,6 +86,8 @@ public sealed class WorldEditorEditQueueStateLawTests {
         verb: WorldEditorCommandModule.NudgeCommand
     );
     private static IServerLink LinkOf(WorldDefinition definition) => new RecordingLink(definition: definition);
+    // A document that carries nothing but its version.
+    private static WorldDeliveredDocument At(WorldDocumentVersion version) => new(Definition: Basis, Version: version);
 
     [Fact]
     public void ADocumentOlderThanAConfirmedValueNeverReplacesItAndANewerOneAlwaysDoes() {
@@ -110,8 +112,8 @@ public sealed class WorldEditorEditQueueStateLawTests {
         Assert.Equal(actual: queue.Latest(id: "a", source: source), expected: second);
         world.Deliver(rows: [first], sequence: 1L);
         Assert.Equal(actual: queue.Latest(id: "a", source: source), expected: second);
-        Assert.True(condition: queue.Deliver(version: new WorldDocumentVersion(Activation: Guid.Empty, Sequence: 9L)));
-        Assert.True(condition: queue.Deliver(version: new WorldDocumentVersion(Activation: world.Activation, Sequence: -1L)));
+        Assert.True(condition: queue.Deliver(document: At(version: new WorldDocumentVersion(Activation: Guid.Empty, Sequence: 9L))));
+        Assert.True(condition: queue.Deliver(document: At(version: new WorldDocumentVersion(Activation: world.Activation, Sequence: -1L))));
         Assert.Equal(actual: queue.Lines, expected: 1);
 
         // Red leg: a document at or past the confirmation releases the line whatever it shows. An undo that puts the
@@ -280,6 +282,43 @@ public sealed class WorldEditorEditQueueStateLawTests {
         Assert.Equal(actual: sent.Submissions[^1].Edit.Row.Position.X, expected: 2f);
     }
     [Fact]
+    public void AnEndpointThatLagsIsBasedOnTheNewestStateAnyEndpointDelivered() {
+        var fast = new World();
+        var slow = new World { Activation = fast.Activation };
+        var sent = new Sent();
+        var queue = new WorldEditorEditQueue(activation: fast.Activation, send: sent.Send);
+        var near = fast.SourceFor(link: LinkOf(definition: Basis));
+        var far = slow.SourceFor(link: LinkOf(definition: Basis));
+        var origin = Row(id: "a", x: 0f);
+        var moved = Row(id: "a", x: 1f);
+        WorldPlacement? basis = null;
+
+        fast.Deliver(rows: [origin], sequence: 0L);
+        slow.Deliver(rows: [origin], sequence: 0L);
+        _ = Offer(principal: Principal.Console, queue: queue, row: moved, source: near);
+        _ = queue.Settle(applied: true, id: "a", token: sent.Submissions[^1].Token, version: fast.Version with { Sequence = 1L });
+
+        // The fast endpoint delivers the confirming document; the slow one has not yet.
+        fast.Deliver(rows: [moved], sequence: 1L);
+        Assert.True(condition: queue.Deliver(document: fast.Document));
+        _ = queue.Offer(
+            compose: (WorldDeliveredDocument document, WorldPlacement? read, bool queues, out CommandResult refusal) => {
+                basis = read;
+                refusal = CommandResult.None;
+
+                return null;
+            },
+            id: "a",
+            source: far,
+            verb: WorldEditorCommandModule.NudgeCommand
+        );
+        Assert.Equal(actual: basis, expected: moved);
+
+        // Red leg: the slow endpoint's own document still shows the row before the confirmed move, so an edit based on
+        // it would overwrite that move.
+        Assert.Equal(actual: WorldDefinitionRows.FindPlacement(id: "a", placements: slow.Document.Definition.Placements), expected: origin);
+    }
+    [Fact]
     public void ARandomInterleavingKeepsEveryInvariantAtEveryStep() {
         var random = new Random(Seed: 1729);
         string[] ids = ["a", "b", "c"];
@@ -287,30 +326,49 @@ public sealed class WorldEditorEditQueueStateLawTests {
         IServerLink[] links = [LinkOf(definition: Basis), LinkOf(definition: Basis)];
         var value = 0f;
 
-        var (confirms, refusalsDropping, supersedes, stale, undos, released, crossings, abandoned, closings, malformed, crossSource) = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        var (confirms, refusalsDropping, supersedes, stale, undos, released, crossings, abandoned, closings, malformed, crossSource, lagging) = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
-        // The world behind the queue: its documents in install order, each a row per placement, and the one delivered, which
-        // never moves back. Both endpoints read the delivered one. The model of each line: the edit in flight, the edits
-        // queued, and the confirmed value no delivered document reflects yet with the install it applied at.
-        var world = new World();
+        // The world behind the queue: its documents in install order, each a row per placement. Each endpoint has its
+        // own view of it, delivered at its own pace and never moving back; the newest either has delivered is the world's
+        // known state. The model of each line: the edit in flight, the edits queued, and the confirmed value no known
+        // state reflects yet with the install it applied at.
+        var activation = Guid.NewGuid();
+        World[] views = [new World { Activation = activation }, new World { Activation = activation }];
         var sent = new Sent();
-        var queue = new WorldEditorEditQueue(activation: world.Activation, send: sent.Send);
+        var queue = new WorldEditorEditQueue(activation: activation, send: sent.Send);
         var documents = new List<Dictionary<string, WorldPlacement>> { ids.ToDictionary(elementSelector: id => Row(id: id, x: 0f), keySelector: id => id) };
-        var delivered = 0;
+        int[] delivered = [0, 0];
+        var newest = 0;
         var inFlight = new Dictionary<string, WorldEditorEditQueue.Submission>();
         var queued = ids.ToDictionary(elementSelector: _ => new List<WorldEditorEditQueue.Edit>(), keySelector: id => id);
         var confirmed = new Dictionary<string, (WorldPlacement Row, long At)>();
         var settled = new List<WorldEditorEditQueue.Submission>();
-        WorldEditorEditQueue.Source[] sources = [world.SourceFor(link: links[0]), world.SourceFor(link: links[1])];
+        WorldEditorEditQueue.Source[] sources = [views[0].SourceFor(link: links[0]), views[1].SourceFor(link: links[1])];
 
-        void Show(int index) {
-            delivered = index;
-            world.Deliver(rows: documents[index].Values, sequence: index);
+        // One endpoint delivers a document: its mirror hands it to the queue, as it would on arrival.
+        void Show(int view, int index) {
+            delivered[view] = index;
+            views[view].Deliver(rows: documents[index].Values, sequence: index);
+            Assert.True(condition: queue.Deliver(document: views[view].Document));
+
+            if (index <= newest) {
+                return;
+            }
+
+            newest = index;
+
+            foreach (var each in ids) {
+                if (confirmed.TryGetValue(key: each, value: out var held) && (held.At <= newest)) {
+                    _ = confirmed.Remove(key: each);
+                    released++;
+                }
+            }
         }
         void Install(string id, WorldPlacement row) => documents.Add(item: new Dictionary<string, WorldPlacement>(dictionary: documents[^1]) { [id] = row });
         IEnumerable<WorldEditorEditQueue.Edit> EditsOf(string id) => ((inFlight.TryGetValue(key: id, value: out var flying) ? [flying.Edit] : Array.Empty<WorldEditorEditQueue.Edit>()).Concat(second: queued[id]));
 
-        Show(index: 0);
+        Show(index: 0, view: 0);
+        Show(index: 0, view: 1);
 
         for (var step = 0; (step < 6000); step++) {
             var id = ids[random.Next(maxValue: ids.Length)];
@@ -356,7 +414,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
 
                         var at = (documents.Count - 1);
                         var count = sent.Submissions.Count;
-                        var settlement = queue.Settle(applied: true, id: id, token: submission.Token, version: new WorldDocumentVersion(Activation: world.Activation, Sequence: at));
+                        var settlement = queue.Settle(applied: true, id: id, token: submission.Token, version: new WorldDocumentVersion(Activation: activation, Sequence: at));
 
                         settled.Add(item: submission);
                         confirms++;
@@ -381,31 +439,29 @@ public sealed class WorldEditorEditQueueStateLawTests {
                             break;
                         }
 
-                        var settlement = queue.Settle(applied: false, id: id, token: submission.Token, version: world.Version);
+                        var settlement = queue.Settle(applied: false, id: id, token: submission.Token, version: views[0].Version);
 
                         settled.Add(item: submission);
                         refusalsDropping += ((queued[id].Count > 0) ? 1 : 0);
                         Assert.True(condition: settlement.RolledBack);
                         Assert.Null(@object: settlement.Next);
                         Assert.Equal(actual: settlement.Dropped, expected: queued[id].Count);
-                        Assert.Equal(actual: settlement.RolledBackTo, expected: (confirmed.TryGetValue(key: id, value: out var held) ? held.Row : documents[delivered][id]));
+                        Assert.Equal(actual: settlement.RolledBackTo, expected: (confirmed.TryGetValue(key: id, value: out var held) ? held.Row : documents[newest][id]));
                         queued[id].Clear();
 
                         break;
                     }
-                case 6:
-                    if (delivered < (documents.Count - 1)) {
-                        Show(index: ((delivered + 1) + random.Next(maxValue: ((documents.Count - 1) - delivered))));
+                case 6: {
+                        // One endpoint, chosen at random, delivers a later document; the other lags.
+                        var view = random.Next(maxValue: views.Length);
 
-                        foreach (var each in ids) {
-                            if (confirmed.TryGetValue(key: each, value: out var held) && (held.At <= delivered)) {
-                                _ = confirmed.Remove(key: each);
-                                released++;
-                            }
+                        if (delivered[view] < (documents.Count - 1)) {
+                            Show(index: ((delivered[view] + 1) + random.Next(maxValue: ((documents.Count - 1) - delivered[view]))), view: view);
+                            lagging += ((delivered[0] != delivered[1]) ? 1 : 0);
                         }
-                    }
 
-                    break;
+                        break;
+                    }
                 case 7:
                     // Another door (an undo, a reload, another editor) installs a row this queue never submitted.
                     Install(id: id, row: Row(id: id, x: -(++value)));
@@ -414,15 +470,15 @@ public sealed class WorldEditorEditQueueStateLawTests {
                     break;
                 case 8: {
                         malformed++;
-                        Assert.True(condition: queue.Deliver(version: ((random.Next(maxValue: 2) == 0)
+                        Assert.True(condition: queue.Deliver(document: At(version: ((random.Next(maxValue: 2) == 0)
                             ? new WorldDocumentVersion(Activation: Guid.Empty, Sequence: (documents.Count + 5))
-                            : new WorldDocumentVersion(Activation: world.Activation, Sequence: -1L))));
+                            : new WorldDocumentVersion(Activation: activation, Sequence: -1L)))));
 
                         if (settled.Count > 0) {
                             var old = settled[random.Next(maxValue: settled.Count)];
 
                             stale++;
-                            Assert.False(condition: queue.Settle(applied: (random.Next(maxValue: 2) == 0), id: old.Edit.Row.Id, token: old.Token, version: world.Version).Answered);
+                            Assert.False(condition: queue.Settle(applied: (random.Next(maxValue: 2) == 0), id: old.Edit.Row.Id, token: old.Token, version: views[0].Version).Answered);
                         }
 
                         break;
@@ -472,16 +528,19 @@ public sealed class WorldEditorEditQueueStateLawTests {
                         Assert.Null(@object: Offer(principal: Principal.Console, queue: queue, row: Row(id: id, x: 0f), source: sources[0]).Admitted);
 
                         foreach (var flying in inFlight.Values) {
-                            Assert.False(condition: queue.Settle(applied: true, id: flying.Edit.Row.Id, token: flying.Token, version: world.Version).Answered);
+                            Assert.False(condition: queue.Settle(applied: true, id: flying.Edit.Row.Id, token: flying.Token, version: views[0].Version).Answered);
                         }
 
                         Assert.Equal(actual: sent.Submissions.Count, expected: count);
-                        Assert.False(condition: queue.Deliver(version: new WorldDocumentVersion(Activation: Guid.NewGuid(), Sequence: 0L)));
+                        Assert.False(condition: queue.Deliver(document: At(version: new WorldDocumentVersion(Activation: Guid.NewGuid(), Sequence: 0L))));
                         abandoned += retired.Count;
                         crossings++;
-                        world.Activation = Guid.NewGuid();
-                        queue = new WorldEditorEditQueue(activation: world.Activation, send: sent.Send);
+                        activation = Guid.NewGuid();
+                        views[0].Activation = activation;
+                        views[1].Activation = activation;
+                        queue = new WorldEditorEditQueue(activation: activation, send: sent.Send);
                         documents = [ids.ToDictionary(elementSelector: each => Row(id: each, x: -(++value)), keySelector: each => each)];
+                        newest = 0;
                         inFlight.Clear();
                         confirmed.Clear();
                         settled.Clear();
@@ -490,21 +549,22 @@ public sealed class WorldEditorEditQueueStateLawTests {
                             queued[each].Clear();
                         }
 
-                        Show(index: 0);
+                        Show(index: 0, view: 0);
+                        Show(index: 0, view: 1);
 
                         break;
                     }
             }
 
-            // Every placement's base is its last queued edit, else the one in flight, else the confirmed value no
-            // delivered document reflects yet, else the delivered row: never a document older than a confirmation. Both
-            // endpoints read it the same.
+            // Every placement's base is its last queued edit, else the one in flight, else the confirmed value no known
+            // state reflects yet, else its row in the newest document either endpoint delivered: never a document older
+            // than a confirmation, whichever endpoint reads it.
             foreach (var each in ids) {
                 var expected = ((queued[each].Count > 0)
                     ? queued[each][^1].Row
                     : (inFlight.TryGetValue(key: each, value: out var flying)
                         ? flying.Edit.Row
-                        : (confirmed.TryGetValue(key: each, value: out var held) ? held.Row : documents[delivered][each])));
+                        : (confirmed.TryGetValue(key: each, value: out var held) ? held.Row : documents[newest][each])));
 
                 Assert.Equal(actual: queue.Latest(id: each, source: sources[0]), expected: expected);
                 Assert.Equal(actual: queue.Latest(id: each, source: sources[1]), expected: expected);
@@ -525,5 +585,6 @@ public sealed class WorldEditorEditQueueStateLawTests {
         Assert.True(condition: (closings > 100));
         Assert.True(condition: (malformed > 100));
         Assert.True(condition: (crossSource > 50));
+        Assert.True(condition: (lagging > 100));
     }
 }

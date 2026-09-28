@@ -22,7 +22,7 @@ public sealed partial class WorldEditorCommandModule {
         public WorldEditorEditQueue Queue { get; set; } = null!;
     }
     private sealed class Attachment {
-        public Action<WorldDocumentVersion>? Handler { get; set; }
+        public Action<WorldDeliveredDocument>? Handler { get; set; }
         public CancellationTokenRegistration Lifetime { get; set; }
         public WorldSessionMirror? Mirror { get; init; }
     }
@@ -67,8 +67,8 @@ public sealed partial class WorldEditorCommandModule {
             target.Attachments[link] = attachment;
 
             if (world.Mirror is { } mirror) {
-                attachment.Handler = version => {
-                    if (!attaching.Queue.Deliver(version: version)) {
+                attachment.Handler = document => {
+                    if (!attaching.Queue.Deliver(document: document)) {
                         Detach(key: key, link: link, reason: "its link now delivers another world", target: attaching);
                     }
                 };
@@ -171,6 +171,7 @@ public sealed partial class WorldEditorCommandModule {
 
         try {
             var submitted = edit.Source.Link.Submit(
+                expectedActivation: target.Queue.Activation,
                 echoes: echoes,
                 mutation: edit.Mutation,
                 observe: result => Conclude(result: result, submission: submission, target: target),

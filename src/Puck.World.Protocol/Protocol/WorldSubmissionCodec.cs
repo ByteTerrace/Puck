@@ -77,7 +77,7 @@ public readonly record struct WorldCodecFailure(WorldCodecRefusal Refusal, strin
 /// The one canonical encoder/decoder pair for each declared <see cref="WorldSubmissionPayload"/> leaf. The
 /// wire framer, loopback, and replay tape all call these methods; none owns a second command/grant vocabulary.
 /// </summary>
-public static class WorldSubmissionCodec {
+public static partial class WorldSubmissionCodec {
     private const int MaxDurableStateValues = 256;
 
     private static readonly JsonSerializerOptions Json = CreateJsonOptions();
@@ -1416,12 +1416,12 @@ public static class WorldSubmissionCodec {
                 }
                 return false;
             case WorldSubmissionKind.Mutation:
-                if (TryDecodeMutation(
+                if (TryDecodeMutationPayload(
                     bytes: bytes,
                     failure: out failure,
-                    mutation: out var mutation
+                    payload: out var mutation
                 )) {
-                    payload = new WorldSubmissionPayload.Mutation(Value: mutation!);
+                    payload = mutation;
                     return true;
                 }
                 return false;
@@ -1706,10 +1706,10 @@ public static class WorldSubmissionCodec {
                 );
             case WorldSubmissionPayload.Mutation mutation:
                 kind = WorldSubmissionKind.Mutation;
-                return TryEncodeMutation(
-                    mutation.Value,
-                    out bytes,
-                    out failure
+                return TryEncodeMutationPayload(
+                    bytes: out bytes,
+                    failure: out failure,
+                    payload: mutation
                 );
             case WorldSubmissionPayload.Undo undo:
                 kind = WorldSubmissionKind.Undo;

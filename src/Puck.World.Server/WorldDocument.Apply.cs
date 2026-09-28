@@ -265,6 +265,9 @@ public sealed partial class WorldDocument {
                         Detail: bindingDetail
                     );
                 }
+                if (RefuseActivationMismatch(binding: binding, envelope: in envelope, expected: mutation.ExpectedActivation) is { } mismatch) {
+                    return mismatch;
+                }
                 // The tape's one mutation ingress: fires here rather than at the loopback so a forwarded traveller's
                 // submission and an admitted peer's are captured on the same terms as a local one, each with the
                 // actor its own envelope stamped. See WorldServer.MutationTap.

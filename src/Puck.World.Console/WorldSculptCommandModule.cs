@@ -245,7 +245,9 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, I
                 foreach (var (identity, mutation) in composed) {
                     _ = link.Submit(
                         echoes: echoes,
+                        expectedActivation: server.DocumentVersion.Activation,
                         mutation: mutation,
+                        observe: null,
                         verb: "creation.sculpt"
                     );
                     stepGuard.Claim(rowIdentity: identity, window: window);

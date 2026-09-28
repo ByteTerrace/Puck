@@ -10,8 +10,8 @@ namespace Puck.World;
 /// reaching one world through different endpoints share its lines, and each edit goes out through its own endpoint
 /// (<see cref="Source"/>) under its own principal.
 /// <para>Every transition (offer, settle, dispatch, delivery, abandonment, retirement) happens under the queue's lock,
-/// against the document the edit's source delivers now (read inside the lock, never captured before it) and against
-/// the queue's retirement state. An offer reads the base, composes the edit on it and admits it in one step; an edit
+/// against the world's newest known state (the newest document any of its endpoints delivered, read inside the lock,
+/// never captured before it) and against the queue's retirement state. An offer reads the base, composes the edit on it and admits it in one step; an edit
 /// that goes in flight is handed to <see cref="Sender"/> inside the same step, after checking that its source still
 /// delivers this activation; a retired queue never sends. A queued edit supersedes the one queued before it only when
 /// both are the same principal's.</para>
@@ -67,7 +67,7 @@ public sealed class WorldEditorEditQueue(Guid activation, WorldEditorEditQueue.S
     /// <returns>What the link answered.</returns>
     public delegate CommandResult Sender(Submission submission);
     /// <summary>Composes an edit on a placement's base, under the queue's lock.</summary>
-    /// <param name="document">The document the edit's source delivers now.</param>
+    /// <param name="document">The world's newest known state: the newest document any of its endpoints delivered.</param>
     /// <param name="basis">The base: the line's latest value, else the delivered row; <see langword="null"/> when there
     /// is none.</param>
     /// <param name="queues">Whether the edit will queue behind one in flight rather than go out now.</param>
@@ -75,7 +75,7 @@ public sealed class WorldEditorEditQueue(Guid activation, WorldEditorEditQueue.S
     /// <returns>The edit, or <see langword="null"/> to refuse.</returns>
     public delegate Edit? Composer(WorldDeliveredDocument document, WorldPlacement? basis, bool queues, out CommandResult refusal);
     /// <summary>Composes a new placement's edit, choosing its id, under the queue's lock.</summary>
-    /// <param name="document">The document the edit's source delivers now.</param>
+    /// <param name="document">The world's newest known state: the newest document any of its endpoints delivered.</param>
     /// <param name="latest">Reads any placement's latest value, as <see cref="Offer"/> would base an edit on it.</param>
     /// <param name="taken">Whether an id is taken: the document holds it, or a line does.</param>
     /// <param name="mint">Mints the first free id numbered from 1 after a prefix.</param>
@@ -89,6 +89,7 @@ public sealed class WorldEditorEditQueue(Guid activation, WorldEditorEditQueue.S
     private readonly Dictionary<string, Line> m_lines = new(comparer: StringComparer.Ordinal);
     private long m_delivered = -1L;
 
+    private WorldDeliveredDocument? m_newest;
     private long m_nextToken;
     private bool m_retired;
 
@@ -142,8 +143,17 @@ public sealed class WorldEditorEditQueue(Guid activation, WorldEditorEditQueue.S
             }
         }
     }
-    // Reads the document a source delivers now and records its version: null when it is not a valid delivery of this
-    // activation, so the source no longer reaches this queue's world.
+    // Takes a delivered document of this activation as the world's newest known state when it is newer than any seen.
+    private void AcceptLocked(WorldDeliveredDocument document) {
+        if ((m_newest is null) || (document.Version.Sequence > m_newest.Version.Sequence)) {
+            m_newest = document;
+        }
+
+        DeliverLocked(sequence: document.Version.Sequence);
+    }
+    // Reads the document a source delivers now and returns the world's newest known state, which that read may advance:
+    // null when the source's document is not a valid delivery of this activation, so the source no longer reaches this
+    // queue's world. A source that lags behind another is based on the newest state all of them delivered.
     private WorldDeliveredDocument? ReadLocked(Source source) {
         var document = source.Delivered();
 
@@ -151,9 +161,9 @@ public sealed class WorldEditorEditQueue(Guid activation, WorldEditorEditQueue.S
             return null;
         }
 
-        DeliverLocked(sequence: document.Version.Sequence);
+        AcceptLocked(document: document);
 
-        return document;
+        return m_newest;
     }
     private WorldPlacement? LatestLocked(string id, WorldDeliveredDocument document) {
         var delivered = WorldDefinitionRows.FindPlacement(id: id, placements: document.Definition.Placements);
@@ -208,23 +218,25 @@ public sealed class WorldEditorEditQueue(Guid activation, WorldEditorEditQueue.S
         }
     }
 
-    /// <summary>Records a delivered document's version: every confirmed value it reflects is released to the delivered
-    /// document. A malformed version is ignored.</summary>
-    /// <param name="version">The delivered document's version.</param>
+    /// <summary>Records a document one of the world's endpoints delivered: the newest across every endpoint is the world's
+    /// known state, and every confirmed value it reflects is released to it. A malformed version is ignored.</summary>
+    /// <param name="document">The delivered document and its version.</param>
     /// <returns><see langword="false"/> when the version is a valid delivery of another activation, so the document is
     /// not this queue's world.</returns>
-    public bool Deliver(WorldDocumentVersion version) {
-        if (!Valid(version: version)) {
+    public bool Deliver(WorldDeliveredDocument document) {
+        ArgumentNullException.ThrowIfNull(argument: document);
+
+        if (!Valid(version: document.Version)) {
             return true;
         }
 
         lock (m_gate) {
-            if (version.Activation != activation) {
+            if (document.Version.Activation != activation) {
                 return false;
             }
 
             if (!m_retired) {
-                DeliverLocked(sequence: version.Sequence);
+                AcceptLocked(document: document);
             }
 
             return true;
@@ -272,7 +284,7 @@ public sealed class WorldEditorEditQueue(Guid activation, WorldEditorEditQueue.S
         }
     }
     /// <summary>Composes a new placement's edit, choosing its id, and admits it, as one step under the queue's lock. An
-    /// id is taken when the document the source delivers now holds it or a line does; an edit for a taken id is refused
+    /// id is taken when the world's newest known state holds it or a line does; an edit for a taken id is refused
     /// by name.</summary>
     /// <param name="verb">The verb, which names a refusal.</param>
     /// <param name="source">Where the edit comes from and goes out through.</param>

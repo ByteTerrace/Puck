@@ -394,8 +394,9 @@ same batch's own composing writes — a defect class, not a shortcut. The genera
 literal field/list doors below do exactly this shape, safely, because they share
 ONE window guard (`WorldRowStepWindowGuard`) that refuses a second read-modify-
 whole-row-write against the same row inside one tick window of one world (a
-`WorldRowStepWindow`: authority, activation and tick, so another world or a
-recreated one never inherits a claim) rather than letting the later one silently
+`WorldRowStepWindow`: one claim set per authority and activation, emptied when
+its tick moves on and dropped when that activation stops, so another world or
+activation never inherits or erases a claim) rather than letting the later one silently
 revert the earlier; a bespoke verb reinventing the shape
 without that guard is the regression this rule still targets.
 

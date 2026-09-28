@@ -85,28 +85,15 @@ internal sealed class WorldDeferredForwardedAuthority(WorldForwardingDestination
         }
         reason = Unavailable; return false;
     }
-    public bool TryForwardSubmission(WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) {
+    public bool TryForwardSubmission(WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason) {
         if (Volatile.Read(location: ref m_current) is { } current) {
             return current.TryForwardSubmission(
-            payload: payload,
-            reason: out reason,
-            result: out result
-        );
-        }
-        result = null; reason = Unavailable; return false;
-    }
-    public bool TryForwardSubmission(WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
-        if (Volatile.Read(location: ref m_current) is { } current) {
-            return current.TryForwardSubmission(
+            completion: completion,
             operationId: operationId,
             payload: payload,
-            reason: out reason,
-            result: out result
+            reason: out reason
         );
         }
-        result = new WorldSubmissionResult.Refusal(
-            Code: "world.forwarding.unavailable",
-            Detail: Unavailable
-        ); reason = Unavailable; return false;
+        reason = Unavailable; return false;
     }
 }

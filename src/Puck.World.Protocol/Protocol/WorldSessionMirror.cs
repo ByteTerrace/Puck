@@ -137,8 +137,8 @@ public sealed class WorldSessionMirror : IClientSink {
     }
 
     /// <summary>Raised on the delivering thread after each delivered definition or state is published as
-    /// <see cref="Document"/>, with the version it carries.</summary>
-    public event Action<WorldDocumentVersion>? DocumentDelivered;
+    /// <see cref="Document"/>, with the document and version it published.</summary>
+    public event Action<WorldDeliveredDocument>? DocumentDelivered;
 
     /// <summary>The authority named by the latest delivered snapshot.</summary>
     public string Authority => Volatile.Read(location: ref m_authority);
@@ -347,7 +347,7 @@ public sealed class WorldSessionMirror : IClientSink {
             version: version
         );
         _ = Interlocked.Increment(location: ref m_definitionRevision);
-        DocumentDelivered?.Invoke(obj: version);
+        DocumentDelivered?.Invoke(obj: Document);
     }
     /// <inheritdoc/>
     public void DeliverSessionLever(WorldSessionLever lever) {
@@ -512,7 +512,7 @@ public sealed class WorldSessionMirror : IClientSink {
             definition: definition,
             version: version
         );
-        DocumentDelivered?.Invoke(obj: version);
+        DocumentDelivered?.Invoke(obj: Document);
 
         lock (m_stampGate) {
             if (stamp.Everything) {

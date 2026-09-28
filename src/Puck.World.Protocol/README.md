@@ -133,11 +133,17 @@ A mutation verdict carries the version it applied at (or was refused against),
 so a reader orders a verdict against a delivered document exactly, whichever
 arrives first: a document at or past a verdict's version reflects that edit.
 `WorldSessionMirror` publishes a delivered definition and its version as one
-`WorldDeliveredDocument` and raises `DocumentDelivered` after each delivery.
+`WorldDeliveredDocument` and raises `DocumentDelivered` with that pair after each
+delivery.
 The version is delivery metadata; no hash, checkpoint or replay reads it. The
 federation decoder refuses a version with a negative sequence, or a sequence and
 no activation, and a live route or definition with no delivered version; only a
-reservation's preview carries the empty version. A disposed
+reservation's preview carries the empty version. A mutation payload composed on
+a read of a document carries that document's activation
+(`WorldSubmissionPayload.Mutation.ExpectedActivation`); the server refuses it by
+name (`world.mutation.activation_mismatch`), before recording or applying
+anything, when that is not its own. One composed on no read carries none and is
+not checked. A disposed
 `WorldAuthorityEndpoint` refuses every submission through its `Submissions`
 (`world.endpoint.retired`) and cancels `Retired`.
 `IWorldStateView.cs` is the state half of the

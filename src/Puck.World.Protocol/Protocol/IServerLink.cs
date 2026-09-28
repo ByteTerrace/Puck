@@ -130,12 +130,14 @@ public static class ServerLinkSubmissions {
     /// <param name="echoes">The pending-verb table the echo subscriber consumes.</param>
     /// <param name="verb">The submitting verb, exactly as its response line spells it.</param>
     /// <param name="observe">Receives the typed result, or <see langword="null"/> for none.</param>
+    /// <param name="expectedActivation">The activation of the world whose document the mutation was composed on, which
+    /// the server refuses the mutation against when it is not its own, or <see langword="null"/> for none.</param>
     /// <returns>The verdict itself when the link refused the submission before returning; otherwise a result with no
     /// output of its own that settles with the tick-boundary verdict, which <paramref name="echoes"/> publishes.</returns>
-    public static CommandResult Submit(this IServerLink link, WorldMutation mutation, WorldDeferredVerbEchoes echoes, string verb, Action<WorldSubmissionResult>? observe) {
+    public static CommandResult Submit(this IServerLink link, WorldMutation mutation, WorldDeferredVerbEchoes echoes, string verb, Action<WorldSubmissionResult>? observe, Guid? expectedActivation = null) {
         var settlement = new CommandSettlement();
 
-        _ = link.SubmitWorldMutation(mutation: mutation, completion: result => {
+        _ = link.SubmitWorldMutation(expectedActivation: expectedActivation, mutation: mutation, completion: result => {
             settlement.Settle(result: Verdict(result: result, verb: verb));
             observe?.Invoke(obj: result);
         });
@@ -316,9 +318,11 @@ public static class ServerLinkSubmissions {
     /// <param name="mutation">The world mutation to apply.</param>
     /// <param name="operationId">The caller-preserved retry identity, or empty to mint one for this submission.</param>
     /// <param name="completion">The eventual typed result, including a named ingress refusal.</param>
+    /// <param name="expectedActivation">The activation of the world whose document the mutation was composed on, which
+    /// the server refuses the mutation against when it is not its own, or <see langword="null"/> for none.</param>
     /// <returns>The minted correlation id (see <see cref="IServerLink.SubmitEnvelope(WorldSubmissionPayload, Principal, System.Guid)"/>).</returns>
-    public static long SubmitWorldMutation(this IServerLink link, WorldMutation mutation, Guid operationId = default, Action<WorldSubmissionResult>? completion = null) => link.SubmitEnvelope(
-        payload: new WorldSubmissionPayload.Mutation(Value: mutation),
+    public static long SubmitWorldMutation(this IServerLink link, WorldMutation mutation, Guid operationId = default, Action<WorldSubmissionResult>? completion = null, Guid? expectedActivation = null) => link.SubmitEnvelope(
+        payload: new WorldSubmissionPayload.Mutation(ExpectedActivation: expectedActivation, Value: mutation),
         principal: mutation.Principal,
         operationId: ((operationId == Guid.Empty)
         ? Guid.NewGuid()

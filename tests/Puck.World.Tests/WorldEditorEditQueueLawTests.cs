@@ -296,4 +296,43 @@ public sealed class WorldEditorEditQueueLawTests {
         Assert.Equal(actual: Assert.IsType<WorldSubmissionResult.Refusal>(@object: answer).Code, expected: "world.endpoint.retired");
         _ = Assert.Single(collection: rig.Link.Submitted);
     }
+    [Fact]
+    public void AnEditMadeOnOneWorldIsRefusedByAWorldItsLinkReachedInstead() {
+        using var console = WorldEditorPlacementLawTests.Build();
+        var away = WorldEditorPlacementLawTests.AwayDocument(row: console);
+        using var first = HostRow.Build(definition: away, name: "a");
+        using var second = HostRow.Build(definition: away, name: "b");
+        var link = new SwitchingLink(target: first.Instance.Link);
+        using var endpoint = EditorEndpoints.Of(definition: first.Server.Definition, identity: "away", link: link, pose: WorldEditorPlacementLawTests.AwayCrate, version: first.Server.DocumentVersion);
+        var echoes = new WorldDeferredVerbEchoes();
+        var lines = new List<string>();
+        var routes = new WorldSeatAuthorityRouter();
+        var registry = WorldEditorPlacementLawTests.BuildRegistry(echoes: echoes, routes: routes, row: console, seats: new WorldEditorSeats());
+
+        Vector3 CrateIn(HostRow world) => ((Vector3)WorldDefinitionRows.FindPlacement(id: "crate1", placements: world.Server.Definition.Placements)!.Position);
+
+        echoes.Completed += result => lines.Add(item: result.Output);
+        _ = routes.Publish(endpoint: endpoint, entity: endpoint.Mirror.Address(index: 0), slot: 0);
+        Assert.False(condition: registry.Submit(line: $"world.grid pitch {WorldEditorPlacementLawTests.Pitch}").IsError);
+
+        // The traveler crosses on: its link reaches world b before its mirror has seen b. An edit based on a's document is
+        // refused by b by name, and rolls back.
+        link.Target = second.Instance.Link;
+
+        var refused = registry.Submit(line: Nudge);
+
+        Assert.True(condition: refused.IsError);
+        Assert.StartsWith(actualString: refused.Output, expectedStartString: $"[world.nudge: {Server.WorldDocument.ActivationMismatchCode} ");
+        Assert.Contains(collection: lines, expected: "[world.nudge: 'crate1' in 'away' rolled back to -3,0,2]");
+        second.Server.Advance(stepTicks: Fixtures.StepTicks);
+        Assert.Equal(actual: CrateIn(world: second), expected: WorldEditorPlacementLawTests.AwayCrate);
+
+        // Red leg: the same upsert with no expectation is one b applies.
+        _ = second.Instance.Link.SubmitWorldMutation(mutation: new WorldMutation.UpsertPlacement(
+            Placement: (WorldDefinitionRows.FindPlacement(id: "crate1", placements: away.Placements)! with { Position = (WorldEditorPlacementLawTests.AwayCrate + Step) }),
+            Principal: Principal.Console
+        ));
+        second.Server.Advance(stepTicks: Fixtures.StepTicks);
+        Assert.Equal(actual: CrateIn(world: second), expected: (WorldEditorPlacementLawTests.AwayCrate + Step));
+    }
 }

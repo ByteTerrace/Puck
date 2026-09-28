@@ -90,8 +90,8 @@ public sealed partial class WorldEditorCommandModule {
 
         return false;
     }
-    // Whether a nudge or turn may act on its base (the placement as its line holds it, against the document its source
-    // delivers now): refused when there is none, and when its position is resolved through something else (a parent, an
+    // Whether a nudge or turn may act on its base (the placement as its line holds it, against the world's newest known
+    // state): refused when there is none, and when its position is resolved through something else (a parent, an
     // attachment, a board), which is what to move instead.
     private static bool TryMovable(EditWorld world, WorldDefinition definition, string id, WorldPlacement? basis, string verb, out CommandResult refusal) {
         refusal = CommandResult.None;
@@ -114,7 +114,7 @@ public sealed partial class WorldEditorCommandModule {
 
         return true;
     }
-    // Edits one placement: its base is read, the edit composed on it against the document its source delivers now, and
+    // Edits one placement: its base is read, the edit composed on it against the world's newest known state, and
     // the edit admitted and sent, as one step under its world's queue (WorldEditorEditQueue.Offer).
     private CommandResult EditPlacement(CommandContext context, EditWorld world, string id, string verb, Func<WorldDefinition, WorldPlacement, WorldPlacement> change) {
         if (!TryTargetOf(refusal: out var refusal, source: out var source, target: out var target, verb: verb, world: world)) {

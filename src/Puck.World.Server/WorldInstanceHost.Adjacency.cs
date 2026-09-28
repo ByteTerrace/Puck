@@ -646,43 +646,38 @@ public sealed partial class WorldInstanceHost {
         );
     }
     /// <inheritdoc/>
-    public bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) =>
-        TryForwardSubmission(
-            mobility: in mobility,
-            operationId: Guid.Empty,
-            payload: payload,
-            reason: out reason,
-            result: out result,
-            source: source
-        );
-    public bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
+    public bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: completion);
+
         if (!m_forwardedBodies.TryGetValue(
             key: (source, mobility.Incarnation),
             value: out var route
         )) {
-            result = null;
             reason = $"traveler {mobility.Incarnation} has no committed onward route";
             return false;
         }
 
-        var accepted = route.Authority.TryForwardSubmission(
+        var traveler = mobility;
+
+        return route.Authority.TryForwardSubmission(
+            completion: result => {
+                // An accepted leave retires the forwarded traveler once its answer arrives.
+                if (
+                    (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
+                    (result is WorldSubmissionResult.Session { Reply.Accepted: true })
+                ) {
+                    RetireForwardedTraveler(mobility: in traveler);
+                }
+
+                completion(obj: result);
+            },
+            operationId: operationId,
             payload: RebindForwardedPayload(
                 payload: payload,
                 bodyIndex: route.BodyIndex
             ),
-            result: out result,
-            reason: out reason,
-            operationId: operationId
+            reason: out reason
         );
-
-        if (
-            accepted &&
-            (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
-            (result is WorldSubmissionResult.Session { Reply.Accepted: true })
-        ) {
-            RetireForwardedTraveler(mobility: in mobility);
-        }
-        return accepted;
     }
 
     private readonly record struct AdjacencyEdgeHit(WorldAdjacency Adjacency, int Seat, WorldFaceFrame Frame, FixedQ4816 SeamU, FixedQ4816 SeamV, FixedQ4816 Parameter);

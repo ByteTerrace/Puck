@@ -55,24 +55,15 @@ public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority
         );
     }
     /// <inheritdoc/>
-    public bool TryForwardSubmission(WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) {
-        return TryForwardSubmission(
-            operationId: Guid.Empty,
-            payload: payload,
-            reason: out reason,
-            result: out result
-        );
-    }
-    /// <inheritdoc/>
-    public bool TryForwardSubmission(WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
+    public bool TryForwardSubmission(WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason) {
         var held = credential;
 
         return authority.TryForwardSubmission(
+            completion: completion,
             credential: in held,
             operationId: operationId,
             payload: payload,
-            reason: out reason,
-            result: out result
+            reason: out reason
         );
     }
 }
@@ -438,42 +429,11 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
         reason = string.Empty;
         return true;
     }
-    internal bool TryForwardSubmission(int bodyIndex, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) =>
-        TryForwardSubmission(
-            bodyIndex: bodyIndex,
-            operationId: Guid.Empty,
-            payload: payload,
-            reason: out reason,
-            result: out result
-        );
-    internal bool TryForwardSubmission(int bodyIndex, WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
-        if (!TryRouteCredential(
-            bodyIndex: bodyIndex,
-            credential: out var credential
-        )) {
-            result = null;
-            reason = $"forwarded body:{bodyIndex} has no committed destination credential";
-            return false;
-        }
+    // Forwards one submission over the routed lane and answers its completion with the destination's typed result,
+    // which a destination sends once its own verdict exists (a buffered mutation's at its tick boundary).
+    internal bool TryForwardSubmission(in WorldRemoteRouteCredential credential, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: completion);
 
-        return TryForwardSubmission(
-            credential: in credential,
-            operationId: operationId,
-            payload: payload,
-            reason: out reason,
-            result: out result
-        );
-    }
-    internal bool TryForwardSubmission(in WorldRemoteRouteCredential credential, WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) =>
-        TryForwardSubmission(
-            credential: in credential,
-            operationId: Guid.Empty,
-            payload: payload,
-            reason: out reason,
-            result: out result
-        );
-    internal bool TryForwardSubmission(in WorldRemoteRouteCredential credential, WorldSubmissionPayload payload, Guid operationId, out WorldSubmissionResult? result, out string reason) {
-        result = null;
         if (!Puck.World.Protocol.WorldFrameCodec.TryEncode(
             failure: out var failure,
             frame: out var canonical,
@@ -501,11 +461,17 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
             return false;
         }
 
-        return TryReadCompletion(
+        if (!TryReadCompletion(
             body: answer.Body,
-            result: out result,
+            result: out var result,
             reason: out reason
-        );
+        ) || (result is null)) {
+            return false;
+        }
+
+        completion(obj: result);
+
+        return true;
     }
 
     public bool TryRouteCredential(int bodyIndex, out WorldRemoteRouteCredential credential) {

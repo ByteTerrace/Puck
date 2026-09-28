@@ -99,7 +99,22 @@ internal static class EditorEndpoints {
     /// <param name="link">The link its edits are submitted over, whose version the document is delivered at.</param>
     /// <param name="pose">Where its body 0 stands, in its own coordinates.</param>
     /// <returns>The endpoint.</returns>
-    public static WorldAuthorityEndpoint Of(string identity, WorldDefinition definition, RecordingLink link, Vector3 pose) => new(
+    public static WorldAuthorityEndpoint Of(string identity, WorldDefinition definition, RecordingLink link, Vector3 pose) => Of(
+        definition: definition,
+        identity: identity,
+        link: ((IServerLink)link),
+        pose: pose,
+        version: link.Version
+    );
+    /// <summary>Returns an endpoint of a world named <paramref name="identity"/> whose document is delivered at a given
+    /// version.</summary>
+    /// <param name="identity">The instance and authority name.</param>
+    /// <param name="definition">The world's document.</param>
+    /// <param name="link">The link its edits are submitted over.</param>
+    /// <param name="version">The version the document is delivered at.</param>
+    /// <param name="pose">Where its body 0 stands, in its own coordinates.</param>
+    /// <returns>The endpoint.</returns>
+    public static WorldAuthorityEndpoint Of(string identity, WorldDefinition definition, IServerLink link, WorldDocumentVersion version, Vector3 pose) => new(
         adjacencies: static () => null,
         clockOwnedHere: false,
         definition: () => definition,
@@ -108,7 +123,7 @@ internal static class EditorEndpoints {
         observe: sink => {
             sink.DeliverDefinition(
                 definition: definition,
-                version: link.Version
+                version: version
             );
             sink.DeliverSnapshot(snapshot: new WorldSnapshot(
                 Authority: identity,
@@ -134,4 +149,23 @@ internal static class EditorEndpoints {
         },
         submissions: link
     );
+}
+/// <summary>A link that forwards to whichever link it holds now, as a traveler route does when it follows its body onward
+/// before the destination's documents reach the traveler's mirror.</summary>
+/// <param name="target">The link it forwards to first.</param>
+internal sealed class SwitchingLink(IServerLink target) : IServerLink {
+    /// <summary>Gets or sets the link every submission goes to now.</summary>
+    public IServerLink Target { get; set; } = target;
+
+    public void Query(WorldQuery query, Action<QueryAnswer> completion) => Target.Query(completion: completion, query: query);
+    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => Target.SubmitEnvelope(payload: payload, principal: principal);
+    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId) => Target.SubmitEnvelope(operationId: operationId, payload: payload, principal: principal);
+    public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion) => Target.SubmitEnvelope(
+        completion: completion,
+        operationId: operationId,
+        payload: payload,
+        principal: principal
+    );
+    public void SubmitIntent(in IntentSubmission submission) => Target.SubmitIntent(submission: in submission);
+    public void SubmitSession(SessionRequest request, Action<SessionReply> completion) => Target.SubmitSession(completion: completion, request: request);
 }

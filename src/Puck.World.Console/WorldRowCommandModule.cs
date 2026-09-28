@@ -1046,8 +1046,10 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
         );
 
         return link.Submit(
-            mutation: outcome.Mutation!,
             echoes: echoes,
+            expectedActivation: server.DocumentVersion.Activation,
+            mutation: outcome.Mutation!,
+            observe: null,
             verb: "world.row.add"
         );
     }
@@ -1205,8 +1207,10 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
         );
 
         return link.Submit(
-            mutation: outcome.Mutation!,
             echoes: echoes,
+            expectedActivation: server.DocumentVersion.Activation,
+            mutation: outcome.Mutation!,
+            observe: null,
             verb: "world.row.remove"
         );
     }
@@ -1347,8 +1351,10 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
         );
 
         return link.Submit(
-            mutation: outcome.Mutation!,
             echoes: echoes,
+            expectedActivation: server.DocumentVersion.Activation,
+            mutation: outcome.Mutation!,
+            observe: null,
             verb: "world.row.set"
         );
     }
@@ -1733,8 +1739,10 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
         // per-verb "[world.row.step: …]" line through the registered correlation, so a script can account the refusal
         // against the verb that submitted it.
         return link.Submit(
-            mutation: outcome.Mutation!,
             echoes: echoes,
+            expectedActivation: server.DocumentVersion.Activation,
+            mutation: outcome.Mutation!,
+            observe: null,
             verb: "world.row.step"
         );
     }

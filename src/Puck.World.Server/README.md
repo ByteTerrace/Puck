@@ -1275,7 +1275,12 @@ incoming routes; admitting the same authority later binds them again. Stopping o
 reaping an instance stops its server (`WorldServer.Stop`): admission closes, and
 every submission still pending is answered at once with a refusal naming the stop
 (`world.authority.stopped`), through the typed completion and the edit echo a
-refusal at the tick boundary uses, as is every submission after it.
+refusal at the tick boundary uses, as is every submission after it. A submission
+forwarded to a committed traveler's destination answers through the same typed
+completion (`WorldLocalForwardedAuthority.TryApplySubmission`,
+`IWorldForwardedAuthority.TryForwardSubmission`): a buffered mutation's answer is
+the verdict the destination's tick applied, which the peer host awaits before it
+writes the completion back.
 
 The route follows later transfers whether a hop is local or reached over QUIC.
 Each hop checks its own source-scoped credential before following the next route,

@@ -483,9 +483,11 @@ therefore moves the placement once per press. When the world refuses an edit,
 or its link fails to take it, every edit queued on it is dropped and the
 placement rolls back to the value the world last confirmed, with a
 `rolled back to` line naming it. A new placement's id is never one an edit in
-flight or queued holds. Reading the base from the document the seat's endpoint
-delivers now, composing the edit on it, admitting it and sending it happen as one
-step, so no verdict, delivery or retirement lands in between.
+flight or queued holds. Reading the base from the world's newest known state (the
+newest document any endpoint reaching that world has delivered, so a seat whose
+endpoint lags never overwrites another's confirmed edit), composing the edit on it,
+admitting it and sending it happen as one step, so no verdict, delivery or
+retirement lands in between.
 
 Every verdict and every delivered document carries the world's document version
 (`WorldDocumentVersion`), so a confirmed value is held until a delivered document
@@ -500,7 +502,12 @@ endpoint refuses anything sent through it afterwards (`world.endpoint.retired`).
 When an instance stops or is reaped, its server answers every submission still
 pending, from any submitter, with `world.authority.stopped`, so an edit in
 flight there rolls back by name. The queue keeps nothing once its last endpoint
-is gone.
+is gone. Every edit carries the activation of the world whose document its base
+came from, and a world refuses one composed on another's
+(`world.mutation.activation_mismatch`), so an edit sent while a traveler's link
+has already moved on to the next world rolls back instead of landing there. The
+row doors that read a row before writing it (`world.row.add`, `.remove`, the
+literal `.set`, `.step`) and `creation.sculpt` carry it too.
 
 The grid rides each view's pass block (`SdfViewSnapshot.Grid`), so one seat can
 build on a grid while another plays. [The editor plan](../../docs/plans/editor.md)

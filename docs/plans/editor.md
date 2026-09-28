@@ -247,11 +247,15 @@ document never moves a placement back
 (`ADocumentOlderThanAConfirmedValueNeverReplacesItAndANewerOneAlwaysDoes`,
 `AnUndoneEditIsNeverRestoredByTheNextNudge`). A queue is keyed by its world's
 authority and activation; every transition happens under its lock against the
-document the edit's endpoint delivers at that moment and its retirement state,
+world's newest known state (the newest document any of its endpoints delivered)
+and its retirement state,
 and each edit goes out through its own endpoint. A crossing onward or a closed
 endpoint abandons that endpoint's edits by name, a stopped or reaped instance
 answers its pending edits with `world.authority.stopped`, and a malformed
-version is refused at the wire and ignored by the queue
+version is refused at the wire and ignored by the queue. Every edit carries the
+activation its base was read from, which the receiving world checks, so an edit
+sent over a traveler link that already reached the next world is refused and
+rolled back
 (`WorldEditorEditQueueStateLawTests`, `DocumentVersionWireLawTests`,
 `WorldInstanceStopLawTests`).
 
