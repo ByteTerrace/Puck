@@ -5,6 +5,31 @@ namespace Puck.Transpiler.Parsing;
 
 /// <summary>Shared lexical boundaries for preflight, formatting, and editor services.</summary>
 public static class SourceLexemes {
+    /// <summary>Trims trailing whitespace and comments from a recorded syntax span, preserving strings and interior comments.</summary>
+    /// <param name="source">The source that owns the span.</param>
+    /// <param name="span">The recorded span, which may include trivia consumed by lookahead.</param>
+    /// <returns>The span ending at its last syntax token.</returns>
+    public static SourceSpan ContentSpan(string source, SourceSpan span) {
+        ArgumentNullException.ThrowIfNull(argument: source);
+        var start = Math.Clamp(value: span.Offset, min: 0, max: source.Length);
+        var end = Math.Clamp(value: (span.Offset + span.Length), min: start, max: source.Length);
+        var last = start;
+        var index = start;
+
+        while (index < end) {
+            var lexeme = End(offset: index, source: source);
+
+            if (lexeme > index) {
+                if (source[index] is '"' or '`' or '$') { last = Math.Min(val1: lexeme, val2: end); }
+                index = lexeme;
+                continue;
+            }
+            if (!char.IsWhiteSpace(c: source[index])) { last = (index + 1); }
+            index++;
+        }
+        return span with { Offset = start, Length = (last - start) };
+    }
+
     internal static void Validate(string source) {
         if (source.Length > DocumentEvaluationBudget.TextLimit) {
             throw Refuse(

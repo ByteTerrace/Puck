@@ -1486,47 +1486,35 @@ let skyStops = [
   }
 ]
 
+timeline {
+  clocks [
+    { name: skyMode, state: skyMode }
+  ]
+}
+
 render {
   farDistance: 100
   sky {
     layers [
-      gradient(stops: skyStops)
-      fog(density: 0.004)
-      sunDisc(light: 0, radius: 0.018, intensity: 1.5)
-    ]
-  }
-  cycle {
-    state: skyMode
-    keys [
-      {
-        at: 0
-        sky {
-          layers [
-            gradient(stops: map(skyStops, stop => {
-              elevation: stop["elevation"],
-              color: "#B6B2BA"
-            }
-            )
-            )
-            fog(density: 0)
-            sunDisc(intensity: 0)
-          ]
-        }
-      }
-      {
-        at: 0.5
-        sky {
-          layers [
-            gradient(stops: skyStops)
-            fog(density: 0.004)
-            sunDisc(intensity: 1.5)
-          ]
-        }
-      }
+      gradient(name: courtyard, stops: map(skyStops, (stop, i) => {
+        name: $"stop{i}"
+        elevation: stop["elevation"]
+        color: keys(clock: skyMode) [
+          { at: 0, value: "#B6B2BA" }
+          { at: 0.5, value: stop["color"] }
+        ]
+      }))
+      fog(name: haze, density: keys(clock: skyMode) [
+        { at: 0, value: 0 }
+        { at: 0.5, value: 0.004 }
+      ])
+      sunDisc(name: sun, light: 0, radius: 0.018, intensity: keys(clock: skyMode) [
+        { at: 0, value: 0 }
+        { at: 0.5, value: 1.5 }
+      ])
     ]
   }
 }
-
 // Controls retain the studio bindings; absent optional facets lower to null.
 let movementBindings = [
   {

@@ -7,8 +7,8 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-/// <summary>The sky and the bounded media animate on the frame's presented tick, reduced on the host: the environment
-/// bakes the twinkle's phase (zero when nothing twinkles) and the cloud layer's integrated drift, shear and spin, and the
+/// <summary>The sky arrives as host-resolved values while bounded media animate on the presented tick: the environment
+/// preserves the twinkle phase and cloud offsets without a second integration, and the
 /// volume table carries each medium's integrated advection and pulse gain, so the values move by one tick's worth of
 /// their rate between consecutive ticks wherever the tick or the reduction wraps.</summary>
 public sealed class SdfSkyClockLawTests {
@@ -63,61 +63,22 @@ public sealed class SdfSkyClockLawTests {
     }
 
     [Fact]
-    public void The_twinkle_phase_is_its_periods_phase_at_the_tick_and_zero_when_nothing_twinkles() {
+    public void The_frame_bake_preserves_resolved_sky_offsets_and_phase_at_every_tick() {
         var environment = SdfEnvironment.Default();
-
-        environment.StarBrightness = 1f;
-        environment.StarDensity = 48f;
-        environment.TwinkleShare = 0.5f;
-        environment.TwinkleDepth = 0.5f;
-        environment.TwinkleRate = 2f;
-
-        var lane = ((SdfEnvironment.TwinkleRow * 4) + 2);
-        var period = SdfFrameBlock.TwinklePeriodTicks(rateHertz: 2f);
-        var tick = (Wrap + 1234UL);
-
-        Assert.Equal(actual: period, expected: 25200UL);
-        Assert.Equal(
-            actual: Bake(environment: environment, tick: tick)[lane],
-            expected: ((float)(((double)(tick % period)) / period))
-        );
-
-        // Red leg: with no star brightness nothing twinkles, and the phase bakes zero so a still sky can stand.
-        environment.StarBrightness = 0f;
-
-        Assert.Equal(expected: 0f, actual: Bake(environment: environment, tick: tick)[lane]);
-    }
-    [Fact]
-    public void The_cloud_offsets_move_by_one_ticks_worth_of_wind_across_two_to_the_thirty_two() {
-        var environment = SdfEnvironment.Default();
-
-        environment.CloudDrift = new Vector2(x: 0.02f, y: -0.01f);
-        environment.CloudShear = new Vector2(x: 0.005f, y: 0.003f);
-        environment.CloudSpin = 0.1f;
-
-        var before = Bake(environment: environment, tick: (Wrap - 1UL));
-        var after = Bake(environment: environment, tick: Wrap);
-        var drift = ((SdfEnvironment.CloudsRow + 2) * 4);
-        var spin = ((SdfEnvironment.CloudsRow + 3) * 4);
-        (int Lane, double Rate, double Modulus)[] lanes = [
-            (drift, 0.02d, SdfVolume.NoisePeriodCells),
-            ((drift + 1), -0.01d, SdfVolume.NoisePeriodCells),
-            ((drift + 2), 0.005d, SdfVolume.NoisePeriodCells),
-            ((drift + 3), 0.003d, SdfVolume.NoisePeriodCells),
-            (spin, 0.1d, Math.Tau),
-        ];
-
-        foreach (var (lane, rate, modulus) in lanes) {
-            var step = Math.IEEERemainder(
-                x: (after[lane] - ((double)before[lane])),
-                y: modulus
-            );
-
-            Assert.InRange(
-                actual: Math.Abs(value: (step - (((double)((float)rate)) / EngineTicks.PerSecond))),
-                high: 1e-3d,
-                low: 0d
-            );
+        environment.TwinklePhase = 0.75f;
+        environment.CloudOffset = new Vector2(12.5f, -7.25f);
+        environment.CloudShearOffset = new Vector2(-0.5f, 0.25f);
+        environment.CloudSpinAngle = 1.25f;
+        var twinkle = (SdfEnvironment.TwinkleRow * 4) + 2;
+        var clouds = (SdfEnvironment.CloudsRow + 2) * 4;
+        foreach (var tick in new ulong[] { 0UL, Wrap - 1UL, Wrap, 1UL << 40, ulong.MaxValue }) {
+            var rows = Bake(environment, tick);
+            Assert.Equal(0.75f, rows[twinkle]);
+            Assert.Equal(12.5f, rows[clouds]);
+            Assert.Equal(-7.25f, rows[clouds + 1]);
+            Assert.Equal(-0.5f, rows[clouds + 2]);
+            Assert.Equal(0.25f, rows[clouds + 3]);
+            Assert.Equal(1.25f, rows[clouds + 4]);
         }
     }
     [Fact]

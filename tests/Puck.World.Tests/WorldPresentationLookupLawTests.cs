@@ -151,7 +151,7 @@ public sealed class WorldPresentationLookupLawTests {
             mirror: mirror,
             revision: 1
         );
-        _ = new WorldRenderCycleTrack().Resolve(
+        _ = new WorldEnvironmentResolve().Resolve(
             definition: definition,
             mirror: mirror,
             revision: 1

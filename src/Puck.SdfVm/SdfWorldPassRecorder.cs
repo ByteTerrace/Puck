@@ -28,9 +28,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.VisibilityRecordsWritten,
     ];
-    private static readonly uint OutputBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.Output);
-    private static readonly uint MeshVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshVisibility);
-    private static readonly uint ScreenSourcesBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.ScreenSources);
+    private uint OutputBinding => m_sets!.BindingOf(SdfWorldPackage.Output);
+    private uint MeshVisibilityBinding => m_sets!.BindingOf(SdfWorldPackage.MeshVisibility);
+    private uint ScreenSourcesBinding => m_sets!.BindingOf(SdfWorldPackage.ScreenSources);
 
     private readonly RenderGraphPackageRecorderContext m_context;
     private readonly RenderGraphFragmentPass m_fragmentPass;
@@ -534,7 +534,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var meshVisibility = tables.SampledFiller.ImageViewHandle;
 
         foreach (var member in ScratchMembers) {
-            tables.WriteWorldBuffer(buffer: tables.DummyBuffer, member: member, set: set);
+            WritePassBuffer(tables: tables, buffer: tables.DummyBuffer, member: member, set: set);
         }
 
 
@@ -544,7 +544,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
             if (bound.Buffer is { } buffer) {
                 if (ReadMemberOf(version: name) is { } member) {
-                    tables.WriteWorldBuffer(buffer: buffer, member: member, set: set);
+                    WritePassBuffer(tables: tables, buffer: buffer, member: member, set: set);
                 }
             } else if (string.Equals(
                 a: name,
@@ -560,14 +560,14 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
             if (bound.Buffer is { } buffer) {
                 if (WrittenMemberOf(version: name) is { } member) {
-                    tables.WriteWorldBuffer(buffer: buffer, member: member, set: set);
+                    WritePassBuffer(tables: tables, buffer: buffer, member: member, set: set);
                 }
             } else if (bound.Kind == ShaderPipelineResourceKind.Image) {
                 output = bound.Image.ImageViewHandle;
             }
         }
 
-        tables.WriteWorldBuffer(buffer: WorkCountersOf(recording: in recording).Buffer, member: ShaderWorkCounters.Buffer, set: set);
+        WritePassBuffer(tables: tables, buffer: WorkCountersOf(recording: in recording).Buffer, member: ShaderWorkCounters.Buffer, set: set);
         bindings.WriteStorageImage(
             arrayElement: 0,
             binding: OutputBinding,
@@ -583,6 +583,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         Array.Clear(array: m_screens[slot]);
         m_portTables[slot] = tables;
     }
+    private void WritePassBuffer(SdfWorldTables tables, nint set, string member, IGpuBuffer buffer) {
+        var resource = SdfWorldInterfaces.ResourceOf(m_context.Parameters.Layout, member);
+        tables.Bindings.WriteBuffer(binding: resource.Binding, bufferHandle: buffer.BufferHandle, bufferSize: buffer.SizeBytes,
+            descriptorSetHandle: set, kind: resource.Kind, elementStride: resource.Member.Structure?.SizeBytes ?? resource.Member.Type?.SizeBytes() ?? 0u);
+    }
+
     // Writes each screen's image into the slot's pass set: a host's image every frame, since its handle is unique only among
     // live objects, and the filler once while the screen shows nothing.
     private void BindScreens(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {

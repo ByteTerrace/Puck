@@ -60,35 +60,22 @@
         "type": "object",
         "properties": {
           "chipAlpha": {
-            "description": "The icon chip\u0027s opacity, in [0, 1].",
-            "title": "BindableScalar",
-            "type": [
-              "number",
-              "string"
-            ]
+            "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+            "description": "The icon chip\u0027s opacity, in [0, 1]."
           },
           "size": {
             "description": "The icon chip\u0027s plate half-extent, px. Positive.",
             "type": "number"
           },
           "ringColor": {
+            "$ref": "./common.schema.json#/$defs/BindableColorNonNullable",
             "description": "The ring\u0027s stroke color. Required exactly when Ring is authored; omitted otherwise.",
-            "default": null,
-            "title": "BindableColor",
-            "type": [
-              "string",
-              "null"
-            ]
+            "default": null
           },
           "ringAlpha": {
+            "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
             "description": "The ring\u0027s opacity, in [0, 1]. Required exactly when Ring is authored; omitted otherwise.",
-            "default": null,
-            "title": "BindableScalar",
-            "type": [
-              "number",
-              "string",
-              "null"
-            ]
+            "default": null
           }
         },
         "required": [

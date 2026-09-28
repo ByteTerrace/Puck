@@ -118,6 +118,7 @@ internal sealed partial class WorldScreenBinder {
             session = CreateSessionResidency(
                 name: name,
                 source: source,
+                timeline: feed.Emitter?.TimelineWork,
                 resolution: (feed.Resolution ?? new WorldScreenResolution(Height: WorldViewInstances.DefaultSessionHeight, Width: WorldViewInstances.DefaultSessionWidth))
             );
             m_viewResidencies[name] = session;
@@ -132,7 +133,8 @@ internal sealed partial class WorldScreenBinder {
     }
 
     // A session screen's residency, rendering the session feed's frame source on its own clock.
-    private ViewResidency CreateSessionResidency(string name, SdfCompositionFrameSource source, WorldScreenResolution resolution) {
+    private ViewResidency CreateSessionResidency(string name, SdfCompositionFrameSource source, WorldScreenResolution resolution,
+        Puck.Abstractions.Counting.IWorkCounterSource? timeline) {
         var residency = new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,
             dynamicTransformCapacity: source.WorstCaseDynamicTransformCapacity,
@@ -154,6 +156,7 @@ internal sealed partial class WorldScreenBinder {
             lifetime: residency.WorkLifetime,
             name: name,
             transforms: source.MovedTransforms,
+            timeline: timeline,
             work: residency.Work
         );
 

@@ -1,15 +1,15 @@
 using System.Globalization;
-using Puck.Assets.Documents;
 using Puck.Commands;
+using Puck.Hosting;
 using Puck.World.Server;
 
 namespace Puck.World;
 
 /// <summary>
-/// The <c>render.lighting</c>/<c>render.sky</c>/<c>render.environment</c>/<c>render.grounding</c>/
+/// The <c>render.lighting</c>/<c>render.sky</c>/<c>render.environment</c>/
 /// <c>render.tonemap</c> read-back: <c>world.lighting</c> reports every authored light by slot, the curvature
-/// enrichment, every sky layer, the studio-reflection softbox count and horizon colors, the grounding
-/// strength/radius, the tonemap mode, and the state row a <c>render.cycle</c> keys them on. The sections are
+/// enrichment, every sky layer, the studio-reflection softbox count and horizon colors, and the tonemap mode.
+/// Clock-keyed fields report their clock and key count. The sections are
 /// authored through <c>world.row.set render</c>; every field is optional and an absent one reads <c>default</c>,
 /// which is the engine's pinned value for that field of that kind, not zero.
 /// </summary>
@@ -35,21 +35,16 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority)
         ? number.ToString(provider: CultureInfo.InvariantCulture)
         : "default"
     );
-    private static string Describe(BindableColor? color) => (color?.Raw ?? "default");
-    private static string Describe(DocumentVector3? vector) => ((vector is { } value)
-        ? string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"{value.X:0.####},{value.Y:0.####},{value.Z:0.####}"
-        )
-        : "default"
-    );
-    private static string Describe(DocumentVector2? vector) => ((vector is { } value)
-        ? string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"{value.X:0.####},{value.Y:0.####}"
-        )
-        : "default"
-    );
+    private static string Keyed<T>(WorldKeys<T> keys) => $"keys({keys.Clock},{keys.Keys.Count})";
+    private static string Describe(BindableScalar? value) => value?.Keys is { } keys ? Keyed(keys)
+        : value?.Literal is { } literal ? Describe((float?)literal) : value?.Binding ?? "default";
+    private static string Describe(BindableAngle? value) => Describe(value?.Value);
+    private static string Describe(BindableColor? color) => color?.Keys is { } keys ? Keyed(keys) : color?.Raw ?? "default";
+    private static string Describe(BindableVector3? vector) => vector?.Keys is { } keys ? Keyed(keys)
+        : vector is { } value ? $"{Describe(value.X)},{Describe(value.Y)},{Describe(value.Z)}" : "default";
+    private static string Describe(BindableDirection? vector) => vector?.Keys is { } keys ? Keyed(keys) : Describe(vector?.Value);
+    private static string Describe(BindableVector2? vector) => vector?.Keys is { } keys ? Keyed(keys)
+        : vector is { } value ? $"{Describe(value.X)},{Describe(value.Y)}" : "default";
     private static CommandEcho DescribeLayer(CommandEcho echo, int index, WorldRenderSkyLayer layer) {
         echo = echo.Head(head: $"sky[{index}]");
 
@@ -298,7 +293,10 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority)
         WorldAnchor.Placement placement => $"placement:{placement.PlacementId}/{placement.ShapeId}",
         _ => "none",
     };
-    private static string DescribeLighting(WorldDefinition definition) {
+    private static string DescribeLighting(WorldDefinition definition, ulong tick) {
+        var rates = WorldPresentationRates.Of(definition).Cost;
+        definition = WorldPresentationValues.Of(definition).Definition;
+        var values = new WorldValueResolver(definition, new PresentedTick(tick, 0d));
         var lighting = definition.Render.Lighting;
         var curvature = lighting?.Curvature;
         var echo = CommandEcho.Open(verb: "world.lighting")
@@ -350,7 +348,7 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority)
             // The three gains share the runtime gate: all-zero costs the renderer nothing at all.
             .Field(
             key: "active",
-            value: (((curvature?.Cavity ?? 0f) > 0f) || ((curvature?.Rim ?? 0f) > 0f) || ((curvature?.Ink ?? 0f) > 0f))
+            value: ((values.Scalar(curvature?.Cavity ?? 0f, 0d) > 0d) || (values.Scalar(curvature?.Rim ?? 0f, 0d) > 0d) || (values.Scalar(curvature?.Ink ?? 0f, 0d) > 0d))
         )
             .Segment()
             .Head(head: "sky")
@@ -397,33 +395,20 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority)
             value: (definition.Render.Tonemap ?? WorldTonemap.None).ToString()
         )
             .Segment()
-            .Head(head: "cycle");
+            .Head(head: "timeline")
+            .Field(key: "pieces", value: rates.Pieces)
+            .Field(key: "coefficients", value: rates.Coefficients)
+            .Field(key: "coefficient-bytes", value: rates.CoefficientBytes)
+            .Field(key: "rate-degree", value: rates.Degree);
 
-        return ((definition.Render.Cycle is { } cycle)
-            ? echo
-                .Field(
-                key: "state",
-                value: cycle.State
-            )
-                .Field(
-                key: "keys",
-                value: cycle.Keys.Count
-            )
-                .Close()
-            : echo
-                .Field(
-                key: "state",
-                value: "none"
-            )
-                .Close()
-        );
+        return echo.Close();
     }
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return authority.CreateServerQueryCommand(
-            description: "Reports the render.lighting, render.sky, render.environment, render.grounding, and render.tonemap census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): every light by slot with its kind and fields, the stylized curvature enrichment and whether its runtime gate is open, every sky layer by index, the studio-reflection softbox count and horizon colors, the grounding strength/radius, the tonemap mode, and the state row a render.cycle keys them on. An unauthored field reads 'default' — the engine's pinned value for it, not zero.",
-            describe: server => DescribeLighting(definition: server.Definition),
+            description: "Reports the render.lighting, render.sky, render.environment, and render.tonemap census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): every light by slot with its kind and fields, the stylized curvature enrichment and whether its runtime gate is open, every sky layer by index, the studio-reflection softbox count and horizon colors, and the tonemap mode. Keyed fields name their clock and key count. An unauthored field reads 'default' — the engine's pinned value for it, not zero.",
+            describe: server => DescribeLighting(definition: server.Definition, tick: server.CompletedEngineTicks),
             name: "world.lighting"
         );
     }

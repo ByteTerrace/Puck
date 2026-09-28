@@ -3,12 +3,12 @@ using System.Text.Json.Nodes;
 namespace Puck.World;
 
 /// <summary>Visits one registered name-bearing site of a raw document tree.</summary>
-/// <param name="holder">The object holding the member.</param>
-/// <param name="jsonName">The member's JSON name.</param>
+/// <param name="holder">The object or array holding the value.</param>
+/// <param name="jsonName">The member's JSON name, or an array index in invariant decimal notation.</param>
 /// <param name="value">The member's value.</param>
 /// <param name="field">The member's registration.</param>
 /// <param name="memberType">The type the document model gives the member.</param>
-public delegate void WorldNameVisitor(JsonObject holder, string jsonName, JsonNode value, WorldNameField field, Type memberType);
+public delegate void WorldNameVisitor(JsonNode holder, string jsonName, JsonNode value, WorldNameField field, Type memberType);
 
 /// <summary>The one crossing between a document's <see cref="StateChannelRef"/> members and the colon spelling a
 /// lowering or a decompile works in: a document holds a reserved channel as a call node, and text that builds or
@@ -63,7 +63,7 @@ public static class WorldChannelNodes {
                     (value is JsonValue leaf) &&
                     leaf.TryGetValue<string>(value: out var spelling)
                 ) {
-                    holder[propertyName: jsonName] = Node(spelling: spelling);
+                    WorldModuleNamespace.SetSiteValue(holder, jsonName, Node(spelling: spelling));
                 }
             }
         );
@@ -90,7 +90,7 @@ public static class WorldChannelNodes {
                     var reference = StateChannelRefJsonConverter.FromNode(node: value);
 
                     if (reference.Call is not null) {
-                        holder[propertyName: jsonName] = reference.Spelling;
+                        WorldModuleNamespace.SetSiteValue(holder, jsonName, JsonValue.Create(reference.Spelling));
                     }
                 }
             }

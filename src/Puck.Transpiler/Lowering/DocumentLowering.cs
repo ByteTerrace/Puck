@@ -218,9 +218,10 @@ public static partial class DocumentLowering {
                     );
                     var jsonArr = new JsonArray();
 
-                    foreach (var elem in arr.Elements) {
-                        jsonArr.AppendNode(item: LowerValue(
-                            expr: elem,
+                    for (var index = 0; index < arr.Elements.Count; index++) {
+                        jsonArr.AppendNode(item: LowerElement(
+                            element: arr.Elements[index],
+                            index: index,
                             fieldKey: fieldKey,
                             scope: scope
                         ));
@@ -248,13 +249,16 @@ public static partial class DocumentLowering {
                     }
 
                     foreach (var prop in obj.Properties) {
+                        var pointer = ValueChild(scope: scope, member: prop.Name);
+
                         jsonObj[prop.Name] = LowerMember(
                             fieldKey: prop.Name,
                             holder: holder,
                             holderName: null,
                             memberName: prop.Name,
                             scope: scope,
-                            value: prop.Value
+                            value: prop.Value,
+                            sourcePointer: pointer
                         );
                     }
 
@@ -314,7 +318,8 @@ public static partial class DocumentLowering {
                             holderName: call.Name,
                             memberName: key,
                             scope: scope,
-                            value: arg.Value
+                            value: arg.Value,
+                            sourcePointer: ValueChild(scope: scope, member: key)
                         );
                         positionalIndex++;
                     }
@@ -406,20 +411,25 @@ public static partial class DocumentLowering {
     /// <param name="value">The authored value.</param>
     /// <param name="fieldKey">The key a unit on the value is classified by.</param>
     /// <param name="scope">The lowering scope.</param>
+    /// <param name="sourcePointer">An exact authored value pointer to map, or null when the caller maps a semantic construct separately.</param>
+    /// <param name="sourceIndexOffset">The final start index when this property's array appends to an existing array.</param>
     /// <returns>The lowered value.</returns>
-    public static JsonNode? LowerMember(object? holder, string? holderName, string memberName, ExpressionNode value, string? fieldKey, DocumentScope scope) {
+    public static JsonNode? LowerMember(object? holder, string? holderName, string memberName, ExpressionNode value, string? fieldKey, DocumentScope scope, string? sourcePointer = null, int sourceIndexOffset = 0) {
         ArgumentNullException.ThrowIfNull(argument: memberName);
         ArgumentNullException.ThrowIfNull(argument: scope);
         ArgumentNullException.ThrowIfNull(argument: value);
 
         var form = scope.Vocabulary.ClassifyMember(context: holder, memberName: memberName);
 
+        sourcePointer ??= ValueChild(scope: scope, member: memberName);
+        if (sourcePointer is not null) { scope.SourceMap?.RegisterValue(jsonPointer: sourcePointer, span: value.Span, form: form); }
+
         RefuseMisspelledMember(form: form, holderName: holderName, memberName: memberName, scope: scope, value: value);
         if ((value is IdentifierExpressionNode word) && scope.Vocabulary.IsChoiceWord(context: holder, memberName: memberName, word: word.Name)) {
             return JsonValue.Create(value: word.Name);
         }
 
-        return At(
+        return AtValuePointer(scope: scope, pointer: sourcePointer, indexOffset: sourceIndexOffset, lower: () => At(
             context: scope.Vocabulary.MemberContext(context: holder, memberName: memberName),
             lower: static member => member.Scope.Vocabulary.NormalizeMemberValue(
                 form: member.Form,
@@ -428,7 +438,7 @@ public static partial class DocumentLowering {
             ),
             scope: scope,
             state: (Scope: scope, Form: form, Value: value, FieldKey: fieldKey)
-        );
+        ));
     }
     /// <summary>Runs <paramref name="lower"/> with <paramref name="context"/> as the position its values fill.</summary>
     /// <typeparam name="T">What <paramref name="lower"/> returns.</typeparam>
