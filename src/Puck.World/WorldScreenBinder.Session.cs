@@ -318,14 +318,18 @@ internal sealed partial class WorldScreenBinder {
                 continue;
             }
 
+            // Only the endpoint of the instance the session observes, and only while it discloses everything.
+            var endpoint = (((feed.Observation is { } observation) && m_instanceHost.TryWindowEndpoint(
+                endpoint: out var observed,
+                name: feed.InstanceName,
+                observation: observation
+            ))
+                ? observed
+                : null);
+
             feed.WindowRoute.Settle(
-                disclosesEverything: (feed.Observation?.DisclosesEverything ?? false),
-                endpoint: (m_instanceHost.TryEndpoint(
-                    endpoint: out var endpoint,
-                    name: feed.InstanceName
-                )
-                    ? endpoint
-                    : null),
+                disclosesEverything: (endpoint is not null),
+                endpoint: endpoint,
                 presenter: presenter
             );
         }

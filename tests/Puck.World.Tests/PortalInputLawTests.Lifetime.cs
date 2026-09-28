@@ -141,6 +141,66 @@ public sealed partial class PortalInputLawTests {
             expected: (3, true)
         );
     }
+    // A window renders its destination endpoint's whole replica only for the instance its session observes: a replacement
+    // started under a stopped destination's name never admitted that session, so its endpoint is not the window's.
+    [Fact]
+    public void AWindowRendersOnlyTheEndpointOfTheWorldItsSessionObserves() {
+        using var scene = new HubScene(
+            first: "d1",
+            second: "d2"
+        );
+        using var files = new TemporaryDirectory(prefix: "puck-portal-window-endpoint-");
+        var session = scene.Host.ScreenSession(
+            instanceName: WorldInstanceHost.BootInstanceName,
+            screenIndex: 1
+        )!;
+        var name = session.InstanceName!;
+        var observation = session.Observation!;
+
+        Assert.True(condition: scene.Host.TryWindowEndpoint(
+            endpoint: out _,
+            name: name,
+            observation: observation
+        ));
+        Assert.True(
+            condition: scene.Host.TryStop(
+                name: name,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+
+        var path = Path.GetFullPath(path: Path.Combine(
+            path1: files.RootPath,
+            path2: "replacement.world.json"
+        ));
+        var replacement = Observable(admits: true);
+
+        File.WriteAllBytes(
+            bytes: WorldDefinitionSerialization.Serialize(definition: replacement),
+            path: path
+        );
+
+        var (row, rowState) = FileBackedRow(
+            definition: WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: path)),
+            name: name,
+            path: path
+        );
+
+        using var disposeRowState = rowState;
+
+        scene.Host.Admit(row: row);
+
+        Assert.True(condition: scene.Host.TryEndpoint(
+            endpoint: out _,
+            name: name
+        ));
+        Assert.False(condition: scene.Host.TryWindowEndpoint(
+            endpoint: out _,
+            name: name,
+            observation: observation
+        ));
+    }
     [Fact]
     public void SessionScreensBootOneDestinationEach_AndARepointStopsTheOneLeftBehind() {
         using var scene = new HubScene(

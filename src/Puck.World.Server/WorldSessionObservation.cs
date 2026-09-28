@@ -28,6 +28,15 @@ public sealed class WorldSessionObservation : IDisposable {
     public WorldDisclosureTier Tier { get; }
     /// <summary>Gets the authority the viewer observes from, which the world's admission rows are asked about.</summary>
     public string SourceAuthority { get; }
+
+    /// <summary>Returns whether this observation observes a world: the one server it was admitted by.</summary>
+    /// <param name="server">The server.</param>
+    /// <returns><see langword="true"/> when the observation was admitted by <paramref name="server"/>.</returns>
+    public bool Observes(WorldServer server) => ReferenceEquals(
+        objA: m_server,
+        objB: server
+    );
+
     /// <summary>Gets a value indicating whether the observation is delivered everything its world holds right now: it has
     /// not ended, it still observes the whole world, its admission discloses a <see cref="WorldDisclosureTier.Replica"/>,
     /// and its world's observer disclosure redacts no body. Only then may a viewer render its world's own whole replica

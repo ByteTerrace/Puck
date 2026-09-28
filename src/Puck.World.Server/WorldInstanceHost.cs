@@ -735,6 +735,34 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         return false;
     }
+    /// <summary>Looks up the endpoint a portal window may render in place of its session: the endpoint of the local
+    /// instance its session observes, while that session is delivered everything the instance holds
+    /// (<see cref="WorldSessionObservation.DisclosesEverything"/>). An instance running under the name that the session does
+    /// not observe (a replacement started under a stopped instance's name) yields none, since the session was never
+    /// admitted to it and its endpoint's mirror is that instance's whole replica.</summary>
+    /// <param name="observation">The window's session.</param>
+    /// <param name="name">The instance the window's screen resolved.</param>
+    /// <param name="endpoint">The endpoint, when this returns <see langword="true"/>.</param>
+    /// <returns>Whether the window may render the endpoint's mirror now.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="observation"/> is <see langword="null"/>.</exception>
+    public bool TryWindowEndpoint(WorldSessionObservation observation, string name, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldAuthorityEndpoint? endpoint) {
+        ArgumentNullException.ThrowIfNull(argument: observation);
+
+        endpoint = null;
+
+        return (
+            m_instances.TryGetValue(
+                key: name,
+                value: out var instance
+            ) &&
+            observation.Observes(server: instance.Server) &&
+            observation.DisclosesEverything &&
+            TryEndpoint(
+                endpoint: out endpoint,
+                name: name
+            )
+        );
+    }
     /// <summary>Looks up a running instance by name.</summary>
     /// <param name="name">The console-facing instance name.</param>
     /// <param name="instance">The instance, when found.</param>
