@@ -25,7 +25,7 @@ var context = new PostContext(
     ArtifactsDirectory: (CommandLineArguments.Value(args: args, name: "--artifacts") ?? "artifacts/hgd-post"),
     SstRoot: corpora?.Resolve(args: args, flag: "--sst", name: "nes6502-sst"),
     TestRomRoot: corpora?.Resolve(args: args, flag: "--roms", name: "nes-test-roms"),
-    AccuracyCoinRoot: corpora?.Resolve(args: args, flag: "--accuracy-coin", name: "accuracy-coin"));
+    ResolveAccuracyCoinRoot: () => corpora?.Resolve(args: args, flag: "--accuracy-coin", name: "accuracy-coin"));
 var report = new PostBattery<PostContext>(banner: "Puck.HumbleGamingDeck.Post - Humble Gaming Deck power-on self-test", stages: stages).Run(context: context);
 report.Write(artifactsDirectory: context.ArtifactsDirectory);
 if (report.Abandoned) {
