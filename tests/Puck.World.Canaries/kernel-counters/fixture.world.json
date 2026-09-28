@@ -67,6 +67,43 @@
         ]
       },
       "id": "cloud"
+    },
+    {
+      "document": {
+        "name": "cloud-32",
+        "schema": "puck.creation.v1",
+        "shapes": [],
+        "volumes": [
+          {
+            "halfExtent": [
+              2,
+              1.5,
+              2
+            ],
+            "kind": "cloud",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "ramp": [
+              {
+                "color": "#D7E3ED",
+                "density": 0
+              }
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "seed": 7,
+            "steps": 32
+          }
+        ]
+      },
+      "id": "cloud-32"
     }
   ],
   "schema": "puck.world.definition.v1",
@@ -86,6 +123,15 @@
         ],
         "transitionRenderScale": 1,
         "transitionSeconds": 0.25
+      }
+    ],
+    "post": [
+      {
+        "config": {
+          "intensity": 0.1
+        },
+        "name": "grain",
+        "package": "sdf.film-grain"
       }
     ],
     "seatControl": {

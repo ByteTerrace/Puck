@@ -845,31 +845,41 @@ These are one-line cautions; the owning pages hold the derivations.
   upload's exact counts over `tests/Shared/FakeGpuDevice.cs`, so a
   recording change re-records those constants in the same change.
 - **Kernels count their own work through the node's kernel counters.** A
-  fragment pass or a one-pass package declaring `CountsKernelWork` (every
-  `sdf.world` pass, the mesh pass included, and `place`) declares
-  `ShaderWorkCounters.Members` in its interface, whose generated include then
-  carries `puckCountWork` (a wave sum added by the first active lane) and
-  `puckCountWorkEach` (one invocation's own counts, for a fragment stage), laid
-  out from `GpuKernelCounters`' constants; and it makes its node keep
+  fragment pass declaring `CountsKernelWork` (every `sdf.world` pass, the mesh
+  pass included) or a one-pass package whose members declare
+  `ShaderWorkCounters.Members` (`place`, `overlay`, the source conversions and
+  every post-process package, which `PostProcessPackage` requires) gets the
+  counting functions in its generated include: `puckCountWork` (a wave sum
+  added by the first active lane) for a compute kernel and
+  `puckCountFragmentWork` (the same over the lanes that are not helper lanes)
+  for a fragment stage, laid out from `GpuKernelCounters`' constants, and
+  `PUCK_WORK_COUNTERS`, inside which a kernel a document pass also compiles
+  (the source conversions) counts. Its node keeps
   `GpuKernelCounters`: per frame slot a device-local counter
   buffer and a readback buffer (`IGpuBufferFactory.CreateReadback`), one row a
   planned pass. The node records the clear and its barrier ahead of the first
-  pass and the barrier and copy (`IGpuRecorder.CopyBuffer`) behind the last,
-  outside every pass, and names the slot to its ledger
-  (`GpuWorkLedger.ReadOnCompletion`), which adds each row to its pass as
-  `gpu.march.steps` and `gpu.texels.written` once the submission completes. A
-  recording gets its row in `RenderGraphPackageRecording.WorkCounters`; its
-  recorder binds the buffer at `workCounters` and writes the row into the pass
+  pass, and behind the last the barrier from the compute and fragment stages,
+  the copy (`IGpuRecorder.CopyBuffer`) and the barrier to the host
+  (`GpuStage.Host`, `GpuAccess.HostRead`), outside every pass, and names the
+  slot to its ledger (`GpuWorkLedger.ReadOnCompletion`), which adds each row to
+  its pass as `gpu.march.steps` and `gpu.texels.written` once the submission
+  completes. A package pass that skips the frame is counted skipped
+  (`GpuWorkLedger.SkipPass`), never executed with zeros. A
+  recording gets its row in `RenderGraphPackageRecording.WorkCounters`; a
+  package recorder writes it through `RenderGraphPackageWorkCounters`, which
+  binds the buffer at `workCounters` and writes the row into the pass
   block (`workCounterRow`), and every SDF compute kernel ends with
   `puckCountWork(sdfWorkSteps, sdfWorkTexels)` (`frame/sdf-work.hlsli`), after
   every lane that did work. A new march, query or volume sample adds to
   `sdfWorkSteps` beside the evaluation, never inside the interpreter; a texel
   counts only where one is written (`sdfVisibilityStoreWord`, the output writes),
   and `SdfWorkCountingLawTests` hold both. Vulkan devices are created with
-  `fragmentStoresAndAtomics` for the mesh pass's count. `GpuKernelCountersLawTests`
-  read a modeled slot back through the ledger over `UploadModelGpu`,
-  `RenderGraphFragmentLawTests` hold the clear and copy around the passes, and the
-  `kernel-counters` canary holds a volume's samples doubling its march steps.
+  `fragmentStoresAndAtomics` for the fragment stages' counts. `GpuKernelCountersLawTests`
+  read a modeled slot back through the ledger over `UploadModelGpu` and hold
+  the three barriers, `RenderGraphFragmentLawTests` hold the clear and copy
+  around the passes and a skipping pass counted skipped, and the
+  `kernel-counters` canary holds a volume's samples doubling its march steps and
+  the film grain pass counting one texel a pixel.
 - **Creation faults are one decorator at service creation.** Each backend wraps
   the services it creates with its context once, through
   `GpuCreationFaults.Wrap` (`DirectXDeviceContext.CreateServices`, the Vulkan

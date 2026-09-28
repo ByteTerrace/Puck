@@ -5,7 +5,7 @@ world.wait ready 45
 world.wait 30
 # The cloud integrates sixteen samples along every ray through it.
 world.counters gpu
-# The same cloud at thirty-two samples.
-world.row.set prototypes {"id":"cloud","document":{"name":"cloud","schema":"puck.creation.v1","shapes":[],"volumes":[{"halfExtent":[2,1.5,2],"kind":"cloud","position":[0,0,0],"ramp":[{"color":"#D7E3ED","density":0}],"rotation":[0,0,0,1],"seed":7,"steps":32}]}}
+# The placement takes the same cloud at thirty-two samples.
+world.row.set placements cloud prototypeId "cloud-32"
 world.wait 30
 world.counters gpu

@@ -72,6 +72,26 @@ public sealed class DirectXBufferStatesLawTests {
             expected: (DirectXBufferBarrierKind.Transition, UnorderedAccess, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE)
         );
     }
+    // The readback the counters are copied into lives in COPY_DEST, and the host's read after the copy asks for that
+    // state, so it records nothing: the fence the host waits on makes the copy visible to it.
+    [Fact]
+    public void AHostReadOfAReadbackBufferRecordsNoBarrier() {
+        var hostRead = DirectXBufferStates.RequiredState(access: GpuAccess.HostRead, stages: GpuStage.Host);
+        var barrier = new DirectXBufferStates().Plan(
+            after: hostRead,
+            bufferHandle: ArgsBuffer,
+            firstState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST
+        );
+
+        Assert.Equal(
+            actual: hostRead,
+            expected: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST
+        );
+        Assert.Equal(
+            actual: barrier.Kind,
+            expected: DirectXBufferBarrierKind.None
+        );
+    }
     [Fact]
     public void EachPlacementReachesIndirectArgumentFromTheStateItIsCreatedIn() {
         var indirect = DirectXBufferStates.RequiredState(access: GpuAccess.IndirectCommandRead, stages: GpuStage.ComputeShader);

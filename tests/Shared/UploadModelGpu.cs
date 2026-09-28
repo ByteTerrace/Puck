@@ -38,6 +38,7 @@ internal sealed class UploadModelGpu :
     private readonly Dictionary<(nint Set, uint Binding), nint> m_bindings = [];
     private readonly Dictionary<nint, MemoryBuffer> m_buffers = [];
     private readonly List<string> m_stateConflicts = [];
+    private readonly List<UploadModelBufferBarrier> m_bufferBarriers = [];
     private readonly Dictionary<nint, List<BufferTransition>> m_transitions = [];
 
     private readonly FakeGpuDevice m_inner;
@@ -96,6 +97,8 @@ internal sealed class UploadModelGpu :
     /// of a buffer starts from the state its declared source access names (<c>DirectXBufferStates.RequiredState</c>).
     /// A host-visible buffer never transitions there, so it is not tracked.</summary>
     public IReadOnlyList<string> StateConflicts => m_stateConflicts;
+    /// <summary>Gets every buffer barrier recorded, in recording order, with the accesses and stages it names.</summary>
+    public IReadOnlyList<UploadModelBufferBarrier> BufferBarriers => m_bufferBarriers;
 
     /// <summary>Gets the bytes of the one device-local buffer of <paramref name="sizeBytes"/>.</summary>
     /// <param name="sizeBytes">The buffer's size; exactly one device-local buffer must have it.</param>
@@ -266,6 +269,13 @@ internal sealed class UploadModelGpu :
             After: StateOf(access: destinationAccessMask, stages: destinationStageMask),
             Buffer: bufferHandle,
             Declared: StateOf(access: sourceAccessMask, stages: sourceStageMask)
+        ));
+        m_bufferBarriers.Add(item: new UploadModelBufferBarrier(
+            Buffer: bufferHandle,
+            DestinationAccess: destinationAccessMask,
+            DestinationStages: destinationStageMask,
+            SourceAccess: sourceAccessMask,
+            SourceStages: sourceStageMask
         ));
     }
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
@@ -497,3 +507,10 @@ internal sealed class UploadModelGpu :
         }
     }
 }
+/// <summary>One buffer barrier <see cref="UploadModelGpu"/> recorded.</summary>
+/// <param name="Buffer">The buffer's handle.</param>
+/// <param name="SourceAccess">The accesses the barrier orders before it.</param>
+/// <param name="DestinationAccess">The accesses the barrier orders after it.</param>
+/// <param name="SourceStages">The stages the barrier waits on.</param>
+/// <param name="DestinationStages">The stages the barrier holds back.</param>
+internal readonly record struct UploadModelBufferBarrier(nint Buffer, GpuAccess SourceAccess, GpuAccess DestinationAccess, GpuStage SourceStages, GpuStage DestinationStages);

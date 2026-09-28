@@ -23,7 +23,7 @@
         "slots": [
           {
             "camera": null,
-            "height": 0.125,
+            "height": 0.1111,
             "instance": "ink-simulation",
             "width": 1,
             "x": 0,
@@ -31,59 +31,67 @@
           },
           {
             "camera": null,
-            "height": 0.125,
+            "height": 0.1111,
             "instance": "ink-visualize",
             "width": 1,
             "x": 0,
-            "y": 0.125
+            "y": 0.1111
           },
           {
             "camera": null,
-            "height": 0.125,
+            "height": 0.1111,
             "instance": "ink-finish",
             "width": 1,
             "x": 0,
-            "y": 0.25
+            "y": 0.2222
           },
           {
             "camera": null,
-            "height": 0.125,
+            "height": 0.1111,
             "instance": "tint",
             "width": 1,
             "x": 0,
-            "y": 0.375
+            "y": 0.3333
           },
           {
             "camera": null,
-            "height": 0.125,
+            "height": 0.1111,
             "instance": "sdf-film-grain",
             "width": 1,
             "x": 0,
-            "y": 0.5
+            "y": 0.4444
           },
           {
             "camera": null,
-            "height": 0.125,
+            "height": 0.1111,
             "instance": "place",
             "width": 1,
             "x": 0,
-            "y": 0.625
+            "y": 0.5556
           },
           {
             "camera": null,
-            "height": 0.125,
+            "height": 0.1111,
             "instance": "overlay",
             "width": 1,
             "x": 0,
-            "y": 0.75
+            "y": 0.6667
           },
           {
             "camera": null,
-            "height": 0.125,
+            "height": 0.1111,
             "instance": "sdf-world",
             "width": 1,
             "x": 0,
-            "y": 0.875
+            "y": 0.7778
+          },
+          {
+            "camera": null,
+            "height": 0.1111,
+            "instance": "source",
+            "width": 1,
+            "x": 0,
+            "y": 0.8889
           }
         ],
         "transitionRenderScale": 1,
@@ -151,6 +159,11 @@
         "camera": null,
         "name": "sdf-world",
         "source": "sdf-world.graph.json"
+      },
+      {
+        "camera": null,
+        "name": "source",
+        "source": "source.graph.json"
       }
     ]
   }

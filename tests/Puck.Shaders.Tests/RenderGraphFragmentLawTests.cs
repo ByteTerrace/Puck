@@ -448,13 +448,47 @@ public sealed class RenderGraphFragmentLawTests {
             expected: (Owned: gpu.LiveBytes, Steady: gpu.LiveBytes)
         );
     }
+    // A package pass that skips the frame records nothing and counts as skipped in its submission, never as a pass that
+    // ran and did nothing, so a required zero recorded for a skipped pass cannot be met by one that ran.
+    [Fact]
+    public void APackagePassSkippingTheFrameCountsAsSkipped() {
+        var plan = Plan(definition: Graph(
+            outputs: ["out"],
+            packages: new RenderGraphPackagePass(
+                Name: "counted",
+                Outputs: ["out"],
+                Package: Counting
+            ),
+            resources: [Image(name: "out")]
+        ));
+        var gpu = new FakePipelineGpu();
+        var recordings = new List<(string Pass, GpuKernelCounterRow? Counters)>();
+        using var node = Node(counter: null, gpu: gpu, plan: plan, recordings: recordings, skipped: "counted$plain");
 
-    private static ShaderPipelineRenderNode Node(FakePipelineGpu gpu, RenderGraphPlan plan, IShaderPipelineStorageCounter? counter, List<(string Pass, GpuKernelCounterRow? Counters)>? recordings = null) {
+        node.ProduceUntilInstalled();
+        recordings.Clear();
+
+        var sample = new GpuWorkSample();
+
+        for (var frame = 0; ((frame < 8) && !node.TryReadCompleted(sample: sample)); frame++) {
+            node.ProduceFrame(context: default);
+        }
+
+        var labels = sample.PassLabels.ToArray();
+
+        Assert.Equal(
+            actual: labels.Select(selector: (label, pass) => (label, sample.GetPassState(pass: pass))),
+            expected: [("counted$count", GpuPassState.Executed), ("counted$plain", GpuPassState.Skipped)]
+        );
+        Assert.DoesNotContain(collection: recordings, filter: static recording => (recording.Pass == "counted$plain"));
+    }
+
+    private static ShaderPipelineRenderNode Node(FakePipelineGpu gpu, RenderGraphPlan plan, IShaderPipelineStorageCounter? counter, List<(string Pass, GpuKernelCounterRow? Counters)>? recordings = null, string? skipped = null) {
         var packages = new RenderGraphPackageRecorders();
 
         packages.Register(factory: new Silent(counter: counter), package: Writer);
         packages.Register(factory: new Silent(counter: null), package: Reader);
-        packages.Register(factory: new Silent(counter: null, gpu: gpu, recordings: recordings), package: Counting);
+        packages.Register(factory: new Silent(counter: null, gpu: gpu, recordings: recordings, skipped: skipped), package: Counting);
 
         var node = new ShaderPipelineRenderNode(
             deviceContext: gpu,
@@ -499,8 +533,9 @@ public sealed class RenderGraphFragmentLawTests {
         };
     }
     // A package that builds nothing and records nothing but says it drew, counting its instance's storages by a counter,
-    // and, given a list, noting each recording's pass and work counters in it and in the device's events.
-    private sealed class Silent(IShaderPipelineStorageCounter? counter, FakePipelineGpu? gpu = null, List<(string Pass, GpuKernelCounterRow? Counters)>? recordings = null) : IRenderGraphPackageFactory {
+    // and, given a list, noting each recording's pass and work counters in it and in the device's events. The pass it
+    // is told to skip skips every frame.
+    private sealed class Silent(IShaderPipelineStorageCounter? counter, FakePipelineGpu? gpu = null, List<(string Pass, GpuKernelCounterRow? Counters)>? recordings = null, string? skipped = null) : IRenderGraphPackageFactory {
         public IShaderPipelineStorageCounter? CounterOf(string instance) => counter;
         public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
             if (counter is not Counter control) {
@@ -522,15 +557,17 @@ public sealed class RenderGraphFragmentLawTests {
             return new Recorder(
                 gpu: gpu,
                 pass: context.Pass,
-                recordings: recordings
+                recordings: recordings,
+                skips: string.Equals(a: context.Pass, b: skipped, comparisonType: StringComparison.Ordinal)
             );
         }
 
         private sealed record Built(long Revision) : IDisposable {
             public void Dispose() { }
         }
-        private sealed class Recorder(FakePipelineGpu? gpu, string pass, List<(string Pass, GpuKernelCounterRow? Counters)>? recordings) : IRenderGraphPackageRecorder {
+        private sealed class Recorder(FakePipelineGpu? gpu, string pass, List<(string Pass, GpuKernelCounterRow? Counters)>? recordings, bool skips) : IRenderGraphPackageRecorder {
             public void Dispose() { }
+            public bool Skips(in FrameContext context) => skips;
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
                 recordings?.Add(item: (pass, recording.WorkCounters));
 

@@ -1144,15 +1144,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     }
     private void Record(RuntimePass pass, int slot, in FrameContext context, nint command) {
         if (pass.Package is not null) {
-            if (pass.Package!.Skips(context: in context)) {
-                SkipAccesses(
-                    pass: pass,
-                    slot: slot
-                );
-
-                return;
-            }
-
             RecordPackage(
                 command: command,
                 context: in context,

@@ -3,7 +3,7 @@ world.cadence off
 world.wait ready 45
 world.wait 30
 world.counters gpu
-# The same row set again at sixteen samples: the edit alone moves no count.
-world.row.set prototypes {"id":"cloud","document":{"name":"cloud","schema":"puck.creation.v1","shapes":[],"volumes":[{"halfExtent":[2,1.5,2],"kind":"cloud","position":[0,0,0],"ramp":[{"color":"#D7E3ED","density":0}],"rotation":[0,0,0,1],"seed":7,"steps":16}]}}
+# The placement takes its own sixteen-sample cloud again: the edit alone moves no count.
+world.row.set placements cloud prototypeId "cloud"
 world.wait 30
 world.counters gpu

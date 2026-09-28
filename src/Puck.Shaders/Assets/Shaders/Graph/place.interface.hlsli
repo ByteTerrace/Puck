@@ -42,7 +42,9 @@ struct PlacePass {
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps then texels written, as a 64-bit count in
-// two words, low word first.
+// two words, low word first. A kernel that also compiles under an interface declaring no work counters (a
+// document pass's) counts inside #if defined(PUCK_WORK_COUNTERS).
+#define PUCK_WORK_COUNTERS 1
 static const uint PuckWorkRowWords = 4u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
@@ -73,13 +75,20 @@ void puckCountWork(uint steps, uint texels) {
         puckAddWork((row + PuckWorkTexelsWord), waveTexels);
     }
 }
-// Adds one invocation's own march steps and texels written to its pass's row, with no wave sum: for a fragment
-// stage, whose helper lanes' atomics have no effect.
-void puckCountWorkEach(uint steps, uint texels) {
-    uint row = (passGroup.workCounterRow * PuckWorkRowWords);
+// Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper
+// lanes, and the first of them adds each sum. A helper lane counts nothing and never adds, whether or not the
+// backend lets it take part in wave operations, since its atomics have no effect.
+void puckCountFragmentWork(uint steps, uint texels) {
+    bool counting = !IsHelperLane();
+    uint waveSteps = WaveActiveSum(counting ? steps : 0u);
+    uint waveTexels = WaveActiveSum(counting ? texels : 0u);
 
-    puckAddWork((row + PuckWorkStepsWord), steps);
-    puckAddWork((row + PuckWorkTexelsWord), texels);
+    if (counting && (WavePrefixCountBits(counting) == 0u)) {
+        uint row = (passGroup.workCounterRow * PuckWorkRowWords);
+
+        puckAddWork((row + PuckWorkStepsWord), waveSteps);
+        puckAddWork((row + PuckWorkTexelsWord), waveTexels);
+    }
 }
 
 #endif // PUCK_SHADER_INTERFACE_PLACE

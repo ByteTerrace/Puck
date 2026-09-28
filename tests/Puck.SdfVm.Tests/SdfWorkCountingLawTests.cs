@@ -15,7 +15,10 @@ public sealed partial class SdfWorkCountingLawTests {
     private static string Root => RepositoryPaths.Resolve(relativePath: SdfWorldInterfaces.KernelDirectory);
     private static IEnumerable<string> Sources => Directory.EnumerateFiles(path: Root, searchPattern: "*.hlsl*", searchOption: SearchOption.AllDirectories)
         .Select(selector: path => Path.GetRelativePath(path: path, relativeTo: Root).Replace(newChar: '/', oldChar: '\\'))
-        .Where(predicate: static path => !path.StartsWith(comparisonType: StringComparison.Ordinal, value: "isa/"))
+        .Where(predicate: static path => (
+            !path.StartsWith(comparisonType: StringComparison.Ordinal, value: "isa/") &&
+            !path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".interface.hlsli")
+        ))
         .Order(comparer: StringComparer.Ordinal);
 
     [Fact]

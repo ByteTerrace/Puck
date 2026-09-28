@@ -12,8 +12,8 @@ namespace Puck.Abstractions.Gpu;
 /// that declares the work counters (<c>ShaderWorkCounters</c> in <c>Puck.Shaders</c>).
 /// <para>
 /// Every frame records <see cref="RecordClear"/> before its first pass and <see cref="RecordCopy"/> after its last,
-/// outside every pass: one clear, one copy and a buffer barrier after each clear and before each copy. The passes between
-/// add atomically and need no barrier between them. The frame's submission names the slot to its ledger
+/// outside every pass: one clear, one copy and three buffer barriers, after the clear, before the copy and from the copy
+/// to the host. The passes between add atomically and need no barrier between them. The frame's submission names the slot to its ledger
 /// (<see cref="GpuWorkLedger.ReadOnCompletion"/>), which reads it once the submission has completed and before the slot
 /// is recorded again, so a slot's readback is never read while a copy into it is in flight.
 /// </para>
@@ -123,8 +123,14 @@ public sealed class GpuKernelCounters : IGpuWorkReadback, IDisposable {
             Row: ((uint)row)
         );
     }
-    /// <summary>Records the zero clear of a frame slot's counter buffer, then the barrier ordering it before every compute
-    /// pass's atomic additions.</summary>
+
+    /// <summary>Gets the stages that add to a counter buffer: a compute pass's kernel and a graphics pass's fragment
+    /// stage, which the barriers around the passes order against the clear and the copy.</summary>
+    public static GpuStage CountingStages =>
+        GpuStage.ComputeShader | GpuStage.FragmentShader;
+
+    /// <summary>Records the zero clear of a frame slot's counter buffer, then the barrier ordering it before every pass's
+    /// atomic additions, compute and fragment (<see cref="CountingStages"/>).</summary>
     /// <param name="recorder">The node's counting recorder.</param>
     /// <param name="commandBuffer">The frame's command buffer, ahead of its first pass.</param>
     /// <param name="slot">The frame slot.</param>
@@ -140,18 +146,20 @@ public sealed class GpuKernelCounters : IGpuWorkReadback, IDisposable {
             bufferHandle: counter,
             commandBufferHandle: commandBuffer,
             destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
-            destinationStageMask: GpuStage.ComputeShader,
+            destinationStageMask: CountingStages,
             sourceAccessMask: GpuAccess.TransferWrite,
             sourceStageMask: GpuStage.Transfer
         );
     }
-    /// <summary>Records the barrier ordering every pass's additions before the copy, then the copy of a frame slot's
-    /// counter buffer into its readback.</summary>
+    /// <summary>Records the barrier ordering every pass's additions (<see cref="CountingStages"/>) before the copy, the
+    /// copy of a frame slot's counter buffer into its readback, then the barrier making the copy visible to the host that
+    /// reads the readback once the submission completes.</summary>
     /// <param name="recorder">The node's counting recorder.</param>
     /// <param name="commandBuffer">The frame's command buffer, after its last pass.</param>
     /// <param name="slot">The frame slot.</param>
     public void RecordCopy(IGpuRecorder recorder, nint commandBuffer, int slot) {
         var counter = m_counters[slot].BufferHandle;
+        var readback = m_readbacks[slot].BufferHandle;
 
         recorder.TransitionBuffer(
             bufferHandle: counter,
@@ -159,13 +167,21 @@ public sealed class GpuKernelCounters : IGpuWorkReadback, IDisposable {
             destinationAccessMask: GpuAccess.TransferRead,
             destinationStageMask: GpuStage.Transfer,
             sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
-            sourceStageMask: GpuStage.ComputeShader
+            sourceStageMask: CountingStages
         );
         recorder.CopyBuffer(
             commandBufferHandle: commandBuffer,
-            destinationBufferHandle: m_readbacks[slot].BufferHandle,
+            destinationBufferHandle: readback,
             sizeBytes: SizeBytes,
             sourceBufferHandle: counter
+        );
+        recorder.TransitionBuffer(
+            bufferHandle: readback,
+            commandBufferHandle: commandBuffer,
+            destinationAccessMask: GpuAccess.HostRead,
+            destinationStageMask: GpuStage.Host,
+            sourceAccessMask: GpuAccess.TransferWrite,
+            sourceStageMask: GpuStage.Transfer
         );
     }
     /// <inheritdoc/>

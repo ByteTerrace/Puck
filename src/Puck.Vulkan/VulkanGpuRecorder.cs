@@ -57,6 +57,10 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             result |= VulkanAccessFlags.DepthStencilAttachmentWrite;
         }
 
+        if (0 != (access & GpuAccess.HostRead)) {
+            result |= VulkanAccessFlags.HostRead;
+        }
+
         return result;
     }
     private static uint ToVulkanLayout(GpuImageLayout layout) {
@@ -105,6 +109,10 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
 
         if (0 != (stage & GpuStage.VertexShader)) {
             result |= VulkanPipelineStageFlags.VertexShader;
+        }
+
+        if (0 != (stage & GpuStage.Host)) {
+            result |= VulkanPipelineStageFlags.Host;
         }
 
         return result;

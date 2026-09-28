@@ -26,7 +26,9 @@ public sealed class ShaderWorkCountersLawTests {
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkStepsWord = 0u;");
         Assert.Contains(actualString: generated, expectedSubstring: $"static const uint PuckWorkTexelsWord = {GpuKernelCounters.CountWords}u;");
         Assert.Contains(actualString: generated, expectedSubstring: "void puckCountWork(uint steps, uint texels) {");
-        Assert.Contains(actualString: generated, expectedSubstring: "void puckCountWorkEach(uint steps, uint texels) {");
+        Assert.Contains(actualString: generated, expectedSubstring: "void puckCountFragmentWork(uint steps, uint texels) {");
+        Assert.Contains(actualString: generated, expectedSubstring: "bool counting = !IsHelperLane();");
+        Assert.Contains(actualString: generated, expectedSubstring: "#define PUCK_WORK_COUNTERS 1");
         Assert.Contains(actualString: generated, expectedSubstring: $"RWStructuredBuffer<uint> {ShaderWorkCounters.Buffer}");
         Assert.Contains(actualString: generated, expectedSubstring: $"uint {ShaderWorkCounters.Row};");
         Assert.Equal(
@@ -37,6 +39,7 @@ public sealed class ShaderWorkCountersLawTests {
     [Fact]
     public void AnInterfaceDeclaringOneMemberGeneratesNoCountingFunction() {
         Assert.DoesNotContain(expectedSubstring: "puckCountWork", actualString: ShaderInterfaceHlsl.Generate(shaderInterface: Interface()));
+        Assert.DoesNotContain(expectedSubstring: "PUCK_WORK_COUNTERS", actualString: ShaderInterfaceHlsl.Generate(shaderInterface: Interface()));
         Assert.DoesNotContain(expectedSubstring: "puckCountWork", actualString: ShaderInterfaceHlsl.Generate(shaderInterface: Interface(members: [ShaderWorkCounters.RowMember])));
         Assert.DoesNotContain(expectedSubstring: "puckCountWork", actualString: ShaderInterfaceHlsl.Generate(shaderInterface: Interface(members: [ShaderWorkCounters.BufferMember])));
     }

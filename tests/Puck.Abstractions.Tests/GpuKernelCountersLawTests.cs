@@ -10,7 +10,7 @@ namespace Puck.Abstractions.Tests;
 /// over <see cref="UploadModelGpu"/>, whose buffers hold bytes, whose clear zeroes them and whose copy copies them. A frame
 /// clears its slot's counters, the passes' kernels add to their rows, and the copy carries the rows into the slot's
 /// readback, which the ledger reads into the passes' kernel columns once the submission completes: each row one pass's
-/// 64-bit counts, its march steps and then its texels written. The clear, the copy and their two barriers count outside
+/// 64-bit counts, its march steps and then its texels written. The clear, the copy and their three barriers count outside
 /// every pass, and the Direct3D 12 buffer states the barriers name replay without a conflict.
 /// </summary>
 public sealed class GpuKernelCountersLawTests {
@@ -95,8 +95,57 @@ public sealed class GpuKernelCountersLawTests {
         );
         Assert.Equal(actual: sample.GetOutsidePassCount(column: Column(kind: GpuWork.Clears)), expected: 1L);
         Assert.Equal(actual: sample.GetOutsidePassCount(column: Column(kind: GpuWork.Copies)), expected: 1L);
-        Assert.Equal(actual: sample.GetOutsidePassCount(column: Column(kind: GpuWork.BufferBarriers)), expected: 2L);
+        Assert.Equal(actual: sample.GetOutsidePassCount(column: Column(kind: GpuWork.BufferBarriers)), expected: 3L);
         Assert.Empty(collection: gpu.StateConflicts);
+    }
+    // The clear is ordered before every compute and fragment addition, those additions before the copy, and the copy
+    // before the host's read of the readback, each by its own barrier.
+    [Fact]
+    public void TheBarriersOrderTheClearTheAdditionsTheCopyAndTheHostRead() {
+        var gpu = new UploadModelGpu();
+
+        using var counters = new GpuKernelCounters(
+            buffers: gpu.Services.BufferFactory,
+            owner: "test",
+            part: "kernel counters",
+            rows: 1,
+            slots: 1
+        );
+
+        var command = gpu.Services.CommandPoolFactory.Create(name: default).CommandBufferHandle;
+        var counter = counters.RowOf(row: 0, slot: 0).Buffer.BufferHandle;
+
+        counters.RecordClear(commandBuffer: command, recorder: gpu.Services.Recorder, slot: 0);
+        counters.RecordCopy(commandBuffer: command, recorder: gpu.Services.Recorder, slot: 0);
+
+        var readback = Assert.Single(collection: gpu.BufferBarriers, predicate: barrier => (barrier.Buffer != counter)).Buffer;
+
+        Assert.Equal(
+            actual: gpu.BufferBarriers,
+            expected: [
+                new UploadModelBufferBarrier(
+                    Buffer: counter,
+                    DestinationAccess: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
+                    DestinationStages: GpuStage.ComputeShader | GpuStage.FragmentShader,
+                    SourceAccess: GpuAccess.TransferWrite,
+                    SourceStages: GpuStage.Transfer
+                ),
+                new UploadModelBufferBarrier(
+                    Buffer: counter,
+                    DestinationAccess: GpuAccess.TransferRead,
+                    DestinationStages: GpuStage.Transfer,
+                    SourceAccess: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
+                    SourceStages: GpuStage.ComputeShader | GpuStage.FragmentShader
+                ),
+                new UploadModelBufferBarrier(
+                    Buffer: readback,
+                    DestinationAccess: GpuAccess.HostRead,
+                    DestinationStages: GpuStage.Host,
+                    SourceAccess: GpuAccess.TransferWrite,
+                    SourceStages: GpuStage.Transfer
+                ),
+            ]
+        );
     }
     [Fact]
     public void ASubmissionNamingNoSlotReadsNoKernelCounts() {

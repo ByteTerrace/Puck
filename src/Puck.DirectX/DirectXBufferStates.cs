@@ -36,7 +36,9 @@ public sealed class DirectXBufferStates {
     /// buffer.</param>
     /// <returns><c>UNORDERED_ACCESS</c> for a transfer write, then <c>INDIRECT_ARGUMENT</c> for an indirect-argument
     /// read, then <c>UNORDERED_ACCESS</c> for a shader write, then <c>COPY_SOURCE</c> for a transfer read (a buffer a
-    /// copy reads, <see cref="IGpuRecorder.CopyBuffer"/>), then for a shader read <c>ALL_SHADER_RESOURCE</c> when
+    /// copy reads, <see cref="IGpuRecorder.CopyBuffer"/>), then <c>COPY_DEST</c> for a host read (a readback-heap buffer,
+    /// which stays in that state for its life, so the host needs no transition: the submission's fence makes the copy
+    /// visible to it), then for a shader read <c>ALL_SHADER_RESOURCE</c> when
     /// <paramref name="stages"/> holds the fragment stage and <c>NON_PIXEL_SHADER_RESOURCE</c> otherwise, then
     /// <c>COMMON</c>; the first match wins.</returns>
     public static D3D12_RESOURCE_STATES RequiredState(GpuAccess access, GpuStage stages) {
@@ -54,6 +56,10 @@ public sealed class DirectXBufferStates {
 
         if (0 != (access & GpuAccess.TransferRead)) {
             return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE;
+        }
+
+        if (0 != (access & GpuAccess.HostRead)) {
+            return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
         }
 
         if (0 != (access & GpuAccess.ShaderRead)) {
