@@ -394,6 +394,70 @@ state, matched group, and precedence winner. A missing row contributes no match,
 which keeps portable profile layers usable across worlds. When the winning group
 changes, held commands and chord/page latches from the old group are cleared.
 
+## Build mode
+
+Every seat can build in any world that binds anything. `player.build [seat]`
+(F2, or Back on a pad) flips the seat between the `play` and `build` states of
+the built-in `editor` context family; `player.mode editor build|play` makes the
+same flip. The engine composes a build layer beneath the world's own binding
+layers (`WorldEditorBindings`): the toggle rides the resting page of every group
+the world binds, and a `build` group whose page binds the editor verbs is
+selected by the context row `{editor, build, build}` while the seat builds. The
+build page replaces the seat's play page, so the movement keys nudge instead of
+walking. A world that binds a build key keeps its own meaning, and a world may
+extend or rebind the build page like any other.
+
+While a seat builds, its binding bar shows the build page: the world's own bar
+when it has a bank for the `build` page, otherwise the engine's build bar, one
+row of keyboard plates above one of pad plates. A seat whose principal may not
+mutate placements still builds; its bar reads `Build (read-only)`, and its edits
+are refused by name at the tick boundary as they are from the console.
+
+| Verb | Build page | What it does |
+|---|---|---|
+| `world.grid on\|off\|toggle` | G, North | Shows or hides the seat's grid. |
+| `world.grid next\|surface\|follow\|plane <y>` | H | Chooses where it draws: on every surface, on a working plane that follows the surface under the pointer, or on a fixed plane. |
+| `world.grid pitch <x> [<z>]\|pitch up\|pitch down` | `-`, `=` | Sets the grid pitch, or halves and doubles it. |
+| `world.snap on\|off\|toggle\|angle <deg>\|surface on\|off` | N, West | Moves snapping: whether positions snap, the turn step, and whether placing rests on the surface below. |
+| `world.snap reference [<placement>]\|clear` | C | Aligns to a placement's own lattice, drawn as the orange object grid. |
+| `world.place [<creation>] [<id>]` | Enter, South | Puts a placement down where the seat aims. |
+| `world.nudge [<placement>] x\|y\|z <steps>` | WASD, R, F, d-pad | Moves a placement by whole grid steps. |
+| `world.turn [<placement>] <steps>` | Q, E, shoulders | Turns a placement by whole angle steps. |
+
+`world.grid` and `world.snap` echo the seat's whole state with no argument and
+after every change. They move presentation state only: each value a verb has
+not moved reads through to the document's `editor` section, so a reload that
+changes the section reaches every seat that never overrode it, and `world.save`
+folds seat 1's moved values back into the section. A seat that leaves forgets
+what it moved.
+
+`world.place` casts the seat's aim, through its pointer when the pointer is over
+its view and otherwise through the middle of the view, against the
+presentation's static field (the solid placements, screens and adjacencies a
+body can touch). It lands on the first surface the aim meets, or four units
+ahead of the camera when it meets none. With snapping on, the position snaps to
+the grid, or to the captured reference's lattice and faces, through
+`GridSnap`; with surface snapping on and an upward-facing surface under the
+aim, the snapped column drops back onto the surface, so a placement rests on a
+platform or a ramp instead of a lattice height. A bare `world.place` stamps
+another of the seat's current placement's creation, copying its scale, yaw and
+solidity.
+
+`world.nudge` and `world.turn` act on the named placement or the seat's current
+one (the one it last placed or moved). A nudge moves along the world axes by
+the grid pitch, or along the captured reference's axes by its lattice; with
+snapping on, the moved axis lands on the lattice. A placement whose position is
+resolved through another row (a parent, an attachment, a board) is refused by
+name. Each of the three verbs submits one `placements` upsert through the
+section upsert `world.row.set` uses, under the issuing principal and the shared
+row-edit window guard, so the grant check, revalidation, journal and
+`world.undo` govern it exactly as they govern every row edit.
+
+The grid rides each view's pass block (`SdfViewSnapshot.Grid`), so one seat can
+build on a grid while another plays. [The editor plan](../../docs/plans/editor.md)
+holds the work that follows: selection, a ghost preview, the editor camera and
+the rest.
+
 ## Shader pipelines
 
 A `views.graphs` row (a `graph "name" { … }` block inside `views` in `.puck`)

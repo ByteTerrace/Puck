@@ -28,32 +28,26 @@ session saved back into the district's `.puck` source.
 
 ## Implementation status
 
-Editing is console-only today. The verbs that change a world are
-`world.row.set`, `world.row.add`, `world.row.remove` and `world.row.step` (the
-last is bindable and steps one scalar field; it refuses a vector field such as
-a position), `world.reflow.preview`/`status`/`commit`/`cancel`, `world.undo`,
-`world.reload`, `world.save`, the `pipeline.*` verbs for shader pipelines, and
-the `forge.*` verbs for cartridges. `world.undo` replays the journal minus its
-tail and is unbindable; there is no redo anywhere except the forge draft's
-one-level swap (`CartridgeDraft.Undo`). There are no gizmos, no selection, no
-pointer picking of placements, no copy, paste or duplicate, and no measurement.
+E1 is in place: every seat can enter build mode (`player.build`, the built-in
+`editor` context family), draw its own grid on the ground it works on, and put
+down, nudge and turn placements by whole grid and angle steps from bound keys
+(`world.grid`, `world.snap`, `world.place`, `world.nudge`, `world.turn`). The
+World guide's *Build mode* section describes them. The other verbs that change
+a world are `world.row.set`, `world.row.add`, `world.row.remove` and
+`world.row.step` (the last is bindable and steps one scalar field; it refuses a
+vector field such as a position), `world.reflow.preview`/`status`/`commit`/`cancel`,
+`world.undo`, `world.reload`, `world.save`, the `pipeline.*` verbs for shader
+pipelines, and the `forge.*` verbs for cartridges. `world.undo` replays the
+journal minus its tail and is unbindable; there is no redo anywhere except the
+forge draft's one-level swap (`CartridgeDraft.Undo`). There are no gizmos, no
+selection, no pointer picking of placements (`world.place` aims at a surface
+but picks nothing), no copy or paste, and no measurement; `world.nudge` and
+`world.turn` act on a named placement or the one the seat last placed or moved.
 `world.save` refuses a `.puck` target, so a live edit to a `.puck` world can only
 be saved as JSON.
 
 Several pieces exist with nothing using them:
 
-- `src/Puck.World.Authoring/Authoring/GridSnap.cs` holds the snapping math
-  (`SnapConfig`, `SnapReference`, `RotationSnap`, `GridSnap.Apply`,
-  `SnapRotation`, `SnapYawDegrees`, `SnapToWorldLattice`) and has no caller and
-  no law.
-- The kernels can draw a world grid and an object grid around a reference
-  (`applyWorldFloorGrid` and `applyObjectGrid` in
-  `shade/sdf-surface-shading.hlsli`, called from `sdf-light-stage.hlsli`), and
-  `SdfFrameBlock` writes `SdfFrame`'s `Grid*` fields into the pass block, but
-  `WorldFramePresenter` sets none of them. `GridOverlayState` has no producer.
-  Both grids paint one horizontal plane only: a surface point within 0.02 of
-  `gridFloorY` in height. A slope, a raised platform, a wall or a floor at
-  another height shows no grid.
 - `world.debug-view` selects one of twelve modes (`off`, `depth`, `normals`,
   `raydir`, `material-id`, `iteration-count`, `termination`, `slice`, `mask`,
   `overshoot`, `evals`, `visibility`). It is unbindable and sets the mode on
@@ -225,6 +219,18 @@ grid-free capture (the red leg). Pixels are the honest check here, since the
 lines exist only in the image.
 
 **Depends on:** nothing.
+
+**Status:** delivered. The laws are `GridSnapLawTests`,
+`WorldEditorSectionLawTests`, `SdfFrameBlockLawTests`,
+`WorldEditorBuildModeLawTests` (the presenter law, and a surface place through
+the host's own registry resting on a fixture floor),
+`WorldEditorPlacementLawTests` (nudge, snapped nudge, turn and `world.undo`
+through a real registry over a live row) and `WorldEditorSeatsLawTests` (the
+save fold, the build layer and the build bar); the canary is `editor-grid`.
+The placement verbs cast against the presentation's static field, so a world
+whose static field is refused (see above) places ahead of the camera and does
+not rest on its surfaces. A placement's extent for reference snapping is half
+its scale on each axis until E2 gives placements bounds.
 
 ### E2 — Selection, picking and highlight
 

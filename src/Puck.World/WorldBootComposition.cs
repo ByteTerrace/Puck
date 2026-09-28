@@ -458,8 +458,29 @@ public static class WorldBootComposition {
         // resubmission of a row a literal/list/step edit already buffered this tick window is refused by name, not
         // silently reverted.
         services.AddSingleton<WorldRowStepWindowGuard>();
+        // Each seat's editor state: its grid and snapping over the document's editor section, which the presenter
+        // draws and the editor verbs move. A seat's editor state leaves with its occupant, and a seat whose principal
+        // may not mutate placements builds read-only.
+        services.AddSingleton(implementationFactory: static sp => {
+            var roster = sp.GetRequiredService<PlayerRoster>();
+            var server = sp.GetRequiredService<WorldServer>();
+            var seats = new WorldEditorSeats {
+                EditProbe = slot => server.Grants.Allows(
+                    capability: WorldCapability.Mutate,
+                    principal: roster.PrincipalOf(slot: slot),
+                    subject: GrantSubject.Section(section: WorldSection.Placements)
+                ).IsAllowed,
+            };
+
+            roster.SlotVacated += seats.Reset;
+
+            return seats;
+        });
         services.AddSingleton<ICommandModule, WorldRowCommandModule>();
         services.AddSingleton<ICommandModule, WorldSculptCommandModule>();
+        // world.grid/world.snap move a seat's editor state; world.place/.nudge/.turn edit placements through the
+        // same section upsert and window guard world.row.set uses.
+        services.AddSingleton<ICommandModule, WorldEditorCommandModule>();
         // The contact/solidity verb surface — world.collision.probe/.status and the world.contacts read. Authoring
         // the field or a kit's collider goes through world.row.set collision/world.row.set kits.
         services.AddSingleton<ICommandModule, WorldCollisionCommandModule>();
@@ -1100,6 +1121,7 @@ public static class WorldBootComposition {
         services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
         services.AddSingleton<WorldSeatViewports>();
+        services.AddSingleton(implementationFactory: static sp => new WorldEditorPointer(client: sp.GetRequiredService<WorldClient>(), viewports: sp.GetRequiredService<WorldSeatViewports>()));
         services.AddSingleton<MarkerStore>();
         services.AddSingleton(implementationFactory: static sp => new WorldIconTable(definition: sp.GetRequiredService<WorldDefinition>()));
         services.AddSingleton<WorldSdfDocumentEmitter>();
@@ -1135,7 +1157,8 @@ public static class WorldBootComposition {
             markers: sp.GetRequiredService<MarkerStore>(),
             resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
-            bakes: sp.GetRequiredService<WorldBakeSchedule>()
+            bakes: sp.GetRequiredService<WorldBakeSchedule>(),
+            editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>())
         ) {
             // An offscreen capture shows bound state exactly as of the tick it is armed for.
             PinsStateFraction = true,
@@ -1301,6 +1324,7 @@ public static class WorldBootComposition {
         // authoritative-core one — a headless boot never sees a pointer to observe. A new pointer-driven feature
         // registers an IWorldPointerConsumer below; it does NOT add a second window-input observer.
         services.AddSingleton<WorldPointer>();
+        services.AddSingleton(implementationFactory: static sp => new WorldEditorPointer(client: sp.GetRequiredService<WorldClient>(), pointer: sp.GetRequiredService<WorldPointer>(), viewports: sp.GetRequiredService<WorldSeatViewports>()));
 
         // The local mouse seat's right-drag camera orbit (WoW-style): the shared yaw/pitch state WorldFramePresenter
         // composes onto the slot-0 chase camera anchor, and the pointer consumer that nudges it while the authored
@@ -1420,6 +1444,7 @@ public static class WorldBootComposition {
         services.AddSingleton(implementationFactory: static sp => new WorldOverlayFeed(
             bindingBar: sp.GetRequiredService<WorldBindingBarControl>(),
             bindings: sp.GetRequiredService<WorldSeatBindings>(),
+            editor: sp.GetRequiredService<WorldEditorSeats>(),
             gamepads: sp.GetService<GamepadManager>(),
             icons: sp.GetRequiredService<WorldIconTable>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
@@ -1492,7 +1517,8 @@ public static class WorldBootComposition {
             markers: sp.GetRequiredService<MarkerStore>(),
             resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
-            bakes: sp.GetRequiredService<WorldBakeSchedule>()
+            bakes: sp.GetRequiredService<WorldBakeSchedule>(),
+            editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>())
         ).AttachTo(probe: sp.GetRequiredService<WorldRenderProbe>()));
 
         // The overlay's glyph pack, loaded once, and the default render graph, which draws the overlay when the pack

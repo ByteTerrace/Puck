@@ -29,7 +29,7 @@ namespace Puck.World;
 /// one — and that identity is not a formality: <see cref="WorldServer"/>'s per-section <see cref="WorldCapability.Mutate"/>
 /// grant check applies to EVERY submitted mutation regardless of which module produced it, so revoking a
 /// principal's grant over a section refuses that principal's writes here exactly like any other's.</para></remarks>
-internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog, WorldScheduleRoot scheduleRoot) : ICommandModule {
+internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldEditorSeats editorSeats, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog, WorldScheduleRoot scheduleRoot) : ICommandModule {
     // Buffer a mutation over the link and return a quiet ack — the server prints the loud accept/reject line when the
     // buffered edit applies at the tick boundary, and the barrier guarantees a following world.status sees the result.
     // world.load's own trailing-token grammar: <path> [force], where `force` is recognized only as the LAST token.
@@ -405,6 +405,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     var snapshot = WorldSaveSnapshot.Compose(
                         audio: audioDirector,
                         bindingBar: bindingBarVisibility,
+                        editor: editorSeats,
                         pacing: pacing,
                         render: renderSettings,
                         server: server,
@@ -515,6 +516,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     snapshot: WorldSaveSnapshot.Compose(
                         audio: audioDirector,
                         bindingBar: bindingBarVisibility,
+                        editor: editorSeats,
                         pacing: pacing,
                         render: renderSettings,
                         server: server,

@@ -22,7 +22,7 @@
         "src/Puck.World.Schema/WorldDefinitionFileSource.cs": 2118,
         "src/Puck.World.Schema/WorldDefinitionValidator.Metadata.cs": 2047,
         "src/Puck.World.Schema/WorldDefinitionValidator.Placements.cs": 2394,
-        "src/Puck.World.Schema/WorldDefinitionValidator.cs": 2458,
+        "src/Puck.World.Schema/WorldDefinitionValidator.cs": 2447,
         "src/Puck.World.Schema/WorldNameRegistry.cs": 2042,
         "src/Puck.World.Server/WorldBody.Step.cs": 2167,
         "src/Puck.World.Server/WorldDocument.Compose.cs": 2129,

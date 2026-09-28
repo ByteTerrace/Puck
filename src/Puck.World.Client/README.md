@@ -285,7 +285,7 @@ separate constraint on dense populations; reusable appearances do not remove it.
 - `WorldSeatBindings.cs`—the per-seat compiled `IInputBindings`: engine
   default ⊕ world overlays ⊕ profile bindings ⊕ live session rebinds, and the
   context-derivation state machine that picks a seat's active group. Besides
-  the built-in roster/engagement/layout families and a world's own AUTHORED
+  the built-in roster/engagement/layout/editor families and a world's own AUTHORED
   `seatModes` families (`WorldSeatModeFamily`, flipped by `player.mode`), a
   `state:<row>` family reads the routed world's scalar value or the
   controlled body's keyed value, allowing gameplay-rule state writes to swap
@@ -293,6 +293,14 @@ separate constraint on dense populations; reusable appearances do not remove it.
   while that state condition holds; `SyncSeat` recomposes the seat the tick a
   gated overlay's own condition flips (a per-overlay signature compared
   against the routed definition, never a per-tick poll).
+- `WorldEditorBindings.cs`—the engine's build layer (the build toggle on
+  every resting page, the `build` group and page, its context row) and the
+  build bar a building seat shows when its own bar has no bank for the build
+  page. `WorldEditorSeats.cs` holds each seat's grid and snapping over the
+  document's `editor` section, its captured reference and current placement,
+  and folds seat 1's moved values back for `world.save`;
+  `WorldEditorGeometry.cs` turns them into the `GridOverlayState` a building
+  seat's view carries and the `SnapReference` the placement verbs snap to.
 - `WorldAffordances.cs`—the process command vocabulary check every binding
   document validates against.
 - `CommandVocabulary.cs`—the command-name string constants
