@@ -2237,9 +2237,14 @@ means "fully pressed/1.0" with no rescale; 0 for a seat outside
 carried in its intent, mapped in fixed point through a `Simulation` screen's
 row against a one-by-one source by `WorldScreenMappings.Normalized`: `x` and
 `y` are the source-normalized fractions in `[0, 1)`, `on` is 1 while the ray
-lands on the source, and all three read 0 otherwise; an unknown seat or
-screen, or a screen whose `route.input` is not `Simulation`, is refused at
-compile time)—
+lands on the source, and all three read 0 otherwise; `press:<channelName>`
+reads that seat's channel while its ray lands on the source; the participant
+`any` in place of a seat reads the first participant allowed to point at the
+screen whose ray lands on it, the local seats in order and then the live
+sessions by ordinal, each holding `Control` over the screen, so a portal
+viewer's forwarded input reads through the same operand; an unknown seat,
+channel or screen, or a screen whose `route.input` is not `Simulation`, is
+refused at compile time)—
 folding time, population, occupancy, machine memory, aggregates,
 reconnect-park state, federation liveness, and a local seat's own channel
 value and pointer into the string channel `State` already carries rather than

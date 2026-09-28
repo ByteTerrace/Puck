@@ -233,6 +233,70 @@ public sealed record WorldPlacementDeal(
 
         return templatePrototype;
     }
+    /// <summary>Returns a definition in which every dealt child shows the costliest prototype its deal can deal: the
+    /// template's own prototype or any prototype its variant map selects, whichever stamps the most instances per copy.
+    /// A reader whose disclosure withholds a child's variant cell is dealt the template's prototype, and another reader
+    /// sees the selected variant, so this is the upper bound a measurement sizing for every reader counts. Only a
+    /// measurement reads it; nothing renders it.</summary>
+    /// <param name="definition">The definition.</param>
+    /// <returns>The rewritten definition, or <paramref name="definition"/> itself when no child changes.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static WorldDefinition WithCostliestChildren(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var placements = definition.Placements;
+        List<WorldPlacement>? rewritten = null;
+
+        for (var index = 0; (index < placements.Count); index++) {
+            var placement = placements[index];
+
+            if (
+                (placement.Parent is not { } parentId) ||
+                (WorldDefinitionRows.FindPlacement(
+                id: parentId,
+                placements: placements
+            ) is not { Deal: { } deal } parent) ||
+                !IsChild(
+                parent: parent,
+                placement: placement
+            )
+            ) {
+                continue;
+            }
+
+            var costliest = placement.PrototypeId;
+            var most = -1;
+
+            foreach (var candidate in ((string[])[parent.PrototypeId, .. (deal.Variants?.Map.Values ?? [])])) {
+                if (WorldDefinitionRows.FindCreation(
+                    creations: definition.Creations,
+                    id: candidate
+                ) is not { } creation) {
+                    continue;
+                }
+
+                var count = CreationStampEmitter.PerCopyInstanceCount(document: creation.Document);
+
+                if (count > most) {
+                    most = count;
+                    costliest = candidate;
+                }
+            }
+
+            if (!string.Equals(
+                a: costliest,
+                b: placement.PrototypeId,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                rewritten ??= [.. placements];
+                rewritten[index] = (placement with { PrototypeId = costliest });
+            }
+        }
+
+        return ((rewritten is null)
+            ? definition
+            : (definition with { PlacementRowsRaw = rewritten }));
+    }
     /// <summary>Returns whether <paramref name="placement"/> is a dealt child: it names a parent carrying a deal facet and
     /// spells that parent's child id shape.</summary>
     /// <param name="placement">The placement row.</param>

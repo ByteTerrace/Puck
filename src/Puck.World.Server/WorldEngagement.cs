@@ -59,7 +59,7 @@ public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState
 /// command-apply window and <see cref="FoldTick"/> reads it during <see cref="WorldServer.Step"/>, both on the
 /// launcher's window-pump thread, so no lock guards this state.</para>
 /// </remarks>
-public sealed class WorldEngagement {
+public sealed partial class WorldEngagement {
     private readonly WorldChannelTable m_channels;
     private readonly WorldPadElement?[] m_defaultPad;
     private readonly Func<WorldDefinition> m_definition;
@@ -495,10 +495,13 @@ public sealed class WorldEngagement {
     /// own-body member is visited like any other and simply has nowhere to route, because the avatar's own
     /// integration IS its delivery. Run once per <see cref="WorldServer.Step"/>, before the tick's
     /// <see cref="Protocol.WorldSnapshot"/> is built, so <see cref="BuildPadSnapshot"/> reflects this tick's
-    /// applied intents.</summary>
-    public void FoldTick() {
+    /// applied intents. A tick that replays recorded input stages no portal forward: the destinations beyond a portal
+    /// are not replaying with this world.</summary>
+    /// <param name="replaysInput">Whether this tick's input was fed from a replay tape (<see cref="WorldServer.ReplaysInput"/>).</param>
+    public void FoldTick(bool replaysInput) {
         m_screenPads.Clear();
         m_bodyContributions.Clear();
+        m_portalForwards.Clear();
 
         for (var index = 0; (index < m_population.Capacity); index++) {
             if (m_population.EntryBody(index: index) is not { } body) {
@@ -528,7 +531,17 @@ public sealed class WorldEngagement {
                 if (application.Target.Kind == GrantSubjectKind.Screen) {
                     // The screen's live policy, never the one stamped at compose, so an edit of the screen or its kit
                     // reaches the next fold. A screen the document no longer declares routes nowhere.
+                    // A screen with no row of its own may be a portal face, which routes the body's input through its
+                    // glass to the session the face observes (StagePortalForward).
                     if (PolicyOf(screenIndex: application.Target.Value) is not { } policy) {
+                        if (!replaysInput) {
+                            StagePortalForward(
+                                intent: body.EngagedIntent,
+                                principal: principal,
+                                screenIndex: application.Target.Value
+                            );
+                        }
+
                         continue;
                     }
 

@@ -574,6 +574,97 @@ public sealed class SessionObservationLawTests {
         );
     }
     [Fact]
+    public void ADealtChildIsMeasuredAsTheCostliestPrototypeItsDealCanDeal() {
+        const string Crowd = "crowd";
+        const string Pebble = "pebble";
+        const int CrowdShapes = 8;
+        var keys = new[] { "a", "b", "c" };
+        var crowd = CreationFixtures.Prototype(document: CreationFixtures.Document(
+            name: Crowd,
+            shapes: [.. Enumerable.Range(count: CrowdShapes, start: 0).Select(selector: index => (CreationFixtures.Shape(type: Puck.SignedDistance.SdfSolidPrimitive.Sphere) with {
+                Id = index,
+                Position = new System.Numerics.Vector3(x: (index * 2f), y: 0f, z: 0f),
+            }))]
+        ));
+        // The dealt row is public; the variant row selecting the one-shape pebble is restricted, so a reader denied it
+        // is dealt the template's eight-shape crowd.
+        var accounts = new WorldStateRow(
+            Capacity: 4,
+            Cells: [.. keys.Select(selector: key => new StateCell(Key: CellName.Parse(candidate: key), Value: CellValue.Text(value: key)))],
+            Kind: CellKind.Text,
+            Name: CellName.Parse(candidate: "accounts")
+        );
+        var levels = new WorldStateRow(
+            Capacity: 4,
+            Cells: [.. keys.Select(selector: key => new StateCell(Key: CellName.Parse(candidate: key), Value: CellValue.Text(value: "1")))],
+            Kind: CellKind.Text,
+            Name: CellName.Parse(candidate: "levels"),
+            Visibility: new StateVisibility(Readers: ["seat1"])
+        );
+        var template = new WorldPlacement(
+            Deal: new WorldPlacementDeal(
+                Row: "accounts",
+                Variants: new WorldPlacementDealVariants(
+                    Map: new Dictionary<string, string>(comparer: StringComparer.Ordinal) { ["1"] = Pebble },
+                    Row: "levels"
+                )
+            ),
+            Distribution: new WorldDistribution(
+                Fill: new WorldSequence(
+                    Name: WorldSequence.None,
+                    Offset: 0,
+                    Step: 0f
+                ),
+                Region: new WorldDistributionRegion.Lattice(
+                    CountA: 4,
+                    CountB: 1,
+                    StepA: new DocumentVector3(value: new System.Numerics.Vector3(x: 20f, y: 0f, z: 0f)),
+                    StepB: new DocumentVector3(value: new System.Numerics.Vector3(x: 0f, y: 0f, z: 1f))
+                )
+            ),
+            Id: "crowds",
+            Position: new DocumentVector3(value: new System.Numerics.Vector3(x: 10f, y: 0f, z: 10f)),
+            PrototypeId: Crowd,
+            Scale: 1f,
+            YawDegrees: 0f
+        );
+        var document = Document(tier: WorldDisclosureTier.Presentation);
+
+        using var fixture = Fixtures.FreshServer(definition: document with {
+            CreationsRaw = [.. document.Creations, crowd, CreationFixtures.UnitSphere(id: Pebble)],
+            PlacementRowsRaw = [.. document.Placements, template],
+            StateRaw = ((document.StateRaw ?? new WorldStateSection()) with { World = [.. (document.StateRaw?.World ?? []), accounts, levels] }),
+        });
+
+        fixture.Step();
+        fixture.Step();
+
+        var candidate = fixture.Server.Definition;
+        var dealtAsSelected = WorldPlacementStamper.StaticStampInstances(
+            creations: candidate.Creations,
+            placements: candidate.Placements
+        );
+
+        var (observation, _, refusal) = Observe(fixture: fixture);
+
+        Assert.True(
+            condition: (observation is not null),
+            userMessage: refusal
+        );
+
+        var measured = observation!.Disclose(candidate: candidate)!;
+        var measuredInstances = WorldPlacementStamper.StaticStampInstances(
+            creations: measured.Creations,
+            placements: measured.Placements
+        );
+
+        // The live deal selected the pebble for every child; the measurement counts each child as the crowd.
+        Assert.Equal(
+            actual: (measuredInstances - dealtAsSelected),
+            expected: (keys.Length * (CrowdShapes - 1))
+        );
+    }
+    [Fact]
     public void AFaultedSession_HoldsNothingFromTheMomentOfTheFault() {
         (bool Live, bool Allowed) AfterAFaultingStep(IClientSink sink) {
             using var fixture = Fixtures.FreshServer(definition: Document(tier: WorldDisclosureTier.Replica));

@@ -79,11 +79,13 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
             );
 
             m_instances.ScanBootBoundaryTriggers();
+            m_instances.SettleBootScreenSessions(stepped: true);
             // Count actual host work, including fast-forward bursts, but never paused pump calls.
             m_completedHostEngineTicks += ((stepTick - m_completedHostSteps) * context.StepTicks);
             m_completedHostSteps = stepTick;
         } else {
             _ = m_server.DrainAdministrative();
+            m_instances.SettleBootScreenSessions(stepped: false);
 
             // A world.wait armed before this pause landed can never see its release tick now that boot's own clock
             // is frozen (WorldConsoleWaitGate.PublishTick only ever fires from a step that actually ran) — release
