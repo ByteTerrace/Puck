@@ -159,10 +159,12 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
         private readonly IRenderGraphPlacements? m_placements;
         private readonly int m_letterboxOffset;
         private readonly int m_rectOffset;
+        private readonly int m_rowOffset;
         private readonly GpuDeviceServices m_services;
         private readonly RenderGraphPackageSets m_sets = null!;
         private readonly int m_sharpnessOffset;
         private readonly uint m_source;
+        private readonly uint m_workCounters;
 
         private bool m_disposed;
         private nint m_sampler;
@@ -180,6 +182,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 m_letterboxOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceLetterbox));
                 m_rectOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceRect));
                 m_sharpnessOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceSharpness));
+                m_rowOffset = ((int)parameters.BlockOffsetOf(member: ShaderWorkCounters.Row));
                 m_sets = new RenderGraphPackageSets(
                     context: context,
                     groupLayoutHandles: built.Pipeline.GroupLayoutHandles,
@@ -188,6 +191,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 m_base = m_sets.BindingOf(member: RenderGraphPackageCatalog.PlaceBase);
                 m_source = m_sets.BindingOf(member: RenderGraphPackageCatalog.PlaceSource);
                 m_destination = m_sets.BindingOf(member: RenderGraphPackageCatalog.PlaceDestination);
+                m_workCounters = m_sets.BindingOf(member: ShaderWorkCounters.Buffer);
                 m_sampler = m_services.Bindings.CreateSampler();
 
                 for (var slot = 0; (slot < context.InFlightFrames); slot++) {
@@ -274,6 +278,20 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
             var recorder = recording.Recorder;
             var pipeline = m_built.Pipeline;
             var set = m_sets.PassSet(slot: recording.Slot);
+            var counters = (recording.WorkCounters ?? throw new InvalidOperationException(message: $"Place pass '{m_pass}' counts the texels it writes, but its recording carries no work counters."));
+
+            BinaryPrimitives.WriteUInt32LittleEndian(
+                destination: recording.PassBlock[m_rowOffset..],
+                value: counters.Row
+            );
+            m_services.Bindings.WriteBuffer(
+                binding: m_workCounters,
+                bufferHandle: counters.Buffer.BufferHandle,
+                bufferSize: counters.Buffer.SizeBytes,
+                descriptorSetHandle: set,
+                elementStride: sizeof(uint),
+                kind: GpuBindingKind.ReadWriteBuffer
+            );
 
             m_services.Bindings.WriteStorageImage(
                 arrayElement: 0,

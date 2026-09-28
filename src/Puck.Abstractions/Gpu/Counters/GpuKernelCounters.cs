@@ -8,7 +8,8 @@ namespace Puck.Abstractions.Gpu;
 /// <see cref="Rows"/> rows and a readback buffer of the same size. A row is one pass's counts, the pass's index in the
 /// node's configured passes, and holds each kernel kind in <see cref="GpuWork.KernelKinds"/> order as one 64-bit count
 /// in two 32-bit words, low word first, which a kernel adds to with one atomic on the low word and one on the high word
-/// when that addition carries. KEEP IN SYNC with <c>sdfCountWork</c> in the SDF kernels' <c>frame/sdf-work.hlsli</c>.
+/// when that addition carries. The HLSL that adds to a row is generated from these constants into every pass interface
+/// that declares the work counters (<c>ShaderWorkCounters</c> in <c>Puck.Shaders</c>).
 /// <para>
 /// Every frame records <see cref="RecordClear"/> before its first pass and <see cref="RecordCopy"/> after its last,
 /// outside every pass: one clear, one copy and a buffer barrier after each clear and before each copy. The passes between

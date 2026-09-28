@@ -105,7 +105,7 @@ public sealed class SdfFrameBlockLawTests {
 
         // The row names the pass, so the view's writer leaves it to the recorder.
         Assert.Equal(
-            actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.WorkCounterRow))),
+            actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: ShaderWorkCounters.Row))),
             expected: 0u
         );
         SdfFrameBlock.WriteWorkCounterRow(
@@ -113,7 +113,7 @@ public sealed class SdfFrameBlockLawTests {
             row: 6u
         );
         Assert.Equal(
-            actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.WorkCounterRow))),
+            actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: ShaderWorkCounters.Row))),
             expected: 6u
         );
         var pass = parameters.Layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass));

@@ -242,16 +242,17 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             width: width
         );
 
+        SdfFrameBlock.WriteWorkCounterRow(
+            block: recording.PassBlock,
+            row: WorkCountersOf(recording: in recording).Row
+        );
+
         if (IsMesh) {
             RecordMesh(
                 recording: in recording,
                 tables: tables
             );
         } else {
-            SdfFrameBlock.WriteWorkCounterRow(
-                block: recording.PassBlock,
-                row: WorkCountersOf(recording: in recording).Row
-            );
             RecordCompute(
                 recording: in recording,
                 tables: tables
@@ -421,6 +422,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             set: set,
             slot: tables.CurrentSlot
         );
+        tables.WriteMeshWorkCounters(
+            counters: WorkCountersOf(recording: in recording).Buffer,
+            set: set
+        );
         recorder.BeginRenderPass(
             area: new GpuPixelRect(
                 Height: recording.Height,
@@ -522,7 +527,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             }
         }
 
-        tables.WriteWorldBuffer(buffer: WorkCountersOf(recording: in recording).Buffer, member: SdfWorldPackage.WorkCounters, set: set);
+        tables.WriteWorldBuffer(buffer: WorkCountersOf(recording: in recording).Buffer, member: ShaderWorkCounters.Buffer, set: set);
         bindings.WriteStorageImage(
             arrayElement: 0,
             binding: OutputBinding,
@@ -571,7 +576,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             bound[screen] = image;
         }
     }
-    // Where a compute part counts its march steps and texels written: every one counts
+    // Where a part counts its march steps and texels written: every one counts
     // (RenderGraphFragmentPass.CountsKernelWork), so its node always hands it a row.
     private GpuKernelCounterRow WorkCountersOf(in RenderGraphPackageRecording recording) =>
         (recording.WorkCounters ?? throw new InvalidOperationException(message: $"Pass '{m_context.Pass}' counts its kernels' work, but its recording carries no work counters."));

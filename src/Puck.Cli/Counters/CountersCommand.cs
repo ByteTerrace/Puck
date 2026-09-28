@@ -335,9 +335,11 @@ internal static class CountersCommand {
             per-backend-deterministic, pass by pass and outside every pass, the march steps and texels written the
             SDF kernels count among them: each reads at most its ceiling, and a ceiling of zero is a required zero.
             A per-backend-deterministic count is judged only on the device the backend's ceilings were recorded on,
-            and a line says how many were not judged elsewhere. One line names each count over its ceiling, each
-            required zero broken and each count no ceiling was recorded for. --record writes the report's counts as
-            the ceilings instead, each reading its own ceiling.
+            and a line says how many were not judged elsewhere. Every ceiling must have been measured, of the class
+            it was recorded as, or its pass reported and not executed. One line names each count over its ceiling,
+            each required zero broken, each ceiling not measured or measured as another class, and each count no
+            ceiling was recorded for. --record writes the report's counts as the ceilings instead, each reading its
+            own ceiling, and every kind of a pass that did not execute as a required zero.
 
             Performance is judged by these counts, never by time; 'puck bench' is the only wall-clock tool.
 

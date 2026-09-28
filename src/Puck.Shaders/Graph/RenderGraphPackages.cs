@@ -142,7 +142,10 @@ public sealed record RenderGraphPackagePort(
 /// <param name="Fragment">The passes the package runs as, which the graph compiler splices into a graph in place of a
 /// pass naming it (<see cref="RenderGraphPackageFragment"/>), or <see langword="null"/> for a package that runs as the
 /// one pass naming it.</param>
-public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, IReadOnlyList<ShaderInterfaceMember> Members, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null, RenderGraphPackageStages? Stages = null, bool PushesIndex = false, RenderGraphPackageFragment? Fragment = null) {
+/// <param name="CountsKernelWork">Whether a package that runs as the one pass naming it counts its kernels' own work
+/// into the node's kernel counters (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>, which a fragment's passes
+/// state each), declaring <see cref="ShaderWorkCounters.Members"/> among its <paramref name="Members"/>.</param>
+public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, IReadOnlyList<ShaderInterfaceMember> Members, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null, RenderGraphPackageStages? Stages = null, bool PushesIndex = false, RenderGraphPackageFragment? Fragment = null, bool CountsKernelWork = false) {
     /// <summary>Gets whether the package is a post-process package: one with <see cref="Stages"/>.</summary>
     public bool IsPostProcess => (Stages is not null);
 }
@@ -395,6 +398,7 @@ public sealed class RenderGraphPackageCatalog {
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: PlaceSource, type: ShaderValueType.Float4),
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: (PlaceSource + ShaderPipelinePassPorts.SamplerSuffix)),
         ShaderInterfaceMember.StorageImage(format: WorkingFormat, group: ShaderInterfaceGroup.Pass, name: PlaceDestination, type: ShaderValueType.Float4),
+        .. ShaderWorkCounters.Members,
     ];
 
     /// <summary>The number of frame slots the overlay samples: images a Frame element draws, such as a face cam.</summary>
@@ -509,6 +513,7 @@ public sealed class RenderGraphPackageCatalog {
         ),
         new RenderGraphPackage(
             Config: PlaceConfig,
+            CountsKernelWork: true,
             Id: Place,
             Inputs: [
                 RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead),

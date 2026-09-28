@@ -28,6 +28,17 @@ internal static class CountersReading {
     private const string GpuSection = GpuWorkReport.Section;
     private const string Prefix = "[world.counters: {";
 
+    /// <summary>Returns the class a count of a kind reads in a pass: the kind's, loosened to the pass's, so a deterministic
+    /// kind counted in a per-backend-deterministic pass, whose work follows the device, is per-backend-deterministic
+    /// there.</summary>
+    /// <param name="kind">The kind's declared class.</param>
+    /// <param name="pass">The pass's class.</param>
+    /// <returns>The count's class.</returns>
+    public static WorkClass ClassIn(WorkClass kind, WorkClass pass) =>
+        (((kind == WorkClass.Deterministic) && (pass == WorkClass.PerBackendDeterministic))
+            ? WorkClass.PerBackendDeterministic
+            : kind
+        );
     /// <summary>Finds the one <c>world.counters --json</c> response in a leg's standard output and reads it into a
     /// run.</summary>
     /// <param name="stdout">The leg's standard output lines.</param>
@@ -150,10 +161,7 @@ internal static class CountersReading {
                 }
 
                 counts.Add(item: new WorldCount(
-                    Class: (((workClass == WorkClass.Deterministic) && (passClass == WorkClass.PerBackendDeterministic))
-                        ? WorkClass.PerBackendDeterministic
-                        : workClass
-                    ),
+                    Class: ClassIn(kind: workClass, pass: passClass),
                     Kind: count.Name,
                     Node: node,
                     Pass: pass,
@@ -246,6 +254,7 @@ internal static class CountersReading {
                     }
 
                     passes.Add(item: new WorldCountersPass(
+                        Class: passClass,
                         Label: label,
                         Node: name,
                         State: state

@@ -255,6 +255,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     writeInstanceMaskSummary(maskBase, maskWordCount);
 
-    // The masks are buffers and the cull walks no field: the pass counts nothing, so its row stays zero.
-    sdfCountWork(0u);
+    // The masks are buffers and the cull walks no field, so its row stays zero.
+    puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

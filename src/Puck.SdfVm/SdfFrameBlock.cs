@@ -73,7 +73,7 @@ public static class SdfFrameBlock {
     private static readonly int ViewRight = Offset(member: SdfWorldPackage.ViewRight);
     private static readonly int ViewUp = Offset(member: SdfWorldPackage.ViewUp);
     private static readonly int ViewportCount = Offset(member: SdfWorldPackage.ViewportCount);
-    private static readonly int WorkCounterRow = Offset(member: SdfWorldPackage.WorkCounterRow);
+    private static readonly int WorkCounterRow = Offset(member: ShaderWorkCounters.Row);
 
     /// <summary>The nearest forward distance, in world units, a view's surfaces are rendered from (<see cref="NearOf"/>):
     /// the mesh pass's reversed-Z depth needs a positive near. The kernels read it as <c>SDF_MINIMUM_NEAR</c>, which
@@ -83,7 +83,7 @@ public static class SdfFrameBlock {
     /// <summary>Gets the bytes of the pass block, a multiple of 16.</summary>
     public static int SizeBytes => ((int)Layout.SizeBytes);
 
-    /// <summary>Writes the pass's row of the work counters into its pass block (<see cref="SdfWorldPackage.WorkCounterRow"/>),
+    /// <summary>Writes the pass's row of the work counters into its pass block (<see cref="ShaderWorkCounters.Row"/>),
     /// which <see cref="Write"/> leaves alone: the row names the pass, never what the view renders from, so a view's
     /// signature (<see cref="SdfWorldTables.ViewSignature"/>) never reads it.</summary>
     /// <param name="block">The pass block, at least <see cref="SizeBytes"/> bytes.</param>

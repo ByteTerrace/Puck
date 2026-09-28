@@ -64,14 +64,16 @@ under the residency as `sdf:<name>` with three passes (`SdfWorldTables.PassLabel
 `fillers`, the fillers' first transitions and clears on the first upload;
 `bricks`, the brick staging copy, the bake dispatches and the pool's barriers
 when that work is pending; and `upload`, the region copies. An upload skips a
-pass it has no work for. Every compute pass of the view counts its own march
-steps (each field evaluation of a march or a query) and the pixels it writes an
-output for into its node's kernel counters (`frame/sdf-work.hlsli`: one wave-summed
-atomic a wave into the row `workCounterRow` names, `GpuKernelCounters`), which
-the node clears ahead of the first pass and copies to the slot's readback
-behind the last; `world.counters gpu` reads them as `march.steps` and
-`texels.written`, per-backend deterministic. A new counting site adds to
-`sdfWorkSteps` beside the evaluation it counts. The
+pass it has no work for. Every pass of the view counts its own march steps
+(`sdfWorkSteps`: each field evaluation of a march or a query, and each bounded
+volume sample) and the pixels it writes an output for (`sdfWorkTexels`: set by
+`sdfVisibilityStoreWord` and the output writes; the mesh pass one per fragment)
+into its node's kernel counters through the generated `puckCountWork` (one
+wave-summed atomic a wave into the row `workCounterRow` names,
+`GpuKernelCounters`), which the node clears ahead of the first pass and copies
+to the slot's readback behind the last; `world.counters gpu` reads them as
+`march.steps` and `texels.written`, per-backend deterministic. A new counting
+site adds to `sdfWorkSteps` beside the evaluation it counts. The
 runtime declares a view unchanged when nothing it renders from moved
 (`SdfWorldResidency.IsUnchanged`, `RenderGraphFrame.Unchanged`) and records none
 of its passes. The upload and the view's passes, in order:

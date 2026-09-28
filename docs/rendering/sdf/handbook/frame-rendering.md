@@ -290,10 +290,13 @@ writes and copies. The `bricks` and `upload` passes follow each device's
 residency policy, so they are per-backend deterministic, and `puck counters`
 does not hold the two backends to them.
 
-Each view's compute passes also count their own work on the GPU: the march
-steps they take, one for each field evaluation of a march or a query, and the
-texels they write, one for each pixel whose output they write (an image texel,
-or a pixel's visibility record). Each wave sums its lanes' counts and adds them
+Each view's passes also count their own work on the GPU: the march steps they
+take, one for each field evaluation of a march or a query and for each sample of
+a bounded volume, and the texels they write, one for each pixel whose output
+they write (an image texel, or any word of a pixel's visibility record, so a
+stage that returns before it stores counts nothing) and, in the mesh pass, one
+for each fragment. The root graph's `place` passes count the texels they write
+the same way. Each wave sums its lanes' counts and adds them
 with one atomic into the pass's row of the node's kernel counters, which the
 node clears ahead of the view's first pass and copies to the frame slot's
 readback behind its last; the counts join the pass's line once the submission

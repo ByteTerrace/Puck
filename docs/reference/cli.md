@@ -1456,15 +1456,18 @@ is a required zero. The SDF view's march steps (`gpu.march.steps`) and texels
 written (`gpu.texels.written`), which its kernels count on the GPU, are among
 them, so a pass that cannot do such work (`sdf.world$cull-args` marches
 nothing) and a pass the floor tier skips (the shadow and ambient passes, and
-the mesh pass of a meshless frame) hold required zeros. A per-backend-deterministic
-count is judged only on the device the backend's ceilings were recorded on; on
+the mesh pass of a meshless frame) hold required zeros. Every recorded ceiling must
+have been measured: its count read, of the class it was recorded as, or its pass
+reported and not executed, which reads zero. A per-backend-deterministic count's
+value is judged only on the device the backend's ceilings were recorded on; on
 any other, one line says how many were not judged. The run prints one line for
-each count over its ceiling, each required zero broken and each count no ceiling
-was recorded for, naming its backend, class, kind, pass and node, then whether
-the ceilings hold.
+each count over its ceiling, each required zero broken, each ceiling not measured
+or measured as another class, and each count no ceiling was recorded for, naming
+its backend, class, kind, pass and node, then whether the ceilings hold.
 
 `--record` writes the run's counts as the ceilings instead, each reading its own
-ceiling. A ceiling is re-recorded only in the change that explains why its count
+ceiling, and every submission kind of a pass that did not execute as a required
+zero. A ceiling is re-recorded only in the change that explains why its count
 moved, never from wall-clock or GPU timing. `--ceilings <file>` names another
 ceilings file for either option.
 

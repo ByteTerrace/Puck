@@ -1547,8 +1547,11 @@ draw, barrier, bind, descriptor write, push-constant byte and clear it records
 is counted where it is made, into the pass being recorded. The zero clears that
 start the first frame after an install or a reset count in the first pass. The
 preview and the output transitions count outside every pass. A graph a package
-pass of which counts its kernels' own work (`RenderGraphFragmentPass.CountsKernelWork`,
-every compute pass of `sdf.world`) keeps a counter buffer and a readback buffer
+pass of which counts its kernels' own work (`RenderGraphFragmentPass.CountsKernelWork`
+or `RenderGraphPackage.CountsKernelWork`: every pass of `sdf.world` and `place`)
+declares the work counters in its interface (`ShaderWorkCounters`), whose
+generated include carries the functions its kernels count through, and keeps a
+counter buffer and a readback buffer
 per frame slot, one row a pass (`GpuKernelCounters`); the node clears the slot's
 counters ahead of the first pass and copies them to its readback behind the
 last, which counts one clear, one copy and two buffer barriers outside every

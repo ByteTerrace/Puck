@@ -53,7 +53,7 @@ public sealed class DirectXBufferStatesLawTests {
     public void AKernelCounterBufferIsClearedAsAUavAndCopiedFromCopySource() {
         var states = new DirectXBufferStates();
         var afterClear = states.Plan(
-            after: DirectXBufferStates.RequiredState(access: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite), stages: GpuStage.ComputeShader),
+            after: DirectXBufferStates.RequiredState(access: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, stages: GpuStage.ComputeShader),
             bufferHandle: ArgsBuffer,
             firstState: DirectXBufferStates.RequiredState(access: GpuAccess.TransferWrite, stages: GpuStage.Transfer)
         );

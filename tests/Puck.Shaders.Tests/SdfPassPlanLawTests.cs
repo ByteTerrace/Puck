@@ -278,15 +278,16 @@ public sealed class SdfPassPlanLawTests {
             expected: [GpuImageLayout.RenderTarget, GpuImageLayout.DepthAttachment]
         );
     }
-    // Every compute pass counts its kernels' march steps and texels written into the node's kernel counters, which the
-    // node clears ahead of the view's first pass and copies into the slot's readback behind its last; the mesh pass, a draw,
-    // counts none. The counters are no planned storage: every pass only adds to them, so no barrier falls between passes.
+    // Every pass counts its kernels' march steps and texels written into the node's kernel counters, which the node clears
+    // ahead of the view's first pass and copies into the slot's readback behind its last: the mesh pass, a draw, each
+    // fragment it writes. The counters are no planned storage: every pass only adds to them, so no barrier falls between
+    // passes.
     [Fact]
-    public void EveryComputePassCountsItsKernelsWorkAndTheMeshPassNone() {
+    public void EveryPassCountsItsKernelsWork() {
         Assert.True(condition: Plan.Pipeline.CountsKernelWork);
-        Assert.Equal(
-            actual: Plan.Pipeline.Passes.Where(predicate: static pass => pass.Package!.CountsKernelWork).Select(selector: static pass => pass.Package!.Part),
-            expected: Order.Where(predicate: static part => (part != SdfWorldPackage.Parts.Mesh))
+        Assert.All(
+            action: static pass => Assert.True(condition: pass.Package!.CountsKernelWork, userMessage: pass.Name),
+            collection: Plan.Pipeline.Passes
         );
         Assert.DoesNotContain(
             collection: Plan.Pipeline.Storages,
@@ -294,11 +295,11 @@ public sealed class SdfPassPlanLawTests {
         );
         Assert.Contains(
             collection: SdfWorldPackage.Members,
-            filter: static member => ((member.Name == SdfWorldPackage.WorkCounters) && (member.Group == ShaderInterfaceGroup.Pass))
+            filter: static member => ((member.Name == ShaderWorkCounters.Buffer) && (member.Group == ShaderInterfaceGroup.Pass))
         );
         Assert.Contains(
             collection: SdfWorldPackage.Values,
-            filter: static member => (member.Name == SdfWorldPackage.WorkCounterRow)
+            filter: static member => (member.Name == ShaderWorkCounters.Row)
         );
     }
 }

@@ -340,9 +340,10 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
 
             return (QueueHandle + ((nint)queueFamilyIndex));
         }
-        // The one base feature the factory requires, shaderSampledImageArrayDynamicIndexing (index 34), and no other.
+        // The base features the factory requires, fragmentStoresAndAtomics (index 26) and shaderSampledImageArrayDynamicIndexing
+        // (index 34), and no other.
         public IReadOnlyList<bool> GetFeatureSupport(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
-            [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index == 34))];
+            [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is 26 or 34))];
         public GpuMemoryProfile GetMemoryProfile(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
             default;
         public VkPhysicalDeviceType GetPhysicalDeviceType(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
