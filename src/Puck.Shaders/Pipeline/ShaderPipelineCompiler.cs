@@ -1092,6 +1092,7 @@ public sealed partial class ShaderPipelineCompiler {
         pass.OutputReferences.Concat(second: pass.InputReferences).Select(selector: reference => storages[resources[reference.Name].Storage].Declaration.Dimensions).FirstOrDefault(predicate: static dimensions => (dimensions is not null));
     // A package pass's step: its package, its ports' versions, the fragment pass it runs and its dispatch.
     private static ShaderPipelinePackageStep StepOf(ShaderPipelinePass pass, ShaderPipelinePackagePass package) => new(
+        CountsKernelWork: package.CountsKernelWork,
         Dispatch: package.Dispatch,
         Inputs: new ReadOnlyCollection<ResourceReference>(list: pass.InputReferences.ToArray()),
         Outputs: new ReadOnlyCollection<ResourceReference>(list: pass.OutputReferences.ToArray()),

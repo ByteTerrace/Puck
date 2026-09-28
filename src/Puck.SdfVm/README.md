@@ -86,10 +86,11 @@ passes as a fragment (`Puck.Shaders.SdfWorldPackage.Fragment`) that the graph
 compiler splices, so the render graph's planner decides every barrier between
 them and the recorder (`SdfWorldPassRecorder`) records none. The render graph's
 `place` pass, not this engine, places each output in its seat rect and
-reconstructs a reduced render scale. The residency counts its upload as one
-pass, `upload` (`SdfWorldTables.PassLabels`), in a ledger it owns, so counts
-survive a rebuild of its tables, and each view's node counts the view's passes
-as `sdf.world$sky` through `sdf.world$views`. The views
+reconstructs a reduced render scale. The residency counts its upload as three
+passes, `fillers`, `bricks` and `upload` (`SdfWorldTables.PassLabels`), in a
+ledger it owns, so counts survive a rebuild of its tables, and each view's node
+counts the view's passes as `sdf.world$sky` through `sdf.world$views`, their
+kernels' march steps and texels written among them. The views
 kernel ships in three compiled variants
 (`SdfViewsKernelVariant.Full`/`.Folds`/`.CoreOps`). Folds strips heavy operations;
 CoreOps also strips the remaining exotic cases. The program selects the smallest

@@ -209,12 +209,23 @@
                     "skipped"
                   ],
                   "title": "GpuPassState"
+                },
+                "class": {
+                  "description": "What two runs of the pass may be held to agree on, as its node declared it: Deterministic or PerBackendDeterministic, which a deterministic kind counted in it is loosened to.",
+                  "enum": [
+                    "deterministic",
+                    "per-backend-deterministic",
+                    "pacing",
+                    "allocation-zero-nonzero"
+                  ],
+                  "title": "WorkClass"
                 }
               },
               "required": [
                 "node",
                 "label",
-                "state"
+                "state",
+                "class"
               ],
               "additionalProperties": false,
               "title": "WorldCountersPass"

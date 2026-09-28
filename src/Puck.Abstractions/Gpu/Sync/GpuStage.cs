@@ -26,4 +26,7 @@ public enum GpuStage : uint {
     FragmentTests = 0x40,
     /// <summary>The vertex shader stage: a draw's vertex stage reading a buffer, as a mesh pass pulls its triangles.</summary>
     VertexShader = 0x80,
+    /// <summary>The host: a CPU read of mapped memory once the submission has completed, the destination stage that
+    /// makes a copy into a readback buffer visible to it (Vulkan <c>HOST</c>).</summary>
+    Host = 0x100,
 }

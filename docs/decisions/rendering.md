@@ -41,11 +41,15 @@ deterministic counters, dispatches, march steps, texels written and bytes
 uploaded, is recorded over one pinned workload, `puck counters`' world with its
 camera and views, at the floor tier and the RTX 2060's 1920x1080, and
 held as a calibrated ceiling that workload may not exceed; other content is
-free to cost more, since its counts gate nothing. The ledger already counts
-upload bytes per pass (`gpu.uploads.host-visible`); P15's first step adds the
-march-step and texel counters it lacks, and a pass for the brick writes the SDF
-upload records outside its `upload` pass, before any reconstruction pass
-lands. A ceiling is
+free to cost more, since its counts gate nothing. The ledger counts upload
+bytes per pass (`gpu.uploads.host-visible`), the SDF upload's brick writes and
+fillers under passes of their own, and the kernels count their own march steps
+and texels written (`gpu.march.steps`, `gpu.texels.written`), because a march's
+steps are decided inside the shader's data-dependent loop; `puck counters
+--check` holds the workload to `tests/Puck.Counters/counters.ceilings.json`. A
+pass that cannot do a kind of work, or that the floor tier skips, holds a
+required zero, so work that starts where it should not fails as surely as work
+over its ceiling. A ceiling is
 re-recorded only in the change that explains why the count moved, so a cost
 increase is always a stated decision; wall-clock and GPU timing never set or
 move one. The floor device is where a missed budget first shows, so its counts

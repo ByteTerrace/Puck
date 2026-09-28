@@ -103,20 +103,24 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint2 rectMin = (uint2)clamp(floor((rect.xy * float2(destinationDims)) + 0.5), float2(0.0, 0.0), float2(destinationDims));
     uint2 rectMax = (uint2)clamp(floor(((rect.xy + rect.zw) * float2(destinationDims)) + 0.5), float2(rectMin), float2(destinationDims));
 
+    float4 written;
+
     if (any(id.xy < rectMin) || any(id.xy >= rectMax)) {
         if (passGroup.letterbox != 0u) {
-            destination[id.xy] = LetterboxColor;
-            return;
+            written = LetterboxColor;
+        } else {
+            base.GetDimensions(baseDims.x, baseDims.y);
+            written = base.Load(int3(min(id.xy, (baseDims - 1)), 0));
         }
+    } else {
+        source.GetDimensions(sourceDims.x, sourceDims.y);
 
-        base.GetDimensions(baseDims.x, baseDims.y);
-        destination[id.xy] = base.Load(int3(min(id.xy, (baseDims - 1)), 0));
-        return;
+        float3 color = reconstruct((id.xy - rectMin), (rectMax - rectMin), sourceDims);
+
+        written = float4(((passGroup.tonemap != 0u) ? filmicTonemap(color) : color), 1.0);
     }
 
-    source.GetDimensions(sourceDims.x, sourceDims.y);
-
-    float3 color = reconstruct((id.xy - rectMin), (rectMax - rectMin), sourceDims);
-
-    destination[id.xy] = float4(((passGroup.tonemap != 0u) ? filmicTonemap(color) : color), 1.0);
+    destination[id.xy] = written;
+    // Every pixel inside the destination writes its texel.
+    puckCountWork(0u, 1u);
 }

@@ -79,6 +79,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
                 sdfDetailShadingActive = true;
                 SdfHit detailHit = mapMasked(surfacePoint, p.instanceMaskBase);
                 sdfEvalCount += 1.0;
+                sdfWorkSteps += 1u;
                 sdfDetailShadingActive = false;
                 material = detailHit.material;
                 hitLanes = detailHit.lanes;

@@ -87,6 +87,41 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
 
         return buffer;
     }
+    /// <inheritdoc/>
+    public IGpuReadbackBuffer CreateReadback(ulong sizeBytes, in GpuObjectName name) {
+        ArgumentOutOfRangeException.ThrowIfZero(sizeBytes);
+
+        var buffer = DirectXBuffers.CreateCommitted(
+            device: Device,
+            heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK,
+            initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
+            sizeBytes: sizeBytes
+        );
+        void* mapped;
+
+        try {
+            mapped = DirectXCommandCalls.Map(
+                calls: new DirectXDeviceCommandCalls(device: Device),
+                resource: buffer
+            );
+        } catch {
+            _ = ((IUnknown*)buffer)->Release();
+
+            throw;
+        }
+
+        Naming.Name(
+            handle: ((nint)buffer),
+            kind: GpuObjectKind.Buffer,
+            name: in name
+        );
+
+        return new DirectXGpuReadbackBuffer(
+            bufferHandle: ((nint)buffer),
+            mapped: mapped,
+            sizeBytes: sizeBytes
+        );
+    }
 
     private ID3D12Device* Device =>
         ((ID3D12Device*)deviceContext.Device.Handle);

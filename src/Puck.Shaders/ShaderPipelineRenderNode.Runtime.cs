@@ -88,6 +88,9 @@ public sealed partial class ShaderPipelineRenderNode {
     // versions stand in for them.
     private sealed class RuntimePass(ShaderPipelinePlannedPass planned, CompiledShader? compiled, int count, (uint Width, uint Height) extent) {
         public readonly string Name = planned.Name;
+        // Its position in execution order: its row of the ledger's passes and of the kernel counters.
+        public readonly int Index = planned.Index;
+        public readonly bool CountsKernelWork = (planned.Package?.CountsKernelWork == true);
         public readonly ShaderPipelinePassKind Kind = planned.Kind;
         public readonly ShaderPipelinePass? Spec = planned.Declaration;
         // Arrays, so the per-frame walks over a pass's bindings and accesses enumerate without allocating.
@@ -126,6 +129,9 @@ public sealed partial class ShaderPipelineRenderNode {
         // pass and null on every other.
         public GpuRegion[]? Regions;
         public GpuRegionCopyPool? RegionCopySets;
+        // The counter buffers the graph's kernels count their own work into, on its first pass when a pass counts
+        // (ShaderPipelinePlan.CountsKernelWork) and null on every other.
+        public GpuKernelCounters? KernelCounters;
 
         public bool Grouped => (PortBindings is not null);
 
@@ -170,6 +176,8 @@ public sealed partial class ShaderPipelineRenderNode {
             }
             RegionCopySets?.Dispose();
             RegionCopySets = null;
+            KernelCounters?.Dispose();
+            KernelCounters = null;
             PassRegion?.Dispose();
             PassRegion = null;
             foreach (var region in (RowRegions ?? [])) {

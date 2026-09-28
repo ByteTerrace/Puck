@@ -75,7 +75,9 @@ public sealed class GpuPassPipelineKey : IEquatable<GpuPassPipelineKey> {
     /// <summary>Returns the key of a graphics pipeline.</summary>
     /// <param name="vertex">The vertex stage's bytecode for the device's backend; not empty.</param>
     /// <param name="fragment">The fragment stage's bytecode for the device's backend; not empty.</param>
-    /// <param name="renderPass">The render pass the pipeline draws in, which the entry creates beside it.</param>
+    /// <param name="renderPass">The render pass the pipeline draws in, which the entry creates beside it; when the
+    /// pipeline's layout lets its shaders write (<see cref="GpuPipelineLayoutDescription.ShaderWrites"/>) the entry's pass
+    /// allows shader writes (<see cref="GpuRenderPassDescription.ShaderWrites"/>) whatever this one says.</param>
     /// <param name="description">The pipeline's description.</param>
     /// <returns>The key.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="renderPass"/> or <paramref name="description"/> is
@@ -96,6 +98,12 @@ public sealed class GpuPassPipelineKey : IEquatable<GpuPassPipelineKey> {
         );
 
         var state = new ArrayBufferWriter<byte>();
+
+        // A pipeline whose shaders may write through a binding draws in a pass that allows it, derived from its layout
+        // so no caller names it.
+        if (description.Layout.ShaderWrites) {
+            renderPass = (renderPass with { ShaderWrites = true });
+        }
 
         Write(
             description: description,
@@ -202,6 +210,8 @@ public sealed class GpuPassPipelineKey : IEquatable<GpuPassPipelineKey> {
         } else {
             Write(value: 0u, writer: writer);
         }
+
+        Write(value: (renderPass.ShaderWrites ? 1u : 0u), writer: writer);
     }
     // A push range is its offset, size and stages; the data it starts with is not part of the pipeline.
     private static void Write(GpuPushConstantBinding? push, ArrayBufferWriter<byte> writer) {

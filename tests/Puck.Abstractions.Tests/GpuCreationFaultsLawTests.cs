@@ -26,6 +26,7 @@ public sealed class GpuCreationFaultsLawTests {
     private static Dictionary<string, (GpuCreationKind Kind, Action<GpuDeviceServices> Create)> Creations() => new(comparer: StringComparer.Ordinal) {
         ["IGpuBindings.CreatePool"] = (GpuCreationKind.BindingsPool, static services => _ = services.Bindings.CreatePool(name: default, sizes: default)),
         ["IGpuBufferFactory.CreateDeviceLocal"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 16, usage: GpuBufferUsage.Storage)),
+        ["IGpuBufferFactory.CreateReadback"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateReadback(name: default, sizeBytes: 16)),
         ["IGpuBufferFactory.CreateHostVisible"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateHostVisible(name: default, sizeBytes: 16, usage: GpuBufferUsage.Storage)),
         ["IGpuBufferFactory.CreateHostVisibleDeviceLocal"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateHostVisibleDeviceLocal(name: default, sizeBytes: 16, usage: GpuBufferUsage.Storage)),
         ["IGpuBufferFactory.CreateHostVisible(data)"] = (GpuCreationKind.Buffer, static services => _ = services.BufferFactory.CreateHostVisible(data: new byte[16], name: default, usage: GpuBufferUsage.Vertex)),
@@ -191,19 +192,19 @@ public sealed class GpuCreationFaultsLawTests {
             services: gpu.Services
         );
 
-        // Armed past every kind's creations below (a buffer has four creating members), so each kind is counted and
+        // Armed past every kind's creations below (a buffer has five creating members), so each kind is counted and
         // still armed when the faults are disarmed.
         foreach (var kind in GpuCreationFaults.Kinds) {
             faults.Arm(
                 kind: kind,
-                nth: 5
+                nth: 6
             );
         }
 
         foreach (var (key, (_, create)) in Creations()) {
             Assert.True(
                 condition: Reaches(create: create, gpu: gpu, services: services),
-                userMessage: $"{key} faulted before its fifth creation."
+                userMessage: $"{key} faulted before its sixth creation."
             );
         }
 

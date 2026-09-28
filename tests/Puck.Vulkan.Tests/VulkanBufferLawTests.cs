@@ -80,8 +80,11 @@ public sealed class VulkanBufferLawTests {
             actual: bufferApi.Created,
             expected: [(vulkanUsage, VulkanBufferMemory.HostCoherent, 8UL)]
         );
+        var read = new byte[data.Length];
+
+        buffer.Read(destination: read);
         Assert.Equal(
-            actual: buffer.Read(),
+            actual: read,
             expected: data
         );
     }
@@ -182,7 +185,7 @@ public sealed class VulkanBufferLawTests {
         );
 
         _ = Assert.Throws<InvalidOperationException>(testCode: () => buffer.Write<uint>(data: [1u]));
-        _ = Assert.Throws<InvalidOperationException>(testCode: () => buffer.Read());
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => buffer.Read(destination: new byte[4]));
         Assert.Equal(
             actual: bufferApi.Calls,
             expected: ["create"]

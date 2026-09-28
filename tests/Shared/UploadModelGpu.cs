@@ -16,7 +16,8 @@ namespace Puck.Testing;
 /// dispatch must carry exactly the groups the count needs, and nothing pushes constants to the copy. The copy runs when it
 /// is recorded, which is its execution order only when the command buffers are submitted in the order they were recorded,
 /// so the model also replays each submission's buffer transitions in submission order as Direct3D 12 tracks them
-/// (<see cref="StateConflicts"/>). A disposed buffer is forgotten. Everything else is <see cref="FakeGpuDevice"/>.
+/// (<see cref="StateConflicts"/>). A buffer clear zeroes its bytes and a buffer copy copies them, both at record time, and a
+/// readback buffer reads its bytes back. A disposed buffer is forgotten. Everything else is <see cref="FakeGpuDevice"/>.
 /// <para>Shader modules and pipelines are created on the thread pool, several at once
 /// (<c>GpuPassPipelineCache.BuildConcurrency</c>), so handles come from an interlocked counter and the copy kernel is
 /// identified by the handles of the modules built from its bytecode and the pipelines built from those modules, each a
@@ -37,6 +38,7 @@ internal sealed class UploadModelGpu :
     private readonly Dictionary<(nint Set, uint Binding), nint> m_bindings = [];
     private readonly Dictionary<nint, MemoryBuffer> m_buffers = [];
     private readonly List<string> m_stateConflicts = [];
+    private readonly List<UploadModelBufferBarrier> m_bufferBarriers = [];
     private readonly Dictionary<nint, List<BufferTransition>> m_transitions = [];
 
     private readonly FakeGpuDevice m_inner;
@@ -97,6 +99,8 @@ internal sealed class UploadModelGpu :
     /// of a buffer starts from the state its declared source access names (<c>DirectXBufferStates.RequiredState</c>).
     /// A host-visible buffer never transitions there, so it is not tracked.</summary>
     public IReadOnlyList<string> StateConflicts => m_stateConflicts;
+    /// <summary>Gets every buffer barrier recorded, in recording order, with the accesses and stages it names.</summary>
+    public IReadOnlyList<UploadModelBufferBarrier> BufferBarriers => m_bufferBarriers;
 
     /// <summary>Gets the bytes of the one device-local buffer of <paramref name="sizeBytes"/>.</summary>
     /// <param name="sizeBytes">The buffer's size; exactly one device-local buffer must have it.</param>
@@ -203,6 +207,7 @@ internal sealed class UploadModelGpu :
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(aperture: true, hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
     IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: false, sizeBytes: sizeBytes);
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) => throw new NotSupportedException();
+    IGpuReadbackBuffer IGpuBufferFactory.CreateReadback(ulong sizeBytes, in GpuObjectName name) => Buffer(hostVisible: true, sizeBytes: sizeBytes);
     IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) =>
         PipelineOf(layout: description.Layout);
 
@@ -242,8 +247,14 @@ internal sealed class UploadModelGpu :
     void IGpuRecorder.DrawIndexed(nint commandBufferHandle, uint indexCount) { }
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) { }
-    void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) { }
+    void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
+        if (m_buffers.TryGetValue(key: bufferHandle, value: out var buffer)) {
+            buffer.Memory.AsSpan(length: checked((int)sizeBytes), start: 0).Clear();
+        }
+    }
     void IGpuRecorder.CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) { }
+    void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes) =>
+        m_buffers[sourceBufferHandle].Memory.AsSpan(length: checked((int)sizeBytes), start: 0).CopyTo(destination: m_buffers[destinationBufferHandle].Memory);
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) { }
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
         if (!m_transitions.TryGetValue(
@@ -261,6 +272,13 @@ internal sealed class UploadModelGpu :
             After: StateOf(access: destinationAccessMask, stages: destinationStageMask),
             Buffer: bufferHandle,
             Declared: StateOf(access: sourceAccessMask, stages: sourceStageMask)
+        ));
+        m_bufferBarriers.Add(item: new UploadModelBufferBarrier(
+            Buffer: bufferHandle,
+            DestinationAccess: destinationAccessMask,
+            DestinationStages: destinationStageMask,
+            SourceAccess: sourceAccessMask,
+            SourceStages: sourceStageMask
         ));
 
         if (sourceStageMask.HasFlag(flag: GpuStage.ComputeShader)) {
@@ -339,8 +357,8 @@ internal sealed class UploadModelGpu :
         return buffer;
     }
     // The Direct3D 12 state an access needs, as DirectXBufferStates.RequiredState reads it: a write is unordered access,
-    // an indirect read the argument state, a shader read the non-pixel state and the pixel state too when a fragment
-    // stage reads, and anything else common.
+    // an indirect read the argument state, a copy's read the copy-source state, a shader read the non-pixel state and
+    // the pixel state too when a fragment stage reads, and anything else common.
     private static BufferState StateOf(GpuAccess access, GpuStage stages) {
         if (0 != (access & (GpuAccess.TransferWrite | GpuAccess.ShaderWrite))) {
             return BufferState.UnorderedAccess;
@@ -348,6 +366,10 @@ internal sealed class UploadModelGpu :
 
         if (0 != (access & GpuAccess.IndirectCommandRead)) {
             return BufferState.IndirectArgument;
+        }
+
+        if (0 != (access & GpuAccess.TransferRead)) {
+            return BufferState.CopySource;
         }
 
         if (0 != (access & GpuAccess.ShaderRead)) {
@@ -445,6 +467,7 @@ internal sealed class UploadModelGpu :
         PixelShaderResource = 2,
         UnorderedAccess = 4,
         IndirectArgument = 8,
+        CopySource = 16,
     }
     // One recorded buffer transition: the state its declared source access names, and the state its target access
     // needs.
@@ -471,7 +494,7 @@ internal sealed class UploadModelGpu :
 
         public void Dispose() { }
     }
-    private sealed class MemoryBuffer(nint handle, bool hostVisible, bool aperture, Dictionary<nint, MemoryBuffer> owner, ulong sizeBytes, bool uniform) : IGpuStorageBuffer {
+    private sealed class MemoryBuffer(nint handle, bool hostVisible, bool aperture, Dictionary<nint, MemoryBuffer> owner, ulong sizeBytes, bool uniform) : IGpuStorageBuffer, IGpuReadbackBuffer {
         public bool Aperture => aperture;
         public nint BufferHandle => handle;
         public bool HostVisible => hostVisible;
@@ -481,6 +504,7 @@ internal sealed class UploadModelGpu :
         public long Written { get; set; }
 
         public void Dispose() => _ = owner.Remove(key: handle);
+        public void Read(Span<byte> destination) => Memory.AsSpan(length: destination.Length, start: 0).CopyTo(destination: destination);
         public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => Write(
             data: data,
             destinationOffsetBytes: 0UL
@@ -493,3 +517,10 @@ internal sealed class UploadModelGpu :
         }
     }
 }
+/// <summary>One buffer barrier <see cref="UploadModelGpu"/> recorded.</summary>
+/// <param name="Buffer">The buffer's handle.</param>
+/// <param name="SourceAccess">The accesses the barrier orders before it.</param>
+/// <param name="DestinationAccess">The accesses the barrier orders after it.</param>
+/// <param name="SourceStages">The stages the barrier waits on.</param>
+/// <param name="DestinationStages">The stages the barrier holds back.</param>
+internal readonly record struct UploadModelBufferBarrier(nint Buffer, GpuAccess SourceAccess, GpuAccess DestinationAccess, GpuStage SourceStages, GpuStage DestinationStages);

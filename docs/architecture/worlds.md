@@ -693,15 +693,23 @@ drive ends, each one no observer holds ends, so nothing its recorded viewer pres
 
 A joined-world projection renders the destination from the destination's own delivered snapshots and
 its own measured clock, never through the host's presentation clock—independently scheduled or
-remote worlds do not share a presentation coordinate. A nested screen inside a projected destination
-binds dark: the explicit depth-one policy.
+remote worlds do not share a presentation coordinate. It lights the destination under the
+destination's own sky and lighting, along its `render.cycle` when it authors one, and its sky clock
+(star twinkle, cloud drift) is the destination's delivered engine tick. Its view renders at a
+session screen's reduced quality (`WorldSessionSceneEmitter.ReducedQuality`: no soft shadows, no
+ambient occlusion, no far bound). A nested screen inside a projected destination binds dark: the
+explicit depth-one policy.
 
 A portal's face can show its destination as a window (`projection: window`): the face's portal facet
 maps a counterpart, and the destination renders each frame through an off-axis camera fitted, from
 the viewer's eye mapped through the door's isometry, to the face's glass mapped the same way. The
 window shows what a traveller at the eye would see through the door and parallaxes as the eye moves;
-the glass shows it edge to edge, with no bezel. The eye is the primary local seat's body at eye
-height, one per screen, since a screen shows one image. A pick through the glass continues through
+the glass shows it edge to edge, with no bezel. The eye is the camera the frame renders its viewer with in the same frame,
+one per screen, since a screen shows one image: the first joined seat's view, chase or first
+person, which is the camera a click through that view is cast from, so the texel the glass shows at
+a point and a click at that point look along one line into the destination. With no seat resolving
+a view, the eye is the camera the frame's first view renders with: a fixed camera's, or the
+no-local-seats spectator's. A pick through the glass continues through
 the camera the window rendered into the destination and, since the destination's own screens bind
 dark, ends on its world: on the surface the pick's ray meets among the destination's static
 placements. That pick is presentation; the input a click carries reaches the destination's rules
@@ -710,8 +718,16 @@ through the engaged body's own intent, as above.
 A seat that crosses into a world the boot presentation cannot map it into (another document that no
 adjacency relates to the boot world) is presented in that world. Its view draws the destination's own
 scene from the destination's delivered definition and state mirror, framed by the seat's own rig in
-the destination's coordinates, under the destination's sky and lighting and at the presentation's
-own quality. Seats presented through the same endpoint share one residency, with a view each. Split seats in
+the destination's coordinates, under the destination's sky and lighting on the destination's own
+sky clock (its delivered engine tick), and at the presentation's own quality. Quality is each view's
+(`SdfViewSnapshot.Quality`: ambient occlusion, soft shadows and their reach, the far bound, and the
+fast approximations), so views of one frame render at different cost. Seats presented through the
+same endpoint share one residency, with a view each. A window attached to that world
+(`WorldFramePresenter.AttachWindow`) is one more view of the same frame and residency, after the
+seats' views, at its own quality; the scene stays while a seat is presented there or a window is
+attached. The presenter latches membership each frame: attachments enter at the next latch, and
+disposal reserves the window's slot through the current frame. Session screens render separate
+residencies from their own observations of the destination. Split seats in
 different worlds each show their own world. Named boot cameras and the spectator fallback keep
 showing the boot world. A local seat keeps its roster's color wherever it is presented. A seat's view
 follows the destination's residency in place when its tables are ready, its instance capacity matches

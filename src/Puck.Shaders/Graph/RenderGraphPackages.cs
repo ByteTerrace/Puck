@@ -145,6 +145,11 @@ public sealed record RenderGraphPackagePort(
 public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, IReadOnlyList<ShaderInterfaceMember> Members, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null, RenderGraphPackageStages? Stages = null, bool PushesIndex = false, RenderGraphPackageFragment? Fragment = null) {
     /// <summary>Gets whether the package is a post-process package: one with <see cref="Stages"/>.</summary>
     public bool IsPostProcess => (Stages is not null);
+    /// <summary>Gets whether the package's shaders count their own work into the node's kernel counters: whether its
+    /// <see cref="Members"/> declare <see cref="ShaderWorkCounters.Members"/>. A package that runs as the one pass naming
+    /// it counts as that pass; a fragment's passes state each whether it counts
+    /// (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>).</summary>
+    public bool CountsKernelWork => ShaderWorkCounters.IsDeclaredBy(members: Members);
 }
 /// <summary>One pass of a package fragment, as the fragment names its versions: its own resources, and the names that
 /// stand for the package's ports (<see cref="RenderGraphPackageFragment.InputVersions"/>,
@@ -158,7 +163,10 @@ public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPack
 /// <param name="OutputAccesses">How it writes each of <paramref name="Outputs"/>, one write access per output.</param>
 /// <param name="Dispatch">Its dispatch shape: <see langword="null"/> or <see cref="ShaderPipelineDispatchKind.Extent"/>
 /// for one invocation per pixel, fixed groups, or an indirect dispatch whose arguments one of its versions holds.</param>
-public sealed record RenderGraphFragmentPass(string Name, IReadOnlyList<ResourceReference> Inputs, IReadOnlyList<RenderGraphPortAccess> InputAccesses, IReadOnlyList<ResourceReference> Outputs, IReadOnlyList<RenderGraphPortAccess> OutputAccesses, ShaderPipelineDispatch? Dispatch = null);
+/// <param name="CountsKernelWork">Whether its kernels count their own work into the node's counter buffers
+/// (<see cref="GpuKernelCounters"/>): the node then clears and copies them around its frame's passes, and hands the pass
+/// its row (<see cref="RenderGraphPackageRecording.WorkCounters"/>).</param>
+public sealed record RenderGraphFragmentPass(string Name, IReadOnlyList<ResourceReference> Inputs, IReadOnlyList<RenderGraphPortAccess> InputAccesses, IReadOnlyList<ResourceReference> Outputs, IReadOnlyList<RenderGraphPortAccess> OutputAccesses, ShaderPipelineDispatch? Dispatch = null, bool CountsKernelWork = false);
 /// <summary>The passes a package runs as. The graph compiler splices them into a graph in place of each pass naming the
 /// package: each fragment pass becomes a package pass named <c>&lt;pass&gt;$&lt;fragment pass&gt;</c>, each fragment
 /// resource a version named <c>&lt;pass&gt;$&lt;resource&gt;</c>, a name standing for an input port the version the pass
@@ -345,10 +353,12 @@ public sealed class RenderGraphPackageCatalog {
         ),
     });
     /// <summary>Gets what <see cref="SdfFilmGrain"/>'s fragment stage reads from its pass group beside the extent and
-    /// config: its input image and the sampler it samples it through.</summary>
+    /// config: its input image and the sampler it samples it through, then the work counters it counts every texel it
+    /// writes into.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> SdfFilmGrainMembers { get; } = [
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: "source", type: ShaderValueType.Float4),
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: "sourceSampler"),
+        .. ShaderWorkCounters.Members,
     ];
     /// <summary>Gets the config schema of <see cref="Place"/>: the letterbox switch, off by default, the rect, whole by
     /// default, the sharpness, 0 by default, and the tonemap switch, off by default.</summary>
@@ -392,6 +402,7 @@ public sealed class RenderGraphPackageCatalog {
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: PlaceSource, type: ShaderValueType.Float4),
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: (PlaceSource + ShaderPipelinePassPorts.SamplerSuffix)),
         ShaderInterfaceMember.StorageImage(format: WorkingFormat, group: ShaderInterfaceGroup.Pass, name: PlaceDestination, type: ShaderValueType.Float4),
+        .. ShaderWorkCounters.Members,
     ];
 
     /// <summary>The number of frame slots the overlay samples: images a Frame element draws, such as a face cam.</summary>
@@ -416,7 +427,8 @@ public sealed class RenderGraphPackageCatalog {
     /// per-frame values its recorder writes, which the pass block holds in name order as it holds config fields (<c>counts</c>: panel and
     /// element counts and the atlas cell's width and height; <c>misc</c>: the text, atlas and clip bases and the glyph
     /// count; <c>sdf</c>: the distance range, the outline band and the panel and element bases), then its input image, its
-    /// frame slot images, the one sampler they are all read through, and its storage buffer.</summary>
+    /// frame slot images, the one sampler they are all read through, its storage buffer, and the work counters it counts
+    /// every texel it writes into.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> OverlayMembers { get; } = [
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "counts", type: ShaderValueType.Float4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: "misc", type: ShaderValueType.Float4),
@@ -432,6 +444,7 @@ public sealed class RenderGraphPackageCatalog {
         )),
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: OverlaySampler),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: OverlayData),
+        .. ShaderWorkCounters.Members,
     ];
 
     /// <summary>The name of a conversion package's region in its pass group, its input: the uploaded source's
@@ -442,12 +455,14 @@ public sealed class RenderGraphPackageCatalog {
     public const string SourceImage = "image";
 
     /// <summary>Returns what a conversion package's kernel reads from its pass group beside the extent: the region at
-    /// binding 1 and the image it writes at binding 2, as the kernels in <c>Assets/Shaders/Sources</c> declare them.</summary>
+    /// binding 1, the image it writes at binding 2, and the work counters it counts every texel it writes into, as the
+    /// kernels in <c>Assets/Shaders/Sources</c> declare them.</summary>
     /// <param name="format">The image's format.</param>
     /// <returns>The members.</returns>
     public static IReadOnlyList<ShaderInterfaceMember> SourceMembers(GpuPixelFormat format) => [
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: SourceRegion),
         ShaderInterfaceMember.StorageImage(format: format, group: ShaderInterfaceGroup.Pass, name: SourceImage, type: ShaderValueType.Float4),
+        .. ShaderWorkCounters.Members,
     ];
     /// <summary>Returns the format of the image a conversion package writes: half-float RGBA for
     /// <see cref="Puck.Abstractions.Sources.ImageSourceConversion.TransferPass"/>, which writes linear light, and RGBA8

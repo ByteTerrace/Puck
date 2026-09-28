@@ -49,8 +49,8 @@ public sealed class CountersLawTests {
         GcMode: "workstation, concurrent",
         Height: 144,
         Passes: [
-            new WorldCountersPass(Label: "upload", Node: "world", State: GpuPassState.Executed),
-            new WorldCountersPass(Label: "sky", Node: "world", State: sky),
+            new WorldCountersPass(Class: WorkClass.PerBackendDeterministic, Label: "upload", Node: "world", State: GpuPassState.Executed),
+            new WorldCountersPass(Class: WorkClass.Deterministic, Label: "sky", Node: "world", State: sky),
         ],
         Width: 256
     );

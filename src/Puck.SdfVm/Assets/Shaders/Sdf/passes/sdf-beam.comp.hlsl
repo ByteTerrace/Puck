@@ -128,4 +128,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
                 (2.0 * view.right.w) / max(regionSizePx.y, 1.0));
         }
     }
+
+    // The beam writes tile planes, no texel: it counts its cone march's steps.
+    puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

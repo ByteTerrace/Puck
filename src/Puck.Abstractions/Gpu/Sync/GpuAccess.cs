@@ -26,4 +26,7 @@ public enum GpuAccess : uint {
     DepthAttachmentWrite = 0x80,
     /// <summary>A transfer operation reads the resource.</summary>
     TransferRead = 0x100,
+    /// <summary>The host reads the resource through its mapping (Vulkan <c>HOST_READ</c>). Pair with
+    /// <see cref="GpuStage.Host"/>.</summary>
+    HostRead = 0x200,
 }

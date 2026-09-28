@@ -74,6 +74,7 @@ public static class SdfFrameBlock {
     private static readonly int ViewRight = Offset(member: SdfWorldPackage.ViewRight);
     private static readonly int ViewUp = Offset(member: SdfWorldPackage.ViewUp);
     private static readonly int ViewportCount = Offset(member: SdfWorldPackage.ViewportCount);
+    private static readonly int WorkCounterRow = Offset(member: ShaderWorkCounters.Row);
 
     /// <summary>The nearest forward distance, in world units, a view's surfaces are rendered from (<see cref="NearOf"/>):
     /// the mesh pass's reversed-Z depth needs a positive near. The kernels read it as <c>SDF_MINIMUM_NEAR</c>, which
@@ -83,6 +84,13 @@ public static class SdfFrameBlock {
     /// <summary>Gets the bytes of the pass block, a multiple of 16.</summary>
     public static int SizeBytes => ((int)Layout.SizeBytes);
 
+    /// <summary>Writes the pass's row of the work counters into its pass block (<see cref="ShaderWorkCounters.Row"/>),
+    /// which <see cref="Write"/> leaves alone: the row names the pass, never what the view renders from, so a view's
+    /// signature (<see cref="SdfWorldTables.ViewSignature"/>) never reads it.</summary>
+    /// <param name="block">The pass block, at least <see cref="SizeBytes"/> bytes.</param>
+    /// <param name="row">The pass's row.</param>
+    public static void WriteWorkCounterRow(Span<byte> block, uint row) =>
+        WriteUInt32(block: block, offset: WorkCounterRow, value: row);
     /// <summary>Returns the forward distance of the plane a view's surfaces are rendered from: the camera's own
     /// <see cref="CameraSnapshot.Near"/>, or <see cref="MinimumNear"/> when that is nearer. The kernels start every
     /// surface march where its ray crosses this plane and the mesh pass clips there
@@ -96,8 +104,9 @@ public static class SdfFrameBlock {
             y: MinimumNear
         );
     /// <summary>Writes a view's values into a pass block: its render extent and tile grid, the frame's bound screens,
-    /// instance-mask width, twinkle tick and mesh draws the tables packed, the view's camera, the far distance and the
-    /// debug view mode, the frame's levers, and the environment the tables baked. The extent is not written: the node
+    /// instance-mask width, twinkle tick and mesh draws the tables packed, the view's camera and quality
+    /// (<see cref="SdfViewSnapshot.Quality"/>), the far distance and the debug view mode, the frame's bench levers, and
+    /// the environment the tables baked. The extent is not written: the node
     /// writes it.</summary>
     /// <param name="block">The pass block, at least <see cref="SizeBytes"/> bytes.</param>
     /// <param name="tables">The values of the tables that packed <paramref name="frame"/>.</param>
@@ -112,6 +121,7 @@ public static class SdfFrameBlock {
 
         var snapshot = frame.Views[view];
         var camera = snapshot.Camera;
+        var quality = snapshot.Quality;
 
         WriteUInt32(block: block, offset: ImageExtent, value: width);
         WriteUInt32(block: block, offset: (ImageExtent + sizeof(uint)), value: height);
@@ -154,15 +164,15 @@ public static class SdfFrameBlock {
         WriteSingle(block: block, offset: GridObjectPatchRadius, value: grid.ObjectPatchRadius);
         WriteFlag(block: block, offset: FiniteDifferenceNormals, value: frame.UseFiniteDifferenceNormals);
         WriteFlag(block: block, offset: DisableShadowCull, value: frame.DisableShadowCull);
-        WriteFlag(block: block, offset: DisableSoftShadows, value: frame.DisableSoftShadows);
-        WriteFlag(block: block, offset: DisableAmbientOcclusion, value: frame.DisableAmbientOcclusion);
-        WriteSingle(block: block, offset: ShadowDistanceScale, value: frame.ShadowDistanceScale);
+        WriteFlag(block: block, offset: DisableSoftShadows, value: quality.DisableSoftShadows);
+        WriteFlag(block: block, offset: DisableAmbientOcclusion, value: quality.DisableAmbientOcclusion);
+        WriteSingle(block: block, offset: ShadowDistanceScale, value: quality.ShadowDistanceScale);
         WriteFlag(block: block, offset: DisableScreenLights, value: frame.DisableScreenLights);
         WriteFlag(block: block, offset: EnableShadowProxy, value: frame.EnableShadowProxy);
-        WriteFlag(block: block, offset: CameraTileShadowMask, value: frame.UseCameraTileShadowMask);
-        WriteFlag(block: block, offset: FastSoftShadowMarch, value: frame.UseFastSoftShadowMarch);
-        WriteFlag(block: block, offset: FastAmbientOcclusion, value: frame.UseFastAmbientOcclusion);
-        WriteFlag(block: block, offset: DisableFarBound, value: frame.DisableFarBound);
+        WriteFlag(block: block, offset: CameraTileShadowMask, value: quality.UseCameraTileShadowMask);
+        WriteFlag(block: block, offset: FastSoftShadowMarch, value: quality.UseFastSoftShadowMarch);
+        WriteFlag(block: block, offset: FastAmbientOcclusion, value: quality.UseFastAmbientOcclusion);
+        WriteFlag(block: block, offset: DisableFarBound, value: quality.DisableFarBound);
         MemoryMarshal.AsBytes(span: tables.Environment.Span).CopyTo(destination: block[Environment..]);
     }
     /// <summary>Bakes a frame's environment into the rows every pass block carries: <see cref="SdfEnvironment.Lanes"/>

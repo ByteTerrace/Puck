@@ -3993,15 +3993,14 @@ recorded over `puck counters`' pinned workload
 (`tests/Puck.Counters/counters.world.json`, its camera and views) at the floor
 tier and the RTX 2060's 1920x1080, and held as calibrated ceilings that
 workload may not exceed. A ceiling is re-recorded only in the change that
-explains why the count moved, and never from wall-clock or GPU timing. Two of
-those counters do not exist yet, and P14 adds them as `GpuWork` kinds the
-ledger reports per pass: march steps and texels written. Its uploads count per
-pass too, the brick uploads included under the pass that records them, since
-`gpu.uploads.host-visible` counts only CPU writes to host-visible buffers
-today. The ledger counts host-side API calls, and a march's step count is
-decided inside the shader's data-dependent loop, so the kernels count their own
-steps into a per-pass counter buffer that the completed sample reads back. The
-march runs in floats, so that kind is `PerBackendDeterministic`, held per
+explains why the count moved, and never from wall-clock or GPU timing. P15-1
+built them: march steps and texels written are `GpuWork` kinds the ledger
+reports per pass (`gpu.march.steps`, `gpu.texels.written`), and the uploads
+count per pass, the brick uploads under the `bricks` pass that records them. The
+ledger counts host-side API calls, and a march's step count is decided inside
+the shader's data-dependent loop, so the kernels count their own steps into a
+per-pass row of the node's counter buffers that the completed sample reads back.
+The march runs in floats, so that kind is `PerBackendDeterministic`, held per
 backend like the residency's `upload` pass. Texels written come from the same
 kernel counters, not from host extents, because an indirectly dispatched pass
 writes only the tiles culling leaves it. The workload is pinned: the RTX 2060
@@ -4180,12 +4179,21 @@ item 2 landed.
      the `portal-walk` canary's crossing capture). A change the passes cannot
      follow still rebuilds them and holds the last image
      (`RenderGraphRuntimeLawTests.ResidencySwitchHeldFrames`).
-   Open work: let a routed seat view and a portal window's session view of the
-   same destination share one residency. They cannot share it: a frame's quality
-   levers (ambient occlusion, soft shadows, the far bound) are the frame's,
-   not each view's, and the window is dressed at the session's reduced cost;
-   and each reads its own mirror of the destination (the endpoint's, and the
-   window's own observation).
+   Quality is each view's: `SdfViewSnapshot.Quality` carries ambient
+   occlusion, soft shadows and their reach, the far bound and the fast
+   approximations into the view's own pass block, and the recorder skips the
+   ambient and shadow parts per view, so views of one frame, and of one
+   residency, render at different cost
+   (`SdfFrameBlockLawTests.EachViewOfOneFrameWritesItsOwnQualityAndSharesEverythingElse`).
+   An endpoint's scene (`WorldRoutedScene`) takes its seats' views and the
+   views of windows attached through `WorldFramePresenter.AttachWindow`, each
+   at its own quality, and the binder resolves a window into the scene's one
+   residency (`WorldScreenBinder.TryResolveWindowView`;
+   `WorldRoutedPresentationLawTests.AWindowIsAViewOfTheSceneItsWorldsSeatsRenderAtItsOwnQuality`).
+   Open work: session screens attach through that door. Each reads its
+   own observation of the destination and renders its own residency, so a
+   portal window and a traveller's routed view of one destination keep two
+   residencies until the window reads the endpoint's mirror.
 9. Landed with step 6, the cadence as the scheduler's: `SdfWorldPasses` asks
    each residency whether a view's latest render stands
    (`IRenderGraphPackageFactory.IsUnchanged`), and the runtime declares that
@@ -4355,14 +4363,12 @@ place:
   stands.
 - `SdfWorldPasses`' per-instance entry, which counts every change of the view
   an instance resolves, a residency follow in place (`CanFollow`) included.
-- `puck counters`' pinned workload at the floor tier. The ledger counts
-  host-side API calls only: there is no counted kind for march steps or texels
-  written, and no ceiling file. Upload bytes are already counted per pass:
-  `gpu.uploads.host-visible` (`GpuWork.HostVisibleUploadBytes`) is recorded by
-  the counting storage buffer into the ledger's active pass, and
-  `SdfWorldTables.SubmitUpload` brackets the region copies with the `upload`
-  pass. The brick writes and the fillers it records before that bracket are
-  attributed to no pass.
+- `puck counters`' pinned workload at the floor tier, held to counted-cost
+  ceilings (P15-1). Besides the host-side API calls, every SDF compute pass's
+  kernels count their march steps and texels written (`gpu.march.steps`,
+  `gpu.texels.written`) into the node's kernel counters, and the upload counts
+  its fillers, brick writes and region copies under passes of their own
+  (`fillers`, `bricks`, `upload`).
 - The offscreen host holds its clock at an armed capture, but each frame it
   composes still carries its interval (`FrameDeltaTicks`), and
   `WorldFramePresenter.CaptureFrame` advances presentation time, animation and
@@ -4562,6 +4568,15 @@ counted rows recorded in the same change.
    - Counted-cost gate: the counter buffer's own cost, one clear, one copy and
      their barriers per instance a frame, is the first row recorded, and every
      other P14 pass's ceiling is recorded beside it.
+   - Status: built. Every pass that marches or writes texels counts both kinds
+     in its shaders: the SDF passes, the mesh pass, `place`, the overlay, the
+     source conversions and every post-process package. A pass the frame skips
+     counts as skipped. `puck counters --check` and `--record` hold the report
+     to `puck.counters.ceilings.v1`. The `kernel-counters` canary holds a
+     volume's steps doubling with its samples and a post pass counting one texel
+     a pixel. What remains is the ceilings file recorded on the RTX 2060 at the
+     floor tier, and `--check` shown there failing on a raised count and a
+     broken zero.
 2. **P15-2, jitter and history epochs.** The temporal contract, with
    reconstruction still off by default.
    - Delivers: the `jitter` and `historyFrames` pass-block values, the Halton

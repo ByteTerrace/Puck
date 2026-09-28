@@ -124,6 +124,8 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
     float transmission = 1.0;
     float pulse = 1.0 + v.pulseAmplitude * sin(2.0 * SDF_PI * v.pulseFrequency * clock);
     [loop] for (int i = 0; i < steps; i++) {
+        // Each sample is a march step, counted before a flow column's sample outside its axis skips the rest.
+        sdfWorkSteps += 1u;
         float sampleT = tBegin + ((float)i + 0.5 + dither * 0.49) * stepLength;
         float3 p = localOrigin + localDirection * sampleT;
         float density;

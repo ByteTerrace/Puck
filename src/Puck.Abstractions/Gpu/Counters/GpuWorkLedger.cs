@@ -5,7 +5,9 @@ namespace Puck.Abstractions.Gpu;
 /// <summary>
 /// Collects one render node's GPU work per submission and per pass, and publishes a submission's counts only once
 /// the GPU is known to have finished it. The node wraps its neutral GPU services with <see cref="GpuWorkCounting"/>
-/// over this ledger, so every counted call lands here; the node itself only says which pass it is in.
+/// over this ledger, so every counted call lands here; the node itself only says which pass it is in. The kinds a
+/// pass's kernels count on the GPU (<see cref="GpuWork.KernelKinds"/>) join a submission's pass rows when it completes,
+/// read from the readback slot the node named for it (<see cref="ReadOnCompletion"/>).
 /// <para>
 /// The ledger holds one record per frame in flight plus one, all allocated up front. A record opens at the first
 /// counted call or pass change after the previous submission and seals when the wrapped queue submitter submits,
@@ -211,6 +213,21 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             }
         }
     }
+    /// <summary>Names where the work being recorded leaves the counts its kernels write on the GPU: once the submission
+    /// completes, and before it is published, <paramref name="readback"/> adds what <paramref name="slot"/> holds to its
+    /// pass rows. The last call before the submission seals wins; a submission never named reads none.</summary>
+    /// <param name="readback">The counter buffers the submission's passes count into.</param>
+    /// <param name="slot">The readback slot the submission copies its counts into, which it must not share with another
+    /// submission in flight.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="readback"/> is <see langword="null"/>.</exception>
+    public void ReadOnCompletion(IGpuWorkReadback readback, int slot) {
+        ArgumentNullException.ThrowIfNull(readback);
+
+        var record = OpenRecord();
+
+        record.Readback = readback;
+        record.ReadbackSlot = slot;
+    }
     /// <summary>Marks a pass as not run in the work being recorded, so its sample reads skipped rather than zero.</summary>
     /// <param name="pass">The zero-based pass index in the configured labels.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="pass"/> is not a configured pass.</exception>
@@ -279,6 +296,14 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         }
 
         if (submission > m_published) {
+            completed.Readback?.AddTo(
+                counts: completed.Counts.AsSpan(
+                    length: ((completed.Labels.Length + 1) * Columns),
+                    start: 0
+                ),
+                passCount: completed.Labels.Length,
+                slot: completed.ReadbackSlot
+            );
             Publish(record: completed);
             m_published = submission;
         }
@@ -390,6 +415,8 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
 
         public string[] Labels = [];
 
+        public IGpuWorkReadback? Readback;
+        public int ReadbackSlot;
         public long Revision;
         public RecordState State;
 
@@ -399,6 +426,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
 
         public void Free() {
             Fence = null;
+            Readback = null;
             State = RecordState.Free;
         }
         public void Open(string[] labels, WorkClass[] classes, long revision) {
@@ -413,6 +441,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             ).Clear();
             Fence = null;
             HasPassActivity = false;
+            Readback = null;
             State = RecordState.Open;
             Submission = 0L;
         }

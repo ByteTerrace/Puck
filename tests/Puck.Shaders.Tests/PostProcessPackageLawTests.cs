@@ -101,16 +101,17 @@ public sealed class PostProcessPackageLawTests {
         return node;
     }
     // The recording the law pins for four frames: the fullscreen pass the package is drawn by, with no push and no combined
-    // sampler; the input written at the package's source binding; and the two blocks each draw reads, in hex. The frame group
-    // block holds the frame counter, counting from one, and the tick rate; the pass block holds the 64x64 extent, the
-    // default flicker rate of 24, then the bound config (intensity, seed, then the package's remaining fields).
+    // sampler; the input written at the package's source binding and the frame slot's work counters at theirs; and the two
+    // blocks each draw reads, in hex. The frame group block holds the frame counter, counting from one, and the tick rate;
+    // the pass block holds the 64x64 extent, the default flicker rate of 24, then the bound config (intensity, seed, then
+    // the package's remaining fields) and the pass's work counter row, zero.
     private static Recorded Pinned(string configHex) => new(
         Blocks: [.. Enumerable.Range(count: 4, start: 1).Select(selector: frame => $"{new string(c: '0', count: 48)}{frame:X2}000000E0C40000{new string(c: '0', count: 128)} 400000004000000018000000{configHex}00000000")],
         Commands: [.. Enumerable.Repeat(count: 4, element: new[] { "vertices 24 8", "draw 0 3" }).SelectMany(selector: static pair => pair)],
         Pipeline: "sdf.film-grain  8 GpuVertexAttribute { Location = 0, Format = R32G32Float, OffsetBytes = 0 }",
         RenderPass: "GpuColorAttachment { Format = R8G8B8A8Unorm, Load = Clear, Store = Store, FinalLayout = RenderTarget } ",
         RenderPasses: 4,
-        Writes: [.. Enumerable.Repeat(count: 4, element: $"1 {Input.ImageViewHandle}")]
+        Writes: [.. Enumerable.Repeat(count: 4, element: new[] { $"1 {Input.ImageViewHandle}", "3 work counters" }).SelectMany(selector: static pair => pair)]
     );
     private static void ProduceUntilPublished(ShaderPipelineRenderNode node) => Assert.True(
         condition: SpinWait.SpinUntil(
@@ -156,6 +157,12 @@ public sealed class PostProcessPackageLawTests {
         gpu.Recording = false;
 
         var (pass, description) = Assert.Single(collection: gpu.GraphicsPipelines);
+        // The node's counter buffers, one a frame slot of the pass's one row, which the pass binds at the counters'
+        // binding.
+        var counters = gpu.CreatedObjects
+            .Where(predicate: static created => ((created.Kind == "buffer") && (created.Bytes == ((ulong)GpuKernelCounters.RowBytes))))
+            .Select(selector: static created => created.Handle)
+            .ToHashSet();
 
         return new Recorded(
             Blocks: blocks,
@@ -163,7 +170,9 @@ public sealed class PostProcessPackageLawTests {
             Pipeline: $"{description.Name} {description.DepthCompare} {description.VertexInput.StrideBytes} {string.Join(separator: ",", values: description.VertexInput.Attributes)}",
             RenderPass: $"{string.Join(separator: ",", values: pass.Colors)} {pass.Depth}",
             RenderPasses: gpu.RenderPasses.Count,
-            Writes: [.. gpu.DescriptorWrites.Select(selector: static write => $"{write.Binding} {write.Handle}")]
+            Writes: [.. gpu.DescriptorWrites.Select(selector: write => (counters.Contains(item: write.Handle)
+                ? $"{write.Binding} work counters"
+                : $"{write.Binding} {write.Handle}"))]
         ) {
             Pushes = [.. gpu.PushedConstants.Select(selector: static push => Convert.ToHexString(inArray: push.Data))],
         };

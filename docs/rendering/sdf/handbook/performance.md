@@ -28,19 +28,22 @@ world.budget
   frame whose render inputs match the previous one keeps each view's retained
   output, so a still scene would read near zero.
 - **`world.counters gpu`** echoes what each render node counted for its newest
-  completed submission: per labeled pass (`upload`, `sky`, `mask`, `beam`,
-  `cull-args`, `primary`, `surface`, `ambient`, `views`) the
-  dispatches, barriers, binds, push-constant bytes and uploads it recorded, or
-  `skipped` for a pass the cadence gate did not run. These counts are exact
-  and the same on every backend for the same inputs, so a change that moves
-  one is a real change in work — no averaging or band-trusting needed the way
-  a wall-clock sample would require. The section's header names the device
+  completed submission: per labeled pass (`fillers`, `bricks`, `upload`,
+  `sky`, `mask`, `beam`, `cull-args`, `mesh`, `primary`, `surface`, `ambient`,
+  `shadow`, `views`) the dispatches, barriers, binds, push-constant bytes and
+  uploads it recorded and the march steps and texels written its kernels
+  counted, or `skipped` for a pass that did not run. The recorded counts are
+  exact and the same on every backend for the same inputs, and the kernels'
+  counts the same on every run of one backend, so a change that moves one is a
+  real change in work — no averaging or band-trusting needed the way a
+  wall-clock sample would require. The section's header names the device
   (backend, adapter, PCI ids, driver and API versions), so a reading carries
   the machine that made it. Without the `gpu` filter,
   `world.counters` also prints every other counter source the World
   registered, one section per source, and `--json` prints the same readout as
   one line of JSON. `puck counters` runs an authored workload offscreen on both
-  backends and checks these counts agree; see the
+  backends and checks these counts agree, and `--check` holds them, pass by
+  pass, to the counted-cost ceilings recorded for the workload; see the
   [CLI reference](../../../reference/cli.md#puck-counterswork-counter-collector).
 - **`world.budget`** prints the compose-time cost sheet: live program words and
   instances, the global step scale, volumes, and scoped field clamps. Confirm

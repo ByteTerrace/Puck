@@ -1,9 +1,7 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
-using Puck.Hosting;
 using Puck.World;
 using Puck.World.Transpiler.Composition;
 
@@ -778,106 +776,4 @@ internal static partial class CanaryCommand {
             encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
         );
     }
-
-    private sealed class AuthorityCompanion : IDisposable {
-        // How long the companion may take to report its listener, and how long it may take to quit once asked. Its own
-        // --exit-after-seconds backstop outlasts both plus its client's whole timeout, so it never ends under a client.
-        public const int ListenSeconds = 5;
-        public const int QuitGraceSeconds = 10;
-
-        private readonly Process m_process;
-
-        private CancellationTokenRegistration m_cancellation;
-
-        private readonly StringBuilder m_stdout = new();
-        private readonly StringBuilder m_stderr = new();
-        private readonly Lock m_gate = new();
-
-        private AuthorityCompanion(Process process) {
-            m_process = process;
-            process.OutputDataReceived += (_, args) => {
-                if (args.Data is { } line) {
-                    lock (m_gate) {
-                        m_stdout.AppendLine(value: line);
-                    }
-                }
-            };
-            process.ErrorDataReceived += (_, args) => {
-                if (args.Data is { } line) {
-                    lock (m_gate) {
-                        m_stderr.AppendLine(value: line);
-                    }
-                }
-            };
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-        }
-
-        public string Stderr { get { lock (m_gate) { return m_stderr.ToString(); } } }
-        public string Stdout { get { lock (m_gate) { return m_stdout.ToString(); } } }
-
-        // The companion serves only while its client runs: it is asked to quit when the client's session has ended,
-        // and killed only if it has not exited within the grace below.
-        public void Dispose() {
-            if (!m_process.HasExited) {
-                try {
-                    m_process.StandardInput.Write(value: RunnerQuit);
-                    m_process.StandardInput.Close();
-                } catch (IOException) {
-                    // The companion already closed its end; the wait below observes its exit.
-                }
-
-                if (!m_process.WaitForExit(timeout: TimeSpan.FromSeconds(value: QuitGraceSeconds))) {
-                    try { m_process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
-                }
-
-                m_process.WaitForExit();
-            }
-            m_cancellation.Dispose();
-            m_process.Dispose();
-        }
-        // A cancelled run kills the companion at once, whatever its client is doing.
-        public static AuthorityCompanion Start(string artifact, string world, string stateDirectory, string federationKeyPath, int exitAfterSeconds, CancellationToken cancellationToken) {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var process = ChildProcess.StartRedirected(
-                arguments: [artifact, "--world", world, "--state-dir", stateDirectory, "--exit-after-seconds", exitAfterSeconds.ToString(provider: CultureInfo.InvariantCulture), "--headless", "true", "--federation-key-file", federationKeyPath],
-                fileName: "dotnet"
-            );
-            var companion = new AuthorityCompanion(process: process);
-
-            companion.m_cancellation = cancellationToken.Register(callback: companion.Kill);
-
-            return companion;
-        }
-
-        private void Kill() {
-            try {
-                m_process.Kill(entireProcessTree: true);
-            } catch (InvalidOperationException) {
-                // It had already exited.
-            }
-        }
-
-        public bool WaitUntilListening(TimeSpan timeout) {
-            var clock = Stopwatch.StartNew();
-
-            while (clock.Elapsed < timeout) {
-                lock (m_gate) {
-                    if (m_stderr.ToString().Contains(
-                        comparisonType: StringComparison.Ordinal,
-                        value: "[world.listen: bound "
-                    )) {
-                        return true;
-                    }
-                }
-                if (m_process.HasExited) {
-                    return false;
-                }
-                _ = m_process.WaitForExit(milliseconds: 25);
-            }
-            return false;
-        }
-    }
-
 }

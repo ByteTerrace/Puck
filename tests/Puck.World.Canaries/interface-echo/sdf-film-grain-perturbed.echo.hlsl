@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'sdf-film-grain-perturbed' (sha256/44483d3a35f9e640620997791eff73d70f3cda5e282740c5a368a3c01e06fb96), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
+// The echo pass of shader interface 'sdf-film-grain-perturbed' (sha256/2bd0a61399cfd3b0e56b1d73782352ed025dd9fb91e88561bff528c08fb52c3e), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "sdf-film-grain-perturbed.interface.hlsli"
 
@@ -23,5 +23,6 @@ void main(uint3 id : SV_DispatchThreadID) {
     echo[uint2(13, 0)] = ((asuint(passGroup.flickerHz) == 0x400033A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(14, 0)] = ((asuint(passGroup.intensity) == 0x400043A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(15, 0)] = ((asuint(passGroup.seed) == 0x400053A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(16, 0)] = ((asuint(passGroup.size) == 0x400073A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(16, 0)] = ((asuint(passGroup.size) == 0x400063A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(17, 0)] = ((asuint(passGroup.workCounterRow) == 0x400083A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
 }

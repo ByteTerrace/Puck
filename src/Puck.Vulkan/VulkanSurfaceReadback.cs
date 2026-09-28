@@ -266,6 +266,10 @@ public sealed class VulkanSurfaceReadback : IDisposable {
             graphicsQueue: device.GraphicsQueue
         );
 
-        return m_readbackBuffer!.Read();
+        var pixels = new byte[checked((int)m_readbackBuffer!.SizeBytes)];
+
+        m_readbackBuffer.Read(destination: pixels);
+
+        return pixels;
     }
 }

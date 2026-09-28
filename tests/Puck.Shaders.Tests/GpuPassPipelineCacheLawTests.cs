@@ -37,6 +37,28 @@ public sealed class GpuPassPipelineCacheLawTests {
         Assert.NotEqual(actual: compute, expected: ((object)graphics));
         Assert.Matches(expectedRegexPattern: "^[0-9a-f]{16}$", actualString: graphics.ContentKey);
     }
+    // A graphics pipeline whose layout lets its shaders write draws in a render pass that allows shader writes, derived
+    // from its layout whatever the caller's pass says, and a pipeline that cannot write draws in one that does not. Every
+    // counting graphics package's layout writes: its fragments add to the work counters.
+    [Fact]
+    public void AWritingGraphicsPipelineDrawsInAPassAllowingShaderWrites() {
+        var plain = Graphics();
+        var writing = Graphics(writes: true);
+
+        Assert.False(condition: plain.RenderPass!.ShaderWrites);
+        Assert.True(condition: writing.RenderPass!.ShaderWrites);
+        Assert.NotEqual(actual: writing, expected: plain);
+
+        foreach (var id in ((string[])[RenderGraphPackageCatalog.SdfFilmGrain, RenderGraphPackageCatalog.Overlay])) {
+            Assert.True(condition: RenderGraphPackageCatalog.Engine.TryGet(id: id, package: out var package));
+            Assert.True(
+                condition: ShaderPipelineParameterLayout.ForPackage(config: package.Config, members: package.Members, package: package.Id).Layout.PipelineLayout(stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment).ShaderWrites,
+                userMessage: id
+            );
+        }
+
+        Assert.True(condition: Puck.SdfVm.SdfWorldInterfaces.MeshLayout.PipelineLayout(stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment).ShaderWrites);
+    }
     [Fact]
     public void LeasesOnOneDeviceAndKeyShareOnePipelineCreatedAndCountedOnce() {
         var cache = new GpuPassPipelineCache();
@@ -84,13 +106,16 @@ public sealed class GpuPassPipelineCacheLawTests {
                 PushConstantBinding: push
             )
         );
-    private static GpuPassPipelineKey Graphics(GpuPixelFormat format = GpuPixelFormat.R8G8B8A8Unorm, GpuImageLayout finalLayout = GpuImageLayout.RenderTarget, bool depth = false) =>
+    private static GpuPassPipelineKey Graphics(GpuPixelFormat format = GpuPixelFormat.R8G8B8A8Unorm, GpuImageLayout finalLayout = GpuImageLayout.RenderTarget, bool depth = false, bool writes = false) =>
         GpuPassPipelineKey.OfGraphics(
             description: new GpuGraphicsPipelineDescription(
                 DepthCompare: (depth ? GpuDepthCompare.Less : null),
                 Layout: new GpuPipelineLayoutDescription(
                     groups: [new GpuGroupLayoutDescription(
-                        bindings: [new GpuGroupBinding(binding: 0, kind: GpuBindingKind.ConstantBuffer)],
+                        bindings: [
+                            new GpuGroupBinding(binding: 0, kind: GpuBindingKind.ConstantBuffer),
+                            .. (writes ? ((GpuGroupBinding[])[new GpuGroupBinding(binding: 1, kind: GpuBindingKind.ReadWriteBuffer)]) : []),
+                        ],
                         ordinal: 0
                     )],
                     pushesIndex: false,

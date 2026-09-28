@@ -360,7 +360,13 @@ public sealed partial class ShaderPipelineRenderNode {
             Reads: Reads,
             Recorder: recorder,
             Slot: slot,
-            Width: pass.Width
+            Width: pass.Width,
+            WorkCounters: (pass.CountsKernelWork
+                ? m_passes[0].KernelCounters!.RowOf(
+                    row: pass.Index,
+                    slot: slot
+                )
+                : null)
         ));
 
         // The recorder wrote its declared values beside the extent and config; the slot takes whichever words changed.

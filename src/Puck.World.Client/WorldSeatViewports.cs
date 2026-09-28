@@ -40,15 +40,45 @@ public enum WorldSeatPointerPlace : byte {
 public sealed class WorldSeatViewports {
     private readonly WorldSeatView[] m_seats = new WorldSeatView[PlayerRoster.MaxSlots];
 
+    private CameraSnapshot m_firstView;
+    private bool m_hasFirstView;
+
     /// <summary>Gets the live OS client-area height, px — 0 until the first frame publishes it.</summary>
     public uint ClientHeight { get; private set; }
     /// <summary>Gets the live OS client-area width, px — 0 until the first frame publishes it.</summary>
     public uint ClientWidth { get; private set; }
+    /// <summary>Gets the camera the frame just dressed renders its viewer with, which a window fits its eye to: the
+    /// view of the lowest seat slot that resolved one, or, when no seat did, the camera the frame's first view renders
+    /// with (<see cref="PublishFirstView"/>: a fixed-camera slot, or the no-local-seats spectator).
+    /// <see langword="null"/> when the frame published neither.</summary>
+    public CameraSnapshot? Viewer {
+        get {
+            foreach (ref readonly var seat in m_seats.AsSpan()) {
+                if (seat.Present) {
+                    return seat.Camera;
+                }
+            }
 
-    /// <summary>Clears every seat's view — the start of a dress; a seat that resolves no view this frame stays
-    /// absent. The client extent is NOT cleared: it is a window fact, not a per-seat one, and the freshest
+            return (m_hasFirstView
+                ? m_firstView
+                : null);
+        }
+    }
+
+    /// <summary>Clears every seat's view and the first view — the start of a dress; a seat that resolves no view this
+    /// frame stays absent. The client extent is NOT cleared: it is a window fact, not a per-seat one, and the freshest
     /// publication stays valid until the next one lands.</summary>
-    public void BeginFrame() => Array.Clear(array: m_seats);
+    public void BeginFrame() {
+        Array.Clear(array: m_seats);
+        m_hasFirstView = false;
+    }
+    /// <summary>Publishes the camera the frame's first view renders with, the <see cref="Viewer"/> while no seat
+    /// resolves a view.</summary>
+    /// <param name="camera">The render camera's snapshot, exactly as the view drew with it.</param>
+    public void PublishFirstView(in CameraSnapshot camera) {
+        m_firstView = camera;
+        m_hasFirstView = true;
+    }
     /// <summary>Publishes one seat's resolved view for this frame.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="region">The seat's viewport rect in normalized frame space.</param>

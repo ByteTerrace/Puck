@@ -58,10 +58,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         """;
     private const string NamedForTheObjectOverload = "Xunit.Assert.NotNull(@object: found);";
 
-    private readonly string m_root = Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: $"puck-cli-tests-named-args-{Guid.NewGuid():N}"
-    );
+    private readonly string m_root = CliScratchDirectories.CreateProject(prefix: "puck-cli-tests-named-args-");
 
     private string Source => Path.Combine(
         path1: m_root,
@@ -88,9 +85,10 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
             actual: CliProcess.RunAsync(
                 capture: false,
                 fileName: "dotnet",
+                workingDirectory: Path.GetDirectoryName(path: project),
                 arguments: (restore
-                    ? ["build", project, "-c", configuration]
-                    : ["build", project, "-c", configuration, "--no-restore"])
+                    ? ["build", "--disable-build-servers", project, "-c", configuration]
+                    : ["build", "--disable-build-servers", project, "-c", configuration, "--no-restore"])
             ).GetAwaiter().GetResult().ExitCode,
             expected: 0
         );
@@ -402,6 +400,90 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         );
     }
     /// <summary>
+    /// A batch evaluates together only projects that select their SDK from the same global.json: projects under
+    /// different global.json roots land in separate partitions, projects sharing a root share one, and a project
+    /// directly under the outer root is keyed by that root rather than by a nested one beside it.
+    /// </summary>
+    [Fact]
+    public void ABatchIsPartitionedByTheGlobalJsonEachProjectSelectsItsSdkFrom() {
+        string Project(string relative) {
+            var project = Path.Combine(
+                path1: m_root,
+                path2: relative
+            );
+
+            Directory.CreateDirectory(path: Path.GetDirectoryName(path: project)!);
+            File.WriteAllText(
+                contents: "<Project Sdk=\"Microsoft.NET.Sdk\" />",
+                path: project
+            );
+
+            return Path.GetFullPath(path: project);
+        }
+
+        foreach (var pinned in ((string[])["Alpha", "Beta"])) {
+            Directory.CreateDirectory(path: Path.Combine(path1: m_root, path2: pinned));
+            File.Copy(
+                destFileName: Path.Combine(path1: m_root, path2: pinned, path3: "global.json"),
+                sourceFileName: Path.Combine(path1: m_root, path2: "global.json")
+            );
+        }
+
+        var one = Project(relative: "Alpha/One/One.csproj");
+        var two = Project(relative: "Alpha/Two/Two.csproj");
+        var three = Project(relative: "Beta/Three/Three.csproj");
+        var four = Project(relative: "Four/Four.csproj");
+
+        var partitions = CompileClosure.PartitionBySdkContext(projects: [four, three, two, one]);
+
+        Assert.Equal(
+            actual: partitions.Select(selector: static partition => partition.ToArray()),
+            expected: [[one, two], [three], [four]]
+        );
+    }
+    /// <summary>
+    /// Formatting a tree of sibling projects outside any Puck checkout evaluates them in one batch, with the SDK the
+    /// projects themselves select, and each project's calls bind against its own closure: the library's call into its
+    /// own type and the sample's call into the library are both named.
+    /// </summary>
+    [Fact]
+    public void ABatchedFormatOfSiblingProjectsOutsideACheckoutEvaluatesBoth() {
+        var (library, sample) = BuildReferencingPair(
+            librarySource: "namespace Library;\n\npublic static class Reach {\n    public static string Join(string left, string right) => (left + right);\n    public static string Twice(string value) => Join(value, value);\n}\n",
+            sampleSource: "namespace Sample;\n\ninternal static class Probe {\n    public static string Use() => Library.Reach.Join(\"a\", \"b\");\n}\n"
+        );
+
+        Assert.Null(@object: RepositoryPaths.Ascend(
+            probe: static directory => (File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx")) ? directory.FullName : null),
+            start: m_root
+        ));
+
+        var (code, report) = Format(
+            configuration: "Release",
+            root: m_root
+        );
+
+        Assert.Equal(
+            actual: code,
+            expected: 0
+        );
+        Assert.DoesNotContain(
+            actualString: report,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "skipped"
+        );
+        Assert.Contains(
+            actualString: File.ReadAllText(path: Path.Combine(path1: Path.GetDirectoryName(path: library)!, path2: "Library.cs")),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "Join(left: value, right: value)"
+        );
+        Assert.Contains(
+            actualString: File.ReadAllText(path: Path.Combine(path1: Path.GetDirectoryName(path: sample)!, path2: "Sample.cs")),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "Library.Reach.Join(left: \"a\", right: \"b\")"
+        );
+    }
+    /// <summary>
     /// A member another project makes visible with <c>InternalsVisibleTo</c> binds only in a compilation carrying the
     /// name the grant was made to, which is the project's own assembly name. Under any other name the call has an
     /// inaccessible candidate rather than a method, and is left positional.
@@ -501,7 +583,6 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
     public void ASourceLinkedInFromOutsideTheProjectDirectoryBinds() {
         var shared = $"{m_root}-shared";
 
-        Directory.CreateDirectory(path: m_root);
         Directory.CreateDirectory(path: shared);
 
         try {
@@ -637,10 +718,7 @@ public sealed class BuiltSampleProject : IDisposable {
     public const string NeverBuilt = "Checked";
 
     /// <summary>Gets the project directory.</summary>
-    public string Root { get; } = Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: $"puck-cli-tests-named-args-sample-{Guid.NewGuid():N}"
-    );
+    public string Root { get; } = CliScratchDirectories.CreateProject(prefix: "puck-cli-tests-named-args-sample-");
     /// <summary>Gets the one source file the cases rewrite.</summary>
     public string Source => Path.Combine(
         path1: Root,
@@ -654,7 +732,6 @@ public sealed class BuiltSampleProject : IDisposable {
             path2: "Sample.csproj"
         );
 
-        Directory.CreateDirectory(path: Root);
         File.WriteAllText(
             contents: $"""
                 <Project Sdk="Microsoft.NET.Sdk">

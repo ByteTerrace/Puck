@@ -16,19 +16,19 @@ public sealed class SdfMeshAtlasLawTests {
     // A texture set of the given extent in four-texel tiles over three levels, each usage's every unit filled with a
     // byte pattern that names the set, the usage, the level and the unit, never zero.
     private static SdfMeshTextures Set(int width, int height, byte seed) =>
-        new(textures: SdfMeshTextures.Usages.Select((usage, index) => {
+        new(textures: SdfMeshTextures.Usages.Select(selector: (usage, index) => {
             var format = SdfMeshTextures.FormatOf(usage: usage);
 
             return new SdfBakedTexture(
                 ColorSpace: SdfBakedTexture.PlanFor(usage: usage).ColorSpace,
                 Format: format,
                 Height: height,
-                Levels: [.. Enumerable.Range(start: 0, count: 3).Select(selector: level => {
-                    var (levelWidth, levelHeight) = GpuPixelFormats.LevelExtent(height: (uint)height, level: (uint)level, width: (uint)width);
+                Levels: [.. Enumerable.Range(count: 3, start: 0).Select(selector: level => {
+                    var (levelWidth, levelHeight) = GpuPixelFormats.LevelExtent(height: ((uint)height), level: ((uint)level), width: ((uint)width));
                     var bytes = new byte[GpuPixelFormats.LevelByteLength(format: format, height: levelHeight, width: levelWidth)];
 
                     for (var at = 0; (at < bytes.Length); at++) {
-                        bytes[at] = (byte)(1 + (((((seed * 31) + (index * 7)) + (level * 3)) + at) % 250));
+                        bytes[at] = ((byte)(1 + (((((seed * 31) + (index * 7)) + (level * 3)) + at) % 250)));
                     }
 
                     return bytes;
@@ -41,7 +41,7 @@ public sealed class SdfMeshAtlasLawTests {
 
     [Fact]
     public void EverySetsUnitsSitInItsAlignedRectangleUnchangedAndEveryOtherUnitIsZero() {
-        SdfMeshTextures[] sets = [Set(width: 28, height: 12, seed: 1), Set(width: 64, height: 40, seed: 2), Set(width: 4, height: 4, seed: 3), Set(width: 20, height: 36, seed: 4)];
+        SdfMeshTextures[] sets = [Set(height: 12, seed: 1, width: 28), Set(height: 40, seed: 2, width: 64), Set(height: 4, seed: 3, width: 4), Set(height: 36, seed: 4, width: 20)];
         var atlas = SdfMeshAtlas.Pack(textures: [.. sets, sets[0]]);
 
         Assert.Equal(expected: sets.Length, actual: atlas.MeshCount);
@@ -53,12 +53,12 @@ public sealed class SdfMeshAtlasLawTests {
 
         foreach (var set in sets) {
             var placement = atlas.Placement(textures: set);
-            var x = (int)MathF.Round(x: (placement.Z * atlas.Width));
-            var y = (int)MathF.Round(x: (placement.W * atlas.Height));
+            var x = ((int)MathF.Round(x: (placement.Z * atlas.Width)));
+            var y = ((int)MathF.Round(x: (placement.W * atlas.Height)));
 
-            Assert.Equal(expected: (0, 0), actual: ((x % SdfMeshAtlas.Alignment), (y % SdfMeshAtlas.Alignment)));
-            Assert.Equal(expected: ((float)set.Width / atlas.Width), actual: placement.X);
-            Assert.Equal(expected: ((float)set.Height / atlas.Height), actual: placement.Y);
+            Assert.Equal(actual: ((x % SdfMeshAtlas.Alignment), (y % SdfMeshAtlas.Alignment)), expected: (0, 0));
+            Assert.Equal(expected: (((float)set.Width) / atlas.Width), actual: placement.X);
+            Assert.Equal(expected: (((float)set.Height) / atlas.Height), actual: placement.Y);
             rectangles.Add(item: (x, y, (((set.Width + 15) / 16) * 16), (((set.Height + 15) / 16) * 16)));
         }
 
@@ -73,28 +73,29 @@ public sealed class SdfMeshAtlasLawTests {
         for (var usage = 0; (usage < SdfMeshTextures.Usages.Count); usage++) {
             var format = SdfMeshTextures.FormatOf(usage: SdfMeshTextures.Usages[usage]);
             var unitTexels = (GpuPixelFormats.IsBlockCompressed(format: format) ? 4 : 1);
-            var unit = (int)GpuPixelFormats.UnitBytes(format: format);
+            var unit = ((int)GpuPixelFormats.UnitBytes(format: format));
             var chain = atlas.Chains[usage];
             var levelStart = 0;
 
-            Assert.Equal(expected: (long)GpuPixelFormats.ChainByteLength(format: format, height: (uint)atlas.Height, levels: 3U, width: (uint)atlas.Width), actual: chain.LongLength);
+            Assert.Equal(expected: ((long)GpuPixelFormats.ChainByteLength(format: format, height: ((uint)atlas.Height), levels: 3U, width: ((uint)atlas.Width))), actual: chain.LongLength);
 
             for (var level = 0; (level < 3); level++) {
-                var (levelWidth, levelHeight) = GpuPixelFormats.LevelExtent(height: (uint)atlas.Height, level: (uint)level, width: (uint)atlas.Width);
-                var columns = (int)((levelWidth + (uint)(unitTexels - 1)) / (uint)unitTexels);
-                var rows = (int)((levelHeight + (uint)(unitTexels - 1)) / (uint)unitTexels);
+                var (levelWidth, levelHeight) = GpuPixelFormats.LevelExtent(height: ((uint)atlas.Height), level: ((uint)level), width: ((uint)atlas.Width));
+                var columns = ((int)((levelWidth + ((uint)(unitTexels - 1))) / ((uint)unitTexels)));
+                var rows = ((int)((levelHeight + ((uint)(unitTexels - 1))) / ((uint)unitTexels)));
                 var covered = new bool[(columns * rows)];
 
                 for (var index = 0; (index < sets.Length); index++) {
                     var texture = sets[index].Textures[usage];
-                    var (sourceWidth, sourceHeight) = GpuPixelFormats.LevelExtent(height: (uint)texture.Height, level: (uint)level, width: (uint)texture.Width);
-                    var sourceColumns = (int)((sourceWidth + (uint)(unitTexels - 1)) / (uint)unitTexels);
-                    var sourceRows = (int)((sourceHeight + (uint)(unitTexels - 1)) / (uint)unitTexels);
+
+                    var (sourceWidth, sourceHeight) = GpuPixelFormats.LevelExtent(height: ((uint)texture.Height), level: ((uint)level), width: ((uint)texture.Width));
+                    var sourceColumns = ((int)((sourceWidth + ((uint)(unitTexels - 1))) / ((uint)unitTexels)));
+                    var sourceRows = ((int)((sourceHeight + ((uint)(unitTexels - 1))) / ((uint)unitTexels)));
                     var originColumn = ((rectangles[index].X >> level) / unitTexels);
                     var originRow = ((rectangles[index].Y >> level) / unitTexels);
 
-                    Assert.InRange(actual: (originColumn + sourceColumns), low: 1, high: columns);
-                    Assert.InRange(actual: (originRow + sourceRows), low: 1, high: rows);
+                    Assert.InRange(actual: (originColumn + sourceColumns), high: columns, low: 1);
+                    Assert.InRange(actual: (originRow + sourceRows), high: rows, low: 1);
                     Assert.True(condition: ((sourceColumns * unitTexels) <= (rectangles[index].Width >> level)));
                     Assert.True(condition: ((sourceRows * unitTexels) <= (rectangles[index].Height >> level)));
 
@@ -112,26 +113,26 @@ public sealed class SdfMeshAtlasLawTests {
                 }
                 for (var target = 0; (target < covered.Length); target++) {
                     if (!covered[target]) {
-                        Assert.True(condition: chain.AsSpan(length: unit, start: (levelStart + (target * unit))).IndexOfAnyExcept(value: (byte)0) < 0, userMessage: $"usage {SdfMeshTextures.Usages[usage]} level {level}: unit {target} lies outside every rectangle and is not zero");
+                        Assert.True(condition: (chain.AsSpan(length: unit, start: (levelStart + (target * unit))).IndexOfAnyExcept(value: ((byte)0)) < 0), userMessage: $"usage {SdfMeshTextures.Usages[usage]} level {level}: unit {target} lies outside every rectangle and is not zero");
                     }
                 }
 
-                levelStart += (columns * rows * unit);
+                levelStart += ((columns * rows) * unit);
             }
         }
     }
     [Fact]
     public void SetsOfOtherTilesOrLevelsAnEmptyListAndAnOversizedPackAreRefusedByName() {
-        var set = Set(width: 8, height: 8, seed: 1);
+        var set = Set(height: 8, seed: 1, width: 8);
         var shallow = new SdfMeshTextures(textures: [.. set.Textures.Select(selector: static texture => (texture with { Levels = [texture.Levels[0], texture.Levels[1]] }))]);
 
         Assert.Equal(expected: "textures", actual: Assert.Throws<ArgumentException>(testCode: static () => SdfMeshAtlas.Pack(textures: [])).ParamName);
         Assert.Contains(expectedSubstring: "tile and level count", actualString: Assert.Throws<ArgumentException>(testCode: () => SdfMeshAtlas.Pack(textures: [set, shallow])).Message);
-        Assert.Contains(expectedSubstring: $"at most {SdfMeshAtlas.MaxExtent} texels", actualString: Assert.Throws<ArgumentException>(testCode: static () => SdfMeshAtlas.Pack(textures: [Set(width: (SdfMeshAtlas.MaxExtent + 4), height: 4, seed: 1)])).Message);
+        Assert.Contains(expectedSubstring: $"at most {SdfMeshAtlas.MaxExtent} texels", actualString: Assert.Throws<ArgumentException>(testCode: static () => SdfMeshAtlas.Pack(textures: [Set(height: 4, seed: 1, width: (SdfMeshAtlas.MaxExtent + 4))])).Message);
     }
     [Fact]
     public void ASetMissingAUsageOrOfTheWrongFormatIsRefusedByName() {
-        var set = Set(width: 8, height: 8, seed: 1);
+        var set = Set(height: 8, seed: 1, width: 8);
 
         foreach (var missing in SdfMeshTextures.Usages) {
             Assert.Contains(expectedSubstring: $"lack its {missing} texture", actualString: Assert.Throws<ArgumentException>(testCode: () => new SdfMeshTextures(textures: [.. set.Textures.Where(predicate: texture => (texture.Usage != missing))])).Message);
@@ -141,7 +142,7 @@ public sealed class SdfMeshAtlasLawTests {
     }
     [Fact]
     public void UnsupportedTilesAndChainsAreRefusedBeforePacking() {
-        var set = Set(width: 16, height: 16, seed: 1);
+        var set = Set(height: 16, seed: 1, width: 16);
 
         foreach (var textures in new IReadOnlyList<SdfBakedTexture>[] {
             [.. set.Textures.Select(selector: static texture => (texture with { TileTexels = 8 }))],
@@ -155,7 +156,7 @@ public sealed class SdfMeshAtlasLawTests {
     }
     [Fact]
     public void EveryUsageRequiresExactLevelBytesAndItsPlannedColorSpace() {
-        var set = Set(width: 16, height: 16, seed: 1);
+        var set = Set(height: 16, seed: 1, width: 16);
 
         for (var usage = 0; (usage < set.Textures.Count); usage++) {
             for (var level = 0; (level < set.Levels); level++) {

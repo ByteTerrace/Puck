@@ -6,12 +6,12 @@ namespace Puck.World.Client;
 
 // The views of seats presented elsewhere (WorldContinuum.PresentedElsewhere). Each such seat keeps its view's place in
 // the boot frame, so every view keeps its index, and the view is latched into the scene of the world the seat is
-// presented in (WorldRoutedScene), which renders it instead: one scene per routed endpoint, shared by every seat
-// presented there, latched afresh by every Dress.
+// presented in (WorldRoutedScene), which renders it instead: one scene per endpoint, shared by every seat presented
+// there, latched afresh by every Dress, and by every window attached to it (AttachWindow).
 public sealed partial class WorldFramePresenter {
-    // Each routed endpoint's scene, the scenes a Dress found no seat in, each view's routed scene and its index among
-    // that scene's views (a view no seat routes elsewhere has none), and the frame the Dress returned, whose levers a
-    // routed scene's frame takes.
+    // Each endpoint's scene, the scenes a Dress found no seat or window in, each view's routed scene and its index
+    // among that scene's views (a view no seat routes elsewhere has none), and the frame the Dress returned, whose clock
+    // a routed scene's frame takes.
     private readonly Dictionary<WorldAuthorityEndpoint, WorldRoutedScene> m_routedScenes = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<WorldRoutedScene> m_retiredScenes = [];
     private readonly List<(WorldRoutedScene? Scene, int Index)> m_viewRoutes = new(capacity: PlayerRoster.MaxSlots);
@@ -41,10 +41,26 @@ public sealed partial class WorldFramePresenter {
 
         return false;
     }
-    /// <summary>Returns whether a routed scene is still the scene of a world a seat is presented in, as the last Dress
-    /// latched it.</summary>
+    /// <summary>Attaches a window onto an endpoint's world to the scene this presentation renders that world with, the
+    /// one door a window's view enters it through: the window is a view of the scene's frame after its seats' views, so
+    /// a window and every seat presented in the same world render from one residency, each at its own quality. The scene
+    /// is created if no seat is presented there, and stays while a seat is presented there or a window is
+    /// attached.</summary>
+    /// <param name="endpoint">The authority whose world the window shows.</param>
+    /// <returns>The window, which its holder frames each frame (<see cref="WorldRoutedWindow.View"/>) and disposes when it
+    /// closes.</returns>
+    /// <remarks>Call it on the frame thread. It enters the next presenter latch; until then its index is -1.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="endpoint"/> is <see langword="null"/>.</exception>
+    public WorldRoutedWindow AttachWindow(WorldAuthorityEndpoint endpoint) {
+        ArgumentNullException.ThrowIfNull(argument: endpoint);
+
+        return SceneOf(endpoint: endpoint).Attach();
+    }
+    /// <summary>Returns whether a routed scene is still the scene of a world a seat is presented in or a window is
+    /// attached to, as the last Dress latched it.</summary>
     /// <param name="scene">The scene.</param>
-    /// <returns><see langword="true"/> while a seat is presented in the scene's world through it.</returns>
+    /// <returns><see langword="true"/> while a seat is presented in the scene's world through it or a window is attached
+    /// to it.</returns>
     public bool Presents(WorldRoutedScene scene) => (
         m_routedScenes.TryGetValue(
             key: scene.Endpoint,
@@ -64,11 +80,12 @@ public sealed partial class WorldFramePresenter {
             scene.BeginViews();
         }
     }
-    // A world no seat is presented in any longer leaves the table; the residency rendering it goes once no view resolves
-    // to it.
+    // A world no seat is presented in any longer, and no window is attached to, leaves the table; the residency rendering
+    // it goes once no view resolves to it.
     private void RetireRoutedScenes() {
         foreach (var scene in m_routedScenes.Values) {
-            if (scene.ViewCount == 0) {
+            scene.EndViews();
+            if ((scene.ViewCount == 0) && (scene.WindowCount == 0)) {
                 m_retiredScenes.Add(item: scene);
             }
         }
@@ -100,6 +117,16 @@ public sealed partial class WorldFramePresenter {
     // Latches a view into the scene of the world its seat is presented in, creating the scene the first frame a seat is
     // presented there.
     private void RouteView(WorldAuthorityEndpoint endpoint, int view) {
+        var scene = SceneOf(endpoint: endpoint);
+
+        while (m_viewRoutes.Count < view) {
+            m_viewRoutes.Add(item: (null, 0));
+        }
+
+        m_viewRoutes.Add(item: (scene, scene.AddView(view: m_views[view])));
+    }
+    // The scene of an endpoint's world, created the first time a seat is presented there or a window attaches to it.
+    private WorldRoutedScene SceneOf(WorldAuthorityEndpoint endpoint) {
         if (!m_routedScenes.TryGetValue(
             key: endpoint,
             value: out var scene
@@ -111,11 +138,7 @@ public sealed partial class WorldFramePresenter {
             );
         }
 
-        while (m_viewRoutes.Count < view) {
-            m_viewRoutes.Add(item: (null, 0));
-        }
-
-        m_viewRoutes.Add(item: (scene, scene.AddView(view: m_views[view])));
+        return scene;
     }
     private WorldRoutedScene CreateRoutedScene(WorldAuthorityEndpoint endpoint) => new(
         bodyColor: index => RoutedBodyColor(
