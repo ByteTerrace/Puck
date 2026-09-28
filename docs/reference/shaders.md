@@ -2298,7 +2298,10 @@ loads the `dxcompiler.dll` of an installed DXC at run time. The package also
 ships `build/Shaders.targets` under
 `buildTransitive/ByteTerrace.Puck.Shaders.targets`—the shared HLSL-to-
 SPIR-V/DXIL compile recipe every in-repo shader project imports, which also
-ships each project's bytecode beside its executable. A consumer that authors
+ships each project's bytecode beside its executable—with `ShaderRecipe.props`
+beside it, the DXC options of every stage, which `puck shaders generate`
+writes from `ShaderCompiler.StepsOf`, so the build and the runtime compiler
+run one recipe. A consumer that authors
 its own shaders needs the DirectX Shader Compiler (`dxc`, from the Vulkan
 SDK or Windows SDK) on `PATH`, or must pass `/p:DxcCommand="path\to\dxc"`;
 a consumer with no shader items of its own never invokes `dxc` at all.

@@ -22,6 +22,12 @@ optimization flags:
 -fspv-target-env=vulkan1.3 -T <stage>_6_6 -O3 -enable-16bit-types
 ```
 
+These options have one statement, `ShaderCompiler.StepsOf` in `Puck.Shaders`,
+which the runtime shader compiler runs (a `world.shaders.reload` source among
+its compiles). `puck shaders generate` writes them into
+`build/ShaderRecipe.props`, the properties the build's DXC invocations read,
+and `ShaderBuildRecipeLawTests` holds each build invocation to them.
+
 These versions match the engine's supported GPU capability floor. Do not lower
 them to work around a build issue; doing so would split the shader and device
 contracts. Consult the
