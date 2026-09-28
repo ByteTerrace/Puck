@@ -527,7 +527,7 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
             17763
         )) {
             ((ID3D12GraphicsCommandList4*)state.CommandList)->BeginRenderPass(
-                Flags: D3D12_RENDER_PASS_FLAGS.D3D12_RENDER_PASS_FLAG_NONE,
+                Flags: target.Pass.Flags,
                 NumRenderTargets: ((uint)colorCount),
                 pDepthStencil: ((description.Depth is null)
                     ? null
