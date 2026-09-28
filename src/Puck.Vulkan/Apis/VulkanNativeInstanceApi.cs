@@ -132,6 +132,35 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
         return VulkanApiVersion13;
     }
 
+    /// <summary>Fills a create chain and links it for <c>vkCreateInstance</c>'s <c>pNext</c> when validation is on: the
+    /// validation features, enabling synchronization validation, then a messenger create-info, so the layer's messages
+    /// raised during <c>vkCreateInstance</c> and <c>vkDestroyInstance</c>, which the standalone messenger cannot see,
+    /// also reach the console. With validation off it links nothing.</summary>
+    /// <param name="chain">The chain to fill, at an address that stays valid until the create call returns.</param>
+    /// <param name="enableValidation">Whether the validation layer is enabled.</param>
+    /// <returns>The chain's head, the validation features; zero when <paramref name="enableValidation"/> is
+    /// <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="chain"/> is <see langword="null"/>.</exception>
+    public static nint LinkCreateChain(VulkanInstanceCreateChain* chain, bool enableValidation) {
+        if (null == chain) {
+            throw new ArgumentNullException(paramName: nameof(chain));
+        }
+
+        if (!enableValidation) {
+            return 0;
+        }
+
+        chain->EnabledFeature = VulkanInstanceCreateChain.SynchronizationValidation;
+        chain->Messenger = BuildMessengerCreateInfo();
+        chain->ValidationFeatures = new VkValidationFeaturesExt {
+            EnabledValidationFeatureCount = 1,
+            EnabledValidationFeatures = ((nint)(&chain->EnabledFeature)),
+            Next = ((nint)(&chain->Messenger)),
+            StructureType = VulkanInstanceCreateChain.ValidationFeaturesStructureType,
+        };
+
+        return ((nint)(&chain->ValidationFeatures));
+    }
     /// <inheritdoc/>
     public nint CreateDebugMessenger(VulkanInstanceCommands instance) {
         if (instance is null) {
@@ -181,21 +210,18 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             StructureType = VkStructureTypeApplicationInfo,
         };
 
-        // Chain a messenger create-info into pNext when validation is on, so validation messages raised DURING
-        // vkCreateInstance / vkDestroyInstance — which the standalone messenger (created only after the instance
-        // exists, and destroyed before it) cannot see — also reach the callback. VK_EXT_debug_utils is enabled
-        // alongside validation, so the chained struct is valid exactly when EnableValidation is set. The local
-        // stays in scope through the synchronous create call below, so its address is valid for the chain.
-        var messengerInfo = BuildMessengerCreateInfo();
+        // The local stays in scope through the synchronous create call below, so its address is valid for the chain.
+        VulkanInstanceCreateChain chain = default;
         var createInfo = new VkInstanceCreateInfo {
             ApplicationInfo = m_allocator.Alloc(size: Marshal.SizeOf<VkApplicationInfo>()),
             EnabledExtensionCount = checked((uint)request.ExtensionNames.Count),
             EnabledExtensionNames = extensionNames.Pointer,
             EnabledLayerCount = checked((uint)request.LayerNames.Count),
             EnabledLayerNames = layerNames.Pointer,
-            Next = (request.EnableValidation
-            ? (nint)(&messengerInfo)
-            : 0),
+            Next = LinkCreateChain(
+                chain: &chain,
+                enableValidation: request.EnableValidation
+            ),
             StructureType = VkStructureTypeInstanceCreateInfo,
         };
 
@@ -262,7 +288,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
         );
     }
     /// <inheritdoc/>
-    public bool HasInstanceExtension(string extensionName) {
+    public bool HasInstanceExtension(string extensionName, string? layerName) {
         ArgumentException.ThrowIfNullOrEmpty(argument: extensionName);
 
         var enumerate = GetEnumerateInstanceExtensionProperties();
@@ -271,13 +297,15 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             return false;
         }
 
+        using var layer = ((layerName is null)
+            ? null
+            : Utf8StringScope.Create(value: layerName));
+        var layerPointer = ((byte*)(layer?.Pointer ?? 0));
         var count = 0U;
 
-        // pLayerName == null enumerates the loader's core + implicit-layer instance extensions (which is where the
-        // debug-utils extension is advertised), independent of any explicit validation layer.
         if (
             (VkResult.Success != enumerate(
-            null,
+            layerPointer,
             &count,
             null
         )) ||
@@ -292,7 +320,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             // A second enumeration can legitimately return Incomplete if the list grew between calls; the entries
             // that were written are still valid.
             var result = enumerate(
-                null,
+                layerPointer,
                 &count,
                 propertiesPointer
             );

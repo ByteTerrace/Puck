@@ -25,6 +25,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
     private readonly IVulkanCommandResourcesFactory m_commandResourcesFactory;
     private readonly IVulkanDeviceContext m_deviceContext;
     private readonly VulkanQueueSubmitter m_queueSubmitter;
+    private readonly VulkanGpuRecorder m_recorder;
 
     private VulkanCommandResources? m_commandResources;
     private VulkanLogicalDevice? m_device;
@@ -59,6 +60,10 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         m_commandResourcesFactory = commandResourcesFactory;
         m_deviceContext = deviceContext;
         m_queueSubmitter = queueSubmitter;
+        m_recorder = new VulkanGpuRecorder(
+            deviceContext: deviceContext,
+            recordingApi: commandBufferRecordingApi
+        );
     }
 
     private void DisposeResources() {
@@ -121,29 +126,33 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         m_height = height;
         m_width = width;
     }
-    // The source-state tuple must match the descriptor/producer contract; a mismatched old layout is undefined
-    // behavior on Vulkan and a mismatched resource state is undefined behavior on Direct3D 12.
-    private void RecordReadback(nint commandBufferHandle, nint sourceImageHandle, GpuImageLayout sourceLayout) {
-        var device = m_device!;
 
-        var (vulkanSourceLayout, sourceAccessMask, sourceStageMask) = sourceLayout switch {
-            // The producer-side External handoff is still VkImageLayout.GENERAL; unlike a working General storage
-            // image, however, Record left it scoped for the completed producer write's read-only handoff.
-            GpuImageLayout.External => (
-                VulkanImageLayout.General,
-                VulkanAccessFlags.ShaderRead,
-                VulkanPipelineStageFlags.ComputeShader
-            ),
-            GpuImageLayout.General => (
-                VulkanImageLayout.General,
-                VulkanAccessFlags.ShaderRead | VulkanAccessFlags.ShaderWrite,
-                VulkanPipelineStageFlags.ComputeShader
-            ),
-            GpuImageLayout.ShaderReadOnly => (
-                VulkanImageLayout.ShaderReadOnlyOptimal,
-                VulkanAccessFlags.ShaderRead,
-                VulkanPipelineStageFlags.FragmentShader
-            ),
+    /// <summary>Records one readback into a command buffer: the source image moves to the transfer-source layout, is
+    /// copied into the readback buffer, and returns to its layout, and a barrier from the copy's write to
+    /// <see cref="GpuStage.Host"/> and <see cref="GpuAccess.HostRead"/> makes the copied bytes visible to the host
+    /// that reads the buffer once the submission completes, since a completed submission alone makes no device write
+    /// visible to the host. The barriers go through <paramref name="recorder"/>; the copy, which the neutral recorder
+    /// does not carry, through <paramref name="recordingApi"/>.</summary>
+    /// <param name="recorder">The recorder the command buffer's barriers are recorded through.</param>
+    /// <param name="recordingApi">The API the image-to-buffer copy is recorded through.</param>
+    /// <param name="device">The command table of the device the command buffer belongs to.</param>
+    /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle to record into.</param>
+    /// <param name="sourceImageHandle">The native <c>VkImage</c> handle to read.</param>
+    /// <param name="bufferHandle">The native <c>VkBuffer</c> handle of the host-visible readback buffer.</param>
+    /// <param name="width">The width, in pixels, of the source image.</param>
+    /// <param name="height">The height, in pixels, of the source image.</param>
+    /// <param name="sourceLayout">The image's current layout, whose accesses the readback orders after and restores;
+    /// it must match what the image's producer left, since a mismatched old layout is undefined behavior.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="sourceLayout"/> is not
+    /// <see cref="GpuImageLayout.External"/>, <see cref="GpuImageLayout.General"/> or
+    /// <see cref="GpuImageLayout.ShaderReadOnly"/>.</exception>
+    public static void Record(IGpuRecorder recorder, IVulkanCommandBufferRecordingApi recordingApi, VulkanDeviceCommands device, nint commandBufferHandle, nint sourceImageHandle, nint bufferHandle, uint width, uint height, GpuImageLayout sourceLayout) {
+        var (sourceAccessMask, sourceStageMask) = sourceLayout switch {
+            // The producer-side External handoff is VkImageLayout.GENERAL too; unlike a working General storage
+            // image, however, its producer left it scoped for the completed write's read-only handoff.
+            GpuImageLayout.External => (GpuAccess.ShaderRead, GpuStage.ComputeShader),
+            GpuImageLayout.General => (GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader),
+            GpuImageLayout.ShaderReadOnly => (GpuAccess.ShaderRead, GpuStage.FragmentShader),
             _ => throw new ArgumentOutOfRangeException(
             paramName: nameof(sourceLayout),
             actualValue: sourceLayout,
@@ -151,53 +160,46 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         ),
         };
 
-        m_commandBufferRecordingApi.BeginCommandBuffer(
+        recorder.BeginCommandBuffer(commandBufferHandle: commandBufferHandle);
+        recorder.TransitionImageLayout(
             commandBufferHandle: commandBufferHandle,
-            device: device.Commands
-        ).ThrowIfFailed(operation: "vkBeginCommandBuffer");
-        m_commandBufferRecordingApi.TransitionImageLayout(
-            aspectMask: VulkanGpuFormats.ColorAspect,
-            baseMipLevel: 0,
-            commandBufferHandle: commandBufferHandle,
-            destinationAccessMask: VulkanAccessFlags.TransferRead,
-            destinationStageMask: VulkanPipelineStageFlags.Transfer,
-            device: device.Commands,
+            destinationAccessMask: GpuAccess.TransferRead,
+            destinationStageMask: GpuStage.Transfer,
             imageHandle: sourceImageHandle,
-            mipLevelCount: 1,
-            newLayout: VulkanImageLayout.TransferSourceOptimal,
-            oldLayout: vulkanSourceLayout,
+            newLayout: GpuImageLayout.TransferSource,
+            oldLayout: sourceLayout,
             sourceAccessMask: sourceAccessMask,
             sourceStageMask: sourceStageMask
         );
-        m_commandBufferRecordingApi.CopyImageToBuffer(
-            bufferHandle: m_readbackBuffer!.BufferHandle,
+        recordingApi.CopyImageToBuffer(
+            bufferHandle: bufferHandle,
             commandBufferHandle: commandBufferHandle,
-            device: device.Commands,
-            height: m_height,
+            device: device,
+            height: height,
             imageHandle: sourceImageHandle,
             imageLayout: VulkanImageLayout.TransferSourceOptimal,
-            width: m_width
+            width: width
         );
-        m_commandBufferRecordingApi.TransitionImageLayout(
-            aspectMask: VulkanGpuFormats.ColorAspect,
-            baseMipLevel: 0,
+        recorder.TransitionBuffer(
+            bufferHandle: bufferHandle,
+            commandBufferHandle: commandBufferHandle,
+            destinationAccessMask: GpuAccess.HostRead,
+            destinationStageMask: GpuStage.Host,
+            sourceAccessMask: GpuAccess.TransferWrite,
+            sourceStageMask: GpuStage.Transfer
+        );
+        recorder.TransitionImageLayout(
             commandBufferHandle: commandBufferHandle,
             destinationAccessMask: sourceAccessMask,
             destinationStageMask: sourceStageMask,
-            device: device.Commands,
             imageHandle: sourceImageHandle,
-            mipLevelCount: 1,
-            newLayout: vulkanSourceLayout,
-            oldLayout: VulkanImageLayout.TransferSourceOptimal,
-            sourceAccessMask: VulkanAccessFlags.TransferRead,
-            sourceStageMask: VulkanPipelineStageFlags.Transfer
+            newLayout: sourceLayout,
+            oldLayout: GpuImageLayout.TransferSource,
+            sourceAccessMask: GpuAccess.TransferRead,
+            sourceStageMask: GpuStage.Transfer
         );
-        m_commandBufferRecordingApi.EndCommandBuffer(
-            commandBufferHandle: commandBufferHandle,
-            device: device.Commands
-        ).ThrowIfFailed(operation: "vkEndCommandBuffer");
+        recorder.EndCommandBuffer(commandBufferHandle: commandBufferHandle);
     }
-
     /// <summary>Waits for device idle, then frees the readback buffer and command resources. Safe to call more than once.</summary>
     /// <exception cref="InvalidOperationException">The device was destroyed first, so these resources can no longer be
     /// destroyed and the owner's teardown order is wrong; the readback stays undisposed.</exception>
@@ -252,10 +254,16 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         var device = m_device!;
         var commandBufferHandle = m_commandResources!.CommandBufferHandles[0];
 
-        RecordReadback(
+        Record(
+            bufferHandle: m_readbackBuffer!.BufferHandle,
             commandBufferHandle: commandBufferHandle,
+            device: device.Commands,
+            height: m_height,
+            recorder: m_recorder,
+            recordingApi: m_commandBufferRecordingApi,
             sourceImageHandle: sourceImageHandle,
-            sourceLayout: sourceLayout
+            sourceLayout: sourceLayout,
+            width: m_width
         );
 
         Span<nint> commandBuffers = [commandBufferHandle];

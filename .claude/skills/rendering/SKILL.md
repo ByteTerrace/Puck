@@ -1722,7 +1722,12 @@ has no such option: its state and pixel verdicts compare the two backends. Under
 `puck canary --debug-layers` the runner fails every leg on any
 `[vulkan-debug] validation` or `[d3d12-debug]` line, and on
 `[d3d12] debug layer requested but not loaded` (`DebugLayerOutput` in
-`Puck.Cli`). The Vulkan loader's `general` notices about the machine's own
+`Puck.Cli`). On Vulkan the flag also turns on synchronization validation
+(`VulkanNativeInstanceApi.LinkCreateChain`, `VulkanInstanceCreateChainLawTests`),
+so a missing or short barrier fails the leg as a `SYNC-HAZARD-*` line; fix the
+barrier in the engine, never filter the message. A buffer the host reads after a
+submission gets a barrier to `GpuStage.Host` and `GpuAccess.HostRead` behind its
+last device write (`GpuKernelCounters.RecordCopy`, `VulkanSurfaceReadback.Record`). The Vulkan loader's `general` notices about the machine's own
 layers do not count, and the Direct3D 12 drain never prints a pipeline-library
 miss, which the cache counts instead. No manifest asserts validation lines
 itself; run `pipeline-churn` and `pipeline-fault` with `--debug-layers` for

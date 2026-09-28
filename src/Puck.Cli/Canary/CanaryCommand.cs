@@ -48,8 +48,9 @@ internal static partial class CanaryCommand {
               --capability <class>   filter by automatic, headless, windowed, offscreen, gpu, audio-output, or input:<name>
               --merge                run the merge gate: the automatic set plus every proof requiring gpu
               --backend <name>       run every backend-declaring proof on vulkan or directx only
-              --debug-layers         boot every offscreen leg with its backend's validation layer, and fail
-                                     a leg on any validation message or an unloaded layer
+              --debug-layers         boot every leg that names a backend, windowed or offscreen, with that
+                                     backend's validation layer, and fail a leg on any validation message
+                                     or an unloaded layer
               --plan                 print the selection's counts and ceiling without building or running
 
             The five selection forms are mutually exclusive. Every execution refuses an empty selection,
@@ -159,7 +160,8 @@ internal static partial class CanaryCommand {
     /// <summary>Runs the named proofs on a given World entry assembly, as <c>puck canary --world-artifact</c> does.</summary>
     /// <param name="ids">The proofs to run.</param>
     /// <param name="worldArtifact">The World entry assembly every leg launches.</param>
-    /// <param name="debugLayers">The backends whose offscreen legs boot their World with <c>--debug-layers</c>.</param>
+    /// <param name="debugLayers">The backends whose legs, windowed or offscreen, boot their World with
+    /// <c>--debug-layers</c>.</param>
     /// <returns>The canary exit code: 0 every proof held, 1 a proof failed, 2 a refusal, an unknown id, or an
     /// environment that could not exercise a proof.</returns>
     internal static int RunNamed(IReadOnlyList<string> ids, string worldArtifact, IReadOnlyCollection<string> debugLayers) =>

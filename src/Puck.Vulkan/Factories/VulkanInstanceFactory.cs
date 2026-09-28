@@ -7,7 +7,8 @@ namespace Puck.Vulkan.Factories;
 
 /// <summary>
 /// The default <see cref="IVulkanInstanceFactory"/>: it selects the surface extension for the display kind,
-/// enables the validation layer when requested, and creates an owning <see cref="VulkanInstance"/>.
+/// enables the validation layer, with synchronization validation, when requested, and creates an owning
+/// <see cref="VulkanInstance"/>.
 /// </summary>
 public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
     // VK_EXT_debug_utils serves TWO independent purposes: the validation messenger (surfaced only when validation is
@@ -28,12 +29,14 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
         SwapchainColorSpaceExtension,
     ];
     private static readonly string[] ValidationLayers = [
-        "VK_LAYER_KHRONOS_validation",
+        VulkanInstanceCreateChain.ValidationLayer,
     ];
 
     private readonly IVulkanInstanceApi m_instanceApi;
 
-    private IReadOnlyList<string> BuildExtensionNames(NativeDisplayKind displayKind) {
+    // With validation on, the layer's own VK_EXT_validation_features declares the VkValidationFeaturesEXT the create
+    // chain carries (VulkanNativeInstanceApi.LinkCreateChain), which enables synchronization validation.
+    private IReadOnlyList<string> BuildExtensionNames(NativeDisplayKind displayKind, bool enableValidation) {
         string[] surfaceExtensions = displayKind switch {
             NativeDisplayKind.Vi => [.. CommonExtensions, "VK_NN_vi_surface",],
             NativeDisplayKind.Wayland => [.. CommonExtensions, "VK_KHR_wayland_surface",],
@@ -44,7 +47,16 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
 
         return [
             .. surfaceExtensions,
-            .. OptionalExtensions.Where(predicate: extension => m_instanceApi.HasInstanceExtension(extensionName: extension)),
+            .. OptionalExtensions.Where(predicate: extension => m_instanceApi.HasInstanceExtension(
+                extensionName: extension,
+                layerName: null
+            )),
+            .. ((enableValidation && m_instanceApi.HasInstanceExtension(
+                extensionName: VulkanInstanceCreateChain.ValidationFeaturesExtension,
+                layerName: VulkanInstanceCreateChain.ValidationLayer
+            ))
+                ? [VulkanInstanceCreateChain.ValidationFeaturesExtension,]
+                : Array.Empty<string>()),
         ];
     }
 
@@ -66,7 +78,10 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
                 ApplicationName: applicationName,
                 DisplayKind: displayKind,
                 EnableValidation: enableValidation,
-                ExtensionNames: BuildExtensionNames(displayKind: displayKind),
+                ExtensionNames: BuildExtensionNames(
+                    displayKind: displayKind,
+                    enableValidation: enableValidation
+                ),
                 LayerNames: (enableValidation
                 ? ValidationLayers
                 : [])

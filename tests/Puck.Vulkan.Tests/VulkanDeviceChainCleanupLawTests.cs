@@ -372,7 +372,7 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             (queueFamilyIndex == PresentFamily);
         public bool HasDeviceExtension(VulkanInstanceCommands instance, nint physicalDeviceHandle, string extensionName) =>
             false;
-        public bool HasInstanceExtension(string extensionName) =>
+        public bool HasInstanceExtension(string extensionName, string? layerName) =>
             false;
         public bool IsExtensionFeatureSupported(VulkanInstanceCommands instance, nint physicalDeviceHandle, uint structureType) =>
             false;

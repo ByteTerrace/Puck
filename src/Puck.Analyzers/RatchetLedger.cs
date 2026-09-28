@@ -51,7 +51,7 @@ public sealed record RatchetReconciliation(int Ceiling, IReadOnlyList<RatchetFin
 /// ledgers of this one shape. Keys are repository-relative paths with forward slashes, matched ordinally.
 /// </summary>
 public sealed class RatchetLedger {
-    /// <summary>The ledger document format this reader understands and <see cref="Render"/> writes.</summary>
+    /// <summary>The ledger document format this reader understands and <see cref="Render()"/> writes.</summary>
     public const int Format = 1;
 
     private readonly Dictionary<string, int> m_recorded;
@@ -212,6 +212,13 @@ public sealed class RatchetLedger {
 
         return builder.Append(value: "    }\n}\n").ToString();
     }
+    /// <summary>Renders this ledger's own ceiling and recorded counts as the writer spells them: its one canonical
+    /// form, which a ledger's text must match byte for byte.</summary>
+    /// <returns>The ledger's JSON text, ending in a line feed.</returns>
+    public string Render() => Render(
+        ceiling: Ceiling,
+        recorded: m_recorded
+    );
     /// <summary>Parses the ledger text; a missing, malformed, or off-schema document yields <see langword="false"/> and a message naming the fault.</summary>
     /// <param name="json">The ledger's text, or <see langword="null"/> when it could not be read.</param>
     /// <param name="ledger">The parsed ledger, or <see langword="null"/> on failure.</param>
