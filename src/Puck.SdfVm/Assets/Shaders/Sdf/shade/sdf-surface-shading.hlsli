@@ -14,7 +14,8 @@ float3 applyCurvatureShading(float3 shaded, float curvature) {
     shaded *= (1.0 - (worldCurvatureCavity() * cavity));
     shaded += (worldCurvatureRim() * ridge);
 
-    float ink = (worldCurvatureInk() * smoothstep(low, worldCurvatureInkHigh(), abs(curvature)));
+    // The validated ink interval may be narrower than the ridge/cavity normalization floor.
+    float ink = (worldCurvatureInk() * smoothstep(worldCurvatureInkLow(), worldCurvatureInkHigh(), abs(curvature)));
 
     return lerp(shaded, worldCurvatureInkColor(), saturate(ink));
 }

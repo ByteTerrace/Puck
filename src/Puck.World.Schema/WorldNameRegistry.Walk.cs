@@ -20,7 +20,7 @@ public static partial class WorldNameRegistry {
         "TargetKey", "ComparandKey", "ComparandState", "FromState", "FilterRow", "SpillRow", "ValuesFrom",
         "PhaseOf", "ScaleRow", "CapacityRow", "RangeState", "HalfAngleState", "Set", "Left", "Right", "Codes",
         "With", "Over", "Register", "Score", "Mask", "ReadersFrom", "Id", "Names",
-        "Parent", "Placement", "Prototype",
+        "Parent", "Placement", "Prototype", "Clock",
     };
     private static readonly string[] NameShapedSuffixes = ["State", "Row", "Key", "Rule", "Table", "Pattern", "Zone", "Zones", "Topology", "Field", "Binding", "Expression", "PlacementId", "PrototypeId"];
     private static readonly Lazy<Walk> Walked = new(valueFactory: static () => Walk.Run(fields: Fields));
@@ -50,7 +50,7 @@ public static partial class WorldNameRegistry {
         _ = output.Append(value: "element; `[name]` is a `$type` arm; `{tokens}` is an expression's postfix\n");
         _ = output.Append(value: "spelling; `{row}` is a reaction scalar's row form. A path ending in `…` re-enters a shape listed above it.\n");
         _ = output.Append(value: "An aliased import (`imports[].as`) qualifies every `Declares` site as `<alias>$<name>` and rewrites every\n");
-        _ = output.Append(value: "other role's names of the same namespace to match; a placement and a prototype each have their own. Facet\n");
+        _ = output.Append(value: "other role's names of the same namespace to match; placements, prototypes and clocks each have their own. Facet\n");
         _ = output.Append(value: "is the export list (`exports.reads`/`actions`/`bindings`) that admits a host\n");
         _ = output.Append(value: "reference through the field to an imported module's name; see `src/Puck.World.Schema/README.md`.\n\n");
         _ = output.Append(value: "## Registered fields\n\n| Path | Kind | Role | Facet | Member |\n|---|---|---|---|---|\n");
@@ -131,7 +131,7 @@ public static partial class WorldNameRegistry {
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, IReadOnlyList<(string JsonName, Type DeclaringType, string Member, Type PropertyType)>> RowMembers = new();
 
     /// <summary>Finds the registration for a member, or the implicit one its type carries: a
-    /// <see cref="BindableScalar"/>, <see cref="BindableColor"/> or <c>IDocumentStateValue</c> member — a creation's
+    /// bindable presentation value or <c>IDocumentStateValue</c> member — a creation's
     /// spatial value or identifier a state cell may stand in for — is a state binding wherever it sits.</summary>
     /// <param name="declaringType">The type the member was found on.</param>
     /// <param name="member">The member's C# name.</param>
@@ -151,8 +151,7 @@ public static partial class WorldNameRegistry {
 
         // A value a state cell may stand in for binds a row by its token, whatever member holds it.
         if (
-            (leaf == typeof(BindableScalar)) ||
-            (leaf == typeof(BindableColor)) ||
+            WorldPresentationValues.IsBindable(leaf) ||
             typeof(Puck.Assets.Documents.IDocumentStateValue).IsAssignableFrom(c: leaf)
         ) {
             field = new WorldNameField(
@@ -189,8 +188,7 @@ public static partial class WorldNameRegistry {
             (leaf == typeof(CellName)) ||
             (leaf == typeof(ExpressionProgram)) ||
             (leaf == typeof(StateChannelRef)) ||
-            (leaf == typeof(BindableScalar)) ||
-            (leaf == typeof(BindableColor)) ||
+            WorldPresentationValues.IsBindable(leaf) ||
             (leaf == typeof(WorldLatticeScalar))
         ) {
             return true;
@@ -248,10 +246,7 @@ public static partial class WorldNameRegistry {
 
             var leaf = Unwrap(type: propertyType);
 
-            if (
-                (leaf == typeof(BindableScalar)) ||
-                (leaf == typeof(BindableColor))
-            ) {
+            if (WorldPresentationValues.IsBindable(leaf)) {
                 Sites.Add(item: new WorldNameSite(
                     Path: path,
                     Field: new WorldNameField(
@@ -315,6 +310,16 @@ public static partial class WorldNameRegistry {
         }
         private void VisitType(Type type, string path) {
             type = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
+
+            if (BindableValueShape.KeysType(type) is { } keysType) {
+                VisitType(keysType, path);
+                for (var index = 0; index < BindableValueShape.Components(type); index++) {
+                    var componentPath = $"{path}[{index}]";
+                    Record(componentPath, type, index switch { 0 => "X", 1 => "Y", _ => "Z" }, typeof(BindableScalar));
+                    VisitType(typeof(BindableScalar), componentPath);
+                }
+                return;
+            }
 
             // The IR flattens an instruction's payload onto the instruction object, so the walk enumerates the
             // payload union's own cases rather than resolving a JSON type info for a case it never serializes on

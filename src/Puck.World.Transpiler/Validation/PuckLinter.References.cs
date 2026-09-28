@@ -117,7 +117,7 @@ public static partial class PuckLinter {
             )
         );
 
-        var registered = new HashSet<(JsonObject Holder, string Member)>();
+        var registered = new HashSet<(JsonNode Holder, string Member)>();
 
         WorldModuleNamespace.Visit(
             node: document,
@@ -216,7 +216,7 @@ public static partial class PuckLinter {
         value = string.Empty;
         return false;
     }
-    private static void WalkForReferences(JsonNode? node, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, HashSet<(JsonObject Holder, string Member)> registered, bool resolveGlobalReferences) {
+    private static void WalkForReferences(JsonNode? node, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, HashSet<(JsonNode Holder, string Member)> registered, bool resolveGlobalReferences) {
         switch (node) {
             case JsonObject obj:
                 CheckObjectReferences(
@@ -305,7 +305,7 @@ public static partial class PuckLinter {
             }
         }
     }
-    private static void CheckObjectReferences(JsonObject obj, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, HashSet<(JsonObject Holder, string Member)> registered, bool resolveGlobalReferences) {
+    private static void CheckObjectReferences(JsonObject obj, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, HashSet<(JsonNode Holder, string Member)> registered, bool resolveGlobalReferences) {
         // A placement row (identified by its own required prototypeId) — parent names a sibling placement id.
         if (
             resolveGlobalReferences &&
@@ -414,7 +414,7 @@ public static partial class PuckLinter {
         }
     }
     // A field the registry walk already read is not read twice; what is left names a per-body slot.
-    private static void CheckStateField(JsonObject obj, string field, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, HashSet<(JsonObject Holder, string Member)> registered, bool resolveGlobalReferences) {
+    private static void CheckStateField(JsonObject obj, string field, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, HashSet<(JsonNode Holder, string Member)> registered, bool resolveGlobalReferences) {
         if (
             !resolveGlobalReferences ||
             registered.Contains(item: (obj, field)) ||
@@ -440,7 +440,7 @@ public static partial class PuckLinter {
     // One registered site, read by its role. Only a state row's namespace is resolved here: a zone is a state row, a
     // set of positions is a board row or a declared set, and every other kind is refused by the engine's own
     // validation with a better message than a lint could give.
-    private static void CheckRegisteredSite(JsonObject holder, string member, JsonNode value, WorldNameField field, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, bool resolveGlobalReferences) {
+    private static void CheckRegisteredSite(JsonNode holder, string member, JsonNode value, WorldNameField field, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, bool resolveGlobalReferences) {
         // An interaction side names a property's row, or a region's placement (below), so its kind is Any.
         if (
             (field.Role == WorldNameRole.Declares) ||
@@ -461,6 +461,7 @@ public static partial class PuckLinter {
         // A region interaction's right side is the placement carrying the region, never a row.
         if (
             (field.Owner == typeof(WorldInteraction)) &&
+            (holder is JsonObject interaction) &&
             string.Equals(
                 a: field.Member,
                 b: nameof(WorldInteraction.Right),
@@ -468,7 +469,7 @@ public static partial class PuckLinter {
             ) &&
             TryGetString(
                 field: "coOccurrence",
-                obj: holder,
+                obj: interaction,
                 value: out var coOccurrence
             ) &&
             string.Equals(
@@ -481,7 +482,7 @@ public static partial class PuckLinter {
                 resolveGlobalReferences &&
                 TryGetString(
                     field: member,
-                    obj: holder,
+                    obj: interaction,
                     value: out var placementId
                 ) &&
                 !catalog.Placements.Contains(item: placementId)

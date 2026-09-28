@@ -290,20 +290,18 @@
                       "direction": {
                         "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload). Absent is the pinned sun direction.",
                         "default": null,
-                        "title": "DocumentVector3",
+                        "title": "BindableDirection",
                         "anyOf": [
                           {
                             "type": "array",
-                            "items": {
-                              "type": "number"
-                            },
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "items": {
+                              "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                            }
                           },
                           {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/1"
                           }
                         ]
                       },
@@ -311,26 +309,86 @@
                         "description": "The light\u0027s linear colour.",
                         "default": null,
                         "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "title": "BindableColor",
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/0/properties/color/anyOf/1"
+                                        }
+                                      ]
+                                    },
+                                    "ease": {
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ],
+                                      "default": "Linear",
+                                      "title": "WorldKeyEase"
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
                         ]
                       },
                       "weight": {
                         "description": "The diffuse weight. Absent is the pinned sun weight.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
                       },
                       "angularRadius": {
                         "description": "The light\u0027s angular radius in radians, in [0, atan 0.3]: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableAngle",
+                        "allOf": [
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                          }
+                        ]
                       },
                       "shadows": {
                         "description": "Whether this light drives the soft-shadow march (at most one light per world). Absent is false. An unshadowed directional is scaled by ambient occlusion instead.",
@@ -339,6 +397,13 @@
                           "null"
                         ],
                         "default": null
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -354,26 +419,53 @@
                         "description": "The ambient\u0027s linear colour.",
                         "default": null,
                         "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/0/properties/color/anyOf/1"
+                          }
                         ]
                       },
                       "base": {
                         "description": "The floor. Absent is the pinned ambient floor.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
                       },
                       "gradient": {
                         "description": "The hemisphere gradient. Absent is the pinned gradient.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -389,26 +481,53 @@
                         "description": "The rim\u0027s linear colour.",
                         "default": null,
                         "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/0/properties/color/anyOf/1"
+                          }
                         ]
                       },
                       "weight": {
                         "description": "The strength. Absent is zero, which adds nothing.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
                       },
                       "power": {
                         "description": "The falloff exponent \u2014 larger confines the highlight nearer the silhouette. Absent is the engine default.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -423,30 +542,87 @@
                       "position": {
                         "description": "The world-space position for a static (unanchored) light. Absent is the world origin. An offset in the anchor frame when an anchor is authored.",
                         "default": null,
-                        "title": "DocumentVector3",
+                        "title": "BindableVector3",
                         "anyOf": [
                           {
                             "type": "array",
-                            "items": {
-                              "type": "number"
-                            },
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "items": {
+                              "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                            }
                           },
                           {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "title": "BindableVector3",
+                                      "anyOf": [
+                                        {
+                                          "type": "array",
+                                          "minItems": 3,
+                                          "maxItems": 3,
+                                          "items": {
+                                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                                          }
+                                        },
+                                        {
+                                          "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/3/properties/position/anyOf/1"
+                                        }
+                                      ]
+                                    },
+                                    "ease": {
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ],
+                                      "default": "Linear",
+                                      "title": "WorldKeyEase"
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
                           }
                         ]
                       },
                       "radius": {
                         "description": "The falloff radius. Absent is the engine default.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
                       },
                       "anchor": {
                         "description": "An entity, entity part, or placement frame. A missing live target disables the light.",
@@ -599,18 +775,37 @@
                         "description": "The light\u0027s linear colour.",
                         "default": null,
                         "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/0/properties/color/anyOf/1"
+                          }
                         ]
                       },
                       "weight": {
                         "description": "The strength. Absent is the engine default.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -624,29 +819,35 @@
                       },
                       "position": {
                         "default": null,
-                        "title": "DocumentVector3",
+                        "title": "BindableVector3",
                         "anyOf": [
                           {
                             "type": "array",
-                            "items": {
-                              "type": "number"
-                            },
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "items": {
+                              "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                            }
                           },
                           {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/3/properties/position/anyOf/1"
                           }
                         ]
                       },
                       "radius": {
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
                       },
                       "anchor": {
                         "type": [
@@ -788,11 +989,26 @@
                         "title": "WorldAnchor"
                       },
                       "weight": {
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -812,57 +1028,152 @@
               "properties": {
                 "cavity": {
                   "description": "How far a concave crease darkens, in [0, 1] at a cavity whose curvature reaches InkLow. Zero darkens none.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                    }
+                  ]
                 },
                 "rim": {
                   "description": "How far a convex ridge brightens, in [0, 1] at a ridge whose curvature reaches InkLow. Zero brightens none.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                    }
+                  ]
                 },
                 "ink": {
                   "description": "The ink outline\u0027s strength where the curvature magnitude spikes. Zero draws none.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                    }
+                  ]
                 },
                 "inkLow": {
                   "description": "The curvature magnitude (1 / fillet radius, in world units) at which the outline starts and the ridge and cavity terms saturate.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                    }
+                  ]
                 },
                 "inkHigh": {
                   "description": "The curvature magnitude at which the outline saturates.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                    }
+                  ]
                 },
                 "inkColor": {
                   "description": "BindableColor\u0027s grammar: the outline colour.",
                   "default": null,
                   "title": "BindableColor",
-                  "type": [
-                    "string",
-                    "null"
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/0/properties/color/anyOf/1"
+                    }
                   ]
                 }
               },
               "additionalProperties": false,
               "default": null,
               "title": "WorldRenderCurvature"
+            },
+            "keys": {
+              "description": "Named partial-record keys for this lighting section.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "clock": {
+                  "description": "The named presentation clock.",
+                  "type": "string"
+                },
+                "keys": {
+                  "description": "Ordered partial records; omitted leaves carry from their last stated key around the wrap.",
+                  "type": "array",
+                  "items": {
+                    "description": "One partial presentation record. The preparation pass checks every field against the section\u0027s actual model shape and admits only bindable leaves; extension data is retained here for source-preserving saves.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "at": {
+                        "description": "The position in the clock\u0027s authored span.",
+                        "type": "number"
+                      },
+                      "ease": {
+                        "description": "The easing toward the next key.",
+                        "enum": [
+                          "Linear",
+                          "Smooth",
+                          "Step"
+                        ],
+                        "default": "Linear",
+                        "title": "WorldKeyEase"
+                      }
+                    },
+                    "required": [
+                      "at"
+                    ],
+                    "additionalProperties": false,
+                    "title": "WorldSectionKey"
+                  }
+                }
+              },
+              "required": [
+                "clock",
+                "keys"
+              ],
+              "additionalProperties": false,
+              "title": "WorldSectionKeys"
             }
           },
           "additionalProperties": false,
@@ -913,16 +1224,35 @@
                           "properties": {
                             "elevation": {
                               "description": "The direction\u0027s Y component this stop sits at, in [\u22121, 1].",
-                              "type": [
-                                "number",
-                                "null"
-                              ],
-                              "default": null
+                              "default": null,
+                              "title": "BindableScalar",
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                                }
+                              ]
                             },
                             "color": {
                               "description": "BindableColor\u0027s grammar: the colour at this elevation. Absent (in a cycle key) keeps the previous key\u0027s colour.",
                               "default": null,
                               "title": "BindableColor",
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/0/properties/color/anyOf/1"
+                                }
+                              ]
+                            },
+                            "name": {
+                              "description": "The authored stop identity used by section keys.",
                               "type": [
                                 "string",
                                 "null"
@@ -933,6 +1263,13 @@
                           "title": "WorldRenderSkyStop"
                         },
                         "default": null
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -946,11 +1283,26 @@
                       },
                       "density": {
                         "description": "The density per world unit. Absent is the pinned density.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -972,19 +1324,36 @@
                       },
                       "radius": {
                         "description": "The disc\u0027s angular half-radius in radians, in (0, \u03C0/2]. Absent is the engine default.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableAngle",
+                        "allOf": [
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                          }
+                        ]
                       },
                       "intensity": {
                         "description": "The peak additive brightness. Absent is zero, which draws nothing.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -1006,11 +1375,19 @@
                       },
                       "brightness": {
                         "description": "The peak per-star brightness. Absent is zero, which draws nothing.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
                       },
                       "seed": {
                         "description": "The hash seed folded into every cell.",
@@ -1029,32 +1406,63 @@
                         "properties": {
                           "share": {
                             "description": "The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.",
-                            "type": [
-                              "number",
-                              "null"
-                            ],
-                            "default": null
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                              }
+                            ]
                           },
                           "depth": {
                             "description": "How far a twinkling star dips below its steady brightness, in [0, 1].",
-                            "type": [
-                              "number",
-                              "null"
-                            ],
-                            "default": null
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                              }
+                            ]
                           },
                           "rate": {
                             "description": "The fundamental scintillation rate in hertz.",
-                            "type": [
-                              "number",
-                              "null"
-                            ],
-                            "default": null
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                              }
+                            ]
                           }
                         },
                         "additionalProperties": false,
                         "default": null,
                         "title": "WorldRenderSkyTwinkle"
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -1068,27 +1476,51 @@
                       },
                       "coverage": {
                         "description": "The fraction of the sky the layer covers, in [0, 1]. Absent is zero.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
                       },
                       "softness": {
                         "description": "The width of a cloud\u0027s edge, in (0, 1]. Absent is the engine default.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
                       },
                       "scale": {
                         "description": "The size of one cloud cell in layer units (the layer sits at unit height). Absent is the engine default.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
                       },
                       "seed": {
                         "description": "The hash seed folded into the lattice.",
@@ -1102,65 +1534,82 @@
                         "description": "BindableColor\u0027s grammar: the cloud colour. Absent is white.",
                         "default": null,
                         "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/0/properties/color/anyOf/1"
+                          }
                         ]
                       },
                       "drift": {
                         "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Absent holds still.",
                         "default": null,
-                        "title": "DocumentVector2",
+                        "title": "BindableVector2",
                         "anyOf": [
                           {
                             "type": "array",
-                            "items": {
-                              "type": "number"
-                            },
                             "minItems": 2,
-                            "maxItems": 2
+                            "maxItems": 2,
+                            "items": {
+                              "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                            }
                           },
                           {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/size/anyOf/1"
                           }
                         ]
                       },
                       "spin": {
                         "description": "The layer\u0027s rotation about the zenith in radians per second; positive is counter-clockwise seen from below. Absent is none.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                          }
+                        ]
                       },
                       "curl": {
                         "description": "The Coriolis twist in radians at 45\u00B0 elevation, falling off toward the horizon and the zenith. Positive winds counter-clockwise. Absent is none.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableAngle",
+                        "allOf": [
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                          }
+                        ]
                       },
                       "shear": {
                         "description": "The wind of the shaping field relative to the cloud field, in layer units per second. Absent holds the shapes.",
                         "default": null,
-                        "title": "DocumentVector2",
+                        "title": "BindableVector2",
                         "anyOf": [
                           {
                             "type": "array",
-                            "items": {
-                              "type": "number"
-                            },
                             "minItems": 2,
-                            "maxItems": 2
+                            "maxItems": 2,
+                            "items": {
+                              "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                            }
                           },
                           {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/size/anyOf/1"
                           }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
+                        "type": [
+                          "string",
+                          "null"
                         ]
                       }
                     },
@@ -1171,89 +1620,33 @@
                 "title": "WorldRenderSkyLayer"
               },
               "default": null
+            },
+            "keys": {
+              "description": "Named partial-record keys for this sky section.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "clock": {
+                  "description": "The named presentation clock.",
+                  "type": "string"
+                },
+                "keys": {
+                  "$ref": "#/properties/render/properties/lighting/properties/keys/properties/keys"
+                }
+              },
+              "required": [
+                "clock",
+                "keys"
+              ],
+              "additionalProperties": false,
+              "title": "WorldSectionKeys"
             }
           },
           "additionalProperties": false,
           "default": null,
           "title": "WorldRenderSky"
-        },
-        "cycle": {
-          "description": "Lighting and sky keyed over a state row\u0027s value (a day/night cycle when that row advances). Optional; absent leaves Lighting/Sky static.",
-          "type": [
-            "object",
-            "null"
-          ],
-          "properties": {
-            "state": {
-              "description": "The state row read (its slot cell; Fixed or Int).",
-              "type": "string"
-            },
-            "keys": {
-              "description": "At least two keys, strictly ascending At in [0, 1).",
-              "type": "array",
-              "items": {
-                "description": "One point on a WorldRenderCycle.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "at": {
-                    "description": "The row-value fraction this key sits at, in [0, 1).",
-                    "type": "number"
-                  },
-                  "lighting": {
-                    "description": "The lighting fields this key moves, or null.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "lights": {
-                        "$ref": "#/properties/render/properties/lighting/properties/lights",
-                        "default": null
-                      },
-                      "curvature": {
-                        "$ref": "#/properties/render/properties/lighting/properties/curvature",
-                        "default": null
-                      }
-                    },
-                    "additionalProperties": false,
-                    "default": null,
-                    "title": "WorldRenderLighting"
-                  },
-                  "sky": {
-                    "description": "The sky fields this key moves, or null.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "layers": {
-                        "$ref": "#/properties/render/properties/sky/properties/layers",
-                        "default": null
-                      }
-                    },
-                    "additionalProperties": false,
-                    "default": null,
-                    "title": "WorldRenderSky"
-                  }
-                },
-                "required": [
-                  "at"
-                ],
-                "additionalProperties": false,
-                "title": "WorldRenderCycleKey"
-              }
-            }
-          },
-          "required": [
-            "state",
-            "keys"
-          ],
-          "additionalProperties": false,
-          "default": null,
-          "title": "WorldRenderCycle"
         },
         "environment": {
           "description": "The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.",
@@ -1277,39 +1670,197 @@
                 "properties": {
                   "direction": {
                     "description": "From a reflecting surface toward the softbox, any nonzero length (normalized before upload).",
-                    "title": "DocumentVector3",
+                    "title": "BindableDirection",
                     "anyOf": [
                       {
                         "type": "array",
-                        "items": {
-                          "type": "number"
-                        },
                         "minItems": 3,
-                        "maxItems": 3
+                        "maxItems": 3,
+                        "items": {
+                          "description": "A scalar authored as a finite number literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E][.$target] binding naming a Fixed or Int cell whose live value drives it \u2014 the numeric twin of BindableColor, sharing its binding grammar (StateBinding) and its one read path, the client\u0027s state mirror. Parses as a JSON number (literal) or string (binding).",
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "clock": {
+                                  "type": "string"
+                                },
+                                "keys": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "at": {
+                                        "type": "number"
+                                      },
+                                      "value": {
+                                        "title": "BindableScalar",
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                                          }
+                                        ]
+                                      },
+                                      "ease": {
+                                        "enum": [
+                                          "Linear",
+                                          "Smooth",
+                                          "Step"
+                                        ],
+                                        "default": "Linear",
+                                        "title": "WorldKeyEase"
+                                      }
+                                    },
+                                    "required": [
+                                      "at",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "clock",
+                                "keys"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
                       },
                       {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                        "type": "object",
+                        "properties": {
+                          "clock": {
+                            "type": "string"
+                          },
+                          "keys": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "type": "number"
+                                },
+                                "value": {
+                                  "title": "BindableDirection",
+                                  "anyOf": [
+                                    {
+                                      "type": "array",
+                                      "minItems": 3,
+                                      "maxItems": 3,
+                                      "items": {
+                                        "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                                      }
+                                    },
+                                    {
+                                      "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/1"
+                                    }
+                                  ]
+                                },
+                                "ease": {
+                                  "enum": [
+                                    "Linear",
+                                    "Smooth",
+                                    "Step"
+                                  ],
+                                  "default": "Linear",
+                                  "title": "WorldKeyEase"
+                                }
+                              },
+                              "required": [
+                                "at",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "clock",
+                          "keys"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
                   "size": {
                     "description": "The angular half-extent (width, height) the falloff widens by, both strictly positive.",
-                    "title": "DocumentVector2",
+                    "title": "BindableVector2",
                     "anyOf": [
                       {
                         "type": "array",
-                        "items": {
-                          "type": "number"
-                        },
                         "minItems": 2,
-                        "maxItems": 2
+                        "maxItems": 2,
+                        "items": {
+                          "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                        }
                       },
                       {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                        "type": "object",
+                        "properties": {
+                          "clock": {
+                            "type": "string"
+                          },
+                          "keys": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "type": "number"
+                                },
+                                "value": {
+                                  "title": "BindableVector2",
+                                  "anyOf": [
+                                    {
+                                      "type": "array",
+                                      "minItems": 2,
+                                      "maxItems": 2,
+                                      "items": {
+                                        "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                                      }
+                                    },
+                                    {
+                                      "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/size/anyOf/1"
+                                    }
+                                  ]
+                                },
+                                "ease": {
+                                  "enum": [
+                                    "Linear",
+                                    "Smooth",
+                                    "Step"
+                                  ],
+                                  "default": "Linear",
+                                  "title": "WorldKeyEase"
+                                }
+                              },
+                              "required": [
+                                "at",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "clock",
+                          "keys"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -1317,26 +1868,53 @@
                     "description": "BindableColor\u0027s grammar: the softbox\u0027s linear colour. Absent is white.",
                     "default": null,
                     "title": "BindableColor",
-                    "type": [
-                      "string",
-                      "null"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/0/properties/color/anyOf/1"
+                      }
                     ]
                   },
                   "weight": {
                     "description": "The strength. Absent is 1.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
+                    "default": null,
+                    "title": "BindableScalar",
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                      }
+                    ]
                   },
                   "blur": {
                     "description": "Additional falloff softening, in the same units as Size. Absent is 0.",
+                    "default": null,
+                    "title": "BindableScalar",
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                      }
+                    ]
+                  },
+                  "name": {
+                    "description": "The authored softbox identity used by section keys.",
                     "type": [
-                      "number",
+                      "string",
                       "null"
-                    ],
-                    "default": null
+                    ]
                   }
                 },
                 "required": [
@@ -1359,24 +1937,54 @@
                   "description": "The ground-ward (direction.y = \u22121) colour. Absent is black.",
                   "default": null,
                   "title": "BindableColor",
-                  "type": [
-                    "string",
-                    "null"
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/0/properties/color/anyOf/1"
+                    }
                   ]
                 },
                 "high": {
                   "description": "The sky-ward (direction.y = 1) colour. Absent is black.",
                   "default": null,
                   "title": "BindableColor",
-                  "type": [
-                    "string",
-                    "null"
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/0/properties/color/anyOf/1"
+                    }
                   ]
                 }
               },
               "additionalProperties": false,
               "default": null,
               "title": "WorldRenderHorizon"
+            },
+            "keys": {
+              "description": "Named partial-record keys for this reflection environment.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "clock": {
+                  "description": "The named presentation clock.",
+                  "type": "string"
+                },
+                "keys": {
+                  "$ref": "#/properties/render/properties/lighting/properties/keys/properties/keys"
+                }
+              },
+              "required": [
+                "clock",
+                "keys"
+              ],
+              "additionalProperties": false,
+              "title": "WorldSectionKeys"
             }
           },
           "additionalProperties": false,
@@ -1400,6 +2008,28 @@
             "null"
           ],
           "default": null
+        },
+        "keys": {
+          "description": "Named partial-record keys, compiled to ordinary typed values when the definition is prepared.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "clock": {
+              "description": "The named presentation clock.",
+              "type": "string"
+            },
+            "keys": {
+              "$ref": "#/properties/render/properties/lighting/properties/keys/properties/keys"
+            }
+          },
+          "required": [
+            "clock",
+            "keys"
+          ],
+          "additionalProperties": false,
+          "title": "WorldSectionKeys"
         }
       },
       "additionalProperties": false,
@@ -2410,19 +3040,21 @@
                           "type": "number"
                         },
                         "yaw": {
-                          "description": "The orbit heading in radians, as a literal or numeric state binding.",
-                          "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "description": "The orbit heading in radians, as a literal, numeric state binding or short-arc clock keys.",
+                          "title": "BindableAngle",
+                          "allOf": [
+                            {
+                              "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                            }
                           ]
                         },
                         "pitch": {
-                          "description": "The orbit tilt in radians, as a literal or numeric state binding.",
-                          "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "description": "The orbit tilt in radians, as a literal, numeric state binding or short-arc clock keys.",
+                          "title": "BindableAngle",
+                          "allOf": [
+                            {
+                              "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                            }
                           ]
                         },
                         "pivotOffset": {
@@ -2474,9 +3106,16 @@
                         "fraction": {
                           "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding.",
                           "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                            }
                           ]
                         },
                         "opcode": {
@@ -2555,10 +3194,11 @@
                         },
                         "fieldOfViewRadians": {
                           "description": "The field of view.",
-                          "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "title": "BindableAngle",
+                          "allOf": [
+                            {
+                              "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                            }
                           ]
                         },
                         "opcode": {
@@ -2592,9 +3232,16 @@
                         "weight": {
                           "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding.",
                           "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                            }
                           ]
                         },
                         "opcode": {
@@ -2622,9 +3269,16 @@
                         "key": {
                           "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases.",
                           "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                            }
                           ]
                         },
                         "cases": {
@@ -2720,9 +3374,16 @@
                   "weight": {
                     "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding.",
                     "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                      }
                     ]
                   },
                   "opcode": {
@@ -2805,10 +3466,11 @@
                 "properties": {
                   "fieldOfViewRadians": {
                     "description": "The field of view.",
-                    "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "title": "BindableAngle",
+                    "allOf": [
+                      {
+                        "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                      }
                     ]
                   },
                   "opcode": {
@@ -2941,19 +3603,21 @@
                     "type": "number"
                   },
                   "yaw": {
-                    "description": "The orbit heading in radians, as a literal or numeric state binding.",
-                    "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "description": "The orbit heading in radians, as a literal, numeric state binding or short-arc clock keys.",
+                    "title": "BindableAngle",
+                    "allOf": [
+                      {
+                        "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                      }
                     ]
                   },
                   "pitch": {
-                    "description": "The orbit tilt in radians, as a literal or numeric state binding.",
-                    "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "description": "The orbit tilt in radians, as a literal, numeric state binding or short-arc clock keys.",
+                    "title": "BindableAngle",
+                    "allOf": [
+                      {
+                        "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items"
+                      }
                     ]
                   },
                   "pivotOffset": {
@@ -3006,9 +3670,16 @@
                   "fraction": {
                     "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding.",
                     "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                      }
                     ]
                   },
                   "opcode": {
@@ -3036,9 +3707,16 @@
                   "key": {
                     "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases.",
                     "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                      }
                     ]
                   },
                   "cases": {
@@ -19685,9 +20363,16 @@
                   ],
                   "additionalProperties": {
                     "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/direction/anyOf/0/items/anyOf/2"
+                      }
                     ]
                   }
                 },

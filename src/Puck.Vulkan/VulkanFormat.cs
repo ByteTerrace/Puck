@@ -24,6 +24,8 @@ public static class VulkanFormat {
     public const uint R16G16B16A16Sfloat = 97;
     /// <summary>The <c>VK_FORMAT_R32G32B32A32_SFLOAT</c> value.</summary>
     public const uint R32G32B32A32Sfloat = 109;
+    /// <summary>The <c>VK_FORMAT_R32_SFLOAT</c> value.</summary>
+    public const uint R32Sfloat = 100;
     /// <summary>The <c>VK_FORMAT_R8G8B8A8_SRGB</c> value.</summary>
     public const uint R8G8B8A8Srgb = 43;
     /// <summary>The <c>VK_FORMAT_R8G8B8A8_UNORM</c> format.</summary>

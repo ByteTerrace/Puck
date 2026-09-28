@@ -1941,22 +1941,67 @@ star hash-dealt its own blackbody colour and apparent luminosity;
 and `clouds` (`coverage, softness, scale, seed, color, drift, spin, curl, shear`
 —a hashed, warped noise layer over everything above it, all on the tick clock),
 composited in that order whatever order they are authored in. Every field is
-optional individually. `world.lighting` echoes both sections. `render.cycle`
-keys both over a state row: `{ "state": "timeOfDay", "keys": [ { "at": 0.25,
-"lighting": {…}, "sky": {…} }, … ] }`—the row's live value (its fractional
-part, so an advancing row wraps once per unit) picks the two bracketing keys
-and every lighting/sky lane interpolates between them (directions along the
-arc; counts, kinds, seeds and flags held); a key states only the fields it
-moves, addresses a light by slot and a stop by index with the kinds the statics
-author, and the rest hold from the previous key. The clock is simulation
-state (an advancing `state` row—deterministic, replayed, settable with
-`world.row.set state`); the interpolation is presentation. A key may not move
-a cloud layer's `drift`, `shear` or `spin`: each is a rate integrated from the
-tick, and a state row's value can jump between two ticks.
+optional individually. `world.lighting` reports the authored fields, the clock
+and key count of keyed values, and the world's compiled rate storage.
+
+Continuous presentation values accept literals, state bindings, or clock keys:
+
+```puck
+weight: keys(clock: day) [
+  { at: 0h, value: 0.2, ease: smooth }
+  { at: 12h, value: 0.8 }
+]
+```
+
+The clock's span sets the units of `at`. Keys are strictly ordered within one
+span; the final key wraps to the first. `linear`, `smooth`, and `step` select
+the outgoing segment's easing. Scalars and vector components blend linearly,
+angles take the short arc, directions follow the unit sphere, and colors
+blend their existing linear channels. Key values may be ordinary literals or
+state bindings of that field's type. Nested keyed values are refused; compose
+clocks through a clock's `phase` instead.
+
+The `render`, `lighting`, `sky`, `environment`, and `theme` sections also accept
+partial-record keys. These address list rows by their authored `name` and
+carry omitted leaves from the previous key through the wrap. Counts, kinds,
+seeds, references and other structural fields remain fixed. A light's position
+is a vector; its direction is a direction, so each uses the proper blend.
+Camera angles and theme colors use the same resolver. Only clocks and state
+slots actually read invalidate a cached presentation.
+
+Numeric field domains apply to every literal and every binding's authored initial
+value, including values in inactive keys. Loading refuses an invalid initial
+value by field and source. During presentation, a violation of a closed bound
+clamps to that bound. Non-finite values and violations of an open bound retain
+the field's last valid value. Curvature's `inkLow` and `inkHigh` retain their
+last valid pair together if they become equal or reverse. Directions retain their
+last valid unit vector if bound components become zero or non-finite. A newly opened view
+starts that history from the admitted tick-zero values, including initial state
+bindings; a definition revision starts it again. The console reports entry into
+invalid input and recovery once each, naming the input and the value used.
+Unchanged inputs perform no further domain checks. The `world.timeline` and
+`presentation.theme` counter sources report checks, clamps and holds.
+
+Cloud `drift`, `shear`, `spin`, and star `twinkle.rate` are rates. Literal
+rates and literal-valued keys on tick-driven clocks compile to analytic
+integrals once when the world loads or reloads. A frame searches for and
+evaluates only its active piece; seeking needs no prior frames. State-driven
+rates are refused because their displacement would depend on history. A
+smooth rate may cross at most three nested smooth phase clocks; a refusal
+names the rate, full clock chain, and depth. Ordinary keyed values have no
+such depth restriction. `world.timeline` work-counter rows expose actual
+resolves, evaluated rates, piece-search comparisons, coefficient blends, and
+modular doublings. Their totals depend on how many frames were presented.
+Each world retains at most 4,096 double rate coefficients (32 KiB of payload),
+counting shared compiled operands once. A refusal names the crossing rate,
+requested total, limit, and largest contributors. Literal rates use no
+coefficient storage. [The sky clock study](Assets/worlds/sky-clock-keys.puck)
+shows a nested gust clock driving cloud motion and star shimmer; `world.lighting`
+prints its compiled piece, coefficient, byte and degree counts.
 
 The sky's twinkle and cloud motion and each bounded volume's advection and
 pulse run on the presented engine tick of the world the frame draws, the tick
-the state mirror presented its bound state at, reduced exactly on the host, so
+the state mirror presented its bound state at, reduced on the host, so
 a frame at a given tick draws the same sky on every run and a routed or
 session view shows its destination's time. The top-level `timeline` section
 names presentation clocks: `{ "clocks": [ { "name": "day", "periodSeconds":

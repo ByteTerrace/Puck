@@ -43,6 +43,11 @@ public class ConstructSugarGuardLawTests {
     /// <summary>The source that authors each construct whose spelling admits a closed set of keys, the node it
     /// lowers to, and the text that proves the printer took the fallback instead.</summary>
     private static readonly Dictionary<string, (string Source, string Path, string Fallback)> Fixtures = new(comparer: StringComparer.Ordinal) {
+        ["keys"] = (
+            "schema: \"puck.world.definition.v1\"\n\nrender {\n    keys(clock: day) [ { at: 0, value: 0 } { at: 1, value: 1 } ]\n}\n",
+            "render/keys",
+            "keys {"
+        ),
         ["grid"] = (
             "schema: \"puck.world.definition.v1\"\n\nstate {\n    world {\n        grid board dimensions(width: 2, depth: 2)\n    }\n}\n",
             "state/world/0",

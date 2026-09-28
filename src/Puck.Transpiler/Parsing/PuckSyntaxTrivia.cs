@@ -30,41 +30,9 @@ public static class PuckSyntaxTrivia {
         }
 
         private int ContentEnd(SyntaxNode node) {
-            var start = Math.Clamp(
-                max: m_source.Length,
-                min: 0,
-                value: node.Offset
-            );
-            var end = Math.Clamp(
-                max: m_source.Length,
-                min: start,
-                value: (node.Offset + node.Length)
-            );
-            var last = start;
-            var index = start;
+            var span = SourceLexemes.ContentSpan(source: m_source, span: node.Span);
 
-            while (index < end) {
-                var lexeme = SourceLexemes.End(
-                    offset: index,
-                    source: m_source
-                );
-
-                if (lexeme > index) {
-                    if (m_source[index] is '"' or '`' or '$') {
-                        last = Math.Min(
-                            val1: lexeme,
-                            val2: end
-                        );
-                    }
-                    index = lexeme;
-
-                    continue;
-                }
-                if (!char.IsWhiteSpace(c: m_source[index])) { last = (index + 1); }
-                index++;
-            }
-
-            return last;
+            return (span.Offset + span.Length);
         }
         private int FindNext(int from, char target, int limit = -1) {
             var index = Math.Max(
@@ -1043,13 +1011,25 @@ public static class PuckSyntaxTrivia {
                         });
                     }
                 case CallExpressionNode call: {
-                        return (call with {
-                            Arguments = VisitArguments(
-                            arguments: call.Arguments,
+                        var body = call.Arguments.LastOrDefault(predicate: static argument => argument.TrailingBody);
+                        var close = MatchParenthesis(open: FindNext(from: call.Offset, limit: ContentEnd(node: call), target: '('));
+                        var arguments = VisitArguments(
+                            arguments: ((body is null) ? call.Arguments : [.. call.Arguments.Where(predicate: static argument => !argument.TrailingBody)]),
                             limit: ContentEnd(node: call),
                             openFrom: call.Offset
-                        ),
-                            Trivia = (call.Trivia with { MultiLine = SpansLines(node: call) }),
+                        );
+
+                        if (body is not null) {
+                            var gap = ScanGap(allowSameLine: true, from: (close + 1), to: body.Offset);
+
+                            arguments = [.. arguments, body with {
+                                Value = VisitExpression(expression: body.Value),
+                                Trivia = body.Trivia with { Leading = gap.Pieces, OnNewLine = gap.Broke, Opening = gap.SameLine },
+                            }];
+                        }
+                        return (call with {
+                            Arguments = arguments,
+                            Trivia = (call.Trivia with { MultiLine = SpansLines(node: ((body is null) ? call : (call with { Length = (close + 1 - call.Offset) }))) }),
                         });
                     }
                 case BinaryExpressionNode binary: {

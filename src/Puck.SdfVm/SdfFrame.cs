@@ -21,6 +21,8 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// <summary>The controller's already-quantized render scale, bounded by <see cref="RenderScale"/>'s quantized
     /// ceiling. Zero uses the ceiling; a positive value enables changing the sample grid without reallocating scratch.</summary>
     public float ResolvedRenderScale { get; init; }
+    /// <summary>Whether this view retains and reprojects its own temporal color and surface history.</summary>
+    public bool Temporal { get; init; }
     /// <summary>The spatial reconstruction sharpness, from zero for bilinear to one for clamped Catmull-Rom.</summary>
     public float UpscaleSharpness { get; init; }
 

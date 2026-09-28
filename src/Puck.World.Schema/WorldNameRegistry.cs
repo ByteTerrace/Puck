@@ -6,50 +6,6 @@ using Puck.World.Protocol;
 
 namespace Puck.World;
 
-/// <summary>The namespace a document name belongs to — which declaration a name-bearing field resolves against.</summary>
-public enum WorldNameKind : byte {
-    /// <summary>A record type in the state section.</summary>
-    Record,
-    /// <summary>A bounded pool in the state section.</summary>
-    Pool,
-    /// <summary>A <c>state.world</c> row.</summary>
-    State,
-    /// <summary>An ordered zone: a <c>state.world</c> row a rule's zone table, a transfer, or a search job names as a pile.</summary>
-    Zone,
-    /// <summary>A <c>rules</c> row.</summary>
-    Rule,
-    /// <summary>A <c>tables</c> row.</summary>
-    Table,
-    /// <summary>A <c>patterns</c> row.</summary>
-    Pattern,
-    /// <summary>A <c>ruleGroups</c> row.</summary>
-    RuleGroup,
-    /// <summary>A <c>sets</c> row.</summary>
-    CellSet,
-    /// <summary>A set of positions: a <c>state.world</c> board row or a <c>sets</c> row, whichever declares the name.
-    /// The two namespaces never share a name.</summary>
-    Positions,
-    /// <summary>A <c>state.lattices</c> topology.</summary>
-    Topology,
-    /// <summary>A <c>generators</c> row.</summary>
-    Generator,
-    /// <summary>A <c>fields</c> row.</summary>
-    Field,
-    /// <summary>A <c>dynamics</c> row.</summary>
-    Dynamics,
-    /// <summary>A named machine instance.</summary>
-    Machine,
-    /// <summary>A named screen declaration.</summary>
-    Screen,
-    /// <summary>A hardware binding local to a machine instance.</summary>
-    MachineBinding,
-    /// <summary>A <c>placements</c> row: its own namespace, apart from every state-side name.</summary>
-    Placement,
-    /// <summary>A <c>prototypes</c> row: its own namespace, apart from every state-side name.</summary>
-    Prototype,
-    /// <summary>Any declaration the document makes, whatever its namespace: an entry of a module's export lists.</summary>
-    Any,
-}
 /// <summary>How a document field carries a name.</summary>
 public enum WorldNameRole : byte {
     /// <summary>The field mints the name: the row's own <c>name</c>.</summary>
@@ -1284,8 +1240,10 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Names,
             WorldExportFacet.Binding
         ),
-        new(typeof(WorldRenderCycle), nameof(WorldRenderCycle.State), WorldNameKind.State, WorldNameRole.Names),
         new(typeof(WorldClock), nameof(WorldClock.State), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldClock), nameof(WorldClock.Name), WorldNameKind.Clock, WorldNameRole.Declares),
+        new(typeof(WorldKeys<>), nameof(WorldKeys<BindableScalar>.Clock), WorldNameKind.Clock, WorldNameRole.Names),
+        new(typeof(WorldSectionKeys), nameof(WorldSectionKeys.Clock), WorldNameKind.Clock, WorldNameRole.Names),
         new(
             typeof(WorldLookMotion),
             nameof(WorldLookMotion.Lanes),
@@ -1675,7 +1633,10 @@ public static partial class WorldNameRegistry {
             nameof(WorldCamera.Name),
             "a camera name"
         ),
-        new(typeof(WorldClock), nameof(WorldClock.Name), "a presentation clock name"),
+        new(typeof(WorldRenderLight), nameof(WorldRenderLight.Name), "a lighting-section row identity"),
+        new(typeof(WorldRenderSkyLayer), nameof(WorldRenderSkyLayer.Name), "a sky-section row identity"),
+        new(typeof(WorldRenderSkyStop), nameof(WorldRenderSkyStop.Name), "a gradient-local stop identity"),
+        new(typeof(WorldRenderSoftbox), nameof(WorldRenderSoftbox.Name), "an environment-section row identity"),
         new(
             typeof(WorldIdentitySeed),
             nameof(WorldIdentitySeed.Name),
@@ -1971,7 +1932,7 @@ public static partial class WorldNameRegistry {
     public static bool TryFind(Type declaringType, string member, out WorldNameField field) {
         if (FieldsByMember.TryGetValue(key: member, value: out var candidates)) {
             foreach (var candidate in candidates) {
-                if (candidate.Owner.IsAssignableFrom(c: declaringType)) {
+                if (MatchesOwner(candidate.Owner, declaringType)) {
                     field = candidate;
 
                     return true;
@@ -1998,7 +1959,7 @@ public static partial class WorldNameRegistry {
     private static bool TryFind(IReadOnlyList<WorldNameField> fields, Type declaringType, string member, out WorldNameField field) {
         foreach (var candidate in fields) {
             if (
-                candidate.Owner.IsAssignableFrom(c: declaringType) &&
+                MatchesOwner(candidate.Owner, declaringType) &&
                 string.Equals(
                 a: candidate.Member,
                 b: member,
@@ -2015,6 +1976,9 @@ public static partial class WorldNameRegistry {
 
         return false;
     }
+    private static bool MatchesOwner(Type owner, Type declaringType) => owner.IsAssignableFrom(declaringType)
+        || (owner.IsGenericTypeDefinition && declaringType.IsConstructedGenericType && declaringType.GetGenericTypeDefinition() == owner);
+
     private static bool IsExcluded(Type declaringType, string member) => (ExclusionReason(
         declaringType: declaringType,
         member: member

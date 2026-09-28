@@ -8,7 +8,7 @@ namespace Puck.World.Tests;
 /// two engine-side perceptual floors (type size, scrim alpha) refuse a literal violation by name; a state-bound
 /// scrim alpha cannot be refused at boot (the document has no way to know its live value) but clamps to the floor
 /// at resolve time instead; and absence resolves to the zeroed <see cref="WorldThemeSection.Absent"/> block.</summary>
-public sealed class WorldThemeValidationLawTests {
+public sealed partial class WorldThemeValidationLawTests {
     private static readonly BindableColor OpaqueGray = new(Raw: "#808080");
     private static readonly BindableColor BakedAlphaWhite = new(Raw: "#FFFFFF80");
 
@@ -421,7 +421,7 @@ public sealed class WorldThemeValidationLawTests {
         );
     }
     [Fact]
-    public void BoundScrimAlphaBelowFloorPassesValidationButClampsAtResolve() {
+    public void BoundScrimAlphaBelowFloorRefusesItsInvalidInitialState() {
         var theme = MinimalTheme() with {
             Color = MinimalColor() with { ScrimPanel = BoundScrim(binding: "state.lowAlpha") },
         };
@@ -441,26 +441,10 @@ public sealed class WorldThemeValidationLawTests {
             ]),
         };
 
-        // A state binding cannot be refused at boot — the document has no way to know the cell's live value.
-        var admitted = WorldDefinitionValidator.TryValidate(
-            definition: definition,
-            neighbours: null,
-            reason: out var reason
-        );
-
-        Assert.True(
-            condition: admitted,
-            userMessage: reason
-        );
-
-        // At resolve time, the clamp is what actually enforces the floor.
-        var resolved = new WorldThemeResolve().Resolve(
-            definition: definition,
-            revision: 1,
-            mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition))
-        );
-
-        Assert.True(condition: (resolved.Color.ScrimPanel.Alpha >= WorldThemeCapacity.ScrimMinAlpha));
+        Assert.False(WorldDefinitionValidator.TryValidate(definition, out var reason, neighbours: null));
+        Assert.Contains("theme.color.scrimPanel.alpha", reason);
+        Assert.Contains("state.lowAlpha", reason);
+        Assert.Contains("initially", reason);
     }
     /// <summary>The chrome block's ranges are enforced by name, beside a passing control — an opacity outside [0, 1]
     /// and a negative extent are both authoring errors a boot must refuse rather than draw.</summary>

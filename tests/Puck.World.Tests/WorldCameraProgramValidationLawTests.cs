@@ -413,7 +413,7 @@ public sealed class WorldCameraProgramValidationLawTests {
         );
         Assert.Equal(
             expected: 0.5f,
-            actual: rig.OrbitOp!.Pitch.Literal
+            actual: rig.OrbitOp!.Pitch.Value.Literal
         );
         Assert.Equal(
             expected: "probe",

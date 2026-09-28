@@ -57,123 +57,313 @@
       "additionalProperties": false,
       "title": "WorldQualityPreset"
     },
-    "WorldRenderLightDirectional": {
-      "description": "A Lambert directional light.",
-      "properties": {
-        "$type": {
-          "const": "directional"
+    "BindableScalar": {
+      "description": "A scalar authored as a finite number literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E][.$target] binding naming a Fixed or Int cell whose live value drives it \u2014 the numeric twin of BindableColor, sharing its binding grammar (StateBinding) and its one read path, the client\u0027s state mirror. Parses as a JSON number (literal) or string (binding).",
+      "title": "BindableScalar",
+      "anyOf": [
+        {
+          "type": "number"
         },
-        "direction": {
-          "$ref": "#/$defs/DocumentVector3",
-          "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload). Absent is the pinned sun direction.",
-          "default": null
+        {
+          "type": "string"
         },
-        "color": {
-          "description": "The light\u0027s linear colour.",
-          "default": null,
-          "title": "BindableColor",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "weight": {
-          "description": "The diffuse weight. Absent is the pinned sun weight.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "angularRadius": {
-          "description": "The light\u0027s angular radius in radians, in [0, atan 0.3]: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "shadows": {
-          "description": "Whether this light drives the soft-shadow march (at most one light per world). Absent is false. An unshadowed directional is scaled by ambient occlusion instead.",
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "default": null
+        {
+          "$comment": "WorldKeys\u00601 holds itself here; its shape is the one described where it first appears."
         }
-      },
-      "additionalProperties": false,
-      "title": "WorldRenderLightDirectional"
+      ]
     },
-    "WorldRenderLightHemisphere": {
-      "description": "A hemisphere ambient: a floor plus a gradient on the surface normal\u0027s Y (sky above, darker below), scaled by ambient occlusion.",
+    "WorldKeyBindableScalar": {
+      "type": "object",
       "properties": {
-        "$type": {
-          "const": "hemisphere"
+        "at": {
+          "type": "number"
         },
-        "color": {
-          "description": "The ambient\u0027s linear colour.",
-          "default": null,
-          "title": "BindableColor",
-          "type": [
-            "string",
-            "null"
-          ]
+        "value": {
+          "$ref": "#/$defs/BindableScalar"
         },
-        "base": {
-          "description": "The floor. Absent is the pinned ambient floor.",
-          "type": [
-            "number",
-            "null"
+        "ease": {
+          "enum": [
+            "Linear",
+            "Smooth",
+            "Step"
           ],
-          "default": null
-        },
-        "gradient": {
-          "description": "The hemisphere gradient. Absent is the pinned gradient.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
+          "default": "Linear",
+          "title": "WorldKeyEase"
         }
       },
-      "additionalProperties": false,
-      "title": "WorldRenderLightHemisphere"
+      "required": [
+        "at",
+        "value"
+      ],
+      "additionalProperties": false
     },
-    "WorldRenderLightRim": {
-      "description": "A view-dependent silhouette brighten: weight \u00B7 color \u00B7 pow(1 \u2212 saturate(dot(normal, \u2212rayDirection)), power), added after the material shade.",
+    "WorldKeysBindableScalar": {
+      "type": "object",
       "properties": {
-        "$type": {
-          "const": "rim"
+        "clock": {
+          "type": "string"
         },
-        "color": {
-          "description": "The rim\u0027s linear colour.",
-          "default": null,
-          "title": "BindableColor",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "weight": {
-          "description": "The strength. Absent is zero, which adds nothing.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "power": {
-          "description": "The falloff exponent \u2014 larger confines the highlight nearer the silhouette. Absent is the engine default.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
+        "keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorldKeyBindableScalar"
+          }
         }
       },
-      "additionalProperties": false,
-      "title": "WorldRenderLightRim"
+      "required": [
+        "clock",
+        "keys"
+      ],
+      "additionalProperties": false
+    },
+    "BindableScalarNonNullable": {
+      "description": "A scalar authored as a finite number literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E][.$target] binding naming a Fixed or Int cell whose live value drives it \u2014 the numeric twin of BindableColor, sharing its binding grammar (StateBinding) and its one read path, the client\u0027s state mirror. Parses as a JSON number (literal) or string (binding).",
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/WorldKeysBindableScalar"
+        }
+      ]
+    },
+    "BindableDirection": {
+      "description": "A direction: bindable vector components, or keys blended on the unit sphere.",
+      "title": "BindableDirection",
+      "anyOf": [
+        {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/BindableScalarNonNullable"
+          }
+        },
+        {
+          "$comment": "WorldKeys\u00601 holds itself here; its shape is the one described where it first appears."
+        }
+      ]
+    },
+    "WorldKeyBindableDirection": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "number"
+        },
+        "value": {
+          "$ref": "#/$defs/BindableDirection"
+        },
+        "ease": {
+          "enum": [
+            "Linear",
+            "Smooth",
+            "Step"
+          ],
+          "default": "Linear",
+          "title": "WorldKeyEase"
+        }
+      },
+      "required": [
+        "at",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "WorldKeysBindableDirection": {
+      "type": "object",
+      "properties": {
+        "clock": {
+          "type": "string"
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorldKeyBindableDirection"
+          }
+        }
+      },
+      "required": [
+        "clock",
+        "keys"
+      ],
+      "additionalProperties": false
+    },
+    "BindableDirectionNonNullable": {
+      "title": "BindableDirection",
+      "anyOf": [
+        {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/BindableScalarNonNullable"
+          }
+        },
+        {
+          "$ref": "#/$defs/WorldKeysBindableDirection"
+        }
+      ]
+    },
+    "BindableColor": {
+      "description": "A color authored as a #RRGGBB/#RRGGBBAA hex literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E][.$target] binding naming a Text cell that holds one \u2014 the theme/marker/render vocabulary\u0027s shared color grammar. Parses and serializes as a plain JSON string. The token is parsed once, into Literal or State; a presentation reads the binding through the client\u0027s state mirror, the one binding path, which reads it eased by default and as stored truth with .$target. This carries alpha \u2014 a translucent theme surface bakes it into the token \u2014 while an opaque consumer (the sky and lighting fields) drops it.",
+      "title": "BindableColor",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$comment": "WorldKeys\u00601 holds itself here; its shape is the one described where it first appears."
+        }
+      ]
+    },
+    "WorldKeyBindableColor": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "number"
+        },
+        "value": {
+          "$ref": "#/$defs/BindableColor"
+        },
+        "ease": {
+          "enum": [
+            "Linear",
+            "Smooth",
+            "Step"
+          ],
+          "default": "Linear",
+          "title": "WorldKeyEase"
+        }
+      },
+      "required": [
+        "at",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "WorldKeysBindableColor": {
+      "type": "object",
+      "properties": {
+        "clock": {
+          "type": "string"
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorldKeyBindableColor"
+          }
+        }
+      },
+      "required": [
+        "clock",
+        "keys"
+      ],
+      "additionalProperties": false
+    },
+    "BindableColorNonNullable": {
+      "title": "BindableColor",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/WorldKeysBindableColor"
+        }
+      ]
+    },
+    "BindableScalarNonNullable2": {
+      "title": "BindableScalar",
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/WorldKeysBindableScalar"
+        }
+      ]
+    },
+    "BindableVector3": {
+      "description": "A vector of bindable components, or a curve whose values are vectors.",
+      "title": "BindableVector3",
+      "anyOf": [
+        {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/BindableScalarNonNullable"
+          }
+        },
+        {
+          "$comment": "WorldKeys\u00601 holds itself here; its shape is the one described where it first appears."
+        }
+      ]
+    },
+    "WorldKeyBindableVector3": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "number"
+        },
+        "value": {
+          "$ref": "#/$defs/BindableVector3"
+        },
+        "ease": {
+          "enum": [
+            "Linear",
+            "Smooth",
+            "Step"
+          ],
+          "default": "Linear",
+          "title": "WorldKeyEase"
+        }
+      },
+      "required": [
+        "at",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "WorldKeysBindableVector3": {
+      "type": "object",
+      "properties": {
+        "clock": {
+          "type": "string"
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorldKeyBindableVector3"
+          }
+        }
+      },
+      "required": [
+        "clock",
+        "keys"
+      ],
+      "additionalProperties": false
+    },
+    "BindableVector3NonNullable": {
+      "title": "BindableVector3",
+      "anyOf": [
+        {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/BindableScalarNonNullable"
+          }
+        },
+        {
+          "$ref": "#/$defs/WorldKeysBindableVector3"
+        }
+      ]
     },
     "WorldAnchorEntity": {
       "description": "Rides one population entity\u0027s ROOT pose \u2014 a walking avatar\u0027s whole-body position and orientation.",
@@ -342,523 +532,139 @@
       ],
       "title": "WorldAnchor"
     },
-    "WorldRenderLightPoint": {
-      "description": "A point light with inverse-square falloff and a soft core: intensity = weight / (1 \u002B (distance / radius)^2). No shadow march in v1 \u2014 a point light never occludes and is never occluded.",
-      "properties": {
-        "$type": {
-          "const": "point"
-        },
-        "position": {
-          "$ref": "#/$defs/DocumentVector3",
-          "description": "The world-space position for a static (unanchored) light. Absent is the world origin. An offset in the anchor frame when an anchor is authored.",
-          "default": null
-        },
-        "radius": {
-          "description": "The falloff radius. Absent is the engine default.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "anchor": {
-          "$ref": "#/$defs/WorldAnchor",
-          "description": "An entity, entity part, or placement frame. A missing live target disables the light.",
-          "default": null
-        },
-        "color": {
-          "description": "The light\u0027s linear colour.",
-          "default": null,
-          "title": "BindableColor",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "weight": {
-          "description": "The strength. Absent is the engine default.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldRenderLightPoint"
-    },
-    "WorldRenderLightOccluder": {
-      "description": "A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.",
-      "properties": {
-        "$type": {
-          "const": "occluder"
-        },
-        "position": {
-          "$ref": "#/$defs/DocumentVector3",
-          "default": null
-        },
-        "radius": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "anchor": {
-          "$ref": "#/$defs/WorldAnchor",
-          "default": null
-        },
-        "weight": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldRenderLightOccluder"
-    },
-    "WorldRenderLight": {
-      "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its lane semantics in SdfEnvironment.",
+    "WorldSectionKey": {
+      "description": "One partial presentation record. The preparation pass checks every field against the section\u0027s actual model shape and admits only bindable leaves; extension data is retained here for source-preserving saves.",
       "type": [
         "object",
         "null"
       ],
-      "required": [
-        "$type"
-      ],
-      "anyOf": [
-        {
-          "$ref": "#/$defs/WorldRenderLightDirectional"
+      "properties": {
+        "at": {
+          "description": "The position in the clock\u0027s authored span.",
+          "type": "number"
         },
-        {
-          "$ref": "#/$defs/WorldRenderLightHemisphere"
-        },
-        {
-          "$ref": "#/$defs/WorldRenderLightRim"
-        },
-        {
-          "$ref": "#/$defs/WorldRenderLightPoint"
-        },
-        {
-          "$ref": "#/$defs/WorldRenderLightOccluder"
+        "ease": {
+          "description": "The easing toward the next key.",
+          "enum": [
+            "Linear",
+            "Smooth",
+            "Step"
+          ],
+          "default": "Linear",
+          "title": "WorldKeyEase"
         }
+      },
+      "required": [
+        "at"
       ],
-      "title": "WorldRenderLight"
+      "additionalProperties": false,
+      "title": "WorldSectionKey"
     },
-    "WorldRenderLightList": {
-      "type": [
-        "array",
-        "null"
-      ],
+    "WorldSectionKeyList": {
+      "type": "array",
       "items": {
-        "$ref": "#/$defs/WorldRenderLight"
+        "$ref": "#/$defs/WorldSectionKey"
       }
     },
-    "WorldRenderCurvature": {
-      "description": "The stylized curvature enrichment, keyed on the level-set mean curvature the lit path already measures at each hit. Every field is optional individually \u2014 absent resolves to the engine\u0027s pinned default. The three gains share one runtime gate: while all of them are zero the renderer skips the extra field tap the curvature normal needs, so an unauthored world pays nothing.",
+    "WorldSectionKeys": {
+      "description": "Clock keys for a presentation section. Partial records address existing authored rows by name and lower once to the same typed value curves as an individual bindable.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "cavity": {
-          "description": "How far a concave crease darkens, in [0, 1] at a cavity whose curvature reaches InkLow. Zero darkens none.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
+        "clock": {
+          "description": "The named presentation clock.",
+          "type": "string"
         },
-        "rim": {
-          "description": "How far a convex ridge brightens, in [0, 1] at a ridge whose curvature reaches InkLow. Zero brightens none.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "ink": {
-          "description": "The ink outline\u0027s strength where the curvature magnitude spikes. Zero draws none.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "inkLow": {
-          "description": "The curvature magnitude (1 / fillet radius, in world units) at which the outline starts and the ridge and cavity terms saturate.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "inkHigh": {
-          "description": "The curvature magnitude at which the outline saturates.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "inkColor": {
-          "description": "BindableColor\u0027s grammar: the outline colour.",
-          "default": null,
-          "title": "BindableColor",
-          "type": [
-            "string",
-            "null"
-          ]
+        "keys": {
+          "$ref": "#/$defs/WorldSectionKeyList",
+          "description": "Ordered partial records; omitted leaves carry from their last stated key around the wrap."
         }
       },
-      "additionalProperties": false,
-      "title": "WorldRenderCurvature"
-    },
-    "WorldRenderLighting": {
-      "description": "The lit path\u0027s lights and stylization as world data. Absent renders the pinned sun and hemisphere an unauthored world always had; present, the list IS the lights \u2014 an authored list without a hemisphere has no ambient. Every field of every light is optional individually and resolves to the engine\u0027s pinned default for its kind.",
-      "type": [
-        "object",
-        "null"
+      "required": [
+        "clock",
+        "keys"
       ],
-      "properties": {
-        "lights": {
-          "$ref": "#/$defs/WorldRenderLightList",
-          "description": "The lights, at most SdfEnvironment.MaxLights, in slot order (a render.cycle key moves a light by its slot). At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
-          "default": null
-        },
-        "curvature": {
-          "$ref": "#/$defs/WorldRenderCurvature",
-          "description": "The stylized curvature enrichment \u2014 cavity darkening, curvature rim light, and an ink outline. Optional; absent (and all-zero) shades exactly as a world that declares none.",
-          "default": null
-        }
-      },
       "additionalProperties": false,
-      "title": "WorldRenderLighting"
+      "title": "WorldSectionKeys"
     },
-    "WorldRenderSkyStop": {
-      "description": "One gradient stop.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "elevation": {
-          "description": "The direction\u0027s Y component this stop sits at, in [\u22121, 1].",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "color": {
-          "description": "BindableColor\u0027s grammar: the colour at this elevation. Absent (in a cycle key) keeps the previous key\u0027s colour.",
-          "default": null,
-          "title": "BindableColor",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldRenderSkyStop"
-    },
-    "WorldRenderSkyLayerGradient": {
-      "description": "The colour gradient over elevation: piecewise-linear between stops, clamped to the end stops.",
-      "properties": {
-        "$type": {
-          "const": "gradient"
-        },
-        "stops": {
-          "description": "Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation. A render.cycle key moves a stop by its index and may not add or remove one.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/WorldRenderSkyStop"
-          },
-          "default": null
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldRenderSkyLayerGradient"
-    },
-    "WorldRenderSkyLayerFog": {
-      "description": "The exponential distance fog fading toward the sky gradient.",
-      "properties": {
-        "$type": {
-          "const": "fog"
-        },
-        "density": {
-          "description": "The density per world unit. Absent is the pinned density.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldRenderSkyLayerFog"
-    },
-    "WorldRenderSkyLayerSunDisc": {
-      "description": "The visible sun disc \u2014 an additive highlight about one directional light\u0027s direction.",
-      "properties": {
-        "$type": {
-          "const": "sunDisc"
-        },
-        "light": {
-          "description": "The Lights slot of a directional light. Absent is the shadow light, or the first directional when none shadows.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "default": null
-        },
-        "radius": {
-          "description": "The disc\u0027s angular half-radius in radians, in (0, \u03C0/2]. Absent is the engine default.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "intensity": {
-          "description": "The peak additive brightness. Absent is zero, which draws nothing.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldRenderSkyLayerSunDisc"
-    },
-    "WorldRenderSkyTwinkle": {
-      "description": "Scintillation: a hash-chosen share of the stars dip and recover on the simulation clock, each at its own harmonic and phase of one authored rate, so no two twinkle in step. Presentation-only, keyed on the tick.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "share": {
-          "description": "The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "depth": {
-          "description": "How far a twinkling star dips below its steady brightness, in [0, 1].",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "rate": {
-          "description": "The fundamental scintillation rate in hertz.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldRenderSkyTwinkle"
-    },
-    "WorldRenderSkyLayerStars": {
-      "description": "The procedural star field: a deterministic per-cell hash over an octahedral sky projection.",
-      "properties": {
-        "$type": {
-          "const": "stars"
-        },
-        "density": {
-          "description": "The star grid\u0027s cell count per octahedral axis. Absent is the engine default.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "brightness": {
-          "description": "The peak per-star brightness. Absent is zero, which draws nothing.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "seed": {
-          "description": "The hash seed folded into every cell.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "default": null
-        },
-        "twinkle": {
-          "$ref": "#/$defs/WorldRenderSkyTwinkle",
-          "description": "Scintillation for a share of the stars. Optional; absent twinkles none.",
-          "default": null
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldRenderSkyLayerStars"
-    },
-    "DocumentVector2": {
-      "title": "DocumentVector2",
+    "BindableVector2": {
+      "description": "A pair of bindable components, or a curve whose values are pairs.",
+      "title": "BindableVector2",
       "anyOf": [
         {
           "type": "array",
-          "items": {
-            "type": "number"
-          },
           "minItems": 2,
-          "maxItems": 2
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/BindableScalarNonNullable"
+          }
         },
         {
-          "type": "string",
-          "minLength": 1,
-          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+          "$comment": "WorldKeys\u00601 holds itself here; its shape is the one described where it first appears."
         }
       ]
     },
-    "WorldRenderSkyLayerClouds": {
-      "description": "The procedural cloud layer: a deterministic hashed-lattice noise on a plane above the camera, thresholded by coverage, drawn over the gradient, stars and sun disc and fading into the horizon.",
+    "WorldKeyBindableVector2": {
+      "type": "object",
       "properties": {
-        "$type": {
-          "const": "clouds"
+        "at": {
+          "type": "number"
         },
-        "coverage": {
-          "description": "The fraction of the sky the layer covers, in [0, 1]. Absent is zero.",
-          "type": [
-            "number",
-            "null"
+        "value": {
+          "$ref": "#/$defs/BindableVector2"
+        },
+        "ease": {
+          "enum": [
+            "Linear",
+            "Smooth",
+            "Step"
           ],
-          "default": null
-        },
-        "softness": {
-          "description": "The width of a cloud\u0027s edge, in (0, 1]. Absent is the engine default.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "scale": {
-          "description": "The size of one cloud cell in layer units (the layer sits at unit height). Absent is the engine default.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "seed": {
-          "description": "The hash seed folded into the lattice.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "default": null
-        },
-        "color": {
-          "description": "BindableColor\u0027s grammar: the cloud colour. Absent is white.",
-          "default": null,
-          "title": "BindableColor",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "drift": {
-          "$ref": "#/$defs/DocumentVector2",
-          "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Absent holds still.",
-          "default": null
-        },
-        "spin": {
-          "description": "The layer\u0027s rotation about the zenith in radians per second; positive is counter-clockwise seen from below. Absent is none.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "curl": {
-          "description": "The Coriolis twist in radians at 45\u00B0 elevation, falling off toward the horizon and the zenith. Positive winds counter-clockwise. Absent is none.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "shear": {
-          "$ref": "#/$defs/DocumentVector2",
-          "description": "The wind of the shaping field relative to the cloud field, in layer units per second. Absent holds the shapes.",
-          "default": null
+          "default": "Linear",
+          "title": "WorldKeyEase"
         }
       },
-      "additionalProperties": false,
-      "title": "WorldRenderSkyLayerClouds"
-    },
-    "WorldRenderSkyLayer": {
-      "description": "One sky layer. The $type string is the JSON discriminator.",
-      "type": [
-        "object",
-        "null"
-      ],
       "required": [
-        "$type"
+        "at",
+        "value"
       ],
+      "additionalProperties": false
+    },
+    "WorldKeysBindableVector2": {
+      "type": "object",
+      "properties": {
+        "clock": {
+          "type": "string"
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorldKeyBindableVector2"
+          }
+        }
+      },
+      "required": [
+        "clock",
+        "keys"
+      ],
+      "additionalProperties": false
+    },
+    "BindableVector2NonNullable": {
+      "title": "BindableVector2",
       "anyOf": [
         {
-          "$ref": "#/$defs/WorldRenderSkyLayerGradient"
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/BindableScalarNonNullable"
+          }
         },
         {
-          "$ref": "#/$defs/WorldRenderSkyLayerFog"
-        },
-        {
-          "$ref": "#/$defs/WorldRenderSkyLayerSunDisc"
-        },
-        {
-          "$ref": "#/$defs/WorldRenderSkyLayerStars"
-        },
-        {
-          "$ref": "#/$defs/WorldRenderSkyLayerClouds"
+          "$ref": "#/$defs/WorldKeysBindableVector2"
         }
-      ],
-      "title": "WorldRenderSkyLayer"
-    },
-    "WorldRenderSkyLayerList": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "$ref": "#/$defs/WorldRenderSkyLayer"
-      }
-    },
-    "WorldRenderSky": {
-      "description": "The procedural sky as an ordered stack of layers. Absent is a hard gate: the world renders the pinned two-stop gradient and fog density, as before this section existed. The layers composite in a fixed order \u2014 gradient, stars, sun disc, clouds \u2014 whatever order they are authored in; fog is read every frame on its own. A layer kind appears at most once.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "layers": {
-          "$ref": "#/$defs/WorldRenderSkyLayerList",
-          "description": "The layers.",
-          "default": null
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldRenderSky"
+      ]
     },
     "WorldScreenSourceNone": {
       "description": "No provider is bound \u2014 the engine shades the slot as dark glass, lit faintly by the sun.",
@@ -1316,19 +1122,21 @@
           "type": "number"
         },
         "yaw": {
-          "description": "The orbit heading in radians, as a literal or numeric state binding.",
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
+          "description": "The orbit heading in radians, as a literal, numeric state binding or short-arc clock keys.",
+          "title": "BindableAngle",
+          "allOf": [
+            {
+              "$ref": "#/$defs/BindableScalarNonNullable"
+            }
           ]
         },
         "pitch": {
-          "description": "The orbit tilt in radians, as a literal or numeric state binding.",
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
+          "description": "The orbit tilt in radians, as a literal, numeric state binding or short-arc clock keys.",
+          "title": "BindableAngle",
+          "allOf": [
+            {
+              "$ref": "#/$defs/BindableScalarNonNullable"
+            }
           ]
         },
         "pivotOffset": {
@@ -1363,12 +1171,8 @@
           "type": "string"
         },
         "fraction": {
-          "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding.",
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
-          ]
+          "$ref": "#/$defs/BindableScalarNonNullable2",
+          "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding."
         },
         "opcode": {
           "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
@@ -1446,10 +1250,11 @@
         },
         "fieldOfViewRadians": {
           "description": "The field of view.",
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
+          "title": "BindableAngle",
+          "allOf": [
+            {
+              "$ref": "#/$defs/BindableScalarNonNullable"
+            }
           ]
         },
         "opcode": {
@@ -1481,12 +1286,8 @@
           "type": "string"
         },
         "weight": {
-          "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding.",
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
-          ]
+          "$ref": "#/$defs/BindableScalarNonNullable2",
+          "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding."
         },
         "opcode": {
           "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
@@ -1540,12 +1341,8 @@
           "const": "selectProgram"
         },
         "key": {
-          "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases.",
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
-          ]
+          "$ref": "#/$defs/BindableScalarNonNullable2",
+          "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases."
         },
         "cases": {
           "$ref": "#/$defs/WorldCameraSelectCaseList",
@@ -1661,12 +1458,8 @@
           "type": "string"
         },
         "weight": {
-          "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding.",
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
-          ]
+          "$ref": "#/$defs/BindableScalarNonNullable2",
+          "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding."
         },
         "opcode": {
           "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
@@ -1748,10 +1541,11 @@
       "properties": {
         "fieldOfViewRadians": {
           "description": "The field of view.",
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
+          "title": "BindableAngle",
+          "allOf": [
+            {
+              "$ref": "#/$defs/BindableScalarNonNullable"
+            }
           ]
         },
         "opcode": {
@@ -1855,19 +1649,21 @@
           "type": "number"
         },
         "yaw": {
-          "description": "The orbit heading in radians, as a literal or numeric state binding.",
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
+          "description": "The orbit heading in radians, as a literal, numeric state binding or short-arc clock keys.",
+          "title": "BindableAngle",
+          "allOf": [
+            {
+              "$ref": "#/$defs/BindableScalarNonNullable"
+            }
           ]
         },
         "pitch": {
-          "description": "The orbit tilt in radians, as a literal or numeric state binding.",
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
+          "description": "The orbit tilt in radians, as a literal, numeric state binding or short-arc clock keys.",
+          "title": "BindableAngle",
+          "allOf": [
+            {
+              "$ref": "#/$defs/BindableScalarNonNullable"
+            }
           ]
         },
         "pivotOffset": {
@@ -1903,12 +1699,8 @@
           "type": "string"
         },
         "fraction": {
-          "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding.",
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
-          ]
+          "$ref": "#/$defs/BindableScalarNonNullable2",
+          "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding."
         },
         "opcode": {
           "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
@@ -1933,12 +1725,8 @@
       ],
       "properties": {
         "key": {
-          "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases.",
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
-          ]
+          "$ref": "#/$defs/BindableScalarNonNullable2",
+          "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases."
         },
         "cases": {
           "$ref": "#/$defs/WorldCameraSelectCaseList",
@@ -4134,6 +3922,24 @@
         }
       ],
       "title": "ActionPredicate"
+    },
+    "DocumentVector2": {
+      "title": "DocumentVector2",
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+        }
+      ]
     },
     "ActionTarget": {
       "description": "The participant an action effect addresses. A document-scope rule has no participant to select, so only Self is admitted there; the other members belong to a host\u0027s per-participant action programs, which share the SetState/AddState shapes with the rule compiler and therefore carry the member on the wire.",
@@ -8338,17 +8144,12 @@
       "type": "object",
       "properties": {
         "color": {
-          "description": "The scrim\u0027s opaque fill color.",
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "#/$defs/BindableColorNonNullable",
+          "description": "The scrim\u0027s opaque fill color."
         },
         "alpha": {
-          "description": "The scrim\u0027s opacity, in [0, 1].",
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
-          ]
+          "$ref": "#/$defs/BindableScalarNonNullable2",
+          "description": "The scrim\u0027s opacity, in [0, 1]."
         }
       },
       "required": [
@@ -8363,14 +8164,12 @@
       "type": "object",
       "properties": {
         "ring": {
-          "description": "The 1px lit ring color.",
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "#/$defs/BindableColorNonNullable",
+          "description": "The 1px lit ring color."
         },
         "halo": {
-          "description": "The outer distance-falloff halo color.",
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "#/$defs/BindableColorNonNullable",
+          "description": "The outer distance-falloff halo color."
         }
       },
       "required": [

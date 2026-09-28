@@ -64,7 +64,7 @@ public sealed class WorldTimelineLawTests {
             ))
         );
         Assert.NotEqual(
-            actual: Validate(definition: Definition(new WorldClock(Name: "day$1", PeriodSeconds: 60d))),
+            actual: Validate(definition: Definition(new WorldClock(Name: "day~1", PeriodSeconds: 60d))),
             expected: string.Empty
         );
     }
@@ -82,35 +82,25 @@ public sealed class WorldTimelineLawTests {
         Assert.Equal(expected: 0.75d, actual: WorldClocks.Phase(value: 41.75d));
     }
     [Fact]
-    public void A_cycle_key_may_not_move_a_cloud_rate() {
+    public void A_state_clock_cannot_drive_a_rate_but_can_drive_coverage() {
+        var keyed = new BindableScalar(new WorldKeys<BindableScalar>("tide", [new(0d, 0.2f), new(0.5d, 0.8f)]));
         var definition = new WorldDefinition(
             RenderRaw: new WorldRenderDefaults(
-                Cycle: new WorldRenderCycle(
-                    State: "tide",
-                    Keys: [
-                        new WorldRenderCycleKey(At: 0f),
-                        new WorldRenderCycleKey(At: 0.5f, Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Spin: 0.2f)])),
-                    ]
-                ),
-                Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Coverage: 0.4f)])
+                Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Coverage: 0.4f, Spin: keyed)])
             ),
+            TimelineRaw: new WorldTimelineSection([new WorldClock("tide", State: "tide")]),
             StateRaw: new WorldStateSection(World: [Row(kind: CellKind.Int, name: "tide")])
         );
 
         Assert.Contains(
-            expectedSubstring: "may not key drift, shear or spin",
+            expectedSubstring: "history",
             actualString: Validate(definition: definition)
         );
-        // Control: the same key moving the coverage, which is no rate, is admitted.
+        // Coverage depends only on the current value; a wind displacement would require the state's history.
         Assert.Equal(
             actual: Validate(definition: definition with {
                 RenderRaw = definition.Render with {
-                    Cycle = definition.Render.Cycle! with {
-                        Keys = [
-                            new WorldRenderCycleKey(At: 0f),
-                            new WorldRenderCycleKey(At: 0.5f, Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Coverage: 0.8f)])),
-                        ],
-                    },
+                    Sky = new WorldRenderSky([new WorldRenderSkyLayer.Clouds(Coverage: keyed)]),
                 },
             }),
             expected: string.Empty
