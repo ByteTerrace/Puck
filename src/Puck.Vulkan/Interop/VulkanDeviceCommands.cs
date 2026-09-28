@@ -42,6 +42,8 @@ public sealed unsafe class VulkanDeviceCommands {
     public readonly delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, uint, void> CmdBlitImage;
     /// <summary>The <c>vkCmdClearColorImage</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void> CmdClearColorImage;
+    /// <summary>The <c>vkCmdCopyBuffer</c> entry point.</summary>
+    public readonly delegate* unmanaged[Cdecl]<nint, nint, nint, uint, nint, void> CmdCopyBuffer;
     /// <summary>The <c>vkCmdCopyBufferToImage</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, nint, uint, uint, nint, void> CmdCopyBufferToImage;
     /// <summary>The <c>vkCmdCopyImage</c> entry point.</summary>
@@ -269,6 +271,10 @@ public sealed unsafe class VulkanDeviceCommands {
         CmdClearColorImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
             functionName: "vkCmdClearColorImage"u8
+        ));
+        CmdCopyBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, uint, nint, void>)procedures.ResolveDeviceProc(
+            deviceHandle: deviceHandle,
+            functionName: "vkCmdCopyBuffer"u8
         ));
         CmdCopyBufferToImage = ((delegate* unmanaged[Cdecl]<nint, nint, nint, uint, uint, nint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,

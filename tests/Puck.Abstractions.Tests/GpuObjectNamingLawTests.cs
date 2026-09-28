@@ -19,6 +19,7 @@ public sealed class GpuObjectNamingLawTests {
         ["IGpuBindings.AllocateSet"] = (GpuObjectKind.DescriptorSet, static (services, name) => _ = services.Bindings.AllocateSet(descriptorSetLayoutHandle: 1, name: name, poolHandle: 1)),
         ["IGpuBindings.CreatePool"] = (GpuObjectKind.DescriptorPool, static (services, name) => _ = services.Bindings.CreatePool(name: name, sizes: default)),
         ["IGpuBufferFactory.CreateDeviceLocal"] = (GpuObjectKind.Buffer, static (services, name) => _ = services.BufferFactory.CreateDeviceLocal(name: name, sizeBytes: 16, usage: GpuBufferUsage.Storage)),
+        ["IGpuBufferFactory.CreateReadback"] = (GpuObjectKind.Buffer, static (services, name) => _ = services.BufferFactory.CreateReadback(name: name, sizeBytes: 16)),
         ["IGpuBufferFactory.CreateHostVisible"] = (GpuObjectKind.Buffer, static (services, name) => _ = services.BufferFactory.CreateHostVisible(name: name, sizeBytes: 16, usage: GpuBufferUsage.Storage)),
         ["IGpuBufferFactory.CreateHostVisibleDeviceLocal"] = (GpuObjectKind.Buffer, static (services, name) => _ = services.BufferFactory.CreateHostVisibleDeviceLocal(name: name, sizeBytes: 16, usage: GpuBufferUsage.Storage)),
         ["IGpuBufferFactory.CreateHostVisible(data)"] = (GpuObjectKind.Buffer, static (services, name) => _ = services.BufferFactory.CreateHostVisible(data: new byte[16], name: name, usage: GpuBufferUsage.Vertex)),

@@ -1,4 +1,4 @@
-// Generated from shader interface 'source-nv12' (sha256/2bbaf370f68018a9bc60fd2d6d1d64f8e6cc21ab5454fd84a57240bed18c0581). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'source-nv12' (sha256/c11c10783c4ee1bb7c331ad852424edd1bb9321248a83fcdd1cd311fdceb7c21). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SOURCE_NV12
 #define PUCK_SHADER_INTERFACE_SOURCE_NV12
 
@@ -25,9 +25,62 @@ struct SourceNv12Frame {
 // The Pass group: descriptor set 3, register space 3.
 struct SourceNv12Pass {
     [[vk::offset(0)]] uint2 extent;
+    [[vk::offset(8)]] uint workCounterRow;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SourceNv12Pass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] ByteAddressBuffer region : register(t1, space3);
 [[vk::binding(2, 3)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> image : register(u2, space3);
+[[vk::binding(3, 3)]] RWStructuredBuffer<uint> workCounters : register(u3, space3);
+
+// The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
+// back): each counted kind in GpuWork.KernelKinds order, march steps then texels written, as a 64-bit count in
+// two words, low word first. A kernel that also compiles under an interface declaring no work counters (a
+// document pass's) counts inside #if defined(PUCK_WORK_COUNTERS).
+#define PUCK_WORK_COUNTERS 1
+static const uint PuckWorkRowWords = 4u;
+static const uint PuckWorkStepsWord = 0u;
+static const uint PuckWorkTexelsWord = 2u;
+// Adds to one count: the low word atomically, then the high word by one when that addition carries.
+void puckAddWork(uint word, uint amount) {
+    if (amount == 0u) {
+        return;
+    }
+
+    uint before;
+
+    InterlockedAdd(workCounters[word], amount, before);
+
+    if (before > (0xFFFFFFFFu - amount)) {
+        InterlockedAdd(workCounters[word + 1u], 1u);
+    }
+}
+// Adds an invocation's march steps and texels written to its pass's row: the wave sums both, and its first active
+// lane adds each sum. Every lane that did work reaches the call, since a lane that returned before it counts nothing.
+void puckCountWork(uint steps, uint texels) {
+    uint waveSteps = WaveActiveSum(steps);
+    uint waveTexels = WaveActiveSum(texels);
+
+    if (WaveIsFirstLane()) {
+        uint row = (passGroup.workCounterRow * PuckWorkRowWords);
+
+        puckAddWork((row + PuckWorkStepsWord), waveSteps);
+        puckAddWork((row + PuckWorkTexelsWord), waveTexels);
+    }
+}
+// Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper
+// lanes, and the first of them adds each sum. A helper lane counts nothing and never adds, whether or not the
+// backend lets it take part in wave operations, since its atomics have no effect.
+void puckCountFragmentWork(uint steps, uint texels) {
+    bool counting = !IsHelperLane();
+    uint waveSteps = WaveActiveSum(counting ? steps : 0u);
+    uint waveTexels = WaveActiveSum(counting ? texels : 0u);
+
+    if (counting && (WavePrefixCountBits(counting) == 0u)) {
+        uint row = (passGroup.workCounterRow * PuckWorkRowWords);
+
+        puckAddWork((row + PuckWorkStepsWord), waveSteps);
+        puckAddWork((row + PuckWorkTexelsWord), waveTexels);
+    }
+}
 
 #endif // PUCK_SHADER_INTERFACE_SOURCE_NV12

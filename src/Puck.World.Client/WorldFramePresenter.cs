@@ -1410,6 +1410,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // The authored `markers` section's candidate instances, resolved once for every seat's own cull below.
         ComposeMarkerCandidates(definition: m_client.Definition);
 
+        var quality = ViewQuality();
+
         m_views.Clear();
         BeginRoutedViews();
         Array.Clear(array: m_seatCameraPoses);
@@ -1485,6 +1487,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         Camera: namedCamera,
                         Region: region
                     ) {
+                        Quality = quality,
                         RenderScale = (m_settings.RenderScale * transitionScale),
                     });
                     if (!hasSeatViewFallback) {
@@ -1521,6 +1524,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 Camera: camera,
                 Region: region
             ) {
+                Quality = quality,
                 RenderScale = (m_settings.RenderScale * transitionScale),
             });
             // A seat presented elsewhere keeps its place among the views, so every view keeps its index, and its view
@@ -1609,11 +1613,16 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     Y: 0f
                 )
             ) {
+                Quality = quality,
                 RenderScale = m_settings.RenderScale,
             });
         } else {
             m_noLocalSeatsNarrated = false;
         }
+
+        // The camera the frame's first view renders with, the spectator above included: the viewer a window fits its
+        // eye to while no seat resolves a view (WorldSeatViewports.Viewer).
+        m_viewports.PublishFirstView(camera: m_views[0].Camera);
 
         // Publish this frame's audio snapshot AFTER the transforms are packed and the view rigs resolved: emitter
         // poses read the packed leaf transforms; the listener reads the seat cameras once per produced
@@ -1652,13 +1661,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             Time: m_elapsedSeconds,
             Views: m_views
         ) {
-            // Shadow reach is continuous: zero skips the march; (0,1) scales gather + march reach; one uses the
-            // engine's 0 sentinel for full reach.
-            DisableAmbientOcclusion = !m_settings.AmbientOcclusion,
-            DisableSoftShadows = (m_settings.ShadowReach <= 0f),
-            // Ambient occlusion — the world.ao toggle rides the DisableAmbientOcclusion lane.
-            // The far-field isolator (world.far-field) ships ON, so the frame's flag is the negated "disable" side.
-            DisableFarBound = !m_settings.FarBound,
             DynamicTransforms = transforms,
             MovedTransforms = moved,
             // A frame whose render inputs match the previous one re-composites the retained image instead of
@@ -1677,28 +1679,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // The sky's clock (twinkle, cloud motion), taken from the deterministic tick counter and never from
             // m_elapsedSeconds so a replay at tick N draws the identical sky.
             SampleIndex = ((uint)m_simulation.ElapsedTicks),
-            ShadowDistanceScale = ((m_settings.ShadowReach >= 1f)
-            ? 0f
-            : m_settings.ShadowReach),
-            // At the machine-fleet tiers the correctness-complete per-tile shadow-grid gather is the dominant frame
-            // cost (measured 64.5 ms views at 124 stand-ins versus 16.5 ms with the existing camera-tile fallback).
-            // Small sessions keep exact off-camera shadow candidates; 16/64/128-player sessions take the explicit crowd
-            // approximation, while the independent crowd-radius policy still controls which avatars cast at all.
-            UseCameraTileShadowMask = (m_settings.ShadowMask switch {
-                ShadowMaskMode.ExactGather => false,
-                ShadowMaskMode.CameraTile => true,
-                _ => (m_client.ActivePeerCount >= 16),
-            }),
-            UseFastSoftShadowMarch = (m_settings.ShadowMarch switch {
-                ShadowMarchMode.Exact => false,
-                ShadowMarchMode.Fast => true,
-                _ => (m_client.ActivePeerCount >= 16),
-            }),
-            UseFastAmbientOcclusion = (m_settings.AmbientOcclusionQuality switch {
-                AmbientOcclusionMode.Exact => false,
-                AmbientOcclusionMode.Fast => true,
-                _ => (m_client.ActivePeerCount >= 16),
-            }),
         };
 
         return m_dressedFrame;

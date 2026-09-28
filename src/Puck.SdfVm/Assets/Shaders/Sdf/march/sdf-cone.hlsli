@@ -101,6 +101,7 @@ float coneMarchFarBound(ViewportData view, TileCone cone, uint instanceMaskBase,
         }
 
         float clearance = (min(mapDistanceMasked(origin + (cone.centerDirection * t), instanceMaskBase), sdfMapStepBound) - (spread * t));
+        sdfWorkSteps += 1u;
 
         if (clearance > SurfaceEpsilon) {
             if (!clear) {
@@ -160,6 +161,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
         // is an honest unbounding sphere of the TRUE field, so entry, TileEmpty, and the gap proofs stay sound; a
         // fold-free program publishes SDF_STEP_BOUND_NONE and this min is the identity.
         float clearance = (min(mapDistanceMasked(origin + (cone.centerDirection * t), instanceMaskBase), sdfMapStepBound) - (cone.chord * t));
+        sdfWorkSteps += 1u;
 
         if (clearance <= ConeEpsilon) {
             b.entry = t;
@@ -198,6 +200,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
         // FOLD-SAFE, same as phase 1: a raw-value overestimate here would prove a FALSE clear span across a fold
         // boundary — an unsafe teleport. The bounded clearance keeps firstExit/secondEntry honest.
         float clearance = (min(mapDistanceMasked(origin + (cone.centerDirection * t), instanceMaskBase), sdfMapStepBound) - (cone.chord * t));
+        sdfWorkSteps += 1u;
 
         if (!clear) {
             if (clearance > ConeEpsilon) {

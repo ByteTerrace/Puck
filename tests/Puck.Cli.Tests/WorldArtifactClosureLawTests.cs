@@ -1,4 +1,3 @@
-using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -52,35 +51,52 @@ public sealed class WorldArtifactClosureLawTests {
     [Fact]
     public void EveryInputTheWorldBuildReadsLiesUnderAWalkedRoot() {
         var root = RepositoryPaths.RequireRoot();
-        using var scratch = new TemporaryDirectory();
+        var scratch = CliScratchDirectories.CreateProject(prefix: "puck-world-closure-");
+        string[] collected;
 
-        scratch.WriteText(
-            name: "collect.targets",
-            text: CollectTargets
-        );
+        try {
+            var project = Path.Combine(
+                path1: scratch,
+                path2: "collect.proj"
+            );
 
-        var project = scratch.WriteText(
-            name: "collect.proj",
-            text: CollectProject
-        );
-        var evaluation = CliProcess.RunCaptured(
-            arguments: ["msbuild", project, "-nologo", "-v:q", $"-p:PuckWorldProject={Path.Combine(path1: root, path2: WorldArtifactClosure.WorldProject)}"],
-            cancellationToken: TestContext.Current.CancellationToken,
-            fileName: "dotnet",
-            input: string.Empty,
-            timeout: TimeSpan.FromMinutes(value: 5)
-        );
+            File.WriteAllText(
+                contents: CollectTargets,
+                path: Path.Combine(
+                    path1: scratch,
+                    path2: "collect.targets"
+                )
+            );
+            File.WriteAllText(
+                contents: CollectProject,
+                path: project
+            );
+            var evaluation = CliProcess.RunCaptured(
+                arguments: ["msbuild", "--disable-build-servers", project, "-nologo", "-v:q", $"-p:PuckWorldProject={Path.Combine(path1: root, path2: WorldArtifactClosure.WorldProject)}"],
+                cancellationToken: TestContext.Current.CancellationToken,
+                fileName: "dotnet",
+                input: string.Empty,
+                workingDirectory: scratch,
+                timeout: TimeSpan.FromMinutes(value: 5)
+            );
 
-        Assert.True(
-            condition: (evaluation.ExitCode == 0),
-            userMessage: $"{evaluation.Stdout}{Environment.NewLine}{evaluation.Stderr}"
-        );
+            Assert.True(
+                condition: (evaluation.ExitCode == 0),
+                userMessage: $"{evaluation.Stdout}{Environment.NewLine}{evaluation.Stderr}"
+            );
+            collected = File.ReadAllLines(path: Path.Combine(
+                path1: scratch,
+                path2: "inputs.txt"
+            ));
+        } finally {
+            CliScratchDirectories.TryDelete(path: scratch);
+        }
 
         var (roots, projects) = WorldArtifactClosure.Walk(repositoryRoot: root);
         var reached = new List<string>();
         var inputs = new List<string>();
 
-        foreach (var line in File.ReadAllLines(path: scratch.PathOf(name: "inputs.txt"))) {
+        foreach (var line in collected) {
             var separator = line.IndexOf(value: '|');
             var relative = Path.GetRelativePath(
                 path: line[(separator + 1)..],

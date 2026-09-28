@@ -351,11 +351,11 @@ internal static partial class AzureCommand {
         );
         if (runtimeArtifacts is null) {
             await RunAsync(
-                arguments: ["restore", "src/Puck.Azure.Functions", "--locked-mode"],
+                arguments: ["restore", "--disable-build-servers", "src/Puck.Azure.Functions", "--locked-mode"],
                 executable: "dotnet"
             );
             await RunAsync(
-                arguments: ["publish", "src/Puck.Azure.Functions", "-c", "Release", "--no-restore", "-o", Path.Combine(
+                arguments: ["publish", "--disable-build-servers", "src/Puck.Azure.Functions", "-c", "Release", "--no-restore", "-o", Path.Combine(
                         path1: output,
                         path2: "functions"
                     )],
@@ -397,11 +397,11 @@ internal static partial class AzureCommand {
         );
         if (runtimeArtifacts is null) {
             await RunAsync(
-                arguments: ["restore", "src/Puck.World.Browser", "--locked-mode"],
+                arguments: ["restore", "--disable-build-servers", "src/Puck.World.Browser", "--locked-mode"],
                 executable: "dotnet"
             );
             await RunAsync(
-                arguments: ["publish", "src/Puck.World.Browser", "-c", "Release", "--no-restore"],
+                arguments: ["publish", "--disable-build-servers", "src/Puck.World.Browser", "-c", "Release", "--no-restore"],
                 executable: "dotnet"
             );
         } else {

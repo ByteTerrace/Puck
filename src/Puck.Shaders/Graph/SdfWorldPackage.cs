@@ -279,6 +279,7 @@ public static class SdfWorldPackage {
         Value(name: FastSoftShadowMarch, type: ShaderValueType.Uint),
         Value(name: FastAmbientOcclusion, type: ShaderValueType.Uint),
         Value(name: DisableFarBound, type: ShaderValueType.Uint),
+        ShaderWorkCounters.RowMember,
         ShaderInterfaceMember.Value(
             group: ShaderInterfaceGroup.Pass,
             length: EnvironmentRows,
@@ -313,7 +314,8 @@ public static class SdfWorldPackage {
         WorldImage(name: MeshEmission),
     ];
     /// <summary>Gets what every compute pass of the fragment reads: from its pass group, beside the extent, the values
-    /// (<see cref="Values"/>), the view's scratch, its output, the screens it shows and the mesh target; and the World
+    /// (<see cref="Values"/>), the view's scratch, its output, the screens it shows, the mesh target and the work counters;
+    /// and the World
     /// group's members (<see cref="Tables"/>).</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Members { get; } = [
         .. Values,
@@ -343,10 +345,13 @@ public static class SdfWorldPackage {
             name: MeshVisibility,
             type: ShaderValueType.Float4
         ),
+        ShaderWorkCounters.BufferMember,
         .. Tables,
     ];
     /// <summary>Gets the fragment the package runs as: one view's dispatch set, its scratch transient and counted, its
-    /// one output the view's color.</summary>
+    /// one output the view's color. Every pass counts its kernels' march steps and texels written into the work counters
+    /// (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>): the mesh pass each fragment it writes to its
+    /// target.</summary>
     public static RenderGraphPackageFragment Fragment { get; } = new(
         InputVersions: [],
         OutputVersions: [Color],
@@ -356,6 +361,7 @@ public static class SdfWorldPackage {
             Pass(inputs: [Parts.InstanceMasks], name: Parts.Beam, outputs: [Parts.Tiles]),
             Pass(inputs: [Parts.Tiles], name: Parts.CullArgs, outputs: [Parts.Arguments, Parts.CullBounds]),
             new RenderGraphFragmentPass(
+                CountsKernelWork: true,
                 InputAccesses: [],
                 Inputs: [],
                 Name: Parts.Mesh,
@@ -459,7 +465,9 @@ public static class SdfWorldPackage {
         StrideBytes: VisibilityRecordByteLength,
         Transient: (from is null)
     );
+    // A compute pass, whose kernel counts its own work as every pass of the fragment does.
     private static RenderGraphFragmentPass Pass(string name, string[] outputs, string[]? inputs = null) => new(
+        CountsKernelWork: true,
         InputAccesses: [.. (inputs ?? []).Select(selector: static _ => RenderGraphPortAccess.ComputeRead)],
         Inputs: [.. (inputs ?? []).Select(selector: static input => new ResourceReference(Name: input))],
         Name: name,

@@ -1546,7 +1546,28 @@ it takes. The node wraps every GPU service it holds once, so each dispatch,
 draw, barrier, bind, descriptor write, push-constant byte and clear it records
 is counted where it is made, into the pass being recorded. The zero clears that
 start the first frame after an install or a reset count in the first pass. The
-preview and the output transitions count outside every pass. What the
+preview and the output transitions count outside every pass. A package pass
+that skips a frame (`IRenderGraphPackageRecorder.Skips`) records nothing and
+counts as skipped, never as a pass that ran and did no work. A graph a package
+pass of which counts its shaders' own work (`RenderGraphFragmentPass.CountsKernelWork`,
+or `RenderGraphPackage.CountsKernelWork` for a package whose members declare
+the work counters: every pass of `sdf.world`, `place`, `overlay`, the source
+conversions and every post-process package, which must) declares the work
+counters in its interface (`ShaderWorkCounters`), whose generated include
+carries the functions its shaders count through and defines
+`PUCK_WORK_COUNTERS`, and keeps a counter buffer and a readback buffer per frame
+slot, one row a pass (`GpuKernelCounters`). A compute kernel counts through
+`puckCountWork`, one wave sum added by the wave's first active lane, and a
+fragment stage through `puckCountFragmentWork`, the same over the wave's lanes
+that are not helper lanes. A kernel a document pass also compiles, such as a
+source conversion, counts inside `#if defined(PUCK_WORK_COUNTERS)`, so under a
+document's interface it counts nothing. The node clears the slot's counters
+ahead of the first pass and copies them to its readback behind the last, which
+counts one clear, one copy and three buffer barriers outside every pass: the
+clear before the compute and fragment stages that add, those stages before the
+copy, and the copy before the host's read. The ledger adds each row's
+`gpu.march.steps` and `gpu.texels.written` to its pass once the submission
+completes. What the
 node does between submissions to install or rebuild a graph, the sets it
 writes and the pass blocks it sends to every frame slot, counts in no
 submission, whether the install succeeds, fails partway or follows a device

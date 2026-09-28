@@ -10,7 +10,7 @@ namespace Puck.Vulkan.Interop;
 /// for its lifetime, so a write is visible to the device without a flush and a read after the device's work completes
 /// needs no invalidate. A device-local buffer is never mapped, and its host operations throw.
 /// </summary>
-public sealed class VulkanBuffer : IGpuStorageBuffer {
+public sealed class VulkanBuffer : IGpuStorageBuffer, IGpuReadbackBuffer {
     private readonly IVulkanBufferApi m_bufferApi;
 
     private bool m_disposed;
@@ -121,21 +121,22 @@ public sealed class VulkanBuffer : IGpuStorageBuffer {
         m_bufferApi.Destroy(handles: m_handles);
         m_handles = default;
     }
-    /// <summary>Copies the whole buffer into a new managed array through its mapping.</summary>
-    /// <returns>A copy of the buffer's bytes.</returns>
-    /// <exception cref="InvalidOperationException">The buffer is not host-coherent, or is too large for a managed array.</exception>
+    /// <summary>Copies the buffer's first bytes into <paramref name="destination"/> through its mapping.</summary>
+    /// <param name="destination">The bytes to fill, at most <see cref="SizeBytes"/> long.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="destination"/> is longer than the buffer.</exception>
+    /// <exception cref="InvalidOperationException">The buffer is not host-coherent.</exception>
     /// <exception cref="ObjectDisposedException">The buffer has been disposed.</exception>
-    public unsafe byte[] Read() {
+    public unsafe void Read(Span<byte> destination) {
         var pointer = RequireMapping();
 
-        if (SizeBytes > int.MaxValue) {
-            throw new InvalidOperationException(message: "The Vulkan buffer is too large for a managed byte array.");
-        }
-
-        return new ReadOnlySpan<byte>(
-            length: ((int)SizeBytes),
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            other: SizeBytes,
+            value: ((ulong)destination.Length)
+        );
+        new ReadOnlySpan<byte>(
+            length: destination.Length,
             pointer: ((void*)pointer)
-        ).ToArray();
+        ).CopyTo(destination: destination);
     }
     /// <summary>Copies the supplied data into the buffer's mapping from the start. No flush is needed: the memory is
     /// host-coherent.</summary>

@@ -26,8 +26,16 @@ public sealed class DirectXGpuRenderPass : IGpuRenderPass {
             ? DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: depth.Format)
             : DXGI_FORMAT.DXGI_FORMAT_UNKNOWN
         );
+        Flags = (description.ShaderWrites
+            ? D3D12_RENDER_PASS_FLAGS.D3D12_RENDER_PASS_FLAG_ALLOW_UAV_WRITES
+            : D3D12_RENDER_PASS_FLAGS.D3D12_RENDER_PASS_FLAG_NONE);
     }
 
+    /// <summary>Gets the flags <see cref="DirectXGpuRecorder.BeginRenderPass"/> opens the pass with:
+    /// <c>D3D12_RENDER_PASS_FLAG_ALLOW_UAV_WRITES</c> when the pass allows shader writes
+    /// (<see cref="GpuRenderPassDescription.ShaderWrites"/>), which a UAV write inside a render pass requires, and none
+    /// otherwise.</summary>
+    public D3D12_RENDER_PASS_FLAGS Flags { get; }
     /// <summary>Gets each color attachment's DXGI format, in order.</summary>
     public IReadOnlyList<DXGI_FORMAT> ColorFormats { get; }
     /// <summary>Gets the depth attachment's DXGI format, or <c>DXGI_FORMAT_UNKNOWN</c> for none.</summary>

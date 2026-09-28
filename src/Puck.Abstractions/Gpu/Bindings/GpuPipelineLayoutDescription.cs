@@ -82,4 +82,9 @@ public sealed class GpuPipelineLayoutDescription {
     public bool PushesIndex { get; }
     /// <summary>Gets the pipeline's shader stages, which every binding and the pushed index are visible to.</summary>
     public GpuShaderStage Stages { get; }
+    /// <summary>Gets whether the pipeline's shaders may write through a binding: whether any group binds a
+    /// <see cref="GpuBindingKind.ReadWriteBuffer"/> or a <see cref="GpuBindingKind.StorageImage"/>. A graphics pipeline
+    /// that does draws in a render pass that allows shader writes (<see cref="GpuRenderPassDescription.ShaderWrites"/>),
+    /// since every binding is visible to every stage.</summary>
+    public bool ShaderWrites => Groups.Any(predicate: static group => group.Bindings.Any(predicate: static binding => (binding.Kind is GpuBindingKind.ReadWriteBuffer or GpuBindingKind.StorageImage)));
 }

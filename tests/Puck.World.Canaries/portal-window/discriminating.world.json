@@ -19,23 +19,7 @@
       "version": "puck.body.program.v1"
     }
   ],
-  "cameras": [
-    {
-      "anchor": null,
-      "name": "main-cam",
-      "renderHeight": 144,
-      "renderWidth": 256,
-      "rig": {
-        "name": "main-cam",
-        "operations": [
-          { "$type": "anchor", "subject": { "$type": "worldPoint", "point": [0, 1.6, 6] } },
-          { "$type": "lookAt", "subject": { "$type": "worldPoint", "point": [0, 1.5, 0] } },
-          { "$type": "fieldOfView", "fieldOfViewRadians": 0.9 }
-        ],
-        "version": "puck.camera.program.v1"
-      }
-    }
-  ],
+  "cameras": [],
   "channels": [
     { "name": "forward", "role": "MoveAdvance", "shape": "Bipolar" },
     { "name": "strafe", "role": "MoveStrafe", "shape": "Bipolar" },
@@ -164,7 +148,7 @@
       {
         "name": "doorway",
         "seatCount": 0,
-        "slots": [ { "camera": "main-cam", "height": 1, "width": 1, "x": 0, "y": 0 } ],
+        "slots": [ { "height": 1, "width": 1, "x": 0, "y": 0 } ],
         "transitionRenderScale": 1,
         "transitionSeconds": 0
       }
@@ -173,8 +157,8 @@
     "seatRig": {
       "name": "doorway-seat",
       "operations": [
-        { "$type": "orbit", "distance": 5, "pitch": 0.3, "yaw": 0 },
-        { "$type": "lookAt", "subject": { "$type": "reference" } },
+        { "$type": "orbit", "distance": 3, "pitch": 0, "pivotOffset": [0, 1.6, 0], "yaw": 3.1415927 },
+        { "$type": "lookAt", "subject": { "$type": "worldPoint", "point": [0, 1.5, 0] } },
         { "$type": "fieldOfView", "fieldOfViewRadians": 0.9 }
       ],
       "version": "puck.camera.program.v1"

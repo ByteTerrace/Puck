@@ -568,5 +568,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
         }
     }
 
+    puckCountFragmentWork(0u, 1u);
+
     return float4(color, 1.0);
 }

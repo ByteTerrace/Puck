@@ -249,6 +249,24 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
         );
     }
     /// <inheritdoc/>
+    /// <remarks>A <c>CopyBufferRegion</c>: the source in <c>COPY_SOURCE</c>, which the barrier into
+    /// <see cref="GpuAccess.TransferRead"/> moves it to, and the destination a readback-heap buffer, which is always in
+    /// <c>COPY_DEST</c>.</remarks>
+    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes) {
+        ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(sourceBufferHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(destinationBufferHandle);
+        ArgumentOutOfRangeException.ThrowIfZero(sizeBytes);
+
+        ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList)->CopyBufferRegion(
+            DstOffset: 0UL,
+            NumBytes: sizeBytes,
+            SrcOffset: 0UL,
+            pDstBuffer: ((ID3D12Resource*)destinationBufferHandle),
+            pSrcBuffer: ((ID3D12Resource*)sourceBufferHandle)
+        );
+    }
+    /// <inheritdoc/>
     public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
         ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
         ArgumentOutOfRangeException.ThrowIfZero(bufferHandle);
@@ -509,7 +527,7 @@ public sealed unsafe class DirectXGpuRecorder(DirectXDeviceContext deviceContext
             17763
         )) {
             ((ID3D12GraphicsCommandList4*)state.CommandList)->BeginRenderPass(
-                Flags: D3D12_RENDER_PASS_FLAGS.D3D12_RENDER_PASS_FLAG_NONE,
+                Flags: target.Pass.Flags,
                 NumRenderTargets: ((uint)colorCount),
                 pDepthStencil: ((description.Depth is null)
                     ? null

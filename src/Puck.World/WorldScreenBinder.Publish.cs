@@ -1,6 +1,7 @@
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.SdfVm;
+using Puck.World.Client;
 
 namespace Puck.World;
 
@@ -18,12 +19,16 @@ internal sealed partial class WorldScreenBinder {
     /// shares.</param>
     /// <param name="displayWidth">The display's width, in pixels, which a view's declared extent is a fraction of.</param>
     /// <param name="displayHeight">The display's height, in pixels.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="pipelines"/> or <paramref name="host"/> is
+    /// <param name="viewports">The seats' views for each frame just dressed, whose primary render camera a window session fits
+    /// its eye to.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="pipelines"/>, <paramref name="host"/> or <paramref name="viewports"/> is
     /// <see langword="null"/>.</exception>
-    public void ConfigureViews(SdfWorldPipelineCatalog pipelines, bool hostsOnDirectX, int programWordCapacity, int instanceCapacity, int dynamicTransformCapacity, ISdfFrameSource host, int displayWidth, int displayHeight) {
+    public void ConfigureViews(SdfWorldPipelineCatalog pipelines, bool hostsOnDirectX, int programWordCapacity, int instanceCapacity, int dynamicTransformCapacity, ISdfFrameSource host, int displayWidth, int displayHeight, WorldSeatViewports viewports) {
         ArgumentNullException.ThrowIfNull(argument: pipelines);
         ArgumentNullException.ThrowIfNull(argument: host);
+        ArgumentNullException.ThrowIfNull(argument: viewports);
 
+        m_viewports = viewports;
         m_viewPipelines = pipelines;
         m_viewHostsOnDirectX = hostsOnDirectX;
         m_viewProgramWordCapacity = programWordCapacity;
@@ -74,8 +79,8 @@ internal sealed partial class WorldScreenBinder {
     /// the fills a filled external source resolves to, and services the shared camera feeds, the probe outputs and the HUD's captures. A
     /// producer, machine or probe source a screen shows is a source instance the runtime publishes at its cadence when it
     /// renders the instance, and a view is an instance too, which a capture frame renders again while it is tainted. It
-    /// fits every window session's camera to the local eye, and ends by publishing every screen's mapping
-    /// (<see cref="Mappings"/>) at the extents its images now have.</summary>
+    /// keeps the frame's context, through which a session view captures the world's frame before its own, and ends by
+    /// publishing every screen's mapping (<see cref="Mappings"/>) at the extents its images now have.</summary>
     /// <param name="context">The host's frame context, whose host resolves the live GPU device; a frame with no device publishes
     /// nothing.</param>
     public void Publish(in FrameContext context) {
@@ -118,7 +123,8 @@ internal sealed partial class WorldScreenBinder {
         );
         ServiceProbeFeeds(deviceContext: deviceContext);
         PublishFrameCaptures(context: in context);
-        UpdateWindowCameras();
+        m_frameContext = context;
+        m_hasFrameContext = true;
         Mappings.Publish(images: this);
     }
     /// <summary>Sets the deterministic refresh divisor of every camera view and every session view but a window's. One

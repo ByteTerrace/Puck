@@ -96,12 +96,15 @@ public sealed record ShaderPipelineAttachment(
 /// for a package that runs as one pass.</param>
 /// <param name="Dispatch">Its dispatch shape, or <see langword="null"/> for one invocation per pixel of its extent. An
 /// indirect dispatch's arguments version is planned as the pass's first access, in the indirect-argument state.</param>
+/// <param name="CountsKernelWork">Whether its kernels count their own work into the node's counter buffers
+/// (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>), in the row its pass index names.</param>
 public sealed record ShaderPipelinePackageStep(
     string Package,
     IReadOnlyList<ResourceReference> Inputs,
     IReadOnlyList<ResourceReference> Outputs,
     string? Part = null,
-    ShaderPipelineDispatch? Dispatch = null
+    ShaderPipelineDispatch? Dispatch = null,
+    bool CountsKernelWork = false
 );
 /// <summary>A pass entry in an immutable shader execution plan.</summary>
 /// <param name="Name">The unique pass name.</param>
@@ -186,6 +189,10 @@ public sealed class ShaderPipelinePlan {
         ? string.Empty
         : Outputs[0]
     );
+    /// <summary>Gets whether a pass's kernels count their own work (<see cref="ShaderPipelinePackageStep.CountsKernelWork"/>):
+    /// the node running the plan then keeps a counter row a pass (<see cref="Abstractions.Gpu.GpuKernelCounters"/>),
+    /// clears them before the frame's first pass and copies them into the slot's readback after its last.</summary>
+    public bool CountsKernelWork => Passes.Any(predicate: static pass => (pass.Package?.CountsKernelWork == true));
     /// <summary>Gets the graph's shader passes, package passes and versions copied into this plan, every binding
     /// resolved, with its tick rate and tiers: a snapshot the plan owns, so a later change to the document it was
     /// planned from never reaches it.</summary>

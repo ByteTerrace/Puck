@@ -264,7 +264,10 @@ reserved capacity. For a repeatable reading, run
 boots the authored counters workload offscreen on each backend, writes a report
 with every count tagged by class, and fails when a deterministic count differs
 between the backends. Keep the report from before a change and compare it with
-the one after, using `puck counters compare`.
+the one after, using `puck counters compare`. `puck counters --check` also holds
+every pass's counts to the counted-cost ceilings in
+`tests/Puck.Counters/counters.ceilings.json`, and `--record` rewrites them in the
+change that explains why a count moved.
 
 Compare the same document, camera, resolution, quality settings, backend and
 build configuration before and after the change. Report these conditions with
@@ -412,6 +415,13 @@ framed as unverified when no device run exists.
   infrastructure is built ahead for re-hosting and has no live check.
 - RADV may select wave32 or wave64. New wave-intrinsic kernels must be
   subgroup-size-independent or explicitly request a supported size.
+- The .NET host picks the SDK from the working directory's nearest
+  `global.json`, and MSBuild picks a project's SDK from the project's; with
+  neither, both roll to the newest SDK installed, preview or not. A verb or
+  test that builds a scratch project outside the checkout creates it through
+  `CliScratchDirectories.CreateProject`, which copies the checkout's
+  `global.json` in, and runs the SDK command from that directory. An SDK
+  command against a checkout project runs from the checkout.
 - Incremental builds can retain corrupted reference assemblies. Confirm
   suspicious behavior in a fresh worktree before attributing it to source
   changes, then clean only the affected `bin`/`obj` directories.

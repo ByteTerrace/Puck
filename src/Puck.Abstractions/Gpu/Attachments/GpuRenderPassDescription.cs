@@ -28,7 +28,11 @@ public readonly record struct GpuDepthAttachment(GpuPixelFormat Format, GpuAttac
 /// <param name="Colors">The color attachments, in shader output order (<c>SV_Target0</c> first); at most
 /// <see cref="MaxColorAttachments"/>.</param>
 /// <param name="Depth">The depth attachment, or <see langword="null"/> for none.</param>
-public sealed record GpuRenderPassDescription(IReadOnlyList<GpuColorAttachment> Colors, GpuDepthAttachment? Depth = null) {
+/// <param name="ShaderWrites">Whether the pipelines drawn in the pass may write through a read-write binding from their
+/// shaders (<see cref="GpuPipelineLayoutDescription.ShaderWrites"/>), as a fragment stage counting its work does:
+/// Direct3D 12 then opens the pass with <c>D3D12_RENDER_PASS_FLAG_ALLOW_UAV_WRITES</c>, which a UAV write inside a
+/// render pass requires, and refuses a pipeline that writes against a pass that does not allow it.</param>
+public sealed record GpuRenderPassDescription(IReadOnlyList<GpuColorAttachment> Colors, GpuDepthAttachment? Depth = null, bool ShaderWrites = false) {
     /// <summary>The most color attachments a render pass may have on every backend.</summary>
     public const int MaxColorAttachments = 8;
 

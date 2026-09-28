@@ -81,8 +81,9 @@ misses included. **surface** adds the geometric normal and curvature to it.
 **ambient** evaluates contact occlusion along those normals into the record.
 **shadow** marches the key light's soft shadow from each lit surface into the
 record. **views** reads the record and computes materials, lighting and
-volumes. A frame whose levers turn ambient occlusion or soft shadows off skips
-that pass. Compare all five passes when measuring per-pixel field cost: moving
+volumes. A view whose quality (`SdfViewSnapshot.Quality`) turns ambient occlusion or
+soft shadows off skips that pass; quality is each view's, so views of one frame
+render at different cost. Compare all five passes when measuring per-pixel field cost: moving
 work between kernels can reduce register pressure but adds buffer traffic.
 
 No pass assembles views. Each view's output is its instance's own image, sized
@@ -259,7 +260,7 @@ A still frame therefore writes no table. The frame's presentation time and its
 drifting clouds ride the pass blocks, which the view's node writes whole each
 frame it renders. The frame instance grid is rebuilt only on a frame whose
 transforms moved. `world.counters gpu` reports the tables' written bytes as
-`uploads.host-visible` on its `upload` line.
+`uploads.host-visible` on its `upload` line, and a brick's on its `bricks` line.
 
 Nothing on the live path waits for its own submission: the upload and each
 view's passes are submitted and the fences do the pacing. A capture reads a
@@ -278,15 +279,36 @@ frame's image while the next one renders.
 
 Performance is judged by code, disassembly, and deterministic work counters —
 never by wall-clock or GPU timestamps. The residency counts the work of its
-`upload` pass, and each view's node counts the work each of its passes
+upload's passes, and each view's node counts the work each of its passes
 (`sdf.world$sky` through `sdf.world$views`) records, with no arming and no
 effect on the image: dispatches, indirect dispatches, barriers, pipeline and
 descriptor-set binds, push-constant bytes, descriptor writes and host-visible
-upload bytes. The `upload` pass counts the regions' writes and copies; since
-they follow each device's residency policy, the pass is per-backend
-deterministic, and `puck counters` does not hold the two backends to it. The
-upload's brick copies and bakes and the fillers' first transitions are counted
-outside its pass. A view the cadence gate finds unchanged is not rendered at
+upload bytes. The upload has three passes: `fillers`, the fillers' first
+transitions and clears, which only the first upload runs; `bricks`, a queued
+brick's staging copy and the carve bake's slices with the pool's barriers,
+which an upload runs only when it writes the pool; and `upload`, the regions'
+writes and copies. The `bricks` and `upload` passes follow each device's
+residency policy, so they are per-backend deterministic, and `puck counters`
+does not hold the two backends to them.
+
+Each view's passes also count their own work on the GPU: the march steps they
+take, one for each field evaluation of a march or a query and for each sample of
+a bounded volume, and the texels they write, one for each pixel whose output
+they write (an image texel, or any word of a pixel's visibility record, so a
+stage that returns before it stores counts nothing) and, in the mesh pass, one
+for each fragment. The root graph's `place` passes, the overlay, the source
+conversions and the post passes count the texels they write the same way. Each
+wave sums its lanes' counts, a fragment stage's over the lanes that are not
+helper lanes, and adds them with one atomic into the pass's row of the node's
+kernel counters, which the node clears ahead of the view's first pass and
+copies to the frame slot's readback behind its last; the counts join the pass's
+line once the submission completes, as `march.steps` and `texels.written`. The
+marches run in floats and an indirect pass runs only the tiles culling leaves
+it, so these counts are per backend deterministic. The clear, the copy and their
+three barriers (after the clear, before the copy, and from the copy to the host)
+count outside every pass. A pass the frame skips, such as the ambient and
+shadow passes at a tier that turns them off, is reported as skipped, not as a
+pass that ran and counted nothing. A view the cadence gate finds unchanged is not rendered at
 all: the render graph keeps its latest output, and its passes record nothing.
 Counts are published only once the GPU has finished the submission, so
 `world.counters gpu` shows the newest completed frame.
@@ -296,8 +318,11 @@ scene keeps each view's retained output instead of rendering, so run
 `world.cadence off` before measuring one. Hold the camera at a fixed pose
 while comparing runs; [SDF performance](performance.md) turns this into the
 general rule: frame-index a measurement camera, never wall-clock it. The
-counts are exact and the same on every backend for the same inputs — no
-banding or averaging is needed the way a timestamp sample would require. When
+counts are exact: the calls a pass records are the same on every backend for
+the same inputs, and its march steps and texels written the same on every run
+of one backend, so no banding or averaging is needed the way a timestamp sample
+would require. `puck counters --check` holds a pinned workload's counts, pass by
+pass, to the counted-cost ceilings recorded for it. When
 a counted-work comparison alone cannot answer the question, read the kernel
 disassembly or trace the code path instead.
 

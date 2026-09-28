@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/4b18c33fd2d63bcdf47f3ab9174442614fe2a3cf1970312768765711db93a443). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/ef05579db906c161e928e057080b1ed9ef5d0edcc72c538306611ea0d6d9bbf1). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -93,6 +93,7 @@ struct SdfWorldPass {
     [[vk::offset(1100)]] uint _pad1100;
     [[vk::offset(1104)]] float3 viewUp;
     [[vk::offset(1116)]] uint viewportCount;
+    [[vk::offset(1120)]] uint workCounterRow;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa53B0EA5E : register(b0, space3);
 #define passGroup passGroupIsa53B0EA5E
@@ -108,5 +109,57 @@ struct SdfWorldPass {
 [[vk::binding(10, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u10, space3);
 [[vk::binding(11, 3)]] Texture2D<float4> screenSources[32] : register(t11, space3);
 [[vk::binding(43, 3)]] Texture2D<float4> meshVisibility : register(t43, space3);
+[[vk::binding(44, 3)]] RWStructuredBuffer<uint> workCounters : register(u44, space3);
+
+// The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
+// back): each counted kind in GpuWork.KernelKinds order, march steps then texels written, as a 64-bit count in
+// two words, low word first. A kernel that also compiles under an interface declaring no work counters (a
+// document pass's) counts inside #if defined(PUCK_WORK_COUNTERS).
+#define PUCK_WORK_COUNTERS 1
+static const uint PuckWorkRowWords = 4u;
+static const uint PuckWorkStepsWord = 0u;
+static const uint PuckWorkTexelsWord = 2u;
+// Adds to one count: the low word atomically, then the high word by one when that addition carries.
+void puckAddWork(uint word, uint amount) {
+    if (amount == 0u) {
+        return;
+    }
+
+    uint before;
+
+    InterlockedAdd(workCounters[word], amount, before);
+
+    if (before > (0xFFFFFFFFu - amount)) {
+        InterlockedAdd(workCounters[word + 1u], 1u);
+    }
+}
+// Adds an invocation's march steps and texels written to its pass's row: the wave sums both, and its first active
+// lane adds each sum. Every lane that did work reaches the call, since a lane that returned before it counts nothing.
+void puckCountWork(uint steps, uint texels) {
+    uint waveSteps = WaveActiveSum(steps);
+    uint waveTexels = WaveActiveSum(texels);
+
+    if (WaveIsFirstLane()) {
+        uint row = (passGroup.workCounterRow * PuckWorkRowWords);
+
+        puckAddWork((row + PuckWorkStepsWord), waveSteps);
+        puckAddWork((row + PuckWorkTexelsWord), waveTexels);
+    }
+}
+// Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper
+// lanes, and the first of them adds each sum. A helper lane counts nothing and never adds, whether or not the
+// backend lets it take part in wave operations, since its atomics have no effect.
+void puckCountFragmentWork(uint steps, uint texels) {
+    bool counting = !IsHelperLane();
+    uint waveSteps = WaveActiveSum(counting ? steps : 0u);
+    uint waveTexels = WaveActiveSum(counting ? texels : 0u);
+
+    if (counting && (WavePrefixCountBits(counting) == 0u)) {
+        uint row = (passGroup.workCounterRow * PuckWorkRowWords);
+
+        puckAddWork((row + PuckWorkStepsWord), waveSteps);
+        puckAddWork((row + PuckWorkTexelsWord), waveTexels);
+    }
+}
 
 #endif // PUCK_SHADER_INTERFACE_SDF_WORLD

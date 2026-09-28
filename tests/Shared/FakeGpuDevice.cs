@@ -231,6 +231,7 @@ internal sealed class FakeGpuDevice :
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => Hit(key: "IGpuRecorder.ClearStorageImage");
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) => Hit(key: "IGpuRecorder.ClearStorageBuffer");
     void IGpuRecorder.CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) => Hit(key: "IGpuRecorder.CopyImage");
+    void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes) => Hit(key: "IGpuRecorder.CopyBuffer");
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
         ImageTransitions?.Add(item: (imageHandle, oldLayout, newLayout));
         Hit(key: "IGpuRecorder.TransitionImageLayout");
@@ -504,6 +505,19 @@ internal sealed class FakeGpuDevice :
             )
         );
     }
+    IGpuReadbackBuffer IGpuBufferFactory.CreateReadback(ulong sizeBytes, in GpuObjectName name) {
+        Hit(key: "IGpuBufferFactory.CreateReadback");
+
+        return Named(
+            kind: GpuObjectKind.Buffer,
+            name: in name,
+            resource: new Resource(
+                creation: Track(kind: "readback buffer"),
+                gpu: this,
+                sizeBytes: sizeBytes
+            )
+        );
+    }
     IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
         Hit(key: "IGpuBufferFactory.CreateDeviceLocal");
 
@@ -693,6 +707,7 @@ internal sealed class FakeGpuDevice :
         IGpuImage,
         IGpuPipeline,
         IGpuRenderPass,
+        IGpuReadbackBuffer,
         IGpuShaderModule,
         IGpuStorageBuffer {
         public nint BufferHandle => 3;
@@ -718,6 +733,10 @@ internal sealed class FakeGpuDevice :
         public void Dispose() => creation?.Release();
         public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => gpu.Hit(key: "IGpuStorageBuffer.Write");
         public void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged => gpu.Hit(key: "IGpuStorageBuffer.Write(offset)");
+        public void Read(Span<byte> destination) {
+            gpu.Hit(key: "IGpuReadbackBuffer.Read");
+            destination.Clear();
+        }
     }
     // Every upload lands on one fixed view handle.
     private sealed class SurfaceUpload : IGpuSurfaceUpload {

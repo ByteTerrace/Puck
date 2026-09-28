@@ -28,6 +28,7 @@ float softShadowVisibility(float3 surfacePoint, float3 surfaceNormal, float3 lig
         float clearance = mapDistanceMasked(origin + (lightDirection * traveled), instanceMaskBase);
 
         sdfEvalCount += 1.0;
+        sdfWorkSteps += 1u;
 
         if (clearance < (SurfaceEpsilon * stepScale)) {
             return 0.0;
@@ -103,6 +104,7 @@ float calcAO(float3 surfacePoint, float3 surfaceNormal, uint instanceMaskBase, f
 #endif
 
         sdfEvalCount += 1.0; // one of the three AO rungs
+        sdfWorkSteps += 1u;
 
         // A distant rung cannot cancel a closer rung's contact occlusion.
         occlusion += (max(h - d, 0.0) * scale);
@@ -119,6 +121,7 @@ float calcFastAO(float3 surfacePoint, float3 surfaceNormal, uint instanceMaskBas
     float d = sdfDeScaleField(mapDistanceMasked(surfacePoint + (surfaceNormal * h), instanceMaskBase), stepScale);
 
     sdfEvalCount += 1.0; // the single fleet-tier AO tap
+    sdfWorkSteps += 1u;
 
     return clamp((1.0 - (12.97 * (h - d))), 0.0, 1.0);
 }

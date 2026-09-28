@@ -1,0 +1,11 @@
+# Every frame renders every pass, so each read's newest completed submission is a whole frame of the view.
+world.cadence off
+# The engine ready first: the world's residency built and the root rendered over its first output.
+world.wait ready 45
+world.wait 30
+# The cloud integrates sixteen samples along every ray through it.
+world.counters gpu
+# The placement takes the same cloud at thirty-two samples.
+world.row.set placements cloud prototypeId "cloud-32"
+world.wait 30
+world.counters gpu

@@ -175,7 +175,7 @@ internal static partial class AffectedCoverage {
     public static bool TryRecord(string repositoryRoot, string cli, string scratch, out string error) {
         var build = Path.Combine(path1: scratch, path2: "world");
         var compile = CliProcess.RunCaptured(
-            arguments: ["build", "src/Puck.World/Puck.World.csproj", "-c", "Release", "--nologo", "-v", "q", "-p:NuGetAudit=false", "-p:PuckRecordMethods=true", "--output", build],
+            arguments: ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", "--nologo", "-v", "q", "-p:NuGetAudit=false", "-p:PuckRecordMethods=true", "--output", build],
             fileName: "dotnet",
             input: string.Empty,
             timeout: TimeSpan.FromMinutes(minutes: 30),

@@ -8,7 +8,7 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// CONTRACT UNDER TEST: the live shading levers reach every frame the presenter dresses, read from
-/// <see cref="WorldRenderSettings"/> each frame: <c>world.ao</c> is the frame's ambient-occlusion lever, <c>world.shadows</c>'s
+/// <see cref="WorldRenderSettings"/> each frame: <c>world.ao</c> is each view's ambient-occlusion lever, <c>world.shadows</c>'s
 /// reach turns the soft shadows off at zero, scales their reach between, and leaves the engine's full-reach sentinel at
 /// one, and <c>world.shadow-mask</c>, <c>world.shadow-march</c> and <c>world.ao-quality</c> force their fast paths on or
 /// off, or leave them to the peer count, which a lone session keeps below the crowd tier. The kernels read these from the
@@ -21,8 +21,11 @@ public sealed class WorldRenderLeverFrameLawTests : IDisposable {
 
     private readonly TemporaryDirectory m_stateDirectory = new(prefix: "puck-render-levers-");
 
-    private static (bool Ao, bool Shadows, float Scale, bool TileMask, bool FastMarch, bool FastAo) Levers(SdfFrame frame) =>
-        (!frame.DisableAmbientOcclusion, !frame.DisableSoftShadows, frame.ShadowDistanceScale, frame.UseCameraTileShadowMask, frame.UseFastSoftShadowMarch, frame.UseFastAmbientOcclusion);
+    private static (bool Ao, bool Shadows, float Scale, bool TileMask, bool FastMarch, bool FastAo) Levers(SdfFrame frame) {
+        var quality = frame.Views[0].Quality;
+
+        return (!quality.DisableAmbientOcclusion, !quality.DisableSoftShadows, quality.ShadowDistanceScale, quality.UseCameraTileShadowMask, quality.UseFastSoftShadowMarch, quality.UseFastAmbientOcclusion);
+    }
 
     public void Dispose() => m_stateDirectory.Dispose();
     [Fact]

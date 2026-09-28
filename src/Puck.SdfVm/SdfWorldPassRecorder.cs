@@ -9,9 +9,10 @@ namespace Puck.SdfVm;
 // command buffer for the pass. Every part writes its pass block (SdfFrameBlock): the view's camera, the frame's levers and
 // environment and the world values. Every compute part binds the residency's World set of the ring slot the frame's upload
 // wrote, which holds its tables, and the world interface's pass group: the fragment storages its ports bind and, at every
-// member its ports do not, a dummy of the residency's; and the screens, whose host images are rewritten every frame. The mesh part draws the frame's
+// member its ports do not, a dummy of the residency's; the node's work counters for the frame slot, whose row it writes
+// into its pass block; and the screens, whose host images are rewritten every frame. The mesh part draws the frame's
 // mesh draws into its target through the mesh pipeline, with a set of its own per frame slot binding its pass block. A
-// recorder records no barrier: the planner's are the instance's.
+// recorder records no barrier: the planner's are the instance's, and the node's orders the work counters.
 internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
     private const uint WorkgroupEdge = 8;
 
@@ -181,9 +182,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
     // A part skips a frame whose work it would not do, recording neither its work nor its planned barriers:
     // - the mesh part a frame that draws no mesh, when the hit passes, whose pass block's mesh draws are then zero, read
     //   nothing of the target;
-    // - the ambient part a frame whose ambient occlusion is off, whose neutral occlusion the surface pass already wrote;
-    // - the shadow part a frame whose soft shadows are off or that has no shadow light, when views reads nothing of the
-    //   record's key row.
+    // - the ambient part a view whose ambient occlusion is off, whose neutral occlusion the surface pass already wrote;
+    // - the shadow part a view whose soft shadows are off or a frame that has no shadow light, when views reads nothing
+    //   of the record's key row.
     public bool Skips(in FrameContext context) {
         var mesh = IsMesh;
         var ambient = string.Equals(a: m_part, b: SdfWorldPackage.Parts.Ambient, comparisonType: StringComparison.Ordinal);
@@ -205,11 +206,17 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         if (mesh) {
             return (tables.MeshDrawCount == 0);
         }
+
+        var quality = frame.Views[Math.Min(
+            val1: m_view.View,
+            val2: (frame.Views.Count - 1)
+        )].Quality;
+
         if (ambient) {
-            return frame.DisableAmbientOcclusion;
+            return quality.DisableAmbientOcclusion;
         }
 
-        return (frame.DisableSoftShadows || (frame.Environment.ShadowLightIndex < 0));
+        return (quality.DisableSoftShadows || (frame.Environment.ShadowLightIndex < 0));
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         Follow();
@@ -239,6 +246,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             tables: tables.PassValues,
             view: view,
             width: width
+        );
+
+        SdfFrameBlock.WriteWorkCounterRow(
+            block: recording.PassBlock,
+            row: WorkCountersOf(recording: in recording).Row
         );
 
         if (IsMesh) {
@@ -416,6 +428,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             set: set,
             slot: tables.CurrentSlot
         );
+        tables.WriteMeshWorkCounters(
+            counters: WorkCountersOf(recording: in recording).Buffer,
+            set: set
+        );
         recorder.BeginRenderPass(
             area: new GpuPixelRect(
                 Height: recording.Height,
@@ -517,6 +533,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             }
         }
 
+        tables.WriteWorldBuffer(buffer: WorkCountersOf(recording: in recording).Buffer, member: ShaderWorkCounters.Buffer, set: set);
         bindings.WriteStorageImage(
             arrayElement: 0,
             binding: OutputBinding,
@@ -565,6 +582,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             bound[screen] = image;
         }
     }
+    // Where a part counts its march steps and texels written: every one counts
+    // (RenderGraphFragmentPass.CountsKernelWork), so its node always hands it a row.
+    private GpuKernelCounterRow WorkCountersOf(in RenderGraphPackageRecording recording) =>
+        (recording.WorkCounters ?? throw new InvalidOperationException(message: $"Pass '{m_context.Pass}' counts its kernels' work, but its recording carries no work counters."));
     // The member a pass reads a fragment buffer through, or null for one it reads through no member.
     private static string? ReadMemberOf(string version) => version switch {
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasks,

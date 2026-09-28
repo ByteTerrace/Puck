@@ -112,7 +112,8 @@ register.
   primary's march, and only primary reads it: a mesh pixel's record carries the
   mesh kind, its draw and its triangle, which the later stages read, and the
   shadow stage marches nothing for it. The ambient and shadow passes skip a
-  frame whose levers turn them off (`SdfWorldPassRecorder.Skips`); views then
+  view whose quality turns them off (`SdfViewSnapshot.Quality`,
+  `SdfWorldPassRecorder.Skips`); views then
   reads nothing of the record's K row. AO lives in `sdf-occlusion.hlsli`
   (called from the ambient pass's `sdfResolveAmbient` in `sdf-surface.hlsli`);
   normals and curvature in `sdfResolveSurface`, a mesh pixel's in
@@ -697,7 +698,7 @@ These are one-line cautions; the owning pages hold the derivations.
   policy the device selects), so the tables create and admit two pools, their
   own and the copy pool, and no region the frame thread creates or grows takes
   a descriptor range; a new region takes a slice of that pool too. A view's
-  camera, the frame's levers and its environment are no table: each
+  camera and quality, the frame's bench levers and its environment are no table: each
   `sdf.world` pass writes them into its pass block (`SdfFrameBlock`, the values
   `SdfWorldPackage.Values` declares). Change
   a table only through its
@@ -846,10 +847,54 @@ These are one-line cautions; the owning pages hold the derivations.
   graph, an `sdf.world` view's `sdf.world$<part>` passes among them, in a ledger
   of its own. A counting set is never a device's own
   `IGpuDeviceContext.Services`, and wrapping a counting member again is refused.
-  A new pass needs its `EnterPass`/`LeavePass` where it submits.
-  `SdfWorldTablesWorkLawTests` and `SdfWorldResidencyWorkLawTests` pin the
+  A new pass needs its `EnterPass`/`LeavePass` where it submits; the SDF upload
+  counts its `fillers`, `bricks` and `upload` passes, skipping one it has no work
+  for. `SdfWorldTablesWorkLawTests` and `SdfWorldResidencyWorkLawTests` pin the
   upload's exact counts over `tests/Shared/FakeGpuDevice.cs`, so a
   recording change re-records those constants in the same change.
+- **Kernels count their own work through the node's kernel counters.** A
+  fragment pass declaring `CountsKernelWork` (every `sdf.world` pass, the mesh
+  pass included) or a one-pass package whose members declare
+  `ShaderWorkCounters.Members` (`place`, `overlay`, the source conversions and
+  every post-process package, which `PostProcessPackage` requires) gets the
+  counting functions in its generated include: `puckCountWork` (a wave sum
+  added by the first active lane) for a compute kernel and
+  `puckCountFragmentWork` (the same over the lanes that are not helper lanes)
+  for a fragment stage, laid out from `GpuKernelCounters`' constants, and
+  `PUCK_WORK_COUNTERS`, inside which a kernel a document pass also compiles
+  (the source conversions) counts. Its node keeps
+  `GpuKernelCounters`: per frame slot a device-local counter
+  buffer and a readback buffer (`IGpuBufferFactory.CreateReadback`), one row a
+  planned pass. The node records the clear and its barrier ahead of the first
+  pass, and behind the last the barrier from the compute and fragment stages,
+  the copy (`IGpuRecorder.CopyBuffer`) and the barrier to the host
+  (`GpuStage.Host`, `GpuAccess.HostRead`), outside every pass, and names the
+  slot to its ledger (`GpuWorkLedger.ReadOnCompletion`), which adds each row to
+  its pass as `gpu.march.steps` and `gpu.texels.written` once the submission
+  completes. A package pass that skips the frame is counted skipped
+  (`GpuWorkLedger.SkipPass`), never executed with zeros. A
+  recording gets its row in `RenderGraphPackageRecording.WorkCounters`; a
+  package recorder writes it through `RenderGraphPackageWorkCounters`, which
+  binds the buffer at `workCounters` and writes the row into the pass
+  block (`workCounterRow`), and every SDF compute kernel ends with
+  `puckCountWork(sdfWorkSteps, sdfWorkTexels)` (`frame/sdf-work.hlsli`), after
+  every lane that did work. A new march, query or volume sample adds to
+  `sdfWorkSteps` beside the evaluation, never inside the interpreter; a texel
+  counts only where one is written (`sdfVisibilityStoreWord`, the output writes),
+  and `SdfWorkCountingLawTests` hold both. Vulkan devices are created with
+  `fragmentStoresAndAtomics` for the fragment stages' counts. A graphics
+  pipeline whose layout binds a read-write buffer or storage image
+  (`GpuPipelineLayoutDescription.ShaderWrites`) draws in a render pass that
+  allows shader writes: `GpuPassPipelineKey.OfGraphics` derives
+  `GpuRenderPassDescription.ShaderWrites` from the layout, Direct3D 12 then
+  opens the pass with `D3D12_RENDER_PASS_FLAG_ALLOW_UAV_WRITES`
+  (`DirectXGpuRenderPass.Flags`), and `ValidateAgainst` refuses a writing
+  pipeline against a pass that does not allow it. `GpuKernelCountersLawTests`
+  read a modeled slot back through the ledger over `UploadModelGpu` and hold
+  the three barriers, `RenderGraphFragmentLawTests` hold the clear and copy
+  around the passes and a skipping pass counted skipped, and the
+  `kernel-counters` canary holds a volume's samples doubling its march steps and
+  the film grain pass counting one texel a pixel.
 - **Creation faults are one decorator at service creation.** Each backend wraps
   the services it creates with its context once, through
   `GpuCreationFaults.Wrap` (`DirectXDeviceContext.CreateServices`, the Vulkan
@@ -908,7 +953,9 @@ These are one-line cautions; the owning pages hold the derivations.
   so names appear only when something is reported.
 - **Every kind declares its class.** A `WorkKind` is constructed with its
   `WorkClass`: GPU submission kinds are `Deterministic` (equal across
-  backends), created-object kinds `PerBackendDeterministic`, and anything
+  backends) except the kernel kinds (`GpuWork.KernelKinds`: march steps and
+  texels written), which are `PerBackendDeterministic` like created-object
+  kinds, and anything
   paced by the clock or a cross-process cache `Pacing`.
   `world.counters --json` publishes the classes in its `kinds` legend, and
   `puck counters` compares only what the class allows, so a new kind's class
@@ -966,9 +1013,15 @@ For a repeatable before-and-after reading, `puck counters` boots
 `tests/Puck.Counters/counters.world.json` offscreen on both backends, writes a
 `puck.counters.report.v1` report, and exits 1 naming the kind, pass and node of
 any deterministic count the backends disagree on;
-`puck counters compare <before> <after>` holds two reports to each other. It
-needs a GPU on both backends, so it runs with the other GPU checks, never
-beside a build.
+`puck counters compare <before> <after>` holds two reports to each other.
+`puck counters --check` holds every render node's deterministic and
+per-backend-deterministic submission counts, pass by pass and outside every
+pass, to `tests/Puck.Counters/counters.ceilings.json`
+(`puck.counters.ceilings.v1`): a count reads at most its ceiling, a ceiling of
+zero is a required zero, and a per-backend-deterministic count is judged only
+on the device its backend was recorded on. `--record` rewrites the file, only
+in the change that explains the move. It needs a GPU on both backends, so it
+runs with the other GPU checks, never beside a build.
 
 **Qualification judges a published package, not a change.** `puck qualify
 <package>` holds CI's published World (`artifacts/world`, never a source build)
@@ -1608,7 +1661,7 @@ puck parity                                                 # parity world, offs
 puck canary sdf-decode-sign-refusal                         # puck.sdf.v1 decode sign refusals, offscreen on both backends
 puck canary world-counters                                  # world.counters gpu counted work, offscreen on both backends
 puck canary source-conversion uploaded-sources              # the four shipped conversion kernels against their CPU reference; uploaded source instances converted and shown in panes, offscreen on both backends
-puck counters                                               # counters workload on both backends; deterministic counts must agree
+puck counters --check                                       # counters workload on both backends; deterministic counts must agree and hold their ceilings
 puck qualify artifacts/world                                # a published package against the release profile; --list boots nothing
 puck canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo interface-echo no-device-compile    # shader pipelines offscreen on both backends
 puck canary --capability gpu --backend vulkan               # a per-change GPU check on one backend (vulkan or directx); the verdict names the backend, so it is never the both-backend pass

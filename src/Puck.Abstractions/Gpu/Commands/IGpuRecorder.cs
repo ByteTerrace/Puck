@@ -120,6 +120,16 @@ public interface IGpuRecorder {
     /// <param name="width">The width, in pixels, of both images.</param>
     /// <param name="height">The height, in pixels, of both images.</param>
     void CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height);
+    /// <summary>Records a copy of the first bytes of one buffer into the start of another: a Vulkan
+    /// <c>vkCmdCopyBuffer</c>, a Direct3D 12 <c>CopyBufferRegion</c>. A barrier into <see cref="GpuAccess.TransferRead"/>
+    /// at <see cref="GpuStage.Transfer"/> readies the source (<see cref="TransitionBuffer"/>); the destination is a
+    /// readback buffer (<see cref="IGpuBufferFactory.CreateReadback"/>), which is always a copy's destination.</summary>
+    /// <param name="commandBufferHandle">The command buffer being recorded.</param>
+    /// <param name="sourceBufferHandle">The buffer copied, a storage buffer.</param>
+    /// <param name="destinationBufferHandle">The readback buffer written.</param>
+    /// <param name="sizeBytes">The bytes copied; positive and within both buffers.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="sizeBytes"/> is zero.</exception>
+    void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes);
     /// <summary>Records a zero fill of a whole storage buffer, ordered before the next compute shader access.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
     /// <param name="bufferHandle">The buffer.</param>

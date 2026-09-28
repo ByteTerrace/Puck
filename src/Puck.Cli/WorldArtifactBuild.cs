@@ -36,7 +36,7 @@ internal static class WorldArtifactBuild {
 
     // The build's command line apart from the restore choice and the output directory, neither of which changes what
     // the sources build into. The key covers it, so a change here is never answered with a build made the old way.
-    private static readonly string[] BuildArguments = ["build", WorldArtifactClosure.WorldProject, "-c", "Release", "--nologo", "-p:NuGetAudit=false"];
+    private static readonly string[] BuildArguments = ["build", "--disable-build-servers", WorldArtifactClosure.WorldProject, "-c", "Release", "--nologo", "-p:NuGetAudit=false"];
 
     private static bool TryBuild(string repositoryRoot, string outputDirectory, TimeSpan timeout, out CliProcessResult? build, out string error) {
         build = null;

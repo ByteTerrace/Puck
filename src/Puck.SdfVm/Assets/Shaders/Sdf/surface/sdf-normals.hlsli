@@ -37,6 +37,7 @@ float3 calculateNormal(float3 p, uint instanceMaskBase, out float gradientMagnit
     const float e = NormalProbeEpsilon;
 
     sdfEvalCount += 4.0; // four mapDistanceMasked taps below
+    sdfWorkSteps += 4u;
 
     float3 sum =
         (k.xyy * mapDistanceMasked(p + (k.xyy * e), instanceMaskBase)) +
@@ -54,6 +55,7 @@ float3 calculateNormal(float3 p, uint instanceMaskBase, out float gradientMagnit
 float3 calculateNormalCurvature(float3 p, uint instanceMaskBase, float primaryCenter, out float curvature, out float gradientMagnitude) {
     const float e = NormalProbeEpsilon;
     sdfEvalCount += 4.0;
+    sdfWorkSteps += 4u;
     float3 sum = 0.0;
     float total = 0.0;
     // Keep one interpreter call site: unrolling duplicates the large VM body and slows the views kernel.
@@ -69,6 +71,7 @@ float3 calculateNormalCurvature(float3 p, uint instanceMaskBase, float primaryCe
     if (!sdfProgramLayout.noDetailShapes) {
         center = mapDistanceMasked(p, instanceMaskBase);
         sdfEvalCount += 1.0;
+        sdfWorkSteps += 1u;
     }
     float stepScale = sdfStepScale();
     curvature = ((total - (4.0 * center)) / ((2.0 * e * e) * stepScale));
@@ -90,6 +93,7 @@ float3 calculateNormalAnalytic(float3 p, uint instanceMaskBase, out float gradie
     float3 gradient;
 
     sdfEvalCount += 1.0; // one dual field eval replaces the four taps
+    sdfWorkSteps += 1u;
 
     mapGradMasked(p, instanceMaskBase, gradient);
 

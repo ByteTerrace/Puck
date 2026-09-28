@@ -5,7 +5,8 @@
 //
 // Everything it reads comes from the set's generated interface (sdf-film-grain.interface.hlsli, regenerated with
 // `puck shaders interface --write`): the engine tick and tick rate from the frame group, and the set's config, its
-// source image and the sampler it reads it through from the pass group. The grain frame is the tick quantized to the
+// source image, the sampler it reads it through and the work counters each fragment counts its texel into from the pass
+// group. The grain frame is the tick quantized to the
 // flicker period, never a wall-clock or RNG value, so the same simulation moment hashes identically on every run,
 // machine, and backend.
 #include "../field/sdf-hash.hlsli"
@@ -40,6 +41,8 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     uint grainFrame = quantizeTick(frameGroup.tick, period);
     uint3 hash = sdfPcg3d(uint3(cell.x, cell.y, (grainFrame ^ passGroup.seed)));
     float noise = ((float(hash.x) / 4294967295.0) * 2.0 - 1.0);
+
+    puckCountFragmentWork(0u, 1u);
 
     // The working image keeps its headroom above one; only the display encode clamps.
     return float4(max((sourceColor + (noise * passGroup.intensity)), 0.0), 1.0);
