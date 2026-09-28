@@ -4279,8 +4279,9 @@ item 2 landed.
     instruction set's fingerprint (`SdfIsaHlsl.Fingerprint`) hashes the include,
     which generates every lane enum, header lane accessor and vector count the
     kernels read, and the model's described encoding (`SdfEncodingProbe`: where
-    the builder puts each operation's operands, and a layout program's packed
-    words). It is the stamp the kernels' interfaces carry in
+    the builder and packer put every field, bitfield and table entry, found by
+    raising each input alone), recorded in `SdfIsaFingerprint.cs` for the host
+    to read. It is the stamp the kernels' interfaces carry in
     their pass block's variable name (`ShaderInterface.Stamp`), so every kernel's
     bytecode reflects the instruction set it was compiled against, and a reload
     reflects each changed kernel and holds it to the host's interface

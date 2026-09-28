@@ -94,9 +94,16 @@ public static class SdfWorldInterfaces {
     /// <summary>Gets the layout of <see cref="Mesh"/>.</summary>
     public static ShaderInterfaceLayout MeshLayout { get; } = new(shaderInterface: Mesh);
     /// <summary>Gets each interface with the repository-relative path of the include generated from it.</summary>
-    public static IReadOnlyList<(string Path, ShaderInterface Interface)> Includes { get; } = [
-        (IncludePath(shaderInterface: World), World),
-        (IncludePath(shaderInterface: BrickBake), BrickBake),
+    public static IReadOnlyList<(string Path, ShaderInterface Interface)> Includes { get; } = IncludesStamped(stamp: SdfIsaHlsl.Stamp);
+
+    /// <summary>Returns each interface, the kernels' two stamped with an instruction set's stamp, with the
+    /// repository-relative path of the include generated from it: what <c>puck shaders generate</c> writes for the
+    /// model's own instruction set.</summary>
+    /// <param name="stamp">The instruction set's stamp (<see cref="SdfIsaHlsl.StampOf"/>).</param>
+    /// <returns>The includes.</returns>
+    public static IReadOnlyList<(string Path, ShaderInterface Interface)> IncludesStamped(string stamp) => [
+        (IncludePath(shaderInterface: World), World.Stamped(stamp: stamp)),
+        (IncludePath(shaderInterface: BrickBake), BrickBake.Stamped(stamp: stamp)),
         (IncludePath(shaderInterface: Mesh), Mesh),
     ];
 

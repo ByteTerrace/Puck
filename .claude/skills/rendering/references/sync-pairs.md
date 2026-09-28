@@ -30,13 +30,17 @@ agrees with the instruction set it was built with because the build refuses
 bytecode stale against its sources and every include (the generated
 `sdf-isa.hlsli` among them), and `puck shaders generate --check` refuses a
 stale generated file. The instruction set's fingerprint
-(`SdfIsaHlsl.Fingerprint`) hashes the include and the model's described
-encoding (`SdfEncodingProbe.Describe`: for one builder call per operation,
-shape, blend, lift and lane-enum member, each with distinct operands, which
-operand every lane carries, plus the packed words of a layout program over
-exact arithmetic), so it moves when an operand, a header lane or an enum value
-moves; `SdfEncodingProbeLawTests` holds the probe to every member. It is the
-stamp the kernels' interfaces carry (`SdfIsaHlsl.Stamp`, the `passGroup`
+(`SdfIsaHlsl.DescribeFingerprint`) hashes the include and the model's
+described encoding (`SdfEncodingProbe.Describe`: one builder call per
+operation, shape, blend, lift and lane-enum member, and calls packing every
+side table and flag, described by each packed program's integer words and,
+for each input raised alone, the bits of every integer word that moves, every
+float word that moves and the one that moves most), so it moves when a field,
+a bitfield, a header lane, a table entry or an enum value moves;
+`SdfEncodingProbeLawTests` holds the probe to every member. `puck shaders
+generate` records it in `SdfIsaFingerprint.cs`, which the host reads
+(`SdfIsaHlsl.Fingerprint`) rather than describing the encoding at boot. It is
+the stamp the kernels' interfaces carry (`SdfIsaHlsl.Stamp`, the `passGroup`
 variable's name in `sdf-world.interface.hlsli` and `sdf-bricks.interface.hlsli`),
 so every kernel's bytecode reflects the instruction set it was compiled against,
 and a reload holds each changed kernel to the host's interface, stamp and

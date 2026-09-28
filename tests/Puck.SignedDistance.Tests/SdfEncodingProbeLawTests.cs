@@ -1,19 +1,28 @@
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.SignedDistance.Tests;
 
 /// <summary>
 /// Laws for <see cref="SdfEncodingProbe"/>, the instruction set's encoding exercised for its fingerprint: every probe
-/// call builds, and together they carry every operation, shape type and blend, both lifts, and every member of each enum
-/// an instruction lane carries, in the lane that carries it; the description moves when a call's operands trade places;
-/// a call whose operands could not be told apart is refused; and the packer writes each header lane where the model's
-/// lane constants place it.
+/// call builds, and every call stays valid with each input raised; together they carry every operation, shape type and
+/// blend, both lifts, the shape flags, and every member of each enum an instruction lane carries, in the lane that
+/// carries it, and they pack every side table and flag (compiled part programs traced independently, a material with
+/// every layer, sweep and path tables); the description moves when the builder or packer puts any field elsewhere,
+/// whether a float lane, a bitfield inside a word, a material layer's field or a table entry; and the packer writes each
+/// header lane where the model's lane constants place it.
 /// </summary>
 public sealed class SdfEncodingProbeLawTests {
-    private static readonly (SdfEncodingProbeCall Call, SdfProgram Program)[] Built = [.. SdfEncodingProbe.Calls().Select(selector: static call => (call, SdfEncodingProbe.Build(call: call)))];
+    private static readonly IReadOnlyList<SdfEncodingProbeCall> Calls = SdfEncodingProbe.Calls();
+    private static readonly (SdfEncodingProbeCall Call, SdfProgram Program)[] Built = [.. Calls.Select(selector: static call => (call, SdfEncodingProbe.Build(call: call)))];
 
     private static IEnumerable<SdfInstruction> Emitted(SdfOp op) =>
         Built.SelectMany(selector: static built => built.Program.Instructions).Where(predicate: instruction => (instruction.Op == op));
+    private static SdfEncodingProbeCall Named(string name) =>
+        Calls.Single(predicate: call => (call.Name == name));
+    // The whole probe's description with one call replaced.
+    private static string DescribeWith(SdfEncodingProbeCall call) =>
+        SdfEncodingProbe.Describe(calls: [.. Calls.Select(selector: other => ((other.Name == call.Name) ? call : other))]);
 
     [Fact]
     public void TheProbeCarriesEveryOperationShapeTypeAndBlend() {
@@ -55,30 +64,54 @@ public sealed class SdfEncodingProbeLawTests {
         Covers<SdfAxis>(lanes: Emitted(op: SdfOp.Shear).Select(selector: static instruction => instruction.Shape));
         Covers<SdfAxis>(lanes: Emitted(op: SdfOp.Shear).Select(selector: static instruction => instruction.Blend));
     }
-    // A builder that put a call's operands in each other's lanes describes differently: here the cell displacement's
-    // frequency and amplitude trade places.
+    // The side-table calls pack what the kernels read: a part table whose header carries the independent-tracing flag
+    // over one compiled instance, and sweep and path tables beside their instructions.
     [Fact]
-    public void OperandsTradingPlacesChangeTheDescription() {
-        var calls = SdfEncodingProbe.Calls();
-        var index = calls.ToList().FindIndex(match: static call => (call.Name == $"cell-displace {SdfCellMode.F1}"));
-        var original = calls[index];
-        var traded = original with {
-            Emit = static (b, m) => b.ResetPoint().Sphere(material: m, radius: 1f).CellDisplace(amplitude: 0.95f, frequency: 0.02f, mode: SdfCellMode.F1, randomness: 0.15f, seed: 17u),
-        };
+    public void TheProbePacksEverySideTableAndFlag() {
+        var parts = SdfEncodingProbe.Build(call: Named(name: "part-programs"));
 
-        Assert.Equal(expected: [0.95f, 0.02f, 17f, 0.15f], actual: original.Markers);
-        Assert.NotEqual(
-            actual: SdfEncodingProbe.Describe(calls: [.. calls.Take(count: index), traded, .. calls.Skip(count: (index + 1))]),
-            expected: SdfEncodingProbe.Describe()
-        );
+        Assert.Equal(expected: 0x80000001u, actual: parts.Words[(PartTableOf(program: parts) * 4)]);
+        Assert.Contains(collection: SdfEncodingProbe.Build(call: Named(name: "sweep")).Instructions, filter: static instruction => (instruction.Shape == ((uint)SdfShapeType.Sweep)));
+        Assert.Contains(collection: SdfEncodingProbe.Build(call: Named(name: "path")).Instructions, filter: static instruction => (instruction.Shape == ((uint)SdfShapeType.Path)));
+        Assert.Equal(expected: (1 + 64), actual: SdfEncodingProbe.Build(call: Named(name: "material")).MaterialCount);
     }
+    // Every call stays valid with each of its inputs raised, which is how the description finds where each lands, and the
+    // description is the same every time.
     [Fact]
-    public void ACallWhoseOperandsCannotBeToldApartIsRefused() {
-        var repeated = new SdfEncodingProbeCall(Emit: static (b, m) => b.ResetPoint().Sphere(material: m, radius: 0.5f), Markers: [0.5f, 0.5f], Name: "repeated");
-        var zero = repeated with { Markers = [0f], Name = "zero" };
+    public void EveryCallBuildsWithEachInputRaised() {
+        var description = SdfEncodingProbe.Describe();
 
-        _ = Assert.Throws<ArgumentException>(testCode: () => SdfEncodingProbe.Describe(calls: [repeated]));
-        _ = Assert.Throws<ArgumentException>(testCode: () => SdfEncodingProbe.Describe(calls: [zero]));
+        Assert.All(
+            action: call => Assert.Contains(expectedSubstring: $"{call.Name} words=", actualString: description),
+            collection: Calls
+        );
+        Assert.Equal(expected: description, actual: SdfEncodingProbe.Describe());
+    }
+    // A builder or packer that put a field elsewhere describes differently. Each trade is spelled at the call, which is
+    // what the description sees of the builder writing one field where the other goes: a rotation's Y and W, a sampled
+    // region's Y and Z dimension bitfields, a weathering's Edge and Lines, a sweep's start and end radii, and a cell
+    // displacement's frequency and amplitude.
+    [Fact]
+    public void AFieldPutElsewhereChangesTheDescription() {
+        var description = SdfEncodingProbe.Describe();
+
+        Assert.Empty(collection: SdfEncodingTrades.Traded(calls: Calls).Where(predicate: traded => (DescribeWith(call: traded) == description)).Select(selector: static traded => traded.Name));
+    }
+    // The part table's header records the independent-tracing flag, so a program whose root keeps parts from tracing
+    // alone describes differently.
+    [Fact]
+    public void TheIndependentTracingFlagIsInTheDescription() {
+        var original = Named(name: "part-programs");
+        var untraceable = original with {
+            Emit = (b, m, v) => {
+                original.Emit(arg1: b, arg2: m, arg3: v);
+                b.ResetPoint().Sphere(blend: SdfBlendOp.Subtraction, material: m, radius: 0.1f);
+            },
+        };
+        var program = SdfEncodingProbe.Build(call: untraceable);
+
+        Assert.Equal(expected: 1u, actual: program.Words[(PartTableOf(program: program) * 4)]);
+        Assert.NotEqual(expected: SdfEncodingProbe.Describe(), actual: DescribeWith(call: untraceable));
     }
     // The packer writes the program header and every instruction header lane where the model's lane constants, which
     // the kernels read through generated accessors, place them.
@@ -103,15 +136,14 @@ public sealed class SdfEncodingProbeLawTests {
             }
         }
     }
-    // The layout program builds, packs a static and a dynamic instance and every material field, and describes the same
-    // bytes each time.
-    [Fact]
-    public void TheLayoutProgramPacksItsWordsTheSameEveryTime() {
-        var layout = SdfEncodingProbe.BuildLayout();
 
-        Assert.Equal(expected: 2, actual: layout.Instances.Count);
-        Assert.Equal(expected: 2, actual: layout.MaterialCount);
-        Assert.Equal(expected: layout.Words.ToArray(), actual: SdfEncodingProbe.BuildLayout().Words.ToArray());
-        Assert.Equal(expected: SdfEncodingProbe.Describe(), actual: SdfEncodingProbe.Describe());
+    // The vector offset of a program's part table: the instance directory header's part-programs lane.
+    private static int PartTableOf(SdfProgram program) {
+        var words = program.Words;
+        var boundsOffset = (((int)words[SdfProgram.ProgramMaterialOffsetLane]) + (SdfProgram.MaterialVectorsPerEntry * ((int)words[SdfProgram.ProgramMaterialCountLane])));
+        var segmentOffset = (boundsOffset + (SdfProgram.BoundRecordVectors * program.InstructionCount));
+        var instanceOffset = ((segmentOffset + SdfProgram.DirectoryHeaderVectors) + (SdfProgram.BoundRecordVectors * ((int)words[((segmentOffset * 4) + SdfProgram.SegmentCountLane)])));
+
+        return ((int)words[((instanceOffset * 4) + SdfProgram.InstancePartProgramsLane)]);
     }
 }

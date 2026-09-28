@@ -151,29 +151,32 @@ public sealed class SdfKernelSetLawTests {
             );
         }
 
-        Assert.Equal(expected: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: SdfEncodingProbe.Describe(), include: SdfIsaHlsl.Generate())), actual: SdfIsaHlsl.Stamp);
+        // The recorded fingerprint is the model's: the host names the instruction set its kernels were generated against.
+        Assert.Equal(expected: SdfIsaFingerprint.Value, actual: SdfIsaHlsl.DescribeFingerprint());
+        Assert.Equal(expected: SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value), actual: SdfIsaHlsl.Stamp);
     }
     // Kernels compiled against another instruction set carry another stamp, so no include beside them can make them pass
     // for this host's: an instruction set whose two opcodes, or whose two cell modes, trade values; one whose instruction
-    // headers carry the shape and the blend in each other's lanes; and one whose builder puts an operation's operands in
-    // each other's lanes.
+    // headers carry the shape and the blend in each other's lanes; and one whose builder or packer puts a field
+    // elsewhere (a rotation's Y and W, a sampled region's Y and Z dimension bitfields, a weathering's Edge and Lines, a
+    // sweep's start and end radii, a cell displacement's frequency and amplitude).
     [Fact]
     public void AnInstructionSetEncodedOtherwiseCarriesAnotherStamp() {
         var include = SdfIsaHlsl.Generate();
         var encoding = SdfEncodingProbe.Describe();
         var calls = SdfEncodingProbe.Calls();
-        var index = calls.ToList().FindIndex(match: static call => (call.Name == $"cell-displace {SdfCellMode.F1}"));
-        var traded = calls[index] with {
-            Emit = static (b, m) => b.ResetPoint().Sphere(material: m, radius: 1f).CellDisplace(amplitude: 0.95f, frequency: 0.02f, mode: SdfCellMode.F1, randomness: 0.15f, seed: 17u),
-        };
 
         foreach (var (otherInclude, otherEncoding) in ((ReadOnlySpan<(string, string)>)[
             (Swapped(first: "SDF_OP_TRANSLATE", include: include, second: "SDF_OP_ROTATE"), encoding),
             (Swapped(first: "SDF_CELL_MODE_F1", include: include, second: "SDF_CELL_MODE_F2_MINUS_F1"), encoding),
             (Swapped(first: "SDF_INSTRUCTION_SHAPE(v)", include: include, second: "SDF_INSTRUCTION_BLEND(v)"), encoding),
-            (include, SdfEncodingProbe.Describe(calls: [.. calls.Take(count: index), traded, .. calls.Skip(count: (index + 1))])),
         ])) {
             Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: otherEncoding, include: otherInclude)));
+        }
+        foreach (var other in SdfEncodingTrades.Traded(calls: calls)) {
+            var otherEncoding = SdfEncodingProbe.Describe(calls: [.. calls.Select(selector: call => ((call.Name == other.Name) ? other : call))]);
+
+            Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: otherEncoding, include: include)));
         }
     }
 

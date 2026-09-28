@@ -177,8 +177,8 @@ bool sdfFlatSublevelBox(uint instance, float level, out float3 lower, out float3
     uint end = sdfWords[sdfProgramLayout.segmentOffset + SDF_DIRECTORY_HEADER_VECTORS + 1u + SDF_BOUND_RECORD_VECTORS * (segmentEnd - 1u)].w;
     if (segmentEnd == meta.z + 1u && sdfChainSublevelBox(first, end, level, true, lower, upper)) return true;
     if (first >= end || SDF_INSTRUCTION_OP(sdfWords[SDF_PROGRAM_HEADER_VECTORS + first]) != SDF_OP_PUSH_FIELD) return false;
-    uint4 pop = sdfWords[end];
-    if (pop.x != SDF_OP_POP_FIELD || pop.z != SDF_BLEND_UNION) return false;
+    uint4 pop = sdfWords[SDF_PROGRAM_HEADER_VECTORS + end - 1u];
+    if (SDF_INSTRUCTION_OP(pop) != SDF_OP_POP_FIELD || SDF_INSTRUCTION_BLEND(pop) != SDF_BLEND_UNION) return false;
     float scale = asfloat(sdfWords[sdfProgramLayout.dataOffset + SDF_INSTRUCTION_DATA_VECTORS * (end - 1u) + 1u]).y;
     if (scale <= 0.0) scale = 1.0;
     level /= scale;

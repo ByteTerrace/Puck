@@ -19,8 +19,12 @@ public sealed class ShadersGenerateLawTests {
     private const string PlacePath = "src/Puck.Shaders/Assets/Shaders/Graph/place.interface.hlsli";
     private const string WorldPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-world.interface.hlsli";
 
-    // The SDF engine kernels' includes, each with the text its interface generates: owned whatever the tree holds.
-    private static readonly (string Path, string Text)[] EngineKernels = [.. SdfWorldInterfaces.Includes.Select(selector: static include => (include.Path, ShaderInterfaceHlsl.Generate(shaderInterface: include.Interface)))];
+    // The SDF engine kernels' includes, each with the text its interface generates, and the instruction set's recorded
+    // fingerprint: owned whatever the tree holds.
+    private static readonly (string Path, string Text)[] EngineKernels = [
+        .. SdfWorldInterfaces.Includes.Select(selector: static include => (include.Path, ShaderInterfaceHlsl.Generate(shaderInterface: include.Interface))),
+        (SdfIsaHlsl.FingerprintSourcePath, SdfIsaHlsl.GenerateFingerprintSource(fingerprint: SdfIsaHlsl.Fingerprint)),
+    ];
 
     // Each conversion package's interface include, beside its kernel.
     private static (string Path, string Text)[] SourceIncludes => [.. RenderGraphPackageCatalog.SourceConversions.Select(selector: static id => ($"src/Puck.Shaders/Assets/Shaders/Sources/{id}.interface.hlsli", InterfaceOf(id: id)))];
@@ -164,7 +168,7 @@ public sealed class ShadersGenerateLawTests {
         Assert.Empty(collection: problems);
         Assert.Equal(
             actual: includes.Select(selector: static include => include.Path),
-            expected: [IsaPath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-bricks.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-mesh.interface.hlsli", WorldPath, FilmGrainPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path)]
+            expected: [IsaPath, SdfIsaHlsl.FingerprintSourcePath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-bricks.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-mesh.interface.hlsli", WorldPath, FilmGrainPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path)]
         );
     }
 }

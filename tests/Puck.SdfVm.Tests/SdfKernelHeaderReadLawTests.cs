@@ -8,8 +8,9 @@ namespace Puck.SdfVm.Tests;
 /// <see cref="SdfIsaHlsl"/> generates from the model: a lane through its accessor (<c>SDF_INSTRUCTION_SHAPE(header)</c>),
 /// never a swizzle, and a header's place through the generated vector counts (<c>SDF_PROGRAM_HEADER_VECTORS</c>,
 /// <c>SDF_INSTRUCTION_DATA_VECTORS</c>), never a literal. A header load held in a variable is read the same way for the
-/// rest of its function. So a lane the model moves moves in every kernel, and the fingerprint that names the encoding
-/// names what the kernels read.
+/// rest of its function, and a swizzle compared with an operation, blend or shape, or handed to <c>sdfShapeEnabled</c>,
+/// is an instruction header read however its load was spelled. So a lane the model moves moves in every kernel, and the
+/// fingerprint that names the encoding names what the kernels read.
 /// </summary>
 public sealed partial class SdfKernelHeaderReadLawTests {
     [Fact]
@@ -29,8 +30,10 @@ public sealed partial class SdfKernelHeaderReadLawTests {
             expected: string.Empty
         );
     }
-    // The check refuses a literal header offset, a swizzled read of a header load, and a swizzled read of a variable a
-    // header load was held in, and accepts the accessors, a record's swizzle and a variable reassigned from elsewhere.
+    // The check refuses a literal header offset, a swizzled read of a header load, a swizzled read of a variable a header
+    // load was held in, and a swizzle compared with an operation or blend or handed to sdfShapeEnabled whatever the load
+    // (an instruction header indexed without its generated vector count), and accepts the accessors, a record's swizzle
+    // and a variable reassigned from elsewhere.
     [Fact]
     public void ASwizzledHeaderReadIsRefusedByName() {
         var files = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
@@ -50,6 +53,10 @@ public sealed partial class SdfKernelHeaderReadLawTests {
                 uint Count() {
                     return sdfWords[0].y + sdfWords[dataOffset + (2u * 3u)].x;
                 }
+                bool Pop(uint end) {
+                    uint4 pop = sdfWords[end];
+                    return (pop.x != SDF_OP_POP_FIELD) || (SDF_BLEND_UNION == pop.z) || sdfShapeEnabled(pop.y);
+                }
                 """,
         };
 
@@ -60,6 +67,7 @@ public sealed partial class SdfKernelHeaderReadLawTests {
                 "field/a.hlsli:6 reads header, a header load, by its swizzle",
                 "field/a.hlsli:14 reads a header by its swizzle",
                 "field/a.hlsli:14 reads a header by a literal offset",
+                "field/a.hlsli:18 reads an instruction header's lane by its swizzle",
             ]
         );
     }
@@ -68,6 +76,8 @@ public sealed partial class SdfKernelHeaderReadLawTests {
     private static partial Regex LiteralOffset();
     [GeneratedRegex(pattern: @"sdfWords\[(?:SDF_PROGRAM_HEADER_VECTORS \+ [^\]]+|0|segmentOffset|instanceOffset|worldSegmentOffset|sdfSegmentDirectoryOffset\(\)|sdfInstanceDirectoryOffset\(\))\]\.[xyzw]\b")]
     private static partial Regex SwizzledLoad();
+    [GeneratedRegex(pattern: @"\.[xyzw]\s*[!=]=\s*SDF_(?:OP|BLEND|SHAPE)_|SDF_(?:OP|BLEND|SHAPE)_[A-Z0-9_]+\s*[!=]=\s*[\w\]\)]+\.[xyzw]\b|sdfShapeEnabled\([^()]*\.[xyzw]\)")]
+    private static partial Regex LaneBySwizzle();
     [GeneratedRegex(pattern: @"\b(?<name>\w+)\s*=\s*sdfWords\[(?:SDF_PROGRAM_HEADER_VECTORS \+ [^\]]+|0|segmentOffset|instanceOffset)\]\s*;")]
     private static partial Regex HeldLoad();
     // Every place a kernel reads a header by a literal or a swizzle, in path and line order.
@@ -88,6 +98,9 @@ public sealed partial class SdfKernelHeaderReadLawTests {
                 }
                 if (LiteralOffset().IsMatch(input: line)) {
                     violations.Add(item: $"{path}:{(index + 1)} reads a header by a literal offset");
+                }
+                if (LaneBySwizzle().IsMatch(input: line)) {
+                    violations.Add(item: $"{path}:{(index + 1)} reads an instruction header's lane by its swizzle");
                 }
                 if (HeldLoad().Match(input: line) is { Success: true } held) {
                     var name = held.Groups["name"].Value;
