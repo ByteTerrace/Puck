@@ -121,7 +121,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] P10 bound rows reaching a pass: the `parameter` and array statements, the deterministic tick, the capture's tick verdict, pricing, and tiers.
 - [x] P11 the frame graph document (`puck.render.graph.v1`), views as graph instances scheduled by demand, and self-reference through the previous frame.
 - [x] P12 image sources: uploaded, imported, and rendered transports, content classes, producer registration, shared conversion passes, and every `WorldScreenSource` kind migrated (every P12b step landed, and the `uploaded-sources` canary checks the unbound glass, a session screen, an opened capture and a `text` screen's drawn text; P12b-4's recorded camera run is deferred to the end).
-- [ ] P13 hit-to-source mapping published as data, with simulation, host passthrough, and presentation destinations, and passthrough only for local-user sources (P13b steps 1, 2, 4, 5 and 6 and step 3's CPU half landed, step 2 with a machine's light gun reading the mapped pointer, step 5 with the GPU drawing every screen from its mapping, and step 6 with a pick through a portal's window reaching the destination's surface, checked by the `portal-window` canary; GPU picking remains).
+- [ ] P13 hit-to-source mapping published as data, with simulation, host passthrough, and presentation destinations, and passthrough only for local-user sources (P13b steps 1, 2, 4, 5 and 6 and step 3's CPU half landed, step 2 with a machine's light gun reading the mapped pointer, step 5 with the GPU drawing every screen from its mapping, and step 6 with a pick through a portal's window reaching the destination's surface, checked by the `portal-window` canary; GPU picking remains, and shares its per-instance identity and one-pixel readback with the [editor plan's E2](editor.md#e2--selection-picking-and-highlight)).
 - [x] P14 the SDF engine as a pass package: the capability matrix, the generated frame block, the HLSL module tree, staged shading, float working targets, and the retirements (steps 1 to 13 landed: every SDF view is an `sdf.world` instance of the render graph whose passes the planner orders and barriers, over one generated pass block, a layered kernel tree, one kernel table and the pass-pipeline cache; the capability matrix law, the ISA handshake and the field-per-kernel kernel record are gone).
   - [ ] P14 counted-cost ceilings, built as P15-1: march steps and texels written as `GpuWork` kinds each kernel counts, and calibrated per-pass ceilings, with required zeros for passes that do no such work or are skipped, over `puck counters`' pinned workload that a change may not exceed, as P14's check states. Neither exists yet.
   - [x] Checks for the capability rows the matrix law held without one, each failing with its capability removed:
@@ -133,8 +133,8 @@ Every package below carries its own check on the programme page; tick it there a
     - the shading levers: `WorldRenderLeverFrameLawTests` (settings to frame), `SdfFrameBlockLawTests.EachShadingLeverWritesItsOwnMemberAlone` (frame to pass block) and `SdfWorldPassesLawTests.TheAmbientAndShadowPartsRunExactlyWhenTheirLeversTurnThemOn` (the stages a frame runs);
     - debug views: `SdfWorldResidencyReportLawTests.TheDebugViewModeReachesEveryPassBlockWhenSetBeforeTheTablesOrAfter`, and the `visibility` mode's pixels in the `sdf-visibility-fresh`, `sdf-mesh-visibility`, `sdf-mesh-motion` and `sdf-bake-switch` canaries;
     - brick baking's live half, a height field's host-baked brick: `SdfWorldTablesUploadLawTests.AHostBakedBrickLandsInItsPoolSlotAndTheSlotTurnsReady`.
-  - [ ] Unwired, for the editor and debug lane: the grid overlay (`SdfFrame`'s grid fields and the light stage's floor and object grids), the slice view's world-axis plane (`DebugSliceAxis`, `DebugSliceOffset`), and the levers `DisableShadowCull`, `DisableScreenLights`, `EnableShadowProxy` and `UseFiniteDifferenceNormals`. Each reaches the pass block and the kernels, and no World setting or verb sets it.
-  - [ ] Pending a design decision: the GPU brick bake (`RequestBrickBake`, the bake kernel and `SdfCarveBakePlanner`, whose one driver was the demo's `SdfDebugMode`) and a live `sdf.bricks` instance.
+  - [ ] Unwired, wired by the [editor plan](editor.md) (E1 grid, E4 debug views and levers): the grid overlay (`SdfFrame`'s grid fields and the light stage's floor and object grids), the slice view's world-axis plane (`DebugSliceAxis`, `DebugSliceOffset`), and the levers `DisableShadowCull`, `DisableScreenLights`, `EnableShadowProxy` and `UseFiniteDifferenceNormals`. Each reaches the pass block and the kernels, and no World setting or verb sets it.
+  - [ ] The GPU brick bake (`RequestBrickBake`, the bake kernel and `SdfCarveBakePlanner`) gets its live producer in the [editor plan](editor.md)'s carve brush (E13); a live `sdf.bricks` instance goes with it.
   - [x] P14-8 follow-up: a render node records one command list per instance per frame slot.
   - [x] P14-8 follow-up: the mesh pass is a conditional package pass that records nothing on a meshless frame.
   - [x] The camera-view export no longer aliases the image SDF screens sample: an exported view renders its own per-slot outputs and copies each released frame into the export.
@@ -158,3 +158,21 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] P17 assets derived from SDFs: the baker, the texture pipeline, and the content-addressed cache shipped in compiled worlds and filled on the device on a miss (the baker, its codecs, the block-compressed upload, the one pixel-format vocabulary and a ready bake's mesh drawn in place of its field, with normals, texture coordinates and triangle materials, landed; a bake's textures and impostor and the parity world's shipped bakes remain).
 - [ ] Later display work, unscheduled: HDR calibration, per-display metadata, and HDR on the Steam Deck OLED under Linux.
 - [ ] Later source work, unscheduled: Linux producers for PipeWire DMA-BUF capture and V4L2 cameras.
+
+## [Editor](editor.md)
+
+Every package below carries its own check on the programme page; tick it there and here in the same change.
+
+- [ ] E1 build mode, the grid and snapping (startable today).
+- [ ] E2 selection, a visibility identity per drawn instance, GPU and CPU picking, and highlight.
+- [ ] E3 undo, redo, duplicate, delete and measure.
+- [ ] E4 debug views everywhere (startable today).
+- [ ] E5 the inspector.
+- [ ] E6 why is this dark or invisible.
+- [ ] E7 gizmos and pointer dragging.
+- [ ] E8 editor camera.
+- [ ] E9 cost per object and GPU pass timing (startable today).
+- [ ] E10 live reload and before-and-after.
+- [ ] E11 save edits back to source.
+- [ ] E12 the shape gallery as a world, retiring `Puck.SdfVm.Debug` once the gallery reaches parity with it.
+- [ ] E13 carving and the brick bake: a carve brush whose dabs are document rows.
