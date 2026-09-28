@@ -83,6 +83,8 @@ internal sealed class FakeGpuDevice :
     private int m_distinctImages;
 
     public long AdapterLuid => 0L;
+    public Action<ulong, ulong>? OnBufferCopy { get; set; }
+    public Action<int>? OnReadback { get; set; }
     /// <summary>Gets or sets whether each image created from now on carries an image and view handle of its own rather than
     /// the fake's one fixed pair, so a law can tell images apart by handle.</summary>
     public bool DistinctImages { get; set; }
@@ -231,7 +233,10 @@ internal sealed class FakeGpuDevice :
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => Hit(key: "IGpuRecorder.ClearStorageImage");
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) => Hit(key: "IGpuRecorder.ClearStorageBuffer");
     void IGpuRecorder.CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) => Hit(key: "IGpuRecorder.CopyImage");
-    void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes) => Hit(key: "IGpuRecorder.CopyBuffer");
+    void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes) {
+        OnBufferCopy?.Invoke(arg1: sourceOffsetBytes, arg2: sizeBytes);
+        Hit(key: "IGpuRecorder.CopyBuffer");
+    }
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
         ImageTransitions?.Add(item: (imageHandle, oldLayout, newLayout));
         Hit(key: "IGpuRecorder.TransitionImageLayout");
@@ -734,6 +739,7 @@ internal sealed class FakeGpuDevice :
         public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => gpu.Hit(key: "IGpuStorageBuffer.Write");
         public void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged => gpu.Hit(key: "IGpuStorageBuffer.Write(offset)");
         public void Read(Span<byte> destination) {
+            gpu.OnReadback?.Invoke(obj: destination.Length);
             gpu.Hit(key: "IGpuReadbackBuffer.Read");
             destination.Clear();
         }

@@ -40,8 +40,8 @@ vector field such as a position), `world.reflow.preview`/`status`/`commit`/`canc
 pipelines, and the `forge.*` verbs for cartridges. `world.undo` replays the
 journal minus its tail and is unbindable; there is no redo anywhere except the
 forge draft's one-level swap (`CartridgeDraft.Undo`). There are no gizmos, no
-selection, no pointer picking of placements (`world.place` aims at a surface
-but picks nothing), no copy or paste, and no measurement; `world.nudge` and
+selection, no copy or paste, and no measurement. GPU hover identifies a
+placement but does not select it; `world.place` aims at a surface. `world.nudge` and
 `world.turn` act on a named placement or the one the seat last placed or moved.
 `world.save` refuses a `.puck` target, so a live edit to a `.puck` world can only
 be saved as JSON.
@@ -87,14 +87,17 @@ deterministic interpreter: non-uniform scale, warp ops, render-only shapes such
 as Path and multi-strand Sweep. One refused instruction leaves the whole field
 null, so in such a world nothing can be picked on the CPU.
 
-The visibility record (`frame/sdf-visibility.hlsli`) names what each pixel sees
-in its identity word: the kind in bits 31..30 (0 background, 1 SDF, 2 mesh) and
-the source in bits 29..0. A packed 0 is background. An SDF hit's source is the
-winning instance's dynamic-transform frame slot plus one, carried through
-`mapCore`'s winner resolution as `frameSlot`, so every static SDF hit packs as
-`0x40000000` (kind SDF, source 0) whichever placement it hit. A mesh hit's source
-is its draw. The GPU can therefore tell a background pixel, a mesh draw and a
-moving instance apart, but it cannot tell two static placements apart.
+The shared GPU picker is supplied by [P13](rendering.md#p13--hit-to-source-mapping-and-input-destinations):
+`SdfWorldPasses.PickerOf` exposes one `SdfWorldPicker` per rendered view. Its
+asynchronous readback copies the requested pixel's 16-byte visibility V row
+only while demanded. Kind occupies bits 31..30 (0 background, 1 SDF, 2 mesh),
+and source occupies bits 29..0: the SDF instance's program ordinal plus one,
+or the mesh draw ordinal. SDF source zero means geometry outside any instance.
+The request captures an immutable host lookup, so a later program rebuild or
+reused draw ordinal cannot name a replacement placement. The exact winning
+shape's transform slot is retained in L.x; an articulated instance's bound
+slot can differ. Anonymous lanes are loaded from that transform's existing
+row, preserving the 64-byte visibility record.
 
 Free Cam exists as a gameplay mode
 that possesses an authored `camera-seat-<n>` body
@@ -277,36 +280,25 @@ names a placement id they had to look up.
    `OverlayChannelLeases`. A world-space polyline projects through the seat's
    viewport camera, the way `MarkerWriter` projects a point, and clips to the
    viewport.
-2. **An identity for every drawn instance.** The visibility record's SDF
-   source changes from "frame slot plus one" to "the winning instance's program
-   ordinal plus one" (at most `SdfProgramBuilder.MaxInstances`, 65536, inside
-   the 30 source bits), so a static placement's hit packs as `0x40000000 | (ordinal + 1)`
-   rather than the shared `0x40000000`. Source 0 of kind SDF keeps meaning
-   geometry outside any instance, and background stays 0. The winner already
-   travels through `mapCore`'s and `mapGradCore`'s winner resolution as
-   `frameSlot`; the instance ordinal travels the same way, and readers that need
-   the frame slot (`sdfVisibilityFrameSlot`, the surface sample) read it from
-   the instance's row. Whether the ordinal travels beside `frameSlot` or
-   replaces it is settled by the kernels' register use and disassembly, since
-   every `map*` call site is a full copy of the interpreter. The host keeps a
-   table from instance ordinal to placement (a scope-free creation emits one
-   instance per shape, so many ordinals name one placement), rebuilt with the
-   program. A mesh hit's source stays its draw, and the mesh draw table names
-   the placement a baked draw stands for. The `visibility` debug view colors by
-   the new source.
+2. **An identity for every drawn instance.** P13 supplies the shared identity
+   and readback mechanism described above. `WorldPickMapBuilder` maps the
+   emitted SDF ordinal range and static and pooled mesh draws to their
+   placement or stamped body. Multiple shape ordinals may name one placement.
+   This step consumes that mechanism; it does not create another picker.
 3. **Pointer picking, two paths.** The pointer's display point becomes a ray
    through `SourceRay.Through` over `WorldSeatViewports`, as
    `WorldPointerRayCapture` does, but the ray stays in presentation and is never
    sustained into the command plane.
    - *The GPU path* picks everything the builder sees: a one-pixel readback of
-     the visibility record under the pointer, once per frame while build mode
-     is on and the pointer moves, gives the identity, the ray parameter `t`
+     the visibility record under the pointer, while build mode
+     demands hover, gives the identity, the ray parameter `t`
      and the material, and the host table turns the identity into a
      placement. It covers non-solid placements, shapes and ops the CPU
      evaluator refuses, stamped bodies and baked meshes. The readback is the
      same one the [rendering plan's GPU picking](rendering.md#p13--hit-to-source-mapping-and-input-destinations)
-     needs; whichever lands first owns it, and it is counted in the view's
-     work ledger. Its answer arrives a frame or two late, which a hover label
+     supplies through `SdfWorldPicker`, and it is counted in the view's
+     work ledger. One pending answer supplies backpressure; continuing demand
+     refreshes after completion even when only the camera or scene moves. Its answer arrives a frame or two late, which a hover label
      tolerates.
    - *The CPU path* answers on the frame it is asked, from the client's static
      field: exact hit points and normals for surface snapping and measuring
@@ -788,12 +780,12 @@ are never saved.
 anything, so `editor` is a built-in mode family beside `layout`, with its
 bindings in a default layer.
 
-**Every drawn instance has its own identity.** Today every static SDF hit packs
-as `0x40000000`, so the GPU cannot tell static placements apart. E2 makes the
-SDF source the winning instance's ordinal plus one and keeps a host table from
-ordinal to placement, which serves picking, the in-render highlight and the
-rendering plan's GPU picking alike. Bounds, pivots, gizmos and measurements are
-drawn with the overlay's line primitive either way.
+**Every drawn instance has its own identity.** P13 supplies the SDF source as
+the winning instance's ordinal plus one and the mesh source as its draw
+ordinal, with an immutable host table resolving each to its placement or
+stamped body. E2 consumes that shared picker for selection and in-render
+highlight. Bounds, pivots, gizmos and measurements will use the overlay's
+line primitive.
 
 **Picking has two paths, and the GPU decides.** The GPU readback sees what the
 builder sees, including non-solid placements and geometry the CPU evaluator

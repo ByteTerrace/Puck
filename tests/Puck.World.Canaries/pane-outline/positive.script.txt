@@ -1,0 +1,17 @@
+world.wait ready 60
+pipeline.wait pane compiled 40
+pipeline.wait pane installed 10
+pipeline.wait pane submitted 3 10
+world.view.pointer 200 72
+world.wait 5
+world.screenshot {run}/plain.png
+world.wait captures 30
+world.view.pointer 64 72
+world.wait 5
+world.view.panes
+world.screenshot {run}/hover.png
+world.wait captures 30
+world.view.pointer clear
+world.wait 5
+world.screenshot {run}/clear.png
+world.wait captures 30

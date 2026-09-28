@@ -81,6 +81,10 @@ public sealed partial class WorldStampPool {
         // WITHOUT owning its look or its part namespace.
         public int? BodyIndex;
 
+        private WorldPickTarget? m_pickTarget;
+
+        public WorldPickTarget PickTarget => m_pickTarget ??= new WorldPickTarget(Placement: Row?.Id, BodyIndex: BodyIndex);
+
         // The registration's reads of the client's state mirror: every lane operand, driver signal and gate, pose and
         // effector reference the look reads, bound to BodyIndex so a $body key names the wearing body. Released when
         // the registration retires, so the mirror stops reading what no body wears any more.
@@ -1280,7 +1284,8 @@ public sealed partial class WorldStampPool {
     /// <param name="textCatalog">The world's packed font catalog, or <see langword="null"/> when none is resolved (a
     /// remote projection) — a registration's text runs are then omitted, exactly as the static stamper omits
     /// them.</param>
-    public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, bool probeWorstCase, float maxPlacementScale, int slotBase, PackedFontAtlasCatalog? textCatalog = null) {
+    /// <param name="picks">The presentation identity table populated alongside live emission, or null.</param>
+    public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, bool probeWorstCase, float maxPlacementScale, int slotBase, PackedFontAtlasCatalog? textCatalog = null, WorldPickMapBuilder? picks = null) {
         ArgumentNullException.ThrowIfNull(argument: colors);
 
         for (var index = 0; (index < m_pool.Length); index++) {
@@ -1295,6 +1300,8 @@ public sealed partial class WorldStampPool {
 
             var rootSlot = (slotBase + (index * SlotsPerPlacement));
 
+            var firstInstance = builder.InstanceCount;
+
             EmitOne(
                 builder: builder,
                 colors: colors,
@@ -1304,6 +1311,9 @@ public sealed partial class WorldStampPool {
                 rootSlot: rootSlot,
                 textCatalog: textCatalog
             );
+            if (live is not null) {
+                picks?.Instances(first: firstInstance, end: builder.InstanceCount, target: live.PickTarget);
+            }
         }
     }
     /// <summary>Whether a live body-rooted creation look owns the entity's part namespace.</summary>

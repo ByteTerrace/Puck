@@ -369,6 +369,8 @@ public sealed partial class ShaderPipelineRenderNode {
                 : null)
         ));
 
+        RecordPackageReadback(command: handle, pass: pass, recorder: recorder, slot: slot);
+
         // The recorder wrote its declared values beside the extent and config; the slot takes whichever words changed.
         _ = region.Write(
             bytes: passBlock,

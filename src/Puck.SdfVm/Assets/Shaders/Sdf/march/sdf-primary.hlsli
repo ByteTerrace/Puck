@@ -10,6 +10,7 @@ struct SdfPrimaryMarch {
     float threshold;
     int material;
     float4 lanes;
+    int instanceIndex;
     int frameSlot;
     float blendWeight;
     int blendOther;
@@ -27,8 +28,9 @@ SdfHit sdfPrimarySample(float3 position, uint mask, uint4 part, bool localPart) 
         hit.distance = SDF_FAR_DISTANCE;
         hit.material = 0;
         hit.lanes = 0.0;
+        hit.instanceIndex = -1;
         hit.frameSlot = -1;
-        sdfComposePartProgram(hit, position, part, sdfProgramLayout.dataOffset, true);
+        sdfComposePartProgram(hit, position, part, sdfProgramLayout.dataOffset, -1, true);
         hit.distance *= sdfProgramLayout.stepScale;
         return hit;
     }
@@ -43,6 +45,7 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
     bool hitSurface = false;
     int material = 0;
     float4 hitLanes = 0.0;
+    int hitInstanceIndex = -1;
     int hitFrameSlot = -1;
     float candidateMargin = SDF_FAR_DISTANCE;
     float candidateT = 0.0;
@@ -147,6 +150,7 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
             hitSurface = true;
             material = hit.material;
             hitLanes = hit.lanes;
+            hitInstanceIndex = hit.instanceIndex;
             hitFrameSlot = hit.frameSlot;
             // This mapMasked() call evaluated at exactly surfacePoint (traveled is frozen at the break), so its
             // per-thread material blend channel describes THIS hit's winning smooth seam — capture it now, before the
@@ -254,6 +258,7 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
         hitSurface = true;
         material = candidate.material;
         hitLanes = candidate.lanes;
+        hitInstanceIndex = candidate.instanceIndex;
         hitFrameSlot = candidate.frameSlot;
         materialBlendWeight = sdfMaterialBlendWeight;
         materialBlendOther = sdfMaterialBlendOther;
@@ -267,6 +272,7 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
     result.threshold = terminalHitThreshold;
     result.material = material;
     result.lanes = hitLanes;
+    result.instanceIndex = hitInstanceIndex;
     result.frameSlot = hitFrameSlot;
     result.blendWeight = materialBlendWeight;
     result.blendOther = materialBlendOther;
@@ -356,6 +362,7 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
     result.threshold = best.threshold;
     result.steps = best.steps;
     result.found = best.found;
+    result.instanceIndex = -1;
     result.frameSlot = -1;
     if (best.found) {
         // Resolve attributes in original union order at the selected point, including ties and material seams.
@@ -367,6 +374,7 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
         result.threshold = max(SurfaceEpsilon, pixelFootprint * best.traveled);
         result.material = resolved.material;
         result.lanes = resolved.lanes;
+        result.instanceIndex = resolved.instanceIndex;
         result.frameSlot = resolved.frameSlot;
         result.blendWeight = sdfMaterialBlendWeight;
         result.blendOther = sdfMaterialBlendOther;
@@ -386,6 +394,7 @@ void sdfPrimaryStage(SdfPixel p) {
     bool hitSurface = false;
     int material = 0;
     float4 hitLanes = float4(0.0, 0.0, 0.0, 0.0);
+    int hitInstanceIndex = -1;
     int hitFrameSlot = -1;
     float materialBlendWeight = 0.0;
     int materialBlendOther = 0;
@@ -412,6 +421,7 @@ void sdfPrimaryStage(SdfPixel p) {
         terminalHitThreshold = primary.threshold;
         material = primary.material;
         hitLanes = primary.lanes;
+        hitInstanceIndex = primary.instanceIndex;
         hitFrameSlot = primary.frameSlot;
         materialBlendWeight = primary.blendWeight;
         materialBlendOther = primary.blendOther;
@@ -427,6 +437,7 @@ void sdfPrimaryStage(SdfPixel p) {
         hitSurface = true;
         traveled = meshHit.t;
         material = sdfMeshMaterial(meshHit.draw, meshHit.triangleIndex);
+        hitInstanceIndex = -1;
         hitFrameSlot = -1;
         materialBlendWeight = 0.0;
         materialBlendOther = 0;
@@ -443,7 +454,7 @@ void sdfPrimaryStage(SdfPixel p) {
     visibility.t = traveled;
     visibility.identity = (meshPixel
         ? sdfVisibilityIdentity(SdfVisibilityKindMesh, meshHit.draw)
-        : sdfVisibilitySdfIdentity(hitSurface, hitFrameSlot));
+        : sdfVisibilitySdfIdentity(hitSurface, hitInstanceIndex));
     visibility.material = material;
     visibility.flags = sdfVisibilityFlags(marchStep, sdfEvalCount);
     SdfVisibilityCoverage coverage;
@@ -457,7 +468,7 @@ void sdfPrimaryStage(SdfPixel p) {
     if (meshPixel) {
         sdfStoreVisibilityMeshTriangle(record, meshHit.triangleIndex);
     } else {
-        sdfStoreVisibilityLanes(record, hitLanes);
+        sdfStoreVisibilityFrameSlot(record, hitFrameSlot);
     }
 }
 #endif

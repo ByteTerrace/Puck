@@ -49,12 +49,13 @@ internal readonly record struct WorldCursorStatus(
 /// presentation/session state: nothing rides a <see cref="Puck.Commands.CommandSnapshot"/>, touches the binding
 /// vocabulary, or reaches the simulation.
 /// </summary>
-internal sealed class WorldCursorFeed {
+internal sealed partial class WorldCursorFeed {
     // The eight held-button words, indexed by the L|R|M bit mask — interned so the per-frame status never
     // allocates a string for a state with only eight values.
     private static readonly string[] ButtonWords = ["-", "L", "R", "LR", "M", "LM", "RM", "LRM"];
 
     private readonly WorldClient m_client;
+    private readonly WorldSeatBindings m_bindings;
     private readonly WorldOverlayFacts m_facts;
     private readonly IHudSource m_hud;
     private readonly WorldViewGraphHost m_panes;
@@ -86,6 +87,7 @@ internal sealed class WorldCursorFeed {
     );
 
     /// <summary>Initializes a new instance of the <see cref="WorldCursorFeed"/> class.</summary>
+    /// <param name="bindings">The seat modes that demand build-mode GPU hover.</param>
     /// <param name="pointer">The live pointer store (read non-destructively: position and held buttons only).</param>
     /// <param name="roster">The roster the pointer's seat resolves against (the keyboard's seat).</param>
     /// <param name="client">The client view.</param>
@@ -96,7 +98,7 @@ internal sealed class WorldCursorFeed {
     /// <param name="facts">The overlay-visibility fact evaluator the cursor policy's <c>visible</c> reads.</param>
     /// <param name="panes">The render graph host whose published panes the pointer hovers.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldCursorFeed(WorldPointer pointer, PlayerRoster roster, WorldClient client, WorldSeatViewInput viewInput, WorldSeatViewports viewports, IHudSource hud, CursorStore store, WorldOverlayFacts facts, WorldViewGraphHost panes) {
+    public WorldCursorFeed(WorldSeatBindings bindings, WorldPointer pointer, PlayerRoster roster, WorldClient client, WorldSeatViewInput viewInput, WorldSeatViewports viewports, IHudSource hud, CursorStore store, WorldOverlayFacts facts, WorldViewGraphHost panes) {
         ArgumentNullException.ThrowIfNull(facts);
         ArgumentNullException.ThrowIfNull(argument: panes);
         m_facts = facts;
@@ -109,6 +111,7 @@ internal sealed class WorldCursorFeed {
         ArgumentNullException.ThrowIfNull(argument: hud);
         ArgumentNullException.ThrowIfNull(argument: store);
 
+        m_bindings = bindings;
         m_client = client;
         m_hud = hud;
         m_pointer = pointer;
@@ -144,7 +147,7 @@ internal sealed class WorldCursorFeed {
         localX = 0f;
         localY = 0f;
 
-        if (!m_pointer.HasPosition(slot: slot)) {
+        if (!HasPosition(slot: slot)) {
             return "no-position";
         }
 
@@ -220,8 +223,7 @@ internal sealed class WorldCursorFeed {
         return null;
     }
     // The hover resolution: the authored HUD panels' published rects first (they draw over the world and its panes),
-    // then the display pane the picker hovers. Returns the hovered thing's label, or empty — there is no world-row
-    // pick program any more (the editor tool that consumed it was deleted with the editor.* verb surface).
+    // then demanded GPU geometry and the display pane. These labels identify presentation targets only.
     private string ResolveHover(Vector2 framePosition, in WorldSeatView view, SourceMapping? pane) {
         if (HoveredPanelId(
             framePosition: framePosition,
@@ -241,6 +243,10 @@ internal sealed class WorldCursorFeed {
             }
 
             return m_hoverLabel;
+        }
+
+        if (GpuHoverLabel() is { } picked) {
+            return picked;
         }
 
         if (pane?.Source.Name is { } paneName) {
@@ -312,7 +318,7 @@ internal sealed class WorldCursorFeed {
         // window, so at most one cursor entry publishes per frame.
         var slot = (m_pointer.Positioned?.Slot ?? WorldPointerSlot.Resolve(roster: m_roster));
         var count = 0;
-        var position = m_pointer.Position(slot: slot);
+        var position = (m_pointerOverride ?? m_pointer.Position(slot: slot));
         var view = m_viewports.Seat(slot: slot);
         var reason = Decide(
             framePosition: out var framePosition,
@@ -332,7 +338,7 @@ internal sealed class WorldCursorFeed {
         // (inside its seat's viewport) and the pane hover (anywhere on the display) require. A null reason implies the
         // first two, so the policy's condition decides the drawn cursor exactly as it did alone.
         var shown = (
-            m_pointer.HasPosition(slot: slot) &&
+            HasPosition(slot: slot) &&
             !m_viewInput.IsSteering(slot: slot) &&
             (cursorPolicy is not null) &&
             m_facts.Evaluate(
@@ -359,6 +365,8 @@ internal sealed class WorldCursorFeed {
         ) {
             reason = "visible-false";
         }
+
+        DemandGpuHover(inside: (reason is null), localX: localX, localY: localY, pane: pane, shown: shown, slot: slot);
 
         if (reason is null) {
             var policy = cursorPolicy!;

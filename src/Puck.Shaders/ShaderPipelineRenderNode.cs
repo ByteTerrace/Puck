@@ -1681,6 +1681,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             commands: commands,
             fence: slot.Fence!
         );
+        SubmitPackageReadbacks(fence: slot.Fence!, slot: slotIndex);
         if (exported is not null) {
             exportValue = exported.CompleteWrite();
             exportWritten = true;

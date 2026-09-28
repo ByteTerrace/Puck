@@ -85,6 +85,10 @@ public sealed record SdfFrame(
     IReadOnlyList<SdfViewSnapshot> Views,
     float Time
 ) {
+    /// <summary>Gets the immutable host identity table for the composed frame. Composition fills it before publishing
+    /// the frame; it is CPU-only presentation data and is never uploaded to the frame block.</summary>
+    public ISdfPickMap? PickMap { get; internal set; }
+
     /// <summary>Per-frame transforms for the scene's moving entities, indexed by dynamic-transform slot. Must supply
     /// at least the program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/> entries (the render frame
     /// throws otherwise — a dynamic slot silently rendering at identity is a bug, not a default); empty is therefore

@@ -215,13 +215,14 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
         );
     }
     /// <inheritdoc/>
-    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes) =>
+    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0) =>
         recordingApi.CopyBuffer(
             commandBufferHandle: commandBufferHandle,
             destinationBufferHandle: destinationBufferHandle,
             device: Device,
             sizeBytes: sizeBytes,
-            sourceBufferHandle: sourceBufferHandle
+            sourceBufferHandle: sourceBufferHandle,
+            sourceOffsetBytes: sourceOffsetBytes
         );
     /// <inheritdoc/>
     public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) {

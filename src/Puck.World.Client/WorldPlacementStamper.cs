@@ -578,7 +578,8 @@ public static class WorldPlacementStamper {
     /// <see langword="null"/>: its untinted placements then draw that mesh, and keep their field camera-hidden so it still
     /// casts shadows and occludes. A creation carrying text or noise relief, which its bake does not hold, draws through
     /// its field. Collected only with <paramref name="meshDraws"/>.</param>
-    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null, WorldStaticPalettes? palettes = null, Func<string, SdfMesh?>? bakedMeshFor = null) {
+    /// <param name="picks">The presentation identity table populated alongside emission, or null.</param>
+    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null, WorldStaticPalettes? palettes = null, Func<string, SdfMesh?>? bakedMeshFor = null, WorldPickMapBuilder? picks = null) {
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var baked = (colors ?? WorldBakedColors.Of(definition: definition));
         var registered = (palettes ?? new WorldStaticPalettes());
@@ -619,6 +620,9 @@ public static class WorldPlacementStamper {
                 )
             );
 
+            var firstInstance = builder.InstanceCount;
+            var firstMesh = (meshDraws?.Count ?? 0);
+
             EmitPlacement(
                 builder: builder,
                 creation: creation.EngineDocument,
@@ -641,6 +645,12 @@ public static class WorldPlacementStamper {
                     ? bakedMeshFor?.Invoke(arg: placement.ShownPrototypeId)
                     : null)
             );
+            if (picks is not null) {
+                var target = new WorldPickTarget(Placement: placement.Id, BodyIndex: null);
+
+                picks.Instances(first: firstInstance, end: builder.InstanceCount, target: target);
+                picks.Meshes(first: firstMesh, end: (meshDraws?.Count ?? 0), target: target);
+            }
         }
     }
 

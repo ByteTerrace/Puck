@@ -119,11 +119,22 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     }
     /// <inheritdoc/>
     public IShaderPipelineStorageCounter? CounterOf(string instance) => Refresh(instance: instance);
+    /// <summary>Gets the presentation-only picker of one view instance. Requests and results belong to the presentation thread.</summary>
+    /// <param name="instance">The view instance name.</param>
+    /// <returns>The shared picker used by hover and editor clients.</returns>
+    public SdfWorldPicker PickerOf(string instance) => Refresh(instance: instance).Picker;
+    /// <summary>Finds the picker of an instance whose SDF package the runtime has requested.</summary>
+    /// <param name="instance">The rendered instance name.</param>
+    /// <returns>The picker, or null when no SDF package is registered for the instance.</returns>
+    public SdfWorldPicker? FindPicker(string instance) => (m_entries.ContainsKey(key: instance)
+        ? Refresh(instance: instance).Picker
+        : null);
     /// <inheritdoc/>
     public bool IsUnchanged(string instance, in FrameContext context) {
         var entry = Refresh(instance: instance);
 
         return (
+            !entry.Picker.Pending &&
             (entry.View is { } view) &&
             view.Residency.IsUnchanged(
                 context: in context,
@@ -179,6 +190,9 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
 
     /// <inheritdoc/>
     public void OnDeviceLost() {
+        foreach (var entry in m_entries.Values) {
+            entry.Picker.Clear();
+        }
         foreach (var residency in m_residencies.Keys) {
             residency.OnDeviceLost();
         }
@@ -339,6 +353,7 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
         }
 
         entry.View = view;
+        entry.Picker.Follow(view: view);
 
         return entry;
     }
@@ -362,6 +377,8 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     // One instance: the view it renders this frame, and the counter its passes' scratch is sized by. The view is written
     // on the frame thread and read by a pass's build on the thread pool.
     private sealed class Entry : IShaderPipelineStorageCounter {
+        public SdfWorldPicker Picker { get; } = new();
+
         private readonly Lock m_gate = new();
 
         private SdfWorldView? m_view;

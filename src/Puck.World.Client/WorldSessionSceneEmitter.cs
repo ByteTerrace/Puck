@@ -93,6 +93,11 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     private readonly WorldSceneMeshDraws m_meshDraws;
 
+    private readonly WorldPickMapBuilder m_picks = new();
+
+    /// <inheritdoc/>
+    public ISdfPickMap? PickMap => m_picks.Snapshot(pool: m_pool.PickMeshTargets);
+
     private readonly WorldStampPool m_pool = new();
 
     private readonly WorldSessionStampSource m_source;
@@ -190,7 +195,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             : index => m_emittedRigs[index]),
             scaleFor: (probeWorstCase
             ? null
-            : index => m_emittedScales[index])
+            : index => m_emittedScales[index]),
+            picks: (probeWorstCase ? null : m_picks)
         );
     }
     // The camera row's anchor pose, restricted to what a STATIC-geometry-only mirror can resolve: a Placement anchor
@@ -406,6 +412,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             return;
         } else {
             m_emittedDefinition = definition;
+            m_picks.Clear();
             var colors = BakedColors();
 
             colors.Begin();
@@ -429,7 +436,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 creations: definition.Creations,
                 placements: definition.Placements,
                 palettes: m_palettes,
-                meshDraws: meshDraws
+                meshDraws: meshDraws,
+                picks: m_picks
             );
             m_meshDraws.Static = meshDraws;
             m_pool.Emit(
@@ -437,7 +445,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 colors: colors,
                 maxPlacementScale: definition.Authoring.MaxPlacementScale,
                 probeWorstCase: false,
-                slotBase: (context.SlotBase + WorldRigCatalog.DynamicTransformCapacity)
+                slotBase: (context.SlotBase + WorldRigCatalog.DynamicTransformCapacity),
+                picks: m_picks
             );
         }
 

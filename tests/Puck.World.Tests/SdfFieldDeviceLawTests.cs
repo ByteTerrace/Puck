@@ -118,7 +118,7 @@ public sealed partial class SdfFieldDeviceLawTests {
     }
     // Packs every leg's cases, binds each leg's words at sdfWords, dispatches the probe once per leg and reads the
     // results back, one per case in leg order.
-    private static Vector4[] Run(byte[] kernel, GpuDeviceServices services, IReadOnlyList<SdfFieldLeg> legs) {
+    private static Vector4[] Run(byte[] kernel, GpuDeviceServices services, IReadOnlyList<SdfFieldLeg> legs, Vector4[]? transforms = null) {
         var caseCount = checked((legs.Count * Points.Length));
 
         if ((Points.Length > 0xFFFF) || (caseCount > 0xFFFF)) {
@@ -127,11 +127,14 @@ public sealed partial class SdfFieldDeviceLawTests {
 
         var height = ((((uint)caseCount) + (ResultsWidth - 1U)) / ResultsWidth);
         var worldGroup = new GpuGroupLayoutDescription(
-            bindings: [new GpuGroupBinding(binding: WordsBinding, kind: GpuBindingKind.ReadOnlyBuffer)],
+            bindings: ((transforms is null)
+                ? [new GpuGroupBinding(binding: WordsBinding, kind: GpuBindingKind.ReadOnlyBuffer)]
+                : [new GpuGroupBinding(binding: WordsBinding, kind: GpuBindingKind.ReadOnlyBuffer), new GpuGroupBinding(binding: 1, kind: GpuBindingKind.ReadOnlyBuffer)]),
             ordinal: WorldGroup
         );
         var passGroup = new GpuGroupLayoutDescription(
             bindings: [
+                .. ((transforms is null) ? Array.Empty<GpuGroupBinding>() : [new GpuGroupBinding(binding: 9, kind: GpuBindingKind.ReadWriteBuffer)]),
                 new GpuGroupBinding(binding: CasesBinding, kind: GpuBindingKind.ReadOnlyBuffer),
                 new GpuGroupBinding(binding: ResultsBinding, kind: GpuBindingKind.StorageImage),
             ],
@@ -181,6 +184,12 @@ public sealed partial class SdfFieldDeviceLawTests {
             sizeBytes: ((ulong)(caseWords.Length * sizeof(uint))),
             usage: GpuBufferUsage.Storage
         );
+        using var dynamicTable = ((transforms is null) ? null : services.BufferFactory.CreateHostVisible(
+            name: default, sizeBytes: (((ulong)transforms.Length) * 16), usage: GpuBufferUsage.Storage));
+        using var visibility = ((transforms is null) ? null : services.BufferFactory.CreateDeviceLocal(
+            name: default, sizeBytes: (((ulong)caseCount) * 64), usage: GpuBufferUsage.Storage));
+
+        dynamicTable?.Write<Vector4>(data: transforms);
         var programs = new List<IGpuStorageBuffer>(capacity: legs.Count);
 
         cases.Write<uint>(data: caseWords);
@@ -207,6 +216,10 @@ public sealed partial class SdfFieldDeviceLawTests {
                 poolHandle: pool
             );
 
+            if (visibility is not null) {
+                bindings.WriteBuffer(binding: 9, bufferHandle: visibility.BufferHandle, bufferSize: visibility.SizeBytes,
+                    descriptorSetHandle: passSet, elementStride: 4, kind: GpuBindingKind.ReadWriteBuffer);
+            }
             bindings.WriteBuffer(
                 binding: CasesBinding,
                 bufferHandle: cases.BufferHandle,
@@ -262,6 +275,10 @@ public sealed partial class SdfFieldDeviceLawTests {
                     poolHandle: pool
                 );
 
+                if (dynamicTable is not null) {
+                    bindings.WriteBuffer(binding: 1, bufferHandle: dynamicTable.BufferHandle, bufferSize: dynamicTable.SizeBytes,
+                        descriptorSetHandle: worldSet, elementStride: 16, kind: GpuBindingKind.ReadOnlyBuffer);
+                }
                 bindings.WriteBuffer(
                     binding: WordsBinding,
                     bufferHandle: program.BufferHandle,
