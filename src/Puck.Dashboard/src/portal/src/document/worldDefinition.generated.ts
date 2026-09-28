@@ -71,6 +71,7 @@ export type WorldDefinition = {
   ruleGroups?: (RuleGroupDeclaration | null)[] | null;
   sets?: (CellSetRow | null)[] | null;
   editor?: WorldEditorDefaults | null;
+  timeline?: WorldTimelineSection | null;
   /**
    * Gets the basis document this file layers over, as a file path resolved against this document's own directory — the document-composition member (see WorldDocumentBasis). A file naming a basis is a delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis chain. Unrelated to the coordinate basis the validator's geometry speaks of.
    */
@@ -4325,6 +4326,29 @@ export type WorldChannel = {
    * What the MoveAdvance/MoveStrafe pair is relative to when a binding row folds into it (see ChannelFrame); the two roles must declare the same frame, and every other channel leaves it at World. Omitted from a saved document at that default.
    */
   frame?: ChannelFrame;
+};
+
+export type WorldClock = {
+  /**
+   * The clock's name, unique within the section.
+   */
+  name: string;
+  /**
+   * A tick clock's period, in seconds: a whole number of engine ticks (1/50400 s). Refused beside State.
+   */
+  periodSeconds?: number | null;
+  /**
+   * What one period reads as, in the units a key's time is authored in: a day that passes in twenty minutes and reads as twenty-four hours has a span of 24h. Absent reads as the period for a tick clock and as one for a state clock.
+   */
+  spanSeconds?: number | null;
+  /**
+   * How far into its span a tick clock stands at engine tick zero, in SpanSeconds' units, in [0, span). Absent is zero. Refused on a state clock.
+   */
+  startSeconds?: number | null;
+  /**
+   * A state clock's Fixed or Int row. Refused beside PeriodSeconds.
+   */
+  state?: string | null;
 };
 
 export type WorldCollider = WorldColliderSphere | WorldColliderCapsule | WorldColliderBox | WorldColliderFromCreation | null;
@@ -10877,6 +10901,13 @@ export type WorldThemeType = {
   titleLine: number;
   titleTracking: number;
   titleWeight: number;
+};
+
+export type WorldTimelineSection = {
+  /**
+   * The clocks, each named once.
+   */
+  clocks?: (WorldClock | null)[] | null;
 };
 
 export type WorldTonemap = "None" | "Filmic";

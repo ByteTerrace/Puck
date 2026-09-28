@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/0c91b30629698bf950fccc31f0d2377dc522e9a72223fa7cb28908c7f35ee0af). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/05abdc9a3325b29a56e54b3247edefff650ddfc38b634d7c415c819eef8d5f79). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -77,15 +77,15 @@ struct SdfWorldPass {
     [[vk::offset(1016)]] uint instanceMaskWordCount;
     [[vk::offset(1020)]] uint meshDraws;
     [[vk::offset(1024)]] float nearDistance;
-    [[vk::offset(1028)]] uint sampleIndex;
-    [[vk::offset(1032)]] float sceneTime;
-    [[vk::offset(1036)]] uint screenCount;
-    [[vk::offset(1040)]] float shadowDistanceScale;
-    [[vk::offset(1044)]] float sunScale;
-    [[vk::offset(1048)]] float tanHalfFieldOfView;
-    [[vk::offset(1052)]] uint _pad1052;
-    [[vk::offset(1056)]] uint2 tileGrid;
-    [[vk::offset(1064)]] uint viewBase;
+    [[vk::offset(1028)]] uint screenCount;
+    [[vk::offset(1032)]] float shadowDistanceScale;
+    [[vk::offset(1036)]] float sunScale;
+    [[vk::offset(1040)]] float tanHalfFieldOfView;
+    [[vk::offset(1044)]] uint _pad1044;
+    [[vk::offset(1048)]] uint2 tileGrid;
+    [[vk::offset(1056)]] uint viewBase;
+    [[vk::offset(1060)]] uint _pad1060;
+    [[vk::offset(1064)]] uint _pad1064;
     [[vk::offset(1068)]] uint _pad1068;
     [[vk::offset(1072)]] float3 viewForward;
     [[vk::offset(1084)]] uint _pad1084;
@@ -97,8 +97,8 @@ struct SdfWorldPass {
     [[vk::offset(1132)]] uint viewportCount;
     [[vk::offset(1136)]] uint workCounterRow;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaE5CD1162 : register(b0, space3);
-#define passGroup passGroupIsaE5CD1162
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaC521032A : register(b0, space3);
+#define passGroup passGroupIsaC521032A
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<float> tiles : register(t3, space3);

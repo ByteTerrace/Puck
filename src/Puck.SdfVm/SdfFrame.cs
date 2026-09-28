@@ -19,6 +19,7 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// <summary>The editor grid the view draws, which its pass block carries (<see cref="SdfFrameBlock"/>); a view that
     /// draws none carries <see cref="GridOverlayState.Hidden"/>.</summary>
     public GridOverlayState Grid { get; init; } = GridOverlayState.Hidden;
+
     /// <summary>The quality the view renders at. Each view's pass block carries its own, so views of one frame, and of
     /// one residency, render the same scene at different cost. The default is full quality.</summary>
     public SdfViewQuality Quality { get; init; }

@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/a74226932dfb01dff3a84f72c995fa5683df459be80950d6d4ce30607a1f8dee). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/ea39ac13b119f5c3b3dcf5f387b9d351760b3f9f9ce5c5c6390c380342db7e5b). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -38,15 +38,15 @@ struct SdfMeshPass {
     [[vk::offset(1016)]] uint instanceMaskWordCount;
     [[vk::offset(1020)]] uint meshDraws;
     [[vk::offset(1024)]] float nearDistance;
-    [[vk::offset(1028)]] uint sampleIndex;
-    [[vk::offset(1032)]] float sceneTime;
-    [[vk::offset(1036)]] uint screenCount;
-    [[vk::offset(1040)]] float shadowDistanceScale;
-    [[vk::offset(1044)]] float sunScale;
-    [[vk::offset(1048)]] float tanHalfFieldOfView;
-    [[vk::offset(1052)]] uint _pad1052;
-    [[vk::offset(1056)]] uint2 tileGrid;
-    [[vk::offset(1064)]] uint viewBase;
+    [[vk::offset(1028)]] uint screenCount;
+    [[vk::offset(1032)]] float shadowDistanceScale;
+    [[vk::offset(1036)]] float sunScale;
+    [[vk::offset(1040)]] float tanHalfFieldOfView;
+    [[vk::offset(1044)]] uint _pad1044;
+    [[vk::offset(1048)]] uint2 tileGrid;
+    [[vk::offset(1056)]] uint viewBase;
+    [[vk::offset(1060)]] uint _pad1060;
+    [[vk::offset(1064)]] uint _pad1064;
     [[vk::offset(1068)]] uint _pad1068;
     [[vk::offset(1072)]] float3 viewForward;
     [[vk::offset(1084)]] uint _pad1084;

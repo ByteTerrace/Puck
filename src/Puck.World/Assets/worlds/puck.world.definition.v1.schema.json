@@ -204,6 +204,9 @@
     "editor": {
       "$ref": "./schema/editor.schema.json"
     },
+    "timeline": {
+      "$ref": "./schema/timeline.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },
