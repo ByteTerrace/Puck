@@ -86,7 +86,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] Neutral contracts: rational clock rates and multi-port input.
 - [x] The CPU and the bus.
 - [x] A complete NTSC machine.
-- [ ] NTSC accuracy (startable today).
+- [ ] NTSC accuracy (in progress: AccuracyCoin runs against a recorded ledger).
 - [ ] Common boards; regional hardware; long-tail boards; expansion audio.
 - [ ] The Famicom Disk System; peripherals; World cabinets.
 

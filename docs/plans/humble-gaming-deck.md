@@ -49,7 +49,10 @@ of scope here.
   rendered picture compared pixel for pixel with an independent reference
   renderer, controller, OAM DMA and APU fixtures, nestest's PPU column, and a
   nestest boot driven through the controller.
-- **Not started:** every package below.
+- **In progress:** NTSC accuracy. AccuracyCoin runs in the battery against a
+  recorded outcome ledger, so no passing test can regress, and its recorded
+  failures are the package's work list.
+- **Not started:** every package below NTSC accuracy.
 
 ## What state of the art means here
 
