@@ -26,6 +26,11 @@ internal sealed class RecordingLink(WorldDefinition definition) : IServerLink {
 
     /// <summary>Gets each submitted envelope's completion, in submission order.</summary>
     public List<Action<WorldSubmissionResult>?> Completions { get; } = [];
+    /// <summary>Gets or sets whether the link throws instead of accepting an envelope, as a closed link does.</summary>
+    public bool Fails { get; set; }
+    /// <summary>Gets or sets the verdict the link answers each envelope with before it returns, or
+    /// <see langword="null"/> to leave every verdict to <see cref="Complete"/>.</summary>
+    public WorldSubmissionResult? Inline { get; set; }
     /// <summary>Gets each submitted envelope, in submission order.</summary>
     public List<WorldSubmissionPayload> Submitted { get; } = [];
 
@@ -45,11 +50,23 @@ internal sealed class RecordingLink(WorldDefinition definition) : IServerLink {
         principal: principal
     );
     public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion) {
+        if (Fails) {
+            throw new InvalidOperationException(message: "the link is closed");
+        }
+
         Submitted.Add(item: payload);
         Completions.Add(item: completion);
 
+        if (Inline is { } verdict) {
+            completion?.Invoke(obj: verdict);
+        }
+
         return Submitted.Count;
     }
+    /// <summary>Returns the principal one submitted envelope's mutation was composed under.</summary>
+    /// <param name="index">The envelope's submission index.</param>
+    /// <returns>The principal.</returns>
+    public Principal PrincipalOf(int index) => ((WorldSubmissionPayload.Mutation)Submitted[index]).Value.Principal;
     public void SubmitIntent(in IntentSubmission submission) {
     }
     public void SubmitSession(SessionRequest request, Action<SessionReply> completion) {

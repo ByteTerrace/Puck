@@ -67,11 +67,12 @@ public sealed partial class WorldEditorCommandModule {
 
         return (snapped with { Y = ((below is { Normal.Y: > RestingNormalY } ground) ? ground.Point.Y : point.Y) });
     }
-    private static string MintId(WorldDefinition definition, string prototype) {
+    // The creation's name and the first number no placement takes, delivered or held by an edit (IsTaken).
+    private string MintId(EditWorld world, string prototype) {
         for (var n = 1; ; n++) {
             var id = $"{prototype}{n}";
 
-            if (WorldDefinitionRows.FindPlacement(id: id, placements: definition.Placements) is null) {
+            if (!IsTaken(id: id, world: world)) {
                 return id;
             }
         }
@@ -187,7 +188,7 @@ public sealed partial class WorldEditorCommandModule {
         var slot = context.Slot;
         var definition = world.Definition;
         var current = ((seats.CurrentOf(slot: slot, world: world.Name) is { } currentId)
-            ? WorldDefinitionRows.FindPlacement(id: currentId, placements: definition.Placements)
+            ? LatestOf(id: currentId, world: world)
             : null);
         var prototype = ((args.Count >= 1) ? args[0].ToString() : current?.PrototypeId);
 
@@ -199,9 +200,9 @@ public sealed partial class WorldEditorCommandModule {
             return CommandResult.Error(output: $"[{PlaceCommand}: no creation '{prototype}']");
         }
 
-        var id = ((args.Count == 2) ? args[1].ToString() : MintId(definition: definition, prototype: prototype));
+        var id = ((args.Count == 2) ? args[1].ToString() : MintId(prototype: prototype, world: world));
 
-        if (WorldDefinitionRows.FindPlacement(id: id, placements: definition.Placements) is not null) {
+        if (IsTaken(id: id, world: world)) {
             return CommandResult.Error(output: $"[{PlaceCommand}: a placement '{id}' already exists]");
         }
 
