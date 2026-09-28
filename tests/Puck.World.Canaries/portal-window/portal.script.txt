@@ -8,12 +8,12 @@ world.screens
 body.pose 1 0 9 0 0 0 0
 world.wait 10
 world.screenshot {run}/right.png
-world.wait 10
+world.wait captures 30
 # The viewer steps a unit left, and the destination's marker moves across the glass the other way.
 body.pose -1 0 9 0 0 0 0
 world.wait 10
 world.screenshot {run}/left.png
-world.wait 10
+world.wait captures 30
 # The view renders at three-quarter scale, so the room's view is a pane a display point walks into.
 world.render-scale three-quarter
 world.wait 10

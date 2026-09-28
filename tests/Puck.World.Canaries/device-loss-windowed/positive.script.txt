@@ -9,5 +9,6 @@ world.screenshot {run}/lost.png
 world.wait 30
 # Recovered: the device's pipelines were created again, and a capture on the rebuilt device lands.
 gpu.faults list
+world.wait captures 30
 world.screenshot {run}/after.png
-world.wait 10
+world.wait captures 30

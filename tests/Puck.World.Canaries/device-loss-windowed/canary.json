@@ -17,8 +17,9 @@
       { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
       { "verb": "gpu.faults", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" }
     ],
     "expect": [
       { "type": "line", "name": "the-device-is-lost-once", "stream": "stderr", "match": "exact", "text": "[device-lost] reason 0x00000000; recovering (attempt 1/8)", "present": true },
@@ -42,8 +43,9 @@
       { "verb": "gpu.faults", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
       { "verb": "gpu.faults", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" },
       { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" }
+      { "verb": "world.wait", "occurrence": 6, "outcome": "accepted" }
     ],
     "expect": [
       { "type": "line", "name": "no-device-is-lost", "stream": "stderr", "match": "contains", "text": "[device-lost]", "present": false },

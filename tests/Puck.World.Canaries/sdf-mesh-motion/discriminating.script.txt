@@ -6,11 +6,11 @@ world.wait ready 600
 world.debug-view visibility
 world.wait 30
 world.screenshot {run}/before.png
-world.wait 10
+world.wait captures 30
 world.wait 30
 world.screenshot {run}/after.png
-world.wait 10
+world.wait captures 30
 # The camera never pans either.
 world.wait 30
 world.screenshot {run}/panned.png
-world.wait 10
+world.wait captures 30

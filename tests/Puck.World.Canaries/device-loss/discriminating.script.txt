@@ -6,5 +6,6 @@ gpu.faults list
 world.screenshot {run}/lost.png
 world.wait 30
 gpu.faults list
+world.wait captures 30
 world.screenshot {run}/after.png
-world.wait 10
+world.wait captures 30
