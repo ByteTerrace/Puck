@@ -742,8 +742,9 @@ has, and runs every leg against that exact artifact. The build never goes into
 the projects' `bin` directories (see [where the World artifact is
 built](#where-the-world-artifact-is-built)). `--world-artifact <dll>` runs every
 leg on the named entry assembly instead, such as a published package's, and
-builds nothing. `--debug-layers` boots every offscreen leg's World with
-`--debug-layers`, its backend's validation layer, and then fails any such leg
+builds nothing. `--debug-layers` boots the World of every leg that names a
+backend, windowed or offscreen, with `--debug-layers`, its backend's validation
+layer, and then fails any such leg
 whose stderr holds a validation message, naming the first: a
 `[vulkan-debug] validation` line or any `[d3d12-debug]` line, a teardown
 live-object report included. The Vulkan loader's `general` notices do not
