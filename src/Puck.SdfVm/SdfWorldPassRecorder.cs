@@ -182,9 +182,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
     // A part skips a frame whose work it would not do, recording neither its work nor its planned barriers:
     // - the mesh part a frame that draws no mesh, when the hit passes, whose pass block's mesh draws are then zero, read
     //   nothing of the target;
-    // - the ambient part a frame whose ambient occlusion is off, whose neutral occlusion the surface pass already wrote;
-    // - the shadow part a frame whose soft shadows are off or that has no shadow light, when views reads nothing of the
-    //   record's key row.
+    // - the ambient part a view whose ambient occlusion is off, whose neutral occlusion the surface pass already wrote;
+    // - the shadow part a view whose soft shadows are off or a frame that has no shadow light, when views reads nothing
+    //   of the record's key row.
     public bool Skips(in FrameContext context) {
         var mesh = IsMesh;
         var ambient = string.Equals(a: m_part, b: SdfWorldPackage.Parts.Ambient, comparisonType: StringComparison.Ordinal);
@@ -206,11 +206,17 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         if (mesh) {
             return (tables.MeshDrawCount == 0);
         }
+
+        var quality = frame.Views[Math.Min(
+            val1: m_view.View,
+            val2: (frame.Views.Count - 1)
+        )].Quality;
+
         if (ambient) {
-            return frame.DisableAmbientOcclusion;
+            return quality.DisableAmbientOcclusion;
         }
 
-        return (frame.DisableSoftShadows || (frame.Environment.ShadowLightIndex < 0));
+        return (quality.DisableSoftShadows || (frame.Environment.ShadowLightIndex < 0));
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         Follow();

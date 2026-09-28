@@ -487,6 +487,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
             actual: scene.AddView(view: in view),
             expected: 0
         );
+        scene.EndViews();
 
         var frame = Capture(source: scene.FrameSource);
 

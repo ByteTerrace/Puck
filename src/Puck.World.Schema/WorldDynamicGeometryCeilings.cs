@@ -66,8 +66,8 @@ namespace Puck.World;
 /// already pays close to in full. This is a genuine finding, not a methodology defect to engineer around: at full
 /// default shading quality and 1280x800, the 60 Hz budget for contributed dynamic geometry has no headroom
 /// on this hardware once derated for the RDNA2 floor. Raising the ceiling above 0 needs one of: a cheaper shading
-/// tier specifically for contributed/dynamic content (fast shadow march + fast AO — <c>SdfFrame.UseFastSoftShadowMarch</c>/
-/// <c>UseFastAmbientOcclusion</c> already exist and were not armed here), a smaller render target (a split-screen
+/// tier specifically for contributed/dynamic content (fast shadow march + fast AO — <c>SdfViewQuality.UseFastSoftShadowMarch</c>/
+/// <c>UseFastAmbientOcclusion</c>), a smaller render target (a split-screen
 /// pane is well under 1280x800), or accepting the policy is a GPU-bound ceiling of 0 additional instances at this
 /// preset — this file states the fact measured, not a recommendation between those.</para>
 /// <para><b>The CPU ceiling is not binding.</b> The worst measured per-frame instance-grid rebuild

@@ -112,7 +112,8 @@ register.
   primary's march, and only primary reads it: a mesh pixel's record carries the
   mesh kind, its draw and its triangle, which the later stages read, and the
   shadow stage marches nothing for it. The ambient and shadow passes skip a
-  frame whose levers turn them off (`SdfWorldPassRecorder.Skips`); views then
+  view whose quality turns them off (`SdfViewSnapshot.Quality`,
+  `SdfWorldPassRecorder.Skips`); views then
   reads nothing of the record's K row. AO lives in `sdf-occlusion.hlsli`
   (called from the ambient pass's `sdfResolveAmbient` in `sdf-surface.hlsli`);
   normals and curvature in `sdfResolveSurface`, a mesh pixel's in
@@ -696,7 +697,7 @@ These are one-line cautions; the owning pages hold the derivations.
   policy the device selects), so the tables create and admit two pools, their
   own and the copy pool, and no region the frame thread creates or grows takes
   a descriptor range; a new region takes a slice of that pool too. A view's
-  camera, the frame's levers and its environment are no table: each
+  camera and quality, the frame's bench levers and its environment are no table: each
   `sdf.world` pass writes them into its pass block (`SdfFrameBlock`, the values
   `SdfWorldPackage.Values` declares). Change
   a table only through its

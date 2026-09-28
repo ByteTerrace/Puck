@@ -1,5 +1,5 @@
 // The debug view modes and the engine levers the bench verbs and the world's settings set, each read from the pass block
-// (SdfFrame's lever fields, written by SdfFrameBlock).
+// (the view's quality, SdfViewSnapshot.Quality, and SdfFrame's bench levers, written by SdfFrameBlock).
 #ifndef FRAME_SDF_LEVERS_HLSLI
 #define FRAME_SDF_LEVERS_HLSLI
 #include "sdf-environment.hlsli"
@@ -45,7 +45,7 @@ bool worldUseTapNormals() {
     return (passGroup.finiteDifferenceNormals != 0u);
 }
 
-// The per-frame shader-feature levers (World's world.shadows drives the soft shadows and their reach; world.ao drives
+// The per-view shader-feature levers (World's world.shadows drives the soft shadows and their reach; world.ao drives
 // ambient occlusion): each defaults to the shipped behavior, every feature on at full reach.
 // Whether a pixel of `viewMode` takes the final shading. The evals heatmap rides it too, since it tallies what a lit
 // pixel really costs.
