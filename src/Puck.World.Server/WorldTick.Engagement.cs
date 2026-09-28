@@ -22,6 +22,21 @@ public sealed partial class WorldTick {
             }
         }
 
+        // A portal face engages while the engaging body is live: its input then routes through the glass to the
+        // session the face observes.
+        if (Host.Engagement.TryPortalFace(
+            face: out _,
+            screenIndex: target.Value
+        )) {
+            if (Host.Body(index: entityIndex) is null) {
+                reason = $"body {entityIndex} is not live";
+
+                return false;
+            }
+
+            return true;
+        }
+
         reason = $"screen {target.Value} does not exist";
         return false;
     }

@@ -231,7 +231,10 @@ holds its half through the same `Sustain` until it is typed again,
 slot sustained). The typed aim and the capture share one sustained value per
 half: the later write rides, and the capture ending its ray ends that value
 whichever wrote it. A rule reads the hit as
-`$pointer:<seat>:<screenIndex>:x|y|on`, mapped in the tick through
+`$pointer:<seat>:<screenIndex>:x|y|on` (or `press:<channelName>`, that
+seat's channel while it points there; `any` in place of the seat reads the
+first seat, then live session by ordinal, holding `Control` over the screen
+whose ray lands on it), mapped in the tick through
 `WorldScreenMappings.Normalized` (source-normalized `x`/`y` in `[0, 1)`, `on`
 1 on the source, all 0 otherwise); a screen whose `input` is not `Simulation`
 is refused for it at compile time. `world.screens` echoes `input:<destination>`

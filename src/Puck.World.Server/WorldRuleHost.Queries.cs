@@ -264,6 +264,75 @@ public sealed partial class WorldRuleHost {
 
         return Host.Body(index: seat)?.ChannelReadComposed.SourceRay;
     }
+    // $pointer: — one seat's mapped ray, or with "any" the first participant allowed to point at the screen whose ray
+    // lands on its source: the local seats in order, then the live sessions by ordinal, each holding Control over the
+    // screen. A press facet reads that same participant's channel, a session's kept press included.
+    private long ReadPointer(PointerOperand operand) {
+        if (operand.Seat != PointerOperand.AnyParticipant) {
+            return operand.Read(
+                press: ((operand.Facet == PointerFacet.Press)
+                    ? ReadChannelValue(
+                        ordinal: operand.PressChannel,
+                        seat: operand.Seat
+                    )
+                    : FixedQ4816.Zero),
+                ray: ReadPointerRay(seat: operand.Seat)
+            );
+        }
+
+        var screen = GrantSubject.Screen(index: operand.ScreenIndex);
+
+        for (var seat = 0; (seat < Host.Population.LocalSeatCount); seat++) {
+            var ray = ReadPointerRay(seat: seat);
+
+            if (
+                operand.Lands(ray: ray) &&
+                Host.GrantTable.Allows(
+                capability: WorldCapability.Control,
+                principal: Principal.Seat(slot: seat),
+                subject: screen
+            ).IsAllowed
+            ) {
+                return operand.Read(
+                    press: ((operand.Facet == PointerFacet.Press)
+                        ? ReadChannelValue(
+                            ordinal: operand.PressChannel,
+                            seat: seat
+                        )
+                        : FixedQ4816.Zero),
+                    ray: ray
+                );
+            }
+        }
+
+        for (var ordinal = 0; (ordinal < Host.GrantTable.SessionOrdinalBound); ordinal++) {
+            if (
+                Host.GrantTable.TryReadSessionPointer(
+                ordinal: ordinal,
+                ray: out var ray,
+                session: out var session
+            ) &&
+                operand.Lands(ray: ray) &&
+                Host.GrantTable.Allows(
+                capability: WorldCapability.Control,
+                principal: session,
+                subject: screen
+            ).IsAllowed
+            ) {
+                return operand.Read(
+                    press: ((operand.Facet == PointerFacet.Press)
+                        ? Host.GrantTable.ReadSessionChannel(
+                            channel: operand.PressChannel,
+                            ordinal: ordinal
+                        )
+                        : FixedQ4816.Zero),
+                    ray: ray
+                );
+            }
+        }
+
+        return 0L;
+    }
     // Reads a declared cell as fixed point off the LIVE definition (Install swaps it on every apply, so this is
     // always this tick's settled document), through the ONE shared (row, key) resolver — which computes an advancing
     // row's LIVE value rather than its stored base, so a rule composes with the trait instead of duplicating it. A
