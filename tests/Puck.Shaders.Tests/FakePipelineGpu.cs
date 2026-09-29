@@ -87,6 +87,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public int FailAtCreation { get; set; }
     /// <summary>Gets or sets whether <see cref="Events"/> and <see cref="Barriers"/> record.</summary>
     public bool Recording { get; set; }
+    /// <summary>Gets or sets whether the next fenced submission throws before any commands reach the queue.</summary>
+    public bool RefuseNextSubmission { get; set; }
     /// <summary>Gets or sets whether the queue holds every submission unfinished: while set, no fence reads as
     /// signaled, though a wait still returns at once.</summary>
     public bool QueueHeld { get; set; }
@@ -522,7 +524,10 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     }
     public void SetScissor(nint commandBufferHandle, GpuPixelRect rect) { }
     public void Submit(ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
-    public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => Submissions++;
+    public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
+        if (RefuseNextSubmission) { RefuseNextSubmission = false; throw new InvalidOperationException(message: "Injected pre-submit failure."); }
+        Submissions++;
+    }
     public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
     public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Buffer, NewLayout: GpuImageLayout.Undefined, OldLayout: GpuImageLayout.Undefined, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: bufferHandle);
     public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Image, NewLayout: newLayout, OldLayout: oldLayout, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: imageHandle);

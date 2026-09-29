@@ -141,6 +141,24 @@ uint; "uint4" and "float4" name 16-byte vectors.
 | `PrimaryMarchSteps` = 128 | `MaxSteps` in `march/sdf-march-constants.hlsli` | |
 | `SdfProgram.MaxDynamicTransformSlot` = int.MaxValue − 1 | the `TransformDynamic` slot decode | `slot + 1` must fit. The C# validation compares the float lane in double, because `(float)int.MaxValue` rounds up to 2³¹. |
 
+## Retained pass cadence
+
+`ShaderPipelineResource.Retained` is an owned intermediate's single
+queue-ordered allocation; do not combine it with transient, external, history
+or public-output storage. A package recorder's nullable `Signature` authorizes
+reuse only together with the node's input-generation and output-validity checks.
+Keep `SkipAccesses` as the barrier-state path for both inactive and standing
+passes; content generations are not a second barrier tracker.
+
+Before setting `PreservesPredecessor` on a forwarding version, audit its actual
+shader writes: it must preserve predecessor-owned fields and replace its own
+fields idempotently. An accumulated query counter or an overwritten sky image
+violates that contract. Force a null signature for unversioned borrowed inputs
+and for demanded work whose recording must run, including readback, capture
+and temporal convergence. Existing dependency preparation retains its own
+counting and ordering. `GpuPassState.Standing` has no per-pass count, so timing
+or counted-load consumers must not interpret it as a measured zero.
+
 ## Image sources
 
 | C# (`Puck.Abstractions.Sources`) | HLSL (`src/Puck.Shaders/Assets/Shaders/Sources`) | Contract |

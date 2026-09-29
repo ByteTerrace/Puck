@@ -11,7 +11,9 @@ monotonic counts, and the difference between an undeclared kind and a zero
 count. `GpuWorkLedgerLawTests` and `GpuWorkCountingLawTests` drive the GPU work
 ledger and its pass-through wrappers over `FakeGpuDevice`, the shared stand-in
 in `tests/Shared`, which holds fences until the test signals them and, for the
-wrapper laws, counts each call.
+wrapper laws, counts each call. `GpuStandingPassLawTests` distinguishes a
+retained pass from an inactive pass in text and JSON, and keeps both from
+inventing executed zero counts.
 
 `GpuResidencyLawTests` covers residency without a device. It fills memory
 profiles from fixture Vulkan types and heaps and Direct3D 12 values, pins one

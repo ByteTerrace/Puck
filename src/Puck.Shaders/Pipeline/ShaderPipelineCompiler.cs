@@ -1046,6 +1046,13 @@ public sealed partial class ShaderPipelineCompiler {
             comparer: StringComparer.Ordinal
         );
 
+        ValidateRetained(
+            definition: definition,
+            diagnostics: diagnostics,
+            passes: plannedPasses,
+            resources: versions.Resources,
+            storages: versions.Storages
+        );
         ValidateTransients(
             accesses: versions.Accesses,
             definition: definition,

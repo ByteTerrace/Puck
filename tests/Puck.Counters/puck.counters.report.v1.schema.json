@@ -206,7 +206,8 @@
                   "enum": [
                     "not-reached",
                     "executed",
-                    "skipped"
+                    "skipped",
+                    "standing"
                   ],
                   "title": "GpuPassState"
                 },

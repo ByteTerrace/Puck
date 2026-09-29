@@ -8,7 +8,7 @@ namespace Puck.Shaders;
 // in: new or reset storage, a zero clear, a presentation, and history carried over from a replaced graph. Each such
 // instance holds an override until its next access, which starts from the override and always records a barrier, so
 // every later planned barrier, which waits only on planned stages, still orders the unplanned accesses through it. A
-// package pass that skips a frame (IRenderGraphPackageRecorder.Skips) records none of its barriers and leaves each
+// package pass that skips a frame or stands on retained contents records none of its barriers and leaves each
 // instance it would have accessed in the state before that access, its planned prior, as a planned override, from which
 // the next access records only the barrier the planned states call for.
 public sealed partial class ShaderPipelineRenderNode {
@@ -19,7 +19,7 @@ public sealed partial class ShaderPipelineRenderNode {
     private static ShaderPipelineAccessState Discarded => ShaderPipelineAccessState.Host(layout: GpuImageLayout.Undefined);
 
     // The instance a reference reaches: this frame slot's, or the previous slot's for a previous-frame read. A host-owned
-    // storage has one instance every slot shares.
+    // storage has one instance every slot shares; owned transient and retained storage do too.
     private static int InstanceIndex(RuntimeResource resource, int slot, bool previous) =>
         (resource.Spec.IsExternal
             ? 0
@@ -88,6 +88,10 @@ public sealed partial class ShaderPipelineRenderNode {
                     state: ShaderPipelineAccessState.Cleared
                 );
                 resource.Initialized[instance] = true;
+                if (resource.Cadence.Length > 0) {
+                    resource.Cadence[0].Generation = ++m_contentGeneration;
+                    resource.Cadence[0].Valid = true;
+                }
             }
         }
         m_initializationPending = false;

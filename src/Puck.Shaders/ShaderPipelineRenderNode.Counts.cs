@@ -84,9 +84,9 @@ public sealed partial class ShaderPipelineRenderNode {
             m_recountPending = true;
         }
     }
-    // The instances a storage is allocated as: one for a transient storage, which every frame slot shares, and one per
-    // frame slot for every other.
-    private static int InstancesOf(ShaderPipelinePlannedStorage storage, uint inFlight) => (storage.Declaration.Transient
+    // A transient or retained intermediate has one queue-ordered allocation shared by every frame slot. Other owned
+    // storages have one allocation per frame slot.
+    private static int InstancesOf(ShaderPipelinePlannedStorage storage, uint inFlight) => ((storage.Declaration.Transient || storage.Declaration.Retained)
         ? 1
         : ((int)inFlight));
     // The instance a slot's index reaches in a storage: its own, or the one instance of a storage that has one.

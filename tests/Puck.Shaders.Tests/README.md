@@ -33,6 +33,14 @@ steady frames. The fake records descriptor writes while `Recording` is on.
 `ShaderPipelineVersionLawTests` cover forwarding: readers ordered before an
 overwrite, each refusal by name, one storage per chain, and a node that records
 exactly the barriers the plan gives each access.
+`RenderGraphCadenceLawTests` use the same fake to preserve retained contents
+across flight slots, invalidate dependent versions after actual upstream writes,
+keep disjoint forwarded fields reusable, and distinguish standing from inactive
+passes. They cover lifecycle and config changes, failed-recording recovery,
+conservative unversioned inputs, singleton output-selection refusals, and the
+existing planner's last-access barriers. Recovery distinguishes unsubmitted
+initialization and staged copies from already submitted writes. Its checkpoint
+storage is counted; steady standing allocates no objects.
 `ShaderInterfaceLawTests` pin the pass interface's layout, document and
 generated include. `ShaderInterfaceSpikeTests` build the variant passes under
 `Assets/Interfaces/` with DXC. They hold the SPIR-V and DXIL readers to the

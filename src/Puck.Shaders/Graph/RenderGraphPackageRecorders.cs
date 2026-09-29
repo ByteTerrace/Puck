@@ -120,6 +120,16 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// <param name="context">The frame being recorded.</param>
     /// <returns><see langword="true"/> when the pass records nothing this frame.</returns>
     bool Skips(in FrameContext context) => false;
+    /// <summary>Returns the identity of every package-owned input determining this pass's output, or null to execute.
+    /// The node asks after <see cref="Skips"/> and before recording. The recorder may use its existing preparation of
+    /// borrowed dependencies here, preserving that preparation's counting and queue ordering; it records no access to
+    /// this pass's graph-bound versions. Include borrowed regions, view state, config, unbound reads and every other input not
+    /// represented by graph versions; return null when an input has no reliable identity or the pass is forced.
+    /// Equal signatures permit standing only while every graph input's last write and the retained output contents
+    /// also remain valid. A standing pass records neither work nor barriers; its consumers read its retained result.</summary>
+    /// <param name="context">The frame being recorded.</param>
+    /// <returns>The output's package-input identity, or null to force execution.</returns>
+    ulong? Signature(in FrameContext context) => null;
 }
 /// <summary>Makes the recorders of one package id. A candidate graph's package passes build with its shader passes:
 /// <see cref="Build"/> creates a pass's shader modules, pipelines and render passes on the thread pool before the graph
