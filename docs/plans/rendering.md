@@ -5604,6 +5604,30 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `WindIntegralLawTests` hold a keyed cloud rate's offset continuous across a
      key (red leg: `rate × time` at each key's rate jumps); `sky-cycle` holds the
      courtyard's toggle.
+   - Remote presentation decision: use the existing tier-governed
+     `WorldProjectionDocument`, with no side metadata or held-value history.
+     Tick-only clock closures evaluate locally. For a disclosed state clock,
+     send an anchor whenever the client's prediction at an authoritative tick
+     differs from the authority's phase. The anchor carries its tick, phase
+     and the current rate for a proven affine span, or rate zero otherwise.
+     Rate changes, quantized advances, staircases, nonlinear rows and seeks
+     all follow this one rule. Other resolved presentation values travel as
+     per-recipient deltas only when changed. Every used dependency must pass
+     the existing disclosure boundary; a hidden source refuses before any
+     derived value is emitted. A late view seeds invalid fields from the
+     load-validated authored initial value (or clamps a closed range), so
+     early and late views may hold different values while invalid.
+   - Projection proof is a separate unimplemented slice after the keys
+     substrate. Authority and recipient must call the same prediction function
+     from a shared package, bit-exact on the u64 phase. A mixed affine,
+     staircase, quantized, nonlinear and seek trace must match the host phase
+     at every tick and produce zero spurious anchors. A steady state sends
+     nothing; a late join hydrates the exact current phase; a hidden
+     dependency sends no derived value. Count the last anchor per recipient
+     per clock as a memory row, and release it when that recipient leaves or
+     loses disclosure. Before merge, count bytes per recipient per second for
+     a steady sky, a busy sky and a nonlinear clock that re-anchors every
+     tick, plus full late-join hydration. Each law needs an actual red leg.
    - Counted-cost gate: the environment re-resolves only when a clock a key
      reads moves or a bound slot moves, counted as resolutions in
      `world.timeline`.
