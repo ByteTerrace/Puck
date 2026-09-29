@@ -494,6 +494,25 @@ override from which the next access records only the barrier the planned
 states call for. A pass skips only on frames no later pass reads the contents
 of its outputs on; the SDF mesh pass skips every frame that draws no mesh.
 
+A recorder can instead return a non-null `IRenderGraphPackageRecorder.Signature`
+for its prepared package inputs. The node leaves the pass standing only when
+that signature, its extent, its graph inputs' last writes and its retained
+outputs all remain valid. Its later consumers then read the last retained
+result. Null forces execution. The signature covers borrowed regions, view
+state and unbound inputs; their existing preparation keeps its own counting
+and queue ordering. Graph-bound external, history or rotating inputs force
+execution because this path has no persistent content identity for them.
+The node also invalidates a standing result when its config bytes change.
+
+Standing records neither pass work nor pass barriers. It uses the same planned
+state override as skipping, so the next actual access starts from the last
+actual access. First install, reset, replacement, resize and device loss require
+new writes. Before recording a retained graph, the node checkpoints its existing
+resource tracker and content identities. A failure before submission restores
+that state and rearms the failed slot's staged region copies. Previously
+submitted contents remain valid; an exception after a successful submission
+cannot roll back that submission.
+
 A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`,
 and each output then stands for the input at its position: the instance
 publishes that input's image with no copy, in its own layout
@@ -1390,6 +1409,20 @@ more pieces of vocabulary:
   transient storage that is history, published, host- or zero-initialized,
   read as the previous frame, or first reached by anything but its first
   version's write is refused (`SHADERPIPE_TRANSIENT`).
+- A resource's `retained` keeps one queue-ordered intermediate allocation across
+  frames. Only the chain root declares it. It cannot also be transient,
+  external, history or a public output (`SHADERPIPE_RETAINED`); a composite
+  still writes the current public output. The allocation count is one even
+  when several submission slots are in flight. Output selection also refuses
+  retained and transient intermediates by name, and a reload drops an old
+  selection that becomes such storage; ordinary per-slot intermediates remain
+  selectable.
+- A forwarding version can declare `preservesPredecessor` only when its package
+  writer uses retained storage and preserves every predecessor-owned field.
+  Its writes must replace its own fields idempotently. Ordinary forwarding
+  invalidates predecessor contents; preserving forwarding keeps their logical
+  identities valid. Either write invalidates later derived versions, so an
+  unchanged downstream signature cannot hide an upstream change.
 
 A shader pass declaring a `Groups` or `Indirect` dispatch is refused
 (`SHADERPIPE_DISPATCH_PACKAGE`), and so is a shader pass binding a buffer with
@@ -1585,7 +1618,10 @@ not contribute host-visible upload bytes. The zero clears that
 start the first frame after an install or a reset count in the first pass. The
 preview and the output transitions count outside every pass. A package pass
 that skips a frame (`IRenderGraphPackageRecorder.Skips`) records nothing and
-counts as skipped, never as a pass that ran and did no work. A graph a package
+counts as skipped, never as a pass that ran and did no work. A pass reusing its
+retained result counts as `standing`, distinct from an inactive `skipped` pass.
+Neither state has per-pass counts: a standing primary pass is not a measured
+zero march load. Both contribute no work to the submission's totals. A graph a package
 pass of which counts its shaders' own work (`RenderGraphFragmentPass.CountsKernelWork`,
 or `RenderGraphPackage.CountsKernelWork` for a package whose members declare
 the work counters: every pass of `sdf.world`, `place`, `overlay`, the source
@@ -1742,6 +1778,10 @@ once, then releases pools as their fences complete; device loss releases them.
 These durations are observational and never choose quality or establish parity.
 
 `pipeline.inspect` includes timestamp readback and CPU sample payload bytes.
+Both inspection and the live budget include `cadence-cpu-bytes`: installed
+content identities, dependency arrays and the existing resource tracker's
+failure-recovery checkpoints. Graphs without retained storage allocate none;
+retained graphs allocate these arrays at installation and reuse them each frame.
 Its region-memory rows separately count installed host-written regions by GPU
 memory kind, CPU shadows, and writer/row/upload scratch. Empty overlay output
 still owns those buffers. Logical payload counts exclude backend padding and
@@ -1754,8 +1794,9 @@ replacement allocates anything (a reload, a row edit or a resize), the node
 counts two numbers from the plan it would install:
 
 - **Steady-state bytes**: what the graph owns once it runs. That is one
-  instance per frame slot of every image and buffer the node owns, retained
-  history, the images a graphics pass draws into and depth attachments included,
+  instance per frame slot of ordinary and history images and buffers, and one
+  queue-ordered instance of each transient or retained intermediate. This includes
+  the images a graphics pass draws into and depth attachments,
   each geometry pass's vertex and index buffer, the fullscreen triangle's vertex
   buffer for each pass that reads the
   `Position` input, and the preview an external selected output needs.

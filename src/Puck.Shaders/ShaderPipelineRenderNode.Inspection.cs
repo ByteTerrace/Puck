@@ -26,7 +26,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
         builder.Append(handler: $"region-device-bytes={memory.Gpu.DeviceLocal}; region-host-bytes={memory.Gpu.HostVisible}; region-cpu-shadow-bytes={memory.CpuShadowBytes}; region-cpu-scratch-bytes={memory.CpuScratchBytes}; ");
 
-        builder.Append(handler: $"timing-readback-bytes={TimingReadbackBytes}; timing-cpu-bytes={TimingCpuBytes}; ");
+        builder.Append(handler: $"timing-readback-bytes={TimingReadbackBytes}; timing-cpu-bytes={TimingCpuBytes}; cadence-cpu-bytes={CadenceCpuBytes}; ");
 
         // The work block leads, so its submission line shares the record's first line; it ends in a line feed, which
         // the next line's own separator replaces.

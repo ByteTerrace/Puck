@@ -89,11 +89,19 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                         pass: pass,
                         slot: slot
                     );
+                    if (pass.Cadence is { } inactive) { inactive.Signature = null; }
                     m_work.SkipPass(pass: index);
 
                     continue;
                 }
 
+                var signature = ((pass.Cadence is { CanStand: true }) ? pass.Package!.Signature(context: in context) : null);
+
+                if (Stands(pass: pass, signature: signature)) {
+                    SkipAccesses(pass: pass, slot: slot);
+                    m_work.StandPass(pass: index);
+                    continue;
+                }
                 m_work.EnterPass(pass: index);
                 BeginTiming(command: command, pass: index, slot: slot);
                 Record(
@@ -104,6 +112,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                 );
                 EndTiming(command: command, pass: index, slot: slot);
                 m_work.LeavePass();
+                RecordedCadence(pass: pass, signature: signature);
             }
             if (counters is not null) {
                 counters.RecordCopy(
@@ -123,6 +132,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
         }
     }
     private void ResetWork() {
+        InvalidateCadence();
         m_work.Invalidate();
         m_resetSubmission = m_submissions;
     }

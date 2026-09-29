@@ -165,7 +165,7 @@ Every package below carries its own check on the programme page; tick it there a
   - [ ] P18-3: keys on clocks for every bindable presentation value, blended by the field's type, with one resolver replacing `render.cycle`.
   - [ ] P18-4: the sky block and the lights table as regions with generated decoders, and the environment out of every pass block.
   - [ ] P18-5: the sky evaluated once, only where a pixel is uncovered, and a composite pass for the sky, fog and bounded media; the pinned sky branch deleted and parity re-recorded.
-  - [ ] P18-6: a cadence per pass, so a sky-only change runs only the sky and the composite.
+  - [ ] P18-6: a cadence per pass, so a sky-only change runs only the sky and the composite (the generic retained-resource, signature, standing-counter and failure-recovery foundation has landed; SDF change classes, pass scheduling and temporal-history integration remain).
   - [ ] P18-7: celestial bodies with light binding and illumination, and up to four shadowed lights chosen by slot and tier, a slot changing hands by a counted crossfade.
   - [ ] P18-8: the open, ordered layer stack with one module per kind, the sky frame, per-layer tiers, one noise module and the `skies.puck` presets.
   - [ ] P18-9: ambient and reflection derived from the same sky through a shared environment map, replacing the hemisphere light, the horizon and the softboxes.

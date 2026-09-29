@@ -96,7 +96,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     /// <exception cref="ArgumentException">An element of <paramref name="passLabels"/> is <see langword="null"/>, or
     /// <paramref name="passClasses"/> is neither empty nor as long as <paramref name="passLabels"/>, or holds a class other
     /// than <see cref="WorkClass.Deterministic"/> or <see cref="WorkClass.PerBackendDeterministic"/>.</exception>
-    /// <exception cref="InvalidOperationException">The work being recorded has already entered or skipped a pass.</exception>
+    /// <exception cref="InvalidOperationException">The work being recorded has already entered, skipped, or retained a pass.</exception>
     public void Configure(long revision, ReadOnlySpan<string> passLabels, ReadOnlySpan<WorkClass> passClasses = default) {
         if (
             !passClasses.IsEmpty &&
@@ -127,7 +127,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         }
 
         if (m_open is { HasPassActivity: true }) {
-            throw new InvalidOperationException(message: "The passes cannot change while the work being recorded has entered or skipped a pass.");
+            throw new InvalidOperationException(message: "The passes cannot change while the work being recorded has entered, skipped, or retained a pass.");
         }
 
         m_labels = passLabels.ToArray();
@@ -158,7 +158,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     /// <summary>Marks a pass as running; the work counted until <see cref="LeavePass"/> is that pass's.</summary>
     /// <param name="pass">The zero-based pass index in the configured labels.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="pass"/> is not a configured pass.</exception>
-    /// <exception cref="InvalidOperationException">A pass is already running, or this submission skipped <paramref name="pass"/>.</exception>
+    /// <exception cref="InvalidOperationException">A pass is already running, or this submission already skipped or retained <paramref name="pass"/>.</exception>
     public void EnterPass(int pass) {
         var record = OpenRecord();
 
@@ -171,8 +171,8 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             throw new InvalidOperationException(message: $"Pass {m_currentPass} is still running; leave it before entering pass {pass}.");
         }
 
-        if (record.States[pass] == GpuPassState.Skipped) {
-            throw new InvalidOperationException(message: $"Pass {pass} was skipped in this submission.");
+        if (record.States[pass] is GpuPassState.Skipped or GpuPassState.Standing) {
+            throw new InvalidOperationException(message: $"Pass {pass} was {record.States[pass]} in this submission.");
         }
 
         record.States[pass] = GpuPassState.Executed;
@@ -232,7 +232,14 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     /// <param name="pass">The zero-based pass index in the configured labels.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="pass"/> is not a configured pass.</exception>
     /// <exception cref="InvalidOperationException">This submission already executed <paramref name="pass"/>.</exception>
-    public void SkipPass(int pass) {
+    public void SkipPass(int pass) => OmitPass(pass: pass, state: GpuPassState.Skipped);
+    /// <summary>Marks a pass as retaining its earlier output without recording work in this submission.</summary>
+    /// <param name="pass">The zero-based pass index in the configured labels.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The pass is not a configured pass.</exception>
+    /// <exception cref="InvalidOperationException">This submission already executed the pass.</exception>
+    public void StandPass(int pass) => OmitPass(pass: pass, state: GpuPassState.Standing);
+
+    private void OmitPass(int pass, GpuPassState state) {
         var record = OpenRecord();
 
         ValidatePass(
@@ -244,9 +251,10 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             throw new InvalidOperationException(message: $"Pass {pass} already executed in this submission.");
         }
 
-        record.States[pass] = GpuPassState.Skipped;
+        record.States[pass] = state;
         record.HasPassActivity = true;
     }
+
     /// <inheritdoc/>
     public bool TryRead(WorkKind kind, out long value) {
         var kinds = GpuWork.LifetimeKinds;

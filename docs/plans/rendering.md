@@ -5669,6 +5669,14 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      (1 − h) × P per view (see the expected wins), and every hit reads zero;
      each field run's texels written are a row of their own under `sky`.
 6. **P18-6, a cadence per pass.**
+   - Landed foundation: the graph can retain private intermediate resources
+     and leave a pass standing while its signature, extent, inputs and outputs
+     remain valid. Standing has its own counted state and no pass work. The
+     existing resource tracker preserves the last actual access and restores
+     its state when a frame fails before successful submission. Installed cadence
+     metadata is counted in the graph's CPU memory rows. The SDF change
+     classes, sky/composite scheduling and temporal-history integration below
+     remain to be connected and verified.
    - Delivers: the pass-group signatures, retained fragment resources, the
      planner's barriers for a standing pass, the rule that a pass stands only
      when its group signature and its inputs do, and the four change classes

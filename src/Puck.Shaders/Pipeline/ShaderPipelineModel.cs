@@ -151,6 +151,12 @@ public sealed record ResourceReference(
 /// successive frames' uses of the one allocation are ordered on the queue by the planned barrier of each frame's first
 /// use. Only the first version of a chain declares it; a transient storage is never history, external, zero-initialized
 /// or a public output.</param>
+/// <param name="Retained">Whether one queue-ordered allocation preserves an intermediate across frames so an unchanged
+/// package pass can stand. Only the chain root declares it; history, external, transient and public-output storage
+/// cannot be retained.</param>
+/// <param name="PreservesPredecessor">Whether this forwarding version's package writer preserves every field owned by
+/// its predecessor, so those predecessor contents remain valid for a standing pass on later frames. The writer must
+/// replace only its own fields idempotently. This contract is legal only on a retained forwarding chain.</param>
 /// <param name="ClearDepth">The depth a depth resource's writer clears it to, in [0, 1], or <see langword="null"/> for
 /// <see cref="GpuDepthAttachment.DefaultClearDepth"/>: its render pass's <see cref="GpuDepthAttachment.ClearDepth"/>.
 /// A pass that keeps greater depths (<see cref="ShaderPipelineDepthCompare.Greater"/>) tests against a depth cleared to
@@ -169,7 +175,9 @@ public sealed record ShaderPipelineResource(
     uint? StrideBytes = null,
     IReadOnlyList<ShaderPipelineCountTerm>? Count = null,
     bool Transient = false,
-    float? ClearDepth = null
+    float? ClearDepth = null,
+    bool Retained = false,
+    bool PreservesPredecessor = false
 ) {
     /// <summary>Gets whether the host supplies the resource rather than a pass producing it.</summary>
     [JsonIgnore]

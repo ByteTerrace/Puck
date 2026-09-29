@@ -188,6 +188,16 @@
               "null"
             ],
             "default": null
+          },
+          "retained": {
+            "description": "Whether one queue-ordered allocation preserves an intermediate across frames so an unchanged package pass can stand. Only the chain root declares it; history, external, transient and public-output storage cannot be retained.",
+            "type": "boolean",
+            "default": false
+          },
+          "preservesPredecessor": {
+            "description": "Whether this forwarding version\u0027s package writer preserves every field owned by its predecessor, so those predecessor contents remain valid for a standing pass on later frames. The writer must replace only its own fields idempotently. This contract is legal only on a retained forwarding chain.",
+            "type": "boolean",
+            "default": false
           }
         },
         "required": [
