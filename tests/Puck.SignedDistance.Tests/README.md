@@ -17,6 +17,12 @@ a probe texel per level, to a fresh bake and to the CPU decoder; it is the GPU-f
 half of a sampling check whose device half, `BakeSamplingDeviceLawTests` in
 `tests/Puck.World.Tests`, samples the same probes on Vulkan, Direct3D 12 and WARP.
 
+`SkyRunCompositionLawTests` checks the CPU preparation of ordered sky runs. An
+independent double-precision blend oracle checks all four affine blend modes
+with field, point and screen layers interleaved. The suite also checks summary
+image counts, empty stacks, named refusals and allocation-free partitioning.
+These laws do not stand in for the later layer-table and rendered-pixel proofs.
+
 ## Verification
 
 ```powershell
