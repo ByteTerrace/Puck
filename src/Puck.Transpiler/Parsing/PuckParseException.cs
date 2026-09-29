@@ -2,6 +2,9 @@ namespace Puck.Transpiler.Parsing;
 
 /// <summary>Exception thrown when parsing a Puck authoring document fails.</summary>
 public sealed class PuckParseException : Exception {
+    // Once a vocabulary-owned spelling has been recognized, an operand fallback cannot reinterpret its failure.
+    internal bool Committed { get; set; }
+
     /// <summary>Gets the diagnostic code this failure is reported under.</summary>
     public string Code { get; init; } = Diagnostics.PuckDiagnosticCodes.Syntax;
     /// <summary>Gets the 1-based column number in the source text.</summary>

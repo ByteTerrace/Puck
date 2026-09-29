@@ -12,11 +12,12 @@ internal sealed partial class WorldScreenBinder {
     // The moved sets of the views that compose a frame source of their own (a session view's), by view name, each
     // attached to the probe's sdf.transforms forwarder until the view is released.
     private readonly Dictionary<string, SdfMovedTransforms> m_workTransforms = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, IWorkCounterSource> m_workTimelines = new(comparer: StringComparer.Ordinal);
 
     // Registers (or re-registers) a view's GPU work with the render probe under the view's instance name. A view that
     // composes its own frame source passes that source's moved set, which world.counters then sums into
     // sdf.transforms beside the presenter's.
-    private void RegisterViewWork(string name, IGpuWorkSource work, IWorkCounterSource lifetime, SdfMovedTransforms? transforms = null) {
+    private void RegisterViewWork(string name, IGpuWorkSource work, IWorkCounterSource lifetime, SdfMovedTransforms? transforms = null, IWorkCounterSource? timeline = null) {
         if (m_renderProbe is not { } probe) {
             return;
         }
@@ -28,10 +29,15 @@ internal sealed partial class WorldScreenBinder {
         );
         _ = m_workViews.Add(item: name);
         DetachTransforms(name: name);
+        DetachTimeline(name: name);
 
         if (transforms is not null) {
             probe.Transforms.Attach(instance: transforms);
             m_workTransforms[name] = transforms;
+        }
+        if (timeline is not null) {
+            probe.Timeline.Attach(instance: timeline);
+            m_workTimelines[name] = timeline;
         }
     }
     // Withdraws a view's GPU work from the render probe, when its producer is disposed.
@@ -41,6 +47,7 @@ internal sealed partial class WorldScreenBinder {
         }
 
         DetachTransforms(name: name);
+        DetachTimeline(name: name);
     }
     private void UnregisterAllViewWork() {
         foreach (var name in m_workViews) {
@@ -54,6 +61,11 @@ internal sealed partial class WorldScreenBinder {
         }
 
         m_workTransforms.Clear();
+        foreach (var timeline in m_workTimelines.Values) { m_renderProbe?.Timeline.Detach(instance: timeline); }
+        m_workTimelines.Clear();
+    }
+    private void DetachTimeline(string name) {
+        if (m_workTimelines.Remove(key: name, value: out var timeline)) { m_renderProbe?.Timeline.Detach(instance: timeline); }
     }
     // Retires a view's moved set from sdf.transforms, carrying its totals forward.
     private void DetachTransforms(string name) {

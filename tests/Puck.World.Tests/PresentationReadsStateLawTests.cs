@@ -134,7 +134,7 @@ public sealed class PresentationReadsStateLawTests {
     // resolved as opaque (alpha ignored) here, matching every other opaque render-path color.
     [Fact]
     public void SkyZenith_AcceptsAnAlphaSuffixLiteral_IgnoringAlpha() {
-        var track = new WorldRenderCycleTrack();
+        var track = new WorldEnvironmentResolve();
         var definition = Fixtures.BuildDocument() with {
             RenderRaw = WorldRenderDefaults.Absent with {
                 Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [new WorldRenderSkyStop(
@@ -174,7 +174,7 @@ public sealed class PresentationReadsStateLawTests {
 
     [Fact]
     public void SkyZenith_BoundToStateTextCell_RecolorsOnTheNextEmit_WithNoRebake() {
-        var track = new WorldRenderCycleTrack();
+        var track = new WorldEnvironmentResolve();
         var sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [new WorldRenderSkyStop(
                     Elevation: -1f,
                     Color: new BindableColor(Raw: "#000000")

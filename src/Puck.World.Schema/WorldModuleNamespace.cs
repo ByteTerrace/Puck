@@ -22,7 +22,7 @@ namespace Puck.World;
 /// name. Runs on the fragment's composed raw JSON tree before the strict parse, in the same pass that strips
 /// <c>basis</c>/<c>imports</c>.
 /// </summary>
-public static class WorldModuleNamespace {
+public static partial class WorldModuleNamespace {
     // The model's shape never changes. Resolve each type's property registrations once, without retaining document
     // nodes: every walk still observes the current values and lets its visitor rewrite them.
     private static readonly ConditionalWeakTable<WorldModelType, VisitMemberPlan[]> VisitMembers = new();
@@ -337,9 +337,9 @@ public static class WorldModuleNamespace {
                         break;
                     case JsonValue leaf when leaf.TryGetValue<string>(value: out var text):
                         var rewritten = rewriter.Rewrite(text, field.Role, field.Kind);
-                        parent[name] = ((value is JsonObject)
+                        SetSiteValue(holder: parent, jsonName: name, value: ((value is JsonObject)
                             ? WorldChannelNodes.Node(spelling: rewritten)
-                            : rewritten);
+                            : JsonValue.Create(rewritten)));
                         break;
                 }
             }
@@ -632,7 +632,7 @@ public static class WorldModuleNamespace {
     }
 
     /// <summary>Walks a raw tree type-directed, calling <paramref name="visitor"/> at every registered name-bearing
-    /// site with the holding object, the member's JSON name, the value, and the registration: each present member
+    /// site with the holding object or array, the member's JSON name or array index, the value, and the registration: each present member
     /// is resolved against the registry by its C# member, a <c>$type</c> discriminator selects the arm, and the two
     /// converter-backed shapes (an expression's instruction list, a reaction scalar's row object) are followed by
     /// hand.</summary>
@@ -645,6 +645,10 @@ public static class WorldModuleNamespace {
         type = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
 
         if (node is null) {
+            return;
+        }
+
+        if (VisitBindable(node: node, type: type, visitor: visitor)) {
             return;
         }
 
@@ -796,11 +800,15 @@ public static class WorldModuleNamespace {
                         );
                     }
 
-                    Visit(
-                        node: value,
-                        type: member.Type,
-                        visitor: visitor
-                    );
+                    if ((member.Type == typeof(WorldSectionKeys)) && (value is JsonObject sectionKeys)) {
+                        VisitSectionKeys(keys: sectionKeys, section: obj, sectionType: type, visitor: visitor);
+                    } else {
+                        Visit(
+                            node: value,
+                            type: member.Type,
+                            visitor: visitor
+                        );
+                    }
                 }
 
                 break;
@@ -827,17 +835,19 @@ public static class WorldModuleNamespace {
         }
     }
 
-    // Where a declared name lives: a placement and a prototype each keep their own namespace, and every other kind
+    // Where a declared name lives: a placement, prototype and clock each keep their own namespace, and every other kind
     // shares the document's, so a module's placement 'gate' never renames a host row 'gate' the module reads.
     private enum NameSpace : byte {
         Document,
         Placement,
         Prototype,
+        Clock,
     }
 
     private static NameSpace SpaceOf(WorldNameKind kind) => kind switch {
         WorldNameKind.Placement => NameSpace.Placement,
         WorldNameKind.Prototype => NameSpace.Prototype,
+        WorldNameKind.Clock => NameSpace.Clock,
         _ => NameSpace.Document,
     };
 
@@ -881,7 +891,7 @@ public static class WorldModuleNamespace {
                 );
             }
 
-            foreach (var space in ((ReadOnlySpan<NameSpace>)[NameSpace.Document, NameSpace.Placement, NameSpace.Prototype])) {
+            foreach (var space in ((ReadOnlySpan<NameSpace>)[NameSpace.Document, NameSpace.Placement, NameSpace.Prototype, NameSpace.Clock])) {
                 if (m_spaced.TryGetValue(
                     key: (space, name),
                     value: out mapped
@@ -1322,7 +1332,7 @@ public static class WorldModuleNamespace {
 
         // Rewrites one registered site in place: a list of names, or one name-bearing value. A member that holds a
         // call node holds one again, its row arguments renamed.
-        public void RewriteSite(JsonObject parent, string name, JsonNode value, WorldNameField field, Type memberType) {
+        public void RewriteSite(JsonNode parent, string name, JsonNode value, WorldNameField field, Type memberType) {
             switch (WorldChannelNodes.Spelled(
                 memberType: memberType,
                 value: value
@@ -1362,10 +1372,10 @@ public static class WorldModuleNamespace {
                         text: text
                     );
 
-                    parent[propertyName: name] = ((value is JsonObject)
+                    SetSiteValue(holder: parent, jsonName: name, value: ((value is JsonObject)
                         ? WorldChannelNodes.Node(spelling: rewritten)
-                        : rewritten
-                    );
+                        : JsonValue.Create(rewritten)
+                    ));
 
                     break;
             }

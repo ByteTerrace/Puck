@@ -20,6 +20,8 @@ public enum WorldConstructShape {
     /// <summary>A one-line keyword statement: <c>set s: all</c>, <c>local n = 1</c>,
     /// <c>schedule due in 5s</c>.</summary>
     Statement,
+    /// <summary>A call whose array body follows its closing parenthesis: <c>keys(clock: day) [ … ]</c>.</summary>
+    Call,
     /// <summary>A block whose body is another language's source text, handed to that language's own parser:
     /// <c>sql { }</c>.</summary>
     EmbeddedLanguage,

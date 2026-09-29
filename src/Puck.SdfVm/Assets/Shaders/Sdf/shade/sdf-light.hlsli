@@ -33,8 +33,6 @@ struct SdfShadeSurface {
     SdfMaterialData material;
     float ambientOcclusion;
     float keyVisibility;
-    float sunScale;
-    float ambientScale;
 };
 
 // What one light adds at a surface: its diffuse term, its specular lobe and its rim brighten, and the factor it scales
@@ -49,7 +47,7 @@ struct SdfLightResponse {
 // The lights the stage walks: the environment's, then one slot per screen up to the highest bound one while screen
 // lights are on.
 uint sdfLightCount() {
-    uint count = worldLightCount();
+    uint count = (lightFrame[0].Count);
 #ifdef SDF_SCREEN_SOURCES
     if (!worldScreenLightsDisabled()) {
         count += screenLightLoopBound();
@@ -61,19 +59,19 @@ uint sdfLightCount() {
 bool sdfLightAt(uint index, out SdfLight light) {
     light = (SdfLight)0;
 
-    uint environmentCount = worldLightCount();
+    uint environmentCount = (lightFrame[0].Count);
 
     if (index < environmentCount) {
-        SdfEnvLight environment = worldLight(index);
+        SdfLightData environment = lights[index];
 
-        light.kind = environment.kind;
-        light.color = environment.color;
-        light.weight = environment.weight;
-        light.position = (((environment.kind == SDF_LIGHT_POINT) || (environment.kind == SDF_LIGHT_OCCLUDER))
+        light.kind = environment.Kind;
+        light.color = environment.Color;
+        light.weight = environment.Weight;
+        light.position = (((environment.Kind == SDF_LIGHT_POINT) || (environment.Kind == SDF_LIGHT_OCCLUDER))
             ? worldPointLightPosition(environment)
-            : environment.direction);
-        light.param = environment.param;
-        light.key = ((int)index == worldShadowLightIndex());
+            : environment.Direction);
+        light.param = environment.Parameter;
+        light.key = ((int)index == (lightFrame[0].ShadowIndex));
 
         return true;
     }
@@ -123,11 +121,11 @@ SdfLightResponse sdfLightResponse(SdfLight light, SdfShadeSurface surface) {
         float lambert = sdfWrapDiffuse(dot(normal, light.position), surface.material.wrap);
         float occlusion = (light.key ? surface.keyVisibility : surface.ambientOcclusion);
 
-        response.diffuse = (light.color * (((light.weight * lambert) * occlusion) * surface.sunScale));
+        response.diffuse = (light.color * ((light.weight * lambert) * occlusion));
     } else if (light.kind == SDF_LIGHT_HEMISPHERE) {
         float ambient = (light.weight + (light.param * normal.y));
 
-        response.diffuse = (light.color * ((ambient * surface.ambientScale) * surface.ambientOcclusion));
+        response.diffuse = (light.color * (ambient * surface.ambientOcclusion));
     } else if (light.kind == SDF_LIGHT_POINT) {
         float3 toLight = (light.position - surface.position);
         float pointDistance = length(toLight);

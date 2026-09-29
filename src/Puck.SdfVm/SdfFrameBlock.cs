@@ -2,9 +2,7 @@ using System.Buffers.Binary;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Cameras;
-using Puck.Hosting;
 using Puck.Shaders;
-using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -13,24 +11,16 @@ namespace Puck.SdfVm;
 /// <param name="InstanceMaskWordCount">The live program's per-tile instance-mask width.</param>
 /// <param name="MeshDraws">The frame's mesh draws.</param>
 /// <param name="DebugMode">The debug view mode; zero renders the final image.</param>
-/// <param name="Environment">The environment rows <see cref="SdfFrameBlock.BakeEnvironment"/> baked,
-/// <see cref="SdfEnvironment.LaneCount"/> floats.</param>
-public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode, ReadOnlyMemory<float> Environment);
+public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode);
 /// <summary>
 /// Writes what one view's passes read of a frame into an <c>sdf.world</c> pass block: the world values, the view's camera,
-/// the frame's levers and its environment, each at the offset the generated declarations read it from
+/// the frame's controls, each at the offset the generated declarations read it from
 /// (<see cref="SdfWorldInterfaces.WorldParameters"/>). It is the one writer of that block; the kernels read each value by
-/// name through <c>isa/sdf-world.interface.hlsli</c>, and the environment's rows by the indices <see cref="SdfIsaHlsl"/>
-/// generates from <see cref="SdfEnvironment"/>.
+/// name through its generated interface. Sky and light records are separate residency tables.
 /// </summary>
 public static class SdfFrameBlock {
-    // The cloud offsets' wrap period in layer units, the lattice period of the sky's noise (SdfNoisePeriodCells in
-    // field/sdf-noise.hlsli, whose cells wrap to it before they are hashed), so an offset reduced by it joins without a
-    // seam.
-    private const double CloudLatticePeriod = SdfVolume.NoisePeriodCells;
-
     private static readonly ShaderPipelineParameterLayout Layout = SdfWorldInterfaces.WorldParameters;
-    private static readonly int AmbientScale = Offset(member: SdfWorldPackage.AmbientScale);
+    private static readonly int CurvatureEnabled = Offset(member: SdfWorldPackage.CurvatureEnabled);
     private static readonly int AspectRatio = Offset(member: SdfWorldPackage.AspectRatio);
     private static readonly int CameraTileShadowMask = Offset(member: SdfWorldPackage.CameraTileShadowMask);
     private static readonly int DebugMode = Offset(member: SdfWorldPackage.DebugMode);
@@ -42,7 +32,6 @@ public static class SdfFrameBlock {
     private static readonly int DisableShadowCull = Offset(member: SdfWorldPackage.DisableShadowCull);
     private static readonly int DisableSoftShadows = Offset(member: SdfWorldPackage.DisableSoftShadows);
     private static readonly int EnableShadowProxy = Offset(member: SdfWorldPackage.EnableShadowProxy);
-    private static readonly int Environment = Offset(member: SdfWorldPackage.Environment);
     private static readonly int FarDistance = Offset(member: SdfWorldPackage.FarDistance);
     private static readonly int FastAmbientOcclusion = Offset(member: SdfWorldPackage.FastAmbientOcclusion);
     private static readonly int FastSoftShadowMarch = Offset(member: SdfWorldPackage.FastSoftShadowMarch);
@@ -67,7 +56,6 @@ public static class SdfFrameBlock {
     private static readonly int NearDistance = Offset(member: SdfWorldPackage.NearDistance);
     private static readonly int ScreenCount = Offset(member: SdfWorldPackage.ScreenCount);
     private static readonly int ShadowDistanceScale = Offset(member: SdfWorldPackage.ShadowDistanceScale);
-    private static readonly int SunScale = Offset(member: SdfWorldPackage.SunScale);
     private static readonly int TanHalfFieldOfView = Offset(member: SdfWorldPackage.TanHalfFieldOfView);
     private static readonly int TileGrid = Offset(member: SdfWorldPackage.TileGrid);
     private static readonly int ViewBase = Offset(member: SdfWorldPackage.ViewBase);
@@ -112,7 +100,7 @@ public static class SdfFrameBlock {
         rows[4] = camera.Right.X; rows[5] = camera.Right.Y; rows[6] = camera.Right.Z; rows[7] = camera.TanHalfFieldOfView;
         rows[8] = camera.Up.X; rows[9] = camera.Up.Y; rows[10] = camera.Up.Z; rows[11] = camera.AspectRatio;
         rows[12] = camera.Forward.X; rows[13] = camera.Forward.Y; rows[14] = camera.Forward.Z;
-        rows[16] = view.Width; rows[17] = view.Height;
+        rows[16] = view.Width; rows[17] = view.Height; rows[18] = view.Jitter.X; rows[19] = view.Jitter.Y;
         rows[20] = camera.Near;
         rows[21] = (camera.FrustumOffset.X + ((((2f * view.Jitter.X) / view.Width) * camera.AspectRatio) * camera.TanHalfFieldOfView));
         rows[22] = (camera.FrustumOffset.Y - (((2f * view.Jitter.Y) / view.Height) * camera.TanHalfFieldOfView));
@@ -139,7 +127,7 @@ public static class SdfFrameBlock {
     /// <summary>Writes a view's values into a pass block: its render extent and tile grid, the frame's bound screens,
     /// instance-mask width and mesh draws the tables packed, the view's camera and quality
     /// (<see cref="SdfViewSnapshot.Quality"/>), the far distance and the debug view mode, the frame's bench levers, and
-    /// the environment the tables baked. The extent is not written: the node writes it.</summary>
+    /// whether a surface needs curvature. The extent is not written: the node writes it.</summary>
     /// <param name="block">The pass block, at least <see cref="SizeBytes"/> bytes.</param>
     /// <param name="tables">The values of the tables that packed <paramref name="frame"/>.</param>
     /// <param name="frame">The frame.</param>
@@ -177,8 +165,6 @@ public static class SdfFrameBlock {
         WriteSingle(block: block, offset: NearDistance, value: camera.Near);
         WriteSingle(block: block, offset: FarDistance, value: frame.FarDistance);
         WriteUInt32(block: block, offset: DebugMode, value: ((uint)tables.DebugMode));
-        WriteSingle(block: block, offset: AmbientScale, value: frame.AmbientScale);
-        WriteSingle(block: block, offset: SunScale, value: frame.SunScale);
         WriteSingle(block: block, offset: DebugSliceAxis, value: frame.DebugSliceAxis);
         WriteSingle(block: block, offset: DebugSliceOffset, value: frame.DebugSliceOffset);
         var grid = snapshot.Grid;
@@ -210,162 +196,10 @@ public static class SdfFrameBlock {
         WriteFlag(block: block, offset: FastSoftShadowMarch, value: quality.UseFastSoftShadowMarch);
         WriteFlag(block: block, offset: FastAmbientOcclusion, value: quality.UseFastAmbientOcclusion);
         WriteFlag(block: block, offset: DisableFarBound, value: quality.DisableFarBound);
-        MemoryMarshal.AsBytes(span: tables.Environment.Span).CopyTo(destination: block[Environment..]);
-    }
-    /// <summary>Bakes a frame's environment into the rows every pass block carries: <see cref="SdfEnvironment.Lanes"/>
-    /// copied row for row, with the host bakes the shader must not pay per pixel: every directional (light and softbox)
-    /// normalized in double and rounded once (DXC's DXIL backend constant-folds a <c>normalize()</c> while its SPIR-V
-    /// backend emits a runtime call; a uniform has no such asymmetry), the sun-disc angular radius baked into the
-    /// <c>pow()</c> exponent that puts the disc's edge at half brightness (k = ln 0.5 / ln cos r), the twinkle rate baked into
-    /// the phase of its period at the frame's presented tick (<see cref="TwinklePeriodTicks"/>, zero when nothing twinkles),
-    /// and the cloud drift, shear and spin integrated from the presented tick (<see cref="PresentedTick.Integrate"/>:
-    /// offsets reduced by the noise's lattice period, the angle by 2π). The kernels read the rows' indices from the
-    /// generated <c>sdf-isa.hlsli</c>, and <c>frame/sdf-lights.hlsli</c> decodes each row's lanes as
-    /// <see cref="SdfEnvironment"/> lays them out.</summary>
-    /// <param name="frame">The frame whose environment and presented tick the rows are baked from.</param>
-    /// <param name="rows">The rows, <see cref="SdfEnvironment.LaneCount"/> floats.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="rows"/> holds other than <see cref="SdfEnvironment.LaneCount"/>
-    /// floats.</exception>
-    public static void BakeEnvironment(SdfFrame frame, Span<float> rows) {
-        ArgumentNullException.ThrowIfNull(argument: frame);
-
-        if (rows.Length != SdfEnvironment.LaneCount) {
-            throw new ArgumentException(
-                message: $"The environment bakes into {SdfEnvironment.LaneCount} floats; the rows hold {rows.Length}.",
-                paramName: nameof(rows)
-            );
-        }
-
-        var environment = frame.Environment;
-        var lanes = environment.Lanes;
-        var floats = rows;
-
-        lanes.CopyTo(destination: floats);
-
-        for (var index = 0; (index < SdfEnvironment.MaxLights); index++) {
-            var row = ((SdfEnvironment.LightsRow + (index * SdfEnvironment.RowsPerLight)) * 4);
-            var kind = ((SdfLightKind)((byte)lanes[(row + 7)]));
-
-            if (kind != SdfLightKind.Directional) {
-                continue;
-            }
-
-            double x = lanes[(row + 0)], y = lanes[(row + 1)], z = lanes[(row + 2)];
-            var length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
-
-            if (length <= 0d) {
-                // A zero direction has no Lambert term; the authoring doors refuse one by name, and a frame assembled
-                // in code still must not upload NaNs into every shaded pixel.
-                x = SdfEnvironment.DefaultSunDirection.X; y = SdfEnvironment.DefaultSunDirection.Y; z = SdfEnvironment.DefaultSunDirection.Z;
-                length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
-            }
-
-            floats[(row + 0)] = ((float)(x / length)); floats[(row + 1)] = ((float)(y / length)); floats[(row + 2)] = ((float)(z / length));
-        }
-
-        var skyControl = (SdfEnvironment.SkyControlRow * 4);
-        var cosDiscRadius = Math.Cos(d: environment.SunDiscRadians);
-        var discExponent = ((cosDiscRadius is > 0d and < 1d)
-            ? Math.Clamp(
-                value: (Math.Log(d: 0.5d) / Math.Log(d: cosDiscRadius)),
-                min: 0d,
-                max: 100000d
-            )
-            : 100000d
-        );
-
-        floats[(skyControl + 2)] = ((float)discExponent);
-
-        // A sky with no visible twinkle bakes phase zero, so a still frame's block repeats and the cadence can stand it.
-        var clock = frame.Clock;
-        var twinkle = (SdfEnvironment.TwinkleRow * 4);
-        var twinkles = (
-            (environment.StarBrightness > 0f) &&
-            (environment.StarDensity > 0f) &&
-            (environment.TwinkleShare > 0f) &&
-            (environment.TwinkleDepth > 0f) &&
-            (environment.TwinkleRate > 0f)
-        );
-
-        floats[(twinkle + 2)] = (twinkles
-            ? ((float)clock.Phase(periodTicks: TwinklePeriodTicks(rateHertz: environment.TwinkleRate)))
-            : 0f
-        );
-
-        var drift = environment.CloudDrift;
-        var shear = environment.CloudShear;
-        var cloudsC = ((SdfEnvironment.CloudsRow + 2) * 4);
-        var cloudsD = ((SdfEnvironment.CloudsRow + 3) * 4);
-
-        floats[(cloudsC + 0)] = ((float)clock.Integrate(
-            modulus: CloudLatticePeriod,
-            ratePerSecond: drift.X
-        ));
-        floats[(cloudsC + 1)] = ((float)clock.Integrate(
-            modulus: CloudLatticePeriod,
-            ratePerSecond: drift.Y
-        ));
-        floats[(cloudsC + 2)] = ((float)clock.Integrate(
-            modulus: CloudLatticePeriod,
-            ratePerSecond: shear.X
-        ));
-        floats[(cloudsC + 3)] = ((float)clock.Integrate(
-            modulus: CloudLatticePeriod,
-            ratePerSecond: shear.Y
-        ));
-        floats[(cloudsD + 0)] = ((float)clock.Integrate(
-            modulus: Math.Tau,
-            ratePerSecond: environment.CloudSpin
-        ));
-
-        for (var index = 0; (index < SdfEnvironment.MaxSoftboxes); index++) {
-            var row = ((SdfEnvironment.SoftboxesRow + (index * SdfEnvironment.RowsPerSoftbox)) * 4);
-
-            double x = lanes[(row + 0)], y = lanes[(row + 1)], z = lanes[(row + 2)];
-            var length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
-
-            if (length <= 0d) {
-                continue; // an unauthored softbox slot has zero weight and never contributes; leave its direction zero
-            }
-
-            floats[(row + 0)] = ((float)(x / length)); floats[(row + 1)] = ((float)(y / length)); floats[(row + 2)] = ((float)(z / length));
-        }
-    }
-    /// <summary>Returns the star twinkle's period at a rate: the whole engine ticks nearest one cycle, at least one, so
-    /// the phase the environment bakes closes exactly at each period's end.</summary>
-    /// <param name="rateHertz">The twinkle's fundamental rate, in hertz; positive.</param>
-    /// <returns>The period, in engine ticks.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rateHertz"/> is not positive and finite.</exception>
-    public static ulong TwinklePeriodTicks(float rateHertz) {
-        if (!float.IsFinite(f: rateHertz) || (rateHertz <= 0f)) {
-            throw new ArgumentOutOfRangeException(
-                message: "The twinkle rate must be positive and finite.",
-                paramName: nameof(rateHertz)
-            );
-        }
-
-        return ((ulong)Math.Max(
-            val1: 1d,
-            val2: Math.Round(a: (EngineTicks.PerSecond / ((double)rateHertz)))
-        ));
+        WriteFlag(block: block, offset: CurvatureEnabled, value: (MathF.Max(x: frame.Environment.CurvatureCavity, y: MathF.Max(x: frame.Environment.CurvatureRim, y: frame.Environment.CurvatureInk)) > 0f));
     }
 
-    // The offset a pass-block member lies at, which the environment's rows must fill exactly.
-    private static int Offset(string member) {
-        if (
-            string.Equals(
-                a: member,
-                b: SdfWorldPackage.Environment,
-                comparisonType: StringComparison.Ordinal
-            ) &&
-            (SdfWorldPackage.EnvironmentRows != SdfEnvironment.RowCount)
-        ) {
-            throw new InvalidOperationException(message: $"The pass block holds {SdfWorldPackage.EnvironmentRows} environment rows; the environment lays out {SdfEnvironment.RowCount}.");
-        }
-
-        return ((int)Layout.BlockOffsetOf(member: member));
-    }
+    private static int Offset(string member) => ((int)Layout.BlockOffsetOf(member: member));
     private static void WriteFlag(Span<byte> block, int offset, bool value) =>
         WriteUInt32(
             block: block,

@@ -46,7 +46,7 @@ public enum WorldStateConversion : byte {
 /// lock. Reads are counted as <c>presentation.mirror.reads</c>.
 /// </para>
 /// </summary>
-public sealed class WorldStateMirror : IWorkCounterSource {
+public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldValueSource {
     /// <summary>The stable counter-source name.</summary>
     public const string SourceName = "presentation.mirror";
 
@@ -504,46 +504,13 @@ public sealed class WorldStateMirror : IWorkCounterSource {
     /// <param name="fallback">The value when the literal is not finite, no registration records the binding, or it
     /// reads no number.</param>
     /// <returns>The scalar's presented value.</returns>
-    public float Scalar(in BindableScalar scalar, float fallback) {
-        if (scalar.State is { } binding) {
-            return (TryNumber(
-                slot: SlotOf(
-                    binding: in binding,
-                    conversion: WorldStateConversion.Number
-                ),
-                value: out var bound
-            )
-                ? bound
-                : fallback
-            );
-        }
-
-        return (((scalar.Literal is { } literal) && float.IsFinite(f: literal))
-            ? literal
-            : fallback
-        );
-    }
+    public float Scalar(in BindableScalar scalar, float fallback) => ((float)Values.Scalar(fallback: fallback, value: scalar));
     /// <summary>Resolves a bindable color: its literal, or its registered binding's current color.</summary>
     /// <param name="color">The authored color.</param>
     /// <param name="fallback">The color when the token is malformed, no registration records the binding, or it holds
     /// no color.</param>
     /// <returns>The color.</returns>
-    public Vector4 Color(in BindableColor color, Vector4 fallback) {
-        if (color.State is { } binding) {
-            return (TryColor(
-                slot: SlotOf(
-                    binding: in binding,
-                    conversion: WorldStateConversion.Color
-                ),
-                value: out var bound
-            )
-                ? bound
-                : fallback
-            );
-        }
-
-        return (color.Literal ?? fallback);
-    }
+    public Vector4 Color(in BindableColor color, Vector4 fallback) => Values.Color(fallback: fallback, value: color);
     /// <inheritdoc/>
     public bool TryRead(WorkKind kind, out long value) => WorkCounterSources.TryReadSingle(
         count: in m_reads,

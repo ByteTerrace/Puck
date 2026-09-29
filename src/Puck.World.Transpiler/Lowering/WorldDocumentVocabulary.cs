@@ -12,7 +12,7 @@ namespace Puck.World.Transpiler.Lowering;
 /// <see cref="WorldConstructs.Table"/> when omitted.</param>
 /// <remarks>The description is a constructor argument rather than a static read so a law can hand one pass a
 /// description it invented and watch every reader of that pass follow it.</remarks>
-public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = null) : IDocumentVocabulary {
+public sealed partial class WorldDocumentVocabulary(WorldConstructTable? constructs = null) : IDocumentVocabulary {
     /// <summary>The canonical schema URI for world definitions.</summary>
     public const string Schema = "puck.world.definition.v1";
     /// <summary>The annotation holding the directory the lowered document's relative file paths resolve against.</summary>
@@ -67,6 +67,14 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
     /// to exactly the dialects the vocabulary describes.</remarks>
     public bool IsEmbeddedLanguage(string identifier) => Constructs.IsEmbeddedLanguage(identifier: identifier);
     /// <inheritdoc />
+    public string? NameCallBody(string callName) => Constructs.Constructs
+        .FirstOrDefault(predicate: construct => ((construct.Keyword == callName) && (construct.Shape == WorldConstructShape.Call)))?
+        .Members.FirstOrDefault(predicate: static member => (member.Position == WorldMemberPosition.Body))?.Name;
+    /// <inheritdoc />
+    public bool RequiresCallBody(string callName, IReadOnlyList<ArgumentNode> arguments) =>
+        (Constructs.TryGet(construct: out var construct, keyword: callName) && arguments.Any(predicate: argument =>
+            construct!.Members.Any(predicate: member => ((member.Position == WorldMemberPosition.Header) && (member.Name == argument.Name)))));
+    /// <inheritdoc />
     /// <remarks>A bare flag is a described member of <see cref="WorldMemberKind.Flag"/> written where a modifier
     /// stands, so the parser reads exactly the flags the table carries.</remarks>
     public bool IsBareModifier(string keyword, string modifier) => (
@@ -83,6 +91,7 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
     );
     /// <inheritdoc />
     public bool TryLowerValue(ExpressionNode expression, DocumentScope scope, string? fieldKey, out System.Text.Json.Nodes.JsonNode? value) {
+        if (TryLowerKeys(expression: expression, fieldKey: fieldKey, scope: scope, value: out value)) { return true; }
         if (expression is AssetExpressionNode asset) {
             value = null;
             if ((scope.Annotations.GetValueOrDefault(key: "AssetContext") is not Assets.AssetCompilationContext context) || (scope.BasePath is null)) {
@@ -141,7 +150,9 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
     /// <remarks>A position is the model type a value fills. A call names an arm of the polymorphic type at its
     /// position, or the first arm any type declares under that name when the position is unknown, so a call the
     /// model does not declare (a template, a builtin) has no position.</remarks>
-    public object? CallContext(object? context, string callName) => WorldCallArguments.ArmType(baseType: (context as Type), discriminator: callName);
+    public object? CallContext(object? context, string callName) => ((callName == "keys")
+        ? new KeyCallContext(Field: null, Value: context)
+        : WorldCallArguments.ArmType(baseType: (context as Type), discriminator: callName));
     /// <inheritdoc />
     /// <remarks>An arm is any <c>$type</c> the model declares under any polymorphic base.</remarks>
     public bool NamesArm(string callName) => (WorldCallArguments.ArmType(
@@ -155,12 +166,15 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
         ? ((WorldCallArguments.Classify(member: memberName, owner: owner) == WorldArgumentForm.Path)
             ? FileReferencePosition
             : WorldCallArguments.MemberType(member: memberName, owner: owner))
-        : null
+        : ((context is null) ? null : KeyMemberContext(context: context, memberName: memberName))
     );
     /// <inheritdoc />
     /// <remarks>The form is the document model's: <see cref="WorldCallArguments"/> reads it from the member's name
     /// registry role where it carries one and from its type otherwise.</remarks>
-    public DocumentValueForm ClassifyMember(object? context, string memberName) => (((context is Type owner)
+    public DocumentValueForm ClassifyMember(object? context, string memberName) => context switch {
+        KeyCallContext when (memberName == "clock") => DocumentValueForm.Name,
+        KeyRowContext when (memberName == "ease") => DocumentValueForm.Choice,
+        _ => (((context is Type owner)
         ? WorldCallArguments.Classify(member: memberName, owner: owner)
         : WorldArgumentForm.Unclassified
     ) switch {
@@ -170,12 +184,15 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
         WorldArgumentForm.Choice => DocumentValueForm.Choice,
         WorldArgumentForm.Text or WorldArgumentForm.Path => DocumentValueForm.Text,
         _ => DocumentValueForm.Unclassified,
-    });
+    }),
+    };
     /// <inheritdoc />
-    public bool IsChoiceWord(object? context, string memberName, string word) => (
+    public bool IsChoiceWord(object? context, string memberName, string word) => (((context is KeyRowContext) && (memberName == "ease"))
+        ? (word is "linear" or "smooth" or "step")
+        : (
         (context is Type owner) &&
         WorldCallArguments.IsChoiceWord(member: memberName, owner: owner, word: word)
-    );
+    ));
     /// <inheritdoc />
     public System.Text.Json.Nodes.JsonNode? NormalizeMemberValue(System.Text.Json.Nodes.JsonNode? value, DocumentValueForm form, DocumentScope scope) => (
         ((form == DocumentValueForm.Name) &&

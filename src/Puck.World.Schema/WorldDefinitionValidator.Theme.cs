@@ -5,15 +5,30 @@ namespace Puck.World;
 /// document's own finite/range checks per field. Two floors live here, engine-side, never authored:
 /// <see cref="WorldThemeCapacity.TypeAbsoluteFloorSize"/> (a plain-float field — always a literal, so a value below
 /// it refuses outright) and <see cref="WorldThemeCapacity.ScrimMinAlpha"/> (a <see cref="BindableScalar"/> — a
-/// literal below it refuses here, but a state binding cannot be checked at boot, so <c>WorldThemeResolve</c> clamps
-/// it to the floor at resolve time instead).</summary>
+/// literal or initial state value below it refuses here; <c>WorldThemeResolve</c> clamps subsequent closed-bound
+/// violations through the shared presentation domain guard).</summary>
 public static partial class WorldDefinitionValidator {
+    private static WorldRenderDefaults PreparedRender(WorldDefinition definition, List<string> errors) {
+        var presentation = WorldPresentationValues.Of(definition: definition);
+
+        errors.AddRange(collection: presentation.Errors);
+        if (presentation.Errors.Count == 0) { errors.AddRange(collection: WorldPresentationRates.Of(definition: definition).Errors); }
+        return presentation.Definition.Render;
+    }
     private static void RequireBindableColor(BindableColor color, WorldDefinition definition, string path, List<string> errors) {
+        if ((color.Keys is { } keys) && !WorldValueValidation.TryValidate(curve: keys, definition: definition, reason: out var reason)) {
+            errors.Add(item: $"{path} {reason}.");
+            return;
+        }
         if (!color.IsAuthorable(definition: definition)) {
             errors.Add(item: $"{path} '{color.Raw}' {BindableColor.Grammar}.");
         }
     }
     private static void RequireBindableScalar(BindableScalar scalar, WorldDefinition definition, string path, List<string> errors) {
+        if ((scalar.Keys is { } keys) && !WorldValueValidation.TryValidate(curve: keys, definition: definition, reason: out var reason)) {
+            errors.Add(item: $"{path} {reason}.");
+            return;
+        }
         if (!scalar.IsAuthorable(definition: definition)) {
             errors.Add(item: $"{path} {(scalar.Binding ?? (scalar.Literal?.ToString() ?? "(absent)"))} {BindableScalar.Grammar}.");
         }
@@ -26,12 +41,7 @@ public static partial class WorldDefinitionValidator {
             scalar: scalar
         );
 
-        if (
-            (scalar.Literal is { } literal) &&
-            ((literal < 0f) || (literal > 1f))
-        ) {
-            errors.Add(item: $"{path} {literal} must be in [0, 1].");
-        }
+        RequireBindableDomain(scalar, definition, path, WorldValueDomain.Unit, errors);
     }
     private static void RequireScrim(WorldThemeScrim scrim, WorldDefinition definition, string path, List<string> errors) {
         RequireBindableColor(
@@ -47,12 +57,8 @@ public static partial class WorldDefinitionValidator {
             scalar: scrim.Alpha
         );
 
-        if (
-            (scrim.Alpha.Literal is { } literal) &&
-            ((literal < WorldThemeCapacity.ScrimMinAlpha) || (literal > 1f))
-        ) {
-            errors.Add(item: $"{path}.alpha {literal} must be in [{WorldThemeCapacity.ScrimMinAlpha}, 1] — below it the guaranteed-AA contrast floor (over both a dark corner and a lit CRT) breaks. A state.<row> binding is not refused here; it clamps to the floor at resolve time instead.");
-        }
+        RequireBindableDomain(scrim.Alpha, definition, $"{path}.alpha", new WorldValueDomain(WorldThemeCapacity.ScrimMinAlpha, 1f), errors,
+            " Below it the guaranteed-AA contrast floor breaks. State bindings clamp to that floor at resolve time.");
     }
     private static void RequireBloomHue(WorldThemeBloomHue hue, WorldDefinition definition, string path, List<string> errors) {
         RequireBindableColor(
@@ -80,6 +86,7 @@ public static partial class WorldDefinitionValidator {
         }
     }
     private static void ValidateTheme(WorldDefinition definition, List<string> errors) {
+        definition = WorldPresentationValues.Of(definition: definition).Definition;
         if (definition.ThemeRaw is not { } theme) {
             return;
         }

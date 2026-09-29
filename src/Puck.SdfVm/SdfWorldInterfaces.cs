@@ -14,11 +14,11 @@ namespace Puck.SdfVm;
 /// every value in ordinal name order, so a graph document whose config names the same values reads the same block.</para>
 /// <para><see cref="ResolveParameters"/> serves the optional output reconstruction pass with its own resource bindings
 /// and the same frame values. Its common values copy by declared member offsets; the native pass block stays unchanged.</para>
-/// <para><see cref="World"/> serves the native per-view dispatches: sky, mask, beam, cull-args, primary, surface, ambient,
-/// shadow and the three views variants. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>): its
-/// World group is the residency's tables (<see cref="SdfWorldPackage.Tables"/>), one set per upload ring slot that every
-/// pass of every view binds, and its pass group one set per frame slot and pass, whose block holds the view's render
-/// extent and the frame's values.</para>
+/// <para><see cref="World"/> serves traversal's common interface. <see cref="SkyParameters"/>,
+/// <see cref="ShadowParameters"/> and <see cref="ViewsParameters"/> add the typed lighting tables their passes read.
+/// Each World layout has one set per upload ring slot, sharing the residency's common tables
+/// (<see cref="SdfWorldPackage.Tables"/>). Each pass has one pass set per frame slot, whose block holds the view's render
+/// extent and the common frame values at identical offsets.</para>
 /// <para><see cref="BrickBake"/> serves the carve-bake baker, the <c>sdf.bricks</c> pass: it binds the ring slot's frame
 /// set and one pass set per brick slot binding that slot's request buffer and the brick pool, whose block's extent is one
 /// slice as one row, the voxels one bake dispatch writes at most, with the slice ordinal pushed per dispatch.</para>
@@ -42,7 +42,7 @@ public static class SdfWorldInterfaces {
     /// in its <c>isa</c> directory and the pass entry points in <c>passes</c>.</summary>
     public const string KernelDirectory = "src/Puck.SdfVm/Assets/Shaders/Sdf";
 
-    /// <summary>Gets the frame data of every per-view SDF dispatch: the standard frame group, the World group of the
+    /// <summary>Gets the common frame data of per-view SDF traversal: the standard frame group, the World group of the
     /// residency's tables, and a pass group whose block holds the view's render extent and the frame's values, followed by
     /// the view's own resources. Its frame block is written through
     /// <see cref="ShaderPipelineParameterLayout.WriteFrame"/>.</summary>
@@ -51,12 +51,32 @@ public static class SdfWorldInterfaces {
         package: RenderGraphPackageCatalog.SdfWorld,
         members: SdfWorldPackage.Members
     ).Stamped(stamp: SdfIsaHlsl.Stamp);
+    /// <summary>The sky pass's common frame values and typed sky records.</summary>
+    public static ShaderPipelineParameterLayout SkyParameters { get; } = ShaderPipelineParameterLayout.ForPackage(
+        config: null, package: "sdf-sky", members: SdfWorldPackage.SkyMembers
+    ).Stamped(stamp: SdfIsaHlsl.Stamp);
+    /// <summary>The shadow pass's common frame values and typed light records.</summary>
+    public static ShaderPipelineParameterLayout ShadowParameters { get; } = ShaderPipelineParameterLayout.ForPackage(
+        config: null, package: "sdf-shadow", members: SdfWorldPackage.ShadowMembers
+    ).Stamped(stamp: SdfIsaHlsl.Stamp);
+    /// <summary>The hit-shading pass's common frame values, typed lights and typed sky.</summary>
+    public static ShaderPipelineParameterLayout ViewsParameters { get; } = ShaderPipelineParameterLayout.ForPackage(
+        config: null, package: "sdf-views", members: SdfWorldPackage.ViewsMembers
+    ).Stamped(stamp: SdfIsaHlsl.Stamp);
     /// <summary>The reconstruction pass's interface, with the same frame values as the traversal passes.</summary>
     public static ShaderPipelineParameterLayout ResolveParameters { get; } = ShaderPipelineParameterLayout.ForPackage(
         config: null, package: "sdf-resolve", members: SdfWorldPackage.ResolveMembers
     ).Stamped(stamp: SdfIsaHlsl.Stamp);
+    /// <summary>The temporal Views pass adds only a reactivity UAV to the native shading interface.</summary>
+    public static ShaderPipelineParameterLayout TemporalViewsParameters { get; } = ShaderPipelineParameterLayout.ForPackage(
+        config: null, package: "sdf-temporal-views", members: SdfWorldPackage.TemporalViewsMembers
+    ).Stamped(stamp: SdfIsaHlsl.Stamp);
+    /// <summary>The temporal Resolve interface, including per-view history and residency motion tables.</summary>
+    public static ShaderPipelineParameterLayout TemporalResolveParameters { get; } = ShaderPipelineParameterLayout.ForPackage(
+        config: null, package: "sdf-temporal-resolve", members: SdfWorldPackage.TemporalResolveMembers
+    ).Stamped(stamp: SdfIsaHlsl.Stamp);
 
-    /// <summary>Gets the interface every per-view SDF dispatch reads.</summary>
+    /// <summary>Gets the common traversal interface without sky or light tables.</summary>
     public static ShaderInterface World => WorldParameters.Interface;
 
     /// <summary>Gets the frame data of the carve-bake baker, the <c>sdf.bricks</c> pass: the standard frame group, and a
@@ -104,16 +124,21 @@ public static class SdfWorldInterfaces {
     /// <summary>Gets each interface with the repository-relative path of the include generated from it.</summary>
     public static IReadOnlyList<(string Path, ShaderInterface Interface)> Includes { get; } = IncludesStamped(stamp: SdfIsaHlsl.Stamp);
 
-    /// <summary>Returns each interface, the kernels' two stamped with an instruction set's stamp, with the
+    /// <summary>Returns each interface, with the compute interfaces stamped with an instruction set's stamp, and the
     /// repository-relative path of the include generated from it: what <c>puck shaders generate</c> writes for the
     /// model's own instruction set.</summary>
     /// <param name="stamp">The instruction set's stamp (<see cref="SdfIsaHlsl.StampOf"/>).</param>
     /// <returns>The includes.</returns>
     public static IReadOnlyList<(string Path, ShaderInterface Interface)> IncludesStamped(string stamp) => [
         (IncludePath(shaderInterface: World), World.Stamped(stamp: stamp)),
+        (IncludePath(shaderInterface: SkyParameters.Interface), SkyParameters.Interface.Stamped(stamp: stamp)),
+        (IncludePath(shaderInterface: ShadowParameters.Interface), ShadowParameters.Interface.Stamped(stamp: stamp)),
+        (IncludePath(shaderInterface: ViewsParameters.Interface), ViewsParameters.Interface.Stamped(stamp: stamp)),
         (IncludePath(shaderInterface: BrickBake), BrickBake.Stamped(stamp: stamp)),
         (IncludePath(shaderInterface: Mesh), Mesh),
         (IncludePath(shaderInterface: ResolveParameters.Interface), ResolveParameters.Interface.Stamped(stamp: stamp)),
+        (IncludePath(shaderInterface: TemporalViewsParameters.Interface), TemporalViewsParameters.Interface.Stamped(stamp: stamp)),
+        (IncludePath(shaderInterface: TemporalResolveParameters.Interface), TemporalResolveParameters.Interface.Stamped(stamp: stamp)),
     ];
 
     private static string IncludePath(ShaderInterface shaderInterface) =>

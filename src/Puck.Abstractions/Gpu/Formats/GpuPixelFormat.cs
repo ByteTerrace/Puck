@@ -45,6 +45,8 @@ public enum GpuPixelFormat : uint {
     /// <summary>Two 8-bit unsigned normalized channels, red first (Vulkan <c>R8G8_UNORM</c>,
     /// <c>DXGI_FORMAT_R8G8_UNORM</c>).</summary>
     R8G8Unorm = 14,
+    /// <summary>One 32-bit floating-point color channel, usable as a storage or sampled image.</summary>
+    R32Float = 15,
 }
 /// <summary>
 /// The byte layout of <see cref="GpuPixelFormat"/> images: the one statement of each format's texel or block size, and
@@ -76,7 +78,7 @@ public static class GpuPixelFormats {
         GpuPixelFormat.R8Unorm or GpuPixelFormat.R8G8Unorm or GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm
             or GpuPixelFormat.R8G8B8A8Srgb or GpuPixelFormat.B8G8R8A8Srgb => 255U,
         GpuPixelFormat.R10G10B10A2Unorm => 1023U,
-        GpuPixelFormat.R16G16B16A16Float or GpuPixelFormat.R32G32B32A32Float => 0U,
+        GpuPixelFormat.R16G16B16A16Float or GpuPixelFormat.R32G32B32A32Float or GpuPixelFormat.R32Float => 0U,
         _ => throw new ArgumentOutOfRangeException(
             actualValue: format,
             message: "The pixel format is not a color format a write targets.",
@@ -99,7 +101,7 @@ public static class GpuPixelFormats {
         GpuPixelFormat.R8Unorm => 1U,
         GpuPixelFormat.R8G8Unorm => 2U,
         GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm or GpuPixelFormat.D32Float or GpuPixelFormat.R8G8B8A8Srgb
-            or GpuPixelFormat.B8G8R8A8Srgb or GpuPixelFormat.R10G10B10A2Unorm => 4U,
+            or GpuPixelFormat.B8G8R8A8Srgb or GpuPixelFormat.R10G10B10A2Unorm or GpuPixelFormat.R32Float => 4U,
         GpuPixelFormat.R16G16B16A16Float or GpuPixelFormat.Bc4Unorm => 8U,
         GpuPixelFormat.R32G32B32A32Float or GpuPixelFormat.Bc5Unorm or GpuPixelFormat.Bc6hUfloat or GpuPixelFormat.Bc7Unorm => 16U,
         _ => throw new ArgumentOutOfRangeException(

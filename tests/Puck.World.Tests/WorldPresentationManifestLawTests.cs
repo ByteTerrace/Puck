@@ -31,7 +31,7 @@ public sealed class WorldPresentationManifestLawTests {
         Number(row: "score", key: "home"),
         Number(row: "bar", key: "layout"),
         Number(row: "bar", key: "model"),
-        Number(row: "daylight", target: true),
+        Number(row: "daylight"),
     ];
     private static readonly WorldPresentationBinding[] ExpectedBodyBindings = [
         Number(row: "scale", key: StateBinding.BodyKey),
@@ -198,10 +198,10 @@ public sealed class WorldPresentationManifestLawTests {
                 """),
             PopulationRaw = (baseline.Population with { ScaleRow = "scale" }),
             RenderRaw = (baseline.Render with {
-                Cycle = Section<WorldRenderCycle>(json: """
-                    { "state": "daylight", "keys": [ { "at": 0 }, { "at": 0.5 } ] }
-                    """),
+                Lighting = new WorldRenderLighting([new WorldRenderLight.Hemisphere(Base:
+                    new BindableScalar(keys: new WorldKeys<BindableScalar>(Clock: "daylight", Keys: [new(0d, 0.1f), new(0.5d, 0.5f)])))]),
             }),
+            TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock("daylight", State: "daylight")]),
         };
     }
 

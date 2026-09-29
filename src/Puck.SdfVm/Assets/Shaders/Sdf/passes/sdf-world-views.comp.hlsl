@@ -1,8 +1,8 @@
 // The hit passes' shared entry point: primary, surface, ambient, shadow and views each select their pass macro and compile
 // their own stage (sdf-hit-stages.hlsli) over the pixel the entry point gathers. All five use an 8x8 workgroup over the
 // one indirect tile box, and the same camera, masks and active-pixel test. Primary also reads the mesh pass's target
-// (sdf-mesh.hlsli). Every hit pass reads its resources through the sdf-world interface: dynamic transforms, screen sources,
-// and the read-only instance mask instance-cull produced (sdfInstanceMasks). Primary, surface, ambient and shadow write
+// (sdf-mesh.hlsli). The common interface carries dynamic transforms, screen sources and the read-only instance mask
+// instance-cull produced (sdfInstanceMasks); shadow and views add the native lighting tables they read. Primary, surface, ambient and shadow write
 // the visibility records through sdfVisibilityRecordsRW; views reads them through sdfVisibilityRecords
 // (sdf-visibility.hlsli).
 // Unused shading resources compile out of primary traversal.

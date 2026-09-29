@@ -11,7 +11,7 @@ namespace Puck.World.Client;
 /// The scene of one endpoint's world as this presentation renders it: the endpoint's own static scene, stamp pool and
 /// population, drawn from its delivered definition and state mirror by a <see cref="WorldSessionSceneEmitter"/> over
 /// <see cref="WorldAuthorityEndpoint.Mirror"/>, the same emitter a session screen draws a destination with, which lights it
-/// under the destination's own sky and lighting (its <c>render.cycle</c> or static lanes) on the destination's own sky
+/// under the destination's own sky and lighting, including typed keys, on the destination's own sky
 /// clock. Every view of the world is a view of
 /// the scene's one frame, so they share one program and one residency, each with its own camera and quality
 /// (<see cref="SdfViewSnapshot.Quality"/>):
@@ -64,6 +64,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
     public WorldAuthorityEndpoint Endpoint { get; }
     /// <summary>Gets the frame source a residency renders the scene through.</summary>
     public SdfCompositionFrameSource FrameSource { get; }
+    /// <summary>The destination's environment work, shared by all its routed views.</summary>
+    public WorldEnvironmentResolve TimelineWork => m_emitter.TimelineWork;
     /// <summary>Gets how many seat views the presenter latched into the scene this frame.</summary>
     public int ViewCount => m_views.Count;
     /// <summary>Gets how many windows are attached to the scene.</summary>

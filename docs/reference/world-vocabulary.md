@@ -38,6 +38,7 @@ kind.
 | `pool` | the document | declaration | `state.pools[]` | Declares a bounded typed instance pool with optional static seeds. |
 | `prototypes` | the document | section | `prototypes` | The creation documents this world places. |
 | `record` | the document | block | `(nothing)` | A typed field set instantiated by pools. |
+| `render` | the document | section | `render` | The world's authored lighting, sky and environment. |
 | `rule` | the document | block | `rules[]` | One reactive rule: a gate, its working values, and the effects it fires. |
 | `rules` | the document | block | `rules[]` | A shared header for several rules: its gate, locals and properties apply to every member. |
 | `set` | the document | statement | `sets[]` | One named set over the positions of a board, a zone, or a family, which `boardCombine` and `writeSet` read by name. |
@@ -47,6 +48,7 @@ kind.
 | `stabilize` | the document | block | `ruleGroups[]` | A fixpoint group: its members re-fire until the board settles or the pass ceiling refuses. |
 | `state` | the document | section | `state` | The simulation state: the world's rows, its lattices, its embedding spaces, and the per-participant lanes. |
 | `test` | the document | block | `(nothing)` | Behaviour stated in the world's own language — a world's own, a module's under the arguments the test gives it, or a whole composition's; the document carries no trace of it and each test lowers to a generated test world of its own. |
+| `timeline` | the document | section | `timeline` | The world's named presentation clocks, driven by ticks, state or another clock's phase. |
 | `views` | the document | section | `views` | Camera layouts, frame-graph instances, and the seat rig a participant looks through. |
 | `workflow` | the document | block | `ruleGroups[]` | A staged group: a cursor that advances one step per committed firing. |
 | `world` | the document | statement | `(nothing)` | Emits one named world document by invoking a module, declared at the top level of its source. Written `entry world`, it is the world `Puck.World --world` boots when it boots the source; a composition declares at most one. |
@@ -58,6 +60,7 @@ kind.
 | `parameter` | `graph` | statement | `views.graphs[].parameters` | One bound parameter of the enclosing graph instance, which the pass reads through its state mirror slot. |
 | `placement` | `placements` | row | `placements.rows[]` | One placed prototype. |
 | `prototype` | `prototypes` | row | `prototypes[]` | One creation document under an identity. |
+| `keys` | `render` | call | `render.keys` | Interpolated values selected by a named clock, on any bindable value or a presentation section. |
 | `claim` | `rule` | block | `rules[].effects[][claim]` | Claims one available instance and binds its fields for nested effects. |
 | `claim pair` | `rule` | block | `rules[].effects[][claimPair]` | Claims one relationship between two bound record instances. |
 | `deal` | `rule` | statement | `rules[].effects[][transformState]` | Moves a counted run of tokens from the front of an ordered zone to another. |
@@ -77,6 +80,7 @@ kind.
 | `space` | `spaces` | row | `state.spaces[]` | One vector embedding space. |
 | `spaces` | `state` | section | `state.spaces` | The document's named vector embedding spaces, declared before any row names one. |
 | `world` | `state` | section | `state.world` | The authoritative rows, written as declarations; the second authoring of the section in either form is refused. |
+| `clock` | `timeline` | row | `timeline.clocks[]` | One named source of wrapped presentation phase. |
 | `onFailure` | `transaction` | block | `rules[].effects[][transaction].onFailure` | What fires after a transaction rewinds; more than one on a transaction is refused. |
 | `graph` | `views` | row | `views.graphs[]` | One named instance of a frame graph. |
 | `layout` | `views` | row | `views.layouts[]` | One viewport arrangement. |
@@ -309,6 +313,14 @@ record Name { field: Kind … }
 
 Never printed back; the printer produces the statements its expansion produced in its place.
 
+### `render`
+
+```puck
+render { lighting { … } sky { … } environment { … } }
+```
+
+Printed back as `render`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
+
 ### `rule`
 
 ```puck
@@ -434,6 +446,14 @@ test "name" [with module(arguments)] { given { row = literal | world { row = lit
 | `world block` | body | statements | — | one generated document per world of the composition, its entry world carrying the `schedule` section whose `instances` arm the rest and whose rows address them by name; a far world's own verdict rule fires one tick before the booted world's export tick, which is where that world stands at the shared export step | — | Inside `given`, `when` or `expect` at the root of a source that emits several worlds: `<world> { … }` addresses one of them by its own name. There is no default world, so every line of such a test stands inside one; `ticks` stays outside, since one grid carries the whole composed run. |
 
 Read back as `test` from the rows it generated when a generated test world is decompiled whose verdict rows, witnesses and verdict rules stand last and whose schedule is seat steps alone: the block prints over the rest of the document, whose boot values already carry what `given` wrote; a composed test's documents arm one another by file and are refused; otherwise a refusal naming the generated row, since printing it as an authored name writes a source the compiler refuses.
+
+### `timeline`
+
+```puck
+timeline { clock name { … } }
+```
+
+Printed back as `timeline`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
 
 ### `views`
 
@@ -572,6 +592,19 @@ prototype "id" { document { … } }
 | `document` (required) | body | statements | — | `document` | — | The creation document itself, an ordinary nested block, so a `shape` inside it reaches the same lowering a root creation document's does. |
 
 Printed back as `prototype` when the node carries `document`, `id`, and its `document` is an object; otherwise the generic value path, for the whole `prototypes` array. Every field of the node the description does not name prints as an ordinary property.
+
+### `keys`
+
+```puck
+keys(clock: name) [ { at: time, value: value, ease: linear|smooth|step } … ]
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `clock` (required) | header | name | — | `clock` | — | The named timeline clock whose wrapped phase selects the keys. |
+| `keys` (required) | body | value | — | `keys` | — | Ordered keys with ordinary literals or state bindings; a section key carries named partial records. |
+
+Printed back as `keys` when the node carries `clock`, `keys`, and it carries no key outside `clock`, `keys`; otherwise the generic value path.
 
 ### `claim`
 
@@ -817,6 +850,18 @@ world { table | slot | pile | grid | row … }
 ```
 
 Printed back as `world` when every row in it sugars or falls back to `row { }` on its own; otherwise the explicit `world [ ]` array. Every field of the node the description does not name prints as an ordinary property.
+
+### `clock`
+
+```puck
+clock name { periodSeconds: … spanSeconds: … startSeconds: … state: … phase: … }
+```
+
+| Member | Written | Kind | Admitted on | Lowers to | Default | Means |
+|---|---|---|---|---|---|---|
+| `name` (required) | header | name | — | `name` | — | The clock's authored name, unique within the timeline. |
+
+Printed back as `clock` when the node carries `name`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
 
 ### `onFailure`
 
