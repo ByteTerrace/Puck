@@ -24,13 +24,15 @@ public sealed record WorldTimelineSection(IReadOnlyList<WorldClock>? Clocks = nu
 /// <param name="StartSeconds">How far into its span a tick clock stands at engine tick zero, in
 /// <paramref name="SpanSeconds"/>' units, in <c>[0, span)</c>. Absent is zero. Refused on a state clock.</param>
 /// <param name="State">A state clock's Fixed or Int row. Refused beside <paramref name="PeriodSeconds"/>.</param>
+/// <param name="Phase">A phase curve keyed on another clock. Refused beside a period or state source.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldClock(
     string Name,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? PeriodSeconds = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? SpanSeconds = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? StartSeconds = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? State = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? State = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Phase = null
 ) {
     /// <summary>Gets whether the clock reads a state row rather than the tick.</summary>
     [JsonIgnore]

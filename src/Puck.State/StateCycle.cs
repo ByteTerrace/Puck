@@ -14,7 +14,7 @@ public enum CycleOutput : byte {
     /// steps — an int cell.</summary>
     Step,
     /// <summary>The rotation as a fraction of one turn, <c>⌊step · 2^16 / order⌋</c> in raw <c>FixedQ4816</c> bits, so
-    /// the value wraps once per loop the way <c>render.cycle</c> keys read a row — a fixed cell.</summary>
+    /// the value wraps once per loop and can drive a state-backed timeline clock — a fixed cell.</summary>
     Turns,
     /// <summary>The unit rotation's cosine, the real part of the order's root of unity at the step — a fixed cell.</summary>
     Cos,

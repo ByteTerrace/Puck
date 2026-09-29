@@ -81,11 +81,11 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             UnifiedMemory: true
         );
 
-        // Eight per-frame tables, each a ring of one buffer per slot, and nothing copied; the mesh region is always staged,
+        // Thirteen per-frame tables, each a ring of one buffer per slot, and nothing copied; the mesh region is always staged,
         // so it takes no aperture buffer.
         using (var rig = new Rig(profile: discrete, slots: 40)) {
             rig.Warm();
-            Assert.Equal(expected: (8 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
+            Assert.Equal(expected: (13 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
             rig.Move(slot: 3);
             rig.Render(time: 0f);
             Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
@@ -978,7 +978,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             Engine = Build();
         }
         // Renders one frame at the given time, by default resetting the tallies first so they read that frame's writes.
-        public void Render(float time, bool resetTallies = true, IReadOnlyList<SdfMeshDraw>? meshDraws = null, IReadOnlyList<SdfVolume>? volumes = null) {
+        public void Render(float time, bool resetTallies = true, IReadOnlyList<SdfMeshDraw>? meshDraws = null, IReadOnlyList<SdfVolume>? volumes = null, SdfLighting? lighting = null) {
             if (resetTallies) {
                 Gpu.ResetTallies();
             }
@@ -1001,6 +1001,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                 time: time,
                 transforms: m_transforms
             ) with {
+                Environment = lighting ?? SdfLighting.Default(),
                 MeshDraws = (meshDraws ?? []),
                 MovedTransforms = m_moved,
                 Volumes = (volumes ?? []),

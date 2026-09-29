@@ -102,10 +102,10 @@ public abstract record WorldCameraProgramOp {
     /// changes — look behind is <c>state.look.behind</c> flipping between 0 and π — while the seat's facing (what
     /// steering and movement resolve against) is untouched, because the facing never includes the rig's offsets.</summary>
     /// <param name="Distance">The finite positive orbit distance.</param>
-    /// <param name="Yaw">The orbit heading in radians, as a literal or numeric state binding.</param>
-    /// <param name="Pitch">The orbit tilt in radians, as a literal or numeric state binding.</param>
+    /// <param name="Yaw">The orbit heading in radians, as a literal, numeric state binding or short-arc clock keys.</param>
+    /// <param name="Pitch">The orbit tilt in radians, as a literal, numeric state binding or short-arc clock keys.</param>
     /// <param name="PivotOffset">The world-axis offset from the current subject's origin to the pivot.</param>
-    public sealed record Orbit(float Distance, BindableScalar Yaw, BindableScalar Pitch, DocumentVector3? PivotOffset = null) : WorldCameraProgramOp;
+    public sealed record Orbit(float Distance, BindableAngle Yaw, BindableAngle Pitch, DocumentVector3? PivotOffset = null) : WorldCameraProgramOp;
     /// <summary>Establishes the CURRENT subject at a point sampled from a named <c>curves</c> row by arc-length
     /// fraction, and re-seeds the eye there — the same subject-seeding role <see cref="Anchor"/> plays, so at most one
     /// of the two may appear in a program, and when present this must be the first operation. The sampled subject's
@@ -138,7 +138,7 @@ public abstract record WorldCameraProgramOp {
     /// binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At
     /// most one per program.</summary>
     /// <param name="FieldOfViewRadians">The field of view.</param>
-    public sealed record FieldOfView(BindableScalar FieldOfViewRadians) : WorldCameraProgramOp;
+    public sealed record FieldOfView(BindableAngle FieldOfViewRadians) : WorldCameraProgramOp;
     /// <summary>Evaluates two other authored programs by name and linearly interpolates their resolved eye, target,
     /// and field of view — the whole document's camera-program table (every <c>cameras[].rig</c> plus
     /// <c>views.seatRig</c>/<c>views.cameraRig</c>) is the namespace <paramref name="A"/>/<paramref name="B"/>

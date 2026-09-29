@@ -45,6 +45,11 @@ per episode. `OverlayLeaseTableFitsBackstopsLawTests` holds the shared text back
 the power-of-two sum of all declared reservations. `OverlayPackageLawTests` counts its
 installed host/device regions and CPU scratch/shadow payloads.
 
+`SdfLightingInterfaceDeviceLawTests` compiles the existing generated echo for
+the five native lighting records and reads every field of two elements on
+Vulkan and Direct3D 12. Corrupting one field in each table changes exactly five
+verdict pixels, checking both field offsets and the native element stride.
+
 `WorldComposedPickMapLawTests` carries material names through the real SDF frame
 composition: two emitters, global SDF ordinals, rebased mesh draws, and a replaced
 identity map that cannot rename an earlier captured answer.

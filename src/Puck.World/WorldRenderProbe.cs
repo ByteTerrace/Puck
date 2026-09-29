@@ -35,6 +35,10 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
         name: SdfMovedTransforms.SourceName
     );
 
+    /// <summary>Actual timeline work across primary, routed and session frames. Retiring views carry their totals
+    /// forward through the same counter mechanism as dynamic transforms.</summary>
+    public ForwardingWorkCounterSource Timeline { get; } = new(WorldEnvironmentResolve.SourceName, WorldEnvironmentResolve.Kinds);
+
     /// <summary>The device the render nodes run on, or <see langword="null"/> until the render factory has run.</summary>
     public IGpuDeviceContext? Device { get; set; }
     /// <inheritdoc/>

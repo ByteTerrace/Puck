@@ -354,7 +354,16 @@ public static partial class WorldDocumentEmitter {
 
             case ExpressionStatementNode exprStmt: {
                     if (exprStmt.Expression is CallExpressionNode call) {
-                        if (exprStmt.IsUse) {
+                        if (!exprStmt.IsUse && (call.Name == "keys") && call.Arguments.Any(predicate: static argument => argument.TrailingBody)) {
+                            scope.SourceMap?.Register(jsonPointer: $"{scope.CurrentPointer}/keys", span: call.Span);
+                            if (target.ContainsKey(propertyName: "keys")) {
+                                scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue,
+                                    message: "A section admits only one 'keys' statement", span: call.Span);
+                            } else {
+                                target["keys"] = DocumentLowering.LowerMember(holder: DocumentLowering.MemberContext(scope: scope), holderName: null,
+                                    memberName: "keys", value: call, fieldKey: "keys", scope: scope, sourcePointer: $"{scope.CurrentPointer}/keys");
+                            }
+                        } else if (exprStmt.IsUse) {
                             ExpandModuleUse(call: call, invocation: out var invocation, scope: scope, statement: exprStmt, target: target);
                             HoistModuleTests(
                                 call: call,
@@ -385,6 +394,7 @@ public static partial class WorldDocumentEmitter {
                     }
 
                     var childPointer = $"{scope.CurrentPointer}/{propNode.Name}";
+                    var offset = (target[propNode.Name] is JsonArray existing ? existing.Count : 0);
 
                     scope.SourceMap?.Register(
                         jsonPointer: childPointer,
@@ -397,7 +407,9 @@ public static partial class WorldDocumentEmitter {
                         holderName: null,
                         memberName: propNode.Name,
                         scope: scope,
-                        value: propNode.Value
+                        value: propNode.Value,
+                        sourcePointer: childPointer,
+                        sourceIndexOffset: offset
                     );
 
                     // An array written element by element maps each element to the text that wrote it, at the index it
@@ -407,11 +419,6 @@ public static partial class WorldDocumentEmitter {
                         (lowered is JsonArray elements) &&
                         (elements.Count == authored.Elements.Count)
                     ) {
-                        var offset = (((target[propNode.Name] is JsonArray existing) && !ReferenceEquals(objA: existing, objB: elements))
-                            ? existing.Count
-                            : 0
-                        );
-
                         for (var index = 0; (index < authored.Elements.Count); ++index) {
                             scope.SourceMap?.Register(
                                 jsonPointer: $"{childPointer}/{(offset + index)}",
@@ -608,6 +615,12 @@ public static partial class WorldDocumentEmitter {
         var id = block.Identifier;
 
         if (TryLowerCompositionEndpointBlock(block: block, parent: parent, scope: scope)) { return; }
+        if ((DocumentLowering.MemberContext(scope: scope) is Type owner) && (owner == typeof(WorldTimelineSection)) &&
+            Constructs(scope: scope).TryGet(keyword: id, enclosing: "timeline", construct: out var clock) && (clock!.DocumentMember == "timeline.clocks[]")) {
+            _ = DocumentLowering.At(context: typeof(WorldClock), scope: scope,
+                lower: () => LowerRowCollectionBlock(block: block, parent: parent, scope: scope, member: "clocks", hashed: false));
+            return;
+        }
 
         var blockPointer = $"{scope.CurrentPointer}/{id}";
 
@@ -1141,14 +1154,7 @@ public static partial class WorldDocumentEmitter {
                 );
             }
         } else if (stmt is PropertyNode prop) {
-            DocumentLowering.AssignOrExtend(
-                viewsObj,
-                prop.Name,
-                LowerExpression(
-                    prop.Value,
-                    scope
-                )
-            );
+            ProcessStatement(statement: prop, target: viewsObj, scope: scope);
         } else if (
             (stmt is ExpressionStatementNode exprStmt) &&
             (exprStmt.Expression is CallExpressionNode call)

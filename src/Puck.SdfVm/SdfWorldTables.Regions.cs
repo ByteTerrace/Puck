@@ -5,7 +5,7 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 // The host-written tables: program words, dynamic transforms, the frame instance grid, screen surfaces, screen mappings,
-// screen lights, volumes, glyph decals and mesh draws, each a GpuRegion under the policy GpuResidency.Select chooses for
+// screen lights, volumes, glyph decals, mesh draws and native lighting, each a GpuRegion under the policy GpuResidency.Select chooses for
 // its size with the upload ring's readers in flight, a ring's buffers in the memory GpuResidency.RingMemory chooses. A
 // frame writes each table into its region, which owes only the words that differ; the upload flushes its ring slot's
 // share (the previous upload's fence has retired the views that read it), records each staged region's copy, then one
@@ -22,8 +22,13 @@ public sealed partial class SdfWorldTables {
     private const int InstanceGridRegionIndex = 2;
     private const int MeshRegionIndex = 8;
     private const int ProgramRegionIndex = 0;
-    // The per-frame regions RegionAt names, the mesh region last.
-    private const int RegionCount = 9;
+    // The native lighting regions follow the geometry and surface tables in RegionAt.
+    private const int LightFrameRegionIndex = 9;
+    private const int LightsRegionIndex = 10;
+    private const int SkyFrameRegionIndex = 11;
+    private const int SkyStopsRegionIndex = 12;
+    private const int SkySoftboxesRegionIndex = 13;
+    private const int RegionCount = 14;
     private const int ScreenLightRegionIndex = 4;
     private const int ScreenMappingRegionIndex = 7;
     private const int ScreenSurfaceRegionIndex = 3;
@@ -168,7 +173,13 @@ public sealed partial class SdfWorldTables {
         VolumeRegionIndex => m_volumeRegion,
         DecalRegionIndex => m_decalRegion,
         ScreenMappingRegionIndex => m_screenMappingRegion,
-        _ => m_meshRegion,
+        MeshRegionIndex => m_meshRegion,
+        LightFrameRegionIndex => m_lightFrameRegion,
+        LightsRegionIndex => m_lightsRegion,
+        SkyFrameRegionIndex => m_skyFrameRegion,
+        SkyStopsRegionIndex => m_skyStopsRegion,
+        SkySoftboxesRegionIndex => m_skySoftboxesRegion,
+        _ => throw new ArgumentOutOfRangeException(nameof(index)),
     };
     // The debug name of region index's objects, its reserved copy sets included: its table's role.
     private static GpuObjectName RegionName(int region) => NameOf(part: region switch {
@@ -181,6 +192,11 @@ public sealed partial class SdfWorldTables {
         DecalRegionIndex => "decals",
         ScreenMappingRegionIndex => "screen-mappings",
         MeshRegionIndex => "mesh-region",
+        LightFrameRegionIndex => "light-frame",
+        LightsRegionIndex => "lights",
+        SkyFrameRegionIndex => "sky-frame",
+        SkyStopsRegionIndex => "sky-stops",
+        SkySoftboxesRegionIndex => "sky-softboxes",
         _ => "brick-staging",
     });
     // Creates the one copy pool of every region the tables may create, the brick staging's with a brick pool, each

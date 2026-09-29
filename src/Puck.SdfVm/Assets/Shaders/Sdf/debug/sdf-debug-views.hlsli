@@ -5,6 +5,7 @@
 #ifndef DEBUG_SDF_DEBUG_VIEWS_HLSLI
 #define DEBUG_SDF_DEBUG_VIEWS_HLSLI
 #ifdef SDF_VIEWS_PASS
+#include "sdf-material-palette.hlsli"
 #include "../frame/sdf-reprojection.hlsli"
 
 float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {

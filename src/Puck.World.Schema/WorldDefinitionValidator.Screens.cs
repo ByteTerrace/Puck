@@ -254,13 +254,13 @@ public static partial class WorldDefinitionValidator {
                         definition: definition,
                         errors: errors,
                         path: $"{opPath}.yaw",
-                        scalar: orbit.Yaw
+                        scalar: orbit.Yaw.Value
                     );
                     RequireBindableScalar(
                         definition: definition,
                         errors: errors,
                         path: $"{opPath}.pitch",
-                        scalar: orbit.Pitch
+                        scalar: orbit.Pitch.Value
                     );
 
                     if (
@@ -353,7 +353,7 @@ public static partial class WorldDefinitionValidator {
                         definition: definition,
                         errors: errors,
                         path: $"{opPath}.fieldOfViewRadians",
-                        scalar: fov.FieldOfViewRadians
+                        scalar: fov.FieldOfViewRadians.Value
                     );
 
                     break;

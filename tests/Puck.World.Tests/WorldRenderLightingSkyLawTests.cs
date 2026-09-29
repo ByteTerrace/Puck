@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json;
 
 using Puck.SignedDistance;
 using Puck.SdfVm;
@@ -9,7 +10,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Laws for <c>render.lighting</c>/<c>render.sky</c> resolution (<see cref="WorldRenderCycleTrack"/>):
+/// <summary>Laws for <c>render.lighting</c>/<c>render.sky</c> resolution (<see cref="WorldEnvironmentResolve"/>):
 /// absence resolves to the pinned environment bit-exactly, an authored list is exactly the lights it names, every
 /// authored field threads through untouched, a state-bound colour reads its cell live, and the validator refuses the
 /// shapes the lane table cannot carry.</summary>
@@ -24,6 +25,7 @@ public sealed class WorldRenderLightingSkyLawTests {
                 )]
         )]) with {
         RenderRaw = defaults,
+        TimelineRaw = new WorldTimelineSection([new WorldClock("clock", State: "clock")]),
     });
     private static WorldStateRow ColorsRow(string hex) => new(
         Name: CellName.Parse(candidate: "colors"),
@@ -33,10 +35,10 @@ public sealed class WorldRenderLightingSkyLawTests {
                 Value: CellValue.Text(value: hex)
             )]
     );
-    private static SdfEnvironment Resolve(WorldRenderDefaults defaults, IReadOnlyList<WorldStateRow>? state = null, int revision = 0, WorldRenderCycleTrack? track = null, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) {
-        var definition = (Fixtures.BuildDocument().WithWorldState(rows: (state ?? [])) with { RenderRaw = defaults });
+    private static SdfLighting Resolve(WorldRenderDefaults defaults, IReadOnlyList<WorldStateRow>? state = null, int revision = 0, WorldEnvironmentResolve? track = null, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) {
+        var definition = (Fixtures.BuildDocument().WithWorldState(rows: (state ?? [])) with { RenderRaw = defaults, TimelineRaw = new WorldTimelineSection([new WorldClock("clock", State: "clock")]) });
 
-        return (track ?? new WorldRenderCycleTrack()).Resolve(
+        return (track ?? new WorldEnvironmentResolve()).Resolve(
             definition: definition,
             mirror: ClientFixtures.StateMirror(definition: definition),
             resolveLightAnchor: resolveLightAnchor,
@@ -115,9 +117,9 @@ public sealed class WorldRenderLightingSkyLawTests {
     [Fact]
     public void AbsentLightingAndSky_ResolveToThePinnedEnvironmentBitExact() {
         var resolved = Resolve(defaults: BaseDefaults());
-        var pinned = SdfEnvironment.Default();
+        var pinned = SdfLighting.Default();
 
-        Assert.True(condition: pinned.Lanes.SequenceEqual(other: resolved.Lanes));
+        Assert.Equal(LightingSnapshot.Bytes(pinned), LightingSnapshot.Bytes(resolved));
         Assert.Equal(
             expected: 2,
             actual: resolved.LightCount
@@ -127,20 +129,20 @@ public sealed class WorldRenderLightingSkyLawTests {
             actual: resolved.ShadowLightIndex
         );
         Assert.Equal(
-            expected: SdfEnvironment.DefaultSunDirection,
+            expected: SdfLighting.DefaultSunDirection,
             actual: resolved.GetLight(index: 0).Direction
         );
         Assert.Equal(
-            expected: SdfEnvironment.DefaultPenumbraSlope,
+            expected: SdfLighting.DefaultPenumbraSlope,
             actual: resolved.GetLight(index: 0).Param
         );
         Assert.Equal(
-            expected: SdfEnvironment.DefaultAmbientBase,
+            expected: SdfLighting.DefaultAmbientBase,
             actual: resolved.GetLight(index: 1).Weight
         );
         Assert.False(condition: resolved.SkyEnabled);
         Assert.Equal(
-            expected: SdfEnvironment.DefaultFogDensity,
+            expected: SdfLighting.DefaultFogDensity,
             actual: resolved.FogDensity
         );
     }
@@ -319,14 +321,7 @@ public sealed class WorldRenderLightingSkyLawTests {
         var fill = resolved.GetLight(index: 1);
         var rim = resolved.GetLight(index: 2);
 
-        Assert.Equal(
-            expected: new Vector3(
-                x: 0.3f,
-                y: 0.6f,
-                z: -0.5f
-            ),
-            actual: key.Direction
-        );
+        Assert.InRange(Vector3.Distance(Vector3.Normalize(new Vector3(0.3f, 0.6f, -0.5f)), key.Direction), 0f, 1e-7f);
         Assert.Equal(
             expected: 0.42f,
             actual: key.Weight
@@ -354,7 +349,7 @@ public sealed class WorldRenderLightingSkyLawTests {
             actual: fill.Color
         );
         Assert.Equal(
-            expected: SdfEnvironment.DefaultPenumbraSlope,
+            expected: SdfLighting.DefaultPenumbraSlope,
             actual: fill.Param
         );
         Assert.Equal(
@@ -468,11 +463,11 @@ public sealed class WorldRenderLightingSkyLawTests {
             actual: resolved.SkyStopCount
         );
         Assert.Equal(
-            expected: (SdfEnvironment.DefaultSkyGroundColor, -1f),
+            expected: (SdfLighting.DefaultSkyGroundColor, -1f),
             actual: resolved.GetSkyStop(index: 0)
         );
         Assert.Equal(
-            expected: (SdfEnvironment.DefaultSkyZenithColor, 1f),
+            expected: (SdfLighting.DefaultSkyZenithColor, 1f),
             actual: resolved.GetSkyStop(index: 1)
         );
     }
@@ -509,7 +504,7 @@ public sealed class WorldRenderLightingSkyLawTests {
                 RenderRaw = BaseDefaults() with {
                     Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(
                 Ink: 1f,
-                InkLow: SdfEnvironment.DefaultCurvatureInkHigh
+                InkLow: SdfLighting.DefaultCurvatureInkHigh
             )),
                 },
             })),
@@ -517,312 +512,105 @@ public sealed class WorldRenderLightingSkyLawTests {
                 RenderRaw = BaseDefaults() with {
                     Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(
                 Ink: 1f,
-                InkLow: (SdfEnvironment.DefaultCurvatureInkHigh - 1f)
+                InkLow: (SdfLighting.DefaultCurvatureInkHigh - 1f)
             )),
                 },
             }))
         );
     }
-    [Fact]
-    public void Cycle_InheritedShadowFlagsThatResolveToTwoShadowingLights_RefuseByName_ControlOneClean() {
-        // The statics shadow light 0; a key that sets light 1's flag without clearing light 0's resolves to two.
-        static WorldDefinition Cycle(bool? firstFlag) => ClockCycle(defaults: (BaseDefaults() with {
-            Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Shadows: true), new WorldRenderLight.Directional(Direction: new Vector3(
-                x: 0f,
-                y: 1f,
-                z: 0f
-            ))]),
-            Cycle = new WorldRenderCycle(
-            State: "clock",
-            Keys: [
-                new WorldRenderCycleKey(
-                    At: 0f,
-                    Lighting: new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Weight: 0.5f), new WorldRenderLight.Directional()])
-                ),
-                new WorldRenderCycleKey(
-                    At: 0.5f,
-                    Lighting: new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Shadows: firstFlag), new WorldRenderLight.Directional(Shadows: true)])
-                ),
-            ]
-        ),
-        }));
+    private static WorldSectionKey SectionKey(double at, string fields) => new(at) {
+        Values = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(fields)!,
+    };
+    private static WorldRenderLighting NamedLighting() => new([
+        new WorldRenderLight.Directional(Shadows: true) { Name = "sun" },
+        new WorldRenderLight.Hemisphere() { Name = "fill" },
+    ]);
 
-        Laws.RefusalWithControl(
-            lawId: "render.cycle.resolved-shadow-lights",
-            deniedOutcome: static () => TryValidateLocal(definition: Cycle(firstFlag: null)),
-            controlOutcome: static () => TryValidateLocal(definition: Cycle(firstFlag: false))
-        );
+    [Theory]
+    [InlineData("{\"lights\":{\"sun\":{\"shadows\":false}}}", "shadows")]
+    [InlineData("{\"lights\":{\"sun\":{\"$type\":\"rim\"}}}", "$type")]
+    [InlineData("{\"lights\":{\"extra\":{\"weight\":1}}}", "extra")]
+    public void Section_keys_cannot_change_light_topology_or_shadow_ownership(string fields, string refused) {
+        var definition = ClockCycle(BaseDefaults() with { Lighting = NamedLighting() with {
+            Keys = new WorldSectionKeys("clock", [SectionKey(0d, "{}"), SectionKey(0.5d, fields)]),
+        } });
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(definition, out var reason));
+        Assert.Contains(refused, reason);
+        var control = definition with { RenderRaw = definition.Render with { Lighting = NamedLighting() with {
+            Keys = new WorldSectionKeys("clock", [SectionKey(0d, "{}"), SectionKey(0.5d, """{"lights":{"sun":{"weight":1}}}""")]),
+        } } };
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(control, out reason), reason);
     }
-    [Fact]
-    public void Cycle_InkBandThatResolvesInverted_RefusesByName_ControlOrderedClean() {
-        // Key one lowers the high end; key two raises the low end past it while leaving the high end to inheritance.
-        static WorldDefinition Cycle(float secondLow) => ClockCycle(defaults: (BaseDefaults() with {
-            Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(
-            Ink: 1f,
-            InkLow: 6f,
-            InkHigh: 16f
-        )),
-            Cycle = new WorldRenderCycle(
-            State: "clock",
-            Keys: [
-                new WorldRenderCycleKey(
-                    At: 0f,
-                    Lighting: new WorldRenderLighting(Curvature: new WorldRenderCurvature(InkHigh: 8f))
-                ),
-                new WorldRenderCycleKey(
-                    At: 0.5f,
-                    Lighting: new WorldRenderLighting(Curvature: new WorldRenderCurvature(InkLow: secondLow))
-                ),
-            ]
-        ),
-        }));
 
-        Laws.RefusalWithControl(
-            lawId: "render.cycle.resolved-ink-band",
-            deniedOutcome: static () => TryValidateLocal(definition: Cycle(secondLow: 10f)),
-            controlOutcome: static () => TryValidateLocal(definition: Cycle(secondLow: 7f))
-        );
+    [Theory]
+    [InlineData(10f, false)]
+    [InlineData(7f, true)]
+    public void Section_ink_band_inherits_omitted_endpoints_through_the_wrap(float low, bool accepted) {
+        var definition = ClockCycle(BaseDefaults() with { Lighting = new WorldRenderLighting(
+            Curvature: new WorldRenderCurvature(Ink: 1f, InkLow: 6f, InkHigh: 16f)) {
+            Keys = new WorldSectionKeys("clock", [SectionKey(0d, """{"curvature":{"inkHigh":8}}"""),
+                SectionKey(0.5d, FormattableString.Invariant($"{{\"curvature\":{{\"inkLow\":{low}}}}}"))]),
+        } });
+        Assert.Equal(accepted, WorldDefinitionValidator.TryValidateLocally(definition, out _));
     }
-    [Fact]
-    public void Cycle_KeyMovesALightBySlot_AndBlendsTheDirectionAlongTheArc() {
-        var stateRow = new WorldStateRow(
-            Name: CellName.Parse(candidate: "clock"),
-            Kind: CellKind.Fixed,
-            Cells: [new StateCell(
-                    Key: WorldStateRow.SlotKey,
-                    Value: CellValue.Fixed(rawBits: Puck.Maths.FixedQ4816.FromDouble(value: 0.25d).Value)
-                )]
-        );
-        var defaults = BaseDefaults() with {
-            Lighting = SunAndSky(),
-            Cycle = new WorldRenderCycle(
-            State: "clock",
-            Keys: [
-                new WorldRenderCycleKey(
-                    At: 0f,
-                    Lighting: new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(
-                            Direction: new Vector3(
-                                x: 1f,
-                                y: 0f,
-                                z: 0f
-                            ),
-                            Weight: 0f
-                        ), new WorldRenderLight.Hemisphere()])
-                ),
-                new WorldRenderCycleKey(
-                    At: 0.5f,
-                    Lighting: new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(
-                            Direction: new Vector3(
-                                x: 0f,
-                                y: 1f,
-                                z: 0f
-                            ),
-                            Weight: 1f
-                        ), new WorldRenderLight.Hemisphere()])
-                ),
-            ]
-        ),
-        };
-        var resolved = Resolve(
-            defaults: defaults,
-            state: [stateRow]
-        );
-        var key = resolved.GetLight(index: 0);
 
-        // Halfway between east and straight up: the arc's midpoint, unit length, and the weight's linear midpoint.
-        Assert.Equal(
-            expected: 0.5f,
-            actual: key.Weight,
-            precision: 5
-        );
-        Assert.Equal(
-            expected: 1f,
-            actual: key.Direction.Length(),
-            precision: 4
-        );
-        Assert.Equal(
-            expected: MathF.Sqrt(x: 0.5f),
-            actual: key.Direction.X,
-            precision: 4
-        );
-        Assert.Equal(
-            expected: MathF.Sqrt(x: 0.5f),
-            actual: key.Direction.Y,
-            precision: 4
-        );
-        Assert.True(condition: key.Shadows);
-    }
     [Fact]
-    public void Cycle_KeyThatChangesTheLightListShape_RefusesByName_ControlSameShapeClean() {
-        Laws.RefusalWithControl(
-            lawId: "render.cycle.light-shape",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument().WithWorldState(rows: [new WorldStateRow(
-                    Name: CellName.Parse(candidate: "clock"),
-                    Kind: CellKind.Int,
-                    Cells: [new StateCell(
-                            Key: WorldStateRow.SlotKey,
-                            Value: CellValue.Int(value: 0L)
-                        )]
-                )]) with {
-                RenderRaw = BaseDefaults() with {
-                    Lighting = SunAndSky(),
-                    Cycle = new WorldRenderCycle(
-                State: "clock",
-                Keys: [
-                        new WorldRenderCycleKey(
-                        At: 0f,
-                        Lighting: new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Weight: 0.2f)])
-                    ),
-                        new WorldRenderCycleKey(
-                        At: 0.5f,
-                        Lighting: new WorldRenderLighting(Lights: [new WorldRenderLight.Rim(), new WorldRenderLight.Hemisphere()])
-                    ),
-                    ]
-            ),
-                },
-            })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument().WithWorldState(rows: [new WorldStateRow(
-                    Name: CellName.Parse(candidate: "clock"),
-                    Kind: CellKind.Int,
-                    Cells: [new StateCell(
-                            Key: WorldStateRow.SlotKey,
-                            Value: CellValue.Int(value: 0L)
-                        )]
-                )]) with {
-                RenderRaw = BaseDefaults() with {
-                    Lighting = SunAndSky(),
-                    Cycle = new WorldRenderCycle(
-                State: "clock",
-                Keys: [
-                        new WorldRenderCycleKey(
-                        At: 0f,
-                        Lighting: new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Weight: 0.2f), new WorldRenderLight.Hemisphere()])
-                    ),
-                        new WorldRenderCycleKey(
-                        At: 0.5f,
-                        Lighting: new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Weight: 0.9f), new WorldRenderLight.Hemisphere()])
-                    ),
-                    ]
-            ),
-                },
-            }))
-        );
+    public void A_named_light_blends_direction_on_the_arc_and_weight_linearly() {
+        var direction = new BindableDirection(new WorldKeys<BindableDirection>("clock", [new(0d, Vector3.UnitX), new(0.5d, Vector3.UnitY)]));
+        var weight = new BindableScalar(new WorldKeys<BindableScalar>("clock", [new(0d, 0f), new(0.5d, 1f)]));
+        var defaults = BaseDefaults() with { Lighting = new([new WorldRenderLight.Directional(direction, Weight: weight, Shadows: true) { Name = "sun" }]) };
+        var state = new WorldStateRow(CellName.Parse("clock"), CellKind.Fixed, Cells: [
+            new StateCell(WorldStateRow.SlotKey, CellValue.Fixed(Puck.Maths.FixedQ4816.FromDouble(0.25d).Value)),
+        ]);
+        var key = Resolve(defaults, state: [state]).GetLight(0);
+        Assert.Equal(0.5f, key.Weight, precision: 5);
+        Assert.Equal(1f, key.Direction.Length(), precision: 4);
+        Assert.Equal(MathF.Sqrt(0.5f), key.Direction.X, precision: 4);
+        Assert.Equal(MathF.Sqrt(0.5f), key.Direction.Y, precision: 4);
+        Assert.True(key.Shadows);
     }
-    [Fact]
-    public void Cycle_OverCurvatureOnlyLighting_MovesThePinnedTwoLights_AndASunDiscMayNameSlotZero() {
-        // A curvature-only section keeps the pinned sun and hemisphere, so a key moving those two slots is valid, and
-        // a sun disc bound to slot 0 names that pinned directional even with no lighting section at all.
-        Assert.True(condition: TryValidateLocal(definition: ClockCycle(defaults: (BaseDefaults() with {
-            Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(Ink: 1f)),
-            Cycle = new WorldRenderCycle(
-            State: "clock",
-            Keys: [
-                new WorldRenderCycleKey(
-                    At: 0f,
-                    Lighting: new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Weight: 0.2f), new WorldRenderLight.Hemisphere()])
-                ),
-                new WorldRenderCycleKey(
-                    At: 0.5f,
-                    Lighting: new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Weight: 0.9f), new WorldRenderLight.Hemisphere()])
-                ),
-            ]
-        ),
-        }))));
-        Assert.True(condition: TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-            RenderRaw = BaseDefaults() with {
-                Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.SunDisc(
-                Intensity: 1f,
-                Light: 0,
-                Radius: 0.05f
-            )]),
-            },
-        })));
-    }
-    [Fact]
-    public void Cycle_OverUnauthoredLighting_IsJudgedAgainstThePinnedTopology() {
-        // No static render.lighting: the keys move the pinned sun and hemisphere, so a key naming a third light is
-        // adding one, which the lane blend cannot carry (the track would silently drop it).
-        static WorldDefinition Cycle(WorldRenderLighting second) => ClockCycle(defaults: (BaseDefaults() with {
-            Cycle = new WorldRenderCycle(
-            State: "clock",
-            Keys: [
-                new WorldRenderCycleKey(
-                    At: 0f,
-                    Lighting: new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Weight: 0.2f), new WorldRenderLight.Hemisphere()])
-                ),
-                new WorldRenderCycleKey(
-                    At: 0.5f,
-                    Lighting: second
-                ),
-            ]
-        ),
-        }));
 
-        Laws.RefusalWithControl(
-            lawId: "render.cycle.pinned-light-shape",
-            deniedOutcome: static () => TryValidateLocal(definition: Cycle(second: new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Weight: 0.9f), new WorldRenderLight.Hemisphere(), new WorldRenderLight.Rim()]))),
-            controlOutcome: static () => TryValidateLocal(definition: Cycle(second: new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Weight: 0.9f), new WorldRenderLight.Hemisphere()])))
-        );
-    }
     [Fact]
-    public void Cycle_SparseStopsThatResolveOutOfOrder_RefuseByName_ControlOrderedClean() {
-        // Each key alone is ascending; only the inherited resolution [0.9, 0.8, 1] is not.
-        static WorldDefinition Cycle(float firstStopAtSecondKey) => ClockCycle(defaults: (BaseDefaults() with {
-            Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [
-                new WorldRenderSkyStop(
-                    Elevation: -1f,
-                    Color: new BindableColor(Raw: "#0B0D14")
-                ),
-                new WorldRenderSkyStop(
-                    Elevation: 0f,
-                    Color: new BindableColor(Raw: "#1B2350")
-                ),
-                new WorldRenderSkyStop(
-                    Elevation: 1f,
-                    Color: new BindableColor(Raw: "#2B3360")
-                ),
-            ])]),
-            Cycle = new WorldRenderCycle(
-            State: "clock",
-            Keys: [
-                new WorldRenderCycleKey(
-                    At: 0f,
-                    Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [new WorldRenderSkyStop(), new WorldRenderSkyStop(Elevation: 0.8f), new WorldRenderSkyStop()])])
-                ),
-                new WorldRenderCycleKey(
-                    At: 0.5f,
-                    Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [new WorldRenderSkyStop(Elevation: firstStopAtSecondKey), new WorldRenderSkyStop(), new WorldRenderSkyStop()])])
-                ),
-            ]
-        ),
-        }));
+    public void Curvature_only_lighting_keeps_the_pinned_lights_and_a_disc_can_name_the_pinned_sun() {
+        var definition = ClockCycle(BaseDefaults() with {
+            Lighting = new(Curvature: new(Ink: 1f)),
+            Sky = new([new WorldRenderSkyLayer.SunDisc(Light: 0, Radius: 0.05f, Intensity: 1f)]),
+        });
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var reason), reason);
+        var resolved = Resolve(definition.Render);
+        Assert.Equal(2, resolved.LightCount);
+        Assert.Equal(SdfLightKind.Directional, resolved.GetLight(0).Kind);
+        Assert.Equal(0, resolved.SunDiscLightIndex);
+    }
 
-        Laws.RefusalWithControl(
-            lawId: "render.cycle.resolved-stops-ascending",
-            deniedOutcome: static () => TryValidateLocal(definition: Cycle(firstStopAtSecondKey: 0.9f)),
-            controlOutcome: static () => TryValidateLocal(definition: Cycle(firstStopAtSecondKey: -0.9f))
-        );
-    }
     [Fact]
-    public void Cycle_StopsValidOnlyThroughTheWrap_Validate() {
-        // Key A moves stop 0 to 0.9 and key B stop 1 to 0.95: on the first pass A holds [0.9, 0, 1], which is not what
-        // A renders — A inherits B's 0.95 through the wrap and renders [0.9, 0.95, 1]. The retained pass is judged.
-        Assert.True(condition: TryValidateLocal(definition: ClockCycle(defaults: (BaseDefaults() with {
-            Sky = ThreeStopSky(),
-            Cycle = new WorldRenderCycle(
-            State: "clock",
-            Keys: [
-                new WorldRenderCycleKey(
-                    At: 0f,
-                    Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [new WorldRenderSkyStop(Elevation: 0.9f), new WorldRenderSkyStop(), new WorldRenderSkyStop()])])
-                ),
-                new WorldRenderCycleKey(
-                    At: 0.5f,
-                    Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [new WorldRenderSkyStop(), new WorldRenderSkyStop(Elevation: 0.95f), new WorldRenderSkyStop()])])
-                ),
-            ]
-        ),
-        }))));
+    public void Section_keys_require_an_authored_named_light_instead_of_implicitly_addressing_a_pinned_slot() {
+        var definition = ClockCycle(BaseDefaults() with { Lighting = new WorldRenderLighting {
+            Keys = new WorldSectionKeys("clock", [SectionKey(0d, "{}"), SectionKey(0.5d, """{"lights":{"sun":{"weight":1}}}""")]),
+        } });
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(definition, out var reason));
+        Assert.Contains("lights", reason);
+    }
+
+    [Fact]
+    public void Named_gradient_stops_carry_omitted_elevations_through_the_wrap() {
+        var definition = ClockCycle(BaseDefaults() with { Sky = new WorldRenderSky([
+            new WorldRenderSkyLayer.Gradient([
+                new WorldRenderSkyStop(-1f, new BindableColor("#000000")) { Name = "lower" },
+                new WorldRenderSkyStop(0f, new BindableColor("#777777")) { Name = "middle" },
+                new WorldRenderSkyStop(1f, new BindableColor("#FFFFFF")) { Name = "upper" },
+            ]) { Name = "gradient" },
+        ]) {
+            Keys = new WorldSectionKeys("clock", [
+                SectionKey(0d, """{"layers":{"gradient":{"stops":{"lower":{"elevation":0.9}}}}}"""),
+                SectionKey(0.5d, """{"layers":{"gradient":{"stops":{"middle":{"elevation":0.95}}}}}"""),
+            ]),
+        } });
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var reason), reason);
+        var resolved = new WorldEnvironmentResolve().Resolve(definition, 0, ClientFixtures.StateMirror(definition));
+        Assert.Equal(0.9f, resolved.GetSkyStop(0).Elevation);
+        Assert.Equal(0.95f, resolved.GetSkyStop(1).Elevation);
+        Assert.Equal(1f, resolved.GetSkyStop(2).Elevation);
     }
     [Fact]
     public void DirectionalDirection_Zero_RefusesByName_ControlNonzeroClean() {
@@ -977,27 +765,10 @@ public sealed class WorldRenderLightingSkyLawTests {
             actual: fifth.Weight
         );
 
-        // The packed lane table (what the engine uploads, row for row) must carry the fifth light's direction and
-        // weight too — not only what GetLight's own row math reads back.
-        var lanes = resolved.Lanes;
-        var row = (SdfEnvironment.LightsRow + (4 * SdfEnvironment.RowsPerLight));
-
-        Assert.Equal(
-            expected: 0f,
-            actual: lanes[((row * 4) + 0)]
-        );
-        Assert.Equal(
-            expected: 0f,
-            actual: lanes[((row * 4) + 1)]
-        );
-        Assert.Equal(
-            expected: 1f,
-            actual: lanes[((row * 4) + 2)]
-        );
-        Assert.Equal(
-            expected: 0.9f,
-            actual: lanes[((row * 4) + 3)]
-        );
+        var upload = new Puck.SdfVm.SdfLightingUpload();
+        upload.Pack(resolved);
+        Assert.Equal(new Vector3(0f, 0f, 1f), upload.Lights[4].Direction);
+        Assert.Equal(0.9f, upload.Lights[4].Weight);
     }
     [Fact]
     public void LightColor_MalformedHex_RefusesByName_ControlWellFormedClean() {
@@ -1044,7 +815,7 @@ public sealed class WorldRenderLightingSkyLawTests {
             )
         ]),
         };
-        var track = new WorldRenderCycleTrack();
+        var track = new WorldEnvironmentResolve();
         var missing = Resolve(
             defaults,
             track: track
@@ -1172,35 +943,12 @@ public sealed class WorldRenderLightingSkyLawTests {
         );
     }
     [Fact]
-    public void PointLightWithCycleIsAdmitted() {
-        var definition = ClockCycle(defaults: BaseDefaults() with {
-            Lighting = new(Lights: [new WorldRenderLight.Point()]),
-            Cycle = new(
-            "clock",
-            [
-                new(
-                    0f,
-                    Lighting: new(Lights: [new WorldRenderLight.Point(Position: new Vector3(
-                            x: 10f,
-                            y: 2f,
-                            z: 3f
-                        ))])
-                ),
-                new(
-                    0.5f,
-                    Lighting: new(Lights: [new WorldRenderLight.Point(Position: new Vector3(
-                            x: 20f,
-                            y: 4f,
-                            z: 6f
-                        ))])
-                )
-            ]
-        ),
-        });
-
-        Assert.True(condition: TryValidateLocal(definition: definition));
-    }
-    [Fact]
+    public void A_point_light_with_keyed_position_is_admitted() {
+        var position = new BindableVector3(new WorldKeys<BindableVector3>("clock", [
+            new(0d, new Vector3(10f, 2f, 3f)), new(0.5d, new Vector3(20f, 4f, 6f)),
+        ]));
+        Assert.True(TryValidateLocal(ClockCycle(BaseDefaults() with { Lighting = new([new WorldRenderLight.Point(Position: position)]) })));
+    }    [Fact]
     public void PointLight_AnchorWithNoResolver_ResolvesToMinusOne() {
         var resolved = Resolve(defaults: BaseDefaults() with {
             Lighting = new WorldRenderLighting(Lights: [
@@ -1220,63 +968,17 @@ public sealed class WorldRenderLightingSkyLawTests {
     [InlineData(SdfLightKind.Occluder)]
     [Theory]
     public void PositionKindsInterpolateLinearlyWithoutNormalization(SdfLightKind kind) {
-        var from = new SdfEnvironment { LightCount = 1 };
-        var to = new SdfEnvironment { LightCount = 1 };
-        var result = new SdfEnvironment();
-
-        from.SetLight(
-            index: 0,
-            light: new(
-                kind,
-                new(
-                    x: 10f,
-                    y: 20f,
-                    z: 30f
-                ),
-                Vector3.One,
-                0.2f,
-                1f,
-                false
-            )
-        );
-        to.SetLight(
-            index: 0,
-            light: new(
-                kind,
-                new(
-                    x: 30f,
-                    y: 40f,
-                    z: 50f
-                ),
-                Vector3.One,
-                0.8f,
-                3f,
-                false
-            )
-        );
-        var blended = new float[SdfEnvironment.LaneCount];
-
-        SdfEnvironment.Blend(
-            from.Lanes,
-            to.Lanes,
-            0.5f,
-            blended
-        );
-        result.CopyFrom(lanes: blended);
-        Assert.Equal(
-            new Vector3(
-                x: 20f,
-                y: 30f,
-                z: 40f
-            ),
-            result.GetLight(index: 0).Direction
-        );
-        Assert.Equal(
-            2f,
-            result.GetLight(index: 0).Param
-        );
-    }
-    [Fact]
+        var position = new BindableVector3(new WorldKeys<BindableVector3>("clock", [new(0d, new Vector3(10f, 20f, 30f)), new(0.5d, new Vector3(30f, 40f, 50f))]));
+        var radius = new BindableScalar(new WorldKeys<BindableScalar>("clock", [new(0d, 1f), new(0.5d, 3f)]));
+        WorldRenderLight light = kind == SdfLightKind.Point ? new WorldRenderLight.Point(Position: position, Radius: radius)
+            : new WorldRenderLight.Occluder(Position: position, Radius: radius);
+        var state = new WorldStateRow(CellName.Parse("clock"), CellKind.Fixed, Cells: [
+            new StateCell(WorldStateRow.SlotKey, CellValue.Fixed(Puck.Maths.FixedQ4816.FromDouble(0.25d).Value)),
+        ]);
+        var result = Resolve(BaseDefaults() with { Lighting = new([light]) }, state: [state]);
+        Assert.Equal(new Vector3(20f, 30f, 40f), result.GetLight(0).Direction);
+        Assert.Equal(2f, result.GetLight(0).Param);
+    }    [Fact]
     public void SkyFogDensity_Negative_RefusesByName_ControlNonNegativeClean() {
         Laws.RefusalWithControl(
             lawId: "render.sky.fog-density-negative",
@@ -1424,15 +1126,15 @@ public sealed class WorldRenderLightingSkyLawTests {
             actual: resolved.CurvatureInk
         );
         Assert.Equal(
-            expected: SdfEnvironment.DefaultCurvatureInkLow,
+            expected: SdfLighting.DefaultCurvatureInkLow,
             actual: resolved.CurvatureInkLow
         );
         Assert.Equal(
-            expected: SdfEnvironment.DefaultCurvatureInkHigh,
+            expected: SdfLighting.DefaultCurvatureInkHigh,
             actual: resolved.CurvatureInkHigh
         );
         Assert.Equal(
-            expected: SdfEnvironment.DefaultCurvatureInkColor,
+            expected: SdfLighting.DefaultCurvatureInkColor,
             actual: resolved.CurvatureInkColor
         );
     }
@@ -1477,7 +1179,7 @@ public sealed class WorldRenderLightingSkyLawTests {
     }
     [Fact]
     public void SunColor_BoundToStateTextCell_ResolvesToTheCell_AndFollowsItsRowWithoutARevisionMove() {
-        var track = new WorldRenderCycleTrack();
+        var track = new WorldEnvironmentResolve();
         var lighting = SunAndSky(sunColor: new BindableColor(Raw: "state.colors.sun"));
         var definition = (Fixtures.BuildDocument().WithWorldState(rows: [ColorsRow(hex: "#FFD9A6")]) with { RenderRaw = BaseDefaults() with { Lighting = lighting } });
         var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));

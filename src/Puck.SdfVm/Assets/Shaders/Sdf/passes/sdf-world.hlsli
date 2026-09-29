@@ -13,6 +13,7 @@
 #include "../frame/sdf-work.hlsli"
 #include "../frame/sdf-frame.hlsli"
 #include "../shade/sdf-environment.hlsli"
+#include "../frame/sdf-lights.hlsli"
 #include "../shade/sdf-lighting.hlsli"
 #include "../march/sdf-march-constants.hlsli"
 #include "../surface/sdf-normals.hlsli"

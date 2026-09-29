@@ -34,7 +34,14 @@ steady frames. The fake records descriptor writes while `Recording` is on.
 overwrite, each refusal by name, one storage per chain, and a node that records
 exactly the barriers the plan gives each access.
 `ShaderInterfaceLawTests` pin the pass interface's layout, document and
-generated include. `ShaderInterfaceSpikeTests` build the variant passes under
+generated include. `ShaderInterfaceStructureLawTests` derive record fields from
+native C# layouts, verify generated padding and two-element echo sentinels,
+reject a stale same-stride field reorder, and compile the record on both
+backends to check its reflected stride and identity.
+`SdfWorldPackageInitializationLawTests` first reads each public declaration in
+a separate assembly context, so test order cannot hide an incomplete native or
+temporal pass interface caused by static initialization.
+`ShaderInterfaceSpikeTests` build the variant passes under
 `Assets/Interfaces/` with DXC. They hold the SPIR-V and DXIL readers to the
 interface's layout and require byte-identical output from two builds.
 `-showLiveOutput` prints each build's content pins for comparison with another

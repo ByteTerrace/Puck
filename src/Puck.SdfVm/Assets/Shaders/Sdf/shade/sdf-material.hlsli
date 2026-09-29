@@ -129,13 +129,13 @@ float3 sdfMaterialSpecular(SdfMaterialData material, float3 normal, float3 viewD
 // The ONE lit-surface shade funnel: a metal-scaled lambert term, sdfMaterialSpecular's GGX + clearcoat lobe for the
 // caller's own light direction, an emissive lift, and a fresnel sheen edge-lift. `diffuse` is the caller's
 // accumulated radiance (ambient + the sun + any colored screen/point lights — a float3 so colored lights tint the
-// surface); `lightScale` scales the GGX/coat lobes by the caller's shadow/light attenuation. KEEP IN SYNC across
+// surface). KEEP IN SYNC across
 // every caller (shade/sdf-light-stage.hlsli).
-float3 sdfMaterialShade(SdfMaterialData material, float3 diffuse, float3 normal, float3 rayDirection, float3 lightDirection, float lightScale) {
+float3 sdfMaterialShade(SdfMaterialData material, float3 diffuse, float3 normal, float3 rayDirection, float3 lightDirection) {
     float3 diffuseAlbedo = (material.albedo * (1.0 - material.metal));
     float3 color = (diffuseAlbedo * diffuse);
 
-    color += sdfMaterialSpecular(material, normal, -rayDirection, lightDirection, lightScale);
+    color += sdfMaterialSpecular(material, normal, -rayDirection, lightDirection, 1.0);
 
     if (material.emissive > 0.0) {
         color += (material.albedo * material.emissive);

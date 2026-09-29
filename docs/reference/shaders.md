@@ -922,10 +922,33 @@ DXIL's structured stride for one is its 12 bytes, while SPIR-V's buffer layout
 may pad it to 16, so the two backends would disagree on where each element
 starts.
 
+An engine-owned record uses `ShaderInterfaceStructure.From<T>()` and the
+buffer member's `structure` argument. The unmanaged C# record's public fields
+define its names, types, offsets and stride. Fields are `float`, `int`, `uint`
+or floating-point vectors. Each field must meet the shared 4-, 8- or 16-byte
+alignment, and the record's size must include its trailing alignment. This
+allows a `Vector3` followed by a scalar in one 16-byte row. The generator emits
+the struct and any explicit gaps; it does not maintain a second field list.
+Nested records and arrays within records are not admitted.
+
+The reflected buffer name carries the record layout's content identity. A
+same-sized field reorder therefore refuses stale bytecode even though its
+stride has not changed. HLSL reads the buffer through its ordinary member name;
+the generated include supplies the alias.
+Record fields may not share a name with a generated resource or stamped-block
+alias; admission names the colliding field before the shader preprocessor can
+rename its access.
+
+The shared interface echo reads two consecutive native records, checking both
+field offsets and the element stride. `WriteRecordSentinels` prepares those
+records and zeroes padding. Its distinct normal-float sentinels support records
+up to 8192 bytes and bindings below 256; a larger echo refuses by resource name
+instead of reusing sentinel identities.
+
 Each buffer binding carries the element stride its bytecode reflects
 (`ShaderInterfaceBinding.ElementStride`; every other binding carries 0). A
 structured buffer's stride is its element's size on both backends: 4, 8 or 16
-bytes. A raw buffer's stride is what each backend reports for a byte-address
+bytes for a primitive, or the native record's declared size. A raw buffer's stride is what each backend reports for a byte-address
 buffer: SPIR-V declares one as a runtime array of `uint` whose `ArrayStride` is
 4 (`ShaderInterfaceLayout.SpirvRawBufferStride`), and DXIL's reflection reports
 a `NumSamples` of 0 (`ShaderInterfaceLayout.DxilRawBufferStride`), the zero

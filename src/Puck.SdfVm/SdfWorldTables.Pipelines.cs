@@ -28,9 +28,8 @@ public sealed partial class SdfWorldTables {
     // Resolve joins the same reloadable slot table only when a view needs it.
     internal SdfWorldPipelines Pipelines => m_pipelines;
 
-    // Whether a view's passes built against these tables can follow the other tables: the beam covers the common
-    // compute layouts, mesh keeps its graphics layout and render pass, and an acquired resolve requires a ready
-    // resolve with compatible groups in the destination.
+    // Whether a view's passes can follow the other tables: compares the common, sky, shadow and views compute layouts,
+    // the mesh layout and render pass, and any acquired resolve's groups against the destination's ready pipeline.
     internal bool SharesLayoutsWith(SdfWorldTables other) =>
         (
             ReferenceEquals(
@@ -39,6 +38,9 @@ public sealed partial class SdfWorldTables {
             ) ||
             (
                 Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles.SequenceEqual(second: other.Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles) &&
+                Pipeline(kernel: SdfKernel.Sky).GroupLayoutHandles.SequenceEqual(second: other.Pipeline(kernel: SdfKernel.Sky).GroupLayoutHandles) &&
+                Pipeline(kernel: SdfKernel.Shadow).GroupLayoutHandles.SequenceEqual(second: other.Pipeline(kernel: SdfKernel.Shadow).GroupLayoutHandles) &&
+                Pipeline(kernel: SdfKernel.Views).GroupLayoutHandles.SequenceEqual(second: other.Pipeline(kernel: SdfKernel.Views).GroupLayoutHandles) &&
                 m_meshPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_meshPipeline.GroupLayoutHandles) &&
                 ((m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is not { } resolve) ||
                     ((other.m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is { } otherResolve) &&
@@ -91,7 +93,7 @@ public sealed partial class SdfWorldTables {
     // The pipeline descriptions every residency shares. A nested holder, so its initializers run after the tables' own
     // statics, whatever order the partial files are compiled in.
     internal static class PipelineLayouts {
-        // The native per-view pipelines share the sdf-world groups; the baker uses sdf-bricks. Optional resolve uses
+        // Native kernels select the common, sky, shadow or views layout. The baker uses sdf-bricks; optional resolve has
         // its own pass group. Mesh draws through sdf-mesh, with one set per frame slot and the view and draw pushed.
         internal static readonly GpuPipelineLayoutDescription World = SdfWorldInterfaces.WorldLayout.PipelineLayout(stages: GpuShaderStage.Compute);
         internal static readonly GpuPipelineLayoutDescription Mesh = SdfWorldInterfaces.MeshLayout.PipelineLayout(stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment);

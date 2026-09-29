@@ -52,6 +52,11 @@
               "null"
             ],
             "default": null
+          },
+          "phase": {
+            "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+            "description": "A phase curve keyed on another clock. Refused beside a period or state source.",
+            "default": null
           }
         },
         "required": [

@@ -11,7 +11,8 @@ namespace Puck.Shaders;
 /// <c>[[vk::binding(b, set)]]</c> paired with <c>register(xb, spaceset)</c>, and an arrayed image or sampler declares its
 /// length. Values reach a pass as members of a named struct per group, and an array is read through a generated
 /// accessor that hides how its elements are stored. A buffer with an element type is a <c>StructuredBuffer&lt;T&gt;</c> or
-/// <c>RWStructuredBuffer&lt;T&gt;</c>, and one without is a <c>ByteAddressBuffer</c> or <c>RWByteAddressBuffer</c>. A
+/// <c>RWStructuredBuffer&lt;T&gt;</c>; a native record element generates its struct from the C# layout, including padding.
+/// A buffer without an element is a <c>ByteAddressBuffer</c> or <c>RWByteAddressBuffer</c>. A
 /// pushed index (<see cref="ShaderInterface.PushesIndex"/>) follows the groups as a one-member struct carrying
 /// <c>[[vk::push_constant]]</c> paired with <c>register(b0, space4)</c>, the space
 /// <see cref="GpuPipelineLayoutDescription.PushIndexSpace"/> names. An interface declaring the work counters
@@ -56,6 +57,20 @@ public static class ShaderInterfaceHlsl {
             line: $"#define {guard}",
             text: text
         );
+
+        foreach (var structure in shaderInterface.Members.Select(selector: static member => member.Structure)
+            .OfType<ShaderInterfaceStructure>().DistinctBy(keySelector: static structure => structure.Name)) {
+            Line(text: text, line: "");
+            Line(text: text, line: $"struct {structure.Name} {{");
+            var cursor = 0u;
+            foreach (var member in structure.Members) {
+                PadStructure(text: text, cursor: ref cursor, end: member.Offset);
+                Line(text: text, line: $"    [[vk::offset({Number(value: member.Offset)})]] {member.Type.Spelling()} {member.Name};");
+                cursor = member.Offset + member.Type.SizeBytes();
+            }
+            PadStructure(text: text, cursor: ref cursor, end: structure.SizeBytes);
+            Line(text: text, line: "};");
+        }
 
         foreach (var group in layout.Groups) {
             Line(
@@ -111,6 +126,9 @@ public static class ShaderInterfaceHlsl {
                     ),
                     text: text
                 );
+                if (resource.Member.Structure is not null) {
+                    Line(text: text, line: $"#define {resource.Member.Name} {resource.Member.ResourceName}");
+                }
             }
         }
 
@@ -185,18 +203,25 @@ public static class ShaderInterfaceHlsl {
 
     private static string Binding(uint binding, uint set) =>
         $"[[vk::binding({Number(value: binding)}, {Number(value: set)})]]";
+    private static void PadStructure(StringBuilder text, ref uint cursor, uint end) {
+        for (; cursor < end; cursor += ShaderValueTypes.ComponentBytes) {
+            Line(text: text, line: $"    [[vk::offset({Number(value: cursor)})]] uint _pad{Number(value: cursor)};");
+        }
+    }
     private static string Declaration(ShaderInterfaceResourceLayout resource, uint set) {
         var member = resource.Member;
+        var element = member.Structure?.Name ?? member.Type?.Spelling();
+        var name = member.ResourceName;
 
         var (register, declaration) = resource.Kind switch {
             GpuBindingKind.SampledImage => ('t', $"Texture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
             GpuBindingKind.StorageImage => ('u', $"[[vk::image_format(\"{ShaderInterface.StorageFormatSpelling(format: member.Format!.Value)}\")]] RWTexture2D<{member.Type!.Value.Spelling()}> {member.Name}"),
-            GpuBindingKind.ReadOnlyBuffer => ('t', ((member.Type is { } element)
-                ? $"StructuredBuffer<{element.Spelling()}> {member.Name}"
-                : $"ByteAddressBuffer {member.Name}")),
-            GpuBindingKind.ReadWriteBuffer => ('u', ((member.Type is { } element)
-                ? $"RWStructuredBuffer<{element.Spelling()}> {member.Name}"
-                : $"RWByteAddressBuffer {member.Name}")),
+            GpuBindingKind.ReadOnlyBuffer => ('t', ((element is not null)
+                ? $"StructuredBuffer<{element}> {name}"
+                : $"ByteAddressBuffer {name}")),
+            GpuBindingKind.ReadWriteBuffer => ('u', ((element is not null)
+                ? $"RWStructuredBuffer<{element}> {name}"
+                : $"RWByteAddressBuffer {name}")),
             GpuBindingKind.Sampler => ('s', $"SamplerState {member.Name}"),
             _ => throw new ArgumentOutOfRangeException(
                 actualValue: resource.Kind,

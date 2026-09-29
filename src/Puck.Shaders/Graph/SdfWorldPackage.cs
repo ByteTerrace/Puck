@@ -6,8 +6,9 @@ namespace Puck.Shaders;
 /// <summary>
 /// The <see cref="RenderGraphPackageCatalog.SdfWorld"/> package's declaration: the values and resources every one of its
 /// kernels reads from its pass group, the layout facts its storages are sized by, and the fragment it runs as.
-/// <para>Every compute pass of the fragment reads one interface, <see cref="Members"/>, whose pass block holds the
-/// extent and the world values in ordinal name order and whose resources follow. A buffer one pass writes and a later
+/// <para>Every compute pass shares the values in <see cref="Members"/>, whose pass block holds the
+/// extent and the world values in ordinal name order. Sky, shadow and shading add their typed lighting resources.
+/// A buffer one pass writes and a later
 /// pass reads is two members over the one buffer: a read-write member named with an <c>RW</c> suffix for its writer, and a
 /// read-only member for its readers.</para>
 /// <para>The fragment (<see cref="Fragment"/>) is one view: the sky, the instance masks, the beam, the cull arguments, the
@@ -61,10 +62,8 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value holding the debug view mode, an index into the debug view names; zero renders the
     /// final image (<c>uint</c>).</summary>
     public const string DebugMode = "debugMode";
-    /// <summary>The pass-group value scaling the lit path's ambient terms (<c>float</c>).</summary>
-    public const string AmbientScale = "ambientScale";
-    /// <summary>The pass-group value scaling the lit path's sun term (<c>float</c>).</summary>
-    public const string SunScale = "sunScale";
+    /// <summary>The surface pass needs a curvature probe when this value is one.</summary>
+    public const string CurvatureEnabled = "curvatureEnabled";
     /// <summary>The pass-group value selecting the slice debug view's plane: zero camera-locked, one to three the world
     /// X, Y or Z axis (<c>float</c>).</summary>
     public const string DebugSliceAxis = "debugSliceAxis";
@@ -127,12 +126,6 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value set to one to march past the beam's per-tile far bound to the far distance
     /// (<c>uint</c>).</summary>
     public const string DisableFarBound = "disableFarBound";
-    /// <summary>The pass-group block array holding the frame's environment, <c>SdfEnvironment</c>'s lane table row for row
-    /// with its host bakes, <see cref="EnvironmentRows"/> <c>float4</c> rows.</summary>
-    public const string Environment = "environment";
-    /// <summary>The rows of <see cref="Environment"/>: <c>SdfEnvironment.RowCount</c>, which the SDF engine holds it to
-    /// when it writes the block.</summary>
-    public const uint EnvironmentRows = 53;
     /// <summary>The program word stream.</summary>
     public const string ProgramWords = "sdfWords";
     /// <summary>The dynamic-transform table, three float4 rows per slot.</summary>
@@ -274,8 +267,7 @@ public static partial class SdfWorldPackage {
         Value(name: NearDistance, type: ShaderValueType.Float),
         Value(name: FarDistance, type: ShaderValueType.Float),
         Value(name: DebugMode, type: ShaderValueType.Uint),
-        Value(name: AmbientScale, type: ShaderValueType.Float),
-        Value(name: SunScale, type: ShaderValueType.Float),
+        Value(name: CurvatureEnabled, type: ShaderValueType.Uint),
         Value(name: DebugSliceAxis, type: ShaderValueType.Float),
         Value(name: DebugSliceOffset, type: ShaderValueType.Float),
         Value(name: GridFlags, type: ShaderValueType.Uint),
@@ -300,12 +292,6 @@ public static partial class SdfWorldPackage {
         Value(name: FastAmbientOcclusion, type: ShaderValueType.Uint),
         Value(name: DisableFarBound, type: ShaderValueType.Uint),
         ShaderWorkCounters.RowMember,
-        ShaderInterfaceMember.Value(
-            group: ShaderInterfaceGroup.Pass,
-            length: EnvironmentRows,
-            name: Environment,
-            type: ShaderValueType.Float4
-        ),
     ];
     /// <summary>Gets the World group's members: what every pass of every view reads alike, the residency's tables, the
     /// brick pool, the glyph atlas, the samplers and the mesh atlases (<see cref="MeshAtlases"/>), which the residency
@@ -374,63 +360,68 @@ public static partial class SdfWorldPackage {
     /// one output the view's color. Every pass counts its kernels' march steps and texels written into the work counters
     /// (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>): the mesh pass each fragment it writes to its
     /// target.</summary>
-    public static RenderGraphPackageFragment NativeFragment { get; } = new(
-        InputVersions: [],
-        OutputVersions: [Color],
-        Passes: [
-            Pass(name: Parts.Sky, outputs: [Parts.SkyImage]),
-            Pass(name: Parts.Mask, outputs: [Parts.InstanceMasks]),
-            Pass(inputs: [Parts.InstanceMasks], name: Parts.Beam, outputs: [Parts.Tiles]),
-            Pass(inputs: [Parts.Tiles], name: Parts.CullArgs, outputs: [Parts.Arguments, Parts.CullBounds]),
-            new RenderGraphFragmentPass(
-                CountsKernelWork: true,
-                InputAccesses: [],
-                Inputs: [],
-                Name: Parts.Mesh,
-                OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
-                Outputs: [Parts.MeshTarget, Parts.MeshDepth]
-            ),
-            Hit(mesh: true, name: Parts.Primary, visibility: null, written: Parts.Visibility),
-            Hit(mesh: false, name: Parts.Surface, visibility: null, written: Parts.SurfaceVisibility),
-            Hit(mesh: false, name: Parts.Ambient, visibility: null, written: Parts.AmbientVisibility),
-            Hit(mesh: false, name: Parts.Shadow, visibility: null, written: Parts.ShadowVisibility),
-            Hit(mesh: false, name: Parts.Views, visibility: Parts.ShadowVisibility, written: Color),
-        ],
-        Resources: [
-            Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.SkyImage, transient: false),
-            Image(format: RenderGraphPackageCatalog.WorkingFormat, from: Parts.SkyImage, name: Color, transient: false),
-            Buffer(
-                count: [Term(1, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.InstanceMaskWords)],
-                name: Parts.InstanceMasks,
-                sizeBytes: null,
-                strideBytes: sizeof(uint)
-            ),
-            Buffer(
-                count: [
-                    Term(TilePlaneCount, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles),
-                    Term(PartBoundFloatCount, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Instances),
-                ],
-                name: Parts.Tiles,
-                sizeBytes: null,
-                strideBytes: sizeof(float)
-            ),
-            Buffer(count: null, name: Parts.Arguments, sizeBytes: ShaderPipelineDispatch.ArgumentBytes, strideBytes: sizeof(uint)),
-            Buffer(count: null, name: Parts.CullBounds, sizeBytes: CullBoundsByteLength, strideBytes: sizeof(uint)),
-            Image(format: MeshTargetFormat, from: null, name: Parts.MeshTarget, transient: true),
-            new ShaderPipelineResource(
-                Dimensions: ShaderPipelineDimensions.Relative(),
-                Format: MeshDepthFormat.ToString(),
-                ClearDepth: MeshClearDepth,
-                Kind: ShaderPipelineResourceKind.Depth,
-                Name: Parts.MeshDepth,
-                Transient: true
-            ),
-            Visibility(from: null, name: Parts.Visibility),
-            Visibility(from: Parts.Visibility, name: Parts.SurfaceVisibility),
-            Visibility(from: Parts.SurfaceVisibility, name: Parts.AmbientVisibility),
-            Visibility(from: Parts.AmbientVisibility, name: Parts.ShadowVisibility),
-        ]
-    );
+    public static RenderGraphPackageFragment NativeFragment => NativeDeclaration.Value;
+
+    // Fragment passes depend on the derived lighting interfaces, never the common members' type initializer.
+    private static class NativeDeclaration {
+        internal static readonly RenderGraphPackageFragment Value = new(
+            InputVersions: [],
+            OutputVersions: [Color],
+            Passes: [
+                Pass(name: Parts.Sky, outputs: [Parts.SkyImage]),
+                Pass(name: Parts.Mask, outputs: [Parts.InstanceMasks]),
+                Pass(inputs: [Parts.InstanceMasks], name: Parts.Beam, outputs: [Parts.Tiles]),
+                Pass(inputs: [Parts.Tiles], name: Parts.CullArgs, outputs: [Parts.Arguments, Parts.CullBounds]),
+                new RenderGraphFragmentPass(
+                    CountsKernelWork: true,
+                    InputAccesses: [],
+                    Inputs: [],
+                    Name: Parts.Mesh,
+                    OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
+                    Outputs: [Parts.MeshTarget, Parts.MeshDepth]
+                ),
+                Hit(mesh: true, name: Parts.Primary, visibility: null, written: Parts.Visibility),
+                Hit(mesh: false, name: Parts.Surface, visibility: null, written: Parts.SurfaceVisibility),
+                Hit(mesh: false, name: Parts.Ambient, visibility: null, written: Parts.AmbientVisibility),
+                Hit(mesh: false, name: Parts.Shadow, visibility: null, written: Parts.ShadowVisibility),
+                Hit(mesh: false, name: Parts.Views, visibility: Parts.ShadowVisibility, written: Color),
+            ],
+            Resources: [
+                Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.SkyImage, transient: false),
+                Image(format: RenderGraphPackageCatalog.WorkingFormat, from: Parts.SkyImage, name: Color, transient: false),
+                Buffer(
+                    count: [Term(1, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.InstanceMaskWords)],
+                    name: Parts.InstanceMasks,
+                    sizeBytes: null,
+                    strideBytes: sizeof(uint)
+                ),
+                Buffer(
+                    count: [
+                        Term(TilePlaneCount, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles),
+                        Term(PartBoundFloatCount, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Instances),
+                    ],
+                    name: Parts.Tiles,
+                    sizeBytes: null,
+                    strideBytes: sizeof(float)
+                ),
+                Buffer(count: null, name: Parts.Arguments, sizeBytes: ShaderPipelineDispatch.ArgumentBytes, strideBytes: sizeof(uint)),
+                Buffer(count: null, name: Parts.CullBounds, sizeBytes: CullBoundsByteLength, strideBytes: sizeof(uint)),
+                Image(format: MeshTargetFormat, from: null, name: Parts.MeshTarget, transient: true),
+                new ShaderPipelineResource(
+                    Dimensions: ShaderPipelineDimensions.Relative(),
+                    Format: MeshDepthFormat.ToString(),
+                    ClearDepth: MeshClearDepth,
+                    Kind: ShaderPipelineResourceKind.Depth,
+                    Name: Parts.MeshDepth,
+                    Transient: true
+                ),
+                Visibility(from: null, name: Parts.Visibility),
+                Visibility(from: Parts.Visibility, name: Parts.SurfaceVisibility),
+                Visibility(from: Parts.SurfaceVisibility, name: Parts.AmbientVisibility),
+                Visibility(from: Parts.AmbientVisibility, name: Parts.ShadowVisibility),
+            ]
+        );
+    }
 
     private static ShaderInterfaceMember Read(string name, ShaderValueType element) => ShaderInterfaceMember.ReadOnlyBuffer(
         element: element,
@@ -490,6 +481,7 @@ public static partial class SdfWorldPackage {
     // A compute pass, whose kernel counts its own work as every pass of the fragment does.
     private static RenderGraphFragmentPass Pass(string name, string[] outputs, string[]? inputs = null) => new(
         CountsKernelWork: true,
+        Members: name switch { Parts.Sky => SkyMembers, Parts.Shadow => ShadowMembers, Parts.Views => ViewsMembers, _ => null },
         InputAccesses: [.. (inputs ?? []).Select(selector: static _ => RenderGraphPortAccess.ComputeRead)],
         Inputs: [.. (inputs ?? []).Select(selector: static input => new ResourceReference(Name: input))],
         Name: name,

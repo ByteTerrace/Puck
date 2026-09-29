@@ -13,6 +13,7 @@
 // boundary (sdfMapStepBound) and the occlusion test reads the raw clearance in clamped units against the primary
 // march's own accept threshold; the estimate divides a clearance by the world-unit distance travelled, so its
 // clearance is de-scaled first (a clamped clearance would narrow a program's shadows with its stepScale bake).
+#ifdef SDF_SHADOW_PASS
 float softShadowVisibility(float3 surfacePoint, float3 surfaceNormal, float3 lightDirection, uint instanceMaskBase, float stepScale, float reach) {
     bool fastMarch = worldUseFastSoftShadowMarch();
     int stepBudget = (fastMarch ? FastShadowSteps : ShadowSteps);
@@ -61,6 +62,7 @@ float softShadowVisibility(float3 surfacePoint, float3 surfaceNormal, float3 lig
 
     return ((visibility * visibility) * (3.0 - (2.0 * visibility)));
 }
+#endif
 // Normal-ladder ambient occlusion (calcAO): from the hit, step a short ladder of fixed rungs OUTWARD along
 // the surface normal; at each rung compare the distance expected to travel (h) against what the field actually reports
 // (d) — where nearby geometry crowds the normal the field under-reports and the deficit (h - d) accumulates as

@@ -19,8 +19,8 @@ public readonly record struct WorldPresentationBinding(StateBinding Binding, Wor
 /// deduplicated. <see cref="Bindings"/> are the reads that last as long as the document, which a
 /// <see cref="WorldStateMirror"/> registers when it installs the document: a HUD element's binding or template
 /// placeholder, an overlay <c>state</c> predicate, a binding bar's layout and model cells, every bindable scalar and
-/// color (camera program operands, markers, render lighting, sky and environment colors, the theme), a render
-/// cycle's position row, every color a signed-distance program bakes (a creation palette's surface, bounce,
+/// color (camera program operands, markers, render lighting, sky and environment colors, the theme), every state
+/// clock reached by those values, every color a signed-distance program bakes (a creation palette's surface, bounce,
 /// weathering and inset colors, a height field's color, a text screen's ink), and each height field's row read whole,
 /// which its brick is baked from. <see cref="BodyBindings"/> are templates a body reads through its own
 /// <c>WorldStateLease</c>: the population's scale row, a look's pose references and lane operands, a creation
@@ -55,6 +55,10 @@ public sealed class WorldPresentationManifest {
     private static readonly Type[] Surfaces = [
         typeof(BindableColor),
         typeof(BindableScalar),
+        typeof(BindableVector2),
+        typeof(BindableAngle),
+        typeof(BindableVector3),
+        typeof(BindableDirection),
         typeof(CreationDriverDocument),
         typeof(CreationEffectorDocument),
         typeof(CreationEffectorTargetDocument),
@@ -65,7 +69,6 @@ public sealed class WorldPresentationManifest {
         typeof(WorldBindingBarAuthoring),
         typeof(WorldHudElement),
         typeof(WorldLookMotion),
-        typeof(WorldRenderCycle),
         typeof(WorldScreenSource.Text),
     ];
 
@@ -73,11 +76,16 @@ public sealed class WorldPresentationManifest {
     private readonly WorldPresentationBinding[] m_bodyBindings;
     private readonly Dictionary<object, WorldPresentationBinding[]> m_templates;
 
-    private WorldPresentationManifest(WorldPresentationBinding[] bindings, WorldPresentationBinding[] bodyBindings, Dictionary<object, WorldPresentationBinding[]> templates) {
+    private WorldPresentationManifest(WorldPresentationBinding[] bindings, WorldPresentationBinding[] bodyBindings, Dictionary<object, WorldPresentationBinding[]> templates, WorldTimelineSection? timeline = null) {
         m_bindings = bindings;
         m_bodyBindings = bodyBindings;
         m_templates = templates;
+        Timeline = timeline ?? WorldTimelineSection.Absent;
     }
+
+    /// <summary>Gets the world's presentation clocks. Their state sources are registered only when a keyed value
+    /// reaches them, so merely declaring an unused clock reads no state.</summary>
+    public WorldTimelineSection Timeline { get; }
 
     /// <summary>Gets the reads that last as long as the document, each once, in document order.</summary>
     public ReadOnlySpan<WorldPresentationBinding> Bindings => m_bindings;
@@ -136,14 +144,15 @@ public sealed class WorldPresentationManifest {
             builder.Owner = null;
         }
 
-        builder.Visit(value: definition);
+        builder.Visit(value: WorldPresentationValues.Of(definition).Definition);
         builder.AddFields(fields: definition.Fields);
 
-        return (((builder.Bindings.Count == 0) && (builder.BodyBindings.Count == 0))
+        return (((builder.Bindings.Count == 0) && (builder.BodyBindings.Count == 0) && definition.Timeline.Clocks is not { Count: > 0 })
             ? Empty
             : new WorldPresentationManifest(
                 bindings: [.. builder.Bindings],
                 bodyBindings: [.. builder.BodyBindings],
+                timeline: definition.Timeline,
                 templates: builder.Templates.ToDictionary(
                     comparer: ReferenceEqualityComparer.Instance,
                     elementSelector: static pair => pair.Value.ToArray(),
@@ -339,6 +348,7 @@ public sealed class WorldPresentationManifest {
         private readonly HashSet<WorldPresentationBinding> m_bodySeen = [];
         private readonly HashSet<WorldPresentationBinding> m_seen = [];
         private readonly HashSet<object> m_visited = new(comparer: ReferenceEqualityComparer.Instance);
+        private readonly HashSet<string> m_clocks = new(StringComparer.Ordinal);
 
         public List<WorldPresentationBinding> Bindings { get; } = [];
 
@@ -566,10 +576,41 @@ public sealed class WorldPresentationManifest {
                 valueFactory: static type => type.GetProperty(name: "Value")
             )?.GetValue(obj: item);
         }
+        private void AddKeys<T>(WorldKeys<T> keys) {
+            AddClock(keys.Clock);
+            for (var index = 0; index < keys.Keys.Count; index++) {
+                if (keys.Keys[index].Value is { } value) { Collect(value); }
+            }
+        }
+        private void AddClock(string name) {
+            if (Definition is not { } definition || !m_clocks.Add(name)) { return; }
+            var clock = new WorldValueResolver(definition, default).Clock(name);
+            if (clock?.State is { } state) { Add(new StateBinding(state, null, false), WorldStateConversion.Number); }
+            if (clock?.Phase is { } phase) { Collect(phase); }
+        }
+
         // Records the bindings a surface carries; returns whether the walk continues into its members.
         private bool Collect(object value) {
             switch (value) {
+                case WorldTimelineSection:
+                    return false;
+                case BindableAngle angle:
+                    Collect(angle.Value);
+                    return false;
+                case BindableVector2 vector:
+                    if (vector.Keys is { } pairKeys) { AddKeys(pairKeys); }
+                    else { Collect(vector.X); Collect(vector.Y); }
+                    return false;
+                case BindableVector3 vector:
+                    if (vector.Keys is { } vectorKeys) { AddKeys(vectorKeys); }
+                    else { Collect(vector.X); Collect(vector.Y); Collect(vector.Z); }
+                    return false;
+                case BindableDirection direction:
+                    if (direction.Keys is { } directionKeys) { AddKeys(directionKeys); }
+                    else { Collect(direction.Value); }
+                    return false;
                 case BindableScalar scalar:
+                    if (scalar.Keys is { } scalarKeys) { AddKeys(scalarKeys); return false; }
                     // A token naming a keyed row with no key binds the whole row, which a pass's array reads.
                     Add(
                         binding: scalar.State,
@@ -585,6 +626,7 @@ public sealed class WorldPresentationManifest {
 
                     return false;
                 case BindableColor color:
+                    if (color.Keys is { } colorKeys) { AddKeys(colorKeys); return false; }
                     Add(
                         binding: color.State,
                         conversion: WorldStateConversion.Color
@@ -630,20 +672,6 @@ public sealed class WorldPresentationManifest {
                         binding: StateBinding.Parse(token: bar.ModelCell),
                         conversion: WorldStateConversion.Number
                     );
-
-                    return true;
-                case WorldRenderCycle cycle:
-                    // The cycle's position is its row's stored truth, read only once the cycle has two keys.
-                    if (cycle.Keys is { Count: >= 2 }) {
-                        Add(
-                            binding: new StateBinding(
-                                Key: null,
-                                Row: cycle.State,
-                                Target: true
-                            ),
-                            conversion: WorldStateConversion.Number
-                        );
-                    }
 
                     return true;
                 case WorldLookMotion motion:
