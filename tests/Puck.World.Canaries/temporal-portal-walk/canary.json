@@ -1,0 +1,632 @@
+{
+  "id": "temporal-portal-walk",
+  "title": "The first routed temporal frame equals the same walk with spatial rendering",
+  "binding": "Both legs run the existing portal-walk world, the identical crossing script and the same Native render tier. Positive enables temporal reconstruction and must count its resolve pass; the off control must have no resolve pass. Both scripts pause the simulation while the engine becomes ready, then resume before the same fixed walk so asynchronous pipeline warmup cannot shift its clock. The existing crossing capture records exactly the first presented destination frame, before another sample can accumulate. Their whole-frame RGB values must agree exactly through the runner-owned opposite-leg image comparison. Existing blue-before, green-after and first-destination-frame observations remain. Replaying the positive activation claim on the off control must fail independently of the pixel equality.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/portal-walk/portal-walk.puck",
+    "script": "on.script.txt",
+    "commands": [
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.upscale-sharpness",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.rate",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.rate",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "the-door-mints-a-mapped-transfer",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "arch/portal seat 1 entered",
+        "present": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "before-the-lobby-landmark-is-blue",
+        "capture": "before.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.15,
+          0.08,
+          0.185,
+          0.28
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0,
+          0.3,
+          1
+        ],
+        "maximum": [
+          0.25,
+          0.25,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "after-the-garden-landmark-is-green",
+        "capture": "after.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.15,
+          0.08,
+          0.185,
+          0.28
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0.25,
+          0,
+          1
+        ],
+        "maximum": [
+          0.25,
+          1,
+          0.2,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "after-no-lobby-landmark",
+        "capture": "after.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.15,
+          0.08,
+          0.185,
+          0.28
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0,
+          0.3,
+          1
+        ],
+        "maximum": [
+          0.25,
+          0.25,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "arrival-the-first-frame-is-the-garden",
+        "capture": "arrival.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.15,
+          0.15,
+          0.185,
+          0.35
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0.25,
+          0,
+          1
+        ],
+        "maximum": [
+          0.25,
+          1,
+          0.2,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "arrival-no-lobby-landmark",
+        "capture": "arrival.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.15,
+          0.15,
+          0.185,
+          0.35
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0,
+          0.3,
+          1
+        ],
+        "maximum": [
+          0.25,
+          0.25,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "after-the-traveller-is-lit",
+        "capture": "after.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.485,
+          0.4,
+          0.515,
+          0.6
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.3,
+          0.3,
+          0.3,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageComparison",
+        "name": "first-crossing-is-the-spatial-frame-exactly",
+        "capture": "arrival.png",
+        "reference": "arrival.png",
+        "referenceLeg": "other",
+        "referenceScale": 1,
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "maxErrorCodes": 0,
+        "meanErrorCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "temporal-resolve-executes",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "work sdf.world$resolve executed:",
+        "present": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/portal-walk/portal-walk.puck",
+    "script": "off.script.txt",
+    "commands": [
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.upscale-sharpness",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.rate",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.rate",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.where",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "the-door-mints-a-mapped-transfer",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "arch/portal seat 1 entered",
+        "present": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "before-the-lobby-landmark-is-blue",
+        "capture": "before.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.15,
+          0.08,
+          0.185,
+          0.28
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0,
+          0.3,
+          1
+        ],
+        "maximum": [
+          0.25,
+          0.25,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "after-the-garden-landmark-is-green",
+        "capture": "after.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.15,
+          0.08,
+          0.185,
+          0.28
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0.25,
+          0,
+          1
+        ],
+        "maximum": [
+          0.25,
+          1,
+          0.2,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "after-no-lobby-landmark",
+        "capture": "after.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.15,
+          0.08,
+          0.185,
+          0.28
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0,
+          0.3,
+          1
+        ],
+        "maximum": [
+          0.25,
+          0.25,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "arrival-the-first-frame-is-the-garden",
+        "capture": "arrival.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.15,
+          0.15,
+          0.185,
+          0.35
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0.25,
+          0,
+          1
+        ],
+        "maximum": [
+          0.25,
+          1,
+          0.2,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "arrival-no-lobby-landmark",
+        "capture": "arrival.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.15,
+          0.15,
+          0.185,
+          0.35
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0,
+          0.3,
+          1
+        ],
+        "maximum": [
+          0.25,
+          0.25,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "after-the-traveller-is-lit",
+        "capture": "after.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.485,
+          0.4,
+          0.515,
+          0.6
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.3,
+          0.3,
+          0.3,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageComparison",
+        "name": "first-crossing-is-the-spatial-frame-exactly",
+        "capture": "arrival.png",
+        "reference": "arrival.png",
+        "referenceLeg": "other",
+        "referenceScale": 1,
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "maxErrorCodes": 0,
+        "meanErrorCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "temporal-resolve-executes",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "work sdf.world$resolve executed:",
+        "present": false
+      }
+    ]
+  }
+}

@@ -1,0 +1,634 @@
+{
+  "id": "place-sharpen",
+  "title": "Equal-extent Place sharpens with adaptive contrast and exact zero",
+  "binding": "The shipped Place kernel reads a 16x48 seed at equal extent. The softened edge uses exact codes64,96,160,192. At x7 the four-neighbor average is104 and normalized contrast is0.6, so sharpness1 gives96+(96-104)/1.6=91; at x8 it gives160+8/1.5=165.333, encoded165. Strength0.4 gives94 exactly, avoiding a half-code conversion tie. Flat colors and the black/white hard edge stay exact. The control applies sharpness1 to the nominal copy capture, so the zero-strength copy observation fails. This uses the existing Place dispatch and writes the same768 output texels at every strength.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "sharpen.graph.json",
+    "seed.hlsl"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/place-sharpen/fixture.puck",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.time",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.set",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "zero-copies-source-exactly",
+        "capture": "copy.png",
+        "extent": [
+          16,
+          48
+        ],
+        "region": [
+          0.4375,
+          0.3333333333333333,
+          0.5,
+          0.3541666666666667
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.3764705882352941,
+          0.3764705882352941,
+          0.3764705882352941,
+          1
+        ],
+        "maximum": [
+          0.3764705882352941,
+          0.3764705882352941,
+          0.3764705882352941,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "full-sharpness-dark-edge-code91",
+        "capture": "sharp.png",
+        "extent": [
+          16,
+          48
+        ],
+        "region": [
+          0.4375,
+          0.3333333333333333,
+          0.5,
+          0.3541666666666667
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.3568627450980392,
+          0.3568627450980392,
+          0.3568627450980392,
+          1
+        ],
+        "maximum": [
+          0.3568627450980392,
+          0.3568627450980392,
+          0.3568627450980392,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "full-sharpness-bright-edge-code165",
+        "capture": "sharp.png",
+        "extent": [
+          16,
+          48
+        ],
+        "region": [
+          0.5,
+          0.3333333333333333,
+          0.5625,
+          0.3541666666666667
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.6470588235294118,
+          0.6470588235294118,
+          0.6470588235294118,
+          1
+        ],
+        "maximum": [
+          0.6470588235294118,
+          0.6470588235294118,
+          0.6470588235294118,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "partial-sharpness-dark-edge-code94",
+        "capture": "partial.png",
+        "extent": [
+          16,
+          48
+        ],
+        "region": [
+          0.4375,
+          0.3333333333333333,
+          0.5,
+          0.3541666666666667
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.3686274509803922,
+          0.3686274509803922,
+          0.3686274509803922,
+          1
+        ],
+        "maximum": [
+          0.3686274509803922,
+          0.3686274509803922,
+          0.3686274509803922,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "flat-color-stays-exact",
+        "capture": "sharp.png",
+        "extent": [
+          16,
+          48
+        ],
+        "region": [
+          0.0,
+          0.3333333333333333,
+          0.0625,
+          0.3541666666666667
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.25098039215686274,
+          0.25098039215686274,
+          0.25098039215686274,
+          1
+        ],
+        "maximum": [
+          0.25098039215686274,
+          0.25098039215686274,
+          0.25098039215686274,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "black-edge-cannot-ring",
+        "capture": "sharp.png",
+        "extent": [
+          16,
+          48
+        ],
+        "region": [
+          0.4375,
+          0.8333333333333334,
+          0.5,
+          0.8541666666666666
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.0,
+          0.0,
+          0.0,
+          1
+        ],
+        "maximum": [
+          0.0,
+          0.0,
+          0.0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "white-edge-cannot-ring",
+        "capture": "sharp.png",
+        "extent": [
+          16,
+          48
+        ],
+        "region": [
+          0.5,
+          0.8333333333333334,
+          0.5625,
+          0.8541666666666666
+        ],
+        "reduce": "every",
+        "minimum": [
+          1.0,
+          1.0,
+          1.0,
+          1
+        ],
+        "maximum": [
+          1.0,
+          1.0,
+          1.0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/place-sharpen/fixture.puck",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.time",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.set",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.reset",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 8,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "zero-copies-source-exactly",
+        "capture": "copy.png",
+        "extent": [
+          16,
+          48
+        ],
+        "region": [
+          0.4375,
+          0.3333333333333333,
+          0.5,
+          0.3541666666666667
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.3764705882352941,
+          0.3764705882352941,
+          0.3764705882352941,
+          1
+        ],
+        "maximum": [
+          0.3764705882352941,
+          0.3764705882352941,
+          0.3764705882352941,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "full-sharpness-dark-edge-code91",
+        "capture": "sharp.png",
+        "extent": [
+          16,
+          48
+        ],
+        "region": [
+          0.4375,
+          0.3333333333333333,
+          0.5,
+          0.3541666666666667
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.3568627450980392,
+          0.3568627450980392,
+          0.3568627450980392,
+          1
+        ],
+        "maximum": [
+          0.3568627450980392,
+          0.3568627450980392,
+          0.3568627450980392,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "full-sharpness-bright-edge-code165",
+        "capture": "sharp.png",
+        "extent": [
+          16,
+          48
+        ],
+        "region": [
+          0.5,
+          0.3333333333333333,
+          0.5625,
+          0.3541666666666667
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.6470588235294118,
+          0.6470588235294118,
+          0.6470588235294118,
+          1
+        ],
+        "maximum": [
+          0.6470588235294118,
+          0.6470588235294118,
+          0.6470588235294118,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "partial-sharpness-dark-edge-code94",
+        "capture": "partial.png",
+        "extent": [
+          16,
+          48
+        ],
+        "region": [
+          0.4375,
+          0.3333333333333333,
+          0.5,
+          0.3541666666666667
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.3686274509803922,
+          0.3686274509803922,
+          0.3686274509803922,
+          1
+        ],
+        "maximum": [
+          0.3686274509803922,
+          0.3686274509803922,
+          0.3686274509803922,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "flat-color-stays-exact",
+        "capture": "sharp.png",
+        "extent": [
+          16,
+          48
+        ],
+        "region": [
+          0.0,
+          0.3333333333333333,
+          0.0625,
+          0.3541666666666667
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.25098039215686274,
+          0.25098039215686274,
+          0.25098039215686274,
+          1
+        ],
+        "maximum": [
+          0.25098039215686274,
+          0.25098039215686274,
+          0.25098039215686274,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "black-edge-cannot-ring",
+        "capture": "sharp.png",
+        "extent": [
+          16,
+          48
+        ],
+        "region": [
+          0.4375,
+          0.8333333333333334,
+          0.5,
+          0.8541666666666666
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.0,
+          0.0,
+          0.0,
+          1
+        ],
+        "maximum": [
+          0.0,
+          0.0,
+          0.0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "white-edge-cannot-ring",
+        "capture": "sharp.png",
+        "extent": [
+          16,
+          48
+        ],
+        "region": [
+          0.5,
+          0.8333333333333334,
+          0.5625,
+          0.8541666666666666
+        ],
+        "reduce": "every",
+        "minimum": [
+          1.0,
+          1.0,
+          1.0,
+          1
+        ],
+        "maximum": [
+          1.0,
+          1.0,
+          1.0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      }
+    ]
+  }
+}
