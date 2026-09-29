@@ -4,6 +4,10 @@
 #ifndef SDF_HASH_HLSLI
 #define SDF_HASH_HLSLI
 
+// 2^-32, exact. Maps a full-range uint hash to a float in [0, 1] — NOTE the CLOSED upper end: (float)0xFFFFFFFFu
+// rounds UP to 2^32, so the product can be exactly 1.0. Consumers must tolerate that closed upper end.
+#define SDF_INV_2POW32 (1.0 / 4294967296.0)
+
 // Every hashed DECISION in the ISA is integer-only on purpose: DXC lowers multiply/add/xor/shift bit-identically to
 // both SPIR-V and DXIL, while float codegen drifts +-1 LSB between the two. A cell index, a noise lattice, and a
 // dither pattern therefore come out the SAME on Vulkan and Direct3D.

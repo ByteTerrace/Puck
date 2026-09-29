@@ -55,6 +55,15 @@ cover backoff, endpoint acceptance bands, tiny occluders, chamfer bounds, invali
 and adjacent-float equality. This proves the isolated helper; history sampling and
 renderer wiring remain separate work.
 
+`SdfSkyKindDeviceLawTests` compiles the production sky kind modules against their
+generated native records, then reads color, intrinsic coverage, hash work and image
+loads from the same probe on both backends. Integer PCG corners, analytic gradients,
+checker cells, image taps and double sphere roots supply independent expected values.
+The cases include reduced quality, exact seeds, periodic wraps, small positive gradient
+gaps, zero work, extreme finite cloud radii and explicit zero-power boundaries. This
+isolated proof does not exercise the common stack's admission, masks, transforms,
+ordered blending or renderer registration.
+
 ## Keep the feedback loop short
 
 Use the smallest fixture that exercises the behavior under test:

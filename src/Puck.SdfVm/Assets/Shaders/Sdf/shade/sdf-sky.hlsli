@@ -74,17 +74,8 @@ float3 sdfStarField(float3 direction, float density, float brightness, uint seed
 // [0, 1]. The whole-number lacunarity keeps every octave periodic in the base lattice's period, so the layer's
 // host-reduced drift and shear offsets never show a seam.
 float sdfCloudFbm(float2 p, uint seed) {
-    float value = 0.0;
-    float amplitude = 0.5;
-
-    [unroll]
-    for (uint octave = 0u; (octave < 4u); octave++) {
-        value += (amplitude * sdfPeriodicNoise2(p, (seed + octave)));
-        p = ((p * 2.0) + 17.0);
-        amplitude *= 0.5;
-    }
-
-    return (value / 0.9375);
+    uint hashes = 0u;
+    return sdfPeriodicFbm2(p, seed, 4u, hashes);
 }
 // The procedural cloud layer: a heightfield of cloud on a DOME — a spherical shell of radius CloudDomeRadius + 1
 // about a centre CloudDomeRadius below the camera, unit height overhead. A direction's layer point is where its ray
