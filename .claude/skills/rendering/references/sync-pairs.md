@@ -23,9 +23,10 @@ in `SdfIsaHlsl.Generate`. Never edit the file: change the C# and run
 ISA-owned constant or enum the kernels read joins `SdfIsaHlsl.Generate` rather
 than a hand `#define`.
 
-Everything else in these tables — the operand lanes each case decodes, the
-record lanes inside a bound record, masks with no C# constant, and every SDF
-binding and buffer layout — is still written twice. A kernel set
+The operand lanes each case decodes, legacy packed record lanes, and masks with
+no C# constant are still written twice. Pass interfaces and native record
+buffers generate their declarations through `ShaderInterfaceHlsl`; their host
+writers must follow those same layouts. A kernel set
 agrees with the instruction set it was built with because the build refuses
 bytecode stale against its sources and every include (the generated
 `sdf-isa.hlsli` among them), and `puck shaders generate --check` refuses a
@@ -105,6 +106,15 @@ uint; "uint4" and "float4" name 16-byte vectors.
 | `Pcg3dLatticeNoise.Pcg3d` in `Puck.Maths` | `sdfPcg3d` in `field/sdf-hash.hlsli` | One hash, a C# and an HLSL implementation. |
 
 ## Engine buffers, groups, and bindings
+
+Native record buffers use `ShaderInterfaceStructure.From<T>()` to derive the
+public unmanaged C# fields' offsets and stride. `ShaderInterfaceHlsl` emits the
+struct and explicit padding; its reflected resource name carries the layout
+identity so a same-stride field reorder rejects stale bytecode. The shared
+interface echo reads two consecutive records prepared by
+`ShaderInterfaceEcho.WriteRecordSentinels`, checking every field and the stride.
+Keep record changes, generated includes, host region writes, and echo evidence
+together.
 
 | C# (`SdfWorldTables` unless noted) | HLSL | Contract |
 |---|---|---|
