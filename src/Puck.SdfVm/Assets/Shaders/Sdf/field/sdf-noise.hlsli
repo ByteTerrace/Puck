@@ -78,6 +78,21 @@ float sdfPeriodicNoise2(float2 p, uint seed) {
 
     return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
 }
+// Periodic 2D fractal sum shared by sky and media. Integer lacunarity preserves the base lattice's period.
+// The caller chooses its bounded octave count; every lattice sample executes exactly four integer hashes.
+float sdfPeriodicFbm2(float2 p, uint seed, uint octaves, inout uint hashes) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    float normalization = 0.0;
+    [loop] for (uint octave = 0u; octave < octaves; octave++) {
+        value += amplitude * sdfPeriodicNoise2(p, seed + octave);
+        hashes += 4u;
+        normalization += amplitude;
+        p = p * 2.0 + 17.0;
+        amplitude *= 0.5;
+    }
+    return normalization > 0.0 ? value / normalization : 0.0;
+}
 // Exact 27-cell Worley field within SdfCellDisplacement's mode-specific randomness bounds.
 // KEEP IN SYNC with SdfFieldEvaluator.Cells.cs: PCG streams, top 16 bits, and z/y/x visit order.
 float sdfCellDistanceGrad(float3 q, uint seed, uint mode, float randomness, out float3 gradient) {
