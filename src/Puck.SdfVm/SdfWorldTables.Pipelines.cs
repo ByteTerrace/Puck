@@ -21,6 +21,12 @@ public sealed partial class SdfWorldTables {
         SdfViewsKernelVariant.Folds => SdfKernel.ViewsFolds,
         _ => SdfKernel.Views,
     });
+    // Temporal shading uses the same proven operation subset as the native view.
+    internal IGpuComputePipeline TemporalViewsPipeline => m_pipelines.Pipeline(kernel: m_viewsVariant switch {
+        SdfViewsKernelVariant.CoreOps => SdfKernel.TemporalViewsCore,
+        SdfViewsKernelVariant.Folds => SdfKernel.TemporalViewsFolds,
+        _ => SdfKernel.TemporalViews,
+    });
 
     // One of the per-view compute pipelines by its kernel.
     internal IGpuComputePipeline Pipeline(SdfKernel kernel) => m_pipelines.Pipeline(kernel: kernel);
@@ -40,15 +46,21 @@ public sealed partial class SdfWorldTables {
             (
                 Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles.SequenceEqual(second: other.Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles) &&
                 m_meshPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_meshPipeline.GroupLayoutHandles) &&
-                ((m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is not { } resolve) ||
-                    ((other.m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is { } otherResolve) &&
-                        resolve.GroupLayoutHandles.SequenceEqual(second: otherResolve.GroupLayoutHandles))) &&
+                SharesOptionalLayoutsWith(other: other) &&
                 ReferenceEquals(
                     objA: m_meshRenderPass,
                     objB: other.m_meshRenderPass
                 )
             )
         );
+
+    private bool SharesOptionalLayoutsWith(SdfWorldTables other) {
+        foreach (var kernel in SdfKernelSet.Kernels) {
+            if (SdfKernelSet.IsOptional(kernel: kernel) && (m_pipelines.OptionalPipeline(kernel: kernel) is { } pipeline) &&
+                ((other.m_pipelines.OptionalPipeline(kernel: kernel) is not { } target) || !pipeline.GroupLayoutHandles.SequenceEqual(second: target.GroupLayoutHandles))) { return false; }
+        }
+        return true;
+    }
 
     /// <summary>Installs a kernel reload prepared by <see cref="SdfWorldPipelines.PrepareReload"/> at a render-thread
     /// boundary, preserving buffers, images, baked bricks, descriptors and scene state. A reload that changed nothing
@@ -100,9 +112,9 @@ public sealed partial class SdfWorldTables {
         internal static readonly PipelineSpec[] Specs = [.. SdfKernelSet.Kernels.Select(selector: static kernel => Spec(kernel: kernel))];
         // The order a set leases the pipelines in (SdfWorldPipelines.Acquire): the views variants, the longest driver
         // translations, start last, lightest first (core, folds, full), and the other native kernels before them.
-        // Resolve joins this same slot table on demand through BuildResolve.
+        // Reconstruction and temporal shading join this same slot table on demand through BuildOptional.
         internal static readonly SdfKernel[] BuildOrder = [
-            .. SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel is not (SdfKernel.Views or SdfKernel.ViewsCore or SdfKernel.ViewsFolds or SdfKernel.Resolve))),
+            .. SdfKernelSet.Kernels.Where(predicate: static kernel => ((kernel is not (SdfKernel.Views or SdfKernel.ViewsCore or SdfKernel.ViewsFolds)) && !SdfKernelSet.IsOptional(kernel: kernel))),
             SdfKernel.ViewsCore,
             SdfKernel.ViewsFolds,
             SdfKernel.Views,

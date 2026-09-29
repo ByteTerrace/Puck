@@ -163,7 +163,7 @@ public static partial class WorldDefinitionValidator {
         var verb = WorldScheduleCommands.LeadingVerb(command: command);
 
         if (!WorldScheduleCommands.IsAdmitted(verb: verb)) {
-            errors.Add(item: $"{path}.command names '{verb}', which is not a scheduled step — a row submits a simulation command (a state mutation, a guarded transform, a body intent or pose, a join or a leave), never a host-control, clock, process or file verb. The admitted verbs are {string.Join(
+            errors.Add(item: $"{path}.command names '{verb}', which is not a scheduled step — a row submits an admitted simulation command, disclosure read or presentation lever, never a host-control, clock, process or file verb. The admitted verbs are {string.Join(
                 separator: ", ",
                 values: WorldScheduleCommands.Admitted
             )}.");

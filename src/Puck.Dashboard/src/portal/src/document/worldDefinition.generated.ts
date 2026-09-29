@@ -4262,7 +4262,7 @@ export type WorldCaptureRow = {
    */
   palette: (WorldCapturePaletteEntry | null)[];
   /**
-   * The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any views.post pass or the overlay is drawn over it.
+   * The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any views.post pass or the overlay is drawn over it. A non-seat-relative camera may be named when a screen, HUD frame or export already demands its view; a capture does not register demand. A camera without a live instance is refused by name at capture time.
    */
   instance?: string | null;
   /**
@@ -8695,6 +8695,10 @@ export type WorldQualityPreset = {
    * The render-scale tier the preset selects.
    */
   renderScale?: WorldRenderScaleTier;
+  /**
+   * Whether the preset enables temporal reconstruction. Defaults off.
+   */
+  temporal?: boolean;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -8884,7 +8888,7 @@ export type WorldRenderDefaults = {
    */
   renderScale?: WorldRenderScaleTier;
   /**
-   * The boot reduced-resolution reconstruction blend (0 bilinear .. 1 Catmull-Rom).
+   * The boot reconstruction blend (0 bilinear .. 1 Catmull-Rom), also the equal-extent placement sharpening strength; 0 copies exactly.
    */
   upscaleSharpness?: number;
   /**
@@ -8923,6 +8927,10 @@ export type WorldRenderDefaults = {
    * The far distance in world units: the depth at which every camera march ends — the far plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the sky fog has absorbed it (render.sky.fogDensity). Optional; absent resolves to the engine's pinned 40 — exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.
    */
   farDistance?: number | null;
+  /**
+   * Whether this world's views accumulate temporal reconstruction history. Absent is off.
+   */
+  temporal?: boolean;
 };
 
 export type WorldRenderEnvironment = {

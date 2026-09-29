@@ -1,35 +1,6 @@
 // The camera ray, the tile cone and its march bounds, and the per-tile instance masks.
 #ifndef MARCH_SDF_CONE_HLSLI
 #define MARCH_SDF_CONE_HLSLI
-// The perspective ray for a viewport-local UV (pixel centers in [0,1] within the viewport's region; screen-up maps
-// to the camera's +up). SYMMETRIC by construction: `direction`'s defining expression below is untouched from before
-// the off-axis branch existed, so a camera that never sets lens.yz (every camera but a border window) takes
-// the IDENTICAL sum in the IDENTICAL order — bit-exact, not merely numerically equal, which is what a build with the
-// branch not taken needs to prove byte-identity against a build without it at all.
-float3 cameraRayDirection(ViewportData view, float2 localUv) {
-    float2 ndc = ((localUv * 2.0) - 1.0);
-
-    ndc.y = -ndc.y;
-
-    float tanHalfFov = view.right.w;
-    float aspect = view.up.w;
-
-    float3 direction = (
-        view.forward.xyz +
-        (((ndc.x * aspect) * tanHalfFov) * view.right.xyz) +
-        ((ndc.y * tanHalfFov) * view.up.xyz)
-    );
-
-    // Off-axis (asymmetric) frustum shear for a border window (SdfAsymmetricFrustum, Puck.SdfVm.Views): the lens
-    // row's two otherwise-zero lanes carry the frustum's tangent-space center offset, appended as a TRAILING
-    // term so the symmetric sum above is never reassociated (float addition is not associative — computing the
-    // offset into a fresh accumulator first, then adding, can round differently than one flat left-to-right sum).
-    if ((view.lens.y != 0.0) || (view.lens.z != 0.0)) {
-        direction += ((view.lens.y * view.right.xyz) + (view.lens.z * view.up.xyz));
-    }
-
-    return normalize(direction);
-}
 
 struct TileCone {
     float3 centerDirection;
@@ -149,7 +120,8 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
 
     // ENTRY: the Lipschitz-clamped field clears the cone by map(center) - chord*t.
     // Advancing by clearance/(1+chord) stays conservative, including when the entry budget ends early.
-    float t = worldSurfaceNearDistance(view);
+    // Preserve the field sample's rounded advance; contraction here can shift primary refinement by a step.
+    precise float t = worldSurfaceNearDistance(view);
     bool foundEntry = false;
     int entrySteps = entryOnly ? IndependentConeMarchSteps : ConeMarchSteps;
 

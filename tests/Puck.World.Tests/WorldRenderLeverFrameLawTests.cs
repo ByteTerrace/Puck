@@ -45,6 +45,13 @@ public sealed class WorldRenderLeverFrameLawTests : IDisposable {
             width: Display
         );
 
+        Assert.False(condition: settings.Temporal);
+        Assert.False(condition: Dress().Views[0].Temporal);
+        settings.Temporal = true;
+        Assert.True(condition: Dress().Views[0].Temporal);
+        settings.Temporal = false;
+        Assert.False(condition: Dress().Views[0].Temporal);
+
         settings.AmbientOcclusion = true;
         settings.ShadowReach = 1f;
         settings.ShadowMask = ShadowMaskMode.Auto;

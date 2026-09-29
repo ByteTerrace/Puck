@@ -118,10 +118,11 @@ public sealed partial class SdfFieldDeviceLawTests {
     }
     // Packs every leg's cases, binds each leg's words at sdfWords, dispatches the probe once per leg and reads the
     // results back, one per case in leg order.
-    private static Vector4[] Run(byte[] kernel, GpuDeviceServices services, IReadOnlyList<SdfFieldLeg> legs, Vector4[]? transforms = null) {
-        var caseCount = checked((legs.Count * Points.Length));
+    private static Vector4[] Run(byte[] kernel, GpuDeviceServices services, IReadOnlyList<SdfFieldLeg> legs, Vector4[]? transforms = null, Vector3[]? points = null) {
+        points ??= Points;
+        var caseCount = checked((legs.Count * points.Length));
 
-        if ((Points.Length > 0xFFFF) || (caseCount > 0xFFFF)) {
+        if ((points.Length > 0xFFFF) || (caseCount > 0xFFFF)) {
             throw new InvalidOperationException(message: "The pushed index packs a leg's first case and count in 16 bits each.");
         }
 
@@ -153,7 +154,7 @@ public sealed partial class SdfFieldDeviceLawTests {
         var caseWords = new uint[(caseCount * 4)];
 
         for (var index = 0; (index < caseCount); index++) {
-            var point = Points[(index % Points.Length)];
+            var point = points[(index % points.Length)];
 
             caseWords[(index * 4)] = BitConverter.SingleToUInt32Bits(value: point.X);
             caseWords[((index * 4) + 1)] = BitConverter.SingleToUInt32Bits(value: point.Y);
@@ -295,7 +296,7 @@ public sealed partial class SdfFieldDeviceLawTests {
                     pipelineLayoutHandle: pipeline.LayoutHandle
                 );
 
-                ReadOnlySpan<uint> pushed = [(((uint)(index * Points.Length)) | (((uint)Points.Length) << 16))];
+                ReadOnlySpan<uint> pushed = [(((uint)(index * points.Length)) | (((uint)points.Length) << 16))];
 
                 recorder.PushConstants(
                     bindPoint: GpuBindPoint.Compute,
@@ -307,7 +308,7 @@ public sealed partial class SdfFieldDeviceLawTests {
                 );
                 recorder.Dispatch(
                     commandBufferHandle: command,
-                    groupCountX: ((((uint)Points.Length) + (GroupWidth - 1U)) / GroupWidth),
+                    groupCountX: ((((uint)points.Length) + (GroupWidth - 1U)) / GroupWidth),
                     groupCountY: 1U,
                     groupCountZ: 1U
                 );

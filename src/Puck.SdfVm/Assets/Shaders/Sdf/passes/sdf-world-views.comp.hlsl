@@ -74,6 +74,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         // The float working color; the display encode dithers and quantizes it.
         output[pixel] = float4(color, 1.0);
         sdfWorkTexels = 1u;
+#ifdef SDF_TEMPORAL_VIEWS
+        reactivity[pixel] = sdfReactivity;
+        sdfWorkTexels += 1u;
+#endif
     }
 #endif
 

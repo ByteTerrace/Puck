@@ -19,17 +19,23 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfWorldPassesLawTests {
     private const int FollowedInstances = 8;
 
-    [InlineData(FollowedInstances, true, false)]
-    [InlineData(FollowedInstances, true, true)]
-    [InlineData((FollowedInstances * 8), false, false)]
-    [InlineData((FollowedInstances * 8), false, true)]
+    [InlineData(FollowedInstances, true, false, false, 1f)]
+    [InlineData(FollowedInstances, true, true, false, 1f)]
+    [InlineData((FollowedInstances * 8), false, false, false, 1f)]
+    [InlineData((FollowedInstances * 8), false, true, false, 1f)]
+    [InlineData(FollowedInstances, true, true, false, 0.5f)]
+    [InlineData(FollowedInstances, true, true, true, 1f)]
+    [InlineData(FollowedInstances, true, true, true, 0.5f)]
     [Theory]
-    public void AViewFollowsAnotherResidencyInPlaceWhenItsPassesCanRecordIt(int otherInstances, bool followsInPlace, bool capture) {
+    public void AViewFollowsAnotherResidencyInPlaceWhenItsPassesCanRecordIt(int otherInstances, bool followsInPlace, bool capture, bool temporal, float renderScale) {
         var gpu = new FakeGpuDevice();
         var pipelines = SdfTestPipelines.Cache();
+        var initial = Frame();
+
+        initial = initial with { Views = [initial.Views[0] with { Temporal = temporal, RenderScale = renderScale }] };
         var first = new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,
-            frameSource: new FixedFrameSource(frame: Frame()),
+            frameSource: new FixedFrameSource(frame: initial),
             height: Extent,
             instanceCapacity: FollowedInstances,
             kernels: SdfTestPipelines.Kernels(),
@@ -37,7 +43,7 @@ public sealed partial class SdfWorldPassesLawTests {
             pipelines: pipelines,
             width: Extent
         );
-        var otherFrame = Frame() with { EnableCadenceGate = true };
+        var otherFrame = initial with { EnableCadenceGate = true };
 
         otherFrame = otherFrame with { Views = [otherFrame.Views[0], otherFrame.Views[0]] };
         using var other = new SdfWorldResidency(

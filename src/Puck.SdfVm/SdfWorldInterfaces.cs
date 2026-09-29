@@ -55,6 +55,14 @@ public static class SdfWorldInterfaces {
     public static ShaderPipelineParameterLayout ResolveParameters { get; } = ShaderPipelineParameterLayout.ForPackage(
         config: null, package: "sdf-resolve", members: SdfWorldPackage.ResolveMembers
     ).Stamped(stamp: SdfIsaHlsl.Stamp);
+    /// <summary>The temporal Views pass adds only a reactivity UAV to the native shading interface.</summary>
+    public static ShaderPipelineParameterLayout TemporalViewsParameters { get; } = ShaderPipelineParameterLayout.ForPackage(
+        config: null, package: "sdf-temporal-views", members: SdfWorldPackage.TemporalViewsMembers
+    ).Stamped(stamp: SdfIsaHlsl.Stamp);
+    /// <summary>The temporal Resolve interface, including per-view history and residency motion tables.</summary>
+    public static ShaderPipelineParameterLayout TemporalResolveParameters { get; } = ShaderPipelineParameterLayout.ForPackage(
+        config: null, package: "sdf-temporal-resolve", members: SdfWorldPackage.TemporalResolveMembers
+    ).Stamped(stamp: SdfIsaHlsl.Stamp);
 
     /// <summary>Gets the interface every per-view SDF dispatch reads.</summary>
     public static ShaderInterface World => WorldParameters.Interface;
@@ -114,6 +122,8 @@ public static class SdfWorldInterfaces {
         (IncludePath(shaderInterface: BrickBake), BrickBake.Stamped(stamp: stamp)),
         (IncludePath(shaderInterface: Mesh), Mesh),
         (IncludePath(shaderInterface: ResolveParameters.Interface), ResolveParameters.Interface.Stamped(stamp: stamp)),
+        (IncludePath(shaderInterface: TemporalViewsParameters.Interface), TemporalViewsParameters.Interface.Stamped(stamp: stamp)),
+        (IncludePath(shaderInterface: TemporalResolveParameters.Interface), TemporalResolveParameters.Interface.Stamped(stamp: stamp)),
     ];
 
     private static string IncludePath(ShaderInterface shaderInterface) =>

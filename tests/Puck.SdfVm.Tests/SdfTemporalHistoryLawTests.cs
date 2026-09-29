@@ -8,6 +8,31 @@ public sealed class SdfTemporalHistoryLawTests {
     private static readonly SdfTemporalEpoch Epoch = new(Binding: 1, Ceiling: 0.5f, Cut: 1, Debug: 0, Enabled: true, Height: 360, Width: 640);
 
     [Fact]
+    public void ConvergenceCountsEightCompletedSamplesAfterEachContentChangeWithoutDiscardingMotionHistory() {
+        var history = new SdfTemporalHistory();
+
+        for (var frame = 1; (frame <= 8); frame++) {
+            history.Prepare(camera: default, epoch: Epoch, frame: frame);
+            Assert.False(condition: history.Converged);
+            history.Rendered();
+        }
+        Assert.True(condition: history.Converged);
+        Assert.Equal(expected: 8u, actual: history.Frames);
+        history.Changed();
+        Assert.False(condition: history.Converged);
+        Assert.True(condition: history.HasPreviousView);
+        Assert.Equal(expected: 8u, actual: history.Frames);
+        for (var frame = 9; (frame <= 16); frame++) {
+            history.Prepare(camera: default, epoch: Epoch, frame: frame);
+            Assert.False(condition: history.Converged);
+            history.Rendered();
+        }
+        Assert.True(condition: history.Converged);
+        history.Prepare(camera: default, epoch: Epoch with { Debug = 1 }, frame: 17);
+        Assert.True(condition: history.Converged);
+        Assert.Equal(expected: 0u, actual: history.Frames);
+    }
+    [Fact]
     public void PreviousCameraTracksCompletedRendersWithoutTemporalSamplingAndCutsInvalidateIt() {
         var history = new SdfTemporalHistory();
         var camera = new CameraSnapshot(Position: new Vector3(x: 1f, y: 2f, z: 3f),

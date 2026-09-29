@@ -1,6 +1,10 @@
 // The view a dispatch renders, its visibility records and mesh samples, and its tile planes and instance masks.
 #ifndef FRAME_SDF_FRAME_HLSLI
 #define FRAME_SDF_FRAME_HLSLI
+#ifdef SDF_TEMPORAL_VIEWS
+// Color changes that motion cannot carry accumulate across this pixel's shading stages.
+static float sdfReactivity = 0.0;
+#endif
 // The world values (imageExtent, tileGrid, viewportCount, screenCount, instanceMaskWordCount and the view the set
 // renders, viewBase) are the views set's block, passGroup, written per view by SdfFrameBlock:
 // imageExtent is the engine extent, the largest a view renders and the per-view visibility record stride; tileGrid the

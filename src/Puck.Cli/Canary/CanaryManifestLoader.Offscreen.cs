@@ -140,56 +140,8 @@ internal static partial class CanaryManifestLoader {
             element: element,
             member: "capture"
         );
-        var extent = CliStrictJson.ReadRequiredArray(
-            context: context,
-            element: element,
-            member: "extent",
-            refusal: Refusal
-        );
 
-        if (
-            (extent.GetArrayLength() != 2) ||
-            !extent[0].TryGetInt32(value: out var width) ||
-            !extent[1].TryGetInt32(value: out var height) ||
-            (width <= 0) ||
-            (height <= 0)
-        ) {
-            throw new CanaryManifestRefusal(message: $"{context} extent must be two positive whole pixel counts, [width, height]; the capture's extent is part of the claim.");
-        }
-
-        var region = CliStrictJson.ReadRequiredArray(
-            context: context,
-            element: element,
-            member: "region",
-            refusal: Refusal
-        );
-        var edges = new double[4];
-
-        for (var index = 0; (index < 4); index++) {
-            if (
-                (region.GetArrayLength() != 4) ||
-                (region[index].ValueKind != JsonValueKind.Number) ||
-                !region[index].TryGetDouble(value: out edges[index]) ||
-                !double.IsFinite(d: edges[index]) ||
-                (edges[index] < 0) ||
-                (edges[index] > 1)
-            ) {
-                throw new CanaryManifestRefusal(message: $"{context} region must be four normalized edges in [0, 1], [left, top, right, bottom].");
-            }
-        }
-
-        var (left, top, right, bottom) = (edges[0], edges[1], edges[2], edges[3]);
-
-        if (CanaryAssertions.RegionPixelCount(
-            bottom: bottom,
-            height: height,
-            left: left,
-            right: right,
-            top: top,
-            width: width
-        ) == 0) {
-            throw new CanaryManifestRefusal(message: $"{context} region holds no pixel center at {width}x{height}; an empty region passes vacuously.");
-        }
+        var (width, height, left, top, right, bottom) = ReadImageSelection(context: context, element: element);
 
         var reduceText = CliStrictJson.ReadRequiredString(
             context: context,
@@ -271,4 +223,59 @@ internal static partial class CanaryManifestLoader {
             Width: width
         );
     }
+    private static (int Width, int Height, double Left, double Top, double Right, double Bottom) ReadImageSelection(JsonElement element, string context) {
+        var extent = CliStrictJson.ReadRequiredArray(
+            context: context,
+            element: element,
+            member: "extent",
+            refusal: Refusal
+        );
+
+        if (
+            (extent.GetArrayLength() != 2) ||
+            !extent[0].TryGetInt32(value: out var width) ||
+            !extent[1].TryGetInt32(value: out var height) ||
+            (width <= 0) ||
+            (height <= 0)
+        ) {
+            throw new CanaryManifestRefusal(message: $"{context} extent must be two positive whole pixel counts, [width, height]; the capture's extent is part of the claim.");
+        }
+
+        var region = CliStrictJson.ReadRequiredArray(
+            context: context,
+            element: element,
+            member: "region",
+            refusal: Refusal
+        );
+        var edges = new double[4];
+
+        for (var index = 0; (index < 4); index++) {
+            if (
+                (region.GetArrayLength() != 4) ||
+                (region[index].ValueKind != JsonValueKind.Number) ||
+                !region[index].TryGetDouble(value: out edges[index]) ||
+                !double.IsFinite(d: edges[index]) ||
+                (edges[index] < 0) ||
+                (edges[index] > 1)
+            ) {
+                throw new CanaryManifestRefusal(message: $"{context} region must be four normalized edges in [0, 1], [left, top, right, bottom].");
+            }
+        }
+
+        var (left, top, right, bottom) = (edges[0], edges[1], edges[2], edges[3]);
+
+        if (CanaryAssertions.RegionPixelCount(
+            bottom: bottom,
+            height: height,
+            left: left,
+            right: right,
+            top: top,
+            width: width
+        ) == 0) {
+            throw new CanaryManifestRefusal(message: $"{context} region holds no pixel center at {width}x{height}; an empty region passes vacuously.");
+        }
+
+        return (width, height, left, top, right, bottom);
+    }
+
 }

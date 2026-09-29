@@ -5,18 +5,26 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 public sealed partial class SdfWorldTablesWorkLawTests {
-    [InlineData(true)]
-    [InlineData(false)]
+    [InlineData(SdfKernel.Resolve, true)]
+    [InlineData(SdfKernel.Resolve, false)]
+    [InlineData(SdfKernel.TemporalResolve, true)]
+    [InlineData(SdfKernel.TemporalResolve, false)]
+    [InlineData(SdfKernel.TemporalViews, true)]
+    [InlineData(SdfKernel.TemporalViews, false)]
+    [InlineData(SdfKernel.TemporalViewsCore, true)]
+    [InlineData(SdfKernel.TemporalViewsCore, false)]
+    [InlineData(SdfKernel.TemporalViewsFolds, true)]
+    [InlineData(SdfKernel.TemporalViewsFolds, false)]
     [Theory]
-    public void ResolveActivatesOnceAndJoinsReloadEvenWhenActivationFollowsPreparation(bool activateBeforePreparation) {
+    public void AnOptionalKernelActivatesOnceAndJoinsReloadEvenWhenActivationFollowsPreparation(SdfKernel kernel, bool activateBeforePreparation) {
         using var rig = new Rig();
         using var reflector = SdfTestPipelines.Reflector();
 
         Assert.True(condition: rig.Cache.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var nativePipelines));
         Assert.Equal(actual: nativePipelines, expected: 11L);
         var initial = rig.Pipelines.Kernels;
-        var bytes = SpirvEdits.WithGenerator(generator: 931, module: initial[SdfKernel.Resolve].Span);
-        var changed = initial.With(bytecode: bytes, kernel: SdfKernel.Resolve);
+        var bytes = SpirvEdits.WithGenerator(generator: 931, module: initial[kernel].Span);
+        var changed = initial.With(bytecode: bytes, kernel: kernel);
 
         if (activateBeforePreparation) {
             Activate();
@@ -30,7 +38,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             }
             Assert.Equal(expected: 1, actual: rig.Engine.InstallReload(reload: reload));
         }
-        Assert.Equal(expected: bytes, actual: rig.Pipelines.Kernels[SdfKernel.Resolve].ToArray());
+        Assert.Equal(expected: bytes, actual: rig.Pipelines.Kernels[kernel].ToArray());
         Activate();
         Assert.True(condition: rig.Cache.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var created));
         Assert.Equal(actual: created, expected: (nativePipelines + 2));
@@ -41,7 +49,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Assert.True(condition: rig.Cache.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var unchanged));
         Assert.Equal(actual: unchanged, expected: created);
 
-        void Activate() => rig.Pipelines.BuildResolve(cache: rig.Cache, device: rig.Gpu, reflector: reflector,
+        void Activate() => rig.Pipelines.BuildOptional(kernel: kernel, cache: rig.Cache, device: rig.Gpu, reflector: reflector,
             cancellationToken: TestContext.Current.CancellationToken);
     }
 }

@@ -567,6 +567,7 @@ internal static partial class CanaryCommand {
         ))).Id;
         var primaryTranscript = transcripts[primaryId];
         var assertions = CanaryAssertions.Evaluate(
+                deferPairedCaptures: true,
             authorityTranscripts: transcripts,
             leg: leg,
             primaryTranscript: primaryTranscript

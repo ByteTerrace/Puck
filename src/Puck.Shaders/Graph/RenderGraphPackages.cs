@@ -216,7 +216,7 @@ public sealed class RenderGraphPackageCatalog {
     /// interface is <c>sdf-film-grain</c>.</summary>
     public const string SdfFilmGrain = "sdf.film-grain";
     /// <summary>The id of the one placement pass: its base image, with its source reconstructed into a destination rect
-    /// over it, an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to
+    /// over it: at equal extent, an exact copy at sharpness 0 or contrast-adaptive sharpening above 0; otherwise bilinear blending to
     /// clamped Catmull-Rom at sharpness 1. A rect of the whole output resamples the whole source. Its kernel is
     /// <c>Assets/Shaders/Graph/place.comp.hlsl</c>, compiled at build; its config is the rect (<see cref="PlaceRect"/>),
     /// the sharpness (<see cref="PlaceSharpness"/>), whether the destination outside the rect is the letterbox color
@@ -236,7 +236,7 @@ public sealed class RenderGraphPackageCatalog {
     /// left, top, width, height.</summary>
     public const string PlaceRect = "rect";
     /// <summary>The <see cref="Place"/> config field holding the reconstruction's sharpness, from 0 (bilinear) to 1
-    /// (clamped Catmull-Rom).</summary>
+    /// (clamped Catmull-Rom). At equal extent it controls contrast-adaptive sharpening; 0 copies exactly.</summary>
     public const string PlaceSharpness = "sharpness";
     /// <summary>The <see cref="Place"/> config field that, at 1, puts the reconstructed source through the Narkowicz
     /// ACES-fit filmic curve inside the rect: a world's root sets it on each view's place pass when
@@ -393,7 +393,7 @@ public sealed class RenderGraphPackageCatalog {
         ),
         [PlaceSharpness] = new ShaderConfigField(
             Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
-            Description: "Reconstruction sharpness: 0 is bilinear, 1 clamped Catmull-Rom.",
+            Description: "Reconstruction blend: 0 bilinear, 1 clamped Catmull-Rom; at equal extent, 0 copies and positive values sharpen.",
             Max: 1,
             Min: 0,
             Type: ShaderValueType.Float
@@ -549,7 +549,7 @@ public sealed class RenderGraphPackageCatalog {
             ],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
             Members: PlaceMembers,
-            Summary: "The base image with the source reconstructed into a rect over it, bilinear to clamped Catmull-Rom by sharpness, and tonemapped when asked."
+            Summary: "The base image with the source reconstructed into a rect over it, bilinear to clamped Catmull-Rom when resizing, sharpened at equal extent, and tonemapped when asked."
         ),
         .. SourceConversions.Select(selector: static id => new RenderGraphPackage(
             Id: id,

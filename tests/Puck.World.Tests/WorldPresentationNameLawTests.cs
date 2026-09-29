@@ -173,6 +173,27 @@ public sealed class WorldPresentationNameLawTests {
             expectedSubstring: $"captures.rows[0] names both instance 'world' and screen {screen.Index}"
         );
     }
+    [Fact]
+    public void ACaptureAdmitsOneNamedCameraButNotAnUnqualifiedSeatRelativeCamera() {
+        var captured = WithCaptureStation(station: "camera");
+
+        captured = captured with {
+            Captures = captured.Captures! with { Rows = [captured.Captures.Rows[0] with { Instance = "reference" }] },
+        };
+        Assert.Contains(expectedSubstring: "cameras[0] is required", actualString: Refusal(
+            definition: captured with { CamerasRaw = [null!] }), comparisonType: StringComparison.Ordinal);
+        var fixedCamera = Camera(name: "reference");
+
+        Assert.Equal(expected: string.Empty, actual: Refusal(definition: captured with { CamerasRaw = [fixedCamera] }));
+        foreach (var camera in new[] {
+            fixedCamera with { Anchor = new WorldAnchor.Seat() },
+            fixedCamera with { Anchors = [new WorldCameraAnchorCandidate(Anchor: new WorldAnchor.Seat())] },
+            fixedCamera with { Name = "different" },
+        }) {
+            Assert.Contains(expectedSubstring: "captures.rows[0].instance 'reference'", actualString: Refusal(
+                definition: captured with { CamerasRaw = [camera] }), comparisonType: StringComparison.Ordinal);
+        }
+    }
     // The control: stations that differ in more than case are admitted together.
     [Fact]
     public void CaptureStationsThatDifferInMoreThanCaseAreAdmitted() {

@@ -2,7 +2,12 @@
 #ifndef FIELD_SDF_SHAPES_HLSLI
 #define FIELD_SDF_SHAPES_HLSLI
 float sdfSphere(float3 p, float radius) {
-    return (length(p) - radius);
+    // Keep the reduction order explicit: intrinsic length/dot can reduce these products differently across
+    // SPIR-V and DXIL, even with precise. A one-ULP field difference can change a silhouette's refinement phase.
+    precise float3 squared = (p * p);
+    precise float squaredLength = ((squared.x + squared.y) + squared.z);
+    precise float distance = (sqrt(squaredLength) - radius);
+    return distance;
 }
 // `cornerRadius` deliberately does NOT shadow the HLSL round() intrinsic (which this file's fold ops rely on).
 float sdfBox(float3 p, float3 halfExtents, float cornerRadius) {

@@ -165,11 +165,12 @@ internal static partial class CanaryManifestLoader {
                 context: $"{context} expect[{index}]",
                 element: row
             ),
+                "imageComparison" => ReadImageComparisonAssertion(context: $"{context} expect[{index}]", element: row),
                 "imageRegion" => ReadImageRegionAssertion(
                 context: $"{context} expect[{index}]",
                 element: row
             ),
-                _ => throw new CanaryManifestRefusal(message: $"{context} expect[{index}] type '{type}' is invalid; use exactly 'line', 'lines', 'response', 'sequence', 'relation', 'filesDiffer', 'framesAgree', or 'imageRegion' (casing is significant)."),
+                _ => throw new CanaryManifestRefusal(message: $"{context} expect[{index}] type '{type}' is invalid; use exactly 'line', 'lines', 'response', 'sequence', 'relation', 'filesDiffer', 'framesAgree', 'imageRegion', or 'imageComparison' (casing is significant)."),
             };
 
             if (!names.Add(item: assertion.Name)) {

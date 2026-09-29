@@ -5,6 +5,8 @@ namespace Puck.Shaders;
 public sealed partial class RenderGraphRuntime {
     private FrameCaptureRequest? m_convergence;
     private int m_convergenceFrames;
+    private bool m_convergenceWarming;
+    private bool m_restartConvergence;
     private Puck.Hosting.FrameContext? m_convergenceContext;
 
     private readonly HashSet<int> m_convergenceInstances = [];
@@ -23,6 +25,8 @@ public sealed partial class RenderGraphRuntime {
     private void BeginConvergence(int captured, FrameCaptureRequest request) {
         m_convergence = request;
         m_convergenceFrames = 0;
+        m_convergenceWarming = false;
+        m_restartConvergence = false;
         m_convergenceContext = null;
         m_convergenceInstances.Clear();
         if (request.Converge == 0) {
@@ -36,6 +40,34 @@ public sealed partial class RenderGraphRuntime {
             if (!m_convergenceInstances.Add(item: index)) {
                 continue;
             }
+            foreach (var read in m_set.Reads[index]) {
+                pending.Push(item: read.Producer);
+            }
+        }
+        ResetConvergenceSamples();
+    }
+    // Dependency/build warmup can run real package passes. Their samples must not become a capture's first history.
+    // Restart at the next frame boundary, after a completed ready target proves the whole contributing closure ready.
+    private void PrepareConvergenceSamples() {
+        if (m_convergence is not { Converge: > 0, Completion.IsCompleted: false }) { return; }
+        if (m_restartConvergence && (m_convergence is { Completion.IsCompleted: false })) {
+            ResetConvergenceSamples();
+            m_convergenceWarming = false;
+            m_restartConvergence = false;
+        }
+        foreach (var index in m_convergenceInstances) {
+            if (m_nodes[index] is { IsReady: false }) { DeferConvergence(index: index); }
+        }
+    }
+    private void DeferConvergence(int index) {
+        if (IsConverging(index: index)) {
+            m_convergenceWarming = true;
+            m_convergenceFrames = 0;
+        }
+    }
+    private void ResetConvergenceSamples() {
+        if (m_convergence is not { } request) { return; }
+        foreach (var index in m_convergenceInstances) {
             if (m_graphs[index] is { } graph) {
                 var packages = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -45,9 +77,6 @@ public sealed partial class RenderGraphRuntime {
                         factory.BeginConvergence(instance: m_set.Instances[index].Name, request: request);
                     }
                 }
-            }
-            foreach (var read in m_set.Reads[index]) {
-                pending.Push(item: read.Producer);
             }
         }
     }
@@ -62,5 +91,5 @@ public sealed partial class RenderGraphRuntime {
         ((m_convergence is { Converge: > 0, Completion.IsCompleted: false }) && m_convergenceInstances.Contains(item: index));
 
     private bool CanServeConvergence =>
-        ((m_convergence is not { Converge: > 0 } request) || (m_convergenceFrames >= (request.Converge - 1)));
+        ((m_convergence is not { Converge: > 0 } request) || (!m_convergenceWarming && (m_convergenceFrames >= (request.Converge - 1))));
 }

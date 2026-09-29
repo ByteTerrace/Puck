@@ -234,7 +234,7 @@ public sealed partial class ShaderInterface {
             member.Format.HasValue &&
             (StorageFormatSpelling(format: member.Format.Value) is null)
         ) {
-            throw new InvalidDataException(message: $"{where}: a storage image cannot be {member.Format.Value}; it is R8G8B8A8Unorm, R16G16B16A16Float or R32G32B32A32Float.");
+            throw new InvalidDataException(message: $"{where}: a storage image cannot be {member.Format.Value}; it is R8G8B8A8Unorm, R16G16B16A16Float, R32G32B32A32Float or R32Float.");
         }
     }
 
@@ -314,6 +314,7 @@ public sealed partial class ShaderInterface {
             GpuPixelFormat.R8G8B8A8Unorm => "rgba8",
             GpuPixelFormat.R16G16B16A16Float => "rgba16f",
             GpuPixelFormat.R32G32B32A32Float => "rgba32f",
+            GpuPixelFormat.R32Float => "r32f",
             _ => null,
         };
     /// <summary>Reads an interface from its JSON document, refusing an unknown property, a missing required one, and an

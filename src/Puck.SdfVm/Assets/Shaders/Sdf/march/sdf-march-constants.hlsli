@@ -49,9 +49,9 @@ static const int PrimaryRefineSteps = 8;
 // re-armed thereafter, not even across a four-bound teleport (the teleport jump itself still runs — it is bound-proven
 // on both paths — but it does not reset the latch). It is the conservative, division-free reference marcher. Chosen
 // as a compile-time #define because the world kernels are AOT-compiled by DXC in-place at build. (The engine ships one enumerable
-// pair of compiled Stage 1 variants — full-ISA vs core-ops, selected per program at UploadProgram; see the
+// family of compiled Views variants — full ISA, core ops and folds, selected per program; see the
 // SDF_CORE_OPS banner in field/sdf-program.hlsli — but a hand-flip parity anchor like this one still doesn't earn a shipped
-// pipeline: the variant list stays exactly two.)
+// pipeline: it remains an explicit development experiment.)
 // It is NOT built by default and is exercised by NO gate — a hand-flip parity anchor only. The DEFAULT auto-relaxed
 // step's DIVISION is the one new cross-backend hazard (FMA contraction amplified near tangency can flip the disjoint-
 // sphere fallback compare), so the divided step and that compare are pinned `precise` on both backends and the strict

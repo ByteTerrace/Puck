@@ -12,7 +12,7 @@ namespace Puck.World.Tests;
 /// <summary>The shipped spatial resolve preserves the analytic step colors and exact nearest-surface words. These
 /// inputs isolate the resolver from traversal, while the reduced-world canary exercises its ordinary package recorder.</summary>
 [SupportedOSPlatform("windows10.0.15063")]
-public sealed class SdfResolveDeviceLawTests {
+public sealed partial class SdfResolveDeviceLawTests {
     private const uint RenderWidth = 16;
     private const uint RenderHeight = 48;
     private const uint OutputWidth = 64;
@@ -59,16 +59,16 @@ public sealed class SdfResolveDeviceLawTests {
         Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: 9f), actual: nativeSurface[(((8 * RenderWidth) + 7) * 2)]);
         Assert.Equal(expected: (1u << 30) | 7u, actual: nativeSurface[((((8 * RenderWidth) + 7) * 2) + 1)]);
     }
-    private static void Check(Half[] color, uint width, uint x, uint y, float value) {
+    private static void Check(Half[] color, uint width, uint x, uint y, float value, float alpha = 1f) {
         var offset = ((int)(((y * width) + x) * 4));
 
         for (var channel = 0; (channel < 3); channel++) {
             Assert.InRange(actual: MathF.Abs(x: (((float)color[(offset + channel)]) - value)), low: 0f, high: 0.0005f);
         }
-        Assert.Equal(expected: ((Half)1f), actual: color[(offset + 3)]);
+        Assert.Equal(expected: ((Half)alpha), actual: color[(offset + 3)]);
     }
-    private static (Half[] Color, uint[] Surface) Run(GpuDeviceServices services, string extension, float sharpness, uint width, uint height) {
-        var parameters = SdfWorldInterfaces.ResolveParameters;
+    private static (Half[] Color, uint[] Surface) Run(GpuDeviceServices services, string extension, float sharpness, uint width, uint height, TemporalCase? temporal = null) {
+        var parameters = ((temporal is null) ? SdfWorldInterfaces.ResolveParameters : SdfWorldInterfaces.TemporalResolveParameters);
         var block = new byte[parameters.SizeBytes];
 
         parameters.WriteExtent(block: block, height: height, width: width);
@@ -78,13 +78,29 @@ public sealed class SdfResolveDeviceLawTests {
         Word(lane: 1, member: SdfWorldPackage.ImageExtent, value: RenderHeight);
         Word(member: SdfWorldPackage.UpscaleSharpness, value: BitConverter.SingleToUInt32Bits(value: sharpness));
         Word(member: SdfWorldPackage.FarDistance, value: BitConverter.SingleToUInt32Bits(value: 1000f));
+        if (temporal is not null) {
+            Word(member: SdfWorldPackage.ViewForward, lane: 2, value: BitConverter.SingleToUInt32Bits(value: 1f));
+            Word(member: SdfWorldPackage.ViewRight, value: BitConverter.SingleToUInt32Bits(value: 1f));
+            Word(member: SdfWorldPackage.ViewUp, lane: 1, value: BitConverter.SingleToUInt32Bits(value: 1f));
+            Word(member: SdfWorldPackage.AspectRatio, value: BitConverter.SingleToUInt32Bits(value: 1f));
+            Word(member: SdfWorldPackage.TanHalfFieldOfView, value: BitConverter.SingleToUInt32Bits(value: 1f));
+            Word(member: SdfWorldPackage.HistoryFrames, value: temporal.Frames);
+            Word(member: SdfWorldPackage.DebugMode, value: temporal.Debug);
+            Word(member: SdfWorldPackage.Jitter, value: BitConverter.SingleToUInt32Bits(value: temporal.JitterX));
+            SdfFrameBlock.WritePreviousView(block: block, valid: true, view: new SdfReprojectionView(
+                Camera: new Puck.Abstractions.Cameras.CameraSnapshot(Position: System.Numerics.Vector3.Zero,
+                    Right: System.Numerics.Vector3.UnitX, Up: System.Numerics.Vector3.UnitY, Forward: System.Numerics.Vector3.UnitZ,
+                    TanHalfFieldOfView: 1f, AspectRatio: 1f) { FrustumOffset = new System.Numerics.Vector2(x: temporal.PreviousLensX, y: 0f) },
+                Jitter: default, Width: RenderWidth, Height: RenderHeight));
+        }
         var records = new uint[((RenderWidth * RenderHeight) * 16)];
 
         void Hit(uint x, uint y, float distance, uint identity) {
             var offset = (((y * RenderWidth) + x) * 16);
 
             records[offset] = BitConverter.SingleToUInt32Bits(value: distance);
-            records[(offset + 1)] = identity;
+            records[(offset + 1)] = ((temporal is null) ? identity : TemporalIdentity);
+            records[(offset + 7)] = uint.MaxValue;
         }
         Hit(distance: 2f, identity: OuterIdentity, x: 6, y: 8);
         Hit(distance: 9f, identity: (1u << 30) | 7u, x: 7, y: 8);
@@ -96,13 +112,13 @@ public sealed class SdfResolveDeviceLawTests {
                 var value = ((byte)((y < 16) ? ((x < 8) ? 0 : 255) : ((x < ((y < 32) ? 8 : 1)) ? 64 : 191)));
                 var offset = (((y * RenderWidth) + x) * 4);
 
-                source[offset] = value; source[(offset + 1)] = value; source[(offset + 2)] = value; source[(offset + 3)] = 255;
+                source[offset] = value; source[(offset + 1)] = value; source[(offset + 2)] = value; source[(offset + 3)] = ((temporal?.PremultipliedCoverage == true) ? value : (byte)255);
             }
         }
         var layout = parameters.Layout.PipelineLayout(stages: GpuShaderStage.Compute);
         var description = new GpuComputePipelineDescription(Bindings: [], Layout: layout, Name: "sdf-resolve-proof", PushConstantBinding: null);
         using var module = services.ShaderModuleFactory.Create(stage: GpuShaderStage.Compute,
-            bytecode: File.ReadAllBytes(path: Path.Combine(path1: SdfKernelSet.DefaultDirectory, path2: ("sdf-resolve.comp" + extension))));
+            bytecode: File.ReadAllBytes(path: Path.Combine(path1: SdfKernelSet.DefaultDirectory, path2: (((temporal is null) ? "sdf-resolve.comp" : "sdf-temporal-resolve.comp") + extension))));
         using var pipeline = services.PipelineFactory.Create(computeShaderModule: module, description: description, name: default);
         using var frame = services.BufferFactory.CreateHostVisible(data: new byte[256], name: default, usage: GpuBufferUsage.Uniform);
         using var constants = services.BufferFactory.CreateHostVisible(data: block, name: default, usage: GpuBufferUsage.Uniform);
@@ -114,6 +130,7 @@ public sealed class SdfResolveDeviceLawTests {
         using var output = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: height, name: default, usage: GpuImageUsage.Storage, width: width);
         using var upload = services.SurfaceTransferFactory.CreateUpload();
         var sourceView = upload.Upload(pixels: source, format: GpuPixelFormat.R8G8B8A8Unorm, width: RenderWidth, height: RenderHeight);
+        using var temporalInputs = ((temporal is null) ? null : new TemporalInputs(height: height, sample: temporal, services: services, width: width));
         using var readback = services.SurfaceTransferFactory.CreateReadback();
         using var commands = services.CommandPoolFactory.Create(name: default);
         var pool = services.Bindings.CreatePool(name: default, sizes: GpuDescriptorPoolSizes.ForGroups(groups: layout.Groups));
@@ -133,6 +150,7 @@ public sealed class SdfResolveDeviceLawTests {
             Buffer(buffer: bounds, kind: GpuBindingKind.ReadOnlyBuffer, member: SdfWorldPackage.CullBounds, stride: 4);
             Buffer(buffer: surfaces, kind: GpuBindingKind.ReadWriteBuffer, member: SdfWorldPackage.ResolvedSurface, stride: 8);
             Buffer(buffer: counters, kind: GpuBindingKind.ReadWriteBuffer, member: ShaderWorkCounters.Buffer, stride: 4);
+            var worldSet = (temporalInputs?.Bind(parameters: parameters, passSet: set, pipeline: pipeline, pool: pool) ?? 0);
             var recorder = services.Recorder;
             var command = commands.CommandBufferHandle;
 
@@ -150,6 +168,10 @@ public sealed class SdfResolveDeviceLawTests {
             recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, pipelineHandle: pipeline.Handle);
             recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: frameSet, group: 0, pipelineLayoutHandle: pipeline.LayoutHandle);
             recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: set, group: 3, pipelineLayoutHandle: pipeline.LayoutHandle);
+            if (worldSet != 0) {
+                recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command,
+                    descriptorSetHandle: worldSet, group: 1, pipelineLayoutHandle: pipeline.LayoutHandle);
+            }
             recorder.Dispatch(commandBufferHandle: command, groupCountX: ((width + 7) / 8), groupCountY: ((height + 7) / 8), groupCountZ: 1);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: surfaces.BufferHandle,
                 sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader, destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);

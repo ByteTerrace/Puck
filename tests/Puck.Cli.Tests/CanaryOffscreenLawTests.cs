@@ -11,7 +11,7 @@ namespace Puck.Cli.Tests;
 /// against author-derived bounds in both directions, and the runner classifies unsupported environments and
 /// unresolved pipeline waits from a transcript.
 /// </summary>
-public sealed class CanaryOffscreenLawTests : IDisposable {
+public sealed partial class CanaryOffscreenLawTests : IDisposable {
     private readonly string m_root = Path.Combine(
         path1: Path.GetTempPath(),
         path2: $"puck-cli-tests-canary-offscreen-{Guid.NewGuid():N}"

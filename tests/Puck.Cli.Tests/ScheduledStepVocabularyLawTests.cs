@@ -200,7 +200,8 @@ public sealed class ScheduledStepVocabularyLawTests {
     // evaluation diagnostics print values the rules computed, some of them from state a seat is not shown; every one
     // of them, in whichever module the host composes it, answers the operator alone, and in the headless host this
     // class boots nothing else does. A GPU shape adds the verb that arms its device's creation faults and nothing
-    // more (WorldBootCompositionLawTests). A read step a schedule admits is never an operator verb.
+    // more (WorldBootCompositionLawTests). A read step a schedule admits is never an operator verb. The presentation
+    // subset is checked against the ordinary offscreen registry by WorldScheduledPresentationLawTests.
     [Fact]
     public void TheHeadlessHostsOperatorVerbsAreExactlyTheEvaluationDiagnostics() {
         var registry = LiveRegistry.Value;
@@ -221,7 +222,7 @@ public sealed class ScheduledStepVocabularyLawTests {
             expected: ["world.decisions", "world.responses", "world.rule.failures", "world.rule.trace", "world.rules", "world.search", "world.verdicts"]
         );
         Assert.DoesNotContain(
-            collection: WorldScheduleCommands.Admitted,
+            collection: WorldScheduleCommands.Steps.Concat(second: WorldScheduleCommands.Reads),
             filter: verb => string.Equals(
                 a: registry[key: verb].Audience,
                 b: "operator",

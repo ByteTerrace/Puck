@@ -126,6 +126,9 @@ struct SdfProgramLayout {
     uint partProgramOffset;  // whole-scope shared programs (instanceHeader.y); zero when none qualify
     bool noDetailShapes;    // instanceHeader.z bit 0: the visibility record's distance and attributes are valid for shading
     float stepScale;         // per-program Lipschitz step clamp (1/L; already >0-guarded)
+#if defined(SDF_PRIMARY_PASS) && defined(SDF_MARCH_SEED)
+    bool hasFiniteStepScale; // raw 1/L was valid before the legacy zero-stream fallback
+#endif
     uint instanceOffset;     // instance directory offset
     uint instanceCount;      // packed (unclamped) instance count
     uint worldSegmentOffset; // world-segment list offset
@@ -156,6 +159,9 @@ SdfProgramLayout sdfLoadProgramLayout() {
     layout.partProgramOffset = SDF_INSTANCE_PART_PROGRAMS(sdfWords[instanceOffset]);
     layout.noDetailShapes = (SDF_INSTANCE_FLAGS(sdfWords[instanceOffset]) & SDF_NO_DETAIL_SHAPES_FLAG) != 0u;
     layout.stepScale = ((stepScale > 0.0) ? stepScale : 1.0);
+#if defined(SDF_PRIMARY_PASS) && defined(SDF_MARCH_SEED)
+    layout.hasFiniteStepScale = isfinite(stepScale) && stepScale > 0.0 && stepScale <= 1.0;
+#endif
     layout.instanceOffset = instanceOffset;
     layout.instanceCount = instanceCount;
     layout.worldSegmentOffset = (instanceOffset + SDF_DIRECTORY_HEADER_VECTORS + (SDF_BOUND_RECORD_VECTORS * instanceCount));

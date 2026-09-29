@@ -1045,6 +1045,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
 
         RebuildDriftedSources();
+        PrepareConvergenceSamples();
         PackagesBeginFrame(context: in context);
 
         var schedule = m_schedules[m_turn];
@@ -1118,6 +1119,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 reads?.RetireUntaken();
 
                 if (!produced) {
+                    DeferConvergence(index: index);
                     m_unproduced++;
                     schedule.Next.Withdraw(
                         index: index,
@@ -1140,6 +1142,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     tick: frame.Tick
                 )
             ) {
+                DeferConvergence(index: index);
                 m_unproduced++;
                 schedule.Next.Withdraw(
                     index: index,
@@ -1152,6 +1155,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 index: index,
                 schedule: schedule
             )) {
+                DeferConvergence(index: index);
                 m_unproduced++;
 
                 continue;
@@ -1173,6 +1177,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     height: ((uint)row.Height),
                     width: ((uint)row.Width)
                 );
+            }
+            if (!node.IsReady || (m_standInReads[index] is not null) || (m_taintedReads[index] is not null)) {
+                DeferConvergence(index: index);
             }
             // A capture moves to its instance's node only once that node renders a graph over completed inputs, so the
             // frame it produces is the one the capture reads; until then it stays armed here, where
@@ -1213,7 +1220,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
             if ((index == m_captureInstance) && IsConverging(index: index) &&
                 (m_standInReads[index] is null) && (m_taintedReads[index] is null)) {
-                m_convergenceFrames++;
+                if (m_convergenceWarming) { m_restartConvergence = true; } else { m_convergenceFrames++; }
             }
 
             m_previous[index] = m_current[index];

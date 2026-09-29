@@ -55,7 +55,8 @@ public enum WorldScheduleExpectation {
 /// <summary>
 /// The closed verb vocabulary a <see cref="WorldScheduleRow.Command"/> may open with: the steps that reach the
 /// simulation through an ordinary actor's door — state mutations, guarded transforms, body intents and poses, and
-/// joining or leaving a seat — and the reads a seat may make of what its disclosure shows it.
+/// joining or leaving a seat — the reads a seat may make of what its disclosure shows it, and explicitly admitted
+/// presentation levers checked against that seat's existing section grants.
 /// </summary>
 /// <remarks>
 /// <para>The set is enumerated here rather than derived from <c>CommandRegistry.RoutesToSimulation</c>: that
@@ -65,7 +66,8 @@ public enum WorldScheduleExpectation {
 /// <c>tests/Puck.Cli.Tests</c>'s <c>ScheduledStepVocabularyLawTests</c>, which reads the running host's own
 /// affordance manifest: every step here must exist there and route to the simulation, every read must exist there and
 /// run immediately, and every simulation-routed verb there must be a step here or in that law's exclusion table with a
-/// reason.</para>
+/// reason. The presentation subset is checked against the ordinary offscreen registry by
+/// <c>WorldScheduledPresentationLawTests</c>; these verbs do not exist in a headless host.</para>
 /// <para>A read step runs inline at its tick and records the ingress's answer, so a test can claim that a seat reads a
 /// cell its visibility admits and is refused one it does not. The reads are the state read-backs that answer through
 /// the caller's own disclosure; an operator diagnostic is none of them, since a scheduled step never acts as the
@@ -120,6 +122,10 @@ public static class WorldScheduleCommands {
         ],
         comparer: StringComparer.Ordinal
     );
+    private static readonly HashSet<string> PresentationVerbs = new(
+        collection: ["world.temporal"],
+        comparer: StringComparer.Ordinal
+    );
     // The verbs whose own grammar carries a trailing `instance:<name>` token, which is how a line names a world
     // beside the one this process booted with. Every other admitted verb reaches the booted world's link whatever a
     // row asked for, so a row addressing a sibling with one of those is refused rather than silently landing in the
@@ -138,12 +144,15 @@ public static class WorldScheduleCommands {
     /// <summary>The trailing token a command line names a world with.</summary>
     public const string WorldTokenPrefix = "instance:";
 
-    /// <summary>Gets every admitted verb, steps and reads alike, in ordinal order.</summary>
-    public static IReadOnlyList<string> Admitted => [.. StepVerbs.Concat(second: ReadVerbs).Order(comparer: StringComparer.Ordinal)];
+    /// <summary>Gets every admitted step, read and presentation verb in ordinal order.</summary>
+    public static IReadOnlyList<string> Admitted => [.. StepVerbs.Concat(second: ReadVerbs).Concat(second: PresentationVerbs).Order(comparer: StringComparer.Ordinal)];
     /// <summary>Gets every admitted read, in ordinal order: the state read-backs a seat's own disclosure answers.</summary>
     public static IReadOnlyList<string> Reads => [.. ReadVerbs.Order(comparer: StringComparer.Ordinal)];
     /// <summary>Gets every admitted step that reaches the simulation, in ordinal order.</summary>
     public static IReadOnlyList<string> Steps => [.. StepVerbs.Order(comparer: StringComparer.Ordinal)];
+    /// <summary>Gets the presentation levers that apply immediately at the completed tick through the ordinary
+    /// section grant check. They change no simulation state and cannot address a sibling world.</summary>
+    public static IReadOnlyList<string> Presentation => [.. PresentationVerbs.Order(comparer: StringComparer.Ordinal)];
     /// <summary>Gets every verb a row may address a sibling world with, in ordinal order.</summary>
     public static IReadOnlyList<string> Addressable => [.. AddressableVerbs.Order(comparer: StringComparer.Ordinal)];
 
@@ -173,7 +182,7 @@ public static class WorldScheduleCommands {
     /// <summary>Determines whether a verb token is one this section admits.</summary>
     /// <param name="verb">The line's leading token.</param>
     /// <returns><see langword="true"/> when the verb is admitted.</returns>
-    public static bool IsAdmitted(string verb) => (StepVerbs.Contains(item: verb) || ReadVerbs.Contains(item: verb));
+    public static bool IsAdmitted(string verb) => (StepVerbs.Contains(item: verb) || ReadVerbs.Contains(item: verb) || PresentationVerbs.Contains(item: verb));
     /// <summary>Returns the line's leading verb token — everything up to the first run of whitespace.</summary>
     /// <param name="command">The command line.</param>
     /// <returns>The verb token, or the empty string for a line that is all whitespace.</returns>
