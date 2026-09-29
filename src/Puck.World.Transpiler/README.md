@@ -961,8 +961,10 @@ by the key its merge used): a finding about the root's k-th row lands on that ro
 the root and reports without a span.
 
 `WorldSourceEdits` also uses these spans when a live edit is saved. It prints
-only changed authored nodes through `WorldDecompiler`, retains text outside
-their spans, and recompiles the result. `WorldSourceSave` computes the changed
+only changed authored values through `WorldDecompiler`, retains neighboring
+expressions and comments, and recompiles the result. Nested values keep their
+final array positions when repeated properties append rows. Structural edits
+fall back to the enclosing authored node, retaining text outside its span. `WorldSourceSave` computes the changed
 document values against the source's composed snapshot and verifies the final
 composition before an atomic write. Generated rows refuse at their owning
 construct. The [World guide](../Puck.World/README.md#the-world-as-data) describes

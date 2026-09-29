@@ -13,6 +13,22 @@ namespace Puck.World.Transpiler.Decompiler;
 
 /// <summary>Decompiles canonical Puck JSON definitions back into declarative Puck authoring DSL (.puck).</summary>
 public static partial class WorldDecompiler {
+    /// <summary>Prints one document value through the same expression printer used by full document decompilation.</summary>
+    /// <param name="value">The replacement document value.</param>
+    /// <param name="form">The vocabulary's spelling of the authored position.</param>
+    /// <returns>The value's source expression.</returns>
+    public static string DecompileValue(JsonNode? value, DocumentValueForm form = DocumentValueForm.Unclassified) {
+        var text = FormatArgument(node: value, indentLevel: 0, form: form switch {
+            DocumentValueForm.Name => WorldArgumentForm.Name,
+            DocumentValueForm.Key => WorldArgumentForm.Key,
+            DocumentValueForm.Expression => WorldArgumentForm.Expression,
+            DocumentValueForm.Choice => WorldArgumentForm.Choice,
+            DocumentValueForm.Text => WorldArgumentForm.Text,
+            _ => WorldArgumentForm.Unclassified,
+        });
+
+        return PuckPrinter.PrintExpression(expression: PuckParser.ParseExpression(source: text));
+    }
     /// <summary>Decompiles a JSON text string into formatted Puck source code.</summary>
     /// <param name="jsonText">The raw or canonical JSON text.</param>
     /// <param name="embeddings">Optional companion embedding lock file for resolving vector literals.</param>

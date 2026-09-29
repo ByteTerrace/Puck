@@ -1,10 +1,19 @@
+using Puck.Transpiler.Lowering;
+
 namespace Puck.Transpiler.Diagnostics;
 
 /// <summary>The source provenance retained for one lowered JSON location.</summary>
 /// <param name="Span">The defining syntax span.</param>
 /// <param name="SourcePath">The source document that defines the syntax, or <see langword="null"/> for in-memory input.</param>
 /// <param name="ModuleInstancePath">The slash-separated module instance path, or <see langword="null"/> outside an instance.</param>
-public sealed record SourceOrigin(SourceSpan Span, string? SourcePath, string? ModuleInstancePath);
+public sealed record SourceOrigin(SourceSpan Span, string? SourcePath, string? ModuleInstancePath) {
+    /// <summary>Whether this entry defines a diagnostic node, rather than only a replaceable value inside one.</summary>
+    public bool DefinesNode { get; init; } = true;
+    /// <summary>The authored value expression inside the defining node, when generic value lowering recorded one.</summary>
+    public SourceSpan? ValueSpan { get; init; }
+    /// <summary>The vocabulary's spelling for a replacement value at this position.</summary>
+    public DocumentValueForm ValueForm { get; init; }
+}
 /// <summary>Maintains bidirectional mapping between canonical JSON pointers and source AST origins.</summary>
 public sealed class SourceMap {
     private Dictionary<string, SourceOrigin> m_pathToOrigin = new(comparer: StringComparer.OrdinalIgnoreCase);
@@ -63,11 +72,26 @@ public sealed class SourceMap {
     /// <param name="span">The source text span to associate with the active origin.</param>
     /// <returns>The complete origin for deferred registration.</returns>
     public SourceOrigin CaptureOrigin(SourceSpan span) => new(ModuleInstancePath: m_moduleInstancePath, SourcePath: m_sourcePath, Span: span);
+    /// <summary>Records a value expression without discarding its enclosing authored property's span.</summary>
+    /// <param name="jsonPointer">The value's exact JSON pointer.</param>
+    /// <param name="span">The value expression's span.</param>
+    /// <param name="form">The vocabulary's spelling of the value.</param>
+    public void RegisterValue(string jsonPointer, SourceSpan span, DocumentValueForm form) {
+        var pointer = NormalizePointer(pointer: jsonPointer);
+        var origin = (m_pathToOrigin.TryGetValue(key: pointer, value: out var existing) ? existing : CaptureOrigin(span: span) with { DefinesNode = false });
+
+        Register(jsonPointer: pointer, origin: origin with { ValueSpan = span, ValueForm = form });
+    }
     /// <summary>Registers a JSON pointer path to an already captured source origin.</summary>
     public void Register(string jsonPointer, SourceOrigin origin) {
         ArgumentNullException.ThrowIfNull(origin);
         if (string.IsNullOrEmpty(value: jsonPointer) || (origin.Span.Line <= 0)) { return; }
-        m_pathToOrigin[NormalizePointer(pointer: jsonPointer)] = origin;
+        var pointer = NormalizePointer(pointer: jsonPointer);
+
+        if (origin.DefinesNode && (origin.ValueSpan is null) && m_pathToOrigin.TryGetValue(key: pointer, value: out var previous)) {
+            origin = origin with { ValueSpan = previous.ValueSpan, ValueForm = previous.ValueForm };
+        }
+        m_pathToOrigin[pointer] = origin;
     }
     /// <summary>Attempts to resolve a JSON pointer path to its originating source text span.</summary>
     public bool TryGetSpan(string jsonPointer, out SourceSpan span) {
@@ -82,13 +106,13 @@ public sealed class SourceMap {
     public bool TryGetOrigin(string jsonPointer, out SourceOrigin origin) {
         var pointer = NormalizePointer(pointer: jsonPointer);
 
-        if (m_pathToOrigin.TryGetValue(key: pointer, value: out origin!)) { return true; }
+        if (m_pathToOrigin.TryGetValue(key: pointer, value: out origin!) && origin.DefinesNode) { return true; }
         while (true) {
             var lastSlash = pointer.LastIndexOf(value: '/');
 
             if (lastSlash <= 0) { break; }
             pointer = pointer[..lastSlash];
-            if (m_pathToOrigin.TryGetValue(key: pointer, value: out origin!)) { return true; }
+            if (m_pathToOrigin.TryGetValue(key: pointer, value: out origin!) && origin.DefinesNode) { return true; }
         }
         origin = new SourceOrigin(ModuleInstancePath: null, SourcePath: null, Span: SourceSpan.None);
         return false;

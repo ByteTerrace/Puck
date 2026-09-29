@@ -143,4 +143,22 @@ public sealed class SourceSaveLawTests {
         Assert.True(condition: WorldSourceLoader.TryReadAuthored(path: path, document: Encoding.UTF8.GetBytes(s: recompiled.RequireJson().ToJsonString()), authored: out var reloaded, reason: out reason), userMessage: reason);
         Assert.Equal(expected: WorldDefinitionSerialization.Serialize(definition: live!), actual: WorldDefinitionSerialization.Serialize(definition: reloaded!));
     }
+    [InlineData(0, "0.2", "0.3")]
+    [InlineData(1, "0.8", "0.9")]
+    [Theory]
+    public void Saving_an_appended_array_leaf_keeps_both_authored_property_spans(int row, string before, string after) {
+        var source = (WorldSources.Header + """
+            views {
+              // First authored array stays separate.
+              post [ { name: a, package: "sdf.film-grain", parameters { strength: 0.2 } } ]
+              // The appended row owns a different nested value span.
+              post [ { name: b, package: "sdf.film-grain", parameters { strength: 0.8 } } ]
+            }
+            """);
+        var target = WorldCompiler.Compile(source: source, cancellationToken: TestContext.Current.CancellationToken).RequireJson().DeepClone().AsObject();
+
+        target["views"]!["post"]![row]!["parameters"]!["strength"] = double.Parse(after, System.Globalization.CultureInfo.InvariantCulture);
+        Assert.True(condition: WorldSourceEdits.TryRewrite(source: source, target: target, rewritten: out var saved, reason: out var reason), userMessage: reason);
+        Assert.Equal(source.Replace(comparisonType: StringComparison.Ordinal, newValue: after, oldValue: before), saved);
+    }
 }

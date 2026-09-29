@@ -55,6 +55,10 @@ the rewrite from the printer.) `DescentChildLawTests` asks the stronger question
 arm rebuilds every syntax-node child its node declares — and `SyntaxNodeKinds` is the one type enumeration both run
 over. `MigrationDeclarationLawTests` holds a migration to what it declares it reshapes.
 
+`SourceSaveLawTests` covers authored-row edits, generated-row refusals, composed
+saves, and scalar edits within repeated array properties. The appended-row cases
+require every unchanged source byte, including neighboring comments, to survive.
+
 ## Writing a test
 
 Compile world source through `WorldSources`: `LowerClean` for a body under the world schema header that must compile
