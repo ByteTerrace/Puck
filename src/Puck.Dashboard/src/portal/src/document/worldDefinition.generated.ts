@@ -9072,7 +9072,7 @@ export type WorldRenderLighting = {
 };
 
 /**
- * The enumerated world render-scale tiers a player or a quality preset picks, never a free numeric value, over the continuous render scale a view carries (SdfViewSnapshot.RenderScale). A view renders its output at its rect times its render scale, rounded up on each axis to a step of the render graph's extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and the root's place pass reconstructs that output into the rect at world.upscale-sharpness. The continuous scale stays reachable in code (layout transitions); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the world document's quality presets, the console world.render-scale verb and the boot resolution read. Each extent below is a lone whole-display view at 1280x800.
+ * The enumerated world render-scale tiers a player or a quality preset picks, never a free numeric value, over the continuous render-scale ceiling a view carries (SdfViewSnapshot.RenderScale). A view's output keeps its rect's extent; below native it traces and shades a grid of that extent times its render scale, rounded up on each axis to a step of the render graph's extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and its own resolve pass reconstructs the grid into the output at world.upscale-sharpness. A layout transition's dip moves that grid inside the ceiling (SdfViewSnapshot.ResolvedRenderScale); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the world document's quality presets, the console world.render-scale verb and the boot resolution read. Each extent below is a lone whole-display view at 1280x800.
  */
 export type WorldRenderScaleTier = "Native" | "ThreeQuarter" | "Half" | "Quarter" | "Eighth";
 
@@ -11139,7 +11139,7 @@ export type WorldViewLayout = {
    */
   transitionSeconds?: number;
   /**
-   * The render scale (0, 1] applied to every slot mid-transition (a soft dip that sharpens on settle). Default 1, no dip.
+   * The render scale (0, 1] applied to every slot mid-transition (a soft dip that sharpens on settle). It multiplies the render grid inside each view's render-scale ceiling and allocates nothing, so a view rendering at native scale, which reconstructs nothing, does not dip. Default 1, no dip.
    */
   transitionRenderScale?: number;
   /**

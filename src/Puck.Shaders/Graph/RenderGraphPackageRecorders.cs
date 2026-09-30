@@ -53,7 +53,9 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// it, since every pass only adds to it atomically.</param>
 /// <param name="FrameWidth">The instance output width; zero uses the pass width for standalone recordings.</param>
 /// <param name="FrameHeight">The instance output height; zero uses the pass height for standalone recordings.</param>
-public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null, GpuKernelCounterRow? WorkCounters = null, uint FrameWidth = 0, uint FrameHeight = 0) {
+/// <param name="RenderWidth">The width of the instance's render grid this frame; zero uses the output width.</param>
+/// <param name="RenderHeight">The height of the instance's render grid this frame; zero uses the output height.</param>
+public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null, GpuKernelCounterRow? WorkCounters = null, uint FrameWidth = 0, uint FrameHeight = 0, uint RenderWidth = 0, uint RenderHeight = 0) {
     /// <summary>Gets the command buffer to record into.</summary>
     public nint CommandBuffer { get; } = CommandBuffer;
     /// <summary>Gets the instance's counting recorder.</summary>
@@ -68,6 +70,12 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     public uint FrameWidth { get; } = ((FrameWidth == 0) ? Width : FrameWidth);
     /// <summary>Gets the instance output height, independently of this pass's render grid.</summary>
     public uint FrameHeight { get; } = ((FrameHeight == 0) ? Height : FrameHeight);
+    /// <summary>Gets the width of the render grid every render-sized pass of the instance records at this frame: the
+    /// node's one resolution of it, which a pass of another extent reads rather than resolving the grid again.</summary>
+    public uint RenderWidth { get; } = ((RenderWidth != 0) ? RenderWidth : ((FrameWidth == 0) ? Width : FrameWidth));
+    /// <summary>Gets the height of the render grid every render-sized pass of the instance records at this
+    /// frame.</summary>
+    public uint RenderHeight { get; } = ((RenderHeight != 0) ? RenderHeight : ((FrameHeight == 0) ? Height : FrameHeight));
     /// <summary>Gets the versions bound to the input ports.</summary>
     public ReadOnlySpan<RenderGraphPackageResource> Inputs { get; } = Inputs;
     /// <summary>Gets the versions bound to the output ports.</summary>

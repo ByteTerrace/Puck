@@ -86,7 +86,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 return (BitConverter.ToUInt32(value: passBlock, startIndex: ((int)layout.BlockOffsetOf(member: SdfWorldPackage.ImageExtent))) == renderPixels);
             }, timeout: TimeSpan.FromSeconds(value: 30)), userMessage: node.LastSwapError?.ToString());
             Assert.Equal(expected: (Extent, Extent), actual: node.Extent);
-            Assert.Equal(expected: (passes == 11), actual: node.Plan!.Storages.Any(predicate: static item => item.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: "$resolvedSurface")));
+            Assert.Equal(expected: (passes == 11), actual: node.Plan!.Storages.Any(predicate: static item => item.Versions.Any(predicate: static version => version.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.CurrentColor}"))));
         }
         current = current with { EnableCadenceGate = true };
         _ = view.Produce(context: in context);

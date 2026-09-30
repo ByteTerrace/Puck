@@ -129,7 +129,8 @@ public sealed record WorldViewGraphBudget(long PassPixelsPerFrame = 0, long Byte
 /// <param name="TransitionSeconds">How long the ease into this composition takes when it becomes active. Default 0,
 /// a cut.</param>
 /// <param name="TransitionRenderScale">The render scale (0, 1] applied to every slot mid-transition (a soft dip that
-/// sharpens on settle). Default 1, no dip.</param>
+/// sharpens on settle). It multiplies the render grid inside each view's render-scale ceiling and allocates nothing, so
+/// a view rendering at native scale, which reconstructs nothing, does not dip. Default 1, no dip.</param>
 public sealed record WorldViewLayout(string Name, IReadOnlyList<WorldViewSlot> Slots, int SeatCount = 0,
     float TransitionSeconds = 0f, float TransitionRenderScale = 1f) {
     private readonly IReadOnlyList<WorldViewSlot> m_slots = (Slots ?? []);

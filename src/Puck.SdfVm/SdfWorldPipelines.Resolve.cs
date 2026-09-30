@@ -9,31 +9,25 @@ public sealed partial class SdfWorldPipelines {
     /// never call this. The set owns the slot until disposal; repeated requests join the same slot and cache lease.</summary>
     /// <param name="cache">The composition's pass-pipeline cache.</param>
     /// <param name="device">The device this set was acquired on.</param>
-    /// <param name="reflector">The reflector holding the optional kernel to its declared interface.</param>
     /// <param name="cancellationToken">Cancels this background wait, leaving the set's lease intact.</param>
-    /// <remarks>Call on a package's background build after its residency is ready. A reload that races activation also
-    /// prepares changed optional bytecode, so its existing atomic swap cannot leave an active slot on stale bytecode.</remarks>
-    public void BuildResolve(GpuPassPipelineCache cache, IGpuDeviceContext device, ShaderBytecodeReflector reflector, CancellationToken cancellationToken) {
+    /// <remarks>Call on a package's background build after its residency is ready. The kernel is the set's own: the
+    /// deployed tree's, which is the host's own build and is reflected by nobody, as boot reflects none of the others,
+    /// or one a committed reload installed, which <see cref="PrepareReload"/> reflected and held to the host's interface
+    /// before it leased anything. So building it needs no shader toolchain. A reload that races activation also
+    /// prepares changed optional bytecode, so its existing atomic swap cannot leave an active slot on stale
+    /// bytecode.</remarks>
+    public void BuildResolve(GpuPassPipelineCache cache, IGpuDeviceContext device, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(argument: cache);
         ArgumentNullException.ThrowIfNull(argument: device);
-        ArgumentNullException.ThrowIfNull(argument: reflector);
         GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> wait;
-        Slot slot;
 
         lock (m_gate) {
             ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-            if (m_slots[((int)SdfKernel.Resolve)] is { } existing) {
-                slot = existing;
-            } else {
-                var bytes = m_kernels[SdfKernel.Resolve];
-
-                if (SdfKernelSet.InterfaceMismatch(kernel: SdfKernel.Resolve, reflected: reflector.Read(bytecode: bytes.Span)) is { } mismatch) {
-                    throw new InvalidOperationException(message: $"'sdf-resolve': {mismatch}");
-                }
+            if (m_slots[((int)SdfKernel.Resolve)] is not { } slot) {
                 var description = SdfWorldTables.PipelineLayouts.Specs[((int)SdfKernel.Resolve)].Description;
 
                 slot = new Slot(description: description, lease: cache.Acquire(device: device,
-                    key: GpuPassPipelineKey.OfCompute(bytecode: bytes, description: description)));
+                    key: GpuPassPipelineKey.OfCompute(bytecode: m_kernels[SdfKernel.Resolve], description: description)));
                 m_slots[((int)SdfKernel.Resolve)] = slot;
             }
             // Keep a temporary lease while the package build waits. A concurrent reload may retire the slot's

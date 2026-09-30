@@ -1431,7 +1431,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             }
 
             if (composed.Camera is { } cameraName) {
-                // Named cameras share the live resolution setting with seat cameras, including layout transitions.
+                // Named cameras share the live resolution setting with seat cameras, including a layout transition's dip.
                 if (ResolveNamedCamera(
                     camera: out var namedCamera,
                     deltaSeconds: deltaSeconds,
@@ -1446,7 +1446,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     ) {
                         CutRevision = ViewCut(index: m_views.Count, source: m_namedCameraRigCache[cameraName], revision: m_namedCameraRigCache[cameraName].Revision),
                         Quality = quality,
-                        RenderScale = (m_settings.RenderScale * transitionScale),
+                        RenderScale = m_settings.RenderScale,
+                        ResolvedRenderScale = (m_settings.RenderScale * transitionScale),
                         UpscaleSharpness = m_settings.UpscaleSharpness,
                     });
                     if (!hasSeatViewFallback) {
@@ -1499,9 +1500,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 slot: slot,
                 width: width
             );
-            // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
-            // any lower tier renders that view's SDF at a reduced extent, reconstructed inside its own package.
-            // The root places the native output; a layout transition dips only the internal render grid.
+            // The live render-scale tier is each view's ceiling (RenderScale), which sizes its scratch and chooses its
+            // passes: native renders its output grid directly, a lower tier reconstructs a reduced grid inside the view's
+            // own package. A layout transition dips only the grid inside that ceiling (ResolvedRenderScale), which
+            // allocates and rebuilds nothing, so a view at a native ceiling, which reconstructs nothing, does not dip.
             m_views.Add(item: new SdfViewSnapshot(
                 Camera: camera,
                 Region: region
@@ -1509,7 +1511,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 CutRevision = ViewCut(index: m_views.Count, source: m_seatCameraRigs[slot]!, revision: m_roster.Seat(slot: slot)!.View.CutRevision),
                 Grid = SeatGrid(slot: slot),
                 Quality = quality,
-                RenderScale = (m_settings.RenderScale * transitionScale),
+                RenderScale = m_settings.RenderScale,
+                ResolvedRenderScale = (m_settings.RenderScale * transitionScale),
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
             // A seat presented elsewhere keeps its place among the views, so every view keeps its index, and its view

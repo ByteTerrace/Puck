@@ -66,7 +66,8 @@ buffer-layout changes need a rebuild.
 An SDF view is an `sdf.world` instance of the render graph: the graph compiler
 splices its selected package fragment into the one-pass graph the runtime makes
 for the instance. `NativeFragment` has ten passes, `sdf.world$sky` through
-`sdf.world$views`; the reduced or variable `Fragment` adds `sdf.world$resolve`.
+`sdf.world$views`; `Fragment`, which a view below a native ceiling runs, adds
+`sdf.world$resolve`.
 `world.counters gpu` lists them under the instance's name. The frame's first pass to record submits its residency's one
 upload ahead of the instance's submission (`SdfWorldResidency.Submit`), counted
 under the residency as `sdf:<name>` with three passes (`SdfWorldTables.PassLabels`):
@@ -101,12 +102,21 @@ of its passes. The upload and the view's passes, in order:
 | `shadow` | `sdf-world-shadow.comp` | The key light's soft shadow into the record's K row, with its own candidate mask; skips a frame whose soft shadows are off or that has no shadow light (`Skips`). |
 | `views` | `sdf-world-views*.comp` | Materials, lighting through the one light interface, volumes, diagnostics, written into the view's output image. |
 
-A fixed native view uses `SdfWorldPackage.NativeFragment`, ten passes writing
-`color` directly. A reduced or variable view uses `Fragment`: traversal writes
-`currentColor` at the active render grid, then `sdf-resolve.comp` writes `color`
-and `resolvedSurface` at the output grid. Scratch is allocated at the authored
-render ceiling; current-grid changes replace no resources. `place` places the
-full-output image in its rect. The shared `Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli`
+The ceiling (`SdfViewSnapshot.RenderCeiling`) alone selects the fragment
+(`SdfWorldPasses.FragmentOf`) and is the whole render-extent revision, so a
+fragment change is always a rebuild the node holds its last image through, never
+a frame of one graph at another's grid. A view at a native ceiling uses
+`SdfWorldPackage.NativeFragment`, ten passes writing `color` directly, and
+ignores the current grid (`SdfViewSnapshot.RenderGrid`). A view below it uses
+`Fragment`: traversal writes `currentColor` (one transient allocation, started by
+the sky) at the active render grid, then `sdf-resolve.comp` writes `color` at the
+output grid, reading its render grid from the recording
+(`RenderGraphPackageRecording.RenderWidth`), the node's one resolution of it.
+Scratch is allocated at the render ceiling; current-grid changes, a layout
+transition's dip among them, replace no resources and rebuild nothing. `place`
+places the full-output image in its rect, resampling it again unless the
+scheduled extent equals the rect's pixels. No output-sized surface is written
+until a reader needs one. The shared `Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli`
 module supplies both kernels' filter and has no SDF-layer dependency.
 
 Primary, surface, ambient, shadow, and views share `sdf-world-views.comp.hlsl`'s

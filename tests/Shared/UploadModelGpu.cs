@@ -88,6 +88,11 @@ internal sealed class UploadModelGpu :
     /// <summary>Gets or sets the memory profile the device reports; the default reports nothing, which stages every
     /// region.</summary>
     public GpuMemoryProfile MemoryProfile { get; set; }
+    /// <summary>Gets or sets the gate every compute pipeline named <see cref="ComputePipelineGateName"/> waits on before it
+    /// is created, or <see langword="null"/> for none. Pipelines build on pool threads, never on the frame thread.</summary>
+    public ManualResetEventSlim? ComputePipelineGate { get; set; }
+    /// <summary>Gets or sets the name of the compute pipeline <see cref="ComputePipelineGate"/> holds.</summary>
+    public string? ComputePipelineGateName { get; set; }
     /// <summary>Gets the model's buffers, bindings, pipelines, shader modules and recorder, and the
     /// <see cref="FakeGpuDevice"/>'s other services.</summary>
     public GpuDeviceServices Services { get; }
@@ -136,6 +141,11 @@ internal sealed class UploadModelGpu :
     /// <param name="group">The group.</param>
     /// <returns>The set's handle.</returns>
     public nint BoundSet(uint group) => m_boundSets[group];
+
+    /// <summary>Gets or sets the list every set bind is appended to, in recording order, as its group and set, or
+    /// <see langword="null"/>, the default, to record none.</summary>
+    public List<(uint Group, nint Set)>? SetBinds { get; set; }
+
     /// <summary>Returns the handle of the buffer a set's binding names.</summary>
     /// <param name="set">The set.</param>
     /// <param name="binding">The binding.</param>
@@ -182,6 +192,11 @@ internal sealed class UploadModelGpu :
     }
 
     IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) {
+        // A held gate is a driver compiling on a cold cache: the creation waits in the build's pool thread until the
+        // harness opens it, so the frames produced meanwhile are the ones a slow build leaves to the installed graph.
+        if ((ComputePipelineGate is { } gate) && string.Equals(a: description.Name, b: ComputePipelineGateName, comparisonType: StringComparison.Ordinal)) {
+            _ = gate.Wait(timeout: TimeSpan.FromSeconds(value: 60));
+        }
         var pipeline = PipelineOf(layout: description.Layout);
 
         if (m_uploadModules.ContainsKey(key: computeShaderModule.Handle)) {
@@ -301,6 +316,7 @@ internal sealed class UploadModelGpu :
     void IGpuRecorder.BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) {
         m_boundSet = descriptorSetHandle;
         m_boundSets[group] = descriptorSetHandle;
+        SetBinds?.Add(item: (group, descriptorSetHandle));
     }
     void IGpuRecorder.BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) => m_boundPipeline = pipelineHandle;
     void IGpuRecorder.Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {

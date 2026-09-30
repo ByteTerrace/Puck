@@ -54,7 +54,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         var tables = residency.Submit(context: recording.Context);
         var frame = residency.Frame!;
         var index = Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1));
-        var render = m_owner.RenderExtentOf(instance: m_context.Instance)!.FrameAt(width: recording.FrameWidth, height: recording.FrameHeight);
+        var render = (Width: recording.RenderWidth, Height: recording.RenderHeight);
         Span<byte> frameBlock = stackalloc byte[SdfFrameBlock.SizeBytes];
 
         frameBlock.Clear();
@@ -74,9 +74,6 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
 
         bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.CurrentColor), descriptorSetHandle: set, imageViewHandle: recording.Inputs[0].Image.ImageViewHandle);
         bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.Output), descriptorSetHandle: set, imageViewHandle: recording.Outputs[0].Image.ImageViewHandle);
-        WriteBuffer(set: set, member: SdfWorldPackage.VisibilityRecords, buffer: recording.Inputs[1].Buffer!);
-        WriteBuffer(set: set, member: SdfWorldPackage.CullBounds, buffer: recording.Inputs[2].Buffer!);
-        WriteBuffer(set: set, member: SdfWorldPackage.ResolvedSurface, buffer: recording.Outputs[1].Buffer!);
         var pipeline = tables.Pipeline(kernel: SdfKernel.Resolve);
 
         recording.Recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer, pipelineHandle: pipeline.Handle);
@@ -85,11 +82,5 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         residency.MarkRendered(view: index);
         m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
         return RenderGraphPackageOutcome.Drew;
-    }
-
-    private void WriteBuffer(nint set, string member, IGpuBuffer buffer) {
-        var resource = SdfWorldInterfaces.ResourceOf(layout: m_context.Parameters.Layout, member: member);
-
-        m_context.Services.Bindings.WriteBuffer(binding: resource.Binding, bufferHandle: buffer.BufferHandle, bufferSize: buffer.SizeBytes, descriptorSetHandle: set, kind: resource.Kind, elementStride: resource.Member.Type!.Value.SizeBytes());
     }
 }

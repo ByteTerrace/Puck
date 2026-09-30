@@ -14,15 +14,33 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// <summary>The camera's cut revision, moved when its framing is reseeded or a layout slot changes its source.</summary>
     public long CutRevision { get; init; }
 
-    /// <summary>The authored render-scale ceiling in (0, 1], quantized by <see cref="RenderGraphExtent"/>. Scratch is
-    /// allocated at this fraction of the view's output extent; its published output keeps its full extent.</summary>
+    /// <summary>The render-scale ceiling in (0, 1], quantized by <see cref="RenderGraphExtent"/> into
+    /// <see cref="RenderCeiling"/>. Scratch is allocated at that fraction of the view's output extent; its published
+    /// output keeps its full extent. Zero or less reads as native.</summary>
     public float RenderScale { get; init; } = 1f;
 
-    /// <summary>The controller's already-quantized render scale, bounded by <see cref="RenderScale"/>'s quantized
-    /// ceiling. Zero uses the ceiling; a positive value enables changing the sample grid without reallocating scratch.</summary>
+    /// <summary>This frame's render scale inside the ceiling, quantized by <see cref="RenderGraphExtent"/> and bounded by
+    /// <see cref="RenderCeiling"/> into <see cref="RenderGrid"/>. Zero uses the ceiling. It moves the render grid and
+    /// nothing else: no allocation, fragment or graph follows it, so it can change every frame (a layout transition's
+    /// dip). A view whose ceiling is native reconstructs nothing, so it renders its output grid and ignores this.</summary>
     public float ResolvedRenderScale { get; init; }
     /// <summary>The spatial reconstruction sharpness, from zero for bilinear to one for clamped Catmull-Rom.</summary>
     public float UpscaleSharpness { get; init; }
+    /// <summary>Gets the allocation ceiling as a fraction of the output on each axis: <see cref="RenderScale"/>
+    /// quantized, one for a scale of zero or less. It alone chooses whether the view reconstructs
+    /// (<see cref="Reconstructs"/>) and sizes its scratch.</summary>
+    public double RenderCeiling => RenderGraphExtent.Quantize(fraction: ((RenderScale > 0f) ? RenderScale : 1f));
+    /// <summary>Gets whether the view renders a grid below its output and reconstructs it: exactly when
+    /// <see cref="RenderCeiling"/> is below one.</summary>
+    public bool Reconstructs => (RenderCeiling < 1d);
+    /// <summary>Gets this frame's render grid as a fraction of the output on each axis: one for a view that does not
+    /// reconstruct, otherwise <see cref="ResolvedRenderScale"/> quantized and bounded by <see cref="RenderCeiling"/>, or
+    /// the ceiling when that is zero or less.</summary>
+    public double RenderGrid => (!Reconstructs
+        ? 1d
+        : ((ResolvedRenderScale > 0f)
+            ? Math.Min(val1: RenderGraphExtent.Quantize(fraction: ResolvedRenderScale), val2: RenderCeiling)
+            : RenderCeiling));
 
     /// <summary>The editor grid the view draws, which its pass block carries (<see cref="SdfFrameBlock"/>); a view that
     /// draws none carries <see cref="GridOverlayState.Hidden"/>.</summary>

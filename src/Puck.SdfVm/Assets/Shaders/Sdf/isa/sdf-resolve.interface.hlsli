@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/bf2000f4a7618ad2207d92abda0b9a22bb56cb69781342643662ec34373c0877). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/37ba9d7b10c91a25829bbc48440919f74b1ccbba4c2519841a269ef9475516ae). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -84,11 +84,8 @@ struct SdfResolvePass {
 [[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsaC521032A : register(b0, space3);
 #define passGroup passGroupIsaC521032A
 [[vk::binding(1, 3)]] Texture2D<float4> currentColor : register(t1, space3);
-[[vk::binding(2, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t2, space3);
-[[vk::binding(3, 3)]] StructuredBuffer<uint> cullBounds : register(t3, space3);
-[[vk::binding(4, 3)]] RWStructuredBuffer<uint2> resolvedSurface : register(u4, space3);
-[[vk::binding(5, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u5, space3);
-[[vk::binding(6, 3)]] RWStructuredBuffer<uint> workCounters : register(u6, space3);
+[[vk::binding(2, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u2, space3);
+[[vk::binding(3, 3)]] RWStructuredBuffer<uint> workCounters : register(u3, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps then texels written, as a 64-bit count in

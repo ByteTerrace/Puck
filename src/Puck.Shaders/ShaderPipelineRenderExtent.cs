@@ -4,7 +4,10 @@ namespace Puck.Shaders;
 /// that can change without rebuilding. Both are positive and no larger than the output; the current grid is no larger
 /// than the ceiling. The package owns any scale quantization.</summary>
 public interface IShaderPipelineRenderExtent {
-    /// <summary>Gets the revision of the allocation ceiling. A change rebuilds beside the installed graph.</summary>
+    /// <summary>Gets the revision of every input the graph's allocation and passes depend on: the ceiling, and whatever
+    /// else chooses which graph the instance runs (<see cref="IRenderGraphPackageFactory.FragmentOf"/>), so no graph
+    /// records a grid it was not built for. A change rebuilds beside the installed graph, which presents its last image
+    /// until the replacement installs.</summary>
     long Revision { get; }
 
     /// <summary>Resolves the allocation ceiling against the output.</summary>
