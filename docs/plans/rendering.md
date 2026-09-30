@@ -1209,7 +1209,9 @@ runtime's latest schedule renders it at. It hands them to the host's
 before without allocating. The pipeline pane's pointer maps through its
 instance's published mapping (`TryGetPane`), and `WorldViewGraphHost.Walk` runs
 `RenderGraphHitWalk.WalkDisplay` over the runtime's live instance set, with
-each view's seat camera and each pane's paired camera. `world.view.panes`
+each view's seat camera and each pane's paired camera, starting beneath every
+pane from a lone whole-display view (`WorldViewGraphHost.DisplayView`), which is
+no pane and gets no hover outline. `world.view.panes`
 echoes the published mappings, a pick and a walk; the laws are
 `WorldViewPaneMappingLawTests`, and the `pane-display` canary maps a display
 point to the pane's pixel and moves it with the slot.
@@ -1272,8 +1274,9 @@ bezel's one statement is `WorldScreenMappings.Glass`. The pointer's pane hover r
 picker on the CPU (P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`,
 outlined by the overlay's `CursorWriter` and echoed as `world.view.panes`'
 `hovered=`). `SdfWorldPasses.PickerOf` supplies the shared `SdfWorldPicker`:
-one asynchronous 16-byte visibility read resolves the winning SDF instance or
-mesh draw through the frame's immutable `WorldPickMapBuilder` map. The
+one asynchronous visibility read, with the frame's dispatch box so a pixel the
+frame did not write answers nothing, resolves the winning SDF instance or mesh
+draw through the frame's immutable `WorldPickMapBuilder` map. The
 64-byte visibility record keeps that identity in V and the exact winning
 shape transform slot in L.x; material lanes read the existing transform row.
 The `sdf-picking` and `pane-outline` canaries pass on Vulkan and DirectX with

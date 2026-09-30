@@ -84,10 +84,11 @@ void CSMain(uint threadIndex : SV_GroupIndex) {
         boxMaxY = 0u;
     }
 
-    // A tile is WorldTileSize (16) px = (WorldTileSize / 8) groups of the views kernel's 8x8 workgroup. The dispatch
-    // is origin-anchored (0,0); the views kernel adds cullBounds as its pixel-group origin to land on the bbox. The
-    // box's exclusive end is the extent the hit passes wrote this frame, which is where a visibility record is current.
-    uint groupsPerTile = (WorldTileSize / 8u);
+    // A tile is WorldTileSize px, (WorldTileSize / SDF_VISIBILITY_BOX_EDGE) groups of the hit passes' workgroup on each
+    // axis. The dispatch is origin-anchored (0,0); the hit passes add cullBounds as their pixel-group origin to land on
+    // the bbox. The box's exclusive end is the extent the hit passes wrote this frame, which is where a visibility record
+    // is current (SDF_VISIBILITY_CURRENT).
+    uint groupsPerTile = (WorldTileSize / SDF_VISIBILITY_BOX_EDGE);
 
     cullBoundsRW[0] = (boxMinX * groupsPerTile);
     cullBoundsRW[1] = (boxMinY * groupsPerTile);

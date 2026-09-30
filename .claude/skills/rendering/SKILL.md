@@ -1570,8 +1570,10 @@ mapping per shown view and pane, in drawing order, named by the instance's
 `RenderGraphInstance.Handle` at the extent the runtime's latest schedule
 renders it at (`IRenderGraphInstances.Latest`), into `Panes` and the host's
 `SourcePanePicker`. A steady frame publishes the mappings it published before
-and allocates nothing (`WorldViewPaneMappingLawTests`); a view the root stands
-for is no pane. The pane pointer reads its instance's published mapping
+and allocates nothing (`WorldViewPaneMappingLawTests`); a lone whole-display
+view, whether the root stands for it or tonemaps it, is no pane and is never
+hovered or outlined, but its whole-display mapping is `DisplayView`, which the
+walk starts from where no pane holds the point. The pane pointer reads its instance's published mapping
 (`TryGetPane`), so it maps the pane as the display last showed it. A hit on a
 rendered source continues through `RenderGraphHitWalk` (`src/Puck.Hosting/Graph`)
 up to `RenderGraphInstanceSet.NestingDepth`; `WorldViewGraphHost.Walk` runs it

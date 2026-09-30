@@ -29,7 +29,7 @@ SdfHit sdfPrimarySample(float3 position, uint mask, uint4 part, bool localPart) 
         hit.material = 0;
         hit.lanes = 0.0;
         hit.instanceIndex = -1;
-        hit.frameSlot = -1;
+        hit.frameSlot = SDF_TRANSFORM_SLOT_NONE;
         sdfComposePartProgram(hit, position, part, sdfProgramLayout.dataOffset, -1, true);
         hit.distance *= sdfProgramLayout.stepScale;
         return hit;
@@ -46,7 +46,7 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
     int material = 0;
     float4 hitLanes = 0.0;
     int hitInstanceIndex = -1;
-    int hitFrameSlot = -1;
+    int hitFrameSlot = SDF_TRANSFORM_SLOT_NONE;
     float candidateMargin = SDF_FAR_DISTANCE;
     float candidateT = 0.0;
     float materialBlendWeight = 0.0;
@@ -363,7 +363,7 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
     result.steps = best.steps;
     result.found = best.found;
     result.instanceIndex = -1;
-    result.frameSlot = -1;
+    result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
     if (best.found) {
         // Resolve attributes in original union order at the selected point, including ties and material seams.
         // Independent sampling can choose a different accepted point from the full-scene march.
@@ -395,7 +395,7 @@ void sdfPrimaryStage(SdfPixel p) {
     int material = 0;
     float4 hitLanes = float4(0.0, 0.0, 0.0, 0.0);
     int hitInstanceIndex = -1;
-    int hitFrameSlot = -1;
+    int hitFrameSlot = SDF_TRANSFORM_SLOT_NONE;
     float materialBlendWeight = 0.0;
     int materialBlendOther = 0;
     int marchStep = 0;
@@ -438,7 +438,7 @@ void sdfPrimaryStage(SdfPixel p) {
         traveled = meshHit.t;
         material = sdfMeshMaterial(meshHit.draw, meshHit.triangleIndex);
         hitInstanceIndex = -1;
-        hitFrameSlot = -1;
+        hitFrameSlot = SDF_TRANSFORM_SLOT_NONE;
         materialBlendWeight = 0.0;
         materialBlendOther = 0;
         terminalRadius = 0.0;
@@ -453,7 +453,7 @@ void sdfPrimaryStage(SdfPixel p) {
     SdfVisibility visibility;
     visibility.t = traveled;
     visibility.identity = (meshPixel
-        ? sdfVisibilityIdentity(SdfVisibilityKindMesh, meshHit.draw)
+        ? sdfVisibilityIdentity(SDF_VISIBILITY_KIND_MESH, meshHit.draw)
         : sdfVisibilitySdfIdentity(hitSurface, hitInstanceIndex));
     visibility.material = material;
     visibility.flags = sdfVisibilityFlags(marchStep, sdfEvalCount);

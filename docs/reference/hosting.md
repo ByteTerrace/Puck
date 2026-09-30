@@ -331,7 +331,8 @@ ray into an instance's world and meets the nearest surface placement. When that
 placement shows another instance's output, the walk casts a new ray through the
 producer's camera from the hit's point on the image, and repeats in the
 producer's world. `WalkDisplay` starts from the topmost pane under a display
-point. A walk continues at most the limit it is given, which is normally
+point, or, where no pane holds it, from the view the display itself shows when
+that view is no pane (a lone view covering the whole display). A walk continues at most the limit it is given, which is normally
 `RenderGraphInstanceSet.NestingDepth`, the longest chain of same-frame reads.
 It ends on a producer's pixels, on an instance's world, off a source, at the
 limit, on an image the showing instance does not read, or at an instance with

@@ -92,15 +92,20 @@ null, so in such a world nothing can be picked on the CPU.
 
 The shared GPU picker is supplied by [P13](rendering.md#p13--hit-to-source-mapping-and-input-destinations):
 `SdfWorldPasses.PickerOf` exposes one `SdfWorldPicker` per rendered view. Its
-asynchronous readback copies the requested pixel's 16-byte visibility V row
-only while demanded. Kind occupies bits 31..30 (0 background, 1 SDF, 2 mesh),
-and source occupies bits 29..0: the SDF instance's program ordinal plus one,
-or the mesh draw ordinal. SDF source zero means geometry outside any instance.
-The request captures an immutable host lookup, so a later program rebuild or
-reused draw ordinal cannot name a replacement placement. The exact winning
-shape's transform slot is retained in L.x; an articulated instance's bound
-slot can differ. Anonymous lanes are loaded from that transform's existing
-row, preserving the 64-byte visibility record.
+asynchronous readback copies the requested pixel's visibility V, C and L.x
+words and the frame's dispatch box, only while demanded. `SdfVisibility` states
+the identity's kind (`SdfVisibilityKind`: background, SDF, mesh) and source
+fields for the host and, generated, for the kernels: the source is the SDF
+instance's program ordinal plus one, or the mesh draw ordinal. SDF source zero
+means geometry outside any instance. A pixel outside its frame's dispatch box
+answers nothing. The request captures an immutable host lookup, so a later
+program rebuild or reused draw ordinal cannot name a replacement placement.
+The exact winning shape's transform slot is retained in L.x
+(`SdfPickResult.TransformSlot`, null for static geometry); an articulated
+instance's bound slot can differ. The answer resolves that slot against the
+transform table of the frame the record was rendered from
+(`SdfPickResult.Transform`). Anonymous lanes are loaded from that transform's
+existing row, preserving the 64-byte visibility record.
 
 Free Cam exists as a gameplay mode
 that possesses an authored `camera-seat-<n>` body
@@ -294,21 +299,25 @@ names a placement id they had to look up.
    sustained into the command plane.
    - *The GPU path* picks everything the builder sees: a one-pixel readback of
      the visibility record under the pointer, while build mode
-     demands hover, gives the identity, the ray parameter `t`
-     and the material, and the host table turns the identity into a
-     placement. It covers non-solid placements, shapes and ops the CPU
-     evaluator refuses, stamped bodies and baked meshes. The readback is the
+     demands hover, gives the identity, the ray parameter `t`, the material
+     and the winning shape's transform slot with its transform, and the host
+     table turns the identity into a placement. It covers non-solid
+     placements, shapes and ops the CPU evaluator refuses, stamped bodies and
+     baked meshes. The readback is the
      same one the [rendering plan's GPU picking](rendering.md#p13--hit-to-source-mapping-and-input-destinations)
      supplies through `SdfWorldPicker`, and it is counted in the view's
-     work ledger. One pending answer supplies backpressure; continuing demand
-     refreshes after completion even when only the camera or scene moves. Its answer arrives a frame or two late, which a hover label
-     tolerates.
+     work ledger. At most one copy is in flight: a moving pointer's latest
+     coordinate waits for it and records when it completes, so the pointer
+     gets an answer every round trip, each carrying the pixel it was sampled
+     at. Continuing demand refreshes after an answer even when only the
+     camera or scene moves. An answer arrives a frame or two late, which a
+     hover label tolerates because it names the pixel it answers for.
    - *The CPU path* answers on the frame it is asked, from the client's static
      field: exact hit points and normals for surface snapping and measuring
      (E1, E3) wherever the field exists. It never decides what was picked when
      the GPU path has an answer.
-   In build mode the cursor's hover label names the placement under the
-   pointer.
+   In build mode the cursor's hover label names the placement a pick
+   answered and the pixel it answered at.
 4. **A per-seat selection.** `world.select pointer|<id>…|add <id>|toggle <id>|clear|prototype <name>|box`
    (`box` selects every placement whose bounds fall inside a dragged
    rectangle), with bindable forms for pointer, add, clear and cycle.

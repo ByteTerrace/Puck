@@ -136,7 +136,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // read by any op evaluating under that slot — currently SDF_OP_LANE_ERODE. Reset with the chain (RESET), set by
     // TRANSFORM_DYNAMIC, exactly like localPosition; zero under no dynamic slot.
     float4 currentLanes = float4(0.0, 0.0, 0.0, 0.0);
-    int currentSlot = -1;
+    int currentSlot = SDF_TRANSFORM_SLOT_NONE;
     // SDF_OP_LANE_ERODE's pending effect on the NEXT SDF_OP_SHAPE_BLEND: a cheap early-out skip (no field cost) or,
     // otherwise, a world-unit additive erosion. Consumed and cleared there; reset with the chain.
     bool laneErodeSkipShape = false;
@@ -156,7 +156,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     result.material = 0;
     result.lanes = float4(0.0, 0.0, 0.0, 0.0);
     result.instanceIndex = -1;
-    result.frameSlot = -1;
+    result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
 
     // The one-deep SCOPED-ACCUMULATOR slot (SDF_OP_PUSH_FIELD/POP_FIELD): PUSH saves the parent accumulator here and
     // reseeds `result`; POP composes the scope's `result` back into this saved value. This is a single NON-INDEXED pair,
@@ -168,7 +168,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     int savedFieldMaterial = 0;
     float4 savedFieldLanes = float4(0.0, 0.0, 0.0, 0.0);
     int savedFieldInstance = -1;
-    int savedFieldSlot = -1;
+    int savedFieldSlot = SDF_TRANSFORM_SLOT_NONE;
     float savedFieldBlendWeight = 0.0;
     int savedFieldBlendOther = 0;
 
@@ -275,7 +275,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             if (planReady) {
                 float3 rigidBasePosition = worldPosition;
                 float4 rigidLanes = 0.0;
-                int rigidSlot = -1;
+                int rigidSlot = SDF_TRANSFORM_SLOT_NONE;
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
                 if (plan.z != 0u) {
@@ -366,7 +366,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             int composeMaterial = 0;
             float4 composeLanes = float4(0.0, 0.0, 0.0, 0.0);
             int composeInstance = -1;
-            int composeSlot = -1;
+            int composeSlot = SDF_TRANSFORM_SLOT_NONE;
             float composeSmooth = 0.0;
 
             switch (op) {
@@ -374,7 +374,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     localPosition = worldPosition;
                     distanceScale = 1.0;
                     currentLanes = float4(0.0, 0.0, 0.0, 0.0);
-                    currentSlot = -1;
+                    currentSlot = SDF_TRANSFORM_SLOT_NONE;
                     laneErodeSkipShape = false;
                     laneErodeAmount = 0.0;
                     if (trackMaterial) {
@@ -936,7 +936,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         result.material = 0;
                         result.lanes = float4(0.0, 0.0, 0.0, 0.0);
                         result.instanceIndex = -1;
-                        result.frameSlot = -1;
+                        result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
                     }
                     break;
                 }

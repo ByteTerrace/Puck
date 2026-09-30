@@ -3,15 +3,23 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 /// <summary>One view instance's asynchronous presentation picker. Requests use normalized view coordinates and copy
-/// only one visibility pixel. Superseded requests and answers from a replaced program, identity table or routed view are
+/// only one visibility pixel, with the frame's dispatch box. At most one copy is in flight: while it is, a newer
+/// coordinate waits as the latest request and records when the copy completes, so a moving pointer gets one answer per
+/// round trip and forces no render while it waits. Answers from a replaced program, identity table or routed view are
 /// discarded. All members run on the presentation thread; nothing is sustained into simulation input.</summary>
 public sealed class SdfWorldPicker {
     private readonly List<SdfWorldPickReadback> m_readbacks = [];
 
+    // The latest request, and the newest identity whose answer is never published: Request and Clear raise it past
+    // every earlier request, Demand leaves it, so a hover still publishes an older coordinate's answer, labelled with
+    // that coordinate.
     private long m_request;
-    private bool m_pending;
-    private bool m_requested;
+    private long m_floor;
+    // Whether the latest request has no answer yet, and whether it still needs a copy recorded.
     private bool m_awaiting;
+    private bool m_queued;
+    // The readback holding the one copy in flight, or null.
+    private SdfWorldPickReadback? m_flight;
     private bool m_surface;
     private long m_cut;
     private SdfProgram? m_program;
@@ -20,59 +28,55 @@ public sealed class SdfWorldPicker {
     private float m_y;
     private SdfWorldView? m_view;
 
-    /// <summary>Gets the latest completed answer for the view, retained while a newer hover is in flight, or null before one completes.</summary>
+    /// <summary>Gets the latest published answer, retained while a newer request is in flight, or null before one
+    /// completes. Its <see cref="SdfPickResult.X"/> and <see cref="SdfPickResult.Y"/> are the pixel it answers for, which
+    /// a hover's latest coordinate may already have left.</summary>
     public SdfPickResult? Result { get; private set; }
     /// <summary>Gets the currently followed view, for presentation diagnostics of the same residency that answers picks.
     /// Null while no view is followed.</summary>
     public SdfWorldView? View => m_view;
-    /// <summary>Gets whether a request still needs a rendered frame.</summary>
-    public bool Pending => m_pending;
+    /// <summary>Gets whether the latest request needs the next rendered frame to record its copy: false while another
+    /// copy is in flight and while nothing is requested, so neither forces a render.</summary>
+    public bool Pending => (m_queued && (m_flight is null));
+    /// <summary>Gets whether a copy is in flight.</summary>
+    public bool InFlight => (m_flight is not null);
 
     /// <summary>Requests the pixel at normalized coordinates, with the origin at the view's top left. Each coordinate
-    /// must be finite and in [0, 1). Calling again supersedes every earlier result.</summary>
+    /// must be finite and in [0, 1). Calling again supersedes every earlier result, and an answer to an earlier
+    /// request is never published.</summary>
     /// <param name="x">The horizontal coordinate.</param>
     /// <param name="y">The vertical coordinate.</param>
     /// <param name="surface">Whether to copy the packed surface normal and capture the rendered camera.</param>
     /// <returns>The request identity, echoed by the completed answer.</returns>
     /// <exception cref="ArgumentOutOfRangeException">A coordinate is outside [0, 1) or nonfinite.</exception>
     public long Request(float x, float y, bool surface = false) {
-        if (!float.IsFinite(f: x) || (x < 0) || (x >= 1)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(x));
-        }
-        if (!float.IsFinite(f: y) || (y < 0) || (y >= 1)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(y));
-        }
-        m_surface = surface;
-        m_requested = true;
-        m_awaiting = true;
-        m_x = x;
-        m_y = y;
-        m_pending = true;
+        var request = Issue(surface: surface, x: x, y: y);
+
+        m_floor = (request - 1);
         Result = null;
-        return ++m_request;
+        return request;
     }
-    /// <summary>Demands a live hover pixel. While an answer is in flight, equal coordinates reuse that request;
-    /// after completion demand samples the next rendered frame, including camera and geometry motion beneath a
-    /// stationary pointer. The last completed answer stays visible until its replacement arrives.</summary>
+    /// <summary>Demands a live hover pixel. While the latest request is unanswered, equal coordinates reuse it; after
+    /// its answer, demand samples the next rendered frame, including camera and geometry motion beneath a stationary
+    /// pointer. A moved coordinate replaces the latest request, and an answer still in flight for an earlier one is
+    /// published labelled with its own pixel. The last published answer stays visible until its replacement arrives.</summary>
     /// <param name="x">The normalized horizontal coordinate.</param>
     /// <param name="y">The normalized vertical coordinate.</param>
     /// <param name="surface">Whether this consumer needs the surface normal and captured camera.</param>
     /// <returns>The request identity.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A coordinate is outside [0, 1) or nonfinite.</exception>
     public long Demand(float x, float y, bool surface = false) {
-        if (m_requested && m_awaiting && (m_x == x) && (m_y == y) && (m_surface == surface)) {
+        if (m_awaiting && (m_x == x) && (m_y == y) && (m_surface == surface)) {
             return m_request;
         }
-        var previous = Result;
-        var request = Request(surface: surface, x: x, y: y);
 
-        Result = previous;
-        return request;
+        return Issue(surface: surface, x: x, y: y);
     }
-    /// <summary>Cancels the current request and clears its result without waiting for any submission.</summary>
+    /// <summary>Cancels the current request and clears its result without waiting for any submission. A copy still in
+    /// flight completes unpublished before another records.</summary>
     public void Clear() {
-        m_request++;
-        m_pending = false;
-        m_requested = false;
+        m_floor = ++m_request;
+        m_queued = false;
         m_awaiting = false;
         Result = null;
     }
@@ -86,13 +90,10 @@ public sealed class SdfWorldPicker {
         var cut = ((frame is not null) ? frame.Views[Math.Min(val1: view!.Value.View, val2: (frame.Views.Count - 1))].CutRevision : 0);
 
         if ((m_cut != cut) || !ReferenceEquals(objA: m_program, objB: frame?.Program) || !ReferenceEquals(objA: m_map, objB: frame?.PickMap)) {
-            // A queued coordinate has no captured identity until Take. Keep it for this new frame, but never
-            // publish an answer copied against an earlier program or placement map.
-            if (m_pending) {
-                Result = null;
-            } else {
-                Clear();
-            }
+            // A copy recorded against the earlier program, map or cut is never published; the latest request, if
+            // unanswered, records again against the new frame.
+            Result = null;
+            m_queued |= m_awaiting;
             m_cut = cut;
             m_program = frame?.Program;
             m_map = frame?.PickMap;
@@ -102,28 +103,60 @@ public sealed class SdfWorldPicker {
         }
     }
     internal void Attach(SdfWorldPickReadback readback) => m_readbacks.Add(item: readback);
+    // A retired recorder takes its copy in flight with it: the latest request, if unanswered, records again through
+    // the readback that replaces it, which attaches before the retired one detaches. Only the last one clears.
     internal void Detach(SdfWorldPickReadback readback) {
         _ = m_readbacks.Remove(item: readback);
-        Clear();
+        if (ReferenceEquals(objA: m_flight, objB: readback)) {
+            m_flight = null;
+            m_queued |= m_awaiting;
+        }
+        if (m_readbacks.Count == 0) {
+            Clear();
+        }
     }
-    internal bool Take(uint width, uint height, SdfFrame frame, SdfReprojectionView sample, long cut, out SdfPickResult request) {
-        if (!m_pending) {
+    internal bool Take(SdfWorldPickReadback readback, uint width, uint height, SdfFrame frame, SdfReprojectionView sample, long cut, out SdfPickResult request) {
+        if (!Pending) {
             request = default;
             return false;
         }
-        m_pending = false;
+        m_queued = false;
+        m_flight = readback;
         request = new SdfPickResult(Request: m_request,
             X: Math.Min(val1: ((uint)(m_x * width)), val2: (width - 1)), Y: Math.Min(val1: ((uint)(m_y * height)), val2: (height - 1)),
             Width: width, Height: height, Identity: 0, Distance: 0, Material: -1, Program: frame.Program, MeshRevision: frame.MeshDrawsRevision, Map: frame.PickMap) { CutRevision = cut, Sample = (m_surface ? sample : null) };
         return true;
     }
-    internal void Publish(SdfPickResult result) {
-        if ((result.Request == m_request) && Current(result: result)) {
-            Result = result;
-            m_awaiting = false;
+    // Ends the copy in flight: an answer, or null when its recording was never submitted.
+    internal void Complete(SdfWorldPickReadback readback, SdfPickResult? result) {
+        if (ReferenceEquals(objA: m_flight, objB: readback)) {
+            m_flight = null;
         }
+        if ((result is { } answer) && (answer.Request > m_floor) && Current(result: answer)) {
+            Result = answer;
+            if (answer.Request == m_request) {
+                m_awaiting = false;
+                m_queued = false;
+            }
+            return;
+        }
+        m_queued |= m_awaiting;
     }
 
+    private long Issue(float x, float y, bool surface) {
+        if (!float.IsFinite(f: x) || (x < 0) || (x >= 1)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(x));
+        }
+        if (!float.IsFinite(f: y) || (y < 0) || (y >= 1)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(y));
+        }
+        m_surface = surface;
+        m_x = x;
+        m_y = y;
+        m_awaiting = true;
+        m_queued = true;
+        return ++m_request;
+    }
     private bool Current(SdfPickResult result) => ((m_view?.Residency.Frame is { } frame) &&
         (result.CutRevision == m_cut) && ReferenceEquals(objA: result.Program, objB: frame.Program) && ReferenceEquals(objA: result.Map, objB: frame.PickMap));
 }

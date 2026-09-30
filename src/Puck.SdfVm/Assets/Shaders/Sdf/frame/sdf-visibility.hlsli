@@ -8,8 +8,8 @@
 //    and the march flags (steps in bits 0..7, the saturated query count in bits 8..30).
 // C (3 words): the terminal field radius, the acceptance threshold, then the seam's blend weight as a 15-bit fraction
 //    in bits 0..14 and its other material plus one in bits 15..31, so every material from -1 up is exact.
-// L (4 words): the winning SDF shape's transform slot (-1 for static geometry), or a mesh hit's triangle, in the
-//    first word. The remaining words are reserved. Anonymous lanes are read exactly from the winning transform row.
+// L (4 words): the winning SDF shape's transform slot (SDF_TRANSFORM_SLOT_NONE for static geometry), or a mesh hit's
+//    triangle, in the first word. The remaining words are reserved. Anonymous lanes are read exactly from the winning transform row.
 // N (2 words): the geometric normal as a 16-bit signed octahedral pair (a zero normal is its own sentinel), and the
 //    gradient magnitude.
 // S (2 words): curvature and ambient occlusion as halves, then the surface flags in bits 0..7 and the surface and
@@ -21,7 +21,8 @@
 // Primary writes V, C and L for every active pixel, misses included; surface writes N and S; ambient updates S; shadow
 // writes K and adds its queries to S. Views reads the whole record once, as one surface sample (SdfSurfaceSample).
 //
-// The identity names what the pixel sees: its kind in bits 31..30 and its source in bits 29..0. A background pixel
+// The identity names what the pixel sees: its kind (SDF_VISIBILITY_KIND_*) above SDF_VISIBILITY_KIND_SHIFT and its
+// source in SDF_VISIBILITY_SOURCE_MASK, both generated from SdfVisibility, which a pick decodes with. A background pixel
 // is identity 0. An SDF hit's source is the winning instance's program ordinal plus one, so source 0 is
 // geometry outside any instance. A mesh hit's source is its draw.
 //
@@ -32,6 +33,7 @@
 #define SDF_VISIBILITY_HLSLI
 
 #include "../field/sdf-octahedral.hlsli"
+#include "../isa/sdf-isa.hlsli"
 
 #if defined(SDF_PRIMARY_PASS) || defined(SDF_SURFACE_PASS) || defined(SDF_AMBIENT_PASS) || defined(SDF_SHADOW_PASS)
 #define sdfVisibilityRecordBuffer sdfVisibilityRecordsRW
@@ -58,11 +60,6 @@ static const uint SdfVisibilitySurfaceQueryMask = 0xFFFFFFu;
 // The largest finite half: curvature past it saturates rather than becoming infinite.
 static const float SdfVisibilityHalfMax = 65504.0;
 
-static const uint SdfVisibilityKindBackground = 0u;
-static const uint SdfVisibilityKindSdf = 1u;
-static const uint SdfVisibilityKindMesh = 2u;
-static const uint SdfVisibilityKindShift = 30u;
-static const uint SdfVisibilitySourceMask = 0x3FFFFFFFu;
 static const uint SdfVisibilityStepMask = 255u;
 static const uint SdfVisibilityQueryShift = 8u;
 static const uint SdfVisibilityQueryMask = 0x7FFFFFu;
@@ -96,29 +93,29 @@ uint sdfVisibilityRecord(uint2 pixel, uint viewIndex, uint2 extent) {
 }
 
 uint sdfVisibilityIdentity(uint kind, uint source) {
-    return ((kind << SdfVisibilityKindShift) | (source & SdfVisibilitySourceMask));
+    return ((kind << SDF_VISIBILITY_KIND_SHIFT) | (source & SDF_VISIBILITY_SOURCE_MASK));
 }
 uint sdfVisibilityKind(uint identity) {
-    return (identity >> SdfVisibilityKindShift);
+    return (identity >> SDF_VISIBILITY_KIND_SHIFT);
 }
 uint sdfVisibilitySource(uint identity) {
-    return (identity & SdfVisibilitySourceMask);
+    return (identity & SDF_VISIBILITY_SOURCE_MASK);
 }
 // An SDF march's identity: background on a miss, else the winning instance ordinal (-1 outside every instance) plus one.
 uint sdfVisibilitySdfIdentity(bool hit, int instanceIndex) {
-    return (hit ? sdfVisibilityIdentity(SdfVisibilityKindSdf, (uint)(instanceIndex + 1)) : 0u);
+    return (hit ? sdfVisibilityIdentity(SDF_VISIBILITY_KIND_SDF, (uint)(instanceIndex + 1)) : 0u);
 }
 bool sdfVisibilityHit(SdfVisibility visibility) {
-    return (sdfVisibilityKind(visibility.identity) != SdfVisibilityKindBackground);
+    return (sdfVisibilityKind(visibility.identity) != SDF_VISIBILITY_KIND_BACKGROUND);
 }
 // The winning shape's transform slot can differ from its instance's conservative bound slot.
 int sdfVisibilityFrameSlot(uint record, SdfVisibility visibility) {
-    return (sdfVisibilityKind(visibility.identity) == SdfVisibilityKindSdf)
-        ? asint(sdfVisibilityRecordBuffer[record + SdfVisibilityRowL]) : -1;
+    return (sdfVisibilityKind(visibility.identity) == SDF_VISIBILITY_KIND_SDF)
+        ? asint(sdfVisibilityRecordBuffer[record + SdfVisibilityRowL]) : SDF_TRANSFORM_SLOT_NONE;
 }
 float4 sdfFrameLanes(int frameSlot) {
 #ifdef SDF_DYNAMIC_TRANSFORMS
-    if (frameSlot >= 0) return sdfDynamicTransforms[3u * (uint)frameSlot + 2u];
+    if (frameSlot != SDF_TRANSFORM_SLOT_NONE) return sdfDynamicTransforms[3u * (uint)frameSlot + 2u];
 #endif
     return float4(0.0, 0.0, 0.0, 0.0);
 }
@@ -208,7 +205,7 @@ SdfVisibilitySurface sdfLoadVisibilitySurface(uint record) {
 }
 
 // The surface sample the shading stages read: a pixel's whole record, decoded. A mesh hit carries its draw in its
-// identity and its triangle in the L row, so its lanes read zero and its frame slot -1.
+// identity and its triangle in the L row, so its lanes read zero and its frame slot SDF_TRANSFORM_SLOT_NONE.
 struct SdfSurfaceSample {
     float t;
     bool hit;
@@ -244,7 +241,7 @@ SdfSurfaceSample sdfLoadSurfaceSample(uint record) {
     SdfSurfaceSample sample;
     sample.t = visibility.t;
     sample.hit = sdfVisibilityHit(visibility);
-    sample.mesh = (sdfVisibilityKind(visibility.identity) == SdfVisibilityKindMesh);
+    sample.mesh = (sdfVisibilityKind(visibility.identity) == SDF_VISIBILITY_KIND_MESH);
     sample.material = visibility.material;
     sample.frameSlot = sdfVisibilityFrameSlot(record, visibility);
     sample.meshDraw = (sample.mesh ? sdfVisibilitySource(visibility.identity) : 0u);

@@ -16,8 +16,7 @@ internal sealed partial class WorldCursorFeed {
     /// <summary>The exact render instance the pointer pixel samples, or null while no consumer demands it.</summary>
     public string? PickInstance { get; private set; }
 
-    private WorldPickTarget? m_gpuTarget;
-    private string? m_gpuLabel;
+    private readonly WorldPickLabel m_gpuLabel = new();
 
     // Presentation destinations outline their pane. Build mode and a locally opened passthrough pane also demand
     // the pixel's geometry identity; nothing is sampled while neither consumer is active.
@@ -47,17 +46,5 @@ internal sealed partial class WorldCursorFeed {
             _ = picker.Demand(x: localX, y: localY, surface: (EditorSeats?.InspectorEnabled(slot: slot) ?? false));
         }
     }
-    private string? GpuHoverLabel() {
-        var target = (m_hoverPicker?.Result?.Target as WorldPickTarget);
-
-        if (!ReferenceEquals(objA: m_gpuTarget, objB: target)) {
-            m_gpuTarget = target;
-            m_gpuLabel = target switch {
-                { Placement: { } placement } => $"placement '{placement}'",
-                { BodyIndex: { } body } => $"body {body}",
-                _ => null,
-            };
-        }
-        return m_gpuLabel;
-    }
+    private string? GpuHoverLabel() => m_gpuLabel.Of(pick: m_hoverPicker?.Result);
 }

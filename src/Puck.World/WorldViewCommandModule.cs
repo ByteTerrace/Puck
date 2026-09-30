@@ -345,7 +345,7 @@ internal sealed partial class WorldViewCommandModule(IServerLink link, WorldView
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.pick",
-            description: "Requests or reads a presentation-only GPU pixel pick: world.view.pick <instance> [<x> <y>] — normalized coordinates in [0,1) request one visibility pixel; omitting them echoes pending or the completed geometry kind, source ordinal, material and host placement or body. The asynchronous readback belongs to the captured frame's identity table and never sends simulation input.",
+            description: "Requests or reads a presentation-only GPU pixel pick: world.view.pick <instance> [<x> <y>] — normalized coordinates in [0,1) request one visibility pixel; omitting them echoes pending or the completed geometry kind, source ordinal, material, host placement or body, and the winning shape's transform slot. The asynchronous readback belongs to the captured frame's identity table and never sends simulation input.",
             handler: (context, args) => Pick(args: args),
             routing: CommandRouting.Immediate
         );

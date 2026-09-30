@@ -317,6 +317,7 @@ public sealed class RenderGraphHitWalkLawTests {
         // The pane fills the display's lower right quarter, so the display point 768 + 768·0.55 across is the room
         // camera's image point 0.55 across, which lands 4·0.05 right of the centre of the room's screen: 0.7·256.
         var path = RenderGraphHitWalk.WalkDisplay(
+            display: null,
             displayHeight: 1080,
             displayWidth: 1536,
             maxDepth: 1,

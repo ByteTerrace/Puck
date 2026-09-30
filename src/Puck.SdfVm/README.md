@@ -500,11 +500,18 @@ completion does not promise an exact simulation tick or durable disk storage.
 ## Presentation picking
 
 The presentation picker is `SdfWorldPasses.PickerOf`: `Request` samples normalized
-view coordinates once, and `Demand` keeps a hover current with one asynchronous
-request in flight. Ordinary hover copies the selected visibility pixel's 16-byte
-V row, including its step and primary-query counts. An inspector request copies
-48 bytes through the packed geometric normal and captures that frame's camera,
-jitter and cut revision, so point reconstruction never uses a later camera.
+view coordinates once, and `Demand` keeps a hover current with at most one copy
+in flight: a moved coordinate waits for it and records when it completes, and an
+answer for an earlier coordinate is published with its own pixel. Ordinary hover
+copies the selected visibility pixel's V, C and L.x words (32 bytes), including
+its step and primary-query counts and the winning transform slot. An inspector
+request copies 48 bytes through the packed geometric normal and captures that
+frame's camera, jitter and cut revision, so point reconstruction never uses a
+later camera. Either copy carries the frame's dispatch box after the record, and
+a pixel outside it answers nothing (`SdfVisibility.IsCurrent`, the rule the hit
+passes read as `SDF_VISIBILITY_CURRENT`). The transform slot resolves against the
+transform table of the frame the record was rendered from
+(`SdfPickResult.Transform`).
 Composed pick maps route identity and material names to the same captured emitter,
 rebasing mesh draw ordinals into that emitter's table. An emitter with no material
 names still reports an unavailable name.

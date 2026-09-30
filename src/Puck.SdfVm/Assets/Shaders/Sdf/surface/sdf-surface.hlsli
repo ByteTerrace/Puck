@@ -70,7 +70,7 @@ void sdfSurfaceStage(SdfPixel p) {
 
     sdfEvalCount = (float)sdfVisibilityQueries(visibility);
 
-    if (sdfVisibilityKind(visibility.identity) == SdfVisibilityKindMesh) {
+    if (sdfVisibilityKind(visibility.identity) == SDF_VISIBILITY_KIND_MESH) {
         uint draw = sdfVisibilitySource(visibility.identity);
         uint triangleIndex = sdfVisibilityMeshTriangle(record);
         float3 meshPoint = (p.rayOrigin + (p.rayDirection * visibility.t));

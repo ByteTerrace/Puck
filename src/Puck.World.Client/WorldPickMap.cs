@@ -85,11 +85,11 @@ public sealed class WorldPickMapBuilder {
         public string? MaterialName(uint identity, int material) => ((Resolve(identity: identity) is WorldPickTarget { Prototype: { } prototype })
             ? materials.GetValueOrDefault(key: (prototype, material)) : null);
         public object? Resolve(uint identity) {
-            var source = identity & 0x3FFFFFFF;
+            var source = SdfVisibility.SourceOf(identity: identity);
 
-            return (identity >> 30) switch {
-                1 => instances.GetValueOrDefault(key: (((int)source) - 1)),
-                2 when (source < meshes.Length) => meshes[source],
+            return SdfVisibility.KindOf(identity: identity) switch {
+                SdfVisibilityKind.Sdf => instances.GetValueOrDefault(key: (((int)source) - 1)),
+                SdfVisibilityKind.Mesh when (source < meshes.Length) => meshes[source],
                 _ => null,
             };
         }
