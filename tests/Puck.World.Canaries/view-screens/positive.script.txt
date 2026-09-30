@@ -13,10 +13,12 @@ world.wait 30
 world.counters gpu
 world.screenshot {run}/frame.png
 world.wait 10
-# The views render at three-quarter scale, so the room's view is a pane a display point walks into.
-world.render-scale three-quarter
+# The room's view moves into a centred three-quarter slot, so it is a pane a display point walks into. A lone view over
+# the whole display is the display itself at any render scale: the root stands for it and publishes it as no pane.
+world.row.set views.layouts {"name":"screens","seatCount":0,"slots":[{"camera":"main-cam","height":0.75,"width":0.75,"x":0.125,"y":0.125}],"transitionRenderScale":1,"transitionSeconds":0}
 world.wait 10
-# Each screen's published mapping, and a walk from each screen's centre on the display through the screen.
+# Each screen's published mapping, and a walk from each screen's centre on the display through the screen: the points
+# the whole-display frame shows at 96.5,70.5 and 160.5,70.5, moved into the slot.
 world.screens
-world.view.panes 96.5 70.5
-world.view.panes 160.5 70.5
+world.view.panes 104.375 70.875
+world.view.panes 152.375 70.875

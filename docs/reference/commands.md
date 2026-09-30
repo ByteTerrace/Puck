@@ -631,7 +631,9 @@ with different settings are two handles.
 A World host publishes a mapping for every pane its render graph's root draws:
 each shown view of the world and each `views.graphs` pane a layout slot places,
 in drawing order, showing the instance's whole image at the extent it last
-rendered at. The host hands them to its `SourcePanePicker`, a pipeline pane's
+rendered at. A lone view covering the whole display is no pane at any render
+scale, tonemapped or not: the display shows the world itself, so a display
+point there picks nothing and starts no walk. The host hands them to its `SourcePanePicker`, a pipeline pane's
 pointer maps through its pane's mapping, and the hit walk starts from them.
 `world.view.panes` echoes each mapping and, given a display point, what the
 picker and the walk answer there, down to the walk's last hit.
