@@ -353,6 +353,8 @@ public sealed partial class ShaderPipelineRenderNode {
             Context: context,
             FrameWidth: m_width,
             FrameHeight: m_height,
+            RenderWidth: m_renderWidth,
+            RenderHeight: m_renderHeight,
             Height: pass.Height,
             Inputs: inputs,
             Leases: m_frameLeases,

@@ -4538,14 +4538,17 @@ resolution, and stay there.
   reconstruction off writes none. Once P18-5 moves bounded volumes into the
   composite after `resolve`, a volume is never reconstructed and is no longer
   reactive.
-- **`resolve` writes a resolved surface in both modes.** Beside the color it
-  writes, at the output extent, the pixel's ray distance, chosen as the
-  nearest of the render-extent samples it reads and never filtered, so fog
-  never blends two depths, and carries coverage in the color's alpha, filtered
-  and reprojected with the color as premultiplied alpha. The spatial mode
-  writes it too, so a view with reconstruction off still hands P18's
-  `composite` a depth and a coverage at the output extent. Before P18-5 lands
-  the coverage is one everywhere.
+- **`resolve` writes a resolved surface in both modes once it has a reader.**
+  Beside the color it writes, at the output extent, the pixel's ray distance,
+  chosen as the nearest of the render-extent samples it reads and never
+  filtered, so fog never blends two depths, and carries coverage in the color's
+  alpha, filtered and reprojected with the color as premultiplied alpha. The
+  spatial mode writes it too, so a view with reconstruction off still hands
+  P18's `composite` a depth and a coverage at the output extent. The surface is
+  allocated and written from the change that lands its first reader (P18-5's
+  `composite`, or P15-5's history, whichever lands first); until then
+  `resolve` writes the color alone. Before P18-5 lands the coverage is one
+  everywhere.
 - **Sharpening is `place`'s.** With a source at its rect's extent, `place`
   applies a contrast-adaptive sharpen by `world.upscale-sharpness` instead of
   its exact copy, so sharpening adds no pass and no texel written. At sharpness
@@ -4729,18 +4732,26 @@ counted rows recorded in the same change.
 4. **P15-4, render extent inside the output.** Render scale moves into the
    view's instance, and the spatial resolve replaces `place`'s upsample of a
    view.
-   - Landed: fixed native views keep the ten-pass fragment. Reduced or variable
-     views allocate traversal storage at their render ceiling and run one
-     output-sized spatial resolve. Its surface stores the nearest ray-distance
-     bits and exact visibility identity; coverage remains in color alpha.
-     Changing the active grid inside the ceiling neither allocates nor rebuilds.
-     Changing the ceiling uses the normal graph replacement path. The scheduler
-     and memory budget price the render and output grids separately.
+   - Landed: the render-scale ceiling alone selects a view's fragment and is the
+     whole render-extent revision. Views at a native ceiling keep the ten-pass
+     fragment and ignore the active grid. Views below it allocate traversal
+     storage at their render ceiling, shade into one transient render-grid
+     color, and run one output-sized spatial resolve that writes the color
+     alone; coverage remains in color alpha, and the resolved surface waits for
+     its first reader. Changing the active grid inside the ceiling
+     (`ResolvedRenderScale`) neither allocates nor rebuilds, and a layout
+     transition's dip is exactly that change; a view at a native ceiling does
+     not dip. Changing the ceiling uses the normal graph replacement path, which
+     presents the last image until the replacement installs. The resolve
+     pipeline builds from the deployed kernel without reflection, as every
+     deployed kernel does. The scheduler and memory budget price the render and
+     output grids separately. `place` copies a view's output when its scheduled
+     extent equals the rect's pixels and resamples it again otherwise.
    - Delivers: a fragment resource dimension resolved from a render extent the
      package states per instance (as it states counts through `CounterOf`),
      every pass before `resolve` running at that extent, the `resolve` pass in
-     its spatial mode writing the output and the resolved surface (the
-     nearest-sample ray distance, with coverage in the color's alpha), and a
+     its spatial mode writing the output (with coverage in the color's alpha;
+     the resolved surface lands with its first reader), and a
      view's footprint at its rect's
      native extent (`WorldViewGraphHost.PlaceView`). The render extent is a
      ceiling allocation and a per-frame extent inside it; a change of the ceiling
@@ -4761,7 +4772,12 @@ counted rows recorded in the same change.
      once; a placement with no other work stands in for that output. The
      counted 1080p low workload moves its 2,073,600-texel dispatch from `place`
      to `resolve`, with the existing SDF passes unchanged. Resolve adds its
-     output and surface storage, bindings and one pipeline. Native allocation
+     output storage, bindings and one pipeline: a reduced view owns what the
+     native graph at its render ceiling owns, with the render-grid color held
+     once rather than once a frame slot, plus one output color a frame slot,
+     41,472,000 bytes at 1920x1080 and half scale over three frame slots
+     (`SdfPassPlanLawTests`). A layout transition allocates and builds nothing.
+     Native allocation
      and work rows remain unchanged. The accepted exception is one immutable
      `SdfKernelSet` bytecode load: 16,020 bytes on Vulkan and 11,492 on DirectX.
      Keeping the kernel in that set preserves its existing atomic reload and
@@ -4799,7 +4815,13 @@ counted rows recorded in the same change.
    each frame.
    - Delivers: one controller that sets each view's per-frame render extent
      between a floor and the tier's ceiling, never reallocating, and resets no
-     history (the resolve reads the extent each frame); its one load signal,
+     history (the resolve reads the extent each frame). It writes
+     `SdfViewSnapshot.ResolvedRenderScale`, the grid a layout transition's dip
+     already moves, composing with that dip rather than adding a second grid.
+     A view at a native ceiling reconstructs nothing and ignores that grid, so
+     dynamic resolution on a native tier gives its views a ceiling below
+     native for as long as it is on (one rebuild when the lever moves), never a
+     per-frame choice of fragment; its one load signal,
      present timing through an injectable timing source with the counted
      march-step budget where present timing is unavailable; the lever with its
      presets.
@@ -5125,7 +5147,8 @@ Once P15-4 lands, the order is:
 ```
 
 `resolve`, in its spatial mode (reconstruction off) and its temporal mode alike,
-writes the resolved surface at the output extent: `lit` with its coverage, and
+writes the resolved surface at the output extent, from the change that lands
+its first reader: `lit` with its coverage, and
 the ray distance of the nearest render-extent sample it read. `sky` and
 `composite` then run at the output extent and read only that surface, never the
 render-extent record. Before P15-4 they run at the render extent and read the
@@ -5973,7 +5996,8 @@ fraction in live tiles, at least h.
   land before or after P15-2 to P15-7: before P15-4, `sky` and `composite` run at
   the render extent after `views` and read the record; from P15-4 they follow
   `resolve` at the output extent and read only the resolved surface, the depth
-  and coverage P15-4's `resolve` writes in both modes, and the sky's field
+  and coverage `resolve` writes in both modes once its first reader lands (the
+  P18 step that lands `composite` adds it to `resolve`), and the sky's field
   extent follows the output extent scaled by the sky tier. P15's reactivity is
   its own image, which `resolve` consumes, and P18's coverage is `lit`'s alpha,
   which `resolve` carries through; P15's text states both. P15-5's convergence

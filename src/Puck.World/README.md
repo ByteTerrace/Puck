@@ -1880,7 +1880,10 @@ does not author is refused by name. The shipped worlds share one table,
 `Assets/worlds/quality.puck`: the standard world imports it, and a world on
 another basis imports it by name, so every presenting world answers each tier
 without moving its own boot levers (`ShippedWorldQualityLawTests`). Render scale applies
-to both seat views and named cameras, multiplied by any layout-transition scale.
+to both seat views and named cameras as each view's ceiling. A layout
+transition's `transitionRenderScale` multiplies only the grid rendered inside
+that ceiling, which allocates and rebuilds nothing, so it has no effect at the
+native tier, where a view reconstructs nothing.
 Named tiers are
 facades over continuous values. Do not assume a lower render scale is
 monotonic for a large instance field—read both `world.counters gpu` and

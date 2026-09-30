@@ -20,13 +20,15 @@ public sealed partial class SdfWorldPasses {
                 return ((views is { Count: > 0 }) ? views[Math.Min(val1: view!.Value.View, val2: (views.Count - 1))] : default);
             }
         }
-        private double Ceiling => RenderGraphExtent.Quantize(fraction: ((Snapshot.RenderScale > 0f) ? Snapshot.RenderScale : 1f));
+        // The ceiling alone chooses the fragment and sizes the scratch, so the revision a graph is built against covers
+        // both; the resolved scale moves only the grid inside it (SdfViewSnapshot.RenderGrid).
+        private double Ceiling => Snapshot.RenderCeiling;
 
-        public double CurrentScale => ((Snapshot.ResolvedRenderScale > 0f) ? Math.Min(val1: Snapshot.ResolvedRenderScale, val2: Ceiling) : Ceiling);
+        public double CurrentScale => Snapshot.RenderGrid;
         public double RenderedScale { get; set; }
         public float CurrentSharpness => (RequiresResolve ? Snapshot.UpscaleSharpness : 0f);
         public float RenderedSharpness { get; set; }
-        public bool RequiresResolve => ((Ceiling < 1d) || (Snapshot.ResolvedRenderScale > 0f));
+        public bool RequiresResolve => Snapshot.Reconstructs;
 
         long IShaderPipelineRenderExtent.Revision => BitConverter.DoubleToInt64Bits(value: Ceiling);
 

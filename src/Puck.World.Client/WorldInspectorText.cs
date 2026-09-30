@@ -3,7 +3,6 @@ using System.Text.RegularExpressions;
 using Puck.Abstractions;
 using Puck.Abstractions.Cameras;
 using Puck.Overlays;
-using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 
@@ -52,9 +51,7 @@ public sealed partial class WorldInspectorText {
         var normal = (hit?.Normal ?? default);
         var settings = snapshot.Settings;
         var quality = snapshot.View?.Quality;
-        var authoredScale = (snapshot.View?.RenderScale ?? (settings?.RenderScale ?? 1f));
-        var ceiling = RenderGraphExtent.Quantize(fraction: ((authoredScale > 0f) ? authoredScale : 1f));
-        var scale = ((snapshot.View is { ResolvedRenderScale: > 0f } view) ? Math.Min(val1: view.ResolvedRenderScale, val2: ceiling) : ceiling);
+        var scale = (snapshot.View ?? new SdfViewSnapshot(Camera: camera, Region: default) { RenderScale = (settings?.RenderScale ?? 1f) }).RenderGrid;
         var shadows = ((quality is { } resolved) ? (resolved.DisableSoftShadows ? 0 : ((resolved.ShadowDistanceScale > 0) ? resolved.ShadowDistanceScale : 1)) : (settings?.ShadowReach ?? 0));
         var ambient = ((quality is { } shading) ? !shading.DisableAmbientOcclusion : (settings?.AmbientOcclusion ?? false));
         var surfaced = (hit?.Hit ?? false);

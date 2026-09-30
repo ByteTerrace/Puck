@@ -41,7 +41,6 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Assert.True(condition: rig.Cache.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var unchanged));
         Assert.Equal(actual: unchanged, expected: created);
 
-        void Activate() => rig.Pipelines.BuildResolve(cache: rig.Cache, device: rig.Gpu, reflector: reflector,
-            cancellationToken: TestContext.Current.CancellationToken);
+        void Activate() => rig.Pipelines.BuildResolve(cache: rig.Cache, device: rig.Gpu, cancellationToken: TestContext.Current.CancellationToken);
     }
 }

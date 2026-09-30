@@ -32,8 +32,9 @@ between them. `world.counters gpu` reports the upload under the residency
 `sdf.world$sky` through `sdf.world$views`. Here is what the culling and
 rendering passes do; [the engine README](../../../../src/Puck.SdfVm/README.md)
 describes the visibility records the four per-pixel passes share: one per pixel
-of each view's render grid, 64 bytes. Reduced or variable views append the
-full-output `resolve` pass described under [render scale](#render-scale-tiers-trade-resolution-for-frame-time).
+of each view's render grid, 64 bytes. A view whose render-scale ceiling is below
+native appends the full-output `resolve` pass described under
+[render scale](#render-scale-tiers-trade-resolution-for-frame-time).
 
 **mask** (`sdf-instance-cull.comp.hlsl`) computes, for every 16×16 screen tile, the
 set of instances that could possibly matter to that tile—a bitmask, one bit per
@@ -157,19 +158,33 @@ The graph keeps the view's footprint at its native rect size, and an authored
 camera or session resolution stays exact even when its reader shrinks. The
 camera aspect uses that authored width and height from the first frame.
 
-Traversal and shading use the current render grid inside a ceiling allocation.
-A smaller current grid changes dispatch dimensions and the visibility stride
-without reallocating the ceiling's targets. The final `resolve` pass writes
-full-output color with the same bilinear and clamped Catmull-Rom filter as
-`place`. It also writes the nearest ray distance and its exact identity from the
-filter's taps, without filtering either; coverage remains the color's alpha.
-`place` copies that output into the view's rect. A lone whole-display view can
-stand directly, including at a reduced internal render scale.
+The ceiling alone decides which passes a view runs and what it allocates.
+Traversal and shading use the current render grid inside the ceiling's
+allocation (`SdfViewSnapshot.ResolvedRenderScale`, bounded by the ceiling). A
+smaller current grid changes dispatch dimensions and the visibility stride and
+nothing else: no target is reallocated and no graph is rebuilt, so the grid can
+move every frame. A layout transition's dip moves only this grid. The shaded
+color at the render grid is one transient allocation that every frame slot
+shares. The final `resolve` pass writes full-output color with the same
+bilinear and clamped Catmull-Rom filter as `place`; coverage remains the
+color's alpha. Nothing is written beside the color: a per-pixel surface (ray
+distance and identity) at the output extent waits for its first reader.
 
-A fixed native view keeps the original ten-pass fragment and writes its output
-directly. It allocates no resolve resources. A reduced or variable view adds one
-output-sized dispatch; its memory account includes the output beside the render
-ceiling, and its scheduling price sums the passes' current grids.
+The view's output has the extent the render graph schedules for it, which is its
+rect's native extent quantized to the scheduler's steps. `place` copies that
+output where it equals the rect's pixel extent, as it does for a whole-display
+view or one half of an even display. Otherwise `place` resamples it into the rect, so a reduced
+view in such a rect is filtered twice: once by `resolve` and again by `place`. A
+lone whole-display view can stand directly, including at a reduced internal
+render scale.
+
+A view whose ceiling is native keeps the original ten-pass fragment and writes
+its output directly. It allocates no resolve resources and ignores the current
+grid, so a layout transition does not dip it. A changed ceiling rebuilds the
+view's graph beside the installed one, which presents its last image until the
+replacement installs. A reduced view adds one output-sized dispatch; its memory
+account includes the output beside the render ceiling, and its scheduling price
+sums the passes' current grids.
 Render scale is *presentation only*: it never touches simulation state, and which
 tier a view uses is a host decision, not baked into the content. In `Puck.World`,
 `world.render-scale` sets it for every player view and `world.upscale-sharpness`

@@ -88,9 +88,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         try {
             view.Residency.WaitReady(cancellationToken: cancellationToken);
             if (context.Part == SdfWorldPackage.Resolve) {
-                using var reflector = new ShaderBytecodeReflector(toolchain: new ShaderToolchain());
-
-                view.Residency.Tables!.Pipelines.BuildResolve(cache: context.Pipelines, device: context.Device, reflector: reflector, cancellationToken: cancellationToken);
+                view.Residency.Tables!.Pipelines.BuildResolve(cache: context.Pipelines, device: context.Device, cancellationToken: cancellationToken);
             }
         } catch {
             view.Residency.Release();

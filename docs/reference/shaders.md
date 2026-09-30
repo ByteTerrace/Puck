@@ -720,9 +720,12 @@ views any layout or the player roster can compose. When a world has more than
 one, `main` is the root and runs one `place` pass per view ahead of the pane
 passes. `PrepareGraph` places each view at its rect and adds that rect's native
 footprint. The view's own package allocates traversal targets at its quantized
-render ceiling and records the current render grid inside those targets. A
-reduced or variable view appends `resolve`, reconstructing color and nearest
-surface at the output extent before placement. A view is shown only once the
+render ceiling and records the current render grid inside those targets; a
+layout transition's dip moves only that grid, so it rebuilds and allocates
+nothing. A view whose ceiling is below native appends `resolve`, reconstructing
+color at the output extent before placement; `place` copies that output when
+the scheduled extent equals the rect's pixels and otherwise resamples it again.
+A view at a native ceiling renders its output grid directly and does not dip. A view is shown only once the
 engine has rendered it, and a single view covering the whole display with no
 tonemap is not placed, so `main` passes
 `world` through unchanged; with a tonemap it is placed like any other, since its

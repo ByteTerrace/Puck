@@ -19874,7 +19874,7 @@
                 "default": 0
               },
               "transitionRenderScale": {
-                "description": "The render scale (0, 1] applied to every slot mid-transition (a soft dip that sharpens on settle). Default 1, no dip.",
+                "description": "The render scale (0, 1] applied to every slot mid-transition (a soft dip that sharpens on settle). It multiplies the render grid inside each view\u0027s render-scale ceiling and allocates nothing, so a view rendering at native scale, which reconstructs nothing, does not dip. Default 1, no dip.",
                 "type": "number",
                 "default": 1
               },

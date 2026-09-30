@@ -575,7 +575,10 @@ These are one-line cautions; the owning pages hold the derivations.
   variable name (`SdfIsaHlsl.Stamp`, `ShaderInterface.Stamp`), so a kernel
   compiled against another instruction set, or binding anything the host does not
   place where it places it, refuses the reload and the residency keeps its
-  kernels. Boot reflects nothing: the deployed tree is the host's own build. A new SDF pipeline is a row in
+  kernels. Boot reflects nothing, since the deployed tree is the host's own build,
+  and neither does a reduced view's first resolve build (`SdfWorldPipelines.BuildResolve`),
+  which takes no reflector and needs no shader toolchain; its kernel is the set's
+  own, deployed or reflected by the reload that installed it. A new SDF pipeline is a row in
   `SdfWorldTables.PipelineLayouts.Specs`, never a create call in the tables. A harness that drives a residency polls
   `SdfWorldResidency.IsReady`
   (`SdfTestPipelines.ProduceFirstFrame` in `tests/Shared`, whose `Kernels` is the one fake kernel set);
@@ -1463,7 +1466,12 @@ view of the last composed frame is placed through
 `WorldViewGraphHost.PlaceViews`, which `PrepareGraph` calls, and `PlaceView`
 (footprint: native rect; placement: rect with `world.upscale-sharpness`).
 The view package reconstructs a reduced render grid to that native output
-before `place` composes it.
+before `place` composes it, and `place` resamples it once more unless the
+scheduled extent equals the rect's pixels. The presenter sets each view's
+`RenderScale` to the render-scale ceiling and a layout transition's dip into
+`ResolvedRenderScale`, the grid inside it, which allocates and rebuilds nothing;
+a view at a native ceiling does not dip (`WorldLayoutTransitionScaleLawTests`,
+`SdfWorldPassesLawTests.ADipInsideTheCeilingRendersEveryFrameWithoutABuildOrAnAllocation`).
 The first view's footprint is always added, since it is the base, and before
 the world's first frame the first view is placed hidden over the whole display
 so the world is still scheduled. A view is shown only once its instance has
