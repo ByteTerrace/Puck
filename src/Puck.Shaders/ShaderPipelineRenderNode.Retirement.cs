@@ -25,6 +25,34 @@ public sealed partial class ShaderPipelineRenderNode {
 
     private IGpuSubmissionFence? m_lastSubmissionFence;
     private Surface m_previousSurface;
+    // The fence of the node's first submission since its device objects were last released, until that submission is
+    // seen completed. A slot's fence is re-armed only after the node waits on it, so a wait on this fence also completes
+    // the first submission.
+    private IGpuSubmissionFence? m_firstSubmission;
+    private bool m_completedSubmission;
+
+    /// <summary>Gets whether a submission the node made since its device objects were last released has completed on
+    /// the GPU: its fence has signaled or the node has waited on it. A node that has submitted nothing, or whose first
+    /// submission is still in flight, reads <see langword="false"/>, as does one whose device was lost before the
+    /// submission was seen completed.</summary>
+    public bool HasCompletedSubmission {
+        get {
+            if (
+                !m_completedSubmission &&
+                (m_firstSubmission is { } first)
+            ) {
+                try {
+                    if (first.IsSignaled) {
+                        NoteWaited(fence: first);
+                    }
+                } catch (DeviceLostException) {
+                    // The frame path meets the loss and releases the node; nothing it submitted counts as completed.
+                }
+            }
+
+            return m_completedSubmission;
+        }
+    }
 
     /// <summary>Gets the bytes of every GPU resource the node owns: the installed graph with its preview, replaced
     /// objects waiting for the GPU to finish with them, published images held from a replaced graph, and the staging
@@ -288,6 +316,28 @@ public sealed partial class ShaderPipelineRenderNode {
         m_retired.Clear();
         m_held.Clear();
         m_lastSubmissionFence = null;
+        m_firstSubmission = null;
+        m_completedSubmission = false;
+    }
+    // Arms the first-submission watch with the fence of a submission just made, when none is armed and none completed.
+    private void NoteSubmitted(IGpuSubmissionFence fence) {
+        if (
+            !m_completedSubmission &&
+            (m_firstSubmission is null)
+        ) {
+            m_firstSubmission = fence;
+        }
+    }
+    // Records that the node waited on, or found signaled, a slot's fence: when it is the first submission's, that
+    // submission has completed.
+    private void NoteWaited(IGpuSubmissionFence fence) {
+        if (ReferenceEquals(
+            objA: fence,
+            objB: m_firstSubmission
+        )) {
+            m_firstSubmission = null;
+            m_completedSubmission = true;
+        }
     }
 
     // An image behind a published surface, taken out of the objects that replaced it.

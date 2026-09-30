@@ -1,9 +1,5 @@
 world.cadence off
 world.wait ready 60
-# Readiness is the frame thread's; a cold device completes its first frames several ticks later. A landed capture
-# fences that work, so the first pick's answer waits on no startup backlog.
-world.screenshot {run}/settled.png
-world.wait captures 30
 world.view.pick world 0.305 0.47
 world.wait 5
 world.view.pick world

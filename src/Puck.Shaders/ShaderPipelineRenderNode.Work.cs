@@ -147,6 +147,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
         );
         m_submissions++;
         m_lastSubmissionFence = fence;
+        NoteSubmitted(fence: fence);
         ArmRetirements(fence: fence);
     }
 }
