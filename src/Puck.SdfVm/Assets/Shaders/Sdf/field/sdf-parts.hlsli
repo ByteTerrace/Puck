@@ -29,7 +29,7 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
     child.material = 0;
     child.lanes = 0.0;
     child.instanceIndex = -1;
-    child.frameSlot = -1;
+    child.frameSlot = SDF_TRANSFORM_SLOT_NONE;
 
     [loop]
     for (uint leaf = 0u; leaf < (part.z & 0x7FFFFFFFu); leaf++) {
@@ -41,7 +41,7 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
         uint4 binding = sdfWords[part.y + leaf];
         float3 localPosition = worldPosition;
         float4 lanes = 0.0;
-        int slot = -1;
+        int slot = SDF_TRANSFORM_SLOT_NONE;
 #ifdef SDF_DYNAMIC_TRANSFORMS
         if (binding.x != 0u) {
             uint pose = binding.x - 1u;

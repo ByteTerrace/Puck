@@ -37,7 +37,7 @@
 // are never dispatched; the whole box is where this frame wrote visibility records, which worldVisibilityCurrent reads.
 #include "sdf-world.hlsli"
 
-[numthreads(8, 8, 1)]
+[numthreads(SDF_VISIBILITY_BOX_EDGE, SDF_VISIBILITY_BOX_EDGE, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
     uint viewIndex = worldViewOf(id.z);
 
@@ -47,7 +47,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // The indirect dispatch covers the surviving-tile box anchored at (0,0); its group origin, in pixels, moves this
     // invocation onto the box's pixel rather than the frame's top-left.
-    uint2 pixel = ((uint2(cullBounds[0], cullBounds[1]) * 8u) + id.xy);
+    uint2 pixel = ((uint2(cullBounds[0], cullBounds[1]) * SDF_VISIBILITY_BOX_EDGE) + id.xy);
 
     ViewportData view = worldView();
 

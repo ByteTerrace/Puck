@@ -11,7 +11,8 @@ namespace Puck.SdfVm;
 /// Generates <see cref="FileName"/>, the kernels' declarations of the SDF instruction set: every enum an instruction word
 /// carries, the packed-layout constants the interpreter decodes words with, the screen count,
 /// the sampler filters a screen's row indexes the engine's samplers by, and where each row of the environment lies in a
-/// pass block's environment array, with its light kinds. Every value is read from the C# model, never
+/// pass block's environment array, with its light kinds, and the visibility record's identity fields, transform-slot
+/// sentinel and currency rule (<see cref="SdfVisibility"/>). Every value is read from the C# model, never
 /// transcribed, and an enum member's name is its C# name in upper snake case after the enum's prefix (<see cref="SdfOp.ResetPoint"/> is <c>SDF_OP_RESET_POINT</c>), so a new member reaches the kernels by
 /// regenerating. <c>puck shaders generate</c> writes the file beside the kernels and <c>--check</c> fails on drift.
 /// <para>The text is a pure function of the model: the same build generates the same bytes, with LF line endings, on
@@ -271,6 +272,13 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_ENV_HORIZON_LOW_ROW", value: SdfEnvironment.HorizonLowRow);
         declarations.Count(name: "SDF_ENV_HORIZON_HIGH_ROW", value: SdfEnvironment.HorizonHighRow);
         declarations.Members<SdfLightKind>(prefix: "SDF_LIGHT");
+        declarations.Members<SdfVisibilityKind>(prefix: "SDF_VISIBILITY_KIND");
+        declarations.Section(title: "The visibility record's identity fields, transform-slot lane and currency box (SdfVisibility).");
+        declarations.Count(name: "SDF_VISIBILITY_KIND_SHIFT", value: SdfVisibility.KindShift);
+        declarations.Bits(name: "SDF_VISIBILITY_SOURCE_MASK", value: SdfVisibility.SourceMask);
+        declarations.Signed(name: "SDF_TRANSFORM_SLOT_NONE", value: SdfProgram.NoDynamicTransformSlot);
+        declarations.Count(name: "SDF_VISIBILITY_BOX_EDGE", value: SdfVisibility.BoxEdgePixels);
+        declarations.Expression(name: "SDF_VISIBILITY_CURRENT(pixel, bounds)", value: SdfVisibility.CurrencyHlsl);
 
         return declarations.Text();
     }
@@ -343,6 +351,10 @@ public static class SdfIsaHlsl {
                 format: "X8",
                 provider: CultureInfo.InvariantCulture
             )}u"
+        );
+        public void Expression(string name, string value) => Define(
+            name: name,
+            value: value
         );
         public void Lane(string name, int lane) {
             ArgumentOutOfRangeException.ThrowIfNegative(value: lane);

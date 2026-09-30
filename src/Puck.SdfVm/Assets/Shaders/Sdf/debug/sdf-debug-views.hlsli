@@ -191,15 +191,15 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
         }
         case 11: { // VISIBILITY — the kind of the pixel's current visibility record: background dark blue, SDF green,
                    // mesh orange.
-            uint kind = SdfVisibilityKindBackground;
+            uint kind = SDF_VISIBILITY_KIND_BACKGROUND;
 
             if (worldVisibilityCurrent(p.pixel)) {
                 kind = sdfVisibilityKind(sdfLoadVisibility(worldVisibilityRecord(p.pixel, p.viewIndex)).identity);
             }
 
-            viewColor = ((kind == SdfVisibilityKindSdf)
+            viewColor = ((kind == SDF_VISIBILITY_KIND_SDF)
                 ? float3(0.15, 0.90, 0.25)
-                : ((kind == SdfVisibilityKindMesh) ? float3(0.95, 0.55, 0.10) : float3(0.02, 0.05, 0.28)));
+                : ((kind == SDF_VISIBILITY_KIND_MESH) ? float3(0.95, 0.55, 0.10) : float3(0.02, 0.05, 0.28)));
             break;
         }
     }

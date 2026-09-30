@@ -358,23 +358,44 @@ disassembly or trace the code path instead.
 
 A rendered view exposes `SdfWorldPicker` through its `SdfWorldPasses`. A request
 uses normalized view coordinates and reads one visibility pixel asynchronously.
-The V row supplies kind, source, ray distance and material; only its 16 bytes are
-copied. The source is the SDF program instance ordinal plus one, or the mesh draw
+The copy takes the record's V, C and L.x words (32 bytes) and, beside them, the
+frame's 16-byte dispatch box. V supplies kind, source, ray distance and material.
+The source is the SDF program instance ordinal plus one, or the mesh draw
 ordinal. Static instances therefore remain distinguishable even with the same
 material. A queued coordinate captures the program and immutable host identity
 map when its pixel copy records, so a content revision before recording keeps the
 request. A view change cancels it; after recording, a changed program or map
-rejects the answer. Pose-only mesh changes keep that map.
+rejects the answer and the request records again. Pose-only mesh changes keep
+that map.
+
+A pixel outside the frame's dispatch box holds an earlier frame's record, so the
+answer applies the rule the hit passes use, `SdfVisibility.IsCurrent`, to the box
+its own frame wrote, and a pixel outside it answers nothing, as sky. The kernels
+read the same rule through the generated `SDF_VISIBILITY_CURRENT`, and the
+identity's kind and source fields through `SdfVisibility` too.
 
 The 64-byte visibility record keeps the winning shape's exact transform slot in
-L.x. This slot can differ from an articulated instance's bound slot. Surface
-shading reads the four anonymous lanes from the existing dynamic transform row;
-static hits read zero. The remaining L words are reserved.
+L.x, or `SDF_TRANSFORM_SLOT_NONE` (`SdfProgram.NoDynamicTransformSlot`) for
+static geometry. This slot can differ from an articulated instance's bound slot.
+A pick carries it as `SdfPickResult.TransformSlot` and resolves it against the
+transform table of the frame the record was rendered from, the rows that frame's
+upload staged, captured when the copy records, as `SdfPickResult.Transform`.
+Surface shading reads the four anonymous lanes from the existing dynamic
+transform row; static hits read zero. The remaining L words are reserved. A slot
+fits every lane that carries it: `SdfProgram.DynamicTransformSlotBits` is the
+float data lane's exact range, and a program naming a larger slot is refused.
 
 Build mode and locally opened passthrough panes demand hover from the same
-picker. Pending answers provide backpressure; after completion, continuing
-hover samples the next rendered frame so geometry moving beneath a stationary
-pointer stays current. No demand records no copy. `world.view.pick <instance>
+picker. At most one copy is in flight: while it is, a moved pointer's latest
+coordinate waits and records when the copy completes, so a moving pointer gets
+an answer every round trip without forcing a render per frame. An answer for an
+earlier coordinate is published with its own pixel (`SdfPickResult.X` and `Y`),
+and the hover label (`WorldPickLabel`) names a placement only with the pixel it
+was answered at. After an answer, continuing hover samples the next rendered
+frame so geometry moving beneath a stationary pointer stays current. No demand
+records no copy and forces no render. A one-shot request survives a reinstall of
+the view's passes: a copy the retired recorder still held records again through
+the one that replaces it. `world.view.pick <instance>
 [<x> <y>]` exposes the same request/result seam to presentation automation.
 `world.view.pointer <client-x> <client-y>` supplies an in-bounds console-only
 presentation cursor override; `clear` restores the real pointer feed. It does

@@ -13,7 +13,7 @@ bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint
     if (!sdfVisibilityHit(visibility)) {
         return false;
     }
-    if (sdfVisibilityKind(visibility.identity) == SdfVisibilityKindMesh) {
+    if (sdfVisibilityKind(visibility.identity) == SDF_VISIBILITY_KIND_MESH) {
         uint draw = sdfVisibilitySource(visibility.identity);
         uint mesh = sdfMeshRecord(draw);
         uint first = (3u * sdfVisibilityMeshTriangle(record));
@@ -31,7 +31,7 @@ bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint
         return true;
     }
     int slot = sdfVisibilityFrameSlot(record, visibility);
-    if (slot >= 0) {
+    if (slot != SDF_TRANSFORM_SLOT_NONE) {
         uint row = (3u * (uint)slot);
         float3 local = rotatePointByInverseQuaternion(currentPoint - sdfDynamicTransforms[row].xyz, sdfDynamicTransforms[row + 1u]);
         previousPoint = (rotatePointByQuaternion(local, sdfPreviousDynamicTransforms[row + 1u]) + sdfPreviousDynamicTransforms[row].xyz);

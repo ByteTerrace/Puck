@@ -30,6 +30,8 @@ public sealed partial class SdfWorldPassesLawTests {
         var storage = gpu.DeviceLocal(part: "sdf.world$visibility", sizeBytes: ((24UL * 24) * 64));
 
         Assert.Equal(expected: ((24 * 24) * 64), actual: storage.Length);
+        // No kernel runs on the model, so the frame's dispatch box is written here: the whole grid is current.
+        Buffer.BlockCopy(count: BoxBytes, dst: gpu.DeviceLocal(part: "sdf.world$cullBounds", sizeBytes: BoxBytes), dstOffset: 0, src: WholeBox, srcOffset: 0);
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
         // Picking allocates its tiny readback only on demand; warm every frame slot before measuring scale changes.
         for (var warm = 0; (warm < 4); warm++) {

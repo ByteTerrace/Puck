@@ -283,9 +283,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             b: SdfWorldPackage.Parts.Views,
             comparisonType: StringComparison.Ordinal
         )) {
-            var visibility = recording.Inputs[VisibilityInputIndex()];
-
-            m_pick!.Prepare(slot: recording.Slot, width: width, height: height, frame: frame, version: visibility.Version,
+            m_pick!.Prepare(slot: recording.Slot, width: width, height: height, frame: frame,
+                visibility: recording.Inputs[InputIndexOf(member: SdfWorldPackage.VisibilityRecords)].Version,
+                box: recording.Inputs[InputIndexOf(member: SdfWorldPackage.CullBounds)].Version,
                 sample: new SdfReprojectionView(Camera: frame.Views[view].Camera, Jitter: temporal.Jitter, Width: width, Height: height),
                 cut: frame.Views[view].CutRevision);
             if (ReferenceEquals(objA: m_owner.FragmentOf(instance: m_context.Instance), objB: SdfWorldPackage.NativeFragment)) {
@@ -296,22 +296,22 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         return RenderGraphPackageOutcome.Drew;
     }
-    public bool TryReadback(int slot, out RenderGraphBufferReadback readback) {
+    public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) {
         if (m_pick is not null) {
-            return m_pick.Take(readback: out readback, slot: slot);
+            return m_pick.Take(index: index, readback: out readback, slot: slot);
         }
         readback = default;
         return false;
     }
     public void Submitted(int slot, IGpuSubmissionFence fence) => m_pick?.Submitted(fence: fence, slot: slot);
 
-    private int VisibilityInputIndex() {
+    private int InputIndexOf(string member) {
         for (var index = 0; (index < m_fragmentPass.Inputs.Count); index++) {
-            if (ReadMemberOf(version: m_fragmentPass.Inputs[index].Name) == SdfWorldPackage.VisibilityRecords) {
+            if (ReadMemberOf(version: m_fragmentPass.Inputs[index].Name) == member) {
                 return index;
             }
         }
-        throw new InvalidOperationException(message: "The views pass has no visibility input.");
+        throw new InvalidOperationException(message: $"Pass '{m_context.Pass}' has no input read through '{member}'.");
     }
     // Takes the view the instance resolved this frame when it is another than the one the pass records: the package
     // decided the pass can record it as built (SdfWorldPasses.CanFollow). A counter change holds recording until matching

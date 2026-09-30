@@ -7,11 +7,12 @@ namespace Puck.SdfVm;
 /// <summary>A completed presentation-only pick of one rendered pixel. The program and mesh revision identify the
 /// rendered source; the captured immutable map keeps delayed identity lookup independent of later scene changes.</summary>
 /// <param name="Request">The request identity.</param>
-/// <param name="X">The sampled pixel column.</param>
+/// <param name="X">The sampled pixel column: the coordinate this answer belongs to, whatever the pointer did since.</param>
 /// <param name="Y">The sampled pixel row.</param>
 /// <param name="Width">The rendered width.</param>
 /// <param name="Height">The rendered height.</param>
-/// <param name="Identity">The visibility identity: kind in bits 31..30, source in bits 29..0.</param>
+/// <param name="Identity">The visibility identity, packed as <see cref="SdfVisibility"/> states; zero when the pixel's
+/// record was not current in the frame that rendered it.</param>
 /// <param name="Distance">The ray parameter along the normalized camera ray.</param>
 /// <param name="Material">The winning material index.</param>
 /// <param name="Program">The program rendered by this request.</param>
@@ -28,12 +29,18 @@ public readonly record struct SdfPickResult(long Request, uint X, uint Y, uint W
     public object? Target => Map?.Resolve(identity: Identity);
     /// <summary>Gets the host material name captured beside the rendered program.</summary>
     public string? MaterialName => Map?.MaterialName(identity: Identity, material: Material);
-    /// <summary>Gets the hit kind: 0 background, 1 SDF, 2 mesh.</summary>
-    public uint Kind => (Identity >> 30);
+    /// <summary>Gets the hit kind.</summary>
+    public SdfVisibilityKind Kind => SdfVisibility.KindOf(identity: Identity);
     /// <summary>Gets the source: an SDF instance ordinal plus one, or a mesh draw ordinal.</summary>
-    public uint Source => Identity & 0x3FFFFFFF;
+    public uint Source => SdfVisibility.SourceOf(identity: Identity);
     /// <summary>Gets whether the pixel hits geometry.</summary>
-    public bool Hit => (Kind != 0);
+    public bool Hit => (Kind != SdfVisibilityKind.Background);
+    /// <summary>Gets the winning SDF shape's dynamic-transform slot, the record's L.x, which can differ from its
+    /// instance's bound slot in an articulated group; null for static geometry, a mesh hit or a miss.</summary>
+    public int? TransformSlot { get; init; }
+    /// <summary>Gets <see cref="TransformSlot"/>'s row in the transform table of the frame the record was rendered from,
+    /// captured when its copy recorded, so a later frame's motion never answers for it; null without a slot.</summary>
+    public DynamicTransform? Transform { get; init; }
     /// <summary>Gets the camera and ray sample captured by an inspector request, or null for an ordinary identity pick.</summary>
     public SdfReprojectionView? Sample { get; init; }
     /// <summary>Gets the captured camera cut revision, used to discard answers from a superseded view epoch.</summary>

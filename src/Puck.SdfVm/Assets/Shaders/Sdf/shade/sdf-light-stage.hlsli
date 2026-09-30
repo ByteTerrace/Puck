@@ -111,7 +111,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
             float3 layerNormal = normal;
             float3 layerRay = p.rayDirection;
 #ifdef SDF_DYNAMIC_TRANSFORMS
-            if (hitFrameSlot >= 0) {
+            if (hitFrameSlot != SDF_TRANSFORM_SLOT_NONE) {
                 float3 frameOrigin = sdfDynamicTransforms[3u * (uint)hitFrameSlot].xyz;
                 float4 frameRotation = sdfDynamicTransforms[3u * (uint)hitFrameSlot + 1u];
                 layerPoint = rotatePointByInverseQuaternion(surfacePoint - frameOrigin, frameRotation);

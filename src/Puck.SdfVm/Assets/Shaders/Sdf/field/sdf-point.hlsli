@@ -16,7 +16,7 @@ SdfHit sdfIsaErrorHit() {
     result.material = SDF_ISA_ERROR_MATERIAL;
     result.lanes = float4(0.0, 0.0, 0.0, 0.0);
     result.instanceIndex = -1;
-    result.frameSlot = -1;
+    result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
     return result;
 }
 

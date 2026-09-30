@@ -1270,8 +1270,9 @@ bezel's one statement is `WorldScreenMappings.Glass`. The pointer's pane hover r
 picker on the CPU (P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`,
 outlined by the overlay's `CursorWriter` and echoed as `world.view.panes`'
 `hovered=`). `SdfWorldPasses.PickerOf` supplies the shared `SdfWorldPicker`:
-one asynchronous 16-byte visibility read resolves the winning SDF instance or
-mesh draw through the frame's immutable `WorldPickMapBuilder` map. The
+one asynchronous visibility read, with the frame's dispatch box so a pixel the
+frame did not write answers nothing, resolves the winning SDF instance or mesh
+draw through the frame's immutable `WorldPickMapBuilder` map. The
 64-byte visibility record keeps that identity in V and the exact winning
 shape transform slot in L.x; material lanes read the existing transform row.
 The `sdf-picking` and `pane-outline` canaries pass on Vulkan and DirectX with

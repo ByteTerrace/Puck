@@ -52,6 +52,6 @@ internal sealed partial class WorldViewCommandModule {
         var target = (result.Target as WorldPickTarget);
 
         return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture,
-            handler: $"[world.view.pick: instance={instance} request={result.Request} pixel={result.X},{result.Y} kind={result.Kind} source={result.Source} material={result.Material} placement={(target?.Placement ?? "none")} body={(target?.BodyIndex?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")}]"));
+            handler: $"[world.view.pick: instance={instance} request={result.Request} pixel={result.X},{result.Y} kind={((uint)result.Kind)} source={result.Source} material={result.Material} placement={(target?.Placement ?? "none")} body={(target?.BodyIndex?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")} slot={(result.TransformSlot?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")}]"));
     }
 }

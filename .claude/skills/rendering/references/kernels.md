@@ -151,6 +151,14 @@ module and `VisibilityRecordByteLength`. A record is current only inside the fra
 dispatch box, where primary writes every active pixel, misses included: a
 reader of another pixel's record asks `worldVisibilityCurrent` first and
 treats a pixel outside the box as sky, since the beam proved its tile empty.
+The rule is `SdfVisibility.IsCurrent`, generated into `sdf-isa.hlsli` as
+`SDF_VISIBILITY_CURRENT` with the box's unit `SDF_VISIBILITY_BOX_EDGE` (the hit
+passes' workgroup edge), and a pick applies it on the host to the box its copy
+reads back; change the table there, never the macro. The identity's fields are
+`SDF_VISIBILITY_KIND_*`, `SDF_VISIBILITY_KIND_SHIFT` and
+`SDF_VISIBILITY_SOURCE_MASK`, and a static winner's transform slot is
+`SDF_TRANSFORM_SLOT_NONE`; `SdfVisibilityLawTests` refuses a kernel that spells
+any of them by hand.
 `world.debug-view visibility` (mode 11) colors each pixel by its record's kind.
 Material `Soften` changes the later
 lighting normal, while AO uses the geometric normal. Before accepting a record or

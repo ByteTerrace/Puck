@@ -83,7 +83,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
     float3 jz = float3(0.0, 0.0, 1.0);
     // KEEP IN SYNC with mapCore's currentLanes/laneErodeSkipShape/laneErodeAmount — same reset/set/consume points.
     float4 currentLanes = float4(0.0, 0.0, 0.0, 0.0);
-    int currentSlot = -1;
+    int currentSlot = SDF_TRANSFORM_SLOT_NONE;
     bool laneErodeSkipShape = false;
     float laneErodeAmount = 0.0;
     SdfHit result;
@@ -92,7 +92,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
     result.material = 0;
     result.lanes = float4(0.0, 0.0, 0.0, 0.0);
     result.instanceIndex = -1;
-    result.frameSlot = -1;
+    result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
     float3 resultGradient = float3(0.0, 0.0, 0.0);
 
     // The one-deep scoped-accumulator save slot carries distance, material, lanes, and gradient together.
@@ -101,7 +101,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
     saved.material = 0;
     saved.lanes = float4(0.0, 0.0, 0.0, 0.0);
     saved.instanceIndex = -1;
-    saved.frameSlot = -1;
+    saved.frameSlot = SDF_TRANSFORM_SLOT_NONE;
     saved.gradient = float3(0.0, 0.0, 0.0);
 
     [loop]
@@ -176,7 +176,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
             if (planReady) {
                 float3 rigidBasePosition = worldPosition;
                 float4 rigidLanes = 0.0;
-                int rigidSlot = -1;
+                int rigidSlot = SDF_TRANSFORM_SLOT_NONE;
 
                 float4 rigidDynamicOrientation = float4(0.0, 0.0, 0.0, 1.0);
                 bool rigidDynamic = false;
@@ -283,7 +283,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
             int composeMaterial = 0;
             float4 composeLanes = float4(0.0, 0.0, 0.0, 0.0);
             int composeInstance = -1;
-            int composeSlot = -1;
+            int composeSlot = SDF_TRANSFORM_SLOT_NONE;
             float composeSmooth = 0.0;
 
             switch (op) {
@@ -294,7 +294,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     jy = float3(0.0, 1.0, 0.0);
                     jz = float3(0.0, 0.0, 1.0);
                     currentLanes = float4(0.0, 0.0, 0.0, 0.0);
-                    currentSlot = -1;
+                    currentSlot = SDF_TRANSFORM_SLOT_NONE;
                     laneErodeSkipShape = false;
                     laneErodeAmount = 0.0;
                     break;
@@ -764,7 +764,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     result.material = 0;
                     result.lanes = float4(0.0, 0.0, 0.0, 0.0);
                     result.instanceIndex = -1;
-                    result.frameSlot = -1;
+                    result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
                     resultGradient = float3(0.0, 0.0, 0.0);
                     break;
                 }

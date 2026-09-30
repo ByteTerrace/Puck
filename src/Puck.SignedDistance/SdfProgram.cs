@@ -96,10 +96,6 @@ public sealed partial class SdfProgram {
     private const float UnmaskableBoundRadius = 1.0e30f;
     private const int WordsPerVector = 4;
 
-    /// <summary>The largest legal dynamic-transform slot index: the derived capacity is <c>slot + 1</c>, which must
-    /// itself fit in an <see cref="int"/>.</summary>
-    public const int MaxDynamicTransformSlot = (int.MaxValue - 1);
-
     private readonly bool m_buildInstanceGrid;
     // Every SdfShapeType.ConvexPolygon instruction's own vertex list, keyed by that instruction's index — the host
     // side of the side table PackConvexPolygonProfiles appends to the packed word stream (see
@@ -1113,13 +1109,10 @@ public sealed partial class SdfProgram {
         return result;
     }
     private static int DecodeDynamicSlot(float value, string paramName) {
-        // The range compare runs in double: (float)int.MaxValue rounds UP to 2147483648f, so a float compare against
-        // int.MaxValue admits it and the saturating cast + "slot + 1" would overflow past the capacity the slot must
-        // fit (slot + 1 <= int.MaxValue is the real bound).
         if (
             !float.IsFinite(f: value) ||
             (value < 0f) ||
-            (((double)value) > MaxDynamicTransformSlot) ||
+            (value > MaxDynamicTransformSlot) ||
             (value != MathF.Truncate(x: value))
         ) {
             throw new ArgumentOutOfRangeException(

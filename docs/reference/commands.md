@@ -647,7 +647,11 @@ rect in the accent hue, the cursor's hover label names the pane when no HUD
 panel is under it, and `world.view.panes` ends with the hovered pane
 (`hovered=pane<i> <kind>:<instance> pixel <x>,<y>`, or `hovered=none`). A
 letterbox bar or a pane the layout does not show hovers nothing, and nothing
-the hover decides reaches simulation state. GPU picking is not built.
+the hover decides reaches simulation state. Within a pane, build mode and a
+passthrough pane also pick the geometry under the pointer on the GPU, one
+visibility pixel at a time; the hover label then names the placement the pick
+answered and the pixel it answered at (see
+[presentation picking](../rendering/sdf/handbook/frame-rendering.md#presentation-picking)).
 
 Every screen in the world publishes a mapping too. The World's screen binder
 builds each row's mapping through `WorldScreenMappings.Of`, with the screen

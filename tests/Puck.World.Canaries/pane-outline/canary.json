@@ -1,7 +1,7 @@
 {
   "id": "pane-outline",
   "title": "The presentation destination outlines its hovered pane on the GPU and clear restores the real pointer feed",
-  "binding": "The standard authored theme gives the outline an opaque accent. A console-only presentation cursor first sits outside the left-half magenta pane, then inside it. The capture at the composed root reads a top-edge region far from the cursor and its label: a hovered pane replaces magenta with its accent outline. The discriminating leg keeps the override outside the pane, so that same region remains magenta. Clear removes the override and the final capture holds the no-hover edge for the unattended windowed canary. The normal OS pointer is never injected or moved.",
+  "binding": "The standard authored theme outlines a hovered pane in its accent (#FF6A2B at cursorAlpha 0.9), which over the magenta pane reads full red, a mid green and a blue well below magenta's: bounds no magenta, black or white pixel meets. A console-only presentation cursor first sits outside the left-half magenta pane, then inside it. The captures at the composed root read a top-edge region far from the cursor and its label: before the hover every pixel there is magenta, with the pointer inside the pane every pixel is the accent edge, and after clear every pixel is magenta again. The discriminating leg keeps the override outside the pane, so the hover capture stays magenta and the accent observation turns red. Clear removes the override for the unattended windowed canary. The normal OS pointer is never injected or moved.",
   "bootShape": "windowed",
   "backends": [
     "vulkan",
@@ -107,8 +107,8 @@
     "expect": [
       {
         "type": "imageRegion",
-        "name": "hover-draws-an-accent-edge-over-the-magenta-pane",
-        "capture": "hover.png",
+        "name": "plain-shows-no-outline",
+        "capture": "plain.png",
         "extent": [
           256,
           144
@@ -133,7 +133,37 @@
           1
         ],
         "toleranceCodes": 1,
-        "holds": false
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "hover-draws-the-accent-edge",
+        "capture": "hover.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.001,
+          0.26,
+          0.006
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.9,
+          0.25,
+          0,
+          1
+        ],
+        "maximum": [
+          1,
+          0.7,
+          0.7,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
       },
       {
         "type": "imageRegion",
@@ -268,7 +298,37 @@
     "expect": [
       {
         "type": "imageRegion",
-        "name": "hover-draws-an-accent-edge-over-the-magenta-pane",
+        "name": "plain-shows-no-outline",
+        "capture": "plain.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.001,
+          0.26,
+          0.006
+        ],
+        "reduce": "every",
+        "minimum": [
+          1,
+          0,
+          1,
+          1
+        ],
+        "maximum": [
+          1,
+          0,
+          1,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "hover-outside-the-pane-keeps-the-magenta-edge",
         "capture": "hover.png",
         "extent": [
           256,

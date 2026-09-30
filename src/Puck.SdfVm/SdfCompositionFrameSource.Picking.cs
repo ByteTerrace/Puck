@@ -38,13 +38,13 @@ public sealed partial class SdfCompositionFrameSource {
         // program-relative; mesh draws are rebased into that emitter's local draw table.
         private ISdfPickMap? Owner(uint identity, out uint local) {
             local = identity;
-            var kind = (identity >> 30);
-            var source = identity & 0x3FFFFFFF;
+            var kind = SdfVisibility.KindOf(identity: identity);
+            var source = SdfVisibility.SourceOf(identity: identity);
 
             for (var index = 0; (index < Maps.Length); index++) {
-                if (kind == 2) {
+                if (kind == SdfVisibilityKind.Mesh) {
                     if (source < MeshCounts[index]) {
-                        local = 0x80000000 | source;
+                        local = SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: source);
                         return Maps[index];
                     }
                     source -= ((uint)MeshCounts[index]);
