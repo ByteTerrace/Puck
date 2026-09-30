@@ -1571,6 +1571,18 @@ History whose extent changes starts again from its declared initialization: the
 first frame at the new extent reads it as the previous frame's. If the rebuilt graph cannot be
 allocated, the installed graph keeps running at its old extent.
 
+What a frame projects, such as a camera's aspect, is composed for the extent the
+host requests, so a frame the installed graph renders at its old extent projects
+for an extent it is not shown at. An instance whose reader places it into a rect
+still renders meanwhile, because the reader stretches its image into the rect the
+projection was composed for. The render graph's root is shown at its own extent
+as the display (`ShaderPipelineRenderNode.ShownAtItsExtent`), so it renders
+nothing while its requested extent builds or stays refused and presents its last
+image instead. Either way a capture reads only an image rendered at the extent
+last requested of its instance, so a capture armed during a resize lands on the
+first frame at the new extent, and `UnservedCaptureReasonOf` names the extent
+it waits for.
+
 A refused candidate, a reload or a resize, is not retried on a clock or per
 frame: it is tried again when the host asks for something different, when the
 operator's GPU faults change (`GpuCreationFaults.Revision`: `gpu.faults` arming

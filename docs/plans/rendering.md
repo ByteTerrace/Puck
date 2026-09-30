@@ -182,7 +182,8 @@ pipeline set and every world pass as absent, and because the simulation holds
 while the engine builds, both backends read the state counts at the same tick. The render levers (`WorldRenderLeverCommandModule`) are
 composed by the offscreen shape as well as the windowed one, and the offscreen
 shape alone answers `world.resize <width> <height>`, which resizes its display
-live, so a capture after it lands at the new extent. The pipeline-cache counts
+live; the root shows its last image until it has installed the new extent, so a
+capture armed on the tick of the resize lands at the new extent. The pipeline-cache counts
 in a report are pacing: each leg boots on a fresh state root, so every run
 starts with a cold cache and reports misses only. A `puck canary` GPU selection
 with an offscreen proof instead warms each backend's pipeline cache once, by
@@ -2055,6 +2056,7 @@ and the canaries hold every scene the check names.
    | Small and multiple viewports | the `split` layout's half-size and quarter-size slots: `half-slot-*`, `quarter-slot-*` |
    | Reduced render scale | the `half` tier, reconstructed: `scaled-*` |
    | Full-size resize | `world.resize 1920 1080` grows the offscreen display live, and `full-near-floor-is-mesh`, `full-far-mesh-is-mesh`, `full-block-is-sdf` and `full-sky-beside-the-far-mesh-is-background` hold the frame at the new extent |
+   | Aspect-changing resize | `world.resize 144 144`, then `world.resize 256 144`, each captured on the tick it lands: `square-*` and `wide-*` hold each frame at its new extent and projected for it |
    | Bounded against unbounded traversal | every region: the oracle is the fixed-point raycast to the far distance, never stopped by a mesh |
 
    The `puck search -M 0` sweep for the retired layouts finds no reader outside

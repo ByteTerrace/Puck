@@ -114,7 +114,9 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     /// <inheritdoc/>
     public void RequestCapture(FrameCaptureRequest request) => Runtime.RequestCapture(request: request);
     /// <summary>Changes the display extent from the next produced frame on: the runtime schedules every instance's
-    /// footprint against it, so the root and every view it places render at the new extent.</summary>
+    /// footprint against it, so the root and every view it places render at the new extent. The root, shown at its own
+    /// extent, presents its last image until its graph installs the new one
+    /// (<see cref="ShaderPipelineRenderNode.ShownAtItsExtent"/>), and a capture waits for that frame.</summary>
     /// <param name="width">The display's width, in pixels.</param>
     /// <param name="height">The display's height, in pixels.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is zero or

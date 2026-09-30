@@ -62,11 +62,11 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// schedule's while a bake the presentation would draw is still baking, then the frame readiness owes once they all
     /// hold.</remarks>
     public string? NotReadyReason => (((Residency is { } residency) && (Root is { } root))
-        ? (residency.NotReadyReason ?? root.Runtime.UnservedCaptureReason ?? root.Runtime.InFlightReason ?? (BakesSettled
+        ? (residency.NotReadyReason ?? (root.Runtime.UnservedCaptureReason ?? (root.Runtime.InFlightReason ?? (BakesSettled
             ? (IsReady
                 ? null
                 : "the root has produced no frame since every readiness condition held")
-            : "the creation bakes are settling: a prototype the presentation would draw baked is still queued or baking"))
+            : "the creation bakes are settling: a prototype the presentation would draw baked is still queued or baking"))))
         : "the renderer has not been composed: no frame has been produced"
     );
 
@@ -77,6 +77,7 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
         (Root?.Runtime is { UnservedCaptureReason: null, FirstFramesCompleted: true }) &&
         BakesSettled
     );
+
     /// <summary>The presentation's bake schedule, or <see langword="null"/> until the render factory has run.</summary>
     public WorldBakeSchedule? Bakes { get; set; }
     /// <summary>The presentation's render settings, whose <see cref="WorldRenderSettings.DrawsBakes"/> says whether it

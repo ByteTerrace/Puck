@@ -219,7 +219,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         return -1;
     }
-
     private static RenderGraphRuntimeRefusal Refuse(RenderGraphRuntimeRefusalCode code, string message, params string[] names) => new(
         Code: code,
         Message: message,
@@ -977,6 +976,13 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             return $"the instance '{name}' has produced no output";
         }
 
+        var (width, height) = m_nodes[index]!.Extent;
+        var (requestedWidth, requestedHeight) = m_nodes[index]!.RequestedExtent;
+
+        if ((width != requestedWidth) || (height != requestedHeight)) {
+            return $"the instance '{name}' renders at {width}x{height} while {requestedWidth}x{requestedHeight} is requested";
+        }
+
         if (m_standInReads[index] is { } producerName) {
             return $"the instance '{name}' has rendered only over a stand-in for '{producerName}', which has produced no output";
         }
@@ -1215,6 +1221,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             var submitted = node.FrameCounter;
             Surface surface;
 
+            // The root is shown as the display, at its own extent; every other instance is resampled by what reads it.
+            node.ShownAtItsExtent = (index == m_root);
+
             try {
                 surface = node.ProduceFrame(context: in context);
             } finally {
@@ -1236,8 +1245,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 continue;
             }
 
+            // A sample rendered at an extent the node was not asked for is one its capture never reads.
             if ((index == m_captureInstance) && IsConverging(index: index) &&
-                (m_standInReads[index] is null) && (m_taintedReads[index] is null)) {
+                (m_standInReads[index] is null) && (m_taintedReads[index] is null) && (node.Extent == node.RequestedExtent)) {
                 m_convergence!.Count();
             }
 
@@ -1285,7 +1295,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         request: request
     );
     /// <summary>Returns the capture target of one instance. A capture armed on it is served by the first frame after it
-    /// is armed on which a graph instance renders an installed graph with every image input bound to a completed output,
+    /// is armed on which a graph instance renders an installed graph, at the extent last requested of it, with every image
+    /// input bound to a completed output,
     /// or on which an external instance produces. The runtime holds one capture at a time across its instances. A
     /// requester that stops waiting withdraws it with <see cref="FrameCaptureRequest.TryFail"/>, and the runtime then
     /// drops it.</summary>
@@ -1313,7 +1324,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         return target;
     }
     /// <summary>Returns why a capture of one instance would not be served by the frame the runtime produces now, phrased
-    /// as the refusal of a capture that waited on it reads: the instance has no completed output, or its latest render
+    /// as the refusal of a capture that waited on it reads: the instance has no completed output, its installed graph
+    /// renders at an extent other than the one last requested of it (a resize building, or refused), or its latest render
     /// bound a stand-in for a producer that has none. It builds a string, so a caller polls it only to report.</summary>
     /// <param name="instance">The instance's name.</param>
     /// <returns>The reason, or <see langword="null"/> when a capture of it would be served.</returns>

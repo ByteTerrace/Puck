@@ -348,9 +348,13 @@ in this shape) resizes it live, each side 1 to 16384 pixels: the host's
 `OffscreenRenderOptions` asks the next frame for the new extent, the render
 root (`RenderGraphRuntimeNode.Resize`) schedules every instance against it, and
 every camera and session view fits its declared extent to it
-(`WorldScreenBinder.ResizeDisplay`), so a capture after it lands at the new
-extent. It refuses until the renderer is ready, and with no argument it echoes
-the current extent. A windowed display keeps its document extent, which
+(`WorldScreenBinder.ResizeDisplay`). The cameras are composed for the new
+extent from the next frame on, while the root's graph rebuilds at it beside the
+installed one, so until that graph installs the display shows its last image
+and a capture waits: a screenshot armed on the tick of the resize lands at the
+new extent, never as a frame projected for one extent and shown at another. It
+refuses until the renderer is ready, and with no argument it echoes the current
+extent. A windowed display keeps its document extent, which
 presentation scales to the window.
 
 Because its frames are its only output, the offscreen host holds its clock
