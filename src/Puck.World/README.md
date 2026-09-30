@@ -789,7 +789,10 @@ Facts a script needs:
   the rendering engine instead of a tick count: it holds the session until
   the world's SDF residency has built its tables (its pipeline set installed
   and its first frame captured), the render graph's root has rendered over
-  a completed view and the bake schedule has reconciled and, while the
+  a completed view, the GPU has completed a frame of every instance that has
+  rendered and the root has produced one more frame, so a pick or counted pass
+  read after it waits on no cold device and a few ticks after it are a few
+  frames, and the bake schedule has reconciled and, while the
   presentation draws its bakes, settled, or
   the deadline passes, and reports which on standard error. A script that
   reads rendered work (`world.counters gpu`) waits on it, since a cold driver

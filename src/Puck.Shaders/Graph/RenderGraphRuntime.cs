@@ -194,6 +194,31 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <see cref="UnservedCaptureReasonOf"/>), or <see langword="null"/> once the root has a completed output rendered
     /// from completed inputs.</summary>
     public string? UnservedCaptureReason => ReasonOf(index: m_root);
+    /// <summary>Gets whether every instance whose node has submitted a frame has one completed on the GPU
+    /// (<see cref="ShaderPipelineRenderNode.HasCompletedSubmission"/>), so a reader of GPU results waits on no instance's
+    /// first frame. An instance that has not rendered and an external producer, which submits through its own device
+    /// work, never hold it. Reading it allocates nothing.</summary>
+    public bool FirstFramesCompleted => (FirstInFlight() < 0);
+    /// <summary>Gets why <see cref="FirstFramesCompleted"/> is <see langword="false"/>, naming the first instance, in set
+    /// order, whose first submission is still in flight, or <see langword="null"/> when it is
+    /// <see langword="true"/>.</summary>
+    public string? InFlightReason => ((FirstInFlight() is var index and >= 0)
+        ? $"the instance '{m_set.Instances[index].Name}' has no GPU-completed frame: its first submission is still in flight"
+        : null);
+
+    // The first instance whose node has submitted and has no submission completed on the GPU, or -1.
+    private int FirstInFlight() {
+        for (var index = 0; (index < m_nodes.Length); index++) {
+            if (
+                (m_nodes[index] is { LatestSubmission: not null } node) &&
+                !node.HasCompletedSubmission
+            ) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
 
     private static RenderGraphRuntimeRefusal Refuse(RenderGraphRuntimeRefusalCode code, string message, params string[] names) => new(
         Code: code,

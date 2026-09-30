@@ -14,8 +14,10 @@ namespace Puck.World;
 /// <see cref="IGpuWorkRegistry"/> whose nodes the <c>gpu</c> section of <c>world.counters</c> reports: each graph
 /// instance the render graph renders by its instance name, the world's residency's uploads as <c>sdf:world</c>, and
 /// each camera and session view's as <c>sdf:&lt;name&gt;</c>, which <see cref="WorldScreenBinder"/> registers. It is the
-/// host's <see cref="IWorldEngineReadiness"/> too: ready once the world's residency has built its tables and the
-/// graph's root has a completed output rendered over it, not before the render factory has composed either, and once
+/// host's <see cref="IWorldEngineReadiness"/> too: ready once the world's residency has built its tables, the graph's
+/// root has a completed output rendered over it, and every instance that has rendered has a frame completed on the GPU
+/// (<see cref="RenderGraphRuntime.FirstFramesCompleted"/>), so a GPU readback asked for after readiness waits on no
+/// cold device's first frames, not before the render factory has composed either, and once
 /// the bake schedule has reconciled, so whether the presentation draws its bakes is known, and, while it draws them
 /// (<see cref="WorldRenderSettings.DrawsBakes"/>), is settled, so a capture or a <c>world.wait ready</c> never lands
 /// between a placement's field and its bake.
@@ -48,20 +50,32 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// <inheritdoc/>
     public bool CapturesSettled => (Root?.PendingCapturePath is null);
     /// <inheritdoc/>
-    public bool IsReady => (
-        (Residency?.IsReady ?? false) &&
-        (Root?.Runtime.UnservedCaptureReason is null) &&
-        BakesSettled
+    /// <remarks>Ready once every condition holds and the root has produced a frame since a read first found them held
+    /// (<see cref="WorldReadinessLatch"/>).</remarks>
+    public bool IsReady => m_readiness.Observe(
+        conditionsHold: ConditionsHold,
+        framesProduced: (Root?.FramesProduced ?? 0L)
     );
     /// <inheritdoc/>
     /// <remarks>The world's residency's reason while it builds, then the render graph's while its root has not rendered
-    /// over a completed world output, then the bake schedule's while a bake the presentation would draw is still
-    /// baking.</remarks>
+    /// over a completed world output or a rendered instance's first frame is still in flight on the GPU, then the bake
+    /// schedule's while a bake the presentation would draw is still baking, then the frame readiness owes once they all
+    /// hold.</remarks>
     public string? NotReadyReason => (((Residency is { } residency) && (Root is { } root))
-        ? (residency.NotReadyReason ?? (root.Runtime.UnservedCaptureReason ?? (BakesSettled
-            ? null
-            : "the creation bakes are settling: a prototype the presentation would draw baked is still queued or baking")))
+        ? (residency.NotReadyReason ?? root.Runtime.UnservedCaptureReason ?? root.Runtime.InFlightReason ?? (BakesSettled
+            ? (IsReady
+                ? null
+                : "the root has produced no frame since every readiness condition held")
+            : "the creation bakes are settling: a prototype the presentation would draw baked is still queued or baking"))
         : "the renderer has not been composed: no frame has been produced"
+    );
+
+    private readonly WorldReadinessLatch m_readiness = new();
+
+    private bool ConditionsHold => (
+        (Residency?.IsReady ?? false) &&
+        (Root?.Runtime is { UnservedCaptureReason: null, FirstFramesCompleted: true }) &&
+        BakesSettled
     );
     /// <summary>The presentation's bake schedule, or <see langword="null"/> until the render factory has run.</summary>
     public WorldBakeSchedule? Bakes { get; set; }

@@ -46,6 +46,8 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
 
     /// <summary>Gets or sets the reads the display shows inside its rendering instances this frame.</summary>
     public IReadOnlyList<RenderGraphFootprint> Footprints { get; set; }
+    /// <summary>Gets how many frames the node has produced, the next frame's <see cref="RenderGraphFrame.Index"/>.</summary>
+    public long FramesProduced => m_frame;
     /// <summary>Gets the services the host ties to the root's teardown, disposed in order after the runtime. A host
     /// disposes its root while the device is still alive, so a service holding GPU objects that its container would
     /// dispose only after the device context is released here instead; its later disposal by the container is a

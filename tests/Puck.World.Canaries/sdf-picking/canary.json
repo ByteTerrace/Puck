@@ -1,7 +1,7 @@
 {
   "id": "sdf-picking",
   "title": "One GPU visibility pixel identifies static SDF instances and mesh placements independently of material",
-  "binding": "The existing mesh-visibility fixture has two static blocks with the same palette, exposed mesh pixels in front of and above them, and background. After engine readiness a landed capture fences the device's startup backlog: readiness is the frame thread's, and a cold device completes its first frames several ticks after it. Then five asynchronous requests read the rendered world, each query waiting for subsequent frames before reading. Static hits carry distinct positive SDF source ordinals and their authored placements; mesh hits carry draw ordinals and the same owning placements. The discriminating fixture keeps the SDF blocks but moves its meshes out of view: the front sample becomes SDF and the sample above the centre block becomes background. All observations read the real one-pixel transfer and its captured host identity map.",
+  "binding": "The existing mesh-visibility fixture has two static blocks with the same palette, exposed mesh pixels in front of and above them, and background. After engine readiness, five asynchronous requests read the rendered world; each query waits for subsequent frames before reading. Static hits carry distinct positive SDF source ordinals and their authored placements; mesh hits carry draw ordinals and the same owning placements. The discriminating fixture keeps the SDF blocks but moves its meshes out of view: the front sample becomes SDF and the sample above the centre block becomes background. All observations read the real one-pixel transfer and its captured host identity map.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -26,23 +26,13 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.screenshot",
-        "occurrence": 1,
-        "outcome": "accepted"
-      },
-      {
-        "verb": "world.wait",
-        "occurrence": 2,
-        "outcome": "accepted"
-      },
-      {
         "verb": "world.view.pick",
         "occurrence": 1,
         "outcome": "accepted"
       },
       {
         "verb": "world.wait",
-        "occurrence": 3,
+        "occurrence": 2,
         "outcome": "accepted"
       },
       {
@@ -57,7 +47,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 4,
+        "occurrence": 3,
         "outcome": "accepted"
       },
       {
@@ -72,7 +62,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 5,
+        "occurrence": 4,
         "outcome": "accepted"
       },
       {
@@ -87,7 +77,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 6,
+        "occurrence": 5,
         "outcome": "accepted"
       },
       {
@@ -102,7 +92,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 7,
+        "occurrence": 6,
         "outcome": "accepted"
       },
       {
@@ -382,23 +372,13 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.screenshot",
-        "occurrence": 1,
-        "outcome": "accepted"
-      },
-      {
-        "verb": "world.wait",
-        "occurrence": 2,
-        "outcome": "accepted"
-      },
-      {
         "verb": "world.view.pick",
         "occurrence": 1,
         "outcome": "accepted"
       },
       {
         "verb": "world.wait",
-        "occurrence": 3,
+        "occurrence": 2,
         "outcome": "accepted"
       },
       {
@@ -413,7 +393,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 4,
+        "occurrence": 3,
         "outcome": "accepted"
       },
       {
@@ -428,7 +408,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 5,
+        "occurrence": 4,
         "outcome": "accepted"
       },
       {
@@ -443,7 +423,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 6,
+        "occurrence": 5,
         "outcome": "accepted"
       },
       {
@@ -458,7 +438,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 7,
+        "occurrence": 6,
         "outcome": "accepted"
       },
       {

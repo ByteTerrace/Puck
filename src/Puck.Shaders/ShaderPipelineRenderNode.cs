@@ -1459,7 +1459,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     }
     private void WaitAll() {
         foreach (var slot in m_slots) {
-            slot.Fence?.Wait();
+            if (slot.Fence is { } fence) {
+                fence.Wait();
+                NoteWaited(fence: fence);
+            }
             slot.Leases.RetireAll();
         }
     }
@@ -1661,6 +1664,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var slot = m_slots[slotIndex];
 
         slot.Fence!.Wait();
+        NoteWaited(fence: slot.Fence);
         PrepareTiming(slot: slotIndex);
         slot.Leases.RetireAll();
         BindRegionBuffers(slot: slotIndex);

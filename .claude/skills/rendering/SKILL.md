@@ -555,9 +555,17 @@ These are one-line cautions; the owning pages hold the derivations.
   already in the driver, and disposes the entry. A residency is ready
   (`SdfWorldResidency.IsReady`) once its set is ready and its tables are
   built from its first captured frame, and the world is ready
-  (`WorldRenderProbe.IsReady`) once the world's residency is and the render
-  graph's root has rendered over a completed world output. That is the one
-  readiness fact: the console
+  (`WorldRenderProbe.IsReady`) once the world's residency is, the render
+  graph's root has rendered over a completed world output, and every instance
+  whose node has submitted has a frame completed on the GPU
+  (`RenderGraphRuntime.FirstFramesCompleted`, over
+  `ShaderPipelineRenderNode.HasCompletedSubmission`), and then once the root
+  has produced one more frame (`WorldReadinessLatch`): the frame that
+  completes the conditions is the slowest, and the fixed-step host catches up
+  the ticks it cost in one iteration. So a GPU readback a script asks for
+  after it (a pick, a counted pass) waits on no cold device's first frames,
+  and a few ticks after it are a few frames. That is the one readiness fact:
+  the console
   waits on it with `world.wait ready <seconds>`, and whatever reads counted
   world passes (`puck counters`, the `world-counters` canary, `puck qualify`)
   waits on it, never on a tick count. The pass-pipeline cache counts the
