@@ -453,14 +453,14 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
             }
         }
         // Produces frames until the node refuses its engine build, and returns whether that frame was submitted. A refusal
-        // never throws out of the frame. The bound is liveness for a pipeline build on the thread pool; it decides nothing.
+        // never throws out of the frame.
         public bool ProduceUntilRefused() {
             var produced = false;
             var context = m_context;
             var node = Node;
 
-            Assert.True(condition: SpinWait.SpinUntil(
-                condition: () => {
+            SdfTestPipelines.ProduceUntil(
+                frame: () => {
                     produced = node.Produce(context: in context);
 
                     return (node.NotReadyReason?.Contains(
@@ -468,8 +468,9 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
                         value: "refused"
                     ) ?? false);
                 },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ));
+                reason: () => node.NotReadyReason,
+                wait: node.WaitPipelineBuilds
+            );
             Assert.False(condition: node.IsReady);
 
             return produced;

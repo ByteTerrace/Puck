@@ -22,7 +22,8 @@ public sealed partial class SdfWorldPassesLawTests {
             Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = gpu }),
             StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent);
 
-        Assert.True(condition: SpinWait.SpinUntil(condition: () => view.Produce(context: in context), timeout: TimeSpan.FromSeconds(value: 30)), userMessage: (view.Runtime.Node(instance: 0).LastSwapError?.ToString() ?? view.NotReadyReason));
+        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context), reason: () => (view.Runtime.Node(instance: 0).LastSwapError?.ToString() ?? view.NotReadyReason),
+            wait: view.Residency.WaitPipelineBuilds);
         var node = view.Runtime.Node(instance: 0);
 
         Assert.Equal(expected: (Extent, Extent), actual: node.Extent);
@@ -77,7 +78,7 @@ public sealed partial class SdfWorldPassesLawTests {
             (0.5f, 0.25f, 11, 8u), (1f, 0f, 10, 32u), (0.75f, 0.5f, 11, 16u),
         }) {
             current = current with { Views = [current.Views[0] with { RenderScale = ceiling, ResolvedRenderScale = active }], Time = (current.Time + 1f) };
-            Assert.True(condition: SpinWait.SpinUntil(condition: () => {
+            SdfTestPipelines.ProduceUntil(frame: () => {
                 if (!view.Produce(context: in context) || (node.Plan!.Passes.Count != passes)) {
                     return false;
                 }
@@ -86,7 +87,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 var layout = ((passes == 10) ? SdfWorldInterfaces.WorldParameters : SdfWorldInterfaces.ResolveParameters);
 
                 return (BitConverter.ToUInt32(value: passBlock, startIndex: ((int)layout.BlockOffsetOf(member: SdfWorldPackage.ImageExtent))) == renderPixels);
-            }, timeout: TimeSpan.FromSeconds(value: 30)), userMessage: node.LastSwapError?.ToString());
+            }, reason: () => node.LastSwapError?.ToString(), wait: view.Residency.WaitPipelineBuilds);
             Assert.Equal(expected: (Extent, Extent), actual: node.Extent);
             Assert.Equal(expected: (passes == 11), actual: node.Plan!.Storages.Any(predicate: static item => item.Versions.Any(predicate: static version => version.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.CurrentColor}"))));
         }

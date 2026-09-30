@@ -241,7 +241,11 @@ boundary, and until then it presents what it already has. A newer request
 cancels the pending build with `Cancel`, and the discarded result is released
 when the build finishes. Before the device goes away, `CancelAndWait` blocks
 until the build's current unit of work returns, so nothing is created on a
-device being torn down. The SDF pipeline set's build and live shader-pipeline
+device being torn down. An owner with nothing to present until the build
+finishes, such as an offscreen host producing its first frame, blocks on
+`WaitFinished` between frames instead of producing empty ones: it takes
+nothing, so the next `TryTake` sees the result or the failure as a polling
+owner would. The SDF pipeline set's build and live shader-pipeline
 compilations both use it.
 
 A node that samples an image another producer keeps writing, such as a camera

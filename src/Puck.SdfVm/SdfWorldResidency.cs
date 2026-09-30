@@ -272,6 +272,28 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <param name="cancellationToken">Cancels the wait.</param>
     /// <exception cref="OperationCanceledException">The wait was canceled.</exception>
     public void WaitReady(CancellationToken cancellationToken) => m_ready.Wait(cancellationToken: cancellationToken);
+    /// <summary>Blocks, on the frame thread between frames, until the pipeline builds the residency's frames started have
+    /// finished, successfully or not: its pipeline set's, its region-copy and mesh pass pipelines', and a kernel reload's.
+    /// It takes nothing and starts nothing, so the next frame (<see cref="Prepare"/>) builds the tables, refuses a failed
+    /// build or installs the reload as it would had frames been produced meanwhile. It serves a host that produces frames
+    /// on its own thread and has nothing to present until the builds finish, such as an offscreen capture, which would
+    /// otherwise produce empty frames while it waits.</summary>
+    /// <param name="cancellationToken">The token that ends the wait; the builds keep running.</param>
+    /// <returns><see langword="true"/> when a build was in flight, which has finished since; <see langword="false"/> when
+    /// none was: the tables are built, their build was refused, or no frame has started a build, so only another frame
+    /// can change what the residency presents.</returns>
+    /// <exception cref="ObjectDisposedException">The residency is released.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public bool WaitPipelineBuilds(CancellationToken cancellationToken) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        var waited = m_pipelines.WaitFinished(cancellationToken: cancellationToken);
+
+        return m_reloadBuild.WaitFinished(cancellationToken: cancellationToken) | waited;
+    }
     /// <summary>Starts a frame: forgets the frame captured, packed and uploaded in the previous one, so the frame's first
     /// read of the residency captures the current one. The render graph's package calls it once per produced frame, before
     /// the frame is scheduled.</summary>

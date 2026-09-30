@@ -118,16 +118,16 @@ public sealed partial class SdfWorldPassesLawTests {
             );
         }
 
-        // The bound is liveness for a build over a fake device; it decides nothing.
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        SdfTestPipelines.ProduceUntil(
+            frame: () => {
                 Produce();
 
                 return (first.IsReady && passes.HasRenderedResolvedView(instance: SdfTestView.Instance) &&
                     (owned.Node(instance: 0).Extent == (Extent, Extent)) && !owned.Node(instance: 0).IsBuildingCandidate);
             },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ), userMessage: first.NotReadyReason);
+            reason: () => first.NotReadyReason,
+            wait: first.WaitPipelineBuilds
+        );
 
         var counter = passes.CounterOf(instance: SdfTestView.Instance)!.Revision;
 
@@ -161,14 +161,15 @@ public sealed partial class SdfWorldPassesLawTests {
         );
         Assert.Equal(actual: passes.HasRenderedResolvedView(instance: SdfTestView.Instance), expected: followsInPlace);
         // Either way the view goes on to render the other residency.
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        SdfTestPipelines.ProduceUntil(
+            frame: () => {
                 Produce();
 
                 return passes.HasRenderedResolvedView(instance: SdfTestView.Instance);
             },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            reason: () => other.NotReadyReason,
+            wait: other.WaitPipelineBuilds
+        );
         Assert.Equal(
             actual: (passes.CounterOf(instance: SdfTestView.Instance)!.Revision == counter),
             expected: followsInPlace

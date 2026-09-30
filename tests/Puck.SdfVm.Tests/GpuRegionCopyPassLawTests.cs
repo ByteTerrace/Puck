@@ -137,15 +137,15 @@ public sealed class GpuRegionCopyPassLawTests {
 
         return value;
     }
-    // Polls until the lease's pipeline has built on the thread pool. The bound is liveness for a build over a fake
-    // device.
+    // Polls until the lease's pipeline has built on the thread pool.
     private static IGpuComputePipeline Ready(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> lease) {
         GpuPassPipeline? pipeline = null;
 
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => ((pipeline = lease.Poll()) is not null),
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+        SdfTestPipelines.ProduceUntil(
+            frame: () => ((pipeline = lease.Poll()) is not null),
+            reason: () => "the region-copy pipeline is still building",
+            wait: lease.WaitFinished
+        );
 
         return pipeline!.Compute!;
     }

@@ -107,6 +107,21 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             )
         )
     );
+    // Blocks until the builds the next Poll waits on have finished, taking nothing, so that Poll sees what it would had
+    // the holder kept polling: the leases being taken or, once taken, the set's builds and the region copy's and mesh
+    // pass's. Returns whether any was pending. Runs on the frame thread between polls.
+    public bool WaitFinished(CancellationToken cancellationToken) {
+        if (m_lease is null) {
+            return m_acquire.WaitFinished(cancellationToken: cancellationToken);
+        }
+
+        var waited = m_lease.WaitFinished(cancellationToken: cancellationToken);
+
+        waited |= m_regionCopy!.WaitFinished(cancellationToken: cancellationToken);
+        waited |= m_meshRaster!.WaitFinished(cancellationToken: cancellationToken);
+
+        return waited;
+    }
     // Waits out leases still being taken and gives up the leases, which disposes each pipeline no other holder leases,
     // and forgets a refused build: the next build is tried afresh. Call after disposing every table built from the set and
     // before the device goes away.

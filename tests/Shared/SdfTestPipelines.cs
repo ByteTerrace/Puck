@@ -83,19 +83,44 @@ internal static class SdfTestPipelines {
     // A reflector for a reload's interface check; the kernels a harness reloads are SPIR-V, which needs no tool.
     public static ShaderBytecodeReflector Reflector() =>
         new(toolchain: new ShaderToolchain());
+
+    // How long a harness waits for work on the thread pool: liveness, which a loaded machine whose pool is starved reaches
+    // only when a build never finishes. It decides nothing.
+    public static readonly TimeSpan Liveness = TimeSpan.FromMinutes(value: 5);
+
+    // Produces frames until one returns true. Between frames it blocks on the builds a frame waits for (wait, returning
+    // whether any was in flight) or, with none in flight, pauses, so it never spins on a processor the builds need.
+    public static void ProduceUntil(Func<bool> frame, Func<string?> reason, Func<CancellationToken, bool>? wait = null) {
+        using var liveness = new CancellationTokenSource(delay: Liveness);
+        var token = liveness.Token;
+
+        while (!frame()) {
+            try {
+                if (!(wait?.Invoke(arg: token) ?? false)) {
+                    _ = token.WaitHandle.WaitOne(millisecondsTimeout: 1);
+                }
+            } catch (OperationCanceledException) when (token.IsCancellationRequested) {
+            }
+
+            if (token.IsCancellationRequested) {
+                Assert.Fail(message: $"No frame was ready within {Liveness}: {reason()}");
+            }
+        }
+    }
     // Produces frames until the residency's pipeline build has built its tables, then submits that frame's upload, as a
-    // view's first pass of the frame does. The bound is liveness for a build over a fake device; it decides nothing.
+    // view's first pass of the frame does.
     public static void ProduceFirstFrame(this SdfWorldResidency residency, in FrameContext context) {
         var copy = context;
 
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        ProduceUntil(
+            frame: () => {
                 residency.BeginFrame();
 
                 return residency.Prepare(context: in copy);
             },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ), userMessage: residency.NotReadyReason);
+            reason: () => residency.NotReadyReason,
+            wait: residency.WaitPipelineBuilds
+        );
         _ = residency.Submit(context: in context);
     }
     // Produces one frame of a ready residency: captures and packs it and submits its upload, as a view's first pass of the
