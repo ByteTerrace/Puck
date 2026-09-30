@@ -503,7 +503,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         var cloud = new SdfVolume(
             Axis: 2f,
             Coverage: 0.4f,
-            DynamicSlot: -1,
+            DynamicSlot: SdfProgram.NoDynamicTransformSlot,
             Extinction: 2f,
             HalfExtent: new Vector3(x: 3f, y: 1f, z: 2f),
             Intensity: 1f,

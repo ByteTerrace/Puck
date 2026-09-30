@@ -93,8 +93,8 @@ public sealed partial class SdfVisibilityLawTests {
         LineCommentPattern().Replace(input: File.ReadAllText(path: Path.Combine(path1: Root, path2: path)), replacement: string.Empty);
     [GeneratedRegex(pattern: @"//[^\n]*")]
     private static partial Regex LineCommentPattern();
-    // A winner's or record's transform slot set to or compared with a bare literal, or the identity's mask or shift
-    // written out.
-    [GeneratedRegex(pattern: @"\b(?:\w*[fF]rameSlot|currentSlot|rigidSlot|composeSlot|savedFieldSlot|slot)\s*(?:=|==|!=|>=|<=|<|>)\s*-?[01]\b(?!\.)|0x3FFFFFFF|>>\s*30u?\b|<<\s*30u?\b")]
+    // A winner's, record's, light's or volume's transform slot set to or compared with a bare literal, or the
+    // identity's mask or shift written out.
+    [GeneratedRegex(pattern: @"\b(?:\w*[fF]rameSlot|\w*[dD]ynamicSlot|currentSlot|rigidSlot|composeSlot|savedFieldSlot|slot)\s*(?:=|==|!=|>=|<=|<|>)\s*-?[01]\b(?!\.)|0x3FFFFFFF|>>\s*30u?\b|<<\s*30u?\b")]
     private static partial Regex HandSpelledPattern();
 }

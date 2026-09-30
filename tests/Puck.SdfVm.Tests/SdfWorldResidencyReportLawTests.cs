@@ -74,7 +74,7 @@ public sealed class SdfWorldResidencyReportLawTests {
     ) {
         Volumes = [new SdfVolume(
             Axis: 1f,
-            DynamicSlot: -1,
+            DynamicSlot: SdfProgram.NoDynamicTransformSlot,
             Extinction: 0.5f,
             HalfExtent: Vector3.One,
             Intensity: 1f,

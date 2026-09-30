@@ -14,7 +14,7 @@ struct SdfEnvLight {
     uint kind;        // SdfEnvLight{Directional,Hemisphere,Rim,Point}
     float param;      // penumbra half-slope / hemisphere gradient / rim exponent / point falloff radius
     bool shadows;
-    int dynamicSlot;  // point only: the dynamic-transform slot its position rides, or -1 for the static position
+    int dynamicSlot;  // point or occluder: the dynamic-transform slot its position rides, or SDF_TRANSFORM_SLOT_NONE
 };
 uint worldLightCount() { return min((uint)max(worldEnvRow(SDF_ENV_CONTROL_ROW).x + 0.5, 0.0), SDF_ENV_MAX_LIGHTS); }
 int worldShadowLightIndex() { return (int)round(worldEnvRow(SDF_ENV_CONTROL_ROW).y); }
@@ -42,7 +42,7 @@ SdfEnvLight worldLight(uint index) {
 // a kernel that binds no per-frame dynamic-transform table.
 float3 worldPointLightPosition(SdfEnvLight light) {
 #ifdef SDF_DYNAMIC_TRANSFORMS
-    if (light.dynamicSlot < 0) return light.direction;
+    if (light.dynamicSlot == SDF_TRANSFORM_SLOT_NONE) return light.direction;
     uint slot = (uint)light.dynamicSlot;
     return sdfDynamicTransforms[3u * slot].xyz + rotatePointByQuaternion(light.direction, sdfDynamicTransforms[3u * slot + 1u]);
 #else

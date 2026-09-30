@@ -189,4 +189,32 @@ public sealed class PackEnvironmentLawTests {
             floats[(row + 10)]
         );
     }
+    // A point or occluder light packs its slot for the kernels to test against SDF_TRANSFORM_SLOT_NONE, so it is the
+    // sentinel or a slot a program can name, and nothing else; every other kind packs no slot, so its value is ignored.
+    [Fact]
+    public void ALightPacksTheStaticSentinelOrASlotAndNothingElse() {
+        var environment = new SdfEnvironment { LightCount = 1 };
+
+        foreach (var kind in ((SdfLightKind[])[SdfLightKind.Point, SdfLightKind.Occluder])) {
+            foreach (var slot in ((int[])[SdfProgram.NoDynamicTransformSlot, 0, SdfProgram.MaxDynamicTransformSlot])) {
+                environment.SetLight(index: 0, light: Light(kind: kind, slot: slot));
+                Assert.Equal(expected: slot, actual: environment.GetLight(index: 0).DynamicSlot);
+            }
+            foreach (var slot in ((int[])[(SdfProgram.NoDynamicTransformSlot - 1), (SdfProgram.MaxDynamicTransformSlot + 1)])) {
+                Assert.Throws<ArgumentOutOfRangeException>(testCode: () => environment.SetLight(index: 0, light: Light(kind: kind, slot: slot)));
+            }
+        }
+        environment.SetLight(index: 0, light: Light(kind: SdfLightKind.Directional, slot: (SdfProgram.NoDynamicTransformSlot - 1)));
+        Assert.Equal(expected: 0, actual: environment.GetLight(index: 0).DynamicSlot);
+
+        static SdfLight Light(SdfLightKind kind, int slot) => new(
+            Color: Vector3.One,
+            Direction: Vector3.UnitY,
+            DynamicSlot: slot,
+            Kind: kind,
+            Param: 1f,
+            Shadows: false,
+            Weight: 1f
+        );
+    }
 }

@@ -84,7 +84,7 @@ public sealed class VolumeLawTests {
 
         Assert.Empty(collection: CreationCanonicalizer.Validate(document: Document(cloud)));
         var volume = cloud.ToVolume(
-            dynamicSlot: -1,
+            dynamicSlot: SdfProgram.NoDynamicTransformSlot,
             origin: Vector3.Zero,
             rotation: Quaternion.Identity,
             scale: 3f
@@ -275,7 +275,7 @@ public sealed class VolumeLawTests {
         ));
 
         Assert.Equal(
-            expected: -1,
+            expected: SdfProgram.NoDynamicTransformSlot,
             actual: volume.DynamicSlot
         );
         Assert.InRange(

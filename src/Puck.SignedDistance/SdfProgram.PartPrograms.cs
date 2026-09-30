@@ -117,7 +117,7 @@ public sealed partial class SdfProgram {
                 return false;
             }
 
-            var slot = -1;
+            var slot = NoDynamicTransformSlot;
 
             if (m_instructions[cursor].Op == SdfOp.TransformDynamic) {
                 slot = ((int)m_instructions[cursor++].Data0.X);
@@ -288,7 +288,7 @@ public sealed partial class SdfProgram {
             m_words[(entry + 1)] = ((uint)cursor);
             // A non-world shader without pose bindings must leave a dynamic part on its existing fallback path.
             m_words[(entry + 2)] = ((uint)placement.Bindings.Length)
-                | (placement.Bindings.Any(predicate: binding => (binding.DynamicSlot >= 0))
+                | (placement.Bindings.Any(predicate: binding => (binding.DynamicSlot != NoDynamicTransformSlot))
                 ? 0x80000000u
                 : 0u
             );

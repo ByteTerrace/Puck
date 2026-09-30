@@ -14,9 +14,9 @@ public enum SdfVolumeKind {
 /// <summary>One ascending local-density threshold and its linear emission color.</summary>
 public readonly record struct SdfDensityStop(float Density, Vector3 Color);
 /// <summary>A bounded participating medium, separate from the distance-field tape. Position and Rotation are
-/// relative to DynamicSlot, or world space for -1. A flow column runs from the box's +Y face toward -Y;
-/// a cloud fills an ellipsoidal envelope inside the box, with Width setting its noise-cell size.
-/// Ramp contains one to four ascending density stops, evaluated at each sample before integration.
+/// relative to DynamicSlot, or world space for <see cref="SdfProgram.NoDynamicTransformSlot"/>. A flow column runs
+/// from the box's +Y face toward -Y; a cloud fills an ellipsoidal envelope inside the box, with Width setting its
+/// noise-cell size. Ramp contains one to four ascending density stops, evaluated at each sample before integration.
 /// PulseAmplitude is in [0, 1]; PulseFrequency is cycles per second. IntensityLane selects [0, 3], or null
 /// for constant gain. An authored lane on a static volume reads zero. Seed preserves all 32 bits.
 /// Coverage is in [0, 1]; Softness is the cloud density transition width in (0, 1].</summary>
@@ -51,7 +51,7 @@ public readonly record struct SdfVolume(SdfVolumeKind Kind, Vector3 Position, Qu
             (HalfExtent.Z <= 0f) ||
             !float.IsFinite(f: Rotation.LengthSquared()) ||
             (Rotation.LengthSquared() < 1e-12f) ||
-            (DynamicSlot < -1) ||
+            (DynamicSlot < SdfProgram.NoDynamicTransformSlot) ||
             (DynamicSlot >= dynamicTransformCount) ||
             !NonNegative(v: Axis) ||
             (Axis == 0f) ||

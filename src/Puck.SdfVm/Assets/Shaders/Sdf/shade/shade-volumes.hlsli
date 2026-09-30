@@ -42,13 +42,13 @@ SdfVolumeData sdfLoadVolume(uint index) {
     return v;
 }
 // Transforms a world point/direction into the volume's own frame: first undo the riding dynamic slot's rigid
-// transform (when dynamicSlot >= 0), matching how a dynamic shape instance resolves its bound (field/sdf-map.hlsli's
-// rigidBasePosition), then undo the volume's own Position/Rotation offset within that frame. A direction only
-// undoes the rotations (no translation).
+// transform (unless dynamicSlot is SDF_TRANSFORM_SLOT_NONE), matching how a dynamic shape instance resolves its
+// bound (field/sdf-map.hlsli's rigidBasePosition), then undo the volume's own Position/Rotation offset within that
+// frame. A direction only undoes the rotations (no translation).
 float3 sdfVolumeLocalPoint(SdfVolumeData v, float3 worldPoint) {
     float3 p = worldPoint;
 
-    if (v.dynamicSlot >= 0) {
+    if (v.dynamicSlot != SDF_TRANSFORM_SLOT_NONE) {
         uint slot = (uint)v.dynamicSlot;
         float4 dynamicPosition = sdfDynamicTransforms[(3u * slot)];
         float4 dynamicOrientation = sdfDynamicTransforms[((3u * slot) + 1u)];
@@ -61,7 +61,7 @@ float3 sdfVolumeLocalPoint(SdfVolumeData v, float3 worldPoint) {
 float3 sdfVolumeLocalDirection(SdfVolumeData v, float3 worldDirection) {
     float3 d = worldDirection;
 
-    if (v.dynamicSlot >= 0) {
+    if (v.dynamicSlot != SDF_TRANSFORM_SLOT_NONE) {
         uint slot = (uint)v.dynamicSlot;
         float4 dynamicOrientation = sdfDynamicTransforms[((3u * slot) + 1u)];
 
@@ -73,7 +73,7 @@ float3 sdfVolumeLocalDirection(SdfVolumeData v, float3 worldDirection) {
 // An absent lane uses constant gain; a selected lane without a riding slot reads zero.
 float sdfVolumeIntensityScale(SdfVolumeData v) {
     if (v.intensityLane < 0) return 1.0;
-    if (v.dynamicSlot < 0) return 0.0;
+    if (v.dynamicSlot == SDF_TRANSFORM_SLOT_NONE) return 0.0;
     return max(sdfDynamicTransforms[3u * (uint)v.dynamicSlot + 2u][(uint)v.intensityLane], 0.0);
 }
 

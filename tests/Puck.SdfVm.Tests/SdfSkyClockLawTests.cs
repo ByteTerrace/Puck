@@ -127,7 +127,7 @@ public sealed class SdfSkyClockLawTests {
             Position: Vector3.Zero,
             Rotation: Quaternion.Identity,
             HalfExtent: Vector3.One,
-            DynamicSlot: -1,
+            DynamicSlot: SdfProgram.NoDynamicTransformSlot,
             Axis: 1f,
             Width: 0.5f,
             Speed: 2f,
