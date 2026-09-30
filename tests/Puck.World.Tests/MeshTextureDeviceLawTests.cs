@@ -106,8 +106,8 @@ public sealed class MeshTextureDeviceLawTests {
         SdfBake[] bakes = [spheres, box];
         var meshes = bakes.Select(selector: MeshOf).ToArray();
         SdfMeshDraw[] draws = [
-            new(Material: 2, Mesh: meshes[0], ObjectToWorld: Matrix4x4.Identity),
-            new(Material: 7, Mesh: meshes[1], ObjectToWorld: Matrix4x4.CreateTranslation(xPosition: 5f, yPosition: 0f, zPosition: 0f)),
+            new(Identity: "first", Material: 2, Mesh: meshes[0], ObjectToWorld: Matrix4x4.Identity),
+            new(Identity: "second", Material: 7, Mesh: meshes[1], ObjectToWorld: Matrix4x4.CreateTranslation(xPosition: 5f, yPosition: 0f, zPosition: 0f)),
         ];
         var atlas = SdfMeshAtlas.Pack(textures: meshes.Select(selector: static mesh => mesh.Textures!));
 

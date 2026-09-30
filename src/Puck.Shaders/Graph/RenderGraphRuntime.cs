@@ -1068,9 +1068,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_unproduced = 0;
 
         var renders = schedule.Renders;
-        var holdingConvergence = ((m_convergence is { Converge: > 0, Completion.IsCompleted: false } request) &&
-            (m_convergenceFrames >= request.Converge) &&
-            (m_nodes[m_captureInstance]?.PendingCapturePath == request.Path));
+        var holdingConvergence = ((m_convergence is { IsActive: true } convergence) &&
+            (convergence.Samples >= convergence.Request.Converge) &&
+            (m_nodes[m_captureInstance]?.PendingCapturePath == convergence.Request.Path));
 
         for (var position = 0; (position < renders.Count); position++) {
             var index = renders[position];
@@ -1213,7 +1213,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
             if ((index == m_captureInstance) && IsConverging(index: index) &&
                 (m_standInReads[index] is null) && (m_taintedReads[index] is null)) {
-                m_convergenceFrames++;
+                m_convergence!.Count();
             }
 
             m_previous[index] = m_current[index];

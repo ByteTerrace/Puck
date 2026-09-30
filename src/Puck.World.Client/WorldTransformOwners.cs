@@ -14,6 +14,7 @@ public sealed class WorldTransformOwners {
     private readonly bool[] m_casts;
     private readonly Quaternion[] m_orientation;
     private readonly Vector3[] m_position;
+    private readonly bool[] m_reseated;
     private readonly bool[] m_resident;
     private readonly bool[] m_restless;
     private readonly int[] m_version;
@@ -26,6 +27,7 @@ public sealed class WorldTransformOwners {
         m_casts = new bool[capacity];
         m_orientation = new Quaternion[capacity];
         m_position = new Vector3[capacity];
+        m_reseated = new bool[capacity];
         m_resident = new bool[capacity];
         m_restless = new bool[capacity];
         m_version = new int[capacity];
@@ -56,6 +58,7 @@ public sealed class WorldTransformOwners {
             (m_version[owner] != version)
         );
 
+        m_reseated[owner] = (discontinuity || !m_resident[owner]);
         m_position[owner] = position;
         m_orientation[owner] = orientation;
         m_casts[owner] = castsSoftShadow;
@@ -63,6 +66,12 @@ public sealed class WorldTransformOwners {
 
         return wake;
     }
+    /// <summary>Returns whether the owner's latest <see cref="Wake"/> found its slots under another owner than they held
+    /// when last packed: the owner was not resident (a first pack, or a spawn into a vacated range) or its pose jumped.
+    /// The caller commits its repack with <c>reseat</c> set (<see cref="SdfMovedTransforms.Commit"/>).</summary>
+    /// <param name="owner">The owner's index in the band.</param>
+    /// <returns><see langword="true"/> when the repack reseats the owner's slots.</returns>
+    public bool Reseats(int owner) => m_reseated[owner];
     /// <summary>Records an owner's repack: it stays restless while the repack moved its slots, or while the frame
     /// advanced no time.</summary>
     /// <param name="owner">The owner's index in the band.</param>
@@ -98,8 +107,9 @@ public sealed class WorldTransformOwners {
     /// <param name="castsSoftShadow">The body's soft-shadow participation.</param>
     /// <param name="rig">The resolved catalog rig, or -1 for the body's default pick.</param>
     /// <param name="scale">The look's uniform render scale.</param>
+    /// <param name="reseat">Whether the body's slots changed owner (<see cref="Reseats"/>).</param>
     /// <returns><see langword="true"/> when the pack moved any of the body's slots.</returns>
-    public static bool PackBody(Span<DynamicTransform> table, int catalogBase, int avatar, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootOrientation, float gaitPhase, bool castsSoftShadow, int rig, float scale) {
+    public static bool PackBody(Span<DynamicTransform> table, int catalogBase, int avatar, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootOrientation, float gaitPhase, bool castsSoftShadow, int rig, float scale, bool reseat) {
         ArgumentNullException.ThrowIfNull(argument: moved);
 
         var (first, count) = WorldRigCatalog.BodySlots(avatar: avatar);
@@ -126,6 +136,7 @@ public sealed class WorldTransformOwners {
 
         return moved.Commit(
             previous: previous,
+            reseat: reseat,
             slots: table,
             start: start
         );

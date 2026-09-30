@@ -322,7 +322,7 @@ public sealed partial class RenderGraphRuntime {
 
         // The pending request follows this composition's indices and dependency closure. A changed composition
         // starts its converging sample sequence again; a request already forwarded belongs to the frame that served it.
-        if ((m_capture.PendingPath is not null) && (m_convergence is { } pendingCapture)) {
+        if ((m_capture.PendingPath is not null) && (m_convergence?.Request is { } pendingCapture)) {
             if ((pendingCapture.Converge > 0) && !CanConverge(index: m_captureInstance)) {
                 m_capture.Refuse(error: new InvalidOperationException(message: "A convergence capture requires a rendered graph instance."));
             } else {

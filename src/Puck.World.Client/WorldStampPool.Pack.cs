@@ -158,6 +158,7 @@ public sealed partial class WorldStampPool {
                     deltaSeconds: deltaSeconds,
                     moved: moved.Commit(
                     previous: previous,
+                    reseat: m_owners.Reseats(owner: index),
                     slots: transforms,
                     start: rootSlot
                 ),
@@ -177,6 +178,7 @@ public sealed partial class WorldStampPool {
             SetMeshDraw(
                 draw: ((live.Mesh is { } mesh)
                     ? WorldPlacementStamper.MeshDrawOf(
+                        identity: live,
                         material: live.MeshMaterial,
                         mesh: mesh,
                         origin: transforms[rootSlot].Position,

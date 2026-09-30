@@ -766,6 +766,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 rootPosition: (m_animator.HasBodyRegistration(bodyIndex: index)
                 ? context.ParkPosition
                 : followedPosition),
+                reseat: m_avatarOwners.Reseats(owner: index),
                 scale: m_emittedAvatarScales[index],
                 table: slots
             ),

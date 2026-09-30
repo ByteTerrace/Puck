@@ -549,9 +549,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
     private SdfFrame? m_frozenFrame;
 
-    /// <summary>Gets the ordinal of the latest frame consumed from this residency's source.</summary>
-    public long CapturedFrame { get; private set; }
-
     /// <summary>Freezes the presentation source for a converging capture.</summary>
     /// <param name="request">The request whose completion releases the snapshot.</param>
     public void BeginConvergence(Puck.Abstractions.Presentation.FrameCaptureRequest request) {
@@ -572,7 +569,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
             return;
         }
 
-        CapturedFrame++;
         var converging = (m_convergence is { Completion.IsCompleted: false });
 
         if (converging && (m_frozenFrame is { } frozen)) {

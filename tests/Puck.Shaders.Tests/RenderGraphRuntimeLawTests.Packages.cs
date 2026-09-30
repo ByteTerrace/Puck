@@ -189,11 +189,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         public ManualResetEventSlim? BuildGate { get; set; }
         public int Builds => Volatile.Read(location: ref m_builds);
-        public List<FrameCaptureRequest> Convergence { get; } = [];
+        public List<RenderGraphConvergence> Convergence { get; } = [];
         public int Lost { get; private set; }
         public List<string> Parts { get; } = [];
         public long Revision { get; set; }
+        public bool SamplesReads { get; set; }
         public bool Unchanged { get; set; }
+        // The sample index each render of the fragment's last part took from the latest convergence, while it converges.
+        public List<int> Served { get; } = [];
 
         public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
             BuildGate?.Wait(cancellationToken: cancellationToken);
@@ -217,12 +220,15 @@ public sealed partial class RenderGraphRuntimeLawTests {
         );
         public bool IsUnchanged(string instance, in FrameContext context) => Unchanged;
         public void OnDeviceLost() => Lost++;
-        public void BeginConvergence(string instance, FrameCaptureRequest request) => Convergence.Add(item: request);
+        public void BeginConvergence(string instance, RenderGraphConvergence convergence) => Convergence.Add(item: convergence);
 
         private sealed class Recorder(ViewPackage owner, string part) : IRenderGraphPackageRecorder {
             public void Dispose() { }
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
                 owner.Parts.Add(item: part);
+                if ((part == SdfWorldPackage.NativeFragment.Passes[^1].Name) && (owner.Convergence.LastOrDefault() is { IsActive: true } convergence)) {
+                    owner.Served.Add(item: convergence.Samples);
+                }
 
                 return RenderGraphPackageOutcome.Drew;
             }

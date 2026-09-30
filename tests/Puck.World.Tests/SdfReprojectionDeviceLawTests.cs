@@ -93,7 +93,7 @@ public sealed class SdfReprojectionDeviceLawTests {
         }
     }
     private static Vector4[] Run(GpuDeviceServices services, string extension, MotionCase[] cases) {
-        SdfMeshDraw[] draws = [new(Material: 0, Mesh: Mesh, ObjectToWorld: CurrentMesh)];
+        SdfMeshDraw[] draws = [new(Identity: "mesh", Material: 0, Mesh: Mesh, ObjectToWorld: CurrentMesh)];
         var meshes = new Dictionary<SdfMesh, SdfMeshRegionMesh>(comparer: ReferenceEqualityComparer.Instance);
         var meshLayout = SdfMeshRegion.Plan(draws: draws, meshes: meshes);
         var meshWords = new uint[meshLayout.Words];

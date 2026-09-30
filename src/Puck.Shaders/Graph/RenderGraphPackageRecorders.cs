@@ -212,10 +212,14 @@ public interface IRenderGraphPackageFactory {
     /// whether an instance is unchanged and before any instance renders.</summary>
     /// <param name="context">The host's frame context of the frame being produced.</param>
     void BeginFrame(in FrameContext context) { }
-    /// <summary>Starts a frozen convergence epoch for a captured instance or one of its dependencies.</summary>
+    /// <summary>Starts a frozen convergence epoch for a captured instance or one of its dependencies. A package that
+    /// samples on the capture's behalf takes each render's sample index from the convergence's counted samples
+    /// (<see cref="RenderGraphConvergence.Samples"/>), so a frame the runtime does not count renders the same sample
+    /// again.</summary>
     /// <param name="instance">The instance whose output contributes to the capture.</param>
-    /// <param name="request">The capture request; its completion ends the frozen interval.</param>
-    void BeginConvergence(string instance, Puck.Abstractions.Presentation.FrameCaptureRequest request) { }
+    /// <param name="convergence">The capture as the runtime counts it; its request's completion ends the frozen
+    /// interval.</param>
+    void BeginConvergence(string instance, RenderGraphConvergence convergence) { }
 }
 /// <summary>A host-written region a package pass's recorder writes (<see cref="IRenderGraphPackageFactory.Regions"/>).</summary>
 /// <param name="Name">The region's part name, which names its buffers after the instance and the pass.</param>
