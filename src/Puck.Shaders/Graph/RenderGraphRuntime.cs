@@ -219,7 +219,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         return -1;
     }
-
     private static RenderGraphRuntimeRefusal Refuse(RenderGraphRuntimeRefusalCode code, string message, params string[] names) => new(
         Code: code,
         Message: message,

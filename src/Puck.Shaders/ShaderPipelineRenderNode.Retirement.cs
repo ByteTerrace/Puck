@@ -53,7 +53,6 @@ public sealed partial class ShaderPipelineRenderNode {
             return m_completedSubmission;
         }
     }
-
     /// <summary>Gets the bytes of every GPU resource the node owns: the installed graph with its preview, replaced
     /// objects waiting for the GPU to finish with them, published images held from a replaced graph, and the staging
     /// buffer the capture readback holds once a capture has been served, plus optional timestamp readback buffers.</summary>
