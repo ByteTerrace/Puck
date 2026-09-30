@@ -173,24 +173,29 @@ public static class RenderGraphHitWalk {
         }
     }
     /// <summary>Walks a point on the display: the topmost pane under it (<see cref="SourcePanes.Topmost"/>, the last in
-    /// <paramref name="panes"/> whose face holds it), then, when that pane shows an instance, a ray through that
-    /// instance's camera into its world.</summary>
+    /// <paramref name="panes"/> whose face holds it), or, when no pane holds it, the view the display itself shows
+    /// beneath every pane; then, when that shows an instance, a ray through that instance's camera into its world.</summary>
     /// <param name="set">The instances.</param>
     /// <param name="scene">What each instance shows.</param>
     /// <param name="panes">The panes the display shows, in drawing order; only <see cref="SourcePlacement.Pane"/>
     /// placements are read.</param>
+    /// <param name="display">The view the display shows beneath every pane when that view is no pane, a lone view
+    /// covering the whole display, as its whole-display mapping; <see langword="null"/> when the display shows no such
+    /// view.</param>
     /// <param name="point">The point, in display pixels from the display's top-left corner.</param>
     /// <param name="displayWidth">The display's width, in pixels; positive.</param>
     /// <param name="displayHeight">The display's height, in pixels; positive.</param>
     /// <param name="maxDepth">The most times the walk continues into an instance's world, counting the continuation
     /// from the pane; non-negative.</param>
-    /// <returns>The path, whose first step is the pane with an <see cref="RenderGraphHitStep.Instance"/> of -1, or no
-    /// steps with <see cref="RenderGraphHitEnd.World"/> and an instance of -1 when no pane holds the point.</returns>
+    /// <returns>The path, whose first step is the pane with an <see cref="RenderGraphHitStep.Instance"/> of -1 (and a
+    /// <see cref="RenderGraphHitStep.Placement"/> of -1 for <paramref name="display"/>), or no steps with
+    /// <see cref="RenderGraphHitEnd.World"/> and an instance of -1 when neither a pane nor the display's view holds the
+    /// point.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="set"/>, <paramref name="scene"/> or
     /// <paramref name="panes"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="displayWidth"/> or
     /// <paramref name="displayHeight"/> is not positive, or <paramref name="maxDepth"/> is negative.</exception>
-    public static RenderGraphHitPath WalkDisplay(RenderGraphInstanceSet set, IRenderGraphHitScene scene, IReadOnlyList<SourceMapping> panes, FixedVector2 point, int displayWidth, int displayHeight, int maxDepth) {
+    public static RenderGraphHitPath WalkDisplay(RenderGraphInstanceSet set, IRenderGraphHitScene scene, IReadOnlyList<SourceMapping> panes, SourceMapping? display, FixedVector2 point, int displayWidth, int displayHeight, int maxDepth) {
         ArgumentNullException.ThrowIfNull(argument: set);
         ArgumentNullException.ThrowIfNull(argument: scene);
         ArgumentNullException.ThrowIfNull(argument: panes);
@@ -203,9 +208,19 @@ public static class RenderGraphHitWalk {
             panes: panes,
             point: point
         );
+        var beneath = ((index < 0) && (display is { Placement: SourcePlacement.Pane }));
 
-        if (index >= 0) {
-            var mapping = panes[index];
+        if (beneath) {
+            hit = display!.MapDisplayPoint(
+                displayHeight: displayHeight,
+                displayWidth: displayWidth,
+                point: point
+            );
+            beneath = (hit.Outcome != SourceHitOutcome.OutsidePlacement);
+        }
+
+        if ((index >= 0) || beneath) {
+            var mapping = (beneath ? display! : panes[index]);
             var step = new RenderGraphHitStep(
                 Hit: hit,
                 Instance: -1,

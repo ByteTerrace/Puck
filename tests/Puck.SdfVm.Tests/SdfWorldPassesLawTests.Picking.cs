@@ -267,6 +267,40 @@ public sealed partial class SdfWorldPassesLawTests {
         }
         Assert.Equal(expected: request, actual: picker.Result?.Request);
     }
+    // A content revision between requests withdraws the answer that named the older content but cancels nothing: the
+    // next request is the next identity, however many revisions arrived while nothing was asked.
+    [Fact]
+    public void AContentRevisionBetweenRequestsCancelsNothing() {
+        var gpu = new FakeGpuDevice();
+        var pipelines = SdfTestPipelines.Cache();
+        var current = Frame();
+        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+            residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
+                frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
+                kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
+        var context = ContextOf(gpu: gpu);
+
+        Assert.True(condition: SpinWait.SpinUntil(condition: () => view.Produce(context: in context),
+            timeout: TimeSpan.FromSeconds(value: 30)), userMessage: view.NotReadyReason);
+        gpu.WriteReadback = bytes => WriteBox(box: WholeBox, bytes: bytes);
+        var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
+        var first = picker.Request(x: 0.25f, y: 0.75f);
+
+        _ = view.Produce(context: in context);
+        _ = view.Produce(context: in context);
+        Assert.Equal(expected: first, actual: picker.Result?.Request);
+        for (var revision = 0; (revision < 3); revision++) {
+            current = Frame();
+            _ = view.Produce(context: in context);
+        }
+        Assert.Null(@object: picker.Result);
+        var second = picker.Request(x: 0.25f, y: 0.75f);
+
+        Assert.Equal(actual: second, expected: (first + 1));
+        _ = view.Produce(context: in context);
+        _ = view.Produce(context: in context);
+        Assert.Equal(expected: second, actual: picker.Result?.Request);
+    }
 
     private static readonly uint[] WholeBox = [0, 0, (Extent / 8), (Extent / 8)];
 

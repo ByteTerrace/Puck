@@ -1207,7 +1207,9 @@ runtime's latest schedule renders it at. It hands them to the host's
 before without allocating. The pipeline pane's pointer maps through its
 instance's published mapping (`TryGetPane`), and `WorldViewGraphHost.Walk` runs
 `RenderGraphHitWalk.WalkDisplay` over the runtime's live instance set, with
-each view's seat camera and each pane's paired camera. `world.view.panes`
+each view's seat camera and each pane's paired camera, starting beneath every
+pane from a lone whole-display view (`WorldViewGraphHost.DisplayView`), which is
+no pane and gets no hover outline. `world.view.panes`
 echoes the published mappings, a pick and a walk; the laws are
 `WorldViewPaneMappingLawTests`, and the `pane-display` canary maps a display
 point to the pane's pixel and moves it with the slot.

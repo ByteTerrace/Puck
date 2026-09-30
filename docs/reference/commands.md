@@ -632,9 +632,13 @@ A World host publishes a mapping for every pane its render graph's root draws:
 each shown view of the world and each `views.graphs` pane a layout slot places,
 in drawing order, showing the instance's whole image at the extent it last
 rendered at. A lone view covering the whole display is no pane at any render
-scale, tonemapped or not: the display shows the world itself, so a display
-point there picks nothing and starts no walk. The host hands them to its `SourcePanePicker`, a pipeline pane's
-pointer maps through its pane's mapping, and the hit walk starts from them.
+scale, tonemapped or not: the display is that view, so a display point there
+picks no pane and hovers nothing, and the host keeps the view's whole-display
+mapping apart (`WorldViewGraphHost.DisplayView`). The host hands the panes to
+its `SourcePanePicker`, and a pipeline pane's pointer maps through its pane's
+mapping. The hit walk starts from the topmost pane under a point, or, where no
+pane holds it, from the lone view beneath them, so a point on the world walks
+through its camera into screens and portals.
 `world.view.panes` echoes each mapping and, given a display point, what the
 picker and the walk answer there, down to the walk's last hit.
 
@@ -647,9 +651,9 @@ rect in the accent hue, the cursor's hover label names the pane when no HUD
 panel is under it, and `world.view.panes` ends with the hovered pane
 (`hovered=pane<i> <kind>:<instance> pixel <x>,<y>`, or `hovered=none`). A
 letterbox bar or a pane the layout does not show hovers nothing, and nothing
-the hover decides reaches simulation state. Within a pane, build mode and a
-passthrough pane also pick the geometry under the pointer on the GPU, one
-visibility pixel at a time; the hover label then names the placement the pick
+the hover decides reaches simulation state. Build mode and a passthrough pane
+also pick the geometry under the pointer on the GPU, one visibility pixel at a
+time; the hover label then names the placement the pick
 answered and the pixel it answered at (see
 [presentation picking](../rendering/sdf/handbook/frame-rendering.md#presentation-picking)).
 

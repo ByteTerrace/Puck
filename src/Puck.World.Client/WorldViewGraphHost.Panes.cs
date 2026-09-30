@@ -34,6 +34,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     private int m_displayHeight = 1;
     private int m_displayWidth = 1;
 
+    // The lone whole-display view's mapping, which is no pane, and the one last built, kept while it holds.
+    private SourceMapping? m_display;
+    private SourceMapping? m_displayMapping;
     private SourceMapping? m_hovered;
     private SourcePick m_hoveredPick;
 
@@ -52,6 +55,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     /// <c>views.graphs</c> panes), as <see cref="PublishPanes"/> last published it. The host rewrites the list in
     /// place.</summary>
     public IReadOnlyList<SourceMapping> Panes => m_panes;
+    /// <summary>Gets the whole-display mapping of the lone view covering the whole display, which is no pane (the display
+    /// is that view) and so is never hovered or outlined, but which <see cref="Walk"/> starts from where no pane holds the
+    /// point; <see langword="null"/> when the last composed frame showed no such view or it has not rendered.</summary>
+    public SourceMapping? DisplayView => m_display;
 
     /// <summary>Gets the presentation destination's CPU picker, answered from the panes <see cref="PublishPanes"/> last
     /// published.</summary>
@@ -72,13 +79,16 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     /// nothing; neither does a view the root stands for, which no <c>place</c> pass draws, nor a lone whole-display view whose
     /// pass draws it only to tonemap it, so the panes and every pick through them are the same with a tonemap or without. A frame whose placements,
     /// extents and instances hold publishes the mappings it published before, allocating nothing. Publishing clears the
-    /// hovered pane until <see cref="Hover"/> asks again, so no hover outlives the panes it was picked from.</summary>
+    /// hovered pane until <see cref="Hover"/> asks again, so no hover outlives the panes it was picked from. A lone view
+    /// covering the whole display, tonemapped or not, publishes its whole-display mapping as <see cref="DisplayView"/>
+    /// instead.</summary>
     /// <param name="displayWidth">The display's width, in pixels.</param>
     /// <param name="displayHeight">The display's height, in pixels.</param>
     public void PublishPanes(uint displayWidth, uint displayHeight) {
         m_displayWidth = ((int)Math.Clamp(max: int.MaxValue, min: 1u, value: displayWidth));
         m_displayHeight = ((int)Math.Clamp(max: int.MaxValue, min: 1u, value: displayHeight));
         m_panes.Clear();
+        m_display = null;
         ClearHover();
 
         if (
@@ -91,7 +101,21 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
                 val2: synthesized.Producers.Count
             );
 
-            // A lone whole-display view shown only for its tonemap publishes nothing, as the view the root stands for
+            if (
+                m_lone &&
+                (views > 0)
+            ) {
+                m_display = MappingOf(
+                    cached: m_displayMapping,
+                    instance: synthesized.Producers[0].Name,
+                    latest: latest,
+                    region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f),
+                    set: set
+                );
+                m_displayMapping = (m_display ?? m_displayMapping);
+            }
+
+            // A lone whole-display view shown only for its tonemap publishes no pane, as the view the root stands for
             // does: the display shows the world itself either way.
             for (var view = (m_loneTonemapped ? 1 : 0); (view < views); view++) {
                 PublishPane(
@@ -203,8 +227,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
         ? runtime.Instances.Instances[index].Name
         : null);
     /// <summary>Walks a display point through the live instance set (<see cref="RenderGraphHitWalk.WalkDisplay"/>): the
-    /// topmost published pane under it, then, when that pane shows an instance, a ray through the camera it renders from
-    /// into its world, up to the set's <see cref="RenderGraphInstanceSet.NestingDepth"/>.</summary>
+    /// topmost published pane under it, or the <see cref="DisplayView"/> beneath every pane, then, when that shows an
+    /// instance, a ray through the camera it renders from into its world, up to the set's
+    /// <see cref="RenderGraphInstanceSet.NestingDepth"/>.</summary>
     /// <param name="point">The point, in display pixels from the display's top-left corner.</param>
     /// <returns>The path, or <see langword="null"/> before a runtime is attached.</returns>
     public RenderGraphHitPath? Walk(FixedVector2 point) {
@@ -215,6 +240,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
         var set = runtime.Instances;
 
         return RenderGraphHitWalk.WalkDisplay(
+            display: m_display,
             displayHeight: m_displayHeight,
             displayWidth: m_displayWidth,
             maxDepth: set.NestingDepth,
@@ -326,6 +352,31 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
             return;
         }
 
+        var mapping = MappingOf(
+            cached: m_mappings.GetValueOrDefault(key: pass),
+            instance: instance,
+            latest: latest,
+            region: new NormalizedRect(
+                Height: placement.Height,
+                Width: placement.Width,
+                X: placement.Left,
+                Y: placement.Top
+            ),
+            set: set
+        );
+
+        if (mapping is null) {
+            _ = m_mappings.Remove(key: pass);
+
+            return;
+        }
+
+        m_mappings[pass] = mapping;
+        m_panes.Add(item: mapping);
+    }
+    // The mapping of an instance's whole image over a region of the display once the instance has rendered at an extent:
+    // the cached one while its region, extent, source and destination hold, so a steady frame allocates nothing.
+    private SourceMapping? MappingOf(RenderGraphInstanceSet set, RenderGraphSchedule latest, string instance, NormalizedRect region, SourceMapping? cached) {
         var index = set.IndexOf(name: instance);
 
         if (
@@ -337,26 +388,18 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
                 comparisonType: StringComparison.Ordinal
             )
         ) {
-            return;
+            return null;
         }
 
-        var region = new NormalizedRect(
-            Height: placement.Height,
-            Width: placement.Width,
-            X: placement.Left,
-            Y: placement.Top
-        );
         var source = set.Instances[index].Handle;
         var destination = (m_passthrough.Contains(item: instance)
             ? SourceDestination.Passthrough
             : SourceDestination.Presentation
         );
+        var mapping = cached;
 
         if (
-            !m_mappings.TryGetValue(
-                key: pass,
-                value: out var mapping
-            ) ||
+            (mapping is null) ||
             (mapping.Placement is not SourcePlacement.Pane { Region: var shown }) ||
             (shown != region) ||
             (mapping.SourceWidth != row.Width) ||
@@ -379,14 +422,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
 
             // A pane with no area mid-transition shows nothing to map.
             if (!mapping.TryValidate(refusal: out _)) {
-                _ = m_mappings.Remove(key: pass);
-
-                return;
+                return null;
             }
-
-            m_mappings[pass] = mapping;
         }
 
-        m_panes.Add(item: mapping);
+        return mapping;
     }
 }
