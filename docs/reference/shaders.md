@@ -626,7 +626,7 @@ any other:
 - `world$2` onward: one instance per further split-screen view of the same
   residency, when the world's layouts or player roster can compose more than
   one view.
-- `main`: the root graph reading `world`'s output over the whole display and
+- `main`: the scene graph reading `world`'s output over the whole display and
   every pane's output. With more than one view, or with a tonemap, it first
   runs one `place` pass per view. Then it runs one `place` package pass per
   `views.graphs` instance any layout slot names, each pass named after its
@@ -648,7 +648,8 @@ which the display encode shows at the paper-white level.
 
 `main` holds the scene whenever anything is drawn over the world, panes and
 the tonemap included, and whenever the world has more than one view; otherwise
-`world` does. The scene is the root unless the overlay's instance draws over it.
+`world` does. The display shows the scene or an active editor comparison, with
+`main$overlay` as its root when the overlay is drawn over that image.
 When nothing is drawn, as in an offscreen World with no panes, no `views.post`
 rows and no tonemap, `world` is the root and the display shows the world's first
 view directly. The host composes the root again whenever the document's panes, views,
@@ -717,8 +718,8 @@ Split-screen seats are placed the same way. The SDF engine renders each view
 of a layout into its own output image, and each view is a producer of its own:
 `world` for the first, then `world$2`, `world$3` and so on, up to the most
 views any layout or the player roster can compose. When a world has more than
-one, `main` is the root and runs one `place` pass per view ahead of the pane
-passes. `PrepareGraph` places each view at its rect and adds that rect's native
+one, `main` composes the scene and runs one `place` pass per view ahead of the
+pane passes. `PrepareGraph` places each view at its rect and adds that rect's native
 footprint. The view's own package allocates traversal targets at its quantized
 render ceiling and records the current render grid inside those targets; a
 layout transition's dip moves only that grid, so it rebuilds and allocates
@@ -1144,10 +1145,10 @@ its slot's `GpuRegion.Buffer`; it records no copy and no barrier.
 ## The display encode
 
 The engine's working images are float (`RenderGraphPackageCatalog.WorkingFormat`,
-`R16G16B16A16Float`): every SDF view's color, and every version of a world's root
-graph that the views are placed into and the post passes and the overlay draw
-over. A working value is the shading's display-referred value, one at SDR white,
-with headroom above it. Nothing quantizes it until the display encode
+`R16G16B16A16Float`): every SDF view's color, every version of the scene graph
+that places the views and runs the post passes, and the overlay's output in
+`main$overlay`. A working value is the shading's display-referred value, one at
+SDR white, with headroom above it. Nothing quantizes it until the display encode
 (`Assets/Runtime/display-encode.frag.hlsl`, drawn over the fullscreen triangle of
 `display.vert.hlsl`), which samples a working image 1:1 by fragment coordinate
 and writes it in the color space its target shows:

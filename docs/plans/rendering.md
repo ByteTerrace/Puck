@@ -729,7 +729,7 @@ all four live. The notes below record how each landed.
     left them in.
   - The synthesized default composition has `world` as the external
     `sdf.world` producer and a graph that reads it and runs the `views.post`
-    passes. Offscreen, that graph also runs `overlay` and is the root; a
+    passes. Offscreen, that scene is the root and no overlay is drawn; a
     windowed World draws the overlay in its own instance, `main$overlay`,
     which is the root, so a comparison sits under it.
   - `RenderGraphRuntimeLawTests.External` holds the runtime to it over a fake
@@ -861,7 +861,7 @@ captures come from the graph's root output.
 
 - `WorldRootGraph` synthesizes a world's default graph from its document, a
   graph document value `RenderGraphCompiler` plans like any other: `world`, the
-  `sdf.world` producer, and, when anything is drawn over it, the root `main`,
+  `sdf.world` producer, and, when anything is drawn over it, the scene `main`,
   which reads `world` over the whole display and runs one pass per
   `views.post` row in document order. A windowed World that loaded its glyph
   atlas draws the overlay in an instance of its own, `main$overlay`, over that
@@ -932,9 +932,10 @@ reconfiguration, and 9b, panes as graph instances.
   `views.root`), installs each row's background compile through `TryInstall`,
   and places every pane the last composed layout shows. `WorldRootGraph`
   places one `place` pass per instance any layout slot names, ahead of the
-  post passes, and `main` reads every pane and becomes the root when there is
-  one. A pane's footprint is its slot's width and height of `main`; a pane in no
-  active slot draws nothing and is not scheduled. The composer runs inside the
+  post passes, and `main` reads every pane into the scene. The display root is
+  `main$overlay` when the overlay is drawn over it. A pane's footprint is its
+  slot's width and height of `main`; a pane in no active slot draws nothing and
+  is not scheduled. The composer runs inside the
   world producer's frame, so a layout change places its panes one frame later,
   and a layout transition's render-scale dip no longer reaches a pane.
 - 9b: the SDF engine's child path was deleted: `SdfEngineNode`'s child map,
@@ -979,7 +980,7 @@ view an `sdf.world` instance of its own over the world's one residency.
   `SdfEngineNode.ViewProducer` gave the producers `world$2..world$K`, each
   leasing its own view's output. K is `WorldRootGraph.ViewsOf`: the most
   non-instance slots of any `views.layouts` row or `PlayerRoster.MaxSlots`,
-  uncapped since commit 13. With K above one, the root `main` runs one
+  with no fixed cap. With K above one, the scene `main` runs one
   `place` pass per view ahead of the pane passes, and
   `WorldFramePresenter.PrepareGraph` sets each view's footprint to its rect at
   its render scale, so `place` also does the render-scale reconstruction. A
@@ -1293,7 +1294,7 @@ root, in both presentation shapes (see P11b commit 6 above):
    residency, `world$2` onward for each further split-screen view, and each
    `views.graphs` row as an instance of its own.
 2. When anything is drawn over the world or the world can compose more than
-   one view, the root `main`: one `place` pass per view, then one per pane a layout
+   one view, the scene `main`: one `place` pass per view, then one per pane a layout
    slot names, then one post-process package pass per `views.post` row in
    document order, each reading the frame the pass before it wrote. Otherwise `world` holds the scene.
    A windowed World then draws the console, HUD, toasts and cursor in the `main$overlay` instance over the

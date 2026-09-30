@@ -1403,7 +1403,7 @@ The main view runs through the runtime. `WorldRootGraph`
 (the first view's `sdf.world` instance) and `world$2..world$K` for K =
 `WorldRootGraph.ViewsOf` (the most non-instance slots of any `views.layouts`
 row or `PlayerRoster.MaxSlots`; each view is an instance of its own), then
-the root `main`, which reads `world` and every pane and runs, when K > 1 or a
+the scene `main`, which reads `world` and every pane and runs, when K > 1 or a
 tonemap is on, one `place` pass per view (`main$view$<n>`, n from 1; view 1's
 reads `world` through a second version beside `main$world`), then one `place`
 package pass per `views.graphs` instance a layout slot names (the pass named

@@ -1942,8 +1942,8 @@ it can bind: `descriptor-sets` or `root-signature-words`,
 `binding-tier`, `root-signature`, `shader-model`, `heap.views`,
 `heap.samplers` and `heap.samplers-static`; it is recorded the same way. Then come each render node
 (`world` for the SDF engine, then every render-graph instance by its instance
-name, such as the root `main` and each `views.graphs` pane, then
-`view:<name>` for each offscreen view) with its newest
+name, such as the scene `main`, the windowed root `main$overlay` and each
+`views.graphs` pane, then `view:<name>` for each offscreen view) with its newest
 completed submission's per-pass counts and its created objects, or
 `work unavailable` until a submission completes. A filter selects whole dotted
 segments (`world.counters gpu`, `world.counters state`); a filter that selects
