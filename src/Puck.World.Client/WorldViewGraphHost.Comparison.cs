@@ -10,7 +10,8 @@ public sealed partial class WorldViewGraphHost {
     public WorldFrameComparison? Comparison { get; set; }
     /// <summary>Gets or sets the viewports published for the frame this host composes.</summary>
     public WorldSeatViewports? ComparisonViewports { get; set; }
-    /// <summary>Gets the live root before the comparison wrapper, which a hold or measurement captures.</summary>
+    /// <summary>Gets the instance holding the scene, the world image before the comparison and the overlay, which a hold
+    /// or measurement captures.</summary>
     public string? ComparisonLiveRoot => (m_comparisonLiveRoot ?? m_runtime?.Root);
 
     private bool TryComparisonPlacement(string instance, string pass, out RenderGraphPlacement placement) {

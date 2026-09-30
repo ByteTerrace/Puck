@@ -38,11 +38,21 @@ uses the completed pointer hit, and `world.cost top [n]` lists the largest rows.
 Shared program overhead is reported separately and reconciles to `world.budget`.
 These are presentation queries and never submit simulation input.
 
+Every inspector line fits the panel's 96 columns: a long line wraps onto
+indented continuation lines and ends in `...` past its own budget, and pass
+times past the panel's 32nd line are counted in a closing `... n more lines`.
+A reload refusal shows its file and location first, relative to the world's
+document directory.
+
 `world.gpu-timing on|off` enables optional observational per-pass timestamps;
 bare reads completed means over at most 32 pairs. The inspector's FPS and timing
 rows follow that toggle. Timing starts off and creates no timestamp objects or
-commands until requested. An offscreen host supports explicit placement costs
-and timing; the panel and pointer feed belong to the windowed presentation.
+commands until requested. A device without timestamps, or a timestamp pool or
+readback the device will not create, refuses timing for that render-graph
+instance by name (`<instance>: refused <reason>`); the graph keeps rendering and
+nothing is tried again until timing is turned on anew. An offscreen host
+supports explicit placement costs and timing; the panel and pointer feed belong
+to the windowed presentation.
 
 ## Operator access
 
@@ -1023,7 +1033,10 @@ leaves the file and undo journal intact.
 `world.watch on` watches the loaded source's compile and composition inputs,
 including imported documents, missing imports and source-directory listings.
 After 150 ms without another change it submits ordinary `world.reload` under
-the local console or seat principal that enabled it. A refusal retains the
+the local console or seat principal that enabled it. Each poll reads every
+input's file-system stamp (existence, length and last write) and re-reads only
+the contents of an input whose stamp moved, or whose last write is within two
+seconds of the poll, so an unchanged tree costs one stat per input. A refusal retains the
 running world and reports its source diagnostic in the editor and terminal.
 `world.watch off` stops future requests; an already submitted reload can finish.
 After `world.load` changes the origin, the watch adopts the new dependencies
@@ -1042,6 +1055,10 @@ CPU image for reuse.
 A following `world.screenshot` captures the next composed display, including
 when switching comparison on or off changes its render graph root.
 
+A windowed display draws the overlay over the comparison, so the console,
+cursor, toasts and inspector stay live and on top. A hold and a measurement
+capture the scene beneath both, so the overlay never enters a held or measured
+frame, and each is cropped by the seat viewport of the frame it captured.
 A typed comparison captures the live view and reports the number of pixels
 whose RGB differs by at least two byte codes, using the same measurement as
 the canaries. The text session waits for that capture before its next command.
@@ -2023,11 +2040,12 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 capture of a following composed frame. A tick wait lets rendering progress;
 confirm the capture completion before reading the file. Its stdout echo says `pending <path>`
 precisely because no file exists yet; the resolved path arrives on **stderr**
-when the frame lands, named by whichever node served it: `[capture] main ->
-<path>` from the node of the render graph's root, which draws the
-`views.post` passes and the overlay over the world, or `[capture] world ->
-<path>` from the world's own instance when the world is the root because
-nothing is drawn over it. The root reads the frame the display shows; an
+when the frame lands, named by whichever node served it: in a windowed World,
+`[capture] main$overlay -> <path>` from the instance that draws the overlay over
+the scene; offscreen, `[capture] main -> <path>` from the node of the render
+graph's root, which draws the `views.post` passes over the world, or
+`[capture] world -> <path>` from the world's own instance when the world is
+the root because nothing is drawn over it. The root reads the frame the display shows; an
 overlay that draws nothing this frame publishes the world's image in its place,
 and the capture reads that. Arming a second capture while one is still
 pending is REFUSED by name—the earlier path would never be written—and a

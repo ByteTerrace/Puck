@@ -79,9 +79,11 @@ public sealed class CaptureRequestSlot {
     /// <param name="writer">The readback and PNG writer, which must close the file before returning.</param>
     /// <param name="tick">The tick of the state the image the writer reads was rendered from
     /// (<see cref="FrameCaptureRequest.Write"/>); <see langword="null"/> when the serving node names none.</param>
+    /// <param name="frame">The serving node's ordinal of the frame that rendered that image; <see langword="null"/> when
+    /// the serving node counts none.</param>
     /// <exception cref="Gpu.DeviceLostException">The readback lost the graphics device; the request already carries
     /// the same failure.</exception>
-    public void Serve(string failureLabel, Action<string> writer, ulong? tick = null) {
+    public void Serve(string failureLabel, Action<string> writer, ulong? tick = null, ulong? frame = null) {
         ArgumentException.ThrowIfNullOrEmpty(argument: failureLabel);
         ArgumentNullException.ThrowIfNull(argument: writer);
 
@@ -94,6 +96,7 @@ public sealed class CaptureRequestSlot {
         m_request = null;
 
         if (request.Write(
+            frame: frame,
             tick: tick,
             writer: writer
         ).Error is { } error) {

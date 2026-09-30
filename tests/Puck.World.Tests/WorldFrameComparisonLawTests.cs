@@ -4,6 +4,7 @@ using Puck.Assets;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Shaders;
+using Puck.Testing;
 using Puck.World.Client;
 using Xunit;
 
@@ -52,6 +53,55 @@ public sealed class WorldFrameComparisonLawTests {
         WorldComparisonGraph.Append(comparison: comparison, graphs: ref graphs, root: ref root, set: ref set);
         Assert.Same(actual: set, expected: initial);
         Assert.Empty(collection: WorldComparisonGraph.Footprints(comparison: comparison, liveRoot: "live"));
+    }
+    // A windowed presentation draws the overlay (the console, cursor, toasts and inspector) in an instance of its own over
+    // whatever the display shows, so a comparison is composed under it, and a hold or measurement captures the scene,
+    // whose graph runs no overlay pass: nothing the overlay draws can reach a held or measured frame, so an unchanged scene
+    // measures zero changed pixels with the inspector and console on. The host's footprints schedule the whole chain.
+    [Fact]
+    public void AComparisonSitsUnderTheOverlayAndCapturesTheSceneWithoutIt() {
+        using var files = new TemporaryDirectory();
+        using var host = new WorldViewGraphHost(documentDirectory: files.RootPath,
+            packager: new ShaderPackager(compiler: new ShaderCompiler(cacheDirectory: files.PathOf(name: "cache"))));
+        var comparison = new WorldFrameComparison();
+        var viewports = new WorldSeatViewports();
+
+        viewports.Publish(slot: 0, region: View.Region, camera: default, width: 7, height: 3);
+        host.Comparison = comparison;
+        host.ComparisonViewports = viewports;
+        using var instances = FakeGraphInstances.Attach(host: host, overlay: true, create: static name => new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(), deviceContext: new RefusingGpuDevice(), height: 4, hostsOnDirectX: false, name: name, width: 4));
+        var views = new WorldViewDefaults();
+
+        // The display's root, what the overlay draws over, and the width the scene is scheduled at through that chain.
+        (string Root, string Beneath, int SceneWidth) Composed() {
+            host.BeginFrame(views: views);
+            var set = instances.Instances;
+            var overlay = set.Instances[set.IndexOf(name: WorldRootGraph.OverlayInstance)];
+            var schedule = new RenderGraphSchedule(set: set);
+
+            RenderGraphScheduler.Schedule(
+                frame: new RenderGraphFrame(DisplayHeight: 144, DisplayHertz: 60, DisplayWidth: 256, Footprints: host.Footprints,
+                    Index: 0, Roots: [new RenderGraphRoot(Height: 1, Instance: instances.Root, Width: 1)]),
+                history: RenderGraphHistory.Empty(set: set), schedule: schedule, set: set);
+            return (instances.Root, Assert.Single(collection: overlay.Reads).Producer, schedule.Instances[set.IndexOf(name: WorldViewGraphs.MainInstance)].Width);
+        }
+
+        Assert.Equal(expected: (WorldRootGraph.OverlayInstance, WorldViewGraphs.MainInstance, 256), actual: Composed());
+        Assert.Equal(expected: WorldViewGraphs.MainInstance, actual: host.ComparisonLiveRoot);
+        comparison.Hold(slot: 0, frame: Frame(), view: View, tick: 1);
+        comparison.SetMode(slot: 0, mode: WorldCompareMode.Diff);
+        Assert.Equal(expected: (WorldRootGraph.OverlayInstance, WorldComparisonGraph.Root, 256), actual: Composed());
+        Assert.Equal(expected: WorldViewGraphs.MainInstance, actual: host.ComparisonLiveRoot);
+        var wrapped = instances.Instances;
+
+        Assert.Equal(expected: WorldViewGraphs.MainInstance,
+            actual: wrapped.Instances[wrapped.IndexOf(name: WorldComparisonGraph.Root)].Reads[0].Producer);
+        Assert.Equal(expected: WorldViewGraphs.MainInstance, actual: host.Synthesized!.Scene);
+        Assert.DoesNotContain(collection: host.Synthesized.Plan!.Steps, filter: static step => (step.Package?.Id == RenderGraphPackageCatalog.Overlay));
+        Assert.Equal(expected: [RenderGraphPackageCatalog.Overlay], actual: host.Synthesized.OverlayPlan!.Steps.Select(selector: static step => step.Package?.Id));
+        comparison.SetMode(slot: 0, mode: WorldCompareMode.Off);
+        Assert.Equal(expected: (WorldRootGraph.OverlayInstance, WorldViewGraphs.MainInstance, 256), actual: Composed());
     }
 
     private static PngImage Frame() => new(RgbaPixels: Enumerable.Range(count: (7 * 3), start: 0)
@@ -186,7 +236,7 @@ public sealed class WorldFrameComparisonLawTests {
         Assert.True(condition: registry.Submit(line: "world.compare wipe 0.2").IsError);
         Assert.False(condition: comparison.Active);
         Assert.Equal(expected: 0.5f, actual: comparison.Seat(slot: 0)!.Wipe);
-        capture.Attach(target: () => new Target());
+        capture.Attach(completedFrames: static () => 0UL, target: () => new Target());
         var accepted = registry.Submit(line: "world.compare wipe 0.2");
 
         Assert.False(condition: accepted.IsError);
@@ -208,9 +258,11 @@ public sealed class WorldFrameComparisonLawTests {
         using var capture = new WorldCompareCapture(comparison: comparison, viewports: viewports);
         var target = new Target();
         var reports = new List<CommandResult>();
+        var completed = 0UL;
 
-        capture.Attach(target: () => target);
+        capture.Attach(completedFrames: () => completed, target: () => target);
         capture.RecordPreparedFrame();
+        completed++;
         capture.Report = reports.Add;
         var result = capture.Request(hold: true, slot: 0);
 
@@ -219,7 +271,7 @@ public sealed class WorldFrameComparisonLawTests {
         Assert.Null(@object: comparison.Seat(slot: 0));
         var frame = Frame();
 
-        _ = target.Request!.Write(writer: path => PngEncoder.Write(path: path, rgba: frame.RgbaPixels, width: frame.Width, height: frame.Height), tick: 23);
+        _ = target.Request!.Write(writer: path => PngEncoder.Write(path: path, rgba: frame.RgbaPixels, width: frame.Width, height: frame.Height), tick: 23, frame: 1);
         capture.Poll();
         Assert.True(condition: result.Settlement.IsSettled);
         Assert.Equal(expected: 23UL, actual: comparison.Seat(slot: 0)!.Tick);
@@ -251,9 +303,54 @@ public sealed class WorldFrameComparisonLawTests {
         var result = capture.Request(hold: true, slot: 0);
         var frame = Frame();
 
-        _ = target.Request!.Write(writer: path => PngEncoder.Write(path: path, rgba: frame.RgbaPixels, width: frame.Width, height: frame.Height), tick: 1);
+        _ = target.Request!.Write(writer: path => PngEncoder.Write(path: path, rgba: frame.RgbaPixels, width: frame.Width, height: frame.Height), tick: 1, frame: 1);
         capture.Poll();
         Assert.True(condition: result.Settlement!.IsSettled);
         Assert.Equal(expected: (5, 2), actual: (comparison.Seat(slot: 0)!.Image.Width, comparison.Seat(slot: 0)!.Image.Height));
+    }
+    // A capture completes frames after the frame it read rendered; the layout may change in between, and the crop is the
+    // one prepared for the captured frame, named by the capture, never the latest. A frame older than the retained window
+    // is refused by name.
+    [Fact]
+    public void ALayoutChangeWithinReadbackLatencyStillCropsTheCapturedFramesRect() {
+        var comparison = new WorldFrameComparison();
+        var viewports = new WorldSeatViewports();
+        var whole = new NormalizedRect(Height: 1, Width: 1, X: 0, Y: 0);
+
+        viewports.Publish(slot: 0, region: View.Region, camera: default, width: 7, height: 3);
+        using var capture = new WorldCompareCapture(comparison: comparison, viewports: viewports);
+        var target = new Target();
+        var completed = 0UL;
+        var reports = new List<CommandResult>();
+
+        capture.Attach(completedFrames: () => completed, target: () => target);
+        capture.Report = reports.Add;
+        capture.RecordPreparedFrame();
+        completed++;
+        _ = capture.Request(hold: true, slot: 0);
+
+        for (var frame = 0; (frame < 3); frame++) {
+            capture.Poll();
+            viewports.Publish(slot: 0, region: whole, camera: default, width: 7, height: 3);
+            capture.RecordPreparedFrame();
+            completed++;
+        }
+        var image = Frame();
+
+        _ = target.Request!.Write(writer: path => PngEncoder.Write(path: path, rgba: image.RgbaPixels, width: image.Width, height: image.Height), tick: 1, frame: 1);
+        capture.Poll();
+        Assert.False(condition: Assert.Single(collection: reports).IsError, userMessage: reports[0].Output);
+        Assert.Equal(expected: (5, 2, 8), actual: (comparison.Seat(slot: 0)!.Image.Width, comparison.Seat(slot: 0)!.Image.Height, comparison.Seat(slot: 0)!.Image.RgbaPixels[0]));
+
+        _ = capture.Request(hold: true, slot: 0);
+
+        for (var frame = 0; (frame < WorldCompareCapture.RetainedFrames); frame++) {
+            capture.RecordPreparedFrame();
+            completed++;
+        }
+        _ = target.Request!.Write(writer: path => PngEncoder.Write(path: path, rgba: image.RgbaPixels, width: image.Width, height: image.Height), tick: 2, frame: 4);
+        capture.Poll();
+        Assert.True(condition: reports[^1].IsError);
+        Assert.Contains(expectedSubstring: "older than the 8 frames", actualString: reports[^1].Output);
     }
 }

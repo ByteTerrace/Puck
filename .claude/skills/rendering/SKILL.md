@@ -1387,8 +1387,12 @@ tonemap is on, one `place` pass per view (`main$view$<n>`, n from 1; view 1's
 reads `world` through a second version beside `main$world`), then one `place`
 package pass per `views.graphs` instance a layout slot names (the pass named
 after the instance), then one pass per `views.post` row in order (named by the
-row, running its package, each reading the frame the pass before it wrote), then
-`overlay` in a windowed World. The tonemap is each view's place pass: when
+row, running its package, each reading the frame the pass before it wrote). That
+is the scene (`WorldRootGraph.Scene`). A windowed World draws the overlay in an
+instance of its own, `main$overlay` (`WorldRootGraph.OverlayInstance`, one
+`overlay` pass), appended over whatever the display would otherwise show
+(`AppendOverlay`, last in `WorldViewGraphHost.TryCompose`), which is then the
+root; nothing composed between the scene and the overlay covers the HUD. The tonemap is each view's place pass: when
 `render.tonemap` is `Filmic` and no debug view is on
 (`WorldViewGraphHost.ShowsDebugView`), every view pass sets the `place` config's
 `tonemap` (`RenderGraphPackageCatalog.PlaceTonemap`), which puts the view it
@@ -1397,9 +1401,9 @@ framing, written beside the view untonemapped, so it reaches the display exact;
 a pane is display-referred (a pane shader applies its own tonemap, as the moth
 studio's does), so the root never tonemaps a pane; and the HUD is never
 tonemapped. A tonemapped lone whole-display view is shown, never stood in for,
-so its pass runs. `main` is the root whenever anything is drawn over the world,
+so its pass runs. `main` is the scene whenever anything is drawn over the world,
 panes and the tonemap included, and always when K > 1; otherwise `world` is
-the root. With `views.root` set the runtime
+the scene. Without an overlay the scene is the root. With `views.root` set the runtime
 runs the rows alone, and the document may author no `views.post`. A config that
 does not bind is refused when the document validates, naming the row
 (`views.post[<i>].config`), live edits included; the boot's pre-flight
@@ -1475,13 +1479,17 @@ letterboxes the whole output when `RenderGraphPlacement.Uncovered` says part of
 the display lies outside every shown rect (`WorldViewGraphHost.PlaceViews`
 counts it covered only when one shown view or pane covers it whole).
 
-Editor comparisons wrap the live root through `WorldComparisonGraph`: one
+Editor comparisons wrap the scene through `WorldComparisonGraph`: one
 ordinary static `source-rgba` upload per active hold and ordered `place` passes
-compose the result. `WorldCompareCapture` captures the live root's existing
-instance target, never the wrapper, and latches viewport metadata only when
-the completed frame counter advances. Preserve that boundary when changing
-capture or graph composition; a paused capture must use the last rendered
-layout. `WorldFrameComparison` owns cropped CPU pixels while the mode is off;
+compose the result, and the overlay's instance draws over it, so a comparison
+never covers the console, cursor, toasts or inspector. `WorldCompareCapture`
+captures the scene's existing instance target (`ComparisonLiveRoot`), never the
+wrapper or the overlay, and crops by the seat viewports recorded for the frame
+the capture names (`FrameCaptureResult.Frame`, the serving node's frame counter
+as that frame's render left it), retained for `WorldCompareCapture.RetainedFrames`
+frames; a frame that does not render is recorded again under the same ordinal,
+so a paused capture uses the last rendered layout. Preserve that boundary when
+changing capture or graph composition. `WorldFrameComparison` owns cropped CPU pixels while the mode is off;
 off removes the wrapper and upload instances. Mode and wipe edits write the
 existing pass parameters; bound axis input must neither capture nor rebuild.
 The comparison branches in `place.comp.hlsl` and ordinary reconstruction use

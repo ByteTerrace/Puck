@@ -335,9 +335,11 @@ the whole truth, and a script reading only one of them reads a half-answer:
 - stdout, at arming: `[world.screenshot: pending <path> — lands on the next
   composed frame]`. No file is promised yet. Let rendering progress with
   `world.wait`, then confirm the completion before reading it.
-- stderr, when the frame lands: `[capture] main -> <path>` (the render
-  graph's root node served it) or `[capture] world -> <path>` (the world's
-  instance did, as the root when nothing is drawn over the world). THIS is
+- stderr, when the frame lands: `[capture] main$overlay -> <path>` (a
+  windowed World's root, the overlay drawn over the scene, served it),
+  `[capture] main -> <path>` (the offscreen root graph's node did) or
+  `[capture] world -> <path>` (the world's instance did, as the root when
+  nothing is drawn over the world). THIS is
   the line that says a file exists.
 - stderr, at shutdown: `[world.screenshot] WARNING: a capture of <path> was
   still pending when the run ended … NO FILE WAS WRITTEN`
@@ -389,7 +391,10 @@ composed-image cache hits, and queues the existing `world.reload` through a
 session stamped by the enabling local console or seat ingress. Never reload
 by mutating the server directly. A new accepted origin schedules one reload
 after adoption, so an edit between the load's read and adoption is not lost.
-Failed reads retain their missing-input facts for recovery. `WorldSourceWatch`
+Failed reads retain their missing-input facts for recovery. A poll stats every
+input and re-reads contents only where the stamp moved or is within
+`WorldSourceWatch.RacyStampWindow` of the poll (`StampReads`, `ContentReads`
+count both); never hash every input per poll. `WorldSourceWatch`
 keeps the last reload diagnostic for the inspector; the normal command path
 and the editor report fan-out cover the terminal and toast. An accepted rebuild
 drops removed placement ids from editor selection and snap references while

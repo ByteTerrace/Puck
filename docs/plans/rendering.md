@@ -862,8 +862,9 @@ captures come from the graph's root output.
   graph document value `RenderGraphCompiler` plans like any other: `world`, the
   `sdf.world` producer, and, when anything is drawn over it, the root `main`,
   which reads `world` over the whole display and runs one pass per
-  `views.post` row in document order, then `overlay` in a windowed
-  World that loaded its glyph atlas. Both presentation shapes run the post
+  `views.post` row in document order. A windowed World that loaded its glyph
+  atlas draws the overlay in an instance of its own, `main$overlay`, over that
+  scene, and it is then the root. Both presentation shapes run the post
   passes, so offscreen captures and parity see them. With nothing drawn over it
   (offscreen with no `views.post` rows) `world` is the root, and the runtime
   shows and captures the producer's output directly. A config that does not
@@ -1290,8 +1291,10 @@ root, in both presentation shapes (see P11b commit 6 above):
 2. When anything is drawn over the world or the world can compose more than
    one view, the root `main`: one `place` pass per view, then one per pane a layout
    slot names, then one post-process package pass per `views.post` row in
-   document order, each reading the frame the pass before it wrote, then `overlay`, which draws the console, HUD, toasts and
-   cursor in a windowed World. Otherwise `world` is the root.
+   document order, each reading the frame the pass before it wrote. Otherwise `world` holds the scene.
+   A windowed World then draws the console, HUD, toasts and cursor in the `main$overlay` instance over the
+   scene, or over an editor comparison composed on it, and that instance is the root; offscreen, the scene
+   is the root.
 3. The launcher, which hands the root's float image to a surface compositor that
    writes it into the swapchain through the display encode.
 

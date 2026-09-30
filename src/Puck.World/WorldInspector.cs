@@ -82,6 +82,7 @@ internal sealed class WorldInspector(WorldEditorSeats seats, WorldCursorFeed cur
             WordCapacity = (residency?.ProgramWordCapacity ?? 0),
             Instances = (residency?.LiveProgramInstances ?? 0),
             ReloadError = (watch.LastError ?? "none"),
+            WorldRoot = client.Definition.DocumentDirectory,
         };
         var text = m_text[slot];
 
@@ -92,6 +93,10 @@ internal sealed class WorldInspector(WorldEditorSeats seats, WorldCursorFeed cur
             text.FrameRate(mean: observed.AverageFps, slowest: observed.WorstFps);
             for (var index = 0; (index < runtime.Instances.Instances.Count); index++) {
                 if ((runtime.Producer(instance: index) is not null) || (runtime.Instances.Instances[index].Name != InstanceOf(slot: slot))) { continue; }
+                if (runtime.Node(instance: index).TimingRefusal is { } refusal) {
+                    text.TimingRefused(node: runtime.Instances.Instances[index].Name, refusal: refusal);
+                    continue;
+                }
                 foreach (var value in runtime.Node(instance: index).Timings) {
                     text.Timing(node: runtime.Instances.Instances[index].Name, timing: in value);
                 }

@@ -632,8 +632,10 @@ any other:
   `views.graphs` instance any layout slot names, each pass named after its
   instance, then one pass per `views.post` row in document order, named by the
   row and running its [post-process package](#post-process-packages), each
-  reading the frame the pass before it wrote, then the `overlay` pass in a
-  windowed World that loaded its glyph atlas.
+  reading the frame the pass before it wrote. Its output is the scene.
+- `main$overlay`: in a windowed World that loaded its glyph atlas, one
+  `overlay` pass drawing the console, HUD, toasts and cursor over the scene, or
+  over an editor comparison composed on the scene, and the display's root.
 
 When `render.tonemap` is `Filmic`, each view's `place` pass sets the `place`
 config's `tonemap`, which puts the view it reconstructs, and nothing else,
@@ -644,11 +646,12 @@ A pane is display-referred, a pane shader's own tonemap included, so the root
 never tonemaps it, and the HUD composes over the finished frame at SDR white,
 which the display encode shows at the paper-white level.
 
-`main` is the root whenever anything is drawn over the world, panes and the
-tonemap included, and whenever the world has more than one view. When none
-holds, as in an offscreen World with no panes, no `views.post` rows and no
-tonemap, `world` is the root and the display shows the world's first view
-directly. The host composes the root again whenever the document's panes, views,
+`main` holds the scene whenever anything is drawn over the world, panes and
+the tonemap included, and whenever the world has more than one view; otherwise
+`world` does. The scene is the root unless the overlay's instance draws over it.
+When nothing is drawn, as in an offscreen World with no panes, no `views.post`
+rows and no tonemap, `world` is the root and the display shows the world's first
+view directly. The host composes the root again whenever the document's panes, views,
 `views.post` rows or `render.tonemap` move, and runs no tonemap while a debug
 view (`world.debug-view`) is on, so a debug view shows its own colors. A world that sets `views.root` authors its whole render graph,
 the `sdf.world` package row included, and the runtime runs its rows alone; such
@@ -662,8 +665,9 @@ the root, or names `world` to capture the SDF world before its tonemap, panes,
 post passes and overlay: its working image through the SDR display encode,
 untonemapped. `world.counters gpu` counts every graph instance under its
 instance name: `world` is the first view's node, whose passes are
-`sdf.world$sky` through `sdf.world$views`, `main` the root's node, whose passes
-are the place, post and overlay passes, and each pane its own node. It counts
+`sdf.world$sky` through `sdf.world$views`, `main` the scene's node, whose
+passes are the place and post passes, `main$overlay` the overlay's, and each
+pane its own node. It counts
 each residency's upload beside them: the world's as `sdf:world`, and each
 session or routed scene's as `sdf:<name>`. Camera instances share the world's
 upload and tables; their passes and scratch count under their instance names.

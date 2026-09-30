@@ -72,6 +72,50 @@ public sealed class WorldWatchLawTests {
         watch.Poll(now: At(milliseconds: 3000));
         Assert.Equal(actual: count, expected: 2);
     }
+    // A poll stats every input and reads contents only where a stamp moved: an unchanged tree hashes nothing per poll, a
+    // same-length edit under a new stamp is read once and reloads, and a touch that leaves the bytes alone is read once and
+    // reloads nothing.
+    [Fact]
+    public void AnUnchangedTreeHashesNoContentPerPoll() {
+        using var files = new TemporaryDirectory();
+        var module = files.WriteText(name: "counter.puck", text: Module);
+        var root = files.WriteText(name: "root.puck", text: "import \"counter.puck\"\nuse counter as root()");
+        var old = DateTime.UtcNow.AddHours(value: -1);
+
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: old, path: module);
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: old, path: root);
+        var count = 0;
+        var watch = new WorldSourceWatch(() => root);
+
+        watch.Start(submitReload: () => count++);
+        Directory.SetLastWriteTimeUtc(lastWriteTimeUtc: old, path: files.RootPath);
+        watch.Poll(now: At(milliseconds: 1000));
+        var stamps = watch.StampReads;
+        var contents = watch.ContentReads;
+
+        Assert.True(condition: (stamps > 0));
+        for (var poll = 1; (poll <= 10); poll++) {
+            watch.Poll(now: At(milliseconds: (1000 + (poll * 60))));
+        }
+        Assert.Equal(expected: contents, actual: watch.ContentReads);
+        Assert.Equal(expected: (stamps * 11), actual: watch.StampReads);
+        Assert.Equal(actual: count, expected: 0);
+
+        File.WriteAllText(module, Module.Replace(comparisonType: StringComparison.Ordinal, newValue: "8", oldValue: "7"));
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: old.AddMinutes(value: 1), path: module);
+        watch.Poll(now: At(milliseconds: 2000));
+        Assert.Equal(expected: (contents + 1), actual: watch.ContentReads);
+        watch.Poll(now: At(milliseconds: 2200));
+        Assert.Equal(expected: (contents + 1), actual: watch.ContentReads);
+        Assert.Equal(actual: count, expected: 1);
+        watch.Complete(result: CommandResult.None);
+
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: old.AddMinutes(value: 2), path: module);
+        watch.Poll(now: At(milliseconds: 3000));
+        watch.Poll(now: At(milliseconds: 3200));
+        Assert.Equal(expected: (contents + 2), actual: watch.ContentReads);
+        Assert.Equal(actual: count, expected: 1);
+    }
     [Fact]
     public void AFailedReloadWatchesTheNewMissingImportAndALoadFollowsItsNewOrigin() {
         using var files = new TemporaryDirectory();

@@ -476,9 +476,14 @@ allocates nothing; red leg: the pointer on the sky prints `hit=none`).
 reservation and rounds the sum up to a power of two. The current four-seat
 composition reserves 26,721 words and allocates 32,768. A writer exceeding its
 own reservation refuses by channel name; it cannot consume another writer's
-share. The inspector reserves 32 lines of 96 characters per seat. Text that
-cannot fit is replaced by an explicit `editor refused` diagnostic, also charged
-to the existing overlay refusal counters. There is no on-demand reallocation.
+share. The inspector reserves 32 lines of 96 characters per seat, and its
+content fits them line by line: a long line wraps onto indented continuation
+lines and elides its end past its own budget, a reload diagnostic leads with
+its file and location relative to the world's document directory, and pass
+times past the last line are counted in one closing line. Only a formatter
+whose fixed lines exceed the reservation by construction is replaced by an
+explicit `editor refused` diagnostic, also charged to the existing overlay
+refusal counters. There is no on-demand reallocation.
 The off state emits no inspector records, but its shared backing storage remains
 allocated. Graph inspection reports the installed regions' device and
 host-visible bytes, CPU shadow payloads, and package/row/upload scratch payloads
@@ -632,7 +637,9 @@ the pole).
 red leg: a scoped creation counted per shape fails); `ShaderPipelineRenderNodeLawTests` over
 the fake device (on: two queries per pass, named and fault-wrapped, released on
 device loss; off: zero queries; red leg: a node that forgets `LeavePass` fails
-the pair count). The laws assert the mechanism and never a time.
+the pair count; a faulted pool or readback refuses timing by name while frames
+keep rendering, and a later frame tries nothing). The laws assert the mechanism
+and never a time.
 
 **Accounting rule:** placement program words are the words owned by its live
 instance rows, instruction headers/data/bounds, segments, rigid leaves, shape
@@ -643,7 +650,14 @@ program total. No prototype is re-emitted to estimate this number. A hidden
 field instance and its live mesh draw remain visible in the report. Bake representation
 is captured at emission with that frame's map; another world's cache cannot change it.
 
-Timestamp pools are allocated only on demand. Each recorded pass gets one pair;
+Timestamp pools are allocated only on demand, on the frame thread after the
+slot's fence, like the other resources a node allocates there. A device with
+no timestamps, or a pool or readback the device will not create, refuses
+timing for that node by name (`ShaderPipelineRenderNode.TimingRefusal`, echoed
+by `world.gpu-timing` and the inspector), releases what the failed slot
+created, and leaves the graph rendering; nothing is tried again until timing
+is enabled anew, the operator's GPU faults move, or the device is lost. Each
+recorded pass gets one pair;
 readback waits for its submission fence, rejects a replaced graph or an earlier
 enable epoch, and averages at most 32 completed pairs. Disabling hides readings
 immediately and releases pools after their fences. Device loss releases all
@@ -658,9 +672,10 @@ readback for step 3.
 
 **Status:** the source watch uses the graph watch's shared debounce and the
 existing reload command. It covers compile and document-composition inputs,
-keeps the latest reload diagnostic for the inspector and toast, and reconciles
-selection ids after a rebuild. A seat can hold its displayed frame and compare
-it with the live view through the ordinary capture and `place` paths. Split,
+reads contents only for inputs whose file-system stamp moved, keeps the latest
+reload diagnostic for the inspector and toast, and reconciles selection ids
+after a rebuild. A seat can hold its displayed frame and compare it with the
+live view through the ordinary capture and `place` paths, under the overlay. Split,
 wipe, difference, cropped sampling and return to the live view are checked on
 both backends by `editor-compare`.
 
@@ -680,10 +695,12 @@ both backends by `editor-compare`.
    the `place` package draws. A bound `Axis1D` value controls the wipe position
    in `0..1` without capturing or rebuilding the graph. The echo includes
    the changed-pixel count (pixels moving at least 2 LSB, measured by the shared
-   `RgbaFrameDifference` used by the canaries). Captures use the existing live
-   instance target before the comparison wrapper, so a comparison never holds
-   itself. The captured frame carries its last rendered viewport even while
-   paused. Active comparisons add ordinary static uploads and `place` passes;
+   `RgbaFrameDifference` used by the canaries). Captures use the existing scene
+   instance target before the comparison wrapper and the overlay, so a comparison
+   never holds itself or the console, cursor, toasts and inspector drawn over it.
+   A capture names the frame that rendered it and is cropped by that frame's
+   viewport, whatever the layout became while it was read back, and a paused
+   capture keeps its last rendered viewport. Active comparisons add ordinary static uploads and `place` passes;
    off removes those resources and retains the CPU hold. A changed crop extent
    requires a new hold before measuring differences. Completed typed commands
    report once through the terminal, tape and toast; late refusals enter
@@ -694,13 +711,16 @@ both backends by `editor-compare`.
 `Puck.World.Client` (`WorldViewGraphHost`, editor state retention).
 
 **Check:** `WorldWatchLawTests` (touching a compile input submits exactly one
-reload; red leg: touching an unrelated file submits none);
+reload; red leg: touching an unrelated file submits none; an unchanged tree
+reads no content per poll);
 `WorldEditorReloadRetentionLawTests` (selection and camera survive a reload, and
 a removed id drops out). Canary `editor-compare`: hold a frame, move a render
 lever, and the split view's halves differ. `WorldFrameComparisonLawTests`
 checks crop rounding and authored root extents, owned pixels, the shared
 difference threshold, graph revision, refusal atomicity, capture settlement,
-paused metadata and the existing axis binding contract.
+paused metadata, the captured frame's own viewport across a layout change,
+the comparison composed under the overlay's instance with the scene as its
+capture target, and the existing axis binding contract.
 
 **Depends on:** E2 and E8 for what a reload keeps; the compare needs nothing.
 

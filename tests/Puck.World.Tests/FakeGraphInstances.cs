@@ -35,16 +35,22 @@ internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> 
     public RenderGraphSchedule? Latest { get; set; }
 
     /// <summary>Attaches a host to a new fake whose nodes render nothing, over the default graph a world with no
-    /// extensions and no overlay synthesizes.</summary>
+    /// extensions synthesizes.</summary>
     /// <param name="host">The host.</param>
     /// <param name="create">Creates the node of a new graph instance, by its name.</param>
+    /// <param name="overlay">Whether the presentation draws the overlay, as a windowed one does.</param>
     /// <returns>The fake.</returns>
-    public static FakeGraphInstances Attach(WorldViewGraphHost host, Func<string, ShaderPipelineRenderNode> create) {
+    public static FakeGraphInstances Attach(WorldViewGraphHost host, Func<string, ShaderPipelineRenderNode> create, bool overlay = false) {
         var fake = new FakeGraphInstances(create: create);
+        var synthesized = WorldRootGraph.Compose(
+            overlay: overlay,
+            packages: RenderGraphPackageCatalog.Engine,
+            post: null
+        );
 
         host.Attach(
-            compose: static (panes, views, post, tonemap) => WorldRootGraph.Compose(
-                overlay: false,
+            compose: (panes, views, post, tonemap) => WorldRootGraph.Compose(
+                overlay: overlay,
                 packages: RenderGraphPackageCatalog.Engine,
                 post: post,
                 panes: panes,
@@ -52,11 +58,8 @@ internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> 
                 views: views
             ),
             runtime: fake,
-            synthesized: WorldRootGraph.Compose(
-                overlay: false,
-                packages: RenderGraphPackageCatalog.Engine,
-                post: null
-            )
+            scene: synthesized.Scene,
+            synthesized: synthesized
         );
 
         return fake;

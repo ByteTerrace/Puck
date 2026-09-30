@@ -15,9 +15,12 @@ public sealed partial class ShaderPipelineRenderNode {
     private bool m_timingEnabled;
     private long m_timingEpoch;
     private bool m_timingCompleted;
+    private string? m_timingRefusal;
+    private long m_timingRefusedFaultsRevision;
 
     /// <summary>Gets or sets whether pass timestamp queries are recorded. Off by default: no pools, buffers or query
-    /// operations exist until enabled. Disabling withdraws the readout immediately and retires pools after their fences.</summary>
+    /// operations exist until enabled. Disabling withdraws the readout immediately and retires pools after their fences.
+    /// Enabling again forgets an earlier refusal, so a new demand tries once more.</summary>
     public bool TimingEnabled {
         get => m_timingEnabled;
         set {
@@ -25,11 +28,17 @@ public sealed partial class ShaderPipelineRenderNode {
             m_timingEnabled = value;
             m_timingEpoch++;
             m_timingCompleted = false;
+            m_timingRefusal = null;
             m_timingRevision = -1;
             m_timings = [];
             PollTimings();
         }
     }
+    /// <summary>Gets why this node refused the timing it was asked for, or null while timing is off or recording. Timing
+    /// is observational: a device without timestamps, or a pool or readback the device would not create, refuses timing
+    /// by name and leaves the graph rendering. A refusal is tried again only when timing is enabled anew or the
+    /// operator's GPU faults move, never once per frame.</summary>
+    public string? TimingRefusal => (m_timingEnabled ? m_timingRefusal : null);
     /// <summary>Gets the current graph's completed per-pass means. Empty while disabled, unsupported, or awaiting its
     /// first timed submission. A pass with no completed pair has zero samples, never a fabricated time.</summary>
     public ReadOnlySpan<GpuPassTiming> Timings => ((m_timingCompleted && (m_timingRevision == m_revision)) ? m_timings : []);
@@ -47,9 +56,29 @@ public sealed partial class ShaderPipelineRenderNode {
         }
     }
 
+    // Timing records only while it is enabled and not refused.
+    private bool TimingActive => (m_timingEnabled && (m_timingRefusal is null));
+
     private void PrepareTiming(int slot) {
         PollTimings();
-        if (!TimingEnabled || (m_gpu.TimestampFactory is not { } factory) || (m_passLabels.Length == 0)) { return; }
+        if (!m_timingEnabled || (m_passLabels.Length == 0)) { return; }
+        if (m_timingRefusal is not null) {
+            if (FaultsRevision == m_timingRefusedFaultsRevision) { return; }
+            m_timingRefusal = null;
+        }
+        if (m_gpu.TimestampFactory is not { } factory) {
+            RefuseTiming(reason: "unsupported: the device records no timestamps");
+            return;
+        }
+        try {
+            ProvisionTiming(factory: factory, slot: slot);
+        } catch (Exception error) when ((error is not DeviceLostException)) {
+            RefuseTiming(reason: error.Message);
+        }
+    }
+    // Sizes the readout to the installed graph and creates the slot's pool and readback on its first timed frame. A
+    // slot whose creation fails releases what it created at once, since nothing recorded against it.
+    private void ProvisionTiming(IGpuTimestampFactory factory, int slot) {
         if (m_timingRevision != m_revision) {
             m_timings = new GpuPassTiming[m_passLabels.Length];
             m_timingValues = new double[(m_passLabels.Length * TimingWindow)];
@@ -69,7 +98,10 @@ public sealed partial class ShaderPipelineRenderNode {
         if (target.Pool is null) {
             target.Pool = factory.Create(count: checked((uint)(m_passLabels.Length * 2)),
                 name: new GpuObjectName(owner: m_name, part: "timing", index: slot));
-            if (target.Pool is null) { return; }
+            if (target.Pool is null) {
+                RefuseTiming(reason: "unsupported: the recording queue records no timestamps");
+                return;
+            }
             try {
                 target.Bytes = new byte[(m_passLabels.Length * 16)];
                 target.Recorded = new bool[m_passLabels.Length];
@@ -81,15 +113,24 @@ public sealed partial class ShaderPipelineRenderNode {
         target.Revision = m_revision;
         target.Epoch = m_timingEpoch;
     }
+    // Refuses timing by name. Slots that earlier submissions still read retire after their fences, as a disable's do.
+    private void RefuseTiming(string reason) {
+        m_timingRefusal = reason;
+        m_timingRefusedFaultsRevision = FaultsRevision;
+        m_timingRevision = -1;
+        m_timingCompleted = false;
+        m_timings = [];
+        PollTimings();
+    }
     private void BeginTiming(nint command, int slot, int pass) {
-        if (!TimingEnabled || (m_timingSlots.Length == 0) || (m_timingSlots[slot].Pool is not { } pool)) { return; }
+        if (!TimingActive || (m_timingSlots.Length == 0) || (m_timingSlots[slot].Pool is not { } pool)) { return; }
         var first = checked((uint)(pass * 2));
 
         pool.Reset(command: command, count: 2, first: first);
         pool.Write(command: command, index: first);
     }
     private void EndTiming(nint command, int slot, int pass) {
-        if (!TimingEnabled || (m_timingSlots.Length == 0) || (m_timingSlots[slot].Pool is not { } pool)) { return; }
+        if (!TimingActive || (m_timingSlots.Length == 0) || (m_timingSlots[slot].Pool is not { } pool)) { return; }
         var target = m_timingSlots[slot];
         var first = checked((uint)(pass * 2));
 
@@ -101,14 +142,14 @@ public sealed partial class ShaderPipelineRenderNode {
         target.Recorded[pass] = true;
     }
     private void SubmitTiming(int slot, IGpuSubmissionFence fence) {
-        if (TimingEnabled && (m_timingSlots.Length != 0) && (m_timingSlots[slot].Pool is not null)) {
+        if (TimingActive && (m_timingSlots.Length != 0) && (m_timingSlots[slot].Pool is not null)) {
             m_timingSlots[slot].Fence = fence;
         }
     }
     private void PollTimings() {
         foreach (var slot in m_timingSlots) {
             if ((slot.Fence is { } fence) && !fence.IsSignaled) { continue; }
-            if (!TimingEnabled) { slot.Dispose(); continue; }
+            if (!TimingActive) { slot.Dispose(); continue; }
             if (slot.Fence is null) { continue; }
             slot.Fence = null;
             if ((slot.Revision != m_revision) || (m_timingRevision != m_revision) || (slot.Epoch != m_timingEpoch)) { continue; }
@@ -139,6 +180,7 @@ public sealed partial class ShaderPipelineRenderNode {
         m_timingSlots = [];
         m_timingCompleted = false;
         m_timingEpoch++;
+        m_timingRefusal = null;
         m_timings = [];
         m_timingValues = [];
         m_timingNext = [];

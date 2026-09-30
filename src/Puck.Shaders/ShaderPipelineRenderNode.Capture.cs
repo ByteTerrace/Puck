@@ -31,6 +31,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
         m_capture.Serve(
             failureLabel: "[capture] failed",
+            frame: m_publishedFrame,
             tick: m_publishedStateTick,
             writer: (m_captureWriter ??= path => {
                 m_capturePng.ThrowIfUnavailable(path: path);

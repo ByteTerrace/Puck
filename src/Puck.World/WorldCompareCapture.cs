@@ -6,42 +6,53 @@ using Puck.World.Client;
 
 namespace Puck.World;
 
-/// <summary>Requests comparison images through the ordinary instance capture target, then consumes them on the next
-/// presentation pump before that pump replaces the captured frame's viewport metadata.</summary>
+/// <summary>Requests comparison images through the ordinary instance capture target and crops each by the seat viewports
+/// prepared for the frame that rendered it, which the capture names (<see cref="FrameCaptureResult.Frame"/>), however many
+/// frames later it completes.</summary>
 /// <param name="comparison">The session's per-seat held frames.</param>
 /// <param name="viewports">The frame presenter's seat metadata, absent in a headless host.</param>
 public sealed class WorldCompareCapture(WorldFrameComparison comparison, WorldSeatViewports? viewports = null) : IDisposable {
     private sealed record Pending(int Slot, bool Hold, FrameCaptureRequest Request, CommandSettlement Settlement);
 
+    /// <summary>The frames whose prepared viewports stay retained: more than a captured frame's readback can trail its
+    /// render by.</summary>
+    public const int RetainedFrames = 8;
+
     private Func<ICaptureRequestTarget>? m_target;
     private Pending? m_pending;
     private Func<ulong?>? m_completedFrames;
 
-    private readonly WorldSeatView[] m_prepared = new WorldSeatView[PlayerRoster.MaxSlots];
-    private readonly WorldSeatView[] m_published = new WorldSeatView[PlayerRoster.MaxSlots];
-
-    private ulong? m_preparedFrame;
-    private bool m_hasPrepared;
+    // The seat viewports prepared for each of the latest frames, by the ordinal the live root's render of that frame
+    // leaves its frame counter at; an ordinal of zero marks an empty entry.
+    private readonly WorldSeatView[][] m_frames = Enumerable.Range(count: RetainedFrames, start: 0)
+        .Select(selector: static _ => new WorldSeatView[PlayerRoster.MaxSlots]).ToArray();
+    private readonly ulong[] m_ordinals = new ulong[RetainedFrames];
 
     /// <summary>Gets or sets the late command-result fan-out used by the terminal and editor toast.</summary>
     public Action<CommandResult>? Report { get; set; }
 
     /// <summary>Attaches the live root's existing capture target; it excludes the comparison wrapper itself.</summary>
     /// <param name="target">The current live root's capture target.</param>
-    /// <param name="completedFrames">The live root's completed-frame ordinal; null for an external root with no node.</param>
-    public void Attach(Func<ICaptureRequestTarget> target, Func<ulong?>? completedFrames = null) {
+    /// <param name="completedFrames">The live root's completed-frame counter, which a capture of it names its frame by;
+    /// returns null while the live root renders through no node.</param>
+    public void Attach(Func<ICaptureRequestTarget> target, Func<ulong?> completedFrames) {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(completedFrames);
         m_target = target;
         m_completedFrames = completedFrames;
-        m_hasPrepared = false;
-        Array.Clear(array: m_published);
+        Array.Clear(array: m_ordinals);
     }
-    /// <summary>Remembers the viewports prepared for the upcoming render. A paused graph keeps its earlier published
-    /// viewports until its frame counter advances, even when the next dress changes the layout.</summary>
+    /// <summary>Remembers the viewports prepared for the upcoming render under the ordinal that render will leave the live
+    /// root's frame counter at. A frame that does not render (a paused graph) is prepared again under the same ordinal, so
+    /// the frame that last rendered keeps its own viewports.</summary>
     public void RecordPreparedFrame() {
-        if (viewports is null) { return; }
-        for (var slot = 0; (slot < m_prepared.Length); slot++) { m_prepared[slot] = viewports.Seat(slot: slot); }
-        m_preparedFrame = m_completedFrames?.Invoke();
-        m_hasPrepared = true;
+        if ((viewports is null) || (m_completedFrames?.Invoke() is not { } completed)) { return; }
+        var ordinal = (completed + 1);
+        var index = ((int)(ordinal % RetainedFrames));
+        var frame = m_frames[index];
+
+        for (var slot = 0; (slot < frame.Length); slot++) { frame[slot] = viewports.Seat(slot: slot); }
+        m_ordinals[index] = ordinal;
     }
     /// <summary>Gets whether the named seat has an outstanding hold or measurement.</summary>
     /// <param name="slot">The zero-based seat.</param>
@@ -66,11 +77,8 @@ public sealed class WorldCompareCapture(WorldFrameComparison comparison, WorldSe
         m_pending = new Pending(Hold: hold, Request: request, Settlement: settlement, Slot: slot);
         return CommandResult.Settling(settlement: settlement, late: result => Report?.Invoke(obj: result));
     }
-    /// <summary>Consumes a completed PNG before the frame presenter publishes the next frame's seat viewports.</summary>
+    /// <summary>Consumes a completed PNG, cropped by the viewports prepared for the frame that rendered it.</summary>
     public void Poll() {
-        if (m_hasPrepared && ((m_preparedFrame is null) || (m_completedFrames?.Invoke() != m_preparedFrame))) {
-            Array.Copy(sourceArray: m_prepared, destinationArray: m_published, length: m_prepared.Length);
-        }
         if (m_pending is not { Request.Completion.IsCompleted: true } pending) { return; }
         m_pending = null;
         var result = pending.Request.Completion.GetAwaiter().GetResult();
@@ -78,8 +86,8 @@ public sealed class WorldCompareCapture(WorldFrameComparison comparison, WorldSe
 
         try {
             if (result.Error is { } failure) { throw new InvalidOperationException(message: failure.Message, innerException: failure); }
+            var view = ViewOf(frame: result.Frame, slot: pending.Slot);
             var frame = PngDecoder.Decode(pngBytes: File.ReadAllBytes(path: result.Path));
-            var view = m_published[pending.Slot];
 
             if (pending.Hold) {
                 comparison.Hold(slot: pending.Slot, frame: frame, view: view, tick: (result.Tick ?? 0UL));
@@ -105,6 +113,15 @@ public sealed class WorldCompareCapture(WorldFrameComparison comparison, WorldSe
         );
     }
 
+    // The viewport prepared for a seat in the frame a capture names.
+    private WorldSeatView ViewOf(ulong? frame, int slot) {
+        if (frame is not { } ordinal) { throw new InvalidOperationException(message: "the capture names no rendered frame"); }
+        var index = ((int)(ordinal % RetainedFrames));
+
+        return ((m_ordinals[index] == ordinal)
+            ? m_frames[index][slot]
+            : throw new InvalidOperationException(message: $"the captured frame {ordinal} is older than the {RetainedFrames} frames whose viewports are retained"));
+    }
     private static CommandResult Refuse(string reason) => CommandResult.Error(output: $"[world.compare: {reason}]");
     private static void DeleteCapture(string path) {
         try { File.Delete(path: path); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {

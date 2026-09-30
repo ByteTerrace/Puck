@@ -8,7 +8,10 @@ namespace Puck.Abstractions.Presentation;
 /// <param name="Error">The capture failure, or null on success.</param>
 /// <param name="Tick">The tick of the state the served image shows, the tick its server says the image was rendered at;
 /// <see langword="null"/> when the server names none or no frame served the request.</param>
-public sealed record FrameCaptureResult(string Path, Exception? Error, ulong? Tick = null) {
+/// <param name="Frame">The serving node's ordinal of the frame that rendered the served image, counted as its completed
+/// frames were when that frame's render finished; <see langword="null"/> when the server counts no frames or no frame
+/// served the request.</param>
+public sealed record FrameCaptureResult(string Path, Exception? Error, ulong? Tick = null, ulong? Frame = null) {
     /// <summary>Gets whether the PNG write completed successfully.</summary>
     public bool Succeeded => (Error is null);
 }
@@ -66,11 +69,13 @@ public sealed class FrameCaptureRequest {
     /// <param name="tick">The tick of the state the image the writer reads was rendered from, which the result records
     /// (<see cref="FrameCaptureResult.Tick"/>): the tick of the frame that rendered it, however many frames before it is
     /// served; <see langword="null"/> when the server names none.</param>
+    /// <param name="frame">The serving node's ordinal of the frame that rendered that image
+    /// (<see cref="FrameCaptureResult.Frame"/>); <see langword="null"/> when the server counts none.</param>
     /// <returns>The terminal result, including any writer exception.</returns>
     /// <exception cref="InvalidOperationException">Another owner already claimed or refused this request.</exception>
     /// <exception cref="DeviceLostException">Readback lost the graphics device. Completion contains the same
     /// failure before this signal is rethrown for host recovery.</exception>
-    public FrameCaptureResult Write(Action<string> writer, ulong? tick = null) {
+    public FrameCaptureResult Write(Action<string> writer, ulong? tick = null, ulong? frame = null) {
         ArgumentNullException.ThrowIfNull(writer);
         if (Interlocked.CompareExchange(
             comparand: 0,
@@ -88,7 +93,8 @@ public sealed class FrameCaptureRequest {
             m_completion.SetResult(result: new FrameCaptureResult(
                 Path,
                 exception,
-                tick
+                tick,
+                frame
             ));
             throw;
         } catch (Exception exception) {
@@ -98,7 +104,8 @@ public sealed class FrameCaptureRequest {
         var result = new FrameCaptureResult(
             Path,
             error,
-            tick
+            tick,
+            frame
         );
 
         m_completion.SetResult(result: result);

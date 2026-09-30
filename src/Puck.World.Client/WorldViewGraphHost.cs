@@ -296,17 +296,22 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <param name="sources">The source instances the world's screens read (<see cref="WorldScreenMappingSet.Sources"/>).</param>
     /// <param name="rendered">The views the world renders beside its own (<see cref="WorldScreenMappingSet.Views"/>).</param>
     /// <param name="passes">The passes one render of a row's graph records.</param>
+    /// <param name="comparison">The editor's held frames, whose active comparisons are composed over the scene
+    /// (<see cref="WorldComparisonGraph"/>), or <see langword="null"/> for a host with none.</param>
     /// <param name="set">The instances, when this returns <see langword="true"/>.</param>
-    /// <param name="graphs">Each instance's graph, parallel to <paramref name="set"/>: the synthesized root's, and
-    /// <see langword="null"/> for every source, the world producer and every row.</param>
-    /// <param name="root">The instance the display shows.</param>
+    /// <param name="graphs">Each instance's graph, parallel to <paramref name="set"/>: the synthesized root's, the
+    /// comparison's and the overlay's, and <see langword="null"/> for every source, the world producer and every row.</param>
+    /// <param name="root">The instance the display shows: the overlay's when the synthesized graph draws it, over the
+    /// comparison when one is active, over the scene.</param>
+    /// <param name="scene">The instance holding the world image before any comparison or the overlay, which an editor
+    /// hold or measurement captures.</param>
     /// <param name="reason">Why the instances were refused.</param>
     /// <returns><see langword="true"/> when the instances form a valid set.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="views"/>, <paramref name="sources"/>,
     /// <paramref name="rendered"/> or <paramref name="passes"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="synthesized"/> is <see langword="null"/> and the section names
     /// no root.</exception>
-    public static bool TryCompose(WorldViewDefaults views, WorldRootGraph? synthesized, IReadOnlyList<RenderGraphInstance> sources, WorldViewInstances rendered, Func<WorldViewGraph, int> passes, [NotNullWhen(returnValue: true)] out RenderGraphInstanceSet? set, out IReadOnlyList<RenderGraphRuntimeGraph?> graphs, out string root, out string reason) {
+    public static bool TryCompose(WorldViewDefaults views, WorldRootGraph? synthesized, IReadOnlyList<RenderGraphInstance> sources, WorldViewInstances rendered, Func<WorldViewGraph, int> passes, WorldFrameComparison? comparison, [NotNullWhen(returnValue: true)] out RenderGraphInstanceSet? set, out IReadOnlyList<RenderGraphRuntimeGraph?> graphs, out string root, out string scene, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: views);
         ArgumentNullException.ThrowIfNull(argument: sources);
         ArgumentNullException.ThrowIfNull(argument: rendered);
@@ -362,21 +367,47 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             composed.AddRange(collection: synthesizedGraphs.Take(count: producers));
             composed.AddRange(collection: Enumerable.Repeat<RenderGraphRuntimeGraph?>(count: rows.Count, element: null));
             composed.AddRange(collection: synthesizedGraphs.Skip(count: producers));
-            root = synthesized.Root;
+            root = synthesized.Scene;
         }
 
         graphs = composed;
+        scene = root;
 
         if (!RenderGraphInstanceSet.TryCreate(
             instances: instances,
             refusal: out var refusal,
-            set: out set
+            set: out var composedSet
         )) {
+            set = null;
             reason = refusal.Message;
 
             return false;
         }
 
+        // An editor comparison is composed over the scene, and the overlay over whatever the display shows then, so the
+        // comparison sits under the HUD, the console and the cursor, and a hold captures the scene without them.
+        try {
+            if (comparison is not null) {
+                WorldComparisonGraph.Append(
+                    comparison: comparison,
+                    graphs: ref graphs,
+                    root: ref root,
+                    set: ref composedSet
+                );
+            }
+            synthesized?.AppendOverlay(
+                graphs: ref graphs,
+                root: ref root,
+                set: ref composedSet
+            );
+        } catch (WorldRootGraphRefusedException exception) {
+            set = null;
+            reason = exception.Message;
+
+            return false;
+        }
+
+        set = composedSet;
         reason = string.Empty;
 
         return true;
@@ -468,23 +499,26 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <c>render.tonemap</c>.</param>
     /// <param name="synthesized">The default graph the runtime was built with, or <see langword="null"/> when the booted
     /// document names its own root.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="runtime"/> or <paramref name="compose"/> is
-    /// <see langword="null"/>.</exception>
-    public void Attach(IRenderGraphInstances runtime, Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldTonemap, WorldRootGraph> compose, WorldRootGraph? synthesized) {
+    /// <param name="scene">The instance holding the scene in the set the runtime was built with (<see cref="TryCompose"/>).</param>
+    /// <exception cref="ArgumentNullException"><paramref name="runtime"/>, <paramref name="compose"/> or
+    /// <paramref name="scene"/> is <see langword="null"/>.</exception>
+    public void Attach(IRenderGraphInstances runtime, Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldTonemap, WorldRootGraph> compose, WorldRootGraph? synthesized, string scene) {
         ArgumentNullException.ThrowIfNull(argument: runtime);
         ArgumentNullException.ThrowIfNull(argument: compose);
+        ArgumentNullException.ThrowIfNull(argument: scene);
 
         m_compose = compose;
         m_lastSources = null;
         m_lastRendered = null;
         m_lastViews = null;
         m_runtime = runtime;
-        m_comparisonLiveRoot = runtime.Root;
+        m_comparisonLiveRoot = scene;
         m_lastComparisonRevision = 0;
-        // The first Reconcile composes the set again and derives the screens' footprints and the views' roots from it.
-        m_screenFootprints = [];
-        m_roots.Clear();
         m_synthesized = synthesized;
+        // The first Reconcile composes the set again and derives the screens' footprints and the views' roots from it; until
+        // then the display's own reads over the scene hold.
+        m_screenFootprints = DisplayFootprints(scene: scene);
+        m_roots.Clear();
         ResetFootprints();
     }
     /// <summary>Returns the frame values every graph instance presents at a frame before its own pointer, camera and
@@ -1083,7 +1117,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             passes: PassesOf,
             reason: out var reason,
             rendered: rendered,
+            comparison: Comparison,
             root: out var root,
+            scene: out var scene,
             set: out var set,
             sources: (sources?.Instances ?? []),
             synthesized: synthesized,
@@ -1132,11 +1168,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             ? (installed with { Inputs = InputsOf(row: row) })
             : graph))];
 
-        var liveRoot = root;
-
-        if (Comparison is { } comparison) {
-            try { WorldComparisonGraph.Append(comparison: comparison, graphs: ref graphs, root: ref root, set: ref set); } catch (WorldRootGraphRefusedException error) { ReportRefusal(reason: error.Message); return; }
-        }
         if (!runtime.TryReconfigure(
             graphs: graphs,
             refusal: out var refusal,
@@ -1152,15 +1183,15 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_lastRendered = Screens?.Views;
         m_lastViews = views;
         m_lastTonemap = tonemap;
-        m_comparisonLiveRoot = liveRoot;
+        m_comparisonLiveRoot = scene;
         m_lastComparisonRevision = (Comparison?.Revision ?? 0UL);
         m_refusal = null;
+        m_synthesized = synthesized;
         m_screenFootprints = ScreenFootprints(
             rendered: rendered,
             set: set
         );
-        if (Comparison is { } compared) { m_screenFootprints.AddRange(collection: WorldComparisonGraph.Footprints(comparison: compared, liveRoot: liveRoot)); }
-        m_synthesized = synthesized;
+        m_screenFootprints.AddRange(collection: DisplayFootprints(scene: scene));
         m_roots.Clear();
 
         foreach (var view in rendered.Views) {
@@ -1318,6 +1349,25 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             SetReportName,
             $"refused: {reason}"
         );
+    }
+    // The reads composed over the scene show at the whole display's extent: an active comparison's of the scene and its
+    // holds, and the overlay's of whatever it draws over.
+    private List<RenderGraphFootprint> DisplayFootprints(string scene) {
+        var footprints = new List<RenderGraphFootprint>();
+        var beneath = scene;
+
+        if (Comparison is { Active: true } comparison) {
+            footprints.AddRange(collection: WorldComparisonGraph.Footprints(
+                comparison: comparison,
+                liveRoot: scene
+            ));
+            beneath = WorldComparisonGraph.Root;
+        }
+        if (m_synthesized is { Overlays: true }) {
+            footprints.Add(item: WorldRootGraph.OverlayFootprint(beneath: beneath));
+        }
+
+        return footprints;
     }
     private void ResetFootprints() {
         m_footprints.Clear();

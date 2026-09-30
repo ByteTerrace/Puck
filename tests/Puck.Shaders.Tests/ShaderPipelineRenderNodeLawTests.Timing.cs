@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using Puck.Abstractions.Gpu;
 using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
@@ -90,6 +91,46 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         node.TimingEnabled = false;
         Assert.Equal(expected: 0UL, actual: node.TimingReadbackBytes);
         Assert.Equal(expected: 2, actual: gpu.Calls.GetValueOrDefault(key: "IGpuTimestampPool.Dispose"));
+    }
+    // Timing is observational: a pool or readback the device will not create refuses timing by name, the graph keeps
+    // rendering, nothing is tried again on a later frame, and what the failed slot created is released. Enabling again is
+    // a new demand, which tries once more.
+    [InlineData(GpuCreationKind.TimestampPool)]
+    [InlineData(GpuCreationKind.Buffer)]
+    [Theory]
+    public void GpuTimingCreationFaultRefusesTimingByNameAndFramesKeepRendering(GpuCreationKind kind) {
+        var gpu = new FakeGpuDevice(countCalls: true, trackObjects: true);
+        var faults = new GpuCreationFaults();
+        using var node = new ShaderPipelineRenderNode(name: "timing", deviceContext: new FaultingDevice(faults: faults, gpu: gpu),
+            pipelines: new GpuPassPipelineCache(), hostsOnDirectX: false, width: Extent, height: Extent);
+
+        node.Swap(pipeline: CanaryPipeline(canary: "pipeline-feedback", fileName: "feedback.graph.json"));
+        _ = node.ProduceUntilInstalled();
+        Produce(frames: WarmFrames, node: node);
+        faults.Arm(kind: kind);
+        var seen = faults.SeenOf(kind: kind);
+        var frames = node.FrameCounter;
+
+        node.TimingEnabled = true;
+        var surface = Produce(node: node);
+
+        Assert.False(condition: surface.IsEmpty);
+        Assert.False(condition: faults.TryGetArmed(kind: kind, remaining: out _));
+        Assert.Contains(expectedSubstring: GpuCreationFaults.RefusalCode, actualString: node.TimingRefusal);
+        Assert.Empty(collection: node.Timings.ToArray());
+        Produce(frames: WarmFrames, node: node);
+        Assert.Equal(expected: ((frames + 1UL) + WarmFrames), actual: node.FrameCounter);
+        Assert.Equal(expected: (seen + 1), actual: faults.SeenOf(kind: kind));
+        Assert.Equal(expected: 0, actual: gpu.Calls.GetValueOrDefault(key: "IGpuTimestampPool.Write"));
+        Assert.All(collection: gpu.Created.Where(predicate: static item => (item.Kind == "timestamp pool")),
+            action: static item => Assert.Equal(expected: 1, actual: item.DisposeCount));
+        Assert.Equal(expected: 0UL, actual: node.TimingReadbackBytes);
+
+        node.TimingEnabled = false;
+        node.TimingEnabled = true;
+        _ = Produce(node: node);
+        Assert.Null(@object: node.TimingRefusal);
+        Assert.True(condition: (gpu.Calls.GetValueOrDefault(key: "IGpuTimestampPool.Write") > 0));
     }
 
 }

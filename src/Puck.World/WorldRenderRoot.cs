@@ -95,11 +95,13 @@ internal static class WorldRenderRoot {
             : null);
 
         if (!WorldViewGraphHost.TryCompose(
+            comparison: comparison,
             graphs: out var graphs,
             passes: static _ => 1,
             reason: out var composeReason,
             rendered: binder.Mappings.Views,
             root: out var rootName,
+            scene: out var scene,
             set: out var set,
             sources: binder.Mappings.Sources.Instances,
             synthesized: synthesized,
@@ -241,6 +243,7 @@ internal static class WorldRenderRoot {
                 views: views
             ),
             runtime: runtime,
+            scene: scene,
             synthesized: synthesized
         );
         compareCapture.Attach(target: () => runtime.CaptureTarget(instance: host.ComparisonLiveRoot!),

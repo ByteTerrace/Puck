@@ -50,6 +50,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     // which a capture served from that image records, however many paused frames republish it; null while nothing
     // rendered is published.
     private ulong? m_publishedStateTick;
+    // The frame counter as the render that published the current image left it, which a capture of it records.
+    private ulong? m_publishedFrame;
     private Exception? m_lastSwapError;
     // Whether a device loss destroyed the published image. Nothing is published then, but no initialization frame is
     // owed: a paused node presents nothing, and refuses a capture, until its next step, resume or reset renders.
@@ -1304,6 +1306,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         // The published images were the released graph's or held from one, so nothing stays published.
         m_lastSurface = default;
         m_publishedStateTick = null;
+        m_publishedFrame = null;
         m_previousSurface = default;
         m_preview?.Dispose();
         m_preview = null;
@@ -1719,6 +1722,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_outputRefreshRequested = false;
         m_installedUnrendered = false;
         m_frame++;
+        m_publishedFrame = m_frame;
         CaptureIfPending();
         return m_lastSurface;
     }
@@ -1751,6 +1755,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_outputRefreshRequested = false;
         Publish(surface: default);
         m_publishedStateTick = null;
+        m_publishedFrame = null;
         SeedPassRegions();
         ResetWork();
     }

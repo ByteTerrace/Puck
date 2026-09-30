@@ -9,10 +9,11 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>The default render graph a world gets when it authors no root (<see cref="WorldRootGraph"/>): the world
-/// alone as the root when nothing is drawn over it; otherwise the root graph reading the world and running each
-/// <c>views.post</c> row as a pass of its package, named by the row, in document order, then the overlay, planned by the
-/// graph compiler; a <c>place</c> pass per pane a layout slot names, ahead of them, reading the pane's instance; and a
-/// row whose config does not bind refused by the compiler, naming the row.</summary>
+/// alone as the scene when nothing is drawn into it; otherwise the root graph reading the world and running each
+/// <c>views.post</c> row as a pass of its package, named by the row, in document order, planned by the graph compiler;
+/// a <c>place</c> pass per pane a layout slot names, ahead of them, reading the pane's instance; the overlay in an
+/// instance of its own over the scene, which is then the root; and a row whose config does not bind refused by the
+/// compiler, naming the row.</summary>
 public sealed class WorldRootGraphLawTests {
     private const string FilmGrain = RenderGraphPackageCatalog.SdfFilmGrain;
 
@@ -78,7 +79,11 @@ public sealed class WorldRootGraphLawTests {
 
         Assert.Equal(
             actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: ["main$view$1:place", "main$view$2:place", "moth-pipeline:place", $"grain:{FilmGrain}", "main$overlay:overlay"]
+            expected: ["main$view$1:place", "main$view$2:place", "moth-pipeline:place", $"grain:{FilmGrain}"]
+        );
+        Assert.Equal(
+            actual: Assert.IsType<RenderGraphPlan>(@object: filmic.OverlayPlan).Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
+            expected: ["main$overlay:overlay"]
         );
         Assert.Equal(
             actual: PlaceFields(plan: plan),
@@ -189,23 +194,33 @@ public sealed class WorldRootGraphLawTests {
 
         Assert.Equal(
             actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: [$"grain:{FilmGrain}", $"heavy-grain:{FilmGrain}", "main$overlay:overlay"]
+            expected: [$"grain:{FilmGrain}", $"heavy-grain:{FilmGrain}"]
         );
         Assert.Equal(
             actual: graph.Post,
             expected: post
         );
         Assert.Equal(
-            actual: (graph.Root, plan.Inputs.Single(), plan.Outputs.Single()),
-            expected: (WorldViewGraphs.MainInstance, "main$world", "main$frame")
+            actual: (graph.Scene, graph.Root, plan.Inputs.Single(), plan.Outputs.Single()),
+            expected: (WorldViewGraphs.MainInstance, WorldRootGraph.OverlayInstance, "main$world", "main$frame")
         );
 
         var main = graph.Instances.Single(predicate: static instance => (instance.Name == WorldViewGraphs.MainInstance));
 
         Assert.Equal(
             actual: (main.Passes, main.Kind, Assert.Single(collection: main.Reads).Producer),
-            expected: (3, RenderGraphInstanceKind.Graph, WorldViewGraphs.WorldInstance)
+            expected: (2, RenderGraphInstanceKind.Graph, WorldViewGraphs.WorldInstance)
         );
+
+        // The overlay is an instance of its own, appended over whatever the display shows, and never an instance of the
+        // scene's own set.
+        var overlay = Assert.IsType<RenderGraphPlan>(@object: graph.OverlayPlan);
+
+        Assert.Equal(
+            actual: (Assert.Single(collection: overlay.Steps).Name, overlay.Inputs.Single(), overlay.Outputs.Single()),
+            expected: ("main$overlay", "main$scene", "main$frame")
+        );
+        Assert.DoesNotContain(collection: graph.Instances, filter: static instance => (instance.Name == WorldRootGraph.OverlayInstance));
         Assert.Equal(
             actual: Assert.Single(collection: graph.Footprints),
             expected: new RenderGraphFootprint(
@@ -274,6 +289,7 @@ public sealed class WorldRootGraphLawTests {
         );
         Assert.Empty(collection: WorldRootGraph.PanesOf(views: new WorldViewDefaults()));
     }
+    // With nothing drawn into the scene, the world is the scene and the overlay's instance, drawing over it, is the root.
     [Fact]
     public void OnlyTheOverlayIsDrawnOverAWorldWithNoPostPasses() {
         var graph = WorldRootGraph.Compose(
@@ -282,9 +298,10 @@ public sealed class WorldRootGraphLawTests {
             post: []
         );
 
+        Assert.Null(@object: graph.Plan);
         Assert.Equal(
-            actual: Assert.Single(collection: graph.Plan!.Steps).Name,
-            expected: "main$overlay"
+            actual: (graph.Scene, graph.Root, Assert.Single(collection: graph.OverlayPlan!.Steps).Name),
+            expected: (WorldViewGraphs.WorldInstance, WorldRootGraph.OverlayInstance, "main$overlay")
         );
         Assert.Empty(collection: graph.Post);
     }
@@ -301,7 +318,11 @@ public sealed class WorldRootGraphLawTests {
 
         Assert.Equal(
             actual: graph.Plan!.Steps.Select(selector: static step => step.Name),
-            expected: ["frame", "stage1", "overlay", "main$overlay"]
+            expected: ["frame", "stage1", "overlay"]
+        );
+        Assert.Equal(
+            actual: graph.OverlayPlan!.Steps.Select(selector: static step => step.Name),
+            expected: ["main$overlay"]
         );
     }
     [Fact]
