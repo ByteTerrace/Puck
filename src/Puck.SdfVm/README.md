@@ -287,7 +287,11 @@ its `NotReadyReason`, such as "the engine's pipeline set is building (5 of
 A residency is `IsReady` once its set is installed and its tables hold its
 first captured frame; the World is ready once the world's residency is and the
 render graph's root has rendered over a completed view, which is the fact
-`world.wait ready` waits on. A
+`world.wait ready` waits on. A host that produces frames on its own thread and
+has nothing to present until the builds finish blocks between frames on
+`WaitPipelineBuilds`, which waits out the set's builds and a kernel reload's
+without taking or starting anything, so the next frame builds, refuses or
+installs as it would had frames been produced meanwhile. A
 `views.graphs` pane is not part of any residency: it is its own render-graph
 instance with its own node, so it compiles and builds its pipelines without
 waiting for the SDF set. A residency keeps its lease until a device loss or

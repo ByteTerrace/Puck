@@ -142,11 +142,11 @@ public sealed partial class SdfWorldPassesLawTests {
             m_context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
                 Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = m_gpu }),
                 StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent);
-            Assert.True(condition: SpinWait.SpinUntil(condition: () => {
+            SdfTestPipelines.ProduceUntil(frame: () => {
                 Produce();
                 return (Selected.IsReady && Passes.HasRenderedResolvedView(instance: "world") &&
                     (World.Extent == (Extent, Extent)) && !World.IsBuildingCandidate);
-            }, timeout: TimeSpan.FromSeconds(value: 30)));
+            }, reason: () => Selected.NotReadyReason, wait: Selected.WaitPipelineBuilds);
             Produce();
 
             SdfWorldResidency Residency(string name) => new(

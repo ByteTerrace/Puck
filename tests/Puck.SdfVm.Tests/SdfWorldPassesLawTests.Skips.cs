@@ -42,11 +42,11 @@ public sealed partial class SdfWorldPassesLawTests {
             TargetWidth: Extent
         );
 
-        // The bound is liveness for a build over a fake device; it decides nothing.
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => view.Produce(context: in context),
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ), userMessage: view.NotReadyReason);
+        SdfTestPipelines.ProduceUntil(
+            frame: () => view.Produce(context: in context),
+            reason: () => view.NotReadyReason,
+            wait: view.Residency.WaitPipelineBuilds
+        );
 
         for (var frameIndex = 0; (frameIndex < 3); frameIndex++) {
             _ = view.Produce(context: in context);

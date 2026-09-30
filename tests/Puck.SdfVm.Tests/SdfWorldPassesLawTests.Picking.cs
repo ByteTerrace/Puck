@@ -27,8 +27,8 @@ public sealed partial class SdfWorldPassesLawTests {
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        Assert.True(condition: SpinWait.SpinUntil(condition: () => view.Produce(context: in context),
-            timeout: TimeSpan.FromSeconds(value: 30)), userMessage: view.NotReadyReason);
+        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+            reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         var copies = 0;
         var boxes = 0;
         var reads = 0;
@@ -108,8 +108,8 @@ public sealed partial class SdfWorldPassesLawTests {
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        Assert.True(condition: SpinWait.SpinUntil(condition: () => view.Produce(context: in context),
-            timeout: TimeSpan.FromSeconds(value: 30)), userMessage: view.NotReadyReason);
+        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+            reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         var copies = new List<ulong>();
 
         gpu.OnBufferCopy = (_, bytes) => { if (bytes is PickRecordBytes or SurfaceRecordBytes) { copies.Add(item: bytes); } };
@@ -180,8 +180,8 @@ public sealed partial class SdfWorldPassesLawTests {
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        Assert.True(condition: SpinWait.SpinUntil(condition: () => view.Produce(context: in context),
-            timeout: TimeSpan.FromSeconds(value: 30)), userMessage: view.NotReadyReason);
+        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+            reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         var copied = new List<(uint X, uint Y)>();
         var answered = new List<(uint X, uint Y)>();
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
@@ -245,8 +245,8 @@ public sealed partial class SdfWorldPassesLawTests {
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        Assert.True(condition: SpinWait.SpinUntil(condition: () => view.Produce(context: in context),
-            timeout: TimeSpan.FromSeconds(value: 30)), userMessage: view.NotReadyReason);
+        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+            reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         gpu.WriteReadback = bytes => WriteBox(box: WholeBox, bytes: bytes);
         var node = view.Runtime.Node(instance: 0);
         var installed = node.Plan;
@@ -257,11 +257,11 @@ public sealed partial class SdfWorldPassesLawTests {
         current = current with { Views = [current.Views[0] with { RenderScale = 0.5f, ResolvedRenderScale = 0.5f }] };
         var request = picker.Request(x: 0.25f, y: 0.75f);
 
-        Assert.True(condition: SpinWait.SpinUntil(condition: () => {
+        SdfTestPipelines.ProduceUntil(frame: () => {
             _ = view.Produce(context: in context);
 
             return (!ReferenceEquals(objA: node.Plan, objB: installed) && !node.IsBuildingCandidate);
-        }, timeout: TimeSpan.FromSeconds(value: 30)), userMessage: node.LastSwapError?.ToString());
+        }, reason: () => node.LastSwapError?.ToString(), wait: view.Residency.WaitPipelineBuilds);
         for (var frame = 0; (frame < 4); frame++) {
             _ = view.Produce(context: in context);
         }
@@ -280,8 +280,8 @@ public sealed partial class SdfWorldPassesLawTests {
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        Assert.True(condition: SpinWait.SpinUntil(condition: () => view.Produce(context: in context),
-            timeout: TimeSpan.FromSeconds(value: 30)), userMessage: view.NotReadyReason);
+        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+            reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         gpu.WriteReadback = bytes => WriteBox(box: WholeBox, bytes: bytes);
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
         var first = picker.Request(x: 0.25f, y: 0.75f);

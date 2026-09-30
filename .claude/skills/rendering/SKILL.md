@@ -587,9 +587,11 @@ These are one-line cautions; the owning pages hold the derivations.
   and neither does a reduced view's first resolve build (`SdfWorldPipelines.BuildResolve`),
   which takes no reflector and needs no shader toolchain; its kernel is the set's
   own, deployed or reflected by the reload that installed it. A new SDF pipeline is a row in
-  `SdfWorldTables.PipelineLayouts.Specs`, never a create call in the tables. A harness that drives a residency polls
-  `SdfWorldResidency.IsReady`
-  (`SdfTestPipelines.ProduceFirstFrame` in `tests/Shared`, whose `Kernels` is the one fake kernel set);
+  `SdfWorldTables.PipelineLayouts.Specs`, never a create call in the tables. A harness that drives a residency produces frames
+  and blocks between them on `SdfWorldResidency.WaitPipelineBuilds`, never spinning
+  (`SdfTestPipelines.ProduceUntil` and `ProduceFirstFrame` in `tests/Shared`, whose
+  `Liveness` is the one bound a harness gives thread-pool work and whose `Kernels`
+  is the one fake kernel set);
   `SdfPipelineBuildLivenessLawTests` holds the factory and proves the pump
   still drains the console, and that a device loss or the last release waits
   for exactly the `BuildConcurrency` creations in the driver, counted through

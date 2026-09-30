@@ -125,6 +125,32 @@ public sealed class BackgroundBuild<T> where T : class {
             function: () => build(arg: token)
         );
     }
+    /// <summary>Blocks until the pending build finishes, successfully or not, without taking it: <see cref="TryTake"/>
+    /// takes its result or its failure afterwards. For an owner with nothing to do until the build finishes; a build
+    /// that has not started yet may run inline on this thread.</summary>
+    /// <param name="cancellationToken">The token that ends the wait; the build keeps running.</param>
+    /// <returns><see langword="true"/> when a build was pending; <see langword="false"/> when none was.</returns>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public bool WaitFinished(CancellationToken cancellationToken) =>
+        WaitOut(
+            cancellationToken: cancellationToken,
+            completion: m_task
+        );
+
+    // Waits for a build's task, whose failure is left for its taker; returns whether there was one to wait for.
+    internal static bool WaitOut(Task? completion, CancellationToken cancellationToken) {
+        if (completion is null) {
+            return false;
+        }
+
+        try {
+            completion.Wait(cancellationToken: cancellationToken);
+        } catch (AggregateException) {
+        }
+
+        return true;
+    }
+
     /// <summary>Takes the finished build, if it has finished. Once this returns <see langword="true"/> the build is no
     /// longer pending and the caller owns the result.</summary>
     /// <param name="result">The built candidate when the build succeeded; otherwise <see langword="null"/>.</param>

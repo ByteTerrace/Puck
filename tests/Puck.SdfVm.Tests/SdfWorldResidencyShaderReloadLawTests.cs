@@ -233,8 +233,7 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
             width: Extent
         );
     }
-    // Requests a reload of the tree and produces frames until it finishes. The bound is liveness for the pipeline build on
-    // the thread pool; it decides nothing.
+    // Requests a reload of the tree and produces frames until it finishes.
     private static SdfShaderReloadStatus Reload(in FrameContext context, SdfWorldResidency node, string root) {
         var copy = context;
 
@@ -242,14 +241,15 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
             compiler: new ShaderCompiler(cacheDirectory: Path.Combine(path1: Path.GetTempPath(), path2: "puck-test-shader-cache")),
             tree: root
         ));
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        SdfTestPipelines.ProduceUntil(
+            frame: () => {
                 _ = node.Produce(context: in copy);
 
                 return (node.ShaderReloadStatus.State != "pending");
             },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            reason: () => $"the reload is still {node.ShaderReloadStatus.State}",
+            wait: node.WaitPipelineBuilds
+        );
 
         return node.ShaderReloadStatus;
     }

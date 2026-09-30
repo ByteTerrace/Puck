@@ -167,6 +167,29 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             slots: m_slots
         );
     }
+    /// <summary>Blocks until every pending build of the set has finished, successfully or not, without taking any result,
+    /// so the next <see cref="Poll"/> sees what it would had the holder kept polling
+    /// (<see cref="GpuBuildLease{TKey, T}.WaitFinished"/>).</summary>
+    /// <param name="cancellationToken">The token that ends the wait; the entries keep building.</param>
+    /// <returns><see langword="true"/> when any build was pending; <see langword="false"/> when none was.</returns>
+    /// <exception cref="ObjectDisposedException">The set has been disposed.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public bool WaitFinished(CancellationToken cancellationToken) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        var waited = false;
+
+        foreach (var slot in m_slots) {
+            if (slot is not null) {
+                waited |= slot.Lease.WaitFinished(cancellationToken: cancellationToken);
+            }
+        }
+
+        return waited;
+    }
     /// <summary>Leases replacements for the pipelines whose bytecode differs between the installed kernels and
     /// <paramref name="kernels"/>; unchanged bytecode leases nothing. Before it leases anything it reflects each changed
     /// kernel through <paramref name="reflector"/> and holds it to this host's interface

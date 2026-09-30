@@ -160,6 +160,27 @@ public sealed class GpuBuildCache<TKey, T> where TKey : IEquatable<TKey> where T
             }
         }
     }
+    // Waits outside the gate for the entry's pending build, leaving its result, or its failure, for the next poll to take.
+    internal bool WaitFinished(GpuBuildLease<TKey, T>.Entry entry, CancellationToken cancellationToken) {
+        Task? completion;
+
+        lock (m_gate) {
+            ObjectDisposedException.ThrowIf(
+                condition: entry.IsReleased,
+                type: typeof(GpuBuildLease<TKey, T>)
+            );
+
+            completion = ((entry.Value is null)
+                ? entry.Build.Completion
+                : null
+            );
+        }
+
+        return BackgroundBuild<T>.WaitOut(
+            cancellationToken: cancellationToken,
+            completion: completion
+        );
+    }
 
     private void StartBuild(GpuBuildLease<TKey, T>.Entry entry) {
         var request = new GpuBuildRequest<TKey>(
@@ -320,6 +341,28 @@ public sealed class GpuBuildLease<TKey, T> where TKey : IEquatable<TKey> where T
         );
 
         return cache!.Wait(
+            cancellationToken: cancellationToken,
+            entry: m_entry
+        );
+    }
+    /// <summary>Blocks until the entry's pending build finishes, successfully or not, without taking its result: the next
+    /// <see cref="Poll"/> takes the value, or rethrows the failure, as it would had the holder kept polling. For a holder
+    /// that polls on the frame thread and has nothing to do until the build finishes, such as a host producing its first
+    /// frame offscreen; unlike <see cref="Wait"/>, it never starts a build.</summary>
+    /// <param name="cancellationToken">The token that ends the wait; the build keeps running.</param>
+    /// <returns><see langword="true"/> when a build was pending, which has finished since; <see langword="false"/> when
+    /// none was: the value is ready, or a failed build was taken and no poll has started another.</returns>
+    /// <exception cref="ObjectDisposedException">The lease has been released.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public bool WaitFinished(CancellationToken cancellationToken) {
+        var cache = m_cache;
+
+        ObjectDisposedException.ThrowIf(
+            condition: (cache is null),
+            instance: this
+        );
+
+        return cache!.WaitFinished(
             cancellationToken: cancellationToken,
             entry: m_entry
         );
