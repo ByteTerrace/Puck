@@ -1157,14 +1157,15 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// frame (<see cref="IWorldScreenPresenter.Publish"/>), so every source the frame acquires sees one answer from
     /// the capture gate, then reconciles the document's <c>views.graphs</c> rows and the screens' source instances onto
     /// the runtime, hands every graph instance this frame's presented tick and
-    /// presentation time, then places each view of the world the last composed frame rendered in its rect at its render
-    /// scale and the live upscale sharpness, and, for each graph instance a slot of the last composed layout shows,
+    /// presentation time, then places each view of the world the last composed frame rendered in its output rect with the
+    /// live upscale sharpness, and, for each graph instance a slot of the last composed layout shows,
     /// places it in its slot's rect, advances its clock, and hands it this frame's camera, pointer and its own time, and
     /// then publishes the mapping of every pane the root draws (<see cref="WorldViewGraphHost.PublishPanes"/>), which the
     /// pane pointer, the picker and the hit walk read. The tick is the state mirror's delivered engine tick and the time
     /// the mirror's presented engine tick at this frame's interpolation fraction (one for an offscreen presentation), in
-    /// seconds, so a pass reads no wall clock. A lone view covering the whole display at native scale is not shown: the
-    /// root then stands for the world itself. Whether a pane covers the whole display decides whether pixels no view
+    /// seconds, so a pass reads no wall clock. A lone view covering the whole display with no tonemap is not shown at any
+    /// render scale, since the view reconstructs its own output: the root then stands for the world itself and publishes
+    /// it as no pane. Whether a pane covers the whole display decides whether pixels no view
     /// covers owe the letterbox color (<see cref="WorldViewGraphHost.PlaceViews"/>). The views and slots are the ones the
     /// last captured frame composed, since the world producer captures its frame inside the runtime's schedule, so a
     /// layout change places its views and panes one frame later.</summary>
