@@ -727,10 +727,11 @@ all four live. The notes below record how each landed.
     binds whatever image its producer publishes, since it is only sampled; and a
     package recorder's resolved images carry the layout their planned access
     left them in.
-  - The synthesized default composition of two instances, `world` as the
-    external `sdf.world` producer and the root graph that reads it and runs the
-    `views.post` passes and then `overlay`, landed with the live wiring
-    (commit 6).
+  - The synthesized default composition has `world` as the external
+    `sdf.world` producer and a graph that reads it and runs the `views.post`
+    passes. Offscreen, that graph also runs `overlay` and is the root; a
+    windowed World draws the overlay in its own instance, `main$overlay`,
+    which is the root, so a comparison sits under it.
   - `RenderGraphRuntimeLawTests.External` holds the runtime to it over a fake
     producer on `FakePipelineGpu`: the latest output bound on every render, a
     lease retired only after the sampling slot's fence, a skipped producer frame
