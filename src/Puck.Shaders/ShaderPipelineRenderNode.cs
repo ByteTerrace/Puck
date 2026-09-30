@@ -1618,6 +1618,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             CaptureIfPending();
             return m_lastSurface;
         }
+        // A node shown at its own extent presents no frame rendered at an extent it was not asked for.
+        if (ShownAtItsExtent && RendersAnotherExtent) {
+            return m_lastSurface;
+        }
         if (stepping) {
             m_steps--;
         }
@@ -1723,6 +1727,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_frameLeases.MoveTo(destination: slot.Leases);
         Publish(surface: Output(slot: slotIndex));
         m_publishedStateTick = Frame.StateTick;
+        m_publishedAtRequestedExtent = !RendersAnotherExtent;
         m_outputRefreshRequested = false;
         m_installedUnrendered = false;
         m_frame++;
@@ -1765,7 +1770,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     }
     /// <summary>Requests a new frame extent. The pipeline is rebuilt at the new extent as a candidate beside the
     /// installed graph, exactly like a reload: its pipelines build on the thread pool while the installed graph keeps
-    /// producing at its current extent, and it installs at the first frame boundary after. History whose resolved
+    /// producing at its current extent, unless the node is <see cref="ShownAtItsExtent"/>, and it installs at the first
+    /// frame boundary after. No capture reads a frame rendered meanwhile. History whose resolved
     /// extent is unchanged carries over with its contents, history whose extent changes starts again from its declared
     /// initialization, and the old graph retires like any replaced graph. A resize replaces the graph and is not a step:
     /// a paused instance builds and installs it too, renders nothing, and keeps publishing its last image until its next

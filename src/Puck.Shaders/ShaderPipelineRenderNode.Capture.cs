@@ -8,11 +8,15 @@ public sealed partial class ShaderPipelineRenderNode {
     public void PollCapture() => CaptureIfPending();
 
     // A capture armed after a selection reads that selection: while its preview builds, the published image is still the
-    // previous selection's, so the capture waits for the frame that publishes the new one. A published image no surface
+    // previous selection's, so the capture waits for the frame that publishes the new one. It likewise waits past an image
+    // rendered at an extent the node was not asked for (ShownAtItsExtent). A published image no surface
     // carries (a float working image) is captured through the display encode's SDR, which waits while its pipeline
     // builds and moves the image out of the layout it was published in to sample it, and back.
     private void CaptureIfPending() {
-        if (m_previewRequest is not null) {
+        if (
+            (m_previewRequest is not null) ||
+            !m_publishedAtRequestedExtent
+        ) {
             return;
         }
         if (

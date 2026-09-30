@@ -6,9 +6,11 @@ namespace Puck.World;
 
 /// <summary>
 /// The offscreen presentation's own console surface, <c>world.resize</c>: an offscreen host has no window whose size
-/// could change, so a script resizes its display here. The next produced frame renders at the new extent: the offscreen
-/// host asks its render root for it, the root schedules every instance's footprint against it, and every camera and
-/// session view fits its declared extent to it. Registered only by <c>AddWorldOffscreenPresentation</c>.
+/// could change, so a script resizes its display here. The next produced frame composes its cameras for the new extent:
+/// the offscreen host asks its render root for it, the root schedules every instance's footprint against it, and every
+/// camera and session view fits its declared extent to it. The root presents its last image until its graph installs
+/// the new extent, so no frame shows a projection composed for another, and a capture armed meanwhile lands on the first
+/// frame at the new extent. Registered only by <c>AddWorldOffscreenPresentation</c>.
 /// </summary>
 internal sealed class WorldOffscreenCommandModule(OffscreenRenderOptions options, WorldRenderProbe probe, WorldScreenBinder binder, WorldFramePresenter presenter) : ICommandModule {
     private const string Verb = "world.resize";
@@ -69,7 +71,7 @@ internal sealed class WorldOffscreenCommandModule(OffscreenRenderOptions options
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: Verb,
-            description: "Resizes the offscreen display live: world.resize <width> <height>, each 1..16384 pixels. The next produced frame renders at the new extent, the render root, its views and a world.screenshot capture included, so a script checks a resize without a window. No argument echoes the current extent. Offscreen only: a windowed host's display keeps its document extent, which the swap chain scales to the window.",
+            description: "Resizes the offscreen display live: world.resize <width> <height>, each 1..16384 pixels. The display shows its last image until the render root has installed the new extent, and a world.screenshot armed meanwhile captures the first frame at it, so a script checks a resize without a window. No argument echoes the current extent. Offscreen only: a windowed host's display keeps its document extent, which the swap chain scales to the window.",
             handler: Handler
         );
     }

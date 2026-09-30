@@ -603,7 +603,8 @@ These are one-line cautions; the owning pages hold the derivations.
   once) and taken by a later one, never the advance that started it, however
   fast it finished, so the frame an install lands in never depends on the
   pool's timing; it allocates the candidate's resources on the frame thread when
-  the build is taken, and presents the installed graph meanwhile; its install drains
+  the build is taken, and presents the installed graph meanwhile (a node
+  `ShownAtItsExtent` presents its last image while a resize is outstanding); its install drains
   nothing, and the replaced graph retires once the node's latest submission has
   completed (at once when it has), except the images behind the two most
   recently published surfaces, which `ShaderPipelineRenderNode.Retirement.cs`
@@ -1541,7 +1542,17 @@ registration's camera into the frame after them
 presenter's own views (`WorldScreenBinder.HostView`), so a stale seat index
 never renders a camera. The root supplies the display extent through
 `WorldFramePresenter.ResizeDisplay`; own cameras and viewports use it even
-when a probe export widens the shared residency's requested extent.
+when a probe export widens the shared residency's requested extent. A camera
+projects in normalized image coordinates, so its aspect is its rect's, never its
+grid's: a render-scale grid, a transition's dip or a view output still at its old
+extent while a resize builds only resamples, and `place` stretches it back. The
+root alone is shown at its own extent, so the runtime marks it
+`ShaderPipelineRenderNode.ShownAtItsExtent`: while its requested extent builds or
+stays refused it presents its last image, and on every node a capture reads only
+an image rendered at the extent last requested of it (`UnservedCaptureReasonOf`
+names the extent it waits for). Never tie a camera's aspect to a node's
+installed extent; that distorts every placed view during a resize or a layout
+transition.
 A session screen renders an `SdfWorldResidency` of its
 own, one view and no brick pool, from the destination's own frame source on its
 own clock, released in `ReconcileViewResidencies` once the session is gone. A

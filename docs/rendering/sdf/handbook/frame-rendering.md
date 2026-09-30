@@ -178,6 +178,17 @@ view in such a rect is filtered twice: once by `resolve` and again by `place`. A
 lone whole-display view can stand directly, including at a reduced internal
 render scale.
 
+A view's camera maps the image in normalized coordinates, so the aspect it
+projects is the aspect of the rect it was composed for, never of the grid it is
+traversed on. A reduced grid, a transition's dip or an output still at its
+previous extent while a resize builds changes only how densely the view samples
+that rect, and `place` stretches the output back into it. The one image shown at
+its own extent is the root's, which the host presents as the display: a display
+resize composes the cameras for the new extent at once, so until the root's graph
+installs that extent the root presents its last image and a capture waits for
+the first frame at it
+([loading and installing](../../../reference/shaders.md#loading-and-installing)).
+
 A view whose ceiling is native keeps the original ten-pass fragment and writes
 its output directly. It allocates no resolve resources and ignores the current
 grid, so a layout transition does not dip it. A changed ceiling rebuilds the
