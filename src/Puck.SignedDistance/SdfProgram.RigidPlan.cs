@@ -127,14 +127,14 @@ public sealed partial class SdfProgram {
             (segment.End < m_instructions.Length) &&
             (m_instructions[segment.End].Op != SdfOp.ResetPoint)
         ) {
-            dynamicSlot = -1;
+            dynamicSlot = NoDynamicTransformSlot;
 
             return false;
         }
 
         var firstLeaf = leaves.Count;
         var commonDynamicSlot = int.MinValue;
-        var chainDynamicSlot = -1;
+        var chainDynamicSlot = NoDynamicTransformSlot;
         var position = Vector3.Zero;
         var rotation = Quaternion.Identity;
         // The chain's fold run: the pose before it, and the instructions from its first fold through its last, which may
@@ -151,7 +151,7 @@ public sealed partial class SdfProgram {
 
             switch (instruction.Op) {
                 case SdfOp.ResetPoint: {
-                        chainDynamicSlot = -1;
+                        chainDynamicSlot = NoDynamicTransformSlot;
                         position = Vector3.Zero;
                         rotation = Quaternion.Identity;
                         foldFirst = -1;
@@ -170,11 +170,11 @@ public sealed partial class SdfProgram {
                         );
 
                         if (
-                            (chainDynamicSlot >= 0) ||
+                            (chainDynamicSlot != NoDynamicTransformSlot) ||
                             shapeSinceFold ||
                             (runLength > RigidLeafMaxFoldRun)
                         ) {
-                            dynamicSlot = -1;
+                            dynamicSlot = NoDynamicTransformSlot;
 
                             return false;
                         }
@@ -223,11 +223,11 @@ public sealed partial class SdfProgram {
                         // just not this compact two-vector leaf format, so leave that uncommon chain on the fallback.
                         if (
                             (foldCount > 0) ||
-                            (chainDynamicSlot >= 0) ||
+                            (chainDynamicSlot != NoDynamicTransformSlot) ||
                             (position != Vector3.Zero) ||
                             !rotation.IsIdentity
                         ) {
-                            dynamicSlot = -1;
+                            dynamicSlot = NoDynamicTransformSlot;
 
                             return false;
                         }
@@ -245,7 +245,7 @@ public sealed partial class SdfProgram {
                         if (int.MinValue == commonDynamicSlot) {
                             commonDynamicSlot = chainDynamicSlot;
                         } else if (commonDynamicSlot != chainDynamicSlot) {
-                            dynamicSlot = -1;
+                            dynamicSlot = NoDynamicTransformSlot;
 
                             return false;
                         }
@@ -306,7 +306,7 @@ public sealed partial class SdfProgram {
                         break;
                     }
                 default: {
-                        dynamicSlot = -1;
+                        dynamicSlot = NoDynamicTransformSlot;
 
                         return false;
                     }
@@ -314,7 +314,7 @@ public sealed partial class SdfProgram {
         }
 
         if (leaves.Count == firstLeaf) {
-            dynamicSlot = -1;
+            dynamicSlot = NoDynamicTransformSlot;
 
             return false;
         }
@@ -325,8 +325,8 @@ public sealed partial class SdfProgram {
     }
 
     // A segment either maps to a contiguous rigid-leaf run or has LeafCount == 0 and stays on the generic interpreter.
-    // DynamicSlot is shared by the run (-1 = static); requiring one slot lets mapCore hoist the per-frame bone transform
-    // once for every coalesced primitive in that segment.
+    // DynamicSlot is shared by the run (NoDynamicTransformSlot when static); requiring one slot lets mapCore hoist the
+    // per-frame bone transform once for every coalesced primitive in that segment.
     private readonly record struct RigidSegmentPlan(int FirstLeaf, int LeafCount, int DynamicSlot);
     // A leaf slot. A folded leaf (FoldCount > 0) is followed by an extension slot carrying the pose before its folds;
     // the extension repeats the fold fields and sets IsFoldExtension.

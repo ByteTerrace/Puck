@@ -1072,7 +1072,7 @@ public sealed class WorldRenderLightingSkyLawTests {
             live.Weight
         );
         Assert.Equal(
-            -1,
+            SdfProgram.NoDynamicTransformSlot,
             live.DynamicSlot
         );
         Assert.Equal(
@@ -1134,7 +1134,7 @@ public sealed class WorldRenderLightingSkyLawTests {
             actual: resolved.GetLight(index: 0).Kind
         );
         Assert.Equal(
-            expected: -1,
+            expected: SdfProgram.NoDynamicTransformSlot,
             actual: resolved.GetLight(index: 0).DynamicSlot
         );
         Assert.Equal(
@@ -1150,7 +1150,7 @@ public sealed class WorldRenderLightingSkyLawTests {
             actual: resolved.GetLight(index: 1).Kind
         );
         Assert.Equal(
-            expected: -1,
+            expected: SdfProgram.NoDynamicTransformSlot,
             actual: resolved.GetLight(index: 1).DynamicSlot
         );
     }
@@ -1212,7 +1212,7 @@ public sealed class WorldRenderLightingSkyLawTests {
         });
 
         Assert.Equal(
-            expected: -1,
+            expected: SdfProgram.NoDynamicTransformSlot,
             actual: resolved.GetLight(index: 0).DynamicSlot
         );
     }

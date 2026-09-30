@@ -54,13 +54,13 @@ public sealed class WorldRenderCycleTrack {
                 index: index,
                 light: ((pose is { } frame)
                 ? light with {
-                    DynamicSlot = -1,
+                    DynamicSlot = SdfProgram.NoDynamicTransformSlot,
                     Direction = (frame.Position + Vector3.Transform(
                         light.Direction,
                         frame.Orientation
                     )),
                 }
-                : light with { DynamicSlot = -1, Weight = 0f })
+                : light with { DynamicSlot = SdfProgram.NoDynamicTransformSlot, Weight = 0f })
             );
         }
     }
@@ -237,7 +237,7 @@ public sealed class WorldRenderCycleTrack {
                             Weight = (occluder.Weight ?? previous.Weight),
                             Param = (occluder.Radius ?? previous.Param),
                             Shadows = false,
-                            DynamicSlot = -1,
+                            DynamicSlot = SdfProgram.NoDynamicTransformSlot,
                         },
                         WorldRenderLight.Point point => previous with {
                             Kind = SdfLightKind.Point,
@@ -252,7 +252,7 @@ public sealed class WorldRenderCycleTrack {
                             Shadows = false,
                             // Never carried: a live anchor is resolved fresh every frame by ApplyAnchors, after the
                             // statics/keys this method writes are cached for the revision.
-                            DynamicSlot = -1,
+                            DynamicSlot = SdfProgram.NoDynamicTransformSlot,
                         },
                         _ => previous,
                     })

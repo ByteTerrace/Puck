@@ -119,7 +119,8 @@ public sealed partial class SdfProgram {
     /// <summary>The largest legal dynamic-transform slot index; a program naming a larger one is refused.</summary>
     public const int MaxDynamicTransformSlot = ((1 << DynamicTransformSlotBits) - 1);
     /// <summary>The transform slot of geometry no dynamic transform places: what the winner's slot and a visibility
-    /// record's transform-slot lane hold for a static hit (<c>SDF_TRANSFORM_SLOT_NONE</c>).</summary>
+    /// record's transform-slot lane hold for a static hit, and a light's, volume's, rigid segment's or part binding's
+    /// slot when nothing moves it (<c>SDF_TRANSFORM_SLOT_NONE</c>).</summary>
     public const int NoDynamicTransformSlot = -1;
 
     // An instance's flags for the high bits of its segmentEnd lane: shadow-transparent when its compose only removes

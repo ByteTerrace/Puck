@@ -34,9 +34,10 @@ public enum SdfLightKind : byte {
 /// <param name="Param">The kind's second scalar: penumbra half-slope, hemisphere gradient, rim exponent, or (point)
 /// the falloff radius.</param>
 /// <param name="Shadows">Directional only: whether this light drives the soft-shadow march.</param>
-/// <param name="DynamicSlot">Point only: the dynamic-transform slot its position is read from every frame, or −1 for
-/// the static authored position in <paramref name="Direction"/>. Ignored (packed as 0) for every other kind.</param>
-public readonly record struct SdfLight(SdfLightKind Kind, Vector3 Direction, Vector3 Color, float Weight, float Param, bool Shadows, int DynamicSlot = -1);
+/// <param name="DynamicSlot">Point and occluder only: the dynamic-transform slot its position is read from every frame,
+/// or <see cref="SdfProgram.NoDynamicTransformSlot"/> for the static authored position in <paramref name="Direction"/>.
+/// Ignored (packed as 0) for every other kind.</param>
+public readonly record struct SdfLight(SdfLightKind Kind, Vector3 Direction, Vector3 Color, float Weight, float Param, bool Shadows, int DynamicSlot = SdfProgram.NoDynamicTransformSlot);
 /// <summary>One analytic studio-reflection softbox — see <c>worldStudioReflection</c> in shade/sdf-lighting.hlsli.</summary>
 /// <param name="Direction">From a lit surface toward the softbox, any nonzero length (normalized on upload).</param>
 /// <param name="Color">The linear RGB color.</param>
@@ -62,7 +63,7 @@ public enum SdfEnvironmentBlend : byte {
 /// Row layout (row-relative to the environment base, four float lanes per row):
 /// <list type="table">
 /// <item><term>0 control</term><description>x light count, y shadow light index (−1 none), z sky enabled, w fog density</description></item>
-/// <item><term>1 + 3i .. 3 + 3i, i &lt; 8</term><description>light i: (direction.xyz — a position for a point light, weight) (color.rgb, kind) (param, shadows, dynamicSlot — point only, else 0, 0)</description></item>
+/// <item><term>1 + 3i .. 3 + 3i, i &lt; 8</term><description>light i: (direction.xyz — a position for a point light, weight) (color.rgb, kind) (param, shadows, dynamicSlot — point or occluder only, else 0, 0)</description></item>
 /// <item><term>25</term><description>curvature: cavity, rim, ink, ink band low</description></item>
 /// <item><term>26</term><description>ink color.rgb, ink band high</description></item>
 /// <item><term>27 sky control</term><description>x gradient stop count, y sun-disc light index (−1 none), z sun-disc angular radius in radians (uploaded as the baked <c>pow</c> exponent), w sun-disc intensity</description></item>
@@ -591,12 +592,25 @@ public sealed class SdfEnvironment {
     /// <summary>Sets one lane.</summary>
     public void SetLane(int row, int lane, float value) => m_lanes[((row * 4) + lane)] = value;
     /// <summary>Sets one light and, when it shadows, makes it the shadow light.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the light table, or a point or
+    /// occluder light's <see cref="SdfLight.DynamicSlot"/> is neither <see cref="SdfProgram.NoDynamicTransformSlot"/>
+    /// nor a slot in [0, <see cref="SdfProgram.MaxDynamicTransformSlot"/>].</exception>
     public void SetLight(int index, SdfLight light) {
         if (
             (index < 0) ||
             (index >= MaxLights)
         ) {
             throw new ArgumentOutOfRangeException(paramName: nameof(index));
+        }
+        if (
+            (light.Kind is SdfLightKind.Point or SdfLightKind.Occluder) &&
+            (light.DynamicSlot != SdfProgram.NoDynamicTransformSlot) &&
+            ((light.DynamicSlot < 0) || (light.DynamicSlot > SdfProgram.MaxDynamicTransformSlot))
+        ) {
+            throw new ArgumentOutOfRangeException(
+                message: $"A point or occluder light's dynamic slot must be {SdfProgram.NoDynamicTransformSlot} or in [0, {SdfProgram.MaxDynamicTransformSlot}].",
+                paramName: nameof(light)
+            );
         }
 
         var row = (LightsRow + (index * RowsPerLight));
@@ -631,7 +645,7 @@ public sealed class SdfEnvironment {
             ? 1f
             : 0f)
         );
-        // Packed only for a point light (byte-identical for every other kind, as before this lane was assigned).
+        // Packed only for a point or occluder light; every other kind packs 0.
         SetLane(
             row: (row + 2),
             lane: 2,

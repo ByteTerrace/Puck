@@ -145,7 +145,7 @@ public static class WorldPlacementStamper {
             }
 
             volumes.Add(item: volume.ToVolume(
-                dynamicSlot: -1,
+                dynamicSlot: SdfProgram.NoDynamicTransformSlot,
                 origin: frameOrigin,
                 rotation: frameRotation,
                 scale: scale
