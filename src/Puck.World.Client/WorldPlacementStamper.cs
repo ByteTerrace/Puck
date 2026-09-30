@@ -152,13 +152,20 @@ public static class WorldPlacementStamper {
             ));
         }
     }
-    // A static instance's mesh draw, appended when the placement carries a mesh and the caller collects draws.
-    private static void AppendMeshDraw(SdfMesh? mesh, int material, Vector3 origin, Quaternion rotation, float scale, Vector3? reflectionNormal, ICollection<SdfMeshDraw>? meshDraws) {
+    // A static instance's mesh draw, appended when the placement carries a mesh and the caller collects draws. Its
+    // identity is its scope, its placement and its order among the placement's draws, which a rebuild that keeps the
+    // placement keeps, so an edited placement's draw reads its edit as motion.
+    private static void AppendMeshDraw(SdfMesh? mesh, int material, Vector3 origin, Quaternion rotation, float scale, Vector3? reflectionNormal, ICollection<SdfMeshDraw>? meshDraws, string? scope, string placement, int firstMesh) {
         if ((mesh is null) || (meshDraws is null)) {
             return;
         }
 
         meshDraws.Add(item: MeshDrawOf(
+            identity: new StaticMeshIdentity(
+                Ordinal: (meshDraws.Count - firstMesh),
+                Placement: placement,
+                Scope: scope
+            ),
             material: material,
             mesh: mesh,
             origin: origin,
@@ -167,6 +174,8 @@ public static class WorldPlacementStamper {
             scale: scale
         ));
     }
+
+    private readonly record struct StaticMeshIdentity(string? Scope, string Placement, int Ordinal);
 
     /// <summary>Poses a prototype's mesh as a draw: its engine-frame triangles under a uniform scale, an optional mirror (a
     /// plane through the origin in the local frame, as the shapes reflect), then the rotation and the origin, composed in
@@ -177,9 +186,10 @@ public static class WorldPlacementStamper {
     /// <param name="origin">The world-space origin.</param>
     /// <param name="rotation">The orientation.</param>
     /// <param name="scale">The uniform scale.</param>
+    /// <param name="identity">The draw's identity across frames (<see cref="SdfMeshDraw.Identity"/>).</param>
     /// <param name="reflectionNormal">The mirror plane's normal, or <see langword="null"/> for none.</param>
     /// <returns>The draw.</returns>
-    internal static SdfMeshDraw MeshDrawOf(SdfMesh mesh, int material, Vector3 origin, Quaternion rotation, float scale, Vector3? reflectionNormal = null) {
+    internal static SdfMeshDraw MeshDrawOf(SdfMesh mesh, int material, Vector3 origin, Quaternion rotation, float scale, object identity, Vector3? reflectionNormal = null) {
         var local = Matrix4x4.CreateScale(scale: scale);
 
         if (reflectionNormal is { } normal) {
@@ -190,6 +200,7 @@ public static class WorldPlacementStamper {
         }
 
         return new SdfMeshDraw(
+            Identity: identity,
             Material: material,
             Mesh: mesh,
             ObjectToWorld: ((local * Matrix4x4.CreateFromQuaternion(quaternion: rotation)) * Matrix4x4.CreateTranslation(position: origin))
@@ -228,7 +239,7 @@ public static class WorldPlacementStamper {
             )]
         );
     }
-    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes, SdfMesh? mesh, int meshMaterial, ICollection<SdfMeshDraw>? meshDraws, SdfMesh? bakedMesh = null) {
+    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes, SdfMesh? mesh, int meshMaterial, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, SdfMesh? bakedMesh = null) {
         var frame = WorldDefinitionRows.ResolvedFrame(
             definition: definition,
             placement: placement
@@ -280,10 +291,12 @@ public static class WorldPlacementStamper {
             bakedMesh: bakedMesh,
             builder: builder,
             creation: creation,
+            firstMesh: firstMesh,
             hasText: hasText,
             mesh: mesh,
             meshDraws: meshDraws,
             meshMaterial: meshMaterial,
+            meshScope: meshScope,
             paletteIds: paletteIds,
             perShape: perShape,
             placement: placement,
@@ -312,7 +325,7 @@ public static class WorldPlacementStamper {
     // instance holding the whole creation. A placement drawing its bake draws the baked mesh, its palette's first
     // material the base its triangles' entries add to, and keeps its instances camera-hidden, so its field still casts shadows and occludes. A struct the
     // lattice walk calls, so a placement allocates no closure.
-    private readonly struct StaticInstanceVisitor(SdfMesh? bakedMesh, SdfProgramBuilder builder, CreationDocument creation, bool hasText, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
+    private readonly struct StaticInstanceVisitor(SdfMesh? bakedMesh, SdfProgramBuilder builder, CreationDocument creation, bool hasText, SdfMesh? mesh, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, int meshMaterial, int[] paletteIds, bool perShape, WorldPlacement placement, float reach, Quaternion rotation, bool scoped, PackedFontAtlasCatalog? textCatalog, TextLayoutResult[]? textLayouts, ICollection<SdfVolume>? volumes) : ICreationStampVisitor {
         public void Visit(CreationStampInstance instance) {
             AppendStaticVolumes(
                 creation: creation,
@@ -322,22 +335,28 @@ public static class WorldPlacementStamper {
                 volumes: volumes
             );
             AppendMeshDraw(
+                firstMesh: firstMesh,
                 material: meshMaterial,
                 mesh: mesh,
                 meshDraws: meshDraws,
                 origin: instance.Origin,
+                placement: placement.Id,
                 reflectionNormal: instance.ReflectionNormal,
                 rotation: rotation,
-                scale: placement.Scale
+                scale: placement.Scale,
+                scope: meshScope
             );
             AppendMeshDraw(
+                firstMesh: firstMesh,
                 material: paletteIds[0],
                 mesh: bakedMesh,
                 meshDraws: meshDraws,
                 origin: instance.Origin,
+                placement: placement.Id,
                 reflectionNormal: instance.ReflectionNormal,
                 rotation: rotation,
-                scale: placement.Scale
+                scale: placement.Scale,
+                scope: meshScope
             );
 
             if (perShape) {
@@ -579,7 +598,10 @@ public static class WorldPlacementStamper {
     /// casts shadows and occludes. A creation carrying text or noise relief, which its bake does not hold, draws through
     /// its field. Collected only with <paramref name="meshDraws"/>.</param>
     /// <param name="picks">The presentation identity table populated alongside emission, or null.</param>
-    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null, WorldStaticPalettes? palettes = null, Func<string, SdfMesh?>? bakedMeshFor = null, WorldPickMapBuilder? picks = null) {
+    /// <param name="meshScope">What distinguishes these placements' mesh draws from another emission's placements of the
+    /// same ids (an adjacent world's projection), or <see langword="null"/> for the world's own; part of each draw's
+    /// <see cref="SdfMeshDraw.Identity"/>.</param>
+    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null, WorldStaticPalettes? palettes = null, Func<string, SdfMesh?>? bakedMeshFor = null, WorldPickMapBuilder? picks = null, string? meshScope = null) {
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var baked = (colors ?? WorldBakedColors.Of(definition: definition));
         var registered = (palettes ?? new WorldStaticPalettes());
@@ -643,6 +665,8 @@ public static class WorldPlacementStamper {
                     min: 0
                 )],
                 meshDraws: meshDraws,
+                meshScope: meshScope,
+                firstMesh: firstMesh,
                 bakedMesh: bakedMesh
             );
             if (picks is not null) {

@@ -48,7 +48,7 @@ public sealed class WorldComposedPickMapLawTests {
             m_meshes.Clear();
             m_meshes.Add(item: new SdfMeshDraw(Material: Material,
                 Mesh: new SdfMesh(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY }, indices: new uint[] { 0, 1, 2 }),
-                ObjectToWorld: Matrix4x4.Identity));
+                ObjectToWorld: Matrix4x4.Identity, Identity: name));
             Replace(name: name);
         }
         public void Replace(string name) {

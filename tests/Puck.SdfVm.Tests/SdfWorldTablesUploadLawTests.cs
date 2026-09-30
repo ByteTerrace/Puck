@@ -640,9 +640,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         );
         var moved = Matrix4x4.CreateTranslation(xPosition: 1f, yPosition: 2f, zPosition: 3f);
         SdfMeshDraw[] draws = [
-            new(Material: 4, Mesh: quad, ObjectToWorld: moved),
-            new(Material: 5, Mesh: triangle, ObjectToWorld: Matrix4x4.CreateScale(scale: 2f)),
-            new(Material: 6, Mesh: quad, ObjectToWorld: Matrix4x4.Identity),
+            new(Identity: "moved", Material: 4, Mesh: quad, ObjectToWorld: moved),
+            new(Identity: "triangle", Material: 5, Mesh: triangle, ObjectToWorld: Matrix4x4.CreateScale(scale: 2f)),
+            new(Identity: "quad", Material: 6, Mesh: quad, ObjectToWorld: Matrix4x4.Identity),
         ];
         var layout = new SdfMeshRegionLayout(
             DrawCount: 3,
@@ -824,8 +824,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             indices: new uint[] { 0, 1, 2, 0, 2, 3 },
             positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
         );
-        SdfMeshDraw[] one = [new(Material: 1, Mesh: quad, ObjectToWorld: Matrix4x4.Identity)];
+        SdfMeshDraw[] one = [new(Identity: 0, Material: 1, Mesh: quad, ObjectToWorld: Matrix4x4.Identity)];
         var many = Enumerable.Range(count: 8, start: 0).Select(selector: index => new SdfMeshDraw(
+            Identity: index,
             Material: index,
             Mesh: quad,
             ObjectToWorld: Matrix4x4.CreateTranslation(xPosition: index, yPosition: 0f, zPosition: 0f)
@@ -924,6 +925,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     private sealed class Rig : IDisposable {
         private readonly SdfMovedTransforms m_moved = new();
         private readonly List<int> m_pendingMoves = [];
+        private readonly List<(int Slot, DynamicTransform Previous)> m_pendingReseats = [];
 
         private readonly int m_brickPoolVoxelCapacity;
         private readonly SdfProgram m_program;
@@ -969,6 +971,15 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             };
             m_pendingMoves.Add(item: slot);
         }
+        // Moves one slot as a new owner taking it would: its repack is committed as a reseat.
+        public void Reseat(int slot) {
+            m_pendingReseats.Add(item: (slot, m_transforms[slot]));
+            m_transforms[slot] = m_transforms[slot] with {
+                Position = (m_transforms[slot].Position + new Vector3(x: 0f, y: 0f, z: 1f)),
+            };
+        }
+        // Uploads the program again into the same tables, as a rebuilt scene does.
+        public void UploadProgram() => Engine.UploadProgram(program: m_program);
         // Drops the engine and builds another on the same device, as an owner does after a device loss.
         public void Rebuild() {
             Engine.Dispose();
@@ -996,6 +1007,17 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             }
 
             m_pendingMoves.Clear();
+
+            foreach (var (slot, previous) in m_pendingReseats) {
+                _ = m_moved.Commit(
+                    previous: [previous],
+                    reseat: true,
+                    slots: m_transforms,
+                    start: slot
+                );
+            }
+
+            m_pendingReseats.Clear();
             Engine.Pack(frame: Frame(
                 program: m_program,
                 time: time,

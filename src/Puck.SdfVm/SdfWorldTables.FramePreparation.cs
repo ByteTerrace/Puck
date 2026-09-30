@@ -35,6 +35,7 @@ public sealed partial class SdfWorldTables {
                 )
                 : !moved.TryCollect(
                     into: m_owedTransforms,
+                    reseated: m_reseatedTransforms,
                     since: m_movedTransformsSerial
                 ))
         );
@@ -50,6 +51,9 @@ public sealed partial class SdfWorldTables {
         Span<float> floats = stackalloc float[DynamicTransformWordCount];
 
         if (everything) {
+            // Which owners changed is unknown when every row is owed, so every previous row is seeded.
+            m_seedDynamicHistory = true;
+
             if (count == 0) {
                 floats.Clear();
                 floats[7] = 1f; // identity quaternion

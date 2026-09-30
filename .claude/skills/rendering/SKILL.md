@@ -744,12 +744,22 @@ These are one-line cautions; the owning pages hold the derivations.
   a frame moving k bodies at k leaf ranges.
 - **Motion reads the preceding consumed tables and rendered camera.**
   `SdfWorldTables.Motion.cs` copies prior changed rigid rows and compact mesh
-  matrices on the GPU before their current regions are overwritten. The first
-  upload seeds them; one copy settles the last moving frame, then still frames
-  copy nothing. Keep host upload bytes unchanged. `SdfTemporalHistory` retains
-  the instance's preceding completed camera even when temporal sampling is off;
-  resets invalidate it. `frame/sdf-reprojection.hlsli` is the one visibility
-  reprojection implementation, shared by motion diagnostics and reconstruction.
+  matrices on the GPU before their current regions are overwritten. One copy
+  settles the last moving frame, then still frames copy nothing. A row with no
+  previous pose of its own is seeded from the current one after the copies:
+  every dynamic row on the first upload, a program upload and a frame owing
+  every row; a range an emitter commits with `reseat`
+  (`SdfMovedTransforms.Commit`, from `WorldTransformOwners.Reseats`: a first
+  pack, a pack after a vacancy, a discontinuity); a mesh draw whose
+  `SdfMeshDraw.Identity` at its index changed. A new emitter of transforms or
+  draws states owner changes through those two, never by index. Keep host upload
+  bytes unchanged. `SdfWorldTables.PoseRevision` moves only on an upload that
+  changes a pose, and `PreviousPoseRevision` names the poses the previous tables
+  advanced from; `SdfTemporalHistory` continues an instance's history only
+  while they are the poses its preceding render held, and retains its preceding
+  completed camera even when temporal sampling is off; resets invalidate it.
+  `frame/sdf-reprojection.hlsli` is the one visibility reprojection
+  implementation, shared by motion diagnostics and reconstruction.
 - **Device identity is recorded, never branched on.** Each backend fills
   `IGpuDeviceContext.Identity` (`GpuDeviceIdentity`) when it creates the device
   — Vulkan from `vkGetPhysicalDeviceProperties2` with
@@ -1819,9 +1829,18 @@ renders its dependencies through one frozen presentation snapshot, delays the
 readback until sample N, and releases the snapshot on completion or refusal.
 The presentation interval is zero. `SdfTemporalHistory` owns each instance's
 eight-sample Halton sequence and epoch resets; the shared viewport lens applies
-the same render-pixel offset to the march and mesh projection. Ordinary
-rendering keeps jitter zero until reconstruction is enabled. Run the
-`temporal-jitter` canary on both backends after changing this contract.
+the same render-pixel offset to the march and mesh projection. While a capture
+converges the index is the runtime's count (`RenderGraphConvergence.Samples`,
+handed to each contributing package by `BeginConvergence`), never the
+instance's own renders: a frame the runtime does not count renders the same
+sample again. Ordinary rendering keeps jitter zero until reconstruction is
+enabled, and cadence enforces it: `SdfWorldPasses.IsUnchanged` lets a view stand
+only while `SdfTemporalHistory.Stands` finds a render now would feed the same
+temporal inputs (jitter always; previous view and poses where the pass reads
+motion). A new temporal input a pass reads joins `Stands` in the same change.
+`SdfTemporalHistoryLawTests`, `SdfWorldPassesLawTests.Temporal` and the
+runtime's convergence laws hold these. Run the `temporal-jitter` and
+`temporal-motion` canaries on both backends after changing this contract.
 
 ## Route adjacent work
 

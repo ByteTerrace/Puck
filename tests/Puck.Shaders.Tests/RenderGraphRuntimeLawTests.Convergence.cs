@@ -1,4 +1,5 @@
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 
 namespace Puck.Shaders.Tests;
 
@@ -25,7 +26,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var request = new FrameCaptureRequest(path: Path.Combine(path1: Path.GetTempPath(), path2: $"{Guid.NewGuid():N}.png"), converge: 8);
 
         runtime.CaptureTarget(instance: PackageView).RequestCapture(request: request);
-        Assert.Same(expected: request, actual: Assert.Single(collection: view.Convergence));
+        Assert.Same(expected: request, actual: Assert.Single(collection: view.Convergence).Request);
         for (var sample = 0; (sample < 8); sample++) {
             ProducePackageFrame(frameIndex: index++, runtime: runtime);
             Assert.Equal(expected: (start + ((sample + 1) * SdfWorldPackage.NativeFragment.Passes.Count)), actual: view.Parts.Count);
@@ -67,5 +68,44 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.Null(@object: Outcome(request: request).Error);
         }
     }
+    // A package samples on the capture's behalf at the index the runtime counted: every render while its read is tainted
+    // takes sample 0 again, the ready renders take 0 to N-1, and the Nth ready render is the one served.
+    [Fact]
+    public void ConvergingPackagesTakeTheSampleTheRuntimeCountedAndTheServedRenderIsTheLast() {
+        const int Converge = 4;
+        const int Tainted = 6;
+        var gpu = new FakePipelineGpu { ReadbackSupported = true };
+        var camera = new FakeCamera(gpu: gpu);
+        var recorders = new Recorders();
+        var view = new ViewPackage { SamplesReads = true };
 
+        recorders.Registry.RegisterProducer(factory: _ => camera, package: Feed);
+        recorders.Registry.Register(factory: view, package: RenderGraphPackageCatalog.SdfWorld);
+        using var runtime = Runtime(gpu, recorders, Set(
+            new RenderGraphInstance(ExternalPackage: Feed, Name: "camera", Passes: 1, Reads: [], Refresh: RenderGraphRefresh.EveryFrame),
+            (PackageInstance() with { Reads = [new RenderGraphRead(Producer: "camera")] })
+        ), PackageView, new RenderGraphRuntimeGraph[2]);
+        var frames = new Frames(
+            footprints: [new RenderGraphFootprint(Consumer: PackageView, Height: 1.0, Producer: "camera", Width: 1.0)],
+            roots: [new RenderGraphRoot(Height: 1.0, Instance: PackageView, Width: 1.0)],
+            runtime: runtime
+        );
+
+        Assert.True(condition: SpinWait.SpinUntil(condition: () => {
+            _ = frames.Next();
+            return ((view.Parts.Count > 0) && runtime.IsSettled);
+        }, timeout: TimeSpan.FromSeconds(value: 30)));
+        var request = new FrameCaptureRequest(path: CaptureRequest().Path, converge: Converge);
+
+        runtime.CaptureTarget(instance: PackageView).RequestCapture(request: request);
+        frames.Next(count: Tainted);
+        Assert.Equal(expected: Enumerable.Repeat(count: Tainted, element: 0), actual: view.Served);
+        camera.Filling = static () => true;
+        Assert.True(condition: SpinWait.SpinUntil(condition: () => {
+            _ = frames.Next();
+            return request.Completion.IsCompleted;
+        }, timeout: TimeSpan.FromSeconds(value: 30)));
+        Assert.Null(@object: Outcome(request: request).Error);
+        Assert.Equal(expected: Enumerable.Repeat(count: Tainted, element: 0).Concat(second: Enumerable.Range(count: Converge, start: 0)), actual: view.Served);
+    }
 }

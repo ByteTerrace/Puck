@@ -31,6 +31,8 @@ namespace Puck.SdfVm;
 //   - m_programDeclaresScreenSlab : a bound screen's image content updates in place each frame with the same view handle,
 //                          unseen by any packed span, so any declared ScreenSlab force-renders.
 //   - AnyBrickBaking()  : an in-progress carve bake writing brick voxels each upload.
+// The pass block's temporal values (jitter, previous view) and the previous transform tables belong to each instance's
+// history, not the tables: SdfWorldPasses.IsUnchanged holds them through SdfTemporalHistory.Stands.
 public sealed partial class SdfWorldTables {
     private readonly byte[] m_signatureBlock = new byte[SdfFrameBlock.SizeBytes];
 

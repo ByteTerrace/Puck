@@ -4437,8 +4437,11 @@ place:
   (`fillers`, `bricks`, `upload`).
 - A converging capture freezes the armed tick's first presentation snapshot:
   animation, camera followers and pass-block inputs remain fixed while only
-  its jitter index advances. Dependency frames that are not ready do not count;
-  a late encoder reads the held Nth image without rendering another sample.
+  its jitter index advances. Dependency frames that are not ready do not count,
+  and a view renders the same sample again on them, because its index is the
+  runtime's count (`RenderGraphConvergence.Samples`) rather than its own
+  renders; a late encoder reads the held Nth image without rendering another
+  sample.
 
 **Owns:** jitter, motion vectors, the temporal upscaler, history management,
 dynamic resolution, temporal reuse inside the SDF march, and the counted-cost
@@ -4476,8 +4479,13 @@ resolution, and stay there.
   Before changed rows land in the current tables, the rows owed by this upload
   or the preceding upload are copied into the previous tables. One still
   upload therefore settles the last movement; later still uploads copy nothing.
-  Initial loads and program rebuilds seed both tables from the new current
-  poses. No host bytes move, and the residencies' host-visible aperture on the
+  A row with no previous pose of its own is seeded from the current poses:
+  every dynamic row on the first upload, a program upload and a frame owing
+  every row; a range an emitter reseats because its owner changed (a spawn into
+  a vacated range, a reused body index, a jump); and a mesh draw whose identity
+  (`SdfMeshDraw.Identity`) at its index changed, as in a reordered draw list.
+  Mesh draws are continuous by identity rather than by rebuild, so a rebuild
+  that keeps a placement keeps its draw's motion. No host bytes move, and the residencies' host-visible aperture on the
   RTX 2060 (see the open item on it) does not grow. The mesh table stores one
   compact previous matrix per draw, leaving the current draw record unchanged.
   Cuts, parked views and broken frame correspondence invalidate the affected
@@ -4490,8 +4498,11 @@ resolution, and stay there.
   pass-block value. `ViewProjection.Jitter` becomes the instance's. The index
   is the number of frames the instance's history has accumulated since its last
   reset, modulo the period, never the wall clock and never the tick, so the
-  same history produces the same sequence on every run and backend. Jitter is
-  zero whenever reconstruction is off.
+  same history produces the same sequence on every run and backend. While a
+  capture converges, a frame accumulates only when the runtime counts it for
+  the capture, so the served Nth sample is at index N − 1 however many
+  not-ready frames precede it. Jitter is zero whenever reconstruction is off,
+  and cadence never lets a jittered output stand once its capture ends.
 - **History epochs.** An instance's history resets, at no GPU cost, by setting
   its frames-accumulated value to zero: `resolve` then reads no history and
   writes fresh history from the current frame. A reset is never a clear and
@@ -4506,9 +4517,11 @@ resolution, and stay there.
   - a view that was parked or not shown is shown again;
   - reconstruction is turned on, or a debug view is turned on or off. While a
     debug view is on, the resolve is spatial, as the tonemap is off then;
-  - a residency renders a frame that does not follow its view's previous render:
+  - the residency's previous transform tables no longer hold the poses of the
+    instance's preceding render (`SdfWorldTables.PreviousPoseRevision`):
     camera views share the world's residency and can refresh at different
-    cadences, so this check is per instance.
+    cadences, so this check is per instance. Frames an instance stood through
+    while no pose moved break nothing.
 
   Everything else, including a large camera move, is left to per-pixel
   rejection.
@@ -4549,6 +4562,13 @@ resolution, and stay there.
 - **A converged view stands.** `IsUnchanged` answers false while an instance's
   history is younger than one jitter period since its last change, so a still
   view renders eight jittered frames and then stands like any unchanged view.
+  The mechanism is the one cadence already applies to every temporal input:
+  `SdfWorldPasses.IsUnchanged` lets an instance stand only while a render taken
+  now would feed its passes the inputs its standing output was rendered with
+  (`SdfTemporalHistory.Stands`). Today that holds the jitter, so a still view
+  renders once at the pixel center after a converging capture ends, and, for
+  the `motion` debug view, the previous view and previous poses, so that view
+  renders until its motion settles.
 - **Parity boots with reconstruction off.** The parity world's render levers
   pin reconstruction, dynamic resolution and march seeding off, so every
   existing station keeps its pixel contract. Reconstruction gets stations of its

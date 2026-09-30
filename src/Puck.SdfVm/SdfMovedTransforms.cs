@@ -20,6 +20,11 @@ namespace Puck.SdfVm;
 /// to rest and owes nothing. A still frame therefore packs no rows, compares no bytes and owes nothing, and a frame
 /// moving k owners does work proportional to k. The source counts that work as <c>sdf.transforms.*</c>.
 /// </para>
+/// <para>
+/// A moved range whose slots changed owner is also reseated (<see cref="Commit"/>'s <c>reseat</c>): a consumer's
+/// previous transform table then takes that range's poses from the frame that reseated it, so a new owner never reads
+/// its predecessor's pose as motion. A consumer owed everything seeds every previous row.
+/// </para>
 /// </summary>
 public sealed class SdfMovedTransforms : IWorkCounterSource {
     /// <summary>The number of recent frames whose moved ranges are kept for a consumer that skipped frames.</summary>
@@ -54,6 +59,7 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
 
     private readonly bool[] m_everything = new bool[History];
     private readonly GpuUploadRuns[] m_frames = new GpuUploadRuns[History];
+    private readonly GpuUploadRuns[] m_reseats = new GpuUploadRuns[History];
     private readonly long[] m_serials = new long[History];
 
     private WorkCount m_comparedBytes;
@@ -67,6 +73,7 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
     public SdfMovedTransforms() {
         for (var index = 0; (index < History); index++) {
             m_frames[index] = new GpuUploadRuns(capacity: GpuRegion.MaxCopyRuns);
+            m_reseats[index] = new GpuUploadRuns(capacity: GpuRegion.MaxCopyRuns);
         }
     }
 
@@ -92,6 +99,7 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
         m_slot = ((int)(m_serial % History));
         m_everything[m_slot] = everything;
         m_frames[m_slot].Clear();
+        m_reseats[m_slot].Clear();
         m_serials[m_slot] = m_serial;
         m_tableRows = tableRows;
 
@@ -104,8 +112,11 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
     /// <param name="slots">The whole shared table, already holding the owner's repacked slots.</param>
     /// <param name="start">The owner's first slot.</param>
     /// <param name="previous">The owner's slots as they stood before the repack, one per repacked slot.</param>
+    /// <param name="reseat">Whether the slots hold another owner than they held when last packed (a spawn into a vacated
+    /// range, a body index reused, a pose that jumped): a moved range is then also reseated, so each consumer seeds its
+    /// previous poses from this frame's rather than reading the departed pose as motion.</param>
     /// <returns><see langword="true"/> when the repack moved any slot, so the owner stays restless.</returns>
-    public bool Commit(ReadOnlySpan<DynamicTransform> slots, int start, ReadOnlySpan<DynamicTransform> previous) {
+    public bool Commit(ReadOnlySpan<DynamicTransform> slots, int start, ReadOnlySpan<DynamicTransform> previous, bool reseat) {
         var packed = slots.Slice(
             length: previous.Length,
             start: start
@@ -129,6 +140,13 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
                 count: packed.Length,
                 start: start
             );
+
+            if (reseat && !m_everything[m_slot]) {
+                m_reseats[m_slot].Add(
+                    length: packed.Length,
+                    start: start
+                );
+            }
         }
 
         return moved;
@@ -185,9 +203,10 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
         return false;
     }
 
-    // Unions every range the frames after `since` owed into `into`. False when the consumer is owed everything: one of
-    // those frames owed everything, or `since` has fallen out of the history.
-    internal bool TryCollect(long since, GpuUploadRuns into) {
+    // Unions every range the frames after `since` owed into `into`, and adds the ranges they reseated to `reseated`
+    // without clearing it. False when the consumer is owed everything: one of those frames owed everything, or `since`
+    // has fallen out of the history.
+    internal bool TryCollect(long since, GpuUploadRuns into, GpuUploadRuns reseated) {
         into.Clear();
 
         if (since >= m_serial) {
@@ -214,6 +233,15 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
                 into.Add(
                     length: frame.Length(index: run),
                     start: frame.Start(index: run)
+                );
+            }
+
+            var seats = m_reseats[slot];
+
+            for (var run = 0; (run < seats.Count); run++) {
+                reseated.Add(
+                    length: seats.Length(index: run),
+                    start: seats.Start(index: run)
                 );
             }
         }

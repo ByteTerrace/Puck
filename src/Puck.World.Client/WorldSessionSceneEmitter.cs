@@ -542,6 +542,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 rootPosition: (m_pool.HasBodyRegistration(bodyIndex: index)
                 ? context.ParkPosition
                 : position),
+                reseat: m_avatarOwners.Reseats(owner: index),
                 scale: m_emittedScales[index],
                 table: slots
             ),
