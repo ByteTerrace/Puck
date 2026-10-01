@@ -195,22 +195,26 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets whether the residency renders its current frame: its tables are built from its pipeline set, its
     /// first frame captured and packed, and the views kernel its program selects, or a fuller one, is built. A program that
     /// selects a stripped views variant never waits for the full ISA's. It is false again after a device loss until the
-    /// rebuilt tables are, and while a captured program waits for a views kernel that is still building, during which
-    /// the residency holds the frame it last packed.</summary>
+    /// rebuilt tables are, and while a captured program waits for a views kernel that is still building or was refused,
+    /// during which the residency holds the frame it last packed. A refused views kernel is built again only on a kernel
+    /// reload (<see cref="RequestShaderReload"/>) or a device loss (<see cref="OnDeviceLost"/>).</summary>
     public bool IsReady => ((m_tables is not null) && (m_viewsWaiting is null) && Volatile.Read(location: ref m_ready).Task.IsCompletedSuccessfully);
     /// <summary>Gets whether every hold on the residency has been released (<see cref="Release"/>), after which it renders
     /// nothing.</summary>
     public bool IsReleased => m_disposed;
-    /// <summary>Gets why the residency is not <see cref="IsReady"/>, naming its pipeline build and how far it has come or
-    /// the refusal of its tables' latest build, which is retried when its inputs change, or <see langword="null"/> once it
+    /// <summary>Gets why the residency is not <see cref="IsReady"/>, naming its pipeline build and how far it has come,
+    /// the refusal of its tables' latest build, which is retried when its inputs change, or the views kernel its program
+    /// waits on and, when that kernel was refused, its failure, or <see langword="null"/> once it
     /// is ready. It builds a new string on each read, so a caller polls <see cref="IsReady"/> and reads this only to
     /// report.</summary>
     public string? NotReadyReason => (IsReady
         ? null
         : ((m_frame is null)
             ? $"residency '{Name}' has captured no frame"
-            : (((m_tables is not null) && (m_viewsWaiting is { } views))
-                ? $"residency '{Name}' holds its frame until the views kernel its program selects, '{SdfKernelSet.StemOf(kernel: views)}', is built: {m_pipelines.Describe()}"
+            : (((m_tables is { } tables) && (m_viewsWaiting is { } views))
+                ? ((tables.ViewsRefusal(kernel: views) is { } refusal)
+                    ? $"residency '{Name}' holds its frame: the views kernel its program selects, '{SdfKernelSet.StemOf(kernel: views)}', was refused and is built again on a kernel reload or a device loss: {refusal.Message}"
+                    : $"residency '{Name}' holds its frame until the views kernel its program selects, '{SdfKernelSet.StemOf(kernel: views)}', is built: {m_pipelines.Describe()}")
                 : m_pipelines.Describe())));
     /// <summary>Gets the GPU work the residency's uploads recorded (<see cref="SdfWorldTables.Work"/>); submission
     /// identities keep increasing across a device-loss rebuild.</summary>
@@ -413,8 +417,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
             objB: m_packedFrame
         )) {
             if (m_programPending) {
-                // A program whose views kernel is still building is not uploaded: the residency holds the frame it last
-                // packed, which the live program's views render, until that kernel is built, as any rebuild does.
+                // A program whose views kernel is still building, or was refused, is not uploaded: the residency holds the
+                // frame it last packed, which the live program's views render, until that kernel is built, as any rebuild
+                // does.
                 if (tables.ViewsWaiting(program: frame.Program) is { } waiting) {
                     m_viewsWaiting = waiting;
                     m_pendingFrame = frame;

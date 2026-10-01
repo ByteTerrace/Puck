@@ -534,7 +534,9 @@ These are one-line cautions; the owning pages hold the derivations.
   pass and deployed kernels), so a kernel shared by several residencies on a
   device is created once. A set whose creations fail throws one
   `AggregateException` naming every pipeline that failed, in the set's order
-  (a device loss is thrown alone), and `Describe` counts the pipelines built.
+  (a device loss is thrown alone), except a views variant's failure under
+  `PollRequired`, which is refused per slot (below), and `Describe` counts the
+  pipelines built and names the refused.
   A holder (`SdfWorldPipelineSource`) takes its leases on the frame thread when
   kernels are supplied, or on the pool when it must load them. Every pipeline
   builds on the pool. The holder builds no tables until the set is ready, and keeps the
@@ -568,11 +570,22 @@ These are one-line cautions; the owning pages hold the derivations.
   nothing (`SdfWorldTablesCreationFaultLawTests`,
   `SdfWorldResidencyBuildRefusalLawTests`). A new GPU-owning build joins its
   creations to a scope, or to a null-tolerant release it calls on failure.
+  The views variants are outside that build: the tables need only the one the
+  live program selects, or a fuller one (`SdfWorldTables.ViewsWaiting`), and a
+  captured program whose variant is not built is not uploaded; the residency
+  holds its last packed frame and names the kernel. A views kernel whose
+  creation fails is refused per slot (`SdfWorldPipelines.IsBuilt`, `RefusalOf`),
+  never thrown and never polled again, since a poll after a failure starts a
+  fresh build: the hold names the failure, a fuller built variant still renders
+  a narrower program, and only a kernel reload (`PrepareReload` leases a refused
+  slot again even with unchanged bytecode) or a device loss builds it again
+  (`SdfWorldResidencyViewsRefusalLawTests`).
   The last release of a lease cancels an in-flight build inside the cache's gate
   (`BackgroundBuild.Detach`), then waits outside it for only the pipelines
   already in the driver, and disposes the entry. A residency is ready
-  (`SdfWorldResidency.IsReady`) once its set is ready and its tables are
-  built from its first captured frame, and the world is ready
+  (`SdfWorldResidency.IsReady`) once its set is ready, its tables are
+  built from its first captured frame and its program's views kernel is built
+  with no frame held, and the world is ready
   (`WorldRenderProbe.IsReady`) once the world's residency is, the render
   graph's root has rendered over a completed world output, and every instance
   whose node has submitted has a frame completed on the GPU

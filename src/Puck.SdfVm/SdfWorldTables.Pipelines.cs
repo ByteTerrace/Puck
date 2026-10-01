@@ -21,36 +21,50 @@ public sealed partial class SdfWorldTables {
     internal IGpuComputePipeline ViewsPipeline => m_pipelines.Pipeline(kernel: (BuiltViews(variant: m_viewsVariant) ?? ViewsKernelOf(variant: m_viewsVariant)));
 
     // The views kernel a program waits on: null when the variant it selects (SdfViewsKernelVariants.Select), or a fuller
-    // one, is built, so its views can render it; otherwise the selected variant's kernel. A null program asks for the live
-    // program's variant.
+    // one, is built, so its views can render it; otherwise the narrowest of those still building or, when every one was
+    // refused (ViewsRefusal), the selected variant's kernel. A null program asks for the live program's variant.
     internal SdfKernel? ViewsWaiting(SdfProgram? program) {
         var variant = ((program is null)
             ? m_viewsVariant
             : SdfViewsKernelVariants.Select(program: program).Variant);
 
-        return ((BuiltViews(variant: variant) is null)
-            ? ViewsKernelOf(variant: variant)
-            : null);
+        if (BuiltViews(variant: variant) is not null) {
+            return null;
+        }
+
+        foreach (var kernel in ViewsKernelsOf(variant: variant)) {
+            if (m_pipelines.RefusalOf(kernel: kernel) is null) {
+                return kernel;
+            }
+        }
+
+        return ViewsKernelOf(variant: variant);
     }
+    // Why a views kernel was refused (SdfWorldPipelines.IsBuilt), or null when it was not.
+    internal Exception? ViewsRefusal(SdfKernel kernel) => m_pipelines.RefusalOf(kernel: kernel);
 
     // The first built views kernel that renders a program selecting the variant: the variant's own, then each fuller one.
+    // A refused kernel is not built, so a fuller one that is renders the program.
     private SdfKernel? BuiltViews(SdfViewsKernelVariant variant) {
-        if ((variant == SdfViewsKernelVariant.CoreOps) && m_pipelines.IsBuilt(kernel: SdfKernel.ViewsCore)) {
-            return SdfKernel.ViewsCore;
-        }
-        if ((variant != SdfViewsKernelVariant.Full) && m_pipelines.IsBuilt(kernel: SdfKernel.ViewsFolds)) {
-            return SdfKernel.ViewsFolds;
+        foreach (var kernel in ViewsKernelsOf(variant: variant)) {
+            if (m_pipelines.IsBuilt(kernel: kernel)) {
+                return kernel;
+            }
         }
 
-        return (m_pipelines.IsBuilt(kernel: SdfKernel.Views)
-            ? SdfKernel.Views
-            : null);
+        return null;
     }
-    private static SdfKernel ViewsKernelOf(SdfViewsKernelVariant variant) => variant switch {
-        SdfViewsKernelVariant.CoreOps => SdfKernel.ViewsCore,
-        SdfViewsKernelVariant.Folds => SdfKernel.ViewsFolds,
-        _ => SdfKernel.Views,
+    private static SdfKernel ViewsKernelOf(SdfViewsKernelVariant variant) => ViewsKernelsOf(variant: variant)[0];
+    // The views kernels that render a program selecting the variant, narrowest first.
+    private static SdfKernel[] ViewsKernelsOf(SdfViewsKernelVariant variant) => variant switch {
+        SdfViewsKernelVariant.CoreOps => ViewsForCore,
+        SdfViewsKernelVariant.Folds => ViewsForFolds,
+        _ => ViewsForFull,
     };
+
+    private static readonly SdfKernel[] ViewsForCore = [SdfKernel.ViewsCore, SdfKernel.ViewsFolds, SdfKernel.Views];
+    private static readonly SdfKernel[] ViewsForFolds = [SdfKernel.ViewsFolds, SdfKernel.Views];
+    private static readonly SdfKernel[] ViewsForFull = [SdfKernel.Views];
 
     // One of the per-view compute pipelines by its kernel.
     internal IGpuComputePipeline Pipeline(SdfKernel kernel) => m_pipelines.Pipeline(kernel: kernel);
