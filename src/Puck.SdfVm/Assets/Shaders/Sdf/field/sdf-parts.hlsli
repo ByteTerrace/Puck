@@ -14,7 +14,7 @@ bool sdfCanTracePartsIndependently() {
 
 // Compiled whole-scope programs: entry = (shared leaf run, placement binding run, count|dynamic flag, scope scale).
 // Each leaf = (canonical shape instruction, optional domain instruction + 1, 0, 0); each placement binding =
-// (pose slot + 1, material, 0, 0). Geometry payloads and flags come from the canonical instructions, not the
+// (packed pose slot (SDF_TRANSFORM_SLOT_UNPACK), material, 0, 0). Geometry payloads and flags come from the canonical instructions, not the
 // placement that first happened to render. KEEP IN SYNC with SdfProgram.PartPrograms.cs.
 void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part, uint dataOffset, int instanceIndex, bool trackMaterial) {
     float parentWeight = sdfMaterialBlendWeight;
@@ -43,8 +43,8 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
         float4 lanes = 0.0;
         int slot = SDF_TRANSFORM_SLOT_NONE;
 #ifdef SDF_DYNAMIC_TRANSFORMS
-        if (binding.x != 0u) {
-            uint pose = binding.x - 1u;
+        if (binding.x != SDF_TRANSFORM_SLOT_STATIC_WORD) {
+            uint pose = (uint)SDF_TRANSFORM_SLOT_UNPACK(binding.x);
             slot = (int)pose;
             float4 position = sdfDynamicTransforms[3u * pose];
             float4 orientation = sdfDynamicTransforms[3u * pose + 1u];

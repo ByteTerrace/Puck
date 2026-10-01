@@ -4528,8 +4528,9 @@ resolution, and stay there.
   writes fresh history from the current frame. A reset is never a clear and
   never a reallocation. The history resets when:
   - the view the instance resolves changes (`SdfWorldPasses`' binding count
-    moves), which covers a residency switch, a follow in place (S25's portal
-    crossing and every other `CanFollow` follow) and a new view index;
+    moves), which covers a residency switch, a follow in place (a seat's
+    portal crossing into the destination's residency and every other
+    `CanFollow` follow) and a new view index;
   - the camera cuts: the view's camera frame source moves a cut revision when
     a camera program reseeds (`SdfCameraProgram`'s drop of its eased value) or
     a layout change swaps what a slot shows;
@@ -4545,14 +4546,16 @@ resolution, and stay there.
 
   Everything else, including a large camera move, is left to per-pixel
   rejection.
-- **Crossing and following hold no frame.** A follow in place keeps the
-  instance's passes, scratch and history storage, so S25's crossing still shows
-  the destination in the crossing frame; the reset makes that frame the
-  destination's spatial resolve, with no trace of the departed world. A session
-  view's history is its own and resets on the same rules, at every level of
-  nesting: each level is an instance of its own, so a routed seat view, a portal
-  window's view and a deeper level's view of the same destination keep separate
-  histories even while they share one residency, and no level reprojects
+- **A follow in place holds no frame.** When the destination's ready tables
+  satisfy `SdfWorldPasses.CanFollow` (matching layouts and instance capacity),
+  a seat's portal crossing keeps the instance's passes, scratch and history
+  storage and shows the destination in the crossing frame. Otherwise its passes
+  rebuild. The reset makes the first destination frame a spatial resolve, with
+  no trace of the departed world. A session view's history is its own and
+  resets on the same rules, at every level of nesting: each level is an instance
+  of its own, so a routed seat view, a portal window's view and a deeper level's
+  view of the same destination keep separate histories whether they share an
+  endpoint residency or use separate residencies, and no level reprojects
   another's frames.
 - **Reprojection is validated by identity and depth.** History keeps, beside
   the color, each output pixel's ray parameter and identity (a history surface).
@@ -4739,7 +4742,8 @@ counted rows recorded in the same change.
      pixels. Parity passes with reconstruction off. RTX 4070 ordinary counter
      reads keep dispatches, binds, barriers, steps, texels, uploads and
      allocations unchanged; compiled kernel bytes rise by 140 on DirectX and
-     1456 on Vulkan. The floor-machine recording remains owner-assisted.
+     1456 on Vulkan. The default workload's ceilings are recorded on the RTX 2060 at
+     the floor tier.
 3. **P15-3, motion.** Landed. Every visible pixel's previous position is derived
    from the record.
    - Delivers: the previous view in the pass block (the instance's last render's
@@ -5116,9 +5120,15 @@ clocks and its duplicates.
   cycle. No world, canary or parity station draws stars, clouds, twinkle or a
   cycle blend. The parity world renders the pinned sky.
 
-The portal session and window sky, which draws a destination under its own sky
-at its presentation's quality with a residency per endpoint and per-view
-quality levers, is S27's. This package builds on it and does not re-plan it.
+A portal session or window already draws its destination under the
+destination's own sky and sky clock. Routed seats and fully disclosed windows
+onto a live local endpoint share its residency (`WorldRoutedScene`); ordinary
+session screens and windows that cannot join that endpoint render separate
+disclosed session residencies (`WorldScreenBinder.TryResolveView`). Each view
+carries its own quality (`SdfViewSnapshot.Quality`); sessions and routed windows
+use `WorldSessionSceneEmitter.ReducedQuality`. Quality levers a portal window
+sets on its own view are open work. This package builds on that and does not
+re-plan it.
 
 **Owns:** the sky, the atmosphere and the lighting derived from them; the
 celestial bodies and the lights they cast, with any number of shadowed lights;
@@ -5538,7 +5548,11 @@ target; each step settles its own vocabulary rows in
   drawn by `WorldSessionSceneEmitter` over its endpoint's mirror, the dressing
   a `session$<screen>` view and a `WorldRoutedScene` already share, from a
   fixed anchor in it, turned with the viewer's camera and never translated,
-  through S27's per-endpoint residency. It is dressed at reduced cost: its own render
+  using the endpoint-sharing path for eligible views (`WorldRoutedScene`) or a
+  separate disclosed session residency otherwise. The existing binder shares
+  only routed seats and fully disclosed window projections onto a live local
+  endpoint; the infinity view's routing remains part of this step.
+  It is dressed at reduced cost: its own render
   scale (`scale`), a refresh divisor (`refresh`), shadows and ambient occlusion
   off unless its levers turn them on, and a far distance of its own. It renders
   only while some view's previous frame showed it on an uncovered pixel, and
@@ -5591,7 +5605,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `sky-cycle` canaries, and isolated still, drift, twinkle and cycle counters
      workloads. Both backends pass with debug layers and agree on the counted
      baseline. The still workload can skip a node entirely; an absent sample
-     is not a measured zero. The RTX 2060 floor recording remains owner-assisted.
+     is not a measured zero. Each workload's ceilings are recorded on the RTX 2060
+     at the floor tier, beside it as `sky-<workload>.ceilings.json`.
    - Delivers: the parity world gains a sky station authoring every current
      feature (gradient, fog, sun disc, stars with twinkle, clouds with drift,
      shear and spin, a cycle), captured at several ticks across the cycle; the
@@ -5894,8 +5909,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       explained.
     - Counted-cost gate: atmosphere evaluations counted under `composite`, zero
       on a covered pixel with no atmosphere authored.
-11. **P18-11, infinity views: other worlds and far geometry.** After S27 and
-    S28.
+11. **P18-11, infinity views: other worlds and far geometry.** The sharing
+    prerequisites are available: routed seats and eligible windows share an
+    endpoint residency, and camera views render from the world's own residency.
+    Other session screens retain separate residencies; infinity-view routing
+    and quality levers remain part of this step.
     - Delivers: the `view` and `far` kinds and the `far` and `view` body
       shapes, each an `sdf.world` instance (`sky$<layer>`) scheduled by demand
       from the previous frame's uncovered pixels, rendered in its mask's rect,
@@ -6045,12 +6063,15 @@ fraction in live tiles, at least h.
   lighting-visible one. P18-13 follows
   P15-5. P18-14 records beside P15-8, and the two decisions are best taken
   together.
-- **S27 and S28.** P18-11's `view` layer and body shape ride S27's
-  per-endpoint residency and per-view quality levers, and follow it. P18-11
-  also follows S28, which folds camera views into the host residency and so
-  attacks the aperture open item before infinity views add residencies. Every
-  other step is independent of both; P18-2 moves a routed scene onto its own
-  clock, which S27's sky fix reads.
+- **The per-endpoint residency and camera views.** P18-11 can use the shared
+  `WorldRoutedScene` residency for eligible views: routed seats and fully
+  disclosed windows onto a live local endpoint. Ordinary session screens and
+  other windows still have separate disclosed residencies. P18-11 must route
+  its own views under the same disclosure constraints and add their quality
+  levers. Camera views render from the world's own residency, so they add no
+  residency to the aperture. Every other step is independent of both;
+  P18-2 extends the clocks available to routed scenes, whose sky already uses
+  the destination's own presented clock.
 - **The editor.** P18-12 follows E5 for the panel, E10 for reload and compare,
   and E11 for saving, and adds only the sky's rows to each; it does not
   reimplement them.
@@ -6058,8 +6079,8 @@ fraction in live tiles, at least h.
   binding path, so a later styling package keys on the same clocks with no
   mechanism of its own.
 - **The aperture open item.** Each infinity view is a residency, so P18-11
-  reports its tables' bytes in `world.budget`, lands after S28, and carries a
-  per-world cap on infinity views (see the settled decisions below).
+  reports its tables' bytes in `world.budget` and carries a per-world cap on
+  infinity views (see the settled decisions below).
 
 **Settled by the lead.** Each of these is a decision, recorded with its reason.
 
@@ -6075,8 +6096,9 @@ fraction in live tiles, at least h.
   light's lobe, and the reflection path leaves every light-casting body out, so
   no body's highlight is counted twice. Crescents and rings are therefore not
   reflected in their true shape; the analytic lobe is kept.
-- **Infinity views wait for the aperture work and are capped.** P18-11 follows
-  S28, which reduces the residencies the aperture holds. It also carries a
+- **Infinity views are capped.** Camera views render as views of the world's
+  own residency, which reduced the residencies the aperture holds before P18-11
+  adds any. P18-11 also carries a
   per-world cap on infinity views as a counted ceiling (`world.budget` reports
   the live count against it), and a world that exceeds the cap is refused by
   name at validation and at a live edit. The RTX 2060's host-visible heap is
@@ -6108,7 +6130,9 @@ wall-clock or GPU timing.
 **Depends on:** P14 for the pass package and its plan; P15-1 for the counted
 march steps, texels and ceilings; P11's graph instances and history for the
 shared environment instance and retained resources; P12's image sources for
-`panorama`; S27 and S28 for P18-11; P15-5 for P18-13; and E5, E9, E10 and E11 for
+`panorama`; the existing residency sharing for routed seats and eligible
+windows, and camera views of the world's own residency, for P18-11;
+P15-5 for P18-13; and E5, E9, E10 and E11 for
 P18-12.
 
 ## Sequencing
@@ -6182,7 +6206,10 @@ bake's textures (P17) come before P6's choice between a bake and the field.
 **The sky.** P18 follows P14. Its baseline (P18-1) needs P15-1's counted march
 steps and ceilings; its clocks, keys, sky block, passes and cadence (P18-2 to
 P18-6) land before or after P15-2 to P15-7, and move behind `resolve` once P15-4
-has landed. Its views of other worlds (P18-11) follow S27 and S28, its shadow
+has landed. Its views of other worlds (P18-11) can build on the shared
+residency for routed seats and eligible windows and on camera views of the
+world's own residency; other session screens still use separate residencies,
+and infinity-view routing and quality levers remain to be implemented. Its shadow
 amortization (P18-13) follows P15-5, its editor surface (P18-12) follows the
 editor's E5, E10 and E11, and its floor defaults (P18-14) are best decided
 beside P15-8.

@@ -42,8 +42,8 @@ public sealed partial class SdfWorldPassesLawTests {
             TargetWidth: Extent
         );
 
-        SdfTestPipelines.ProduceUntil(
-            frame: () => view.Produce(context: in context),
+        TestLiveness.Until(
+            step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason,
             wait: view.Residency.WaitPipelineBuilds
         );

@@ -16,9 +16,9 @@ namespace Puck.Shaders;
 /// retires after its submissions.
 /// <para>
 /// At most <see cref="BuildConcurrency"/> of the cache's builds create at once, however many entries are building: a
-/// cold driver cache translating many kernels together keeps a processor for the thread that pumps frames. A build waits
-/// for its turn before its first creation and gives it back after its last, and a canceled build stops waiting, so a
-/// release waits only for the creations already in the driver.
+/// cold driver cache translating many kernels together keeps a processor for the thread that pumps frames. A build awaits
+/// its turn before its first creation, holding no thread meanwhile, and gives it back after its last, and a canceled
+/// build stops waiting, so a release waits only for the creations already in the driver.
 /// </para>
 /// <para>
 /// The cache counts the shader modules, render passes and pipelines it creates into <see cref="Work"/>, named
@@ -32,19 +32,16 @@ public sealed class GpuPassPipelineCache {
     /// creates is named by.</summary>
     public const string WorkSourceName = "gpu.pass-pipelines";
 
-    private readonly GpuBuildCache<GpuPassPipelineKey, GpuPassPipeline> m_entries;
-    private readonly SemaphoreSlim m_turns = new(
-        initialCount: BuildConcurrency,
-        maxCount: BuildConcurrency
+    private readonly GpuBuildCache<GpuPassPipelineKey, GpuPassPipeline> m_entries = new(
+        build: static (request, cancellationToken) => Build(
+            cancellationToken: cancellationToken,
+            device: request.Device,
+            key: request.Key,
+            ledger: request.Ledger
+        ),
+        concurrency: BuildConcurrency,
+        workSourceName: WorkSourceName
     );
-
-    /// <summary>Initializes a new instance of the <see cref="GpuPassPipelineCache"/> class.</summary>
-    public GpuPassPipelineCache() {
-        m_entries = new GpuBuildCache<GpuPassPipelineKey, GpuPassPipeline>(
-            build: BuildInTurn,
-            workSourceName: WorkSourceName
-        );
-    }
 
     /// <summary>Gets the most builds that create at once: one fewer than the machine's processors, from one to four, so
     /// the thread that pumps frames keeps a processor while the driver translates kernels.</summary>
@@ -70,24 +67,6 @@ public sealed class GpuPassPipelineCache {
             device: device,
             key: key
         );
-
-    // Builds an entry once one of the cache's turns is free; a cancel ends the wait, so a canceled build that never
-    // reached the driver creates nothing.
-    private GpuPassPipeline BuildInTurn(GpuBuildRequest<GpuPassPipelineKey> request, CancellationToken cancellationToken) {
-        m_turns.Wait(cancellationToken: cancellationToken);
-
-        try {
-            return Build(
-                cancellationToken: cancellationToken,
-                device: request.Device,
-                key: request.Key,
-                ledger: request.Ledger
-            );
-        } finally {
-            _ = m_turns.Release();
-        }
-    }
-
     /// <summary>Creates a key's pipeline on a device, on the calling thread: its shader modules, then for a graphics
     /// pipeline its render pass, then the pipeline, each counted into <paramref name="ledger"/>, and asks a device that
     /// keeps a persistent pipeline cache to write it. The cache builds through it on the thread pool; a harness that

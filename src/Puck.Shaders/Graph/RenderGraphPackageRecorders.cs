@@ -112,7 +112,7 @@ public enum RenderGraphPackageOutcome : byte {
 public interface IRenderGraphPackageRecorder : IDisposable {
     /// <summary>Records the pass's work for one frame. It must not submit, wait, create a pipeline or record a barrier:
     /// the instance submits the command buffer with the rest of its frame, the pipelines were built off the frame thread
-    /// (<see cref="IRenderGraphPackageFactory.Build"/>), and the planned barriers the instance recorded before it left
+    /// (<see cref="IRenderGraphPackageFactory.BuildAsync"/>), and the planned barriers the instance recorded before it left
     /// each bound version in the layout its port's access needs (<see cref="RenderGraphPortAccess"/>): a sampled input
     /// shader-readable and a color-attachment output in <see cref="GpuImageLayout.RenderTarget"/>, which a render pass
     /// the package draws through must leave it in. A recording that draws nothing records nothing and says so, and never
@@ -140,11 +140,12 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     ulong? Signature(in FrameContext context) => null;
 }
 /// <summary>Makes the recorders of one package id. A candidate graph's package passes build with its shader passes:
-/// <see cref="Build"/> creates a pass's shader modules, pipelines and render passes on the thread pool before the graph
-/// installs, and <see cref="Create"/> takes those objects on the frame thread when it installs.</summary>
+/// <see cref="BuildAsync"/> creates a pass's shader modules, pipelines and render passes on the thread pool before the
+/// graph installs, and <see cref="Create"/> takes those objects on the frame thread when it installs.</summary>
 public interface IRenderGraphPackageFactory {
     /// <summary>Builds what a pass's recorder needs that the frame thread must not create: its shader modules,
-    /// pipelines and render passes. It runs on the thread pool, creates objects through
+    /// pipelines and render passes. It runs on the thread pool, awaits whatever it waits for (a pipeline lease, a
+    /// residency's tables) so a waiting build holds no thread, creates objects through
     /// <see cref="RenderGraphPackageRecorderContext.Services"/> only, checks the token between creations, and releases
     /// what it created when it fails or is canceled.</summary>
     /// <param name="context">The pass it builds for.</param>
@@ -152,12 +153,12 @@ public interface IRenderGraphPackageFactory {
     /// instance is disposed.</param>
     /// <returns>The built objects, which <see cref="Create"/> takes, or <see langword="null"/> when the package builds
     /// nothing. The instance disposes them when the candidate never installs.</returns>
-    IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken);
+    ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken);
     /// <summary>Creates a pass's recorder on the frame thread when its graph installs. It takes ownership of
     /// <paramref name="built"/>, allocates its frame and pass group sets from the instance's pool
     /// (<see cref="RenderGraphPackageSets"/>), and creates no pipeline.</summary>
     /// <param name="context">The pass it records.</param>
-    /// <param name="built">What <see cref="Build"/> returned for this pass.</param>
+    /// <param name="built">What <see cref="BuildAsync"/> returned for this pass.</param>
     /// <param name="groups">The instance's pool, which holds the pass's two sets once per frame slot, and the constant
     /// buffers its frame group and pass group blocks live in, one per frame slot.</param>
     /// <returns>The recorder, which the instance disposes with its graph.</returns>
@@ -167,7 +168,7 @@ public interface IRenderGraphPackageFactory {
     /// region's residency (<see cref="GpuResidency.Select"/>, with a reader in flight), flushes each frame slot's share
     /// after the frame's recordings and records every staged copy with its buffer barriers ahead of the frame's passes,
     /// so a recorder only writes a region's contents and binds <see cref="GpuRegion.Buffer"/>. It runs on the thread
-    /// pool with <see cref="Build"/>; a package that writes no region states none.</summary>
+    /// pool with <see cref="BuildAsync"/>; a package that writes no region states none.</summary>
     /// <param name="context">The pass it states the regions of.</param>
     /// <returns>The regions, in the order the recorder receives them.</returns>
     IReadOnlyList<RenderGraphPackageRegion> Regions(RenderGraphPackageRecorderContext context) => [];

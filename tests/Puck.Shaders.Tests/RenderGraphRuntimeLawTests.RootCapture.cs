@@ -1,5 +1,6 @@
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -79,7 +80,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         try {
             runtime.RequestCapture(request: request);
             frames.Next(count: 2);
-            Assert.True(condition: gpu.PipelineGateEntered.Wait(timeout: TimeSpan.FromSeconds(value: 30), cancellationToken: TestContext.Current.CancellationToken));
+            Assert.True(condition: gpu.PipelineGateEntered.Wait(timeout: TestLiveness.Bound, cancellationToken: TestContext.Current.CancellationToken));
             Assert.Equal(expected: (start + 2), actual: captured.FrameCounter);
             Assert.False(condition: request.Completion.IsCompleted);
             Assert.Equal(expected: request.Path, actual: captured.PendingCapturePath);
@@ -93,10 +94,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
             gate.Set();
             gpu.PipelineGate = null;
         }
-        Assert.True(condition: SpinWait.SpinUntil(condition: () => {
-            _ = frames.Next();
-            return request.Completion.IsCompleted;
-        }, timeout: TimeSpan.FromSeconds(value: 30)));
+        TestLiveness.Until(
+            step: () => {
+                _ = frames.Next();
+                return request.Completion.IsCompleted;
+            }
+        );
         Assert.Null(@object: Outcome(request: request).Error);
         Assert.Equal(expected: (start + 2), actual: captured.FrameCounter);
     }

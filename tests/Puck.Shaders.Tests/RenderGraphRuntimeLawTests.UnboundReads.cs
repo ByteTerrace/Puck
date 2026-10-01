@@ -1,6 +1,7 @@
 using Puck.Abstractions.Sources;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -52,17 +53,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         // The view's graph builds on the thread pool, so frames are produced until it has recorded three; the third takes
         // its lease.
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    viewing.Takes = (viewing.Seen.Count == 2);
-                    Produce(frameIndex: index++);
+        TestLiveness.Until(
+            reason: () => $"The view recorded {viewing.Seen.Count} frame(s).",
+            step: () => {
+                viewing.Takes = (viewing.Seen.Count == 2);
+                Produce(frameIndex: index++);
 
-                    return (viewing.Seen.Count >= 3);
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: $"The view recorded {viewing.Seen.Count} frame(s)."
+                return (viewing.Seen.Count >= 3);
+            }
         );
 
         void Produce(long frameIndex) {
@@ -122,14 +120,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
             runtime: runtime
         );
 
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        TestLiveness.Until(
+            step: () => {
                 _ = frames.Next();
 
                 return (runtime.Node(instance: 1).FrameCounter > 0UL);
-            },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            }
+        );
 
         var request = new FrameCaptureRequest(path: Path.Combine(path1: Path.GetTempPath(), path2: $"{Guid.NewGuid():N}.png"));
 
@@ -152,7 +149,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         public bool Takes { get; set; }
 
-        public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => null;
+        public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => ValueTask.FromResult<IDisposable?>(result: null);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder(owner: this);
 
         private sealed class Recorder(ReadingPackage owner) : IRenderGraphPackageRecorder {

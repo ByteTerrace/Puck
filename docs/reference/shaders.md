@@ -464,9 +464,10 @@ publishes, and a bound buffer may be no larger than its producer's; the
 runtime refuses a mismatch by name when it installs. A package recorder's
 resolved images carry the layout their planned access left them in.
 
-A package id is served by an `IRenderGraphPackageFactory`. Its `Build` creates
-the pass's shader modules, pipelines and render passes on the thread pool with
-the candidate graph's shader passes, and its `Create` takes them when the graph
+A package id is served by an `IRenderGraphPackageFactory`. Its `BuildAsync`
+creates the pass's shader modules, pipelines and render passes on the thread pool
+with the candidate graph's shader passes, awaiting each pipeline lease so a
+waiting build holds no thread, and its `Create` takes them when the graph
 installs, with the pass's groups (`RenderGraphPackageGroups`): the instance's one
 descriptor pool, which holds a frame set and a pass set per frame slot for every
 pass, and each slot's frame and pass block buffers. The recorder allocates its

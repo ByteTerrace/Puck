@@ -333,7 +333,8 @@ internal static class CountersCommand {
 
             --world and --script select another authored workload and its script. The report carries both paths,
             so a ceilings file for a different workload or script refuses the comparison. The sky-still,
-            sky-drift, sky-twinkle and sky-cycle fixtures under tests/Puck.Counters isolate sky change classes.
+            sky-drift, sky-twinkle and sky-cycle fixtures under tests/Puck.Counters isolate sky change classes; each
+            has its own ceilings beside it (sky-<workload>.ceilings.json), which --ceilings names.
 
             --check holds the report to the counted-cost ceilings, a {WorldCountersCeilings.SchemaVersion}
             document (schema: tests/Puck.Counters/{WorldCountersCeilings.SchemaVersion}.schema.json). They state,

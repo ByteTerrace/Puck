@@ -449,7 +449,10 @@ public sealed partial class WorldWindowFrustumFitLawTests {
     // and frame the marker at the glass's centre each time.
     [Fact]
     public void TheCanarysSeatViewRidesItsBody_SoAStepReframesTheWindow() {
-        using var state = new TemporaryDirectory(prefix: "puck-portal-window-eye-");
+        using var state = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: "puck-portal-window-eye-"
+        );
         using var host = WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,
@@ -520,7 +523,10 @@ public sealed partial class WorldWindowFrustumFitLawTests {
     // the marker's image toward the side the camera moved to.
     [Fact]
     public void ANoSeatWorldsWindowFitsFromTheSpectator_AndMovingItReframesTheWindow() {
-        using var state = new TemporaryDirectory(prefix: "puck-portal-window-spectator-");
+        using var state = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: "puck-portal-window-spectator-"
+        );
         using var host = WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,

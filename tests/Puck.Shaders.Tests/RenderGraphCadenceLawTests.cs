@@ -307,7 +307,7 @@ public sealed partial class RenderGraphCadenceLawTests {
 
         public IReadOnlyList<RenderGraphPackageRegion> Regions(RenderGraphPackageRecorderContext context) =>
             ((StageRegion && (context.Package == Writer)) ? [new RenderGraphPackageRegion(ByteCount: 16, Name: "source")] : []);
-        public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => null;
+        public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => ValueTask.FromResult<IDisposable?>(result: null);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder(owner: this, package: context.Package);
 
         private sealed class Recorder(Model owner, string package) : IRenderGraphPackageRecorder {

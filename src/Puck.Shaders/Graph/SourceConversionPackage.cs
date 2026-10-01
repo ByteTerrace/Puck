@@ -68,7 +68,7 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException">The pass does not read one buffer and write one image.</exception>
     /// <exception cref="IOException">The deployed kernel is missing or cannot be read.</exception>
-    public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
+    public async ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
         if (
@@ -100,7 +100,7 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
         );
 
         try {
-            _ = lease.Wait(cancellationToken: cancellationToken);
+            _ = await lease.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
         } catch {
             lease.Release();
 

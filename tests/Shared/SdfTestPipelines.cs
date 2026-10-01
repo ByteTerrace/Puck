@@ -2,7 +2,6 @@ using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.Shaders;
-using Xunit;
 
 namespace Puck.Testing;
 
@@ -15,7 +14,8 @@ internal static class SdfTestPipelines {
         path2: $"{SdfKernelSet.StemOf(kernel: kernel)}.comp.spv"
     ))))]);
 
-    // Leases a set from a pass-pipeline cache and waits for it on the calling thread; the cache counts what it creates.
+    // Leases a set from a pass-pipeline cache and blocks the calling thread until it is built; the cache counts what it
+    // creates.
     public static SdfWorldPipelines Build(IGpuDeviceContext device, SdfKernelSet kernels, GpuPassPipelineCache cache, bool includeBrickPipelines = false) {
         var set = SdfWorldPipelines.Acquire(
             cache: cache,
@@ -25,7 +25,7 @@ internal static class SdfTestPipelines {
         );
 
         try {
-            set.Wait(cancellationToken: CancellationToken.None);
+            set.WaitAsync(cancellationToken: CancellationToken.None).GetAwaiter().GetResult();
 
             return set;
         } catch {
@@ -83,37 +83,13 @@ internal static class SdfTestPipelines {
     // A reflector for a reload's interface check; the kernels a harness reloads are SPIR-V, which needs no tool.
     public static ShaderBytecodeReflector Reflector() =>
         new(toolchain: new ShaderToolchain());
-
-    // How long a harness waits for work on the thread pool: liveness, which a loaded machine whose pool is starved reaches
-    // only when a build never finishes. It decides nothing.
-    public static readonly TimeSpan Liveness = TimeSpan.FromMinutes(value: 5);
-
-    // Produces frames until one returns true. Between frames it blocks on the builds a frame waits for (wait, returning
-    // whether any was in flight) or, with none in flight, pauses, so it never spins on a processor the builds need.
-    public static void ProduceUntil(Func<bool> frame, Func<string?> reason, Func<CancellationToken, bool>? wait = null) {
-        using var liveness = new CancellationTokenSource(delay: Liveness);
-        var token = liveness.Token;
-
-        while (!frame()) {
-            try {
-                if (!(wait?.Invoke(arg: token) ?? false)) {
-                    _ = token.WaitHandle.WaitOne(millisecondsTimeout: 1);
-                }
-            } catch (OperationCanceledException) when (token.IsCancellationRequested) {
-            }
-
-            if (token.IsCancellationRequested) {
-                Assert.Fail(message: $"No frame was ready within {Liveness}: {reason()}");
-            }
-        }
-    }
     // Produces frames until the residency's pipeline build has built its tables, then submits that frame's upload, as a
     // view's first pass of the frame does.
     public static void ProduceFirstFrame(this SdfWorldResidency residency, in FrameContext context) {
         var copy = context;
 
-        ProduceUntil(
-            frame: () => {
+        TestLiveness.Until(
+            step: () => {
                 residency.BeginFrame();
 
                 return residency.Prepare(context: in copy);
