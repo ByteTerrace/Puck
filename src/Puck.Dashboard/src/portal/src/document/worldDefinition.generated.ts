@@ -9605,6 +9605,10 @@ export type WorldScreenSourceSession = {
    * The offscreen target's [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.
    */
   resolution?: WorldScreenResolution | null;
+  /**
+   * The colour the face shows, as #RRGGBB, when the screen is as many screens deep as the presentation nests (views.nestingDepth), so two portals facing each other end on it; or null for black. Omitted from the wire when null.
+   */
+  fallback?: string | null;
 };
 
 /**
@@ -11019,6 +11023,10 @@ export type WorldViewDefaults = {
    * The post-process passes the synthesized root graph runs over the composed frame, in order, before the overlay, or null for none. A world that names Root authors its whole graph and names none.
    */
   post?: (WorldViewPostPass | null)[] | null;
+  /**
+   * How many screens deep a view of a world shows another world's view, or null for DefaultNestingDepth; refused past MaxNestingDepth. NestingDepth is what a reader resolves through.
+   */
+  nestingDepth?: number | null;
   /**
    * Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */

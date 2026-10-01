@@ -163,6 +163,12 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"views.root '{root}' names no views.graphs row.");
         }
+        if (
+            (views.NestingDepthRaw is { } nesting) &&
+            ((nesting < 0) || (nesting > RenderGraphInstanceSet.MaxNestingDepth))
+        ) {
+            errors.Add(item: $"views.nestingDepth {nesting} is outside 0 through {RenderGraphInstanceSet.MaxNestingDepth}: a portal seen through a portal nests at most {RenderGraphInstanceSet.MaxNestingDepth} screens deep.");
+        }
         if (views.GraphBudget is { } budget) {
             foreach (var (member, value) in ((ReadOnlySpan<(string, long)>)[
                 ("passPixelsPerFrame", budget.PassPixelsPerFrame),
@@ -191,6 +197,11 @@ public static partial class WorldDefinitionValidator {
                 instances: WorldViewGraphs.Instances(
                     graphs: graphs,
                     passes: static _ => 1
+                ),
+                nestingDepth: Math.Clamp(
+                    max: RenderGraphInstanceSet.MaxNestingDepth,
+                    min: 0,
+                    value: views.NestingDepth
                 ),
                 refusal: out var refusal,
                 set: out _

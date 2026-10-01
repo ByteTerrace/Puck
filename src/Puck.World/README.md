@@ -930,8 +930,9 @@ Facts a script needs:
   there too: `screen.insert`/`.eject` apply through the ordered domain headless exactly as windowed, and
   `screen.source <index> camera|capture|desktop|probe|view|qr` still attempts a real
   device open (or, for `qr`, a real encode) and reports the honest failure
-  rather than refusing as unknown; `world.screens` and `world.view-refresh`
-  read only the screen binder, so every shape answers them), and
+  rather than refusing as unknown; `world.screens`, `world.nesting` and
+  `world.view-refresh` read only the screen binder, so every shape answers
+  them), and
   most others are server-safe (registered in `AddWorldAuthoritativeCore`,
   the fly camera application included—see above);
   `WorldRenderLeverCommandModule.cs` (the render levers: shadows, ambient
@@ -1358,8 +1359,11 @@ change. A producer registers twice, once per half:
   names it. A registration is refused unless its id, content class and
   transport match the shape's, and a feed that declares another producer,
   content class or transport than its registration is disposed and refused by
-  name when it opens. The binder registers the shipped four; a host adds its
-  own as `IWorldImageProducer` services. The ids `machine` and `probe` are
+  name when it opens. The binder registers the shipped five (`testPattern`,
+  `qr`, `color`, `camera`, `capture`); a host adds its own as
+  `IWorldImageProducer` services. `color` shows one flat `#RRGGBB` colour, a
+  one-pixel image a screen stretches over its face; a session screen past the
+  nesting depth shows its `fallback` colour through it. The ids `machine` and `probe` are
   closed to document producers: they name the typed arms' source instances.
 
 A source is a render-graph instance. `WorldSourceInstances` derives one
@@ -1375,7 +1379,7 @@ renames no source. Screens showing equal sources read one instance, which the sc
 its producer's cadence and negotiated extent, and the instance's `SourceHandle`
 is its identity. `WorldImageProducers.RegisterPackages` registers one factory
 per producer under its source package, which opens the instance's feed from
-the instance's settings: an uploaded producer's (`testPattern`, `qr`) is an
+the instance's settings: an uploaded producer's (`testPattern`, `qr`, `color`) is an
 upload, whose instance the render-graph runtime converts once a frame at most
 from the region its feed writes, through the shipped conversion its format
 names. A `views.graphs` row names an uploaded producer's source package with
@@ -1408,10 +1412,11 @@ the drawn image, none exists:
 | `machine` | `source.machine`, an uploaded instance whose `MachineVideoSourceUpload` writes the output's latest frame once per completed tick | `RenderGraphRuntimeLawTests.AMachineSource*`, `WorldCaptureSchedulerLawTests` (the exact verdict), the `uploaded-sources` and `instrument-clock-source` canaries |
 | `producer`, `testPattern` | `WorldTestPatternProducer`, uploaded | `ImageProducerLawTests.ATestPatternFeedStatesTheExactPatternItShowsAndTheVerdictHoldsIt`, `WorldSourceInstanceLawTests`, the `uploaded-sources` canary |
 | `producer`, `qr` | `WorldQrProducer`, uploaded | `ImageProducerLawTests.AQrFeedStatesTheCodeItRasterized`, the `uploaded-sources` canary |
+| `producer`, `color` | `WorldColorProducer`, uploaded | `WorldNestedScreensLawTests` (a face past the nesting depth shows its fallback colour's instance), the `portal-nested` and `portal-return` canaries' discriminating legs |
 | `producer`, `camera` | the binder's `CameraProducer`, imported through `WorldCameraSourceFeed` | `ImageProducerLawTests.ACameraSourceDeclaresTheExtentItsSeatsSensorDelivers`, the `hud-frame-slots` canary (offscreen, it opens no device); a recorded camera run is deferred |
 | `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests`; the `uploaded-sources` canary opens monitor 0 offscreen and captures its fill |
 | `view` | an `sdf.world` instance of its own, rendering the residency `WorldScreenBinder.TryResolveView` creates for it | `WorldViewPaneMappingLawTests.Views`, the `view-screens` canary |
-| `session` | an `sdf.world` instance (`WorldViewNames.Session`) rendered through the destination's own frame source | `WorldScreenMappingLawTests.EachSourceKindNamesItsInstance`, `WorldSessionFollowLawTests`; the `uploaded-sources` canary shows and captures one |
+| `session` | an `sdf.world` instance (`WorldViewNames.Session`) rendered through the destination's own frame source, or its endpoint's shared one; the destination's own screens show to `views.nestingDepth` (`WorldNestedScreens`, `WorldViewNames.Nested`) | `WorldScreenMappingLawTests.EachSourceKindNamesItsInstance`, `WorldSessionFollowLawTests`, `WorldNestedScreensLawTests`; the `uploaded-sources` canary shows and captures one, `portal-nested` a third world two levels deep and `portal-return` a destination's return portal |
 | `text` | no image: the decal tier draws its lines (`WorldScreenTextDecal`, through `TextSourceAt`) | `WorldTextAuthoringLawTests` (`TextScreenSourceValidates`, `TextScreenRefusesWithoutCatalogUnknownFontGridAndColor`, `TextCreationFaceSourceValidates`); the `uploaded-sources` canary checks its glyphs' ink |
 | `probe` | `source.probe`, an imported instance over the probe's output ring (`ProbeSourceFeed`) | `WorldSourceInstanceLawTests`, `RenderedProbeKernelHostLawTests`, the `probe-sources` canary |
 

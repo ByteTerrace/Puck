@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Puck.Commands;
+using Puck.Hosting;
 
 namespace Puck.World.Client;
 
@@ -33,6 +34,10 @@ public sealed class WorldScreenMappingSet {
 
     private readonly List<SourceMapping> m_published = [];
     private Row[] m_rows = [];
+    // The source instances the rows show, before the routed worlds' are joined to them (Sources), and those routed
+    // worlds' instances as ReconcileRouted last set them.
+    private WorldSourceInstances m_rowSources = WorldSourceInstances.Of(shown: []);
+    private IReadOnlyList<RenderGraphInstance> m_routedSources = [];
 
     /// <summary>Gets the mapping of every screen that publishes one, in row order, as <see cref="Publish"/> last
     /// published them. The set rewrites the list in place.</summary>
@@ -40,16 +45,20 @@ public sealed class WorldScreenMappingSet {
 
     /// <summary>Gets the screen rows the set last reconciled, in order.</summary>
     public IReadOnlyList<WorldScreen> Screens { get; private set; } = [];
-    /// <summary>Gets the source instances the screens show, a new value on every <see cref="Reconcile"/>: the render graph
-    /// runs them, and each screen showing one samples its image.</summary>
+    /// <summary>Gets the source instances the screens show, then those the screens of the worlds seats are presented in
+    /// show (<see cref="ReconcileRouted"/>), a new value on every <see cref="Reconcile"/> and whenever the routed worlds'
+    /// change: the render graph runs them, every view of a world the display shows reads them, and each screen showing
+    /// one samples its image.</summary>
     public WorldSourceInstances Sources { get; private set; } = WorldSourceInstances.Of(shown: []);
     /// <summary>Gets the view instances the world renders beside its own, a new value whenever
     /// <see cref="ReconcileViews"/> replaces them: the render graph runs them, and each screen showing one samples its
     /// image.</summary>
     public WorldViewInstances Views { get; private set; } = WorldViewInstances.Empty;
 
+    private const string AwaitsSession = "the session awaits its authority";
+
     // The row a screen's source names: its handle and document extent, or why it names none.
-    private static Row RowOf(WorldScreen screen, int position, WorldSourceInstances sources, IReadOnlyList<WorldCamera> cameras) {
+    private static Row RowOf(WorldScreen screen, int position, WorldSourceInstances sources, IReadOnlyList<WorldCamera> cameras, Func<int, string?> sessionView, bool sessionsPastDepth) {
         switch (screen.Source) {
             case WorldScreenSource.View view:
                 foreach (var camera in cameras) {
@@ -76,13 +85,30 @@ public sealed class WorldScreenMappingSet {
                     refusal: $"camera '{view.CameraName}' not declared",
                     screen: screen
                 );
+            case WorldScreenSource.Session session when sessionsPastDepth:
+                // The fallback colour's source instance, drawn as the session would be, so a face draws alike whatever
+                // level shows it.
+                return new Row(
+                    extent: ((session.Resolution is { } fallbackResolution)
+                        ? (fallbackResolution.Width, fallbackResolution.Height)
+                        : (WorldViewInstances.DefaultSessionWidth, WorldViewInstances.DefaultSessionHeight)),
+                    handle: sources.HandleOf(screen: position),
+                    refusal: null,
+                    screen: screen
+                );
             case WorldScreenSource.Session session:
+                var shownView = sessionView(arg: screen.Index);
+
                 return new Row(
                     extent: ((session.Resolution is { } resolution)
                         ? (resolution.Width, resolution.Height)
                         : (WorldViewInstances.DefaultSessionWidth, WorldViewInstances.DefaultSessionHeight)),
-                    handle: SourceHandle.Instance(name: WorldViewNames.Session(screen: screen.Index)),
-                    refusal: null,
+                    handle: ((shownView is null)
+                        ? null
+                        : SourceHandle.Instance(name: shownView)),
+                    refusal: ((shownView is null)
+                        ? AwaitsSession
+                        : null),
                     screen: screen
                 );
             default:
@@ -138,9 +164,15 @@ public sealed class WorldScreenMappingSet {
     /// <param name="cameras">The cameras a view source names.</param>
     /// <param name="live">The source a live presentation verb shows over a row, by screen index, or
     /// <see langword="null"/> for none; the set reads it only while it reconciles.</param>
+    /// <param name="sessionView">Names the view a session screen shows, by screen index, or answers
+    /// <see langword="null"/> while it shows none; <see langword="null"/> names the boot world's
+    /// (<see cref="WorldViewNames.Session"/>). The set reads it only while it reconciles.</param>
+    /// <param name="sessionsPastDepth">Whether the screens' world is as many screens deep as the presentation nests, so
+    /// every session screen shows its fallback colour's source instance (<see cref="WorldPortalFallback"/>) instead of a
+    /// view.</param>
     /// <exception cref="ArgumentNullException"><paramref name="screens"/> or <paramref name="cameras"/> is
     /// <see langword="null"/>.</exception>
-    public void Reconcile(IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldCamera> cameras, IReadOnlyDictionary<int, WorldScreenSource>? live = null) {
+    public void Reconcile(IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldCamera> cameras, IReadOnlyDictionary<int, WorldScreenSource>? live = null, Func<int, string?>? sessionView = null, bool sessionsPastDepth = false) {
         ArgumentNullException.ThrowIfNull(argument: screens);
         ArgumentNullException.ThrowIfNull(argument: cameras);
 
@@ -157,7 +189,9 @@ public sealed class WorldScreenMappingSet {
                 : screen);
         }
 
-        var sources = WorldSourceInstances.Of(shown: [.. shown.Select(selector: static screen => screen.Source)]);
+        var sources = WorldSourceInstances.Of(shown: [.. shown.Select(selector: screen => ((sessionsPastDepth && (screen.Source is WorldScreenSource.Session session))
+            ? WorldPortalFallback.SourceOf(session: session)
+            : screen.Source))]);
         var rows = new Row[shown.Length];
 
         for (var position = 0; (position < shown.Length); position++) {
@@ -165,6 +199,8 @@ public sealed class WorldScreenMappingSet {
                 cameras: cameras,
                 position: position,
                 screen: shown[position],
+                sessionView: (sessionView ?? (static screen => WorldViewNames.Session(screen: screen))),
+                sessionsPastDepth: sessionsPastDepth,
                 sources: sources
             );
         }
@@ -172,7 +208,49 @@ public sealed class WorldScreenMappingSet {
         m_rows = rows;
         m_published.Clear();
         Screens = screens;
-        Sources = sources;
+        m_rowSources = sources;
+        Sources = sources.Including(others: m_routedSources);
+    }
+    /// <summary>Joins the source instances the screens of the worlds seats are presented in show to <see cref="Sources"/>,
+    /// which then changes only when an instance joins or leaves.</summary>
+    /// <param name="sources">Those worlds' source instances.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="sources"/> is <see langword="null"/>.</exception>
+    public void ReconcileRouted(IReadOnlyList<RenderGraphInstance> sources) {
+        ArgumentNullException.ThrowIfNull(argument: sources);
+
+        if (SameNames(
+            left: sources,
+            right: m_routedSources
+        )) {
+            return;
+        }
+
+        m_routedSources = sources;
+        Sources = m_rowSources.Including(others: sources);
+    }
+    /// <summary>Returns whether two instance lists name the same instances in the same order.</summary>
+    /// <param name="left">One list.</param>
+    /// <param name="right">The other.</param>
+    /// <returns><see langword="true"/> when both name the same instances in order.</returns>
+    public static bool SameNames(IReadOnlyList<RenderGraphInstance> left, IReadOnlyList<RenderGraphInstance> right) {
+        ArgumentNullException.ThrowIfNull(argument: left);
+        ArgumentNullException.ThrowIfNull(argument: right);
+
+        if (left.Count != right.Count) {
+            return false;
+        }
+
+        for (var index = 0; (index < left.Count); index++) {
+            if (!string.Equals(
+                a: left[index].Name,
+                b: right[index].Name,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return false;
+            }
+        }
+
+        return true;
     }
     /// <summary>Replaces the view instances the world renders beside its own, which the render graph runs from its next
     /// reconciliation.</summary>

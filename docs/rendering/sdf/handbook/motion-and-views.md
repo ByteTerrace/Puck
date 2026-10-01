@@ -204,17 +204,30 @@ another world as a view instance (`WorldViewInstances`).
   the eye would see through the door, and the image parallaxes as the eye
   moves. The glass shows the image edge to edge, with no bezel. The frustum's
   shear rides the camera (`CameraSnapshot.FrustumOffset`), and so does its near
-  plane, the mapped glass's own plane (`CameraSnapshot.Near`): the view pass
-  starts every ray on the glass and a hit through the image starts its ray
-  there, so the window shows only what lies beyond the aperture, never the
-  destination's geometry between the mapped eye and the glass. The far
-  distance still counts from the mapped eye, so a pick through the window
-  reaches exactly as far as the window renders.
+  plane, just past the mapped glass and the counterpart face's own glass
+  (`CameraSnapshot.Near`): the view pass starts every ray there and a hit
+  through the image starts its ray there, so the window shows only what lies
+  beyond the aperture, never the destination's geometry between the mapped eye
+  and the glass, nor the glass of the face it looks through. The far distance
+  still counts from the mapped eye, so a pick through the window reaches
+  exactly as far as the window renders.
+- **Nesting.** The world a session view renders draws its own screens, so a
+  portal inside it shows its own destination, recursively, to the
+  presentation's nesting depth (`views.nestingDepth`, 3 by default). Each level
+  is a view instance of its own (`session$<screen>$<screen>…`, or
+  `routed$<authority>$<screen>…` beneath a world a seat is presented in), fitted
+  to the eye of the view one level up, so two portals facing each other end at
+  the depth; a face at the depth shows its session's `fallback` colour. One
+  world seen at several levels shares its endpoint's residency while its
+  sessions disclose everything, and each view of that residency binds the
+  screens of its own level (`ISdfScreenSources.ReadOf` takes the view).
 
 **The scheduler decides what renders.** A view renders only while something
 shows it: a screen, through the footprint of its declared extent inside the
 world's view, or a HUD frame or a probe export, which the display shows
-directly. It renders at most once a frame however many screens show it, at the
+directly. A session's footprint holds only while its consumer's last camera
+sees the glass it shows on (`WorldPortalVisibility`), so a portal face out of
+view renders nothing beneath it. It renders at most once a frame however many screens show it, at the
 extent its footprint asks, and at the refresh `world.view-refresh` sets (a
 window session on every frame); between refreshes every consumer reads its
 latest completed image. A view nothing shows renders nothing and keeps its
@@ -238,11 +251,12 @@ other's screens each show the other's previous frame, never a same-frame loop.
 ```
 
 A hit on a screen showing a view continues through that view's camera into
-the world it films (`RenderGraphHitWalk`), up to the graph's nesting depth. A
-hit on a portal's window continues through the camera the window last rendered
-from into the destination, where no screen stands (a projected destination's
-screens bind dark), and ends on the surface its ray meets among the
-destination's static placements (`RenderGraphHitPath.Surface`).
+the world it films (`RenderGraphHitWalk`), through at most the graph's nesting
+depth of screens. A hit on a portal's window continues through the camera the
+window last rendered from into the destination, through any portal it meets
+there, each world tested against its own screens, and ends on the surface its
+ray meets among the last world's static placements
+(`RenderGraphHitPath.Surface`).
 
 ## View transitions move regions and switch content
 

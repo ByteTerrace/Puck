@@ -383,11 +383,15 @@ Free Cam do not alter the logical movement basis.
   presentation picker's answer (`pick=instance:<name> pixel <x>,<y>` or
   `pick=none`) and how the hit walk through the live instance set ends
   (`walk=<end> steps=<n> in <instance> last <kind>:<source> pixel <x>,<y>`).
-  Each view's world producer reports the screens standing in the world
-  (`WorldViewGraphHost.Screens`, the binder's `WorldScreenMappingSet`), so a
-  walk from a view's pane continues through a screen: `Producer` on a producer,
-  machine or probe source's pixel, `Unread` on a screen showing a camera view,
-  which is no live instance yet. It ends with the pane the pointer hovers
+  Each view's world producer reports the screens standing in the world it
+  renders (`WorldViewGraphHost.Screens`, the binder's `WorldScreenMappingSet`,
+  or, for a seat presented in another world and for a session, that world's
+  own, `IWorldViewScenes.TryPlacements`), so a walk from a view's pane
+  continues through a screen, and through portals inside a destination to
+  `views.nestingDepth` screens: `Producer` on a producer, machine or probe
+  source's pixel (a fallback colour's past the depth), `DepthLimit` past the
+  set's nesting depth, `Unread` on a screen showing a camera view, which is no
+  live instance yet. It ends with the pane the pointer hovers
   (`hovered=pane<i> <kind>:<name> pixel <x>,<y>` or `hovered=none`): each
   frame `WorldCursorFeed` asks the host's picker through
   `WorldViewGraphHost.Hover` for the pointer's display point, whenever the
@@ -401,8 +405,27 @@ Free Cam do not alter the logical movement basis.
   a source, each ending in `mapping <SourceMapping.Describe()>` (the line
   `world.view.panes` prints for a pane) or `mapping none (<reason>)`. A boot
   that presents nothing publishes no screen mapping (`none (not published)`).
-  It and `world.view-refresh` live in the core `ScreenCommandModule`, so
-  every boot shape answers them, offscreen and headless included.
+  It, `world.nesting` and `world.view-refresh` live in the core
+  `ScreenCommandModule`, so every boot shape answers them, offscreen and
+  headless included.
+- `world.nesting` — lists every level of nested worlds the presentation shows:
+  `depth <n>` (the boot world's `views.nestingDepth`), each world a seat is
+  presented in (`routed$<authority> depth 0`), then each session view by name
+  (`session$<screen>`, one `$<screen>` more a level beneath it, or
+  `routed$<authority>$<screen>…` beneath a routed world) with its depth, its
+  destination, `via endpoint:<authority>` (the residency every seat and fully
+  disclosed window presenting that world shares) or `via own`, and
+  `screens <index>:<instance>…`: what each of its world's screens shows, a
+  session one level deeper, a shared source instance, `source$color$<digest>`
+  past the depth, or `none`.
+- `views.nestingDepth` (document) — how many screens deep a portal seen through
+  a portal renders: 3 unauthored, 0 through 8, refused by name past either end.
+  The boot world's governs the presentation and which worlds its authority
+  opens screen sessions for. A session screen at the depth shows its session's
+  `fallback` colour (`#RRGGBB`, black unauthored). A world shown through a
+  screen shows only sessions and producers whose content is a function of their
+  settings (`testPattern`, `qr`, `color`); its machines, probes, camera views,
+  text and local-device producers show nothing.
 - `view.override camera|layout <name|auto>` — live composition override;
   `layout toggle` and `layout next` cycle the authored layouts. It is
   bindable: a bound dispatch (wheel sector / chord row, no tokens) selects the

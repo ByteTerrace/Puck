@@ -33,6 +33,27 @@ public static class WorldWindowFrustumFit {
     /// counterpart that the destination's document declares; <see langword="false"/> otherwise, including while the
     /// destination has not delivered a definition naming the counterpart.</returns>
     public static bool TryResolveApertures(WorldDefinition local, WorldDefinition destination, int screenIndex, out WorldFaceGeometry source, out WorldFaceGeometry counterpart) {
+        var resolved = TryResolveFrames(
+            counterpart: out var counterpartFrame,
+            destination: destination,
+            local: local,
+            screenIndex: screenIndex,
+            source: out var sourceFrame
+        );
+
+        source = (resolved
+            ? WorldFaceGeometry.FromFrame(frame: sourceFrame)
+            : default);
+        counterpart = (resolved
+            ? WorldFaceGeometry.FromFrame(frame: counterpartFrame)
+            : default);
+
+        return resolved;
+    }
+
+    // The two face frames a window screen's apertures are: the local face that claims the screen index, and the
+    // counterpart its portal facet names in the destination.
+    private static bool TryResolveFrames(WorldDefinition local, WorldDefinition destination, int screenIndex, out WorldFaceFrame source, out WorldFaceFrame counterpart) {
         ArgumentNullException.ThrowIfNull(argument: local);
         ArgumentNullException.ThrowIfNull(argument: destination);
 
@@ -70,14 +91,15 @@ public static class WorldWindowFrustumFit {
                 return false;
             }
 
-            source = WorldFaceGeometry.FromFrame(frame: row.Frame);
-            counterpart = WorldFaceGeometry.FromFrame(frame: counterpartRow.Frame);
+            source = row.Frame;
+            counterpart = counterpartRow.Frame;
 
             return true;
         }
 
         return false;
     }
+
     /// <summary>Returns the glass a screen row draws, as an aperture: its rectangle, and its Normal
     /// <c>Right × Up</c>, toward the side it is seen from.</summary>
     /// <param name="screen">The screen row the window shows on.</param>
@@ -127,6 +149,26 @@ public static class WorldWindowFrustumFit {
     /// <returns>The fit.</returns>
     public static Func<CameraSnapshot?> FitFrom(WorldSeatViewports viewports, Func<WorldDefinition?> local, Func<WorldDefinition> destination, Func<WorldScreen?> screen) {
         ArgumentNullException.ThrowIfNull(argument: viewports);
+
+        return FitFrom(
+            destination: destination,
+            eye: () => ViewerEye(viewports: viewports),
+            local: local,
+            screen: screen
+        );
+    }
+    /// <summary>Returns the fit a window session renders through, against any eye: a window inside a world another view
+    /// renders fits to the camera that view renders with (a seat's presented there, or a window's one level up), as the
+    /// boot world's windows fit to its viewer (<see cref="FitFrom(WorldSeatViewports, Func{WorldDefinition?}, Func{WorldDefinition}, Func{WorldScreen?})"/>).
+    /// A transient gap yields <see langword="null"/>, the ordinary session projection for the frame.</summary>
+    /// <param name="eye">Reads the eye, in the local world's space, or <see langword="null"/> while there is none.</param>
+    /// <param name="local">Reads the local document, whose face catalog seats the screen, or <see langword="null"/>.</param>
+    /// <param name="destination">Reads the destination's document, as its session mirror last delivered it.</param>
+    /// <param name="screen">Reads the screen row the window shows on, or <see langword="null"/>.</param>
+    /// <returns>The fit.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public static Func<CameraSnapshot?> FitFrom(Func<Vector3?> eye, Func<WorldDefinition?> local, Func<WorldDefinition> destination, Func<WorldScreen?> screen) {
+        ArgumentNullException.ThrowIfNull(argument: eye);
         ArgumentNullException.ThrowIfNull(argument: local);
         ArgumentNullException.ThrowIfNull(argument: destination);
         ArgumentNullException.ThrowIfNull(argument: screen);
@@ -134,12 +176,13 @@ public static class WorldWindowFrustumFit {
         return () => (
             ((local() is { } document) &&
             (screen() is { } row) &&
-            TryFitFromView(
+            (eye() is { } position) &&
+            TryFitFromEye(
                 camera: out var camera,
                 destination: destination(),
+                eye: position,
                 local: document,
-                screen: row,
-                viewports: viewports
+                screen: row
             ))
                 ? camera
                 : null);
@@ -155,28 +198,82 @@ public static class WorldWindowFrustumFit {
     /// <returns><see langword="true"/> when every part resolves and the eye stands in front of the glass;
     /// <see langword="false"/> otherwise, when the session renders its ordinary projection for the frame.</returns>
     public static bool TryFitFromView(WorldSeatViewports viewports, WorldDefinition local, WorldDefinition destination, WorldScreen screen, out CameraSnapshot camera) {
-        ArgumentNullException.ThrowIfNull(argument: screen);
-
         camera = default;
 
         return (
             (ViewerEye(viewports: viewports) is { } eye) &&
-            TryResolveApertures(
-                counterpart: out var counterpart,
-                destination: destination,
-                local: local,
-                screenIndex: screen.Index,
-                source: out var source
-            ) &&
-            TryFitWindow(
+            TryFitFromEye(
                 camera: out camera,
-                destination: counterpart,
-                glass: Glass(screen: screen),
-                localEye: eye,
-                source: source
+                destination: destination,
+                eye: eye,
+                local: local,
+                screen: screen
             )
         );
     }
+    /// <summary>Fits a window screen's camera against an eye: the local face the screen shows on and its counterpart in
+    /// the destination (<see cref="TryResolveApertures"/>), the glass its row draws (<see cref="Glass"/>), and the
+    /// eye. The camera's rays start past the glass the counterpart face draws (<see cref="WorldPrototypeFacets.GlassBack"/>),
+    /// so the window never shows the destination's own glass it looks through, which shows a window of its own when the
+    /// counterpart is a return portal.</summary>
+    /// <param name="eye">The eye, in the local world's space.</param>
+    /// <param name="local">The local document, whose face catalog seats the screen.</param>
+    /// <param name="destination">The destination's document, as its session mirror last delivered it.</param>
+    /// <param name="screen">The screen row the window shows on.</param>
+    /// <param name="camera">The fitted camera, on success.</param>
+    /// <returns><see langword="true"/> when every part resolves and the eye stands in front of the glass.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="screen"/> is <see langword="null"/>.</exception>
+    public static bool TryFitFromEye(Vector3 eye, WorldDefinition local, WorldDefinition destination, WorldScreen screen, out CameraSnapshot camera) {
+        ArgumentNullException.ThrowIfNull(argument: screen);
+
+        camera = default;
+
+        if (!TryResolveFrames(
+            counterpart: out var counterpartFrame,
+            destination: destination,
+            local: local,
+            screenIndex: screen.Index,
+            source: out var sourceFrame
+        )) {
+            return false;
+        }
+
+        var source = WorldFaceGeometry.FromFrame(frame: sourceFrame);
+        var counterpart = WorldFaceGeometry.FromFrame(frame: counterpartFrame);
+        var glass = Glass(screen: screen);
+
+        if (!TryFitWindow(
+            camera: out camera,
+            destination: counterpart,
+            glass: glass,
+            localEye: eye,
+            source: source
+        )) {
+            return false;
+        }
+
+        // The mapped glass lies this far in front of the counterpart's frame along its normal, which the camera looks
+        // against, and the counterpart's own glass ends this far in front of it.
+        var front = Vector3.Dot(
+            vector1: (WorldWindowProjectionMath.MapPoint(
+                destination: counterpart,
+                point: glass.Origin,
+                source: source
+            ) - counterpart.Origin),
+            vector2: counterpart.Normal
+        );
+        var behind = (WorldPrototypeFacets.GlassBack(frame: counterpartFrame) - GlassClearance);
+
+        if (front > behind) {
+            camera = (camera with { Near = (camera.Near + (front - behind)) });
+        }
+
+        return true;
+    }
+
+    /// <summary>How far past the back of the counterpart's glass a window's rays start, in world units.</summary>
+    public const float GlassClearance = 0.01f;
+
     /// <summary>Maps the viewer's eye and the glass through the border pair's isometry and fits an off-axis frustum
     /// against the mapped glass from the mapped eye — the one call a window projection needs per produced frame.</summary>
     /// <param name="localEye">The viewer's eye, in the source world's space.</param>

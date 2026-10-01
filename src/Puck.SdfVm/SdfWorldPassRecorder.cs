@@ -597,7 +597,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 ? residency.ScreenImage(
                     leases: recording.Leases,
                     reads: recording.Reads,
-                    screen: screen
+                    screen: screen,
+                    view: m_view.View
                 )
                 : 0);
 

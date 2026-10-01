@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.Hosting;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -79,17 +80,14 @@ public sealed partial class WorldInstanceHost {
 
         return declared;
     }
-    // Whether an instance's screens observe right now: the boot world's always do, as a desktop presents it; any other
-    // world's do while a body in it is human-occupied, so a world nobody stands in boots no destination for its screens.
-    private static bool PresentsScreens(WorldInstance instance) {
-        if (string.Equals(
-            a: instance.Name,
-            b: BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            return true;
-        }
 
+    // How many screens deep each running instance is seen, as of the sessions open now (ScreenDepths), and the queue its
+    // walk takes; both reused, so a steady step allocates nothing.
+    private readonly Dictionary<string, int> m_screenDepths = new(comparer: StringComparer.Ordinal);
+    private readonly Queue<string> m_screenDepthQueue = new();
+
+    // Whether an instance has a body a human occupies: someone stands in it.
+    private static bool IsOccupied(WorldInstance instance) {
         var population = instance.Server.Population;
 
         for (var index = 0; (index < population.Capacity); index++) {
@@ -99,6 +97,79 @@ public sealed partial class WorldInstanceHost {
         }
 
         return false;
+    }
+
+    // The boot world's nesting depth (views.nestingDepth): how many screens deep a presentation shows another world, so
+    // how deep the screens it shows observe. The boot world's document decides it, as it decides the presentation's.
+    private int NestingDepth => (m_instances.TryGetValue(
+        key: BootInstanceName,
+        value: out var boot
+    )
+        ? boot.Server.Definition.Views.NestingDepth
+        : RenderGraphInstanceSet.DefaultNestingDepth);
+
+    // Walks the open sessions from every world a presentation shows directly, the boot world and every world a human
+    // stands in, at depth 0: a world a session observes is one screen deeper than the world whose screen observes it,
+    // at the shallowest such screen.
+    private void ScreenDepths() {
+        m_screenDepths.Clear();
+        m_screenDepthQueue.Clear();
+
+        foreach (var (name, instance) in m_instances) {
+            if (
+                string.Equals(
+                    a: name,
+                    b: BootInstanceName,
+                    comparisonType: StringComparison.Ordinal
+                ) ||
+                IsOccupied(instance: instance)
+            ) {
+                m_screenDepths[name] = 0;
+                m_screenDepthQueue.Enqueue(item: name);
+            }
+        }
+
+        while (m_screenDepthQueue.TryDequeue(result: out var owner)) {
+            if (!m_screenSessions.TryGetValue(
+                key: owner,
+                value: out var owned
+            )) {
+                continue;
+            }
+
+            var depth = (m_screenDepths[owner] + 1);
+
+            foreach (var (_, session) in owned.Rows) {
+                if (
+                    (session.Observation is not null) &&
+                    (session.InstanceName is { } observed) &&
+                    m_screenDepths.TryAdd(
+                        key: observed,
+                        value: depth
+                    )
+                ) {
+                    m_screenDepthQueue.Enqueue(item: observed);
+                }
+            }
+        }
+    }
+    // Whether an instance's screens observe right now: a world a presentation shows directly (the boot world, as a
+    // desktop presents it, and any world a human stands in) and every world seen through those worlds' screens, while it
+    // is fewer screens deep than the nesting depth. So a portal seen through a portal observes its destination too, to
+    // the depth the presentation renders, and a world nobody stands in and nothing within that depth shows boots no
+    // destination for its screens. Two portals facing each other end at the depth, since the walk visits each world
+    // once, at its shallowest. The depth is document data and sessions are the authority's, so what a world observes
+    // never depends on what a presentation draws.
+    private bool PresentsScreens(WorldInstance instance) {
+        ScreenDepths();
+
+        return (
+            m_screenDepths.TryGetValue(
+                key: instance.Name,
+                value: out var depth
+            ) &&
+            (depth < NestingDepth)
+        );
     }
     // One screen-session line on the host's narration channel.
     private void NarrateScreenSession(string text) {
@@ -366,8 +437,9 @@ public sealed partial class WorldInstanceHost {
     /// <summary>Settles one instance's screen sessions after it stepped (or when it was admitted): opens a session for
     /// every screen its live definition declares that observes a destination, closes the sessions of screens it no longer
     /// declares or re-pointed, asks a destination that ended a session to admit it again, and forwards what its
-    /// engagement routed through a portal face this step. A world nobody stands in, other than the boot world, holds no
-    /// sessions. A replayed tick routes nothing (<see cref="Server.WorldServer.ReplaysInput"/>), since its destinations
+    /// engagement routed through a portal face this step. A world holds sessions only while a presentation shows it
+    /// within the nesting depth (the boot world's <c>views.nestingDepth</c>): the boot
+    /// world, a world a human stands in, or a world one of their screens shows, to that depth. A replayed tick routes nothing (<see cref="Server.WorldServer.ReplaysInput"/>), since its destinations
     /// are not replaying with it. Called on the thread that steps the instance.</summary>
     /// <param name="instance">The instance that stepped, or that was admitted or held this tick.</param>
     /// <param name="stepped">Whether the instance stepped: false when it was admitted, or held by a pause or a stop,

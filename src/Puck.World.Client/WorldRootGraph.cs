@@ -319,6 +319,7 @@ public sealed class WorldRootGraph {
                     Refresh: RenderGraphRefresh.EveryFrame
                 ),
             ],
+            nestingDepth: set.NestingDepth,
             refusal: out var refusal,
             set: out var overlaid
         )) {

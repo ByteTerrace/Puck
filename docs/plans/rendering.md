@@ -1139,8 +1139,9 @@ validator refuses `Passthrough` by name. `SourceFocus` in `Puck.Input` routes
 keys and text to a focused passthrough source, sends each release where its
 press went, and returns focus to the game on Control, Alt and Escape.
 `RenderGraphHitWalk` in `src/Puck.Hosting/Graph` continues a hit on a rendered
-source through the producer's camera up to a depth limit, normally
-`RenderGraphInstanceSet.NestingDepth`, entering at the topmost pane under a
+source through the producer's camera through at most a depth limit of screens,
+normally the set's declared `RenderGraphInstanceSet.NestingDepth` (the boot
+world's `views.nestingDepth`), entering at the topmost pane under a
 display point by the one rule `SourcePanes.Topmost` states: the last pane in
 drawing order whose face holds the point, a letterbox bar or bezel covering what
 is beneath. `SourcePanePicker` is the CPU `ISourcePicker` over that rule: it picks
@@ -1355,10 +1356,11 @@ described by `ImageSourceDescriptor` (`Puck.Abstractions.Sources`): producer,
 transport, extent, pixel format (including palette-indexed and NV12), color
 encoding, cadence, presentation stamp, content class and capture fill. A world
 document names a producer by id, as a `producer` source with a settings object,
-so the four shipped producers (`testPattern`, `qr`, `camera`, `capture`) and any
-a host adds register a shape in `WorldImageProducerVocabulary` and a runtime in
-`WorldImageProducers` with no schema change. `testPattern`, `qr`, `camera` and
-`capture` are producer ids rather than source kinds, and no `console` source
+so the five shipped producers (`testPattern`, `qr`, `color`, `camera`,
+`capture`) and any a host adds register a shape in
+`WorldImageProducerVocabulary` and a runtime in `WorldImageProducers` with no
+schema change. `testPattern`, `qr`, `color`, `camera` and `capture` are producer
+ids rather than source kinds, and no `console` source
 exists. The machine, view, probe and
 session arms stay typed because each names a document row; an emulator joins as
 a machine engine. External content resolves through `WorldCaptureGate`, so a
@@ -3933,17 +3935,23 @@ Each commit is marked with what it waits on.
    runs `RenderGraphHitWalk` over the runtime's instance set from the published
    panes, with each view's seat camera and each pane's paired camera, and the pane
    pointer maps through its instance's published mapping. Each view's world
-   producer reports the published screens as the surface placements inside its
-   world, so a walk continues from a view through a screen into its source (step
-   1's screen half). A portal's window is a session view: a walk through its
-   glass continues through the camera the window last rendered from
-   (`WorldSessionSceneEmitter.TryCamera`, a window's fitted camera with its
-   shear) into the destination, which reports no placements under the depth-one
-   policy, and ends on the surface its ray meets among the destination's static
-   placements (`RenderGraphHitPath.Surface`). The portal check's laws are
-   `WorldViewPaneMappingLawTests.APickThroughAPortalReachesTheDestinationsSurfaceThroughTheCameraItsWindowRendered`
-   and `WorldWindowFrustumFitLawTests`, and the `portal-window` canary picks the
-   destination's marker through a live window on both backends.
+   producer reports the screens of the world it renders as the surface
+   placements inside that world, so a walk continues from a view through a
+   screen into its source (step 1's screen half); a seat presented in another
+   world reports that world's screens. A portal's window is a session view: a
+   walk through its glass continues through the camera the window last rendered
+   from (`WorldSessionSceneEmitter.TryCamera`, a window's fitted camera with its
+   shear) into the destination, which reports its own screens, so the walk
+   continues through a portal inside it, each world tested against its own
+   screens, through at most the set's nesting depth of screens, and ends on the
+   surface its ray meets among the last world's static placements
+   (`RenderGraphHitPath.Surface`). The portal check's laws are
+   `WorldViewPaneMappingLawTests.APickThroughAPortalReachesTheDestinationsSurfaceThroughTheCameraItsWindowRendered`,
+   `WorldViewPaneMappingLawTests.ASeatPresentedElsewhereIsHitTestedAgainstThatWorldsScreens`,
+   `RenderGraphHitWalkLawTests.AHitWalksThroughTwoNestedLevelsEachWorldAgainstItsOwnScreens`
+   and `WorldWindowFrustumFitLawTests`; the `portal-window` canary picks the
+   destination's marker through a live window, and the `portal-nested` canary
+   picks a third world's wall two levels deep, on both backends.
 
 ### P14 — The SDF engine as a pass package
 
@@ -4211,10 +4219,12 @@ item 2 landed.
    at its own quality, and the binder resolves a window into the scene's one
    residency (`WorldScreenBinder.TryResolveWindowView`;
    `WorldRoutedPresentationLawTests.AWindowIsAViewOfTheSceneItsWorldsSeatsRenderAtItsOwnQuality`).
-   Open work: session screens attach through that door. Each reads its
-   own observation of the destination and renders its own residency, so a
-   portal window and a traveller's routed view of one destination keep two
-   residencies until the window reads the endpoint's mirror.
+   A portal window attaches through that door at every depth while its
+   session discloses everything (`WorldSessionWindowRoute`), so a traveller's
+   routed view and every fully disclosed window onto one destination, at any
+   level of nesting, render from the endpoint's one residency; a window disclosed
+   less renders its own. Each view of that residency binds the screens of the
+   level it renders (`ISdfScreenSources.ReadOf` takes the view).
    A camera view renders a view of the world's own residency at its own
    quality. A diegetic screen showing a live camera (a race billboard)
    costs its instance's passes, output and scratch while sharing the world's
@@ -4539,9 +4549,11 @@ resolution, and stay there.
   instance's passes, scratch and history storage, so S25's crossing still shows
   the destination in the crossing frame; the reset makes that frame the
   destination's spatial resolve, with no trace of the departed world. A session
-  view's history is its own and resets on the same rules; a routed seat view and
-  a portal window's session view of the same destination keep separate
-  histories while they keep separate residencies.
+  view's history is its own and resets on the same rules, at every level of
+  nesting: each level is an instance of its own, so a routed seat view, a portal
+  window's view and a deeper level's view of the same destination keep separate
+  histories even while they share one residency, and no level reprojects
+  another's frames.
 - **Reprojection is validated by identity and depth.** History keeps, beside
   the color, each output pixel's ray parameter and identity (a history surface).
   A history sample whose identity differs from the current pixel's, or whose

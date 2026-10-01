@@ -67,6 +67,36 @@ public static class WorldPrototypeFacets {
             Filter: filter
         );
     }
+
+    /// <summary>Returns the face rows a definition's placements seat at the reserved band (<see cref="Derive"/>'s faces),
+    /// without the placeholders that pad the band's unseated slots: what a view of the world shows, where nothing keeps
+    /// the band's slots registered.</summary>
+    /// <param name="definition">The definition.</param>
+    /// <returns>The seated face rows.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<WorldScreen> Seated(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        return [.. Derive(
+            definition: definition,
+            derivedFaceBase: DerivedFaceBase,
+            derivedFaceScreens: definition.Authoring.DerivedFaceScreens
+        ).Faces.Where(predicate: static face => (face.Source is not WorldScreenSource.None))];
+    }
+    /// <summary>Returns how far in front of a face's frame, along its normal, the back of the glass its face screen draws
+    /// lies (negative when it lies behind): a window looking through the face as its counterpart starts its rays past it
+    /// (<see cref="WorldWindowFrustumFit.TryFitFromEye"/>).</summary>
+    /// <param name="frame">The face's frame.</param>
+    /// <returns>The distance, in world units.</returns>
+    public static float GlassBack(WorldFaceFrame frame) {
+        var halfDepth = ((float)((double)frame.HalfDepth));
+
+        return ((halfDepth + FaceProudEpsilon) - (2f * MathF.Max(
+            x: (halfDepth * FaceInteriorFraction),
+            y: FaceMinimumHalfDepth
+        )));
+    }
+
     private static WorldScreen PlaceholderScreen(int index) => new(
         Index: index,
         Origin: new Vector3(

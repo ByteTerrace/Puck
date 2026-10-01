@@ -361,7 +361,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
         ReconcileGlyphAtlas(tables: tables);
         tables.DebugMode = m_debugMode;
         tables.DebugLabel = Name;
-        BindScreens(tables: tables);
+        BindScreens(
+            frame: frame,
+            tables: tables
+        );
 
         foreach (var (screenIndex, provider) in m_screenSurfaceTransforms) {
             if (provider() is { } transform) {
@@ -485,18 +488,23 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
     /// <summary>Returns the image a screen samples this frame from the images a view's render graph hands its pass, taking
     /// the image's lease into the frame's lease list the first time a pass of the frame samples it.</summary>
+    /// <param name="view">The view's index in the residency's frame, whose own read the screen samples
+    /// (<see cref="ISdfScreenSources.ReadOf"/>).</param>
     /// <param name="screen">The program-declared screen index.</param>
     /// <param name="reads">The images the pass's instance reads that its graph binds to no version, or
     /// <see langword="null"/>.</param>
     /// <param name="leases">The frame's lease list, which retires the lease after the frame's submission.</param>
     /// <returns>The image view, or zero when the screen shows nothing this frame.</returns>
-    public nint ScreenImage(int screen, RenderGraphExternalReads? reads, LeaseRetireList leases) {
+    public nint ScreenImage(int view, int screen, RenderGraphExternalReads? reads, LeaseRetireList leases) {
         ArgumentNullException.ThrowIfNull(argument: leases);
 
         nint handle = 0;
 
         if (
-            (m_screenSources?.ReadOf(screen: screen) is { } read) &&
+            (m_screenSources?.ReadOf(
+                screen: screen,
+                view: view
+            ) is { } read) &&
             (reads is not null) &&
             (reads.IndexOf(producer: read) is var index and >= 0)
         ) {
@@ -683,9 +691,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
             ProgramWordCapacity: m_programWordCapacity,
             WorkLedger: m_work
         );
-    // Binds every screen's mapping, light and bound flag: a screen shows a source while it names an instance its views
-    // read, whose image each view's pass binds from the images its render graph hands it (ScreenImage).
-    private void BindScreens(SdfWorldTables tables) {
+    // Binds every screen's mapping, light and bound flag: a screen shows a source while it names an instance some view of
+    // the frame reads, whose image each view's pass binds from the images its render graph hands it (ScreenImage).
+    private void BindScreens(SdfWorldTables tables, SdfFrame frame) {
         if (m_screenSources is not { } sources) {
             return;
         }
@@ -694,9 +702,17 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         for (var position = 0; (position < screens.Count); position++) {
             var screen = screens[position];
+            var bound = false;
+
+            for (var view = 0; (!bound && (view < frame.Views.Count)); view++) {
+                bound = (sources.ReadOf(
+                    screen: screen,
+                    view: view
+                ) is not null);
+            }
 
             tables.SetScreenBound(
-                bound: (sources.ReadOf(screen: screen) is not null),
+                bound: bound,
                 screenIndex: screen
             );
             tables.SetScreenMapping(

@@ -95,10 +95,15 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
             Feed: null
         )));
     /// <inheritdoc/>
-    /// <remarks>A screen reads the instance of the source it shows: its row's, or the one a live presentation verb bound
-    /// over the row; the source instance of a producer, machine or probe source, and the view instance of a camera view
-    /// or a session.</remarks>
-    public string? ReadOf(int screen) => (Mappings.InstanceOf(screen: screen) ?? (m_slots.TryGetValue(
+    /// <remarks>Every view of the world's residency, a seat's or a camera's, shows the world's screens alike
+    /// (<see cref="InstanceOf"/>).</remarks>
+    public string? ReadOf(int view, int screen) => InstanceOf(screen: screen);
+    /// <summary>Returns the name of the instance a screen of the boot world reads: the source it shows, its row's or the
+    /// one a live presentation verb bound over the row; the source instance of a producer, machine or probe source, and
+    /// the view instance of a camera view or a session.</summary>
+    /// <param name="screen">The screen's index.</param>
+    /// <returns>The instance's name, or <see langword="null"/> when the screen shows nothing or text.</returns>
+    public string? InstanceOf(int screen) => (Mappings.InstanceOf(screen: screen) ?? (m_slots.TryGetValue(
         key: screen,
         value: out var slot
     )
