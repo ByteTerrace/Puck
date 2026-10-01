@@ -2,7 +2,7 @@
     <!--
         The shared shader-compile recipe. DXC compiles HLSL to SPIR-V (Vulkan) and DXIL (DirectX) from whatever
         @(VertexShaderSource)/@(FragmentShaderSource)/@(ComputeShaderSource) items a consuming project declares in its
-        own csproj — this file adds no item declarations and no project-specific branching. Imported once by
+        own csproj — this file adds no stage sources and no project-specific branching. Imported once by
         Directory.Build.targets into EVERY project; a project declaring none of the three item types never triggers a
         single Exec. Per-project knobs, set in a project's own PropertyGroup BEFORE this file imports: $(DxcCommand)
         (default "dxc"), $(PuckShaderDxilEnabled) (default true — governs vertex/fragment DXIL emission),
@@ -72,6 +72,19 @@
             <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckDirect3D11KernelBytecode.cs" Type="Class" />
         </Task>
     </UsingTask>
+    <UsingTask
+        AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
+        TaskFactory="RoslynCodeTaskFactory"
+        TaskName="PuckCollectDirect3D11Kernels"
+    >
+        <ParameterGroup>
+            <Sources ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+            <Bytecode ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+        </ParameterGroup>
+        <Task>
+            <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckDirect3D11KernelBytecode.cs" Type="Class" />
+        </Task>
+    </UsingTask>
 
     <!-- The DXC options of every stage and target, generated from Puck.Shaders.ShaderCompiler.StepsOf, which the
          runtime shader compiler runs too: one recipe. -->
@@ -120,6 +133,15 @@
         <_PuckExpectedBytecode Condition="'$(PuckShaderDxilEnabled)' == 'true'" Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" />
         <_PuckExpectedBytecode Condition="'$(PuckComputeShaderDxilEnabled)' == 'true'" Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" />
     </ItemGroup>
+    <!-- ResolveProjectReferences can restore a missing generated include after evaluation's glob expanded. Refresh
+         the conventional includes before the incremental check, preserving explicit includes outside this directory. -->
+    <Target Name="RefreshShaderIncludes" BeforeTargets="CompileShaders">
+        <ItemGroup>
+            <_PuckConventionalShaderInclude Include="Assets\Shaders\**\*.hlsli" />
+            <ShaderInclude Remove="@(_PuckConventionalShaderInclude)" />
+            <ShaderInclude Include="@(_PuckConventionalShaderInclude)" />
+        </ItemGroup>
+    </Target>
     <Target Name="CompileShaders" AfterTargets="ResolveProjectReferences"
             Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath);$(MSBuildThisFileDirectory)ShaderRecipe.targets"
             Outputs="@(_PuckExpectedBytecode);@(_PuckExpectedBytecode -> '%(Identity).hash')">
@@ -138,6 +160,9 @@
                  whole, so a reader in this or another build of the checkout never sees half a file. -->
             <_PuckShaderToken>$([System.Guid]::NewGuid().ToString('N'))</_PuckShaderToken>
         </PropertyGroup>
+        <ItemGroup>
+            <_PuckTemporaryBytecode Include="@(_PuckExpectedBytecode -> '%(Identity).$(_PuckShaderToken).tmp')" />
+        </ItemGroup>
         <Exec Condition="'$(_PuckHasShaderItems)' == 'true'" Command="&quot;$(DxcCommand)&quot; --version" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="High" StandardOutputImportance="Low">
             <Output PropertyName="DxcProbeExitCode" TaskParameter="ExitCode" />
         </Exec>
@@ -181,6 +206,13 @@
             </_PuckCompiledBytecode>
         </ItemGroup>
         <PuckWriteShaderHashSidecars Condition="'$(DxcProbeExitCode)' == '0'" BytecodeFiles="@(_PuckCompiledBytecode)" Includes="@(ShaderInclude)" Token="$(_PuckShaderToken)" />
+        <Delete Files="@(_PuckTemporaryBytecode)" />
+        <OnError ExecuteTargets="CleanShaderTemporaries" />
+    </Target>
+
+    <!-- Delete only this invocation's files, including earlier successful batches when a later DXC Exec fails. -->
+    <Target Name="CleanShaderTemporaries">
+        <Delete Files="@(_PuckTemporaryBytecode)" />
     </Target>
 
     <!-- Shared by every shader project: one that declares no VertexShaderSource never triggers a vertex Exec above,
@@ -207,13 +239,18 @@
          Direct3D 11 device, so each @(Direct3D11KernelSource) item's entry points (its Entries metadata) compile to
          cs_5_0 DXBC here, beside the source as <stem>.<entry>.dxbc, and ship as content: a world run creates a kernel
          from its bytecode and compiles nothing. Direct3D 11 exists only on Windows, so a build elsewhere writes no kernel
-         bytecode. A kernel already compiled is only declared, so a pack that skips the build ships it too. -->
-    <Target Name="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths;_GetPackageFiles">
+         bytecode. Compilation is a build operation; packing collects and validates existing outputs separately. -->
+    <Target Name="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths">
         <PuckCompileDirect3D11Kernels Condition="'@(Direct3D11KernelSource)' != '' and $([MSBuild]::IsOSPlatform('Windows'))" Sources="@(Direct3D11KernelSource)">
             <Output ItemName="_PuckDirect3D11KernelBytecode" TaskParameter="Bytecode" />
         </PuckCompileDirect3D11Kernels>
+    </Target>
+    <Target Name="CollectDirect3D11KernelBytecode" AfterTargets="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths;_GetPackageFiles">
+        <PuckCollectDirect3D11Kernels Condition="'@(Direct3D11KernelSource)' != '' and $([MSBuild]::IsOSPlatform('Windows'))" Sources="@(Direct3D11KernelSource)">
+            <Output ItemName="_PuckCollectedDirect3D11KernelBytecode" TaskParameter="Bytecode" />
+        </PuckCollectDirect3D11Kernels>
         <ItemGroup>
-            <Content Include="@(_PuckDirect3D11KernelBytecode)" CopyToOutputDirectory="PreserveNewest" />
+            <Content Include="@(_PuckCollectedDirect3D11KernelBytecode)" CopyToOutputDirectory="PreserveNewest" />
         </ItemGroup>
     </Target>
 

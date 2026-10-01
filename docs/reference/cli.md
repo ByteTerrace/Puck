@@ -615,9 +615,10 @@ include a generated declaration references `Puck.Shaders.Generator`, whose build
 writes each declaration the model has changed before those kernels compile. A
 change that adds a declaration and a kernel reading it builds with an ordinary
 `dotnet build`; the verb is needed to write the recipe and to check the tree,
-and never to seed a header by hand. A continuous-integration build only checks:
-it fails naming each generated file that disagrees with the model and writes
-nothing
+and never to seed a header by hand. CI runs the explicit
+`CheckShaderDeclarations` target before building: it builds the model and host,
+then fails naming each generated file that disagrees with the model and writes
+no declaration
 ([generated declarations](shaders.md#generated-declarations)).
 
 `interface` prints the [frame-block](shaders.md#frame-values-extent-and-ports) declarations

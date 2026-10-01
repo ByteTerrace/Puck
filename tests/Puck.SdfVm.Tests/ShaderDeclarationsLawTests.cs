@@ -7,7 +7,7 @@ namespace Puck.SdfVm.Tests;
 /// Laws for <see cref="ShaderDeclarations"/>, the one list of HLSL declarations the C# model owns, as the kernel builds
 /// run it: on the tree its interface files are owned with no problem and every declaration matches its checked-in file,
 /// and over a tree holding every declaration it names exactly the one that drifted, rewriting it only when asked (a
-/// continuous-integration build only names it) and leaving every other file's bytes and time untouched, so an unchanged
+/// check only names it) and leaving every other file's bytes and time untouched, so an unchanged
 /// declaration recompiles no kernel.
 /// </summary>
 public sealed class ShaderDeclarationsLawTests {

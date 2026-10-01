@@ -32,6 +32,8 @@ jobs:
         uses: ./.github/actions/setup-dxc
       - name: Restore locked dependencies
         run: dotnet restore Puck.slnx --locked-mode
+      - name: Check generated shader declarations before building
+        run: dotnet build src/Puck.Shaders.Generator -c Release --no-restore -t:CheckShaderDeclarations
       - name: Compile the platform bootstrap program without running it
         run: dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release
       - name: Compile the solution once

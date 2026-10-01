@@ -93,8 +93,10 @@ finished build) still collects the bytecode the build left, Direct3D 11 probe
 kernels included, and refuses a declared kernel whose bytecode is missing.
 DXC writes each file under a name only its build uses, and the build moves it
 and then its sidecar into place whole, retrying while another process holds
-the file, so two builds sharing a checkout never read half a file or refuse
-each other's writes.
+the file. Failed compilation removes that invocation's temporary bytecode.
+Each file is replaced atomically; bytecode and sidecar publication is not a
+transaction. Concurrent builds producing different bytes can leave a mismatched
+pair, which the freshness gate refuses.
 
 Deleting a source leaves its bytecode behind in any checkout that built it. The
 build removes that bytecode and its sidecar and prints one line naming each
@@ -1045,14 +1047,20 @@ build-only project reference, and `build/Shaders.targets` compiles kernels after
 `ResolveProjectReferences`. The generator's build therefore runs before any of
 those kernels compile: it writes each declaration whose text differs from the
 model's, under the checkout's `src` tree, and touches nothing else, so a model
-change that moves no declaration recompiles no kernel. It runs again only when
-an assembly it runs has changed. A kernel reading a declaration the model has
-only just gained builds in one pass, with no header seeded by hand.
-A continuous-integration build (`ContinuousIntegrationBuild`, which the tree sets
-on CI) is never a generation run: the generator writes nothing there and fails
-the build naming each generated file that disagrees with the model, so no CI
-step after a build, such as the formatting bot's commit, can carry a
-regenerated file the change forgot.
+change that moves no declaration recompiles no kernel. It reconciles on every
+build, including edits or deletions of generated files without a model change.
+The shader targets refresh their include list after references build, so a
+restored include participates in compilation and freshness checking immediately.
+A kernel reading a declaration the model has only just gained builds in one
+pass, with no header seeded by hand.
+
+CI explicitly runs
+`dotnet build src/Puck.Shaders.Generator -c Release --no-restore -t:CheckShaderDeclarations`
+after restore and before the solution build. This target builds the host and
+its model references without invoking generation, then checks each declaration
+and fails naming any drifted file. The formatting workflow checks again before
+building its formatted result. Ordinary builds generate identically locally
+and on CI; `ContinuousIntegrationBuild` does not select generator behavior.
 
 `puck shaders generate` writes the same list, and the build's shader recipe
 (`build/ShaderRecipe.targets`), which a build reads when it is evaluated and so

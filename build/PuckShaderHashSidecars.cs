@@ -13,9 +13,9 @@ using Microsoft.Build.Utilities;
 /// a source-side hash (the source <c>.hlsl</c> concatenated with every <c>ShaderInclude</c> item, in item
 /// order — a real streamed byte concatenation) and a bytecode-side hash of the compiled file itself.
 /// <para>DXC writes each file to a temporary name carrying the run's <see cref="Token"/>, and this task moves it into
-/// place whole, then replaces the sidecar whole, so no reader in this or another build ever sees half a file. Two builds
-/// of one checkout (two test runs, a build beside a canary's World build) compile the same sources to the same bytes,
-/// so whichever publishes last leaves a consistent pair. A replace refused while another process holds the file (a
+/// place whole, then replaces the sidecar whole, so no reader in this or another build ever sees half a file. The two
+/// replacements are separate operations: concurrent publishers producing different bytes can leave a mismatched pair.
+/// A replace refused while another process holds the file (a
 /// concurrent reader, an antivirus scan of a file just written) is retried (<see cref="PuckShaderHashing.Retry"/>).</para>
 /// </summary>
 /// <remarks>
@@ -40,15 +40,14 @@ public sealed class PuckWriteShaderHashSidecars : Task {
             var sourcePath = bytecode.GetMetadata(metadataName: "SourcePath");
             var compiledPath = (((bytecodePath + ".") + Token) + ".tmp");
 
-            if (File.Exists(path: compiledPath)) {
-                PuckShaderHashing.Publish(destinationPath: bytecodePath, log: Log, temporaryPath: compiledPath);
-            }
-            if (!File.Exists(path: bytecodePath) || !File.Exists(path: sourcePath)) {
-                continue;
+            if (!File.Exists(path: compiledPath)) {
+                Log.LogError(message: $"Shader compilation produced no temporary bytecode '{compiledPath}'. The cached bytecode and sidecar are left unchanged.");
+
+                return false;
             }
 
             var sourceHash = PuckShaderHashing.HashConcatenated(firstPath: sourcePath, includes: Includes);
-            var bytecodeHash = PuckShaderHashing.HashFile(path: bytecodePath);
+            var bytecodeHash = PuckShaderHashing.HashFile(path: compiledPath);
 
             // Publish a complete file rather than truncating one a live asset reader may have memory-mapped.
             // Windows refuses truncation of mapped files; replacement also prevents readers seeing half a hash.
@@ -57,6 +56,7 @@ public sealed class PuckWriteShaderHashSidecars : Task {
 
             try {
                 File.WriteAllText(contents: $"source:{sourceHash}\nbytecode:{bytecodeHash}\n", path: temporaryPath);
+                PuckShaderHashing.Publish(destinationPath: bytecodePath, log: Log, temporaryPath: compiledPath);
                 PuckShaderHashing.Publish(destinationPath: sidecarPath, log: Log, temporaryPath: temporaryPath);
             } finally {
                 if (File.Exists(path: temporaryPath)) {

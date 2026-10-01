@@ -17,10 +17,9 @@ public sealed record ShaderDeclaration(string Path, Func<string> Generate);
 /// never the recorded one, so one run brings every file level.</para>
 /// <para>The model compiles no shader, so a project whose kernels include these files generates them first: it
 /// references <c>Puck.Shaders.Generator</c>, whose build runs <see cref="Reconcile"/> over the tree before any kernel
-/// compiles. A file that already holds its text is left untouched, so an unchanged model recompiles no kernel. A
-/// continuous-integration build is never a generation run: it names each file that differs and fails, as
-/// <c>puck shaders generate --check</c> does, and writes nothing, so no CI step after a build can carry a regenerated
-/// file into a commit.</para>
+/// compiles. A file that already holds its text is left untouched, so an unchanged model recompiles no kernel. The
+/// <c>CheckShaderDeclarations</c> target builds the generator and its model without running generation, then names each
+/// file that differs and fails, as <c>puck shaders generate --check</c> does. CI invokes it before building.</para>
 /// </summary>
 public static class ShaderDeclarations {
     /// <summary>The suffix of a generated interface include's file name.</summary>
@@ -163,6 +162,7 @@ public static class ShaderDeclarations {
             var temporary = $"{path}.{Guid.NewGuid():N}.tmp";
 
             try {
+                _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
                 File.WriteAllText(
                     contents: text,
                     encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
