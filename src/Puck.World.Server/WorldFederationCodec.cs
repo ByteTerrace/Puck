@@ -880,7 +880,7 @@ public static partial class WorldFederationCodec {
     /// <returns>The maximum body bytes accepted.</returns>
     public static int MaxResponseBytes(WorldFederationResponse kind) => kind switch {
         WorldFederationResponse.Ack => 0,
-        WorldFederationResponse.ProjectionInvalidated => 0,
+        WorldFederationResponse.ProjectionInvalidated => WireLimits.MaxStringBytes,
         WorldFederationResponse.Authenticated => (sizeof(int) + WireLimits.MaxStringBytes),
         WorldFederationResponse.Status => sizeof(byte),
         WorldFederationResponse.Challenge => MaxProofBytes,
