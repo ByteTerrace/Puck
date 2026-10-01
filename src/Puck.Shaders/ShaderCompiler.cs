@@ -24,7 +24,8 @@ public sealed partial class ShaderCompiler {
         toolchainDirectory
     ) { }
 
-    internal ShaderCompiler(string cacheDirectory, IShaderProcessRunner processRunner, string? toolchainDirectory = null) {
+    /// <summary>Creates a compiler over a supplied tool runner and cache directory.</summary>
+    public ShaderCompiler(string cacheDirectory, IShaderProcessRunner processRunner, string? toolchainDirectory = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(cacheDirectory);
         ArgumentNullException.ThrowIfNull(processRunner);
         m_cacheDirectory = Path.GetFullPath(path: cacheDirectory);
