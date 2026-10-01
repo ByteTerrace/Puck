@@ -392,7 +392,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                 reflector: reflector
             );
 
-            reload.Wait(cancellationToken: CancellationToken.None);
+            reload.WaitAsync(cancellationToken: CancellationToken.None).GetAwaiter().GetResult();
 
             return Engine.InstallReload(reload: reload);
         }

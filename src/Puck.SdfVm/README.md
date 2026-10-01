@@ -282,8 +282,8 @@ draining the console and stepping the simulation meanwhile, so a `world.wait` or
 `pipeline.wait` still reaches its deadline. The one exception is the offscreen
 host with a capture armed: it steps no further tick until the capture is served
 or refused, and a capture refused while the world's residency is not ready names
-its `NotReadyReason`, such as "the engine's pipeline set is building (5 of
-10 pipelines created)" (see [the World guide](../Puck.World/README.md#usage)).
+its `NotReadyReason`, such as "the engine's pipeline set is building (10 of
+11 pipelines created; waiting on sdf-world-views)" (see [the World guide](../Puck.World/README.md#usage)).
 A residency is `IsReady` once its set is installed and its tables hold its
 first captured frame; the World is ready once the world's residency is and the
 render graph's root has rendered over a completed view, which is the fact
@@ -297,8 +297,9 @@ instance with its own node, so it compiles and builds its pipelines without
 waiting for the SDF set. A residency keeps its lease until a device loss or
 its last release. The pass-pipeline cache creates up to
 `GpuPassPipelineCache.BuildConcurrency` pipelines at once on the thread pool,
-however many entries are building, and each entry checks its cancel before it
-creates, never during a creation. Releasing a set cancels every build no other
+however many entries are building; an entry waiting for its turn, and a view's
+pass build waiting for its residency's tables, holds no thread. Each entry checks
+its cancel before it creates, never during a creation. Releasing a set cancels every build no other
 holder leases before it waits for any, then waits for only the pipelines
 already in the driver: nothing may be created on a device that is being torn
 down, and a shutdown never waits out a whole cold build. A set whose creations

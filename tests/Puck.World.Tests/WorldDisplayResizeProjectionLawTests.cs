@@ -26,8 +26,6 @@ public sealed class WorldDisplayResizeProjectionLawTests : IDisposable {
     private const ulong StepTicks = 1680;
     private const string World = "tests/Puck.Counters/counters.world.json";
 
-    private static readonly TimeSpan Settle = TimeSpan.FromSeconds(value: 30);
-
     private readonly TemporaryDirectory m_stateDirectory = new(prefix: "puck-resize-projection-");
 
     public void Dispose() => m_stateDirectory.Dispose();
@@ -155,11 +153,14 @@ public sealed class WorldDisplayResizeProjectionLawTests : IDisposable {
 
             m_display = (width, height);
             m_presenter.ResizeDisplay(height: height, width: width);
-            Assert.True(condition: SpinWait.SpinUntil(condition: () => {
-                renderedAt |= (Produce() && (Root.Extent == (width, height)));
+            TestLiveness.Until(
+                reason: () => $"the root never rendered at {width}x{height}: {m_runtime.UnservedCaptureReason}",
+                step: () => {
+                    renderedAt |= (Produce() && (Root.Extent == (width, height)));
 
-                return (renderedAt && !Root.IsBuildingCandidate);
-            }, timeout: Settle), userMessage: $"the root never rendered at {width}x{height}: {m_runtime.UnservedCaptureReason}");
+                    return (renderedAt && !Root.IsBuildingCandidate);
+                }
+            );
         }
         // Produces frames at the current display extent, judging each.
         public void Frames(int count) {

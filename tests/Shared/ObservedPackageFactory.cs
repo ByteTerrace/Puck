@@ -21,7 +21,7 @@ internal sealed class ObservedPackageFactory(IRenderGraphPackageFactory inner, F
     public RenderGraphPackageOutcome Outcome { get; private set; }
 
     /// <inheritdoc/>
-    public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => inner.Build(
+    public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => inner.BuildAsync(
         cancellationToken: cancellationToken,
         context: context
     );

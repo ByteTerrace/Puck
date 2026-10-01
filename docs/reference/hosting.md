@@ -239,14 +239,29 @@ node moves that work off: it starts a build on the thread pool, the node polls
 `TryTake` once per produced frame and installs the result at that frame
 boundary, and until then it presents what it already has. A newer request
 cancels the pending build with `Cancel`, and the discarded result is released
-when the build finishes. Before the device goes away, `CancelAndWait` blocks
-until the build's current unit of work returns, so nothing is created on a
+on the pool after the build and its cancellation callbacks finish. Callback
+failures are observed along with detached build failures. Before the device
+goes away, `CancelAndWait` blocks until both finish, so nothing is created on a
 device being torn down. An owner with nothing to present until the build
 finishes, such as an offscreen host producing its first frame, blocks on
 `WaitFinished` between frames instead of producing empty ones: it takes
 nothing, so the next `TryTake` sees the result or the failure as a polling
 owner would. The SDF pipeline set's build and live shader-pipeline
 compilations both use it.
+
+A build that waits for other work is asynchronous: it starts through the
+`Start` overload that takes a task, and awaits each wait, so a waiting build
+holds no pool thread. A render node's graph build awaits each pass pipeline's
+lease (`GpuBuildLease.WaitAsync`) and each package's `BuildAsync`; an SDF view's
+passes await their residency's tables (`SdfWorldResidency.WaitReadyAsync`); a
+kernel reload awaits its replacements. `GpuBuildCache` gives each build one of
+its turns before it creates anything: at most its concurrency of builds create
+at once, a build waiting for a turn holds no thread, and a cancel ends that
+wait at once. A cold set of more pipelines than turns therefore occupies only
+the threads whose creations are in the driver. A cancel runs the token's
+callbacks on the thread pool, so a canceled build's continuation never runs on
+the frame thread that canceled it. A compilation or a bake only works, so it
+starts through the synchronous overload.
 
 A node that samples an image another producer keeps writing, such as a camera
 ring slot or a HUD frame, receives it as a `GpuImageLease`: an image-view

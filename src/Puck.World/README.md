@@ -371,7 +371,8 @@ device loss), the run may hold its clock for 180 seconds in all
 for 60 seconds in all (`WorldCaptureScheduler.HoldBudgetSeconds`). Past either,
 the capture is refused as `unserved` and the run steps on; a refusal the build
 caused names it and its progress, such as "the engine's pipeline set is
-building (5 of 14 pipelines created)", and a later capture the chain still
+building (12 of 14 pipelines created; waiting on sdf-world-surface,
+sdf-world-views)", and a later capture the chain still
 cannot serve is refused at once. `world.counters`
 reports the hold under `world.captures`: `world.captures.held` (engine ticks
 withheld) and `world.captures.ticks-while-armed` (ticks stepped while a

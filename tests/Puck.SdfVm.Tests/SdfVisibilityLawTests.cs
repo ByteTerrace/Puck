@@ -78,6 +78,30 @@ public sealed partial class SdfVisibilityLawTests {
         Assert.Contains(actualString: CodeOf(path: "frame/sdf-frame.hlsli"), expectedSubstring: "SDF_VISIBILITY_CURRENT(pixel, cullBounds)");
     }
     [Fact]
+    public void TheKernelsUnpackATransformSlotWordAsTheProgramPacksIt() {
+        var header = SdfIsaHlsl.Generate();
+
+        // The generated spelling is the C# pair: the static word, and the inverse written against the generated sentinel.
+        Assert.Matches(
+            actualString: header,
+            expectedRegexPattern: $@"#define SDF_TRANSFORM_SLOT_STATIC_WORD\s+{SdfProgram.StaticTransformSlotWord}u\n"
+        );
+        Assert.Contains(
+            actualString: header,
+            expectedSubstring: "#define SDF_TRANSFORM_SLOT_UNPACK(word) ((int)(word) + SDF_TRANSFORM_SLOT_NONE)\n"
+        );
+
+        // That inverse, evaluated as the kernels evaluate it, unpacks every word the program packs.
+        foreach (var slot in ((int[])[SdfProgram.NoDynamicTransformSlot, 0, 7, SdfProgram.MaxDynamicTransformSlot])) {
+            var word = SdfProgram.PackTransformSlot(slot: slot);
+
+            Assert.Equal(
+                actual: (((int)word) + SdfProgram.NoDynamicTransformSlot),
+                expected: SdfProgram.UnpackTransformSlot(word: word)
+            );
+        }
+    }
+    [Fact]
     public void NoKernelSpellsTheIdentityFieldsOrTheSlotSentinelByHand() {
         var spellers = Directory.EnumerateFiles(path: Root, searchPattern: "*.hlsl*", searchOption: SearchOption.AllDirectories)
             .Select(selector: path => Path.GetRelativePath(path: path, relativeTo: Root).Replace(newChar: '/', oldChar: '\\'))
@@ -93,8 +117,10 @@ public sealed partial class SdfVisibilityLawTests {
         LineCommentPattern().Replace(input: File.ReadAllText(path: Path.Combine(path1: Root, path2: path)), replacement: string.Empty);
     [GeneratedRegex(pattern: @"//[^\n]*")]
     private static partial Regex LineCommentPattern();
-    // A winner's, record's, light's or volume's transform slot set to or compared with a bare literal, or the
-    // identity's mask or shift written out.
-    [GeneratedRegex(pattern: @"\b(?:\w*[fF]rameSlot|\w*[dD]ynamicSlot|currentSlot|rigidSlot|composeSlot|savedFieldSlot|slot)\s*(?:=|==|!=|>=|<=|<|>)\s*-?[01]\b(?!\.)|0x3FFFFFFF|>>\s*30u?\b|<<\s*30u?\b")]
+    // A winner's, record's, light's or volume's transform slot set to or compared with a bare literal, the identity's
+    // mask or shift written out, or a packed transform-slot word (a rigid segment's plan.z, a part binding's binding.x)
+    // offset by one or compared with zero by hand rather than through SDF_TRANSFORM_SLOT_UNPACK and
+    // SDF_TRANSFORM_SLOT_STATIC_WORD.
+    [GeneratedRegex(pattern: @"\b(?:\w*[fF]rameSlot|\w*[dD]ynamicSlot|currentSlot|rigidSlot|composeSlot|savedFieldSlot|slot)\s*(?:=|==|!=|>=|<=|<|>)\s*-?[01]\b(?!\.)|0x3FFFFFFF|>>\s*30u?\b|<<\s*30u?\b|\b(?:plan\.z|binding\.x)\s*(?:[-+]\s*1u?\b|[=!]=\s*0u?\b)")]
     private static partial Regex HandSpelledPattern();
 }

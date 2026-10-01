@@ -113,12 +113,9 @@ public sealed class PostProcessPackageLawTests {
         RenderPasses: 4,
         Writes: [.. Enumerable.Repeat(count: 4, element: new[] { $"1 {Input.ImageViewHandle}", "3 work counters" }).SelectMany(selector: static pair => pair)]
     );
-    private static void ProduceUntilPublished(ShaderPipelineRenderNode node) => Assert.True(
-        condition: SpinWait.SpinUntil(
-            condition: () => !node.ProduceFrame(context: default).IsEmpty,
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ),
-        userMessage: "The pass never published a frame."
+    private static void ProduceUntilPublished(ShaderPipelineRenderNode node) => TestLiveness.Until(
+        reason: () => "The pass never published a frame.",
+        step: () => !node.ProduceFrame(context: default).IsEmpty
     );
     // What a law compares of one pass's recording: the render pass and pipeline it was created for, the graphics
     // commands, the input written at a binding, and the frame and pass blocks each frame's draw reads, read from the
@@ -334,16 +331,13 @@ public sealed class PostProcessPackageLawTests {
             height: (Extent / 2),
             width: (Extent / 2)
         );
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    _ = node.ProduceFrame(context: default);
+        TestLiveness.Until(
+            reason: () => "The resize never installed.",
+            step: () => {
+                _ = node.ProduceFrame(context: default);
 
-                    return (node.Extent == ((Extent / 2), (Extent / 2)));
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The resize never installed."
+                return (node.Extent == ((Extent / 2), (Extent / 2)));
+            }
         );
         _ = node.ProduceFrame(context: default);
         _ = node.ProduceFrame(context: default);
@@ -445,16 +439,13 @@ public sealed class PostProcessPackageLawTests {
                     kind: kind,
                     nth: nth
                 );
-                Assert.True(
-                    condition: SpinWait.SpinUntil(
-                        condition: () => {
-                            _ = node.ProduceFrame(context: default);
+                TestLiveness.Until(
+                    reason: () => $"The {GpuCreationFaults.NameOf(kind: kind)} creation {nth} fault was never reported.",
+                    step: () => {
+                        _ = node.ProduceFrame(context: default);
 
-                            return (node.LastSwapError is not null);
-                        },
-                        timeout: TimeSpan.FromSeconds(value: 30)
-                    ),
-                    userMessage: $"The {GpuCreationFaults.NameOf(kind: kind)} creation {nth} fault was never reported."
+                        return (node.LastSwapError is not null);
+                    }
                 );
 
                 var fault = Assert.IsType<GpuCreationFaultException>(@object: node.LastSwapError);

@@ -30,7 +30,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+        TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => (view.Runtime.Node(instance: 0).LastSwapError?.ToString() ?? view.NotReadyReason), wait: view.Residency.WaitPipelineBuilds);
         var records = gpu.DeviceLocal(part: "sdf.world$visibility", sizeBytes: ((((ulong)Extent) * Extent) * 64));
         var box = gpu.DeviceLocal(part: "sdf.world$cullBounds", sizeBytes: BoxBytes);

@@ -489,7 +489,7 @@ These are one-line cautions; the owning pages hold the derivations.
   mechanism: entries keyed by device (by reference) and a key's own equality,
   a `GpuBuildLease` per holder, the entry built on the thread pool
   (`BackgroundBuild`) by the first lease and joined by the rest (`Poll` on the
-  frame thread, `Wait` from a holder's own pool build), counted into the
+  frame thread, `WaitAsync` awaited from a holder's own pool build), counted into the
   cache's own `gpu.*` ledger, and disposed by the last release, which cancels a
   build still running and waits only for the creation in the driver. Every
   holder releases on device loss. Never write a second leased cache; make a
@@ -504,8 +504,17 @@ These are one-line cautions; the owning pages hold the derivations.
   retires, so an entry outlives every submission that recorded with it; a node's
   own ledger counts no pipeline or shader module. At most
   `GpuPassPipelineCache.BuildConcurrency` of the cache's builds create at once
-  (a turn a build waits for before its first creation, cancelable), and a build
-  checks its token between creations, never inside a driver call.
+  (a `GpuBuildCache` turn a build awaits before its first creation, cancelable),
+  and a build checks its token between creations, never inside a driver call.
+  No build blocks a pool thread on a wait: a turn, a lease
+  (`GpuBuildLease.WaitAsync`), a package build (`IRenderGraphPackageFactory.BuildAsync`),
+  a residency's tables (`SdfWorldResidency.WaitReadyAsync`) and a reload's
+  replacements are awaited through `BackgroundBuild.Start`'s task overload, so
+  a cold set occupies only the threads whose creations are in the driver
+  (`GpuPassPipelineTurnLawTests`), and `BackgroundBuild` cancels with
+  `CancelAsync`, so no build continuation runs on the frame thread. The
+  synchronous `GpuBuildLease.Wait` is for a holder with no build to await from
+  (a compositor's encode pipeline, a harness).
   `GpuBuildLease.Release(IReadOnlyList)` releases several leases at once,
   canceling every build it leaves unheld before it waits for any.
   `SdfWorldTables`' constructor takes a ready `SdfWorldPipelines` and creates
@@ -539,7 +548,7 @@ These are one-line cautions; the owning pages hold the derivations.
   refusal reads it. It is never retried
   because a frame arrived and never on a clock; a new input to a build joins
   its `inputsOf`. The residency has no tables then, so no pass of its views
-  installs (the `SdfWorldPasses` build waits for them), and a view's instance
+  installs (the `SdfWorldPasses` build awaits them), and a view's instance
   renders nothing new until they are built. `ShaderPipelineRenderNode`
   keeps a refused candidate by the same rule (`RetryRefusal`): it builds it
   again when the faults' revision, read after the refusal, moves or, for a heap
@@ -572,7 +581,7 @@ These are one-line cautions; the owning pages hold the derivations.
   pipelines and shader modules it creates under `gpu.pass-pipelines`, never in
   a node's or view's ledger, and the catalog reads each backend's deployed
   kernels once (`LoadDeployed`). A kernel reload leases the changed kernels'
-  entries (`SdfWorldPipelines.PrepareReload`), waits for them off the frame
+  entries (`SdfWorldPipelines.PrepareReload`), awaits them off the frame
   thread, and swaps them into the residency's own set after the device is idle,
   releasing the replaced leases; another residency leasing the replaced entries
   keeps them. Before it leases anything, a reload reflects each changed kernel
@@ -584,14 +593,16 @@ These are one-line cautions; the owning pages hold the derivations.
   compiled against another instruction set, or binding anything the host does not
   place where it places it, refuses the reload and the residency keeps its
   kernels. Boot reflects nothing, since the deployed tree is the host's own build,
-  and neither does a reduced view's first resolve build (`SdfWorldPipelines.BuildResolve`),
+  and neither does a reduced view's first resolve build (`SdfWorldPipelines.BuildResolveAsync`),
   which takes no reflector and needs no shader toolchain; its kernel is the set's
   own, deployed or reflected by the reload that installed it. A new SDF pipeline is a row in
   `SdfWorldTables.PipelineLayouts.Specs`, never a create call in the tables. A harness that drives a residency produces frames
   and blocks between them on `SdfWorldResidency.WaitPipelineBuilds`, never spinning
-  (`SdfTestPipelines.ProduceUntil` and `ProduceFirstFrame` in `tests/Shared`, whose
-  `Liveness` is the one bound a harness gives thread-pool work and whose `Kernels`
-  is the one fake kernel set);
+  (`SdfTestPipelines.ProduceFirstFrame` in `tests/Shared`, whose `Kernels` is the
+  one fake kernel set, over `TestLiveness.Until`: every harness in the Hosting,
+  Shaders, SdfVm and World tests waits for thread-pool work through
+  `tests/Shared/TestLiveness.cs`, blocking on the work's own completion under its
+  one `Bound`, and polls with a pause only a condition with no completion signal);
   `SdfPipelineBuildLivenessLawTests` holds the factory and proves the pump
   still drains the console, and that a device loss or the last release waits
   for exactly the `BuildConcurrency` creations in the driver, counted through
@@ -1062,7 +1073,8 @@ any deterministic count the backends disagree on;
 `puck counters compare <before> <after>` holds two reports to each other.
 Use `--world` and `--script` for another authored workload. The sky-still,
 sky-drift, sky-twinkle and sky-cycle fixtures use `tests/Puck.Counters/sky.script.txt`
-to isolate each sky change with cadence enabled. Report workload and script
+to isolate each sky change with cadence enabled; each has its own ceilings
+(`--ceilings tests/Puck.Counters/sky-<workload>.ceilings.json`). Report workload and script
 identity must match the ceilings; absent cadence samples are not measured zeros.
 `puck counters --check` holds every render node's deterministic and
 per-backend-deterministic submission counts, pass by pass and outside every
@@ -1310,7 +1322,7 @@ scheduled extent, and binds each external version to the frame of its
 producer's output the schedule names, or to a stand-in while there is none.
 A package pass records inside that node's submission through the recorder
 the `IRenderGraphPackageFactory` registered in `RenderGraphPackageRecorders`
-creates for its package id: the factory's `Build` creates its modules,
+creates for its package id: the factory's `BuildAsync` creates its modules,
 pipelines and render passes in the candidate's `BackgroundBuild`, its `Create`
 takes them at install and allocates a frame and a pass set per slot from the
 node's one pool (`RenderGraphPackageSets`; the pool's statement,

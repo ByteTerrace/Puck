@@ -13,6 +13,12 @@ namespace Puck.Hosting;
 /// last lease is released. That release cancels a build still in flight and waits, outside the cache's lock, only for
 /// the creation already in the driver.
 /// <para>
+/// At most the cache's concurrency of its builds run at once, however many entries are building: each build awaits one
+/// of the cache's turns before it creates anything and gives it back after its last creation. A build waiting for a turn
+/// holds no thread, so a cold set of more entries than turns occupies only the threads whose builds are creating, and a
+/// canceled build stops waiting at once.
+/// </para>
+/// <para>
 /// The build counts what it creates into <see cref="Work"/>, a <see cref="GpuWorkLedger"/> named by the cache, which it
 /// receives through <see cref="GpuBuildRequest{TKey}.Ledger"/>; no holder's ledger counts it. A device is matched by
 /// reference and a key by its own equality, so a key carries what builds its value and equates only what determines
@@ -28,6 +34,7 @@ namespace Puck.Hosting;
 /// <typeparam name="T">The built value, which owns the objects it created.</typeparam>
 public sealed class GpuBuildCache<TKey, T> where TKey : IEquatable<TKey> where T : class, IDisposable {
     private readonly Func<GpuBuildRequest<TKey>, CancellationToken, T> m_build;
+    private readonly SemaphoreSlim m_turns;
 
     private readonly List<GpuBuildLease<TKey, T>.Entry> m_entries = [];
     private readonly Lock m_gate = new();
@@ -37,14 +44,25 @@ public sealed class GpuBuildCache<TKey, T> where TKey : IEquatable<TKey> where T
     /// <summary>Initializes a new instance of the <see cref="GpuBuildCache{TKey, T}"/> class.</summary>
     /// <param name="workSourceName">The name a counters report heads <see cref="Work"/>'s section with, such as
     /// <c>gpu.pass-pipelines</c>.</param>
-    /// <param name="build">Builds one entry's value on a pool thread from its device, key and the cache's ledger; it
-    /// checks the token between creations, never inside one, and releases what it created when it throws.</param>
+    /// <param name="concurrency">The most builds that run at once.</param>
+    /// <param name="build">Builds one entry's value on a pool thread from its device, key and the cache's ledger, once
+    /// the build holds a turn; it checks the token between creations, never inside one, and releases what it created when
+    /// it throws.</param>
     /// <exception cref="ArgumentNullException"><paramref name="build"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="concurrency"/> is less than one.</exception>
     /// <exception cref="ArgumentException"><paramref name="workSourceName"/> is not a work source name.</exception>
-    public GpuBuildCache(string workSourceName, Func<GpuBuildRequest<TKey>, CancellationToken, T> build) {
+    public GpuBuildCache(string workSourceName, int concurrency, Func<GpuBuildRequest<TKey>, CancellationToken, T> build) {
         ArgumentNullException.ThrowIfNull(argument: build);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            other: 1,
+            value: concurrency
+        );
 
         m_build = build;
+        m_turns = new SemaphoreSlim(
+            initialCount: concurrency,
+            maxCount: concurrency
+        );
         m_work = new GpuWorkLedger(
             framesInFlight: 1,
             name: workSourceName
@@ -160,6 +178,23 @@ public sealed class GpuBuildCache<TKey, T> where TKey : IEquatable<TKey> where T
             }
         }
     }
+    internal async Task<T> WaitAsync(GpuBuildLease<TKey, T>.Entry entry, CancellationToken cancellationToken) {
+        while (true) {
+            Task completion;
+
+            lock (m_gate) {
+                if (TakeLocked(entry: entry) is { } ready) {
+                    return ready;
+                }
+
+                completion = entry.Build.Completion!;
+            }
+
+            // A failed build is taken, and rethrown, under the gate on the next pass.
+            await completion.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(options: ConfigureAwaitOptions.SuppressThrowing);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+    }
     // Waits outside the gate for the entry's pending build, leaving its result, or its failure, for the next poll to take.
     internal bool WaitFinished(GpuBuildLease<TKey, T>.Entry entry, CancellationToken cancellationToken) {
         Task? completion;
@@ -189,11 +224,20 @@ public sealed class GpuBuildCache<TKey, T> where TKey : IEquatable<TKey> where T
             Ledger: m_work
         );
         var build = m_build;
+        var turns = m_turns;
 
-        entry.Build.Start(build: token => build(
-            arg1: request,
-            arg2: token
-        ));
+        entry.Build.Start(build: async token => {
+            await turns.WaitAsync(cancellationToken: token).ConfigureAwait(continueOnCapturedContext: false);
+
+            try {
+                return build(
+                    arg1: request,
+                    arg2: token
+                );
+            } finally {
+                _ = turns.Release();
+            }
+        });
     }
     // The ready value, or null while its build runs; starts a build when none is pending. A failed build leaves nothing
     // pending, so the next poll by any holder starts a fresh one.
@@ -238,7 +282,7 @@ public sealed class GpuBuildCache<TKey, T> where TKey : IEquatable<TKey> where T
 public readonly record struct GpuBuildRequest<TKey>(IGpuDeviceContext Device, TKey Key, GpuWorkLedger Ledger);
 /// <summary>
 /// One holder's share of a <see cref="GpuBuildCache{TKey, T}"/> entry. The holder polls it from the frame thread, or
-/// waits for it from its own background build, records with the value, and releases it on device loss and disposal once
+/// awaits it from its own background build, records with the value, and releases it on device loss and disposal once
 /// nothing it recorded with the value is in flight.
 /// </summary>
 /// <typeparam name="TKey">What the value is built from.</typeparam>
@@ -324,9 +368,9 @@ public sealed class GpuBuildLease<TKey, T> where TKey : IEquatable<TKey> where T
             }
         }
     }
-    /// <summary>Blocks until the value is ready and returns it, for a holder's own background build: the wait may run
-    /// the entry's build inline when it has not started. A build that failed rethrows its exception here; the next
-    /// wait or poll starts a fresh one.</summary>
+    /// <summary>Blocks until the value is ready and returns it, for a holder with no build of its own to await it from,
+    /// such as a compositor's first frame or a harness. A build that failed rethrows its exception here; the next wait or
+    /// poll starts a fresh one.</summary>
     /// <param name="cancellationToken">The token that ends the wait; the entry's build keeps running for its other
     /// holders.</param>
     /// <returns>The ready value.</returns>
@@ -341,6 +385,26 @@ public sealed class GpuBuildLease<TKey, T> where TKey : IEquatable<TKey> where T
         );
 
         return cache!.Wait(
+            cancellationToken: cancellationToken,
+            entry: m_entry
+        );
+    }
+    /// <summary>Returns the value once it is ready, for a holder's own background build, which awaits it and holds no
+    /// thread meanwhile. A build that failed rethrows its exception here; the next wait or poll starts a fresh one.</summary>
+    /// <param name="cancellationToken">The token that ends the wait; the entry's build keeps running for its other
+    /// holders.</param>
+    /// <returns>The ready value.</returns>
+    /// <exception cref="ObjectDisposedException">The lease has been released.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public Task<T> WaitAsync(CancellationToken cancellationToken) {
+        var cache = m_cache;
+
+        ObjectDisposedException.ThrowIf(
+            condition: (cache is null),
+            instance: this
+        );
+
+        return cache!.WaitAsync(
             cancellationToken: cancellationToken,
             entry: m_entry
         );

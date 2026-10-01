@@ -62,12 +62,9 @@ public sealed partial class OverlayPackageLawTests {
     private static Surface ProduceUntilPublished(ShaderPipelineRenderNode node) {
         var surface = default(Surface);
 
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => !(surface = node.ProduceFrame(context: default)).IsEmpty,
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The overlay instance never published a frame."
+        TestLiveness.Until(
+            reason: () => "The overlay instance never published a frame.",
+            step: () => !(surface = node.ProduceFrame(context: default)).IsEmpty
         );
 
         return surface;

@@ -370,8 +370,11 @@ public sealed class SdfEnvironment {
         y: m_lanes[((row * 4) + 1)],
         z: m_lanes[((row * 4) + 2)]
     );
-    /// <summary>Sets one lane.</summary>
-    public void SetLane(int row, int lane, float value) => m_lanes[((row * 4) + lane)] = value;
+
+    // Sets one lane for the table's setters. Individual light writes go through SetLight's range check;
+    // CopyFrom also imports complete lane tables.
+    private void SetLane(int row, int lane, float value) => m_lanes[((row * 4) + lane)] = value;
+
     /// <summary>Sets one light and, when it shadows, makes it the shadow light.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the light table, or a point or
     /// occluder light's <see cref="SdfLight.DynamicSlot"/> is neither <see cref="SdfProgram.NoDynamicTransformSlot"/>

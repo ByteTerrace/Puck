@@ -115,14 +115,13 @@ public sealed class WorldViewGraphRebindLawTests : IDisposable {
     ]);
     // Pumps the host until no compile is pending and the latest result is installed. The bound is liveness; it decides
     // nothing.
-    private void PumpUntilInstalled() => Assert.True(condition: SpinWait.SpinUntil(
-        condition: () => {
+    private void PumpUntilInstalled() => TestLiveness.Until(
+        step: () => {
             m_runtime!.PumpWatches();
 
             return m_runtime.Entries.Values.All(predicate: static entry => !entry.IsCompiling);
-        },
-        timeout: TimeSpan.FromSeconds(value: 60)
-    ));
+        }
+    );
     private void Write(string name, string text) => File.WriteAllText(
         contents: text,
         path: Path.Combine(

@@ -98,15 +98,8 @@ public sealed partial class SdfWorldTables {
         internal static readonly GpuPipelineLayoutDescription BrickBake = SdfWorldInterfaces.BrickBakeLayout.PipelineLayout(stages: GpuShaderStage.Compute);
         // One per kernel in SdfKernel order, with the layout and name from the same immutable kernel set.
         internal static readonly PipelineSpec[] Specs = [.. SdfKernelSet.Kernels.Select(selector: static kernel => Spec(kernel: kernel))];
-        // The order a set leases the pipelines in (SdfWorldPipelines.Acquire): the views variants, the longest driver
-        // translations, start last, lightest first (core, folds, full), and the other native kernels before them.
-        // Resolve joins this same slot table on demand through BuildResolve.
-        internal static readonly SdfKernel[] BuildOrder = [
-            .. SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel is not (SdfKernel.Views or SdfKernel.ViewsCore or SdfKernel.ViewsFolds or SdfKernel.Resolve))),
-            SdfKernel.ViewsCore,
-            SdfKernel.ViewsFolds,
-            SdfKernel.Views,
-        ];
+        // Resolve joins the same slot table on demand through BuildResolve, so a set leases every other kernel up front.
+        internal static readonly SdfKernel[] Leased = [.. SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel != SdfKernel.Resolve))];
 
         private static PipelineSpec Spec(SdfKernel kernel) =>
             new(

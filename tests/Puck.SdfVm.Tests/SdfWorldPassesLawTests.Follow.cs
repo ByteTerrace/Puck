@@ -118,8 +118,8 @@ public sealed partial class SdfWorldPassesLawTests {
             );
         }
 
-        SdfTestPipelines.ProduceUntil(
-            frame: () => {
+        TestLiveness.Until(
+            step: () => {
                 Produce();
 
                 return (first.IsReady && passes.HasRenderedResolvedView(instance: SdfTestView.Instance) &&
@@ -161,8 +161,8 @@ public sealed partial class SdfWorldPassesLawTests {
         );
         Assert.Equal(actual: passes.HasRenderedResolvedView(instance: SdfTestView.Instance), expected: followsInPlace);
         // Either way the view goes on to render the other residency.
-        SdfTestPipelines.ProduceUntil(
-            frame: () => {
+        TestLiveness.Until(
+            step: () => {
                 Produce();
 
                 return passes.HasRenderedResolvedView(instance: SdfTestView.Instance);

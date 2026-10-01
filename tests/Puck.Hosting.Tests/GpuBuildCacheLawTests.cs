@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 
 namespace Puck.Hosting.Tests;
 
@@ -61,7 +62,7 @@ public sealed class GpuBuildCacheLawTests {
             function: () => lease.Wait(cancellationToken: TestContext.Current.CancellationToken)
         ).WaitAsync(
             cancellationToken: TestContext.Current.CancellationToken,
-            timeout: TimeSpan.FromSeconds(value: 30)
+            timeout: TestLiveness.Bound
         );
 
         Assert.Same(expected: waited, actual: lease.Poll());
@@ -81,7 +82,7 @@ public sealed class GpuBuildCacheLawTests {
 
         Assert.True(condition: builds.Entered.Wait(
             cancellationToken: TestContext.Current.CancellationToken,
-            timeout: TimeSpan.FromSeconds(value: 30)
+            timeout: TestLiveness.Bound
         ));
         cancel.Cancel();
         _ = Assert.Throws<OperationCanceledException>(testCode: () => waiting.Wait(cancellationToken: cancel.Token));
@@ -101,7 +102,7 @@ public sealed class GpuBuildCacheLawTests {
 
         Assert.True(condition: builds.Entered.Wait(
             cancellationToken: TestContext.Current.CancellationToken,
-            timeout: TimeSpan.FromSeconds(value: 30)
+            timeout: TestLiveness.Bound
         ));
 
         var release = new Thread(start: lease.Release);
@@ -109,10 +110,10 @@ public sealed class GpuBuildCacheLawTests {
         release.Start();
 
         // The entry leaves sharing inside the gate at once; the release itself returns only after the driver does.
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => (cache.SharedEntries == 0),
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+        TestLiveness.Until(
+            reason: () => $"{cache.SharedEntries} entries are still shared",
+            step: () => (cache.SharedEntries == 0)
+        );
         Assert.True(condition: release.IsAlive);
         gate.Set();
         release.Join();
@@ -132,7 +133,7 @@ public sealed class GpuBuildCacheLawTests {
 
         Assert.True(condition: builds.Entered.Wait(
             cancellationToken: TestContext.Current.CancellationToken,
-            timeout: TimeSpan.FromSeconds(value: 30)
+            timeout: TestLiveness.Bound
         ));
 
         var waiter = new Thread(start: () => {
@@ -146,18 +147,18 @@ public sealed class GpuBuildCacheLawTests {
         waiter.Start();
 
         // The wait has passed the lease's own check and blocks on the build in the driver before the release begins.
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => waiter.ThreadState.HasFlag(flag: ThreadState.WaitSleepJoin),
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+        TestLiveness.Until(
+            reason: () => $"the waiter is {waiter.ThreadState}",
+            step: () => waiter.ThreadState.HasFlag(flag: ThreadState.WaitSleepJoin)
+        );
 
         var release = new Thread(start: lease.Release);
 
         release.Start();
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => (cache.SharedEntries == 0),
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+        TestLiveness.Until(
+            reason: () => $"{cache.SharedEntries} entries are still shared",
+            step: () => (cache.SharedEntries == 0)
+        );
         gate.Set();
         release.Join();
         waiter.Join();
@@ -173,8 +174,8 @@ public sealed class GpuBuildCacheLawTests {
         var lease = cache.Acquire(device: new StubDevice(), key: "a");
         Exception? failure = null;
 
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        TestLiveness.Until(
+            step: () => {
                 try {
                     _ = lease.Poll();
                 } catch (InvalidOperationException error) {
@@ -183,8 +184,9 @@ public sealed class GpuBuildCacheLawTests {
 
                 return (failure is not null);
             },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            reason: () => "the first build never failed",
+            wait: lease.WaitFinished
+        );
         Assert.Equal(expected: 2, actual: Ready(lease: lease).Serial);
         lease.Release();
     }
@@ -196,15 +198,15 @@ public sealed class GpuBuildCacheLawTests {
         _ = Assert.Throws<ArgumentNullException>(testCode: () => cache.Acquire(device: null!, key: "a"));
     }
 
-    // Polls until the lease's value has built on the thread pool. The bound is liveness for a build that creates
-    // nothing.
+    // Polls until the lease's value has built on the thread pool, blocking on the build between polls.
     private static Built Ready(GpuBuildLease<string, Built> lease) {
         Built? built = null;
 
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => ((built = lease.Poll()) is not null),
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+        TestLiveness.Until(
+            reason: () => "the lease's value never built",
+            step: () => ((built = lease.Poll()) is not null),
+            wait: lease.WaitFinished
+        );
 
         return built!;
     }
@@ -222,6 +224,7 @@ public sealed class GpuBuildCacheLawTests {
         public GpuBuildCache<string, Built> Cache() =>
             new(
                 build: Build,
+                concurrency: 1,
                 workSourceName: "gpu.test-builds"
             );
 

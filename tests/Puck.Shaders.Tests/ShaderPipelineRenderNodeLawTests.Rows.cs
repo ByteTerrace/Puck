@@ -195,16 +195,13 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         };
 
         node.BindRows(rows: rows);
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    Produce(node: node);
+        TestLiveness.Until(
+            reason: () => $"The rebinding never installed: {node.LastSwapError}",
+            step: () => {
+                Produce(node: node);
 
-                    return (node.RowRegionCount == 2);
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: $"The rebinding never installed: {node.LastSwapError}"
+                return (node.RowRegionCount == 2);
+            }
         );
         Assert.True(condition: node.TryWriteRow(row: "state.other", values: [9d]));
 

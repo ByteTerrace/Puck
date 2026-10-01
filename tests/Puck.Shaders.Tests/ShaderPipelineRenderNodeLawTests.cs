@@ -2,6 +2,7 @@ using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -398,7 +399,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         never.Dispose();
         Assert.True(condition: queued.PipelineGateEntered.Wait(
             cancellationToken: TestContext.Current.CancellationToken,
-            timeout: TimeSpan.FromSeconds(value: 30)
+            timeout: TestLiveness.Bound
         ));
 
         // Held in the driver, the build cannot return, so the loss cannot either.

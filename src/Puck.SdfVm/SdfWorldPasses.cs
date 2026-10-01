@@ -65,9 +65,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     public bool SamplesReads => true;
 
     /// <inheritdoc/>
-    /// <remarks>Waits, on the thread pool, until the instance's residency has built its tables, and holds the residency
+    /// <remarks>Awaits, holding no thread, until the instance's residency has built its tables, and holds the residency
     /// for the recorder.</remarks>
-    public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
+    public async ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
         Entry? entry;
@@ -86,9 +86,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         view.Residency.Retain();
 
         try {
-            view.Residency.WaitReady(cancellationToken: cancellationToken);
+            await view.Residency.WaitReadyAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             if (context.Part == SdfWorldPackage.Resolve) {
-                view.Residency.Tables!.Pipelines.BuildResolve(cache: context.Pipelines, device: context.Device, cancellationToken: cancellationToken);
+                await view.Residency.Tables!.Pipelines.BuildResolveAsync(cache: context.Pipelines, device: context.Device, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             }
         } catch {
             view.Residency.Release();

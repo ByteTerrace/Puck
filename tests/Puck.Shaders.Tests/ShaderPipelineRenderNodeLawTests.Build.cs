@@ -1,5 +1,6 @@
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -142,7 +143,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
 
         Assert.True(condition: gpu.PipelineGateEntered.Wait(
             cancellationToken: TestContext.Current.CancellationToken,
-            timeout: TimeSpan.FromSeconds(value: 30)
+            timeout: TestLiveness.Bound
         ));
         Assert.Equal(
             actual: (Submissions: gpu.Submissions, Building: node.IsBuildingCandidate, Pending: node.HasPendingCandidate, Plan: node.Plan),
