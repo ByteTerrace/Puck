@@ -520,7 +520,7 @@ public sealed class SessionPrincipalLawTests {
         }
 
         Assert.Equal(
-            actual: tape.Verify(name: name).DivergedAt,
+            actual: tape.Verify(name: name).Primary.DivergedAt,
             expected: -1
         );
     }

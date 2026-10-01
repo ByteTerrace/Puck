@@ -455,21 +455,6 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             reason: out _
         );
     }
-    /// <inheritdoc/>
-    public void ResolveContinuations(WorldServer source) {
-        foreach (var instance in m_instances.Values) {
-            if (ReferenceEquals(
-                objA: instance.Server,
-                objB: source
-            )) {
-                ScanInstanceAdjacencies(
-                    instance: instance,
-                    resolveOnly: true
-                );
-                return;
-            }
-        }
-    }
     /// <summary>Resolves the world definition local seat <paramref name="slot"/> currently presents from, per its
     /// live <c>WorldSeatAuthorityRouter</c> route — the one structure source every drag-time/read-back
     /// consumer reads through, so seats never derive "which document currently frames me" two
@@ -1323,6 +1308,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             instance: row,
             stepped: false
         );
+        RecordAdmittedCompanion(row: row);
     }
     /// <summary>Admits <paramref name="row"/> as this host's one boot row and seeds every embodied local seat's
     /// route to it — a desktop's one-time boot admission, never called by a boot-free host.</summary>
@@ -1429,43 +1415,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 continue;
             }
 
-            var targetAuthority = (pending.TargetAuthority?.Local?.Server.AuthorityIdentity
-                ?? (pending.TargetAuthority?.Remote?.PeerAuthority ?? (pending.RecoveryAuthority ?? string.Empty)));
-
-            inDoubt.Add(item: new WorldInDoubtTransferCheckpoint(
-                RollbackOnly: pending.RollbackOnly,
-                CommitConfirmed: pending.CommitConfirmed,
-                Continuation: CaptureTransferContinuation(
-                    pending.Transfer,
-                    pending.Landed
-                ),
-                TargetDefinitionJson: (((pending.TargetAuthority?.Remote?.Definition ?? pending.RecoveryDefinition) is { } remoteDefinition)
-                ? WorldDefinitionSerialization.Serialize(definition: remoteDefinition)
-                : null),
-                CommitMembers: [.. pending.CommitMembers],
-                Landed: [.. pending.Landed.Select(selector: static member => new WorldLandedMemberCheckpoint(
-                        AdmissionGrants: member.AdmissionGrants,
-                        BodyColor: member.BodyColor,
-                        Designations: member.Designations,
-                        DynamicState: member.DynamicState,
-                        Mobility: member.Mobility,
-                        FollowedSeatMask: member.FollowedSeatMask,
-                        Peer: member.Peer,
-                        Position: member.Position,
-                        SourceGrants: member.SourceGrants,
-                        SourceSlot: member.SourceSlot,
-                        TargetSlot: member.TargetSlot,
-                        Yaw: member.Yaw
-                    ))],
-                MemberCount: pending.MemberCount,
-                SourceDeadlineTick: pending.SourceDeadlineTick,
-                SourceInstance: pending.Transfer.SourceInstance,
-                Spawned: pending.Spawned,
-                TargetAuthority: targetAuthority,
-                TargetEndpoint: (pending.TargetAuthority?.Remote?.Endpoint ?? pending.RecoveryEndpoint),
-                TargetName: pending.TargetName,
-                TransferId: pending.Transfer.TransferId
-            ));
+            inDoubt.Add(item: CaptureInDoubt(pending: pending));
         }
 
         // Unbound destinations remain in this table as data, so admission order cannot erase a durable route.
@@ -1479,22 +1429,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 continue;
             }
 
-            var destination = pair.Value.Authority.DescribeForCheckpoint();
-
-            forwarded.Add(item: new WorldForwardedBodyCheckpoint(
-                SourceIncarnation: pair.Key.Incarnation,
-                DestinationAddress: new WorldEntityAddress(
-                    Authority: destination.DestinationAuthority,
-                    Index: pair.Value.BodyIndex,
-                    Generation: 0
-                ),
-                DestinationBodyIndex: pair.Value.BodyIndex,
-                Mobility: destination.Mobility,
-                SourceAuthority: destination.SourceAuthority,
-                DestinationEndpoint: destination.Endpoint,
-                DestinationDefinitionJson: ((destination.Definition is { } definition)
-                ? WorldDefinitionSerialization.Serialize(definition: definition)
-                : null)
+            forwarded.Add(item: CaptureForwarded(
+                body: pair.Value,
+                incarnation: pair.Key.Incarnation
             ));
         }
 

@@ -92,6 +92,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
         )) {
             return CommandResult.Error(output: $"[replay.record: refused to arm — {refusal}]");
         }
+        m_instances.RecordCompanions(tape: m_tape);
 
         return new CommandResult(Output: $"[replay.record: recording '{name}' — replay.stop persists it, replay.cancel drops it]");
     }
@@ -146,17 +147,21 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
                 return CommandResult.Error(output: $"[replay.stop: wrote {result.Path}, but the post-persist verify refused — the LIVE TREE moved past this recording's mounted set: {fault}]");
             }
 
-            var verdict = result.Verdict!.Value;
+            var verdict = result.Verdict!;
 
-            if (verdict.Match) {
+            if (verdict.Passing) {
                 return new CommandResult(Output: $"[replay.stop: wrote {result.Path} | {verdict.Describe()} — faithful, boot-anchored capture]");
             }
 
-            // Tick 0 indicts the STARTING state (a mid-session capture the boot image cannot reproduce); any later tick
-            // means the start matched and the trajectory drifted, which is a determinism defect, not a capture boundary.
-            var reading = (verdict.DivergedAtStart
-                ? "mid-session capture; the fresh re-drive starts from the definition boot image"
-                : "the capture was boot-anchored, so this is TRAJECTORY drift — investigate the tick above"
+            // Every authority matched, so the set fails only on a crossing whose other half no tape here replays.
+            // Otherwise tick 0 indicts the STARTING state (a mid-session capture the boot image cannot reproduce), and
+            // any later tick means the start matched and the trajectory drifted, a determinism defect.
+            var reading = (verdict.Match
+                ? "every authority replayed, but a crossing's other half is on no tape in this set, so the crossing is not verified"
+                : ((verdict.Primary.DivergedAtStart || verdict.Companions.Any(predicate: static companion => companion.Verdict.DivergedAtStart))
+                    ? "mid-session capture; the fresh re-drive starts from the definition boot image"
+                    : "the capture was boot-anchored, so this is TRAJECTORY drift — investigate the tick above"
+                )
             );
 
             return new CommandResult(Output: $"[replay.stop: wrote {result.Path} | {verdict.Describe()} — {reading}]");
@@ -186,7 +191,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
 
             // One rendering, one error flag: the verdict decides both, so a MATCH and a MISMATCH cannot drift apart in
             // wording the way two hand-written branches do.
-            return new CommandResult(Output: $"[replay.verify: '{name}' | {verdict.Describe()}]") { IsError = !verdict.Match };
+            return new CommandResult(Output: $"[replay.verify: '{name}' | {verdict.Describe()}]") { IsError = !verdict.Passing };
         } catch (FileNotFoundException) {
             return CommandResult.Error(output: $"[replay.verify: no replay named '{name}' — replay.list shows what's saved]");
         } catch (WorldReplayCodecException exception) {

@@ -649,7 +649,7 @@ public sealed class WorldExtensionLawTests {
         var stopped = tape.StopRecording();
 
         Assert.Null(@object: stopped.VerifyFault);
-        Assert.True(condition: stopped.Verdict!.Value.Match);
+        Assert.True(condition: stopped.Verdict!.Primary.Match);
         using var stream = File.OpenRead(path: stopped.Path);
         var recorded = WorldReplaySnapshot.Read(stream: stream);
 

@@ -28,7 +28,7 @@ public enum WorldReplayMode {
 /// <param name="VerifyFault">Why the post-persist re-drive itself could not complete — e.g. the mount pin refusing a
 /// world whose addon set moved since record-start (see <see cref="WorldReplaySnapshot.Drive"/>'s mount-pin remarks) —
 /// never a persistence failure, because the tape above is already on disk by the time this can be non-null.</param>
-public readonly record struct WorldReplayStopResult(string Path, WorldReplayVerdict? Verdict, string? VerifyFault);
+public readonly record struct WorldReplayStopResult(string Path, WorldReplaySetVerdict? Verdict, string? VerifyFault);
 /// <summary>
 /// The record side of Puck.World's true deterministic replay. While armed it captures the live session's authoritative
 /// server-input stream — the intent submissions plus the ordered authority inputs (commands, grants, revokes) that reach
@@ -89,6 +89,11 @@ public sealed partial class WorldReplayTape {
     private WorldReplayMode m_mode;
     // The directory the live server's pipeline source reader resolved rows against at record-start, or null for none.
     private string? m_pipelineSourceDirectory;
+    // The directory the record-start definition was read from, so the re-drive resolves its relative paths there.
+    private string? m_documentDirectory;
+    // The recorded row's own document file, which its re-drive's cabinets read content beside; null for the
+    // booted row, whose re-drive's machine host already reads beside the booted document.
+    private string? m_documentPath;
     // The guests MOUNTED at record-start, copied out of the live server's runtime. Read once here rather than at stop:
     // the pin must describe the world that produced the recorded stream, and mounting is a boot-time act that a later
     // read could only re-report, never re-witness.
@@ -225,6 +230,8 @@ public sealed partial class WorldReplayTape {
         m_liveServer.RebuildTap = null;
         m_liveServer.ScreenOpTap = null;
         m_liveServer.ServerEventTap = null;
+        m_liveServer.ArrivalTap = null;
+        m_liveServer.FederatedIntentTap = null;
     }
     // Read straight off the live handle in the simulation's own fixed-point currency — never through the float
     // accessors, which would quantize a rate that is already exact.
@@ -248,6 +255,7 @@ public sealed partial class WorldReplayTape {
         m_definitionJson = null;
         m_forkedFrom = null;
         m_pipelineSourceDirectory = null;
+        m_documentDirectory = null;
         m_recordRateHz = 0U;
         m_mountedAddons = null;
         m_seats = null;
@@ -270,6 +278,7 @@ public sealed partial class WorldReplayTape {
 
         DetachTaps();
         ResetRecordingState();
+        CancelCompanions();
 
         return name;
     }
@@ -390,39 +399,34 @@ public sealed partial class WorldReplayTape {
             }
         }
     }
-    /// <summary>Records one same-process transfer's decided outcome into the active recording's authority stream —
-    /// the local multi-authority tape contract. A no-op while <see cref="Mode"/> is
-    /// <see cref="WorldReplayMode.Idle"/>. The live cohort/resolver machinery lives on
-    /// <c>Puck.World.WorldInstanceHost</c>, a layer above this assembly (the same reason <see cref="NoteRateLever"/>
-    /// is called directly rather than tapped through the loopback), so <c>WorldInstanceHost.ApplyTransfer</c> calls
-    /// this the moment a transfer touching the boot instance (as source or destination) is fully decided —
-    /// committed or aborted, never at enqueue, since only the decided outcome is worth taping. This records the
-    /// crossing's outcome for <c>replay.verify</c> to refuse a tampered one by name; it does not let
-    /// <see cref="WorldReplaySnapshot.Drive"/> re-derive a destination instance's own simulation — the offline
-    /// re-drive constructs one shadow <see cref="Server.WorldServer"/> for the boot instance alone, so a crossing
-    /// that actually lands a body in another instance is, and remains, outside what this tape can
-    /// re-execute.</summary>
-    /// <param name="transferId">The transfer id minted for this crossing.</param>
-    /// <param name="destinationName">The resolved destinations row name.</param>
-    /// <param name="scopeKey">The resolved scope key.</param>
-    /// <param name="generationId">The resolver-issued generation id the cohort resolved against.</param>
+    /// <summary>Records a transfer this recording's authority settled as its source into the active recording's
+    /// authority stream — a no-op while <see cref="Mode"/> is <see cref="WorldReplayMode.Idle"/>. The cohort and
+    /// resolver machinery lives on <c>Puck.World.WorldInstanceHost</c>, which calls this when it settles the transfer:
+    /// committed, refused, or aborted. A committed transfer's departed slots leave the re-drive's population at the same
+    /// position they left live; the arrival is the destination's own fact, taped there.</summary>
+    /// <param name="transferId">The transfer id this authority minted for the crossing.</param>
+    /// <param name="target">The destination's authority identity, or empty when the transfer resolved none.</param>
+    /// <param name="targetRemote">Whether the destination is reached over federation.</param>
+    /// <param name="destinationName">The resolved destinations row name, or empty for a console transfer.</param>
+    /// <param name="scopeKey">The resolved scope key, or empty for a console transfer.</param>
+    /// <param name="generationId">The resolver-issued generation id, or 0 for a console transfer.</param>
     /// <param name="outcome">A short canonical outcome summary (e.g. <c>"committed:2/2"</c> or
-    /// <c>"aborted:&lt;reason&gt;"</c>) — narration only, never re-interpreted by <see cref="WorldReplaySnapshot.Drive"/>.</param>
-    /// <param name="departedBootSlots">The 0-based boot local-seat slots this crossing actually removed from boot's
-    /// own population (empty unless this transfer's source is boot and it committed) — re-applied against the
-    /// replay's shadow population at re-drive so a departed body stops contributing to the population hash there exactly
-    /// as it stopped contributing live (see <see cref="WorldReplayEntry.Transfer"/>'s own remarks).</param>
-    public void NoteTransfer(ulong transferId, string destinationName, string scopeKey, ulong generationId, string outcome, IReadOnlyList<int> departedBootSlots) {
+    /// <c>"aborted:&lt;reason&gt;"</c>).</param>
+    /// <param name="departedSlots">The 0-based body indices the crossing removed from this authority's population;
+    /// empty unless it committed.</param>
+    public void NoteTransfer(ulong transferId, string target, bool targetRemote, string destinationName, string scopeKey, ulong generationId, string outcome, IReadOnlyList<int> departedSlots) {
         if (m_mode != WorldReplayMode.Recording) {
             return;
         }
 
         m_currentAuthority.Add(item: new WorldReplayEntry.Transfer(
-            DepartedBootSlots: departedBootSlots,
+            DepartedSlots: departedSlots,
             DestinationName: destinationName,
             GenerationId: generationId,
             Outcome: outcome,
             ScopeKey: scopeKey,
+            Target: target,
+            TargetRemote: targetRemote,
             TransferId: transferId
         ));
     }
@@ -527,7 +531,7 @@ public sealed partial class WorldReplayTape {
         // Persist under the LIVE tail hash — the state the running session actually reached at the last recorded tick.
         // The verify side re-drives a fresh world and compares against THIS, so a MATCH is a genuine live-vs-replay
         // fidelity proof, not a fresh-drive compared against another fresh drive of the same stream.
-        var recording = SnapshotRecording();
+        var recording = SnapshotRecording(companions: StopCompanions());
         string path;
 
         try {
@@ -559,7 +563,7 @@ public sealed partial class WorldReplayTape {
         }
 
         try {
-            var verdict = Compare(recording: recording);
+            var verdict = CompareSet(recording: recording);
 
             return new WorldReplayStopResult(
                 Path: path,
@@ -649,6 +653,7 @@ public sealed partial class WorldReplayTape {
         // the live rate instead.
         m_recordRateHz = ((uint)m_liveServer.Definition.SimulationRateHz);
         m_pipelineSourceDirectory = m_liveServer.PipelineSources?.DocumentDirectory;
+        m_documentDirectory = m_liveServer.Definition.DocumentDirectory;
         m_mountedAddons = [.. m_liveServer.AddonReceipts];
         m_seats = CaptureActiveSeats();
         m_ticks = new List<WorldReplayTickInput>();
@@ -743,6 +748,12 @@ public sealed partial class WorldReplayTape {
             ContentHash: contentHash,
             Value: op
         ));
+        m_liveServer.ArrivalTap = arrival => m_currentAuthority.Add(item: new WorldReplayEntry.Arrival(
+            Encoded: WorldAuthorityCheckpointCodec.EncodeCrossingArrival(arrival: arrival),
+            SourceAuthority: arrival.Request.SourceAuthority,
+            TransferId: arrival.Request.TransferId
+        ));
+        m_liveServer.FederatedIntentTap = held => m_currentAuthority.Add(item: new WorldReplayEntry.FederatedIntents(Held: held));
         m_liveServer.ServerEventTap = serverEvent => {
             switch (serverEvent) {
                 case WorldServerEvent.PeerAdmitted admitted:
@@ -762,7 +773,8 @@ public sealed partial class WorldReplayTape {
     /// and compares the replayed tail hash against the recorded one — the offline verification, run synchronously so the
     /// verdict is readable the instant it returns. Never touches the live session.</summary>
     /// <param name="name">The saved recording's name.</param>
-    /// <returns>The comparison verdict, which names the first divergent tick when there is one.</returns>
+    /// <returns>The set's verdict: the recording's own and each companion's first divergent tick, if any, and every
+    /// crossing between them.</returns>
     /// <exception cref="FileNotFoundException">No recording of that name exists.</exception>
     /// <exception cref="InvalidDataException">The file is not a <c>.puckreplay</c> recording, does not carry this
     /// build's tape shape token — greenfield, so a foreign shape is refused outright rather than read tolerantly;
@@ -770,7 +782,7 @@ public sealed partial class WorldReplayTape {
     /// reproduce.</exception>
     /// <exception cref="WorldReplayCodecException">A host-side codec bug in the re-drive (see
     /// <see cref="WorldReplaySnapshot.Drive"/>) — never tape data.</exception>
-    public WorldReplayVerdict Verify(string name) {
+    public WorldReplaySetVerdict Verify(string name) {
         var path = PathFor(name: name);
         WorldReplaySnapshot recording;
 
@@ -778,6 +790,6 @@ public sealed partial class WorldReplayTape {
             recording = WorldReplaySnapshot.Read(stream: stream);
         }
 
-        return Compare(recording: recording);
+        return CompareSet(recording: recording);
     }
 }

@@ -5,6 +5,9 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldTick {
     private Func<string, bool>? m_transferAuthorityAllowed;
+    // How many federated images the tape was last handed: the tape hears the held set every step while it is
+    // non-empty, and once more as it empties.
+    private int m_tapedFederatedIntents;
 
     /// <summary>Installs the hosting boundary before admission. The predicate admits only authorities restored
     /// together with this world. It cannot be replaced during an activation.</summary>
@@ -38,7 +41,53 @@ public sealed partial class WorldTick {
             );
         }
     }
+    // Hands the tape the federated device images this step is about to apply — a forwarded or federated traveler's
+    // input, which reaches this authority through no loopback — so a replay holds exactly the images this step held.
+    private void TapFederatedIntents() {
+        if (Host.FederatedIntentTap is not { } tap) {
+            m_tapedFederatedIntents = 0;
+            return;
+        }
 
+        List<(int Index, IntentSubmission Submission)>? held = null;
+
+        for (var index = 0; (index < m_federatedIntents.Length); index++) {
+            ref readonly var state = ref m_federatedIntents[index];
+
+            if (state.Active) {
+                (held ??= []).Add(item: (index, state.Submission with { EntityIndex = index, Principal = state.Principal }));
+            }
+        }
+
+        var count = (held?.Count ?? 0);
+
+        if (
+            (count == 0) &&
+            (m_tapedFederatedIntents == 0)
+        ) {
+            return;
+        }
+        tap(obj: (held ?? []));
+        m_tapedFederatedIntents = count;
+    }
+
+    /// <summary>Replaces every held federated device image with a taped set — the replay's door for the images a
+    /// recorded step held. A replayed image belongs to no stream, so no stream can release it.</summary>
+    internal void ReplaceFederatedIntents(IReadOnlyList<(int Index, IntentSubmission Submission)> held) {
+        lock (Host.AuthorityGate) {
+            Array.Clear(array: m_federatedIntents);
+            foreach (var (index, submission) in held) {
+                if (((uint)index) < ((uint)m_federatedIntents.Length)) {
+                    m_federatedIntents[index] = new WorldFederatedIntentState(
+                        Active: true,
+                        LeaseId: 0,
+                        Principal: submission.Principal,
+                        Submission: submission
+                    );
+                }
+            }
+        }
+    }
     /// <summary>Releases a reservation before commit. A destination that already committed ignores the abort.</summary>
     /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
     /// <param name="transferId">The source-minted transfer id.</param>

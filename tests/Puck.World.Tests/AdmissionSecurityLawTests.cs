@@ -705,8 +705,8 @@ public sealed class AdmissionSecurityLawTests {
                 Assert.Null(@object: result.VerifyFault);
                 Assert.NotNull(@object: result.Verdict);
                 Assert.True(
-                    condition: result.Verdict!.Value.Match,
-                    userMessage: result.Verdict.Value.Describe()
+                    condition: result.Verdict!.Primary.Match,
+                    userMessage: result.Verdict.Primary.Describe()
                 );
             }
         } finally {

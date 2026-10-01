@@ -11,9 +11,6 @@ public interface IWorldTransferForwarder {
     /// <summary>Names host-owned transfer state that prevents this authority from rewinding independently, or
     /// returns null when it has none. Called on the host's tick thread while holding the source authority gate.</summary>
     string? TimelineResetRefusal(WorldServer source);
-    /// <summary>Resolves already-evaluated adjacency continuations before this authority advances its population.
-    /// The caller already holds <paramref name="source"/>'s authority gate.</summary>
-    void ResolveContinuations(WorldServer source);
     /// <summary>Forwards one intent addressed to a departed traveler incarnation.</summary>
     bool TryForwardIntent(WorldServer source, in WorldMobilityIdentity mobility, in IntentSubmission submission, out string reason);
     /// <summary>Forwards one typed submission addressed to a departed traveler incarnation, preserving its caller

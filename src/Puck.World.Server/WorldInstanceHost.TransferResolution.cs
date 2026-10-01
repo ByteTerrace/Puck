@@ -142,11 +142,17 @@ public sealed partial class WorldInstanceHost {
                     // Once any member can return, never retry the cohort commit—even after a checkpoint.
                     pending = pending with { RollbackOnly = true };
                     m_inDoubtTransfers[index] = pending;
-                    if (!RestoreDetachedMembers(
+                    if (
+                        !TrySettle(
+                        arrived: false,
+                        pending: pending
+                    ) ||
+                        !RestoreDetachedMembers(
                         source,
                         pending.Landed,
                         pending.CommitMembers
-                    )) {
+                    )
+                    ) {
                         index++;
                         continue;
                     }
@@ -159,10 +165,10 @@ public sealed partial class WorldInstanceHost {
                         );
                     }
                     if (pending.Spawned) { ReapIfEmpty(name: pending.TargetName); }
-                    NoteResolvedTransferOutcome(
+                    NoteTransferOutcome(
                         transfer: in transfer,
                         sourceName: pending.Transfer.SourceInstance,
-                        targetName: pending.TargetName,
+                        target: pending.TargetAuthority,
                         outcome: "aborted:in-doubt-resolved-missing"
                     );
                     CloseAdjacencyAfterRefusal(

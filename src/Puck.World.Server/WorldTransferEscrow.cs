@@ -158,7 +158,22 @@ public sealed partial class WorldTransferEscrow {
     // The population remains the source of truth: stale rows are pruned before every capacity decision.
     private readonly Dictionary<int, string> m_borderAdmissions = new();
 
+    // The first crossing sequence this authority has not made durable; checkpointed as the recovery watermark.
+    private ulong m_crossingSequence;
+    // Set while a recorded arrival lands again: its record is already durable, so it is not written twice.
+    private bool m_relanding;
+
     public WorldTransferEscrow(WorldServer server) => m_server = server;
+
+    /// <summary>Gets the first crossing sequence this authority has not yet made durable.</summary>
+    public ulong CrossingSequence => m_crossingSequence;
+
+    internal void AdvanceCrossingSequence() => m_crossingSequence = checked((m_crossingSequence + 1UL));
+    // Recovery has redone every record below `next`; later records continue from there.
+    internal void ResumeCrossingSequence(ulong next) => m_crossingSequence = Math.Max(
+        val1: m_crossingSequence,
+        val2: next
+    );
 
     /// <summary>Captures every table this escrow owns.</summary>
     public WorldTransferEscrowCheckpoint Capture() {
@@ -207,7 +222,8 @@ public sealed partial class WorldTransferEscrow {
             LatestCommittedTransfer: [.. m_latestCommittedTransfer.Select(selector: static pair => (pair.Key, pair.Value))],
             MobilityLeases: [.. m_mobilityLeases.Select(selector: static pair => (pair.Key, pair.Value.Transfer, pair.Value.ExpectedEpoch))],
             MobilityAdmissions: [.. m_mobilityAdmissions.Select(selector: static pair => (pair.Key.SourceAuthority, pair.Key.Incarnation, pair.Value.Epoch, pair.Value.Principal))],
-            BorderAdmissions: [.. m_borderAdmissions.Select(selector: static pair => (pair.Key, pair.Value))]
+            BorderAdmissions: [.. m_borderAdmissions.Select(selector: static pair => (pair.Key, pair.Value))],
+            CrossingSequence: m_crossingSequence
         );
     }
     /// <summary>Restores every table this escrow owns from a previously captured checkpoint. Every table is cleared
@@ -225,6 +241,7 @@ public sealed partial class WorldTransferEscrow {
         m_mobilityLeases.Clear();
         m_mobilityAdmissions.Clear();
         m_borderAdmissions.Clear();
+        m_crossingSequence = checkpoint.CrossingSequence;
 
         // Commit's own "definition moved after reservation" guard is a REFERENCE check against the live
         // m_server.Definition object a live Reserve captured verbatim. A restored lease whose destination content
@@ -633,6 +650,8 @@ public sealed partial class WorldTransferEscrow {
             }
         }
 
+        m_server.LandingArrival = true;
+
         try {
             return CommitLease(
             key: key,
@@ -640,7 +659,10 @@ public sealed partial class WorldTransferEscrow {
             members: members,
             reason: out reason
         );
-        } finally { ReleaseLease(key: key); }
+        } finally {
+            m_server.LandingArrival = false;
+            ReleaseLease(key: key);
+        }
     }
 
     private bool CommitLease(WorldTransferKey key, Lease lease, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
@@ -719,6 +741,20 @@ public sealed partial class WorldTransferEscrow {
 
         var landed = new List<int>(capacity: members.Count);
 
+        void Unland() {
+            foreach (var landedSlot in landed) {
+                if (lease.Request.PeerAdmission) {
+                    m_server.GrantTable.RollbackTransferredEntity(slot: landedSlot);
+                } else {
+                    _ = m_server.Population.TryDetachSeatForTransfer(
+                        profile: out _,
+                        slot: landedSlot
+                    );
+                }
+                _ = m_borderAdmissions.Remove(key: landedSlot);
+            }
+        }
+
         for (var index = 0; (index < members.Count); index++) {
             var slot = lease.Slots[index];
             var reservationMember = lease.Request.Members[index];
@@ -747,18 +783,7 @@ public sealed partial class WorldTransferEscrow {
             }
 
             if (!reply.Accepted) {
-                foreach (var landedSlot in landed) {
-                    if (lease.Request.PeerAdmission) {
-                        m_server.GrantTable.RollbackTransferredEntity(slot: landedSlot);
-                    } else {
-                        _ = m_server.Population.TryDetachSeatForTransfer(
-                            profile: out _,
-                            slot: landedSlot
-                        );
-                    }
-                    _ = m_borderAdmissions.Remove(key: landedSlot);
-                }
-
+                Unland();
                 reason = $"body:{slot} refused reserved commit — {reply.Reason}";
 
                 return false;
@@ -813,6 +838,26 @@ public sealed partial class WorldTransferEscrow {
             m_borderAdmissions[slot] = lease.Request.Border;
         }
 
+        // Written ahead of the answer: a destination that cannot make its arrival durable lands nothing, so a
+        // restart can never lose a body the source was told had arrived.
+        var arrival = new WorldCrossingArrival(
+            Members: [.. members],
+            Request: lease.Request,
+            Slots: [.. lease.Slots]
+        );
+
+        if (
+            !m_relanding &&
+            !m_server.RecordCrossingHeld(
+            reason: out var durability,
+            record: new WorldCrossingRecord.Arrival(Value: arrival)
+        )
+        ) {
+            Unland();
+            reason = $"transfer {transferId} arrival could not be made durable — {durability}";
+            return false;
+        }
+
         m_committed.Add(item: key);
         m_committedMembers[key] = [.. members];
         m_committedPrincipals[key] = lease.Slots.Select(selector: slot => (lease.Request.PeerAdmission
@@ -855,6 +900,7 @@ public sealed partial class WorldTransferEscrow {
             );
         }
         m_committedIncarnations[key] = committedIncarnations;
+        m_server.NoteArrival(arrival: arrival);
         reason = string.Empty;
 
         return true;
@@ -1105,6 +1151,59 @@ public sealed partial class WorldTransferEscrow {
             DestinationDefinition: destinationDefinition,
             Reason: string.Empty
         );
+    }
+    /// <summary>Lands a recorded arrival again through the same reservation and commit doors that landed it, each
+    /// traveler preferring the body index it was given. A replay re-executes a destination tape's arrival this way,
+    /// and recovery re-executes a crossing-log arrival its checkpoint does not reflect; the record is already
+    /// durable, so it is not written again. The caller holds the authority gate.</summary>
+    /// <param name="arrival">The recorded arrival.</param>
+    /// <param name="reason">The named refusal, when the arrival did not land.</param>
+    /// <returns><see langword="true"/> when the arrival landed in its recorded body indices.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="arrival"/> is <see langword="null"/>.</exception>
+    public bool TryReland(WorldCrossingArrival arrival, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: arrival);
+
+        if (arrival.Slots.Count != arrival.Request.Members.Count) {
+            reason = $"transfer {arrival.Request.TransferId} records {arrival.Slots.Count} body index(es) for {arrival.Request.Members.Count} traveler(s)";
+            return false;
+        }
+
+        var request = arrival.Request with {
+            Members = [.. arrival.Request.Members.Select(selector: (member, index) => member with { PreferredSlot = arrival.Slots[index] })],
+        };
+        var reply = Reserve(request: request);
+
+        if (!reply.Accepted) {
+            reason = $"transfer {request.TransferId} reservation refused — {reply.Reason}";
+            return false;
+        }
+        if (!reply.BodyIndices.SequenceEqual(second: arrival.Slots)) {
+            Abort(
+                sourceAuthority: request.SourceAuthority,
+                transferId: request.TransferId
+            );
+            reason = $"transfer {request.TransferId} reserved body:[{string.Join(
+                separator: ",",
+                values: reply.BodyIndices
+            )}] where it landed in body:[{string.Join(
+                separator: ",",
+                values: arrival.Slots
+            )}]";
+            return false;
+        }
+
+        m_relanding = true;
+
+        try {
+            return Commit(
+                members: arrival.Members,
+                reason: out reason,
+                sourceAuthority: request.SourceAuthority,
+                transferId: request.TransferId
+            );
+        } finally {
+            m_relanding = false;
+        }
     }
     public void RetireMobility(in WorldMobilityIdentity mobility) {
         var incarnation = mobility.Incarnation;
