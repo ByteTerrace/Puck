@@ -387,8 +387,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "the DUAL part of FixedDual.Log2 \u2014 one FusedArithmetic.DivideProductSum of the raw Q32 product b\u00B7Log2E over a\u00B72\u00B9\u2076",
-        "Against": "Oracles.RoundDyadicRatio(numerator: b\u00B794548, denominator: a, shift: 0) \u2014 one ties-to-even rounding of the exact rational in BigInteger. The constant 94548 is carried on the oracle side as its own literal with the provenance round(log\u2082e\u00B72\u00B9\u2076) = round(94548.4622), NOT read from the subject\u0027s private field",
+        "Subject": "the DUAL part of FixedDual.Log2 \u2014 one FusedArithmetic.DivideProductSum of the exact product of b\u0027s raw with log\u2082e at Q62 over a\u00B72\u2076\u00B2",
+        "Against": "Oracles.RoundDyadicRatio(numerator: b\u00B76653256548922161246, denominator: a\u00B72\u2074\u2076, shift: 0) \u2014 one ties-to-even rounding of the exact rational in BigInteger. The constant is carried on the oracle side as its own literal with the provenance round(log\u2082e\u00B72\u2076\u00B2) = round(6653256548922161245.872), evaluated from 1/ln 2 at eighty significant digits, NOT read from the subject\u0027s field",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

@@ -816,7 +816,7 @@ internal static partial class Subjects {
     }
     /// <summary>Proves the hyperbolic seam on a hand-derived twelve-row rapidity ladder — the exact zero pole, the
     /// representable <c>ln 2</c> anchor, the sign contract, and the invariant norm within its own derived tolerance —
-    /// at the light-cone boundary the member's doc quotes, where raw 726822 is the first exact <c>U == V</c>
+    /// at the light-cone boundary the member's doc quotes, where raw 726818 is the first exact <c>U == V</c>
     /// collision and one raw below is still a unit — and on a six-row saturation ladder pinning the top of the
     /// carrier, where the pair must reach <see cref="FixedQ4816.MaxValue"/> with the sine carrying the rapidity's
     /// sign.</summary>
@@ -839,26 +839,26 @@ internal static partial class Subjects {
             if (Math.Abs(value: (value.Norm.Value - OneRaw)) > normTolerance) { return $"the norm of FromRapidity({rapidityRaw}) is {value.Norm.Value}, expected {OneRaw} within {normTolerance}"; }
         }
 
-        // The light-cone boundary, pinned where the member's doc quotes it: raw 726822 is the first rapidity whose
+        // The light-cone boundary, pinned where the member's doc quotes it: raw 726818 is the first rapidity whose
         // backward exponential 2^(−s−1) rounds to Zero (s > 16, φ > 16·ln 2 ≈ 11.0904), so the pair collides
         // bit-for-bit onto the cone and stays there; one raw below, the pair is still a unit. The negative mirror
         // lands on the opposite diagonal, the collided pair has no inverse, and its conjugate annihilates it.
-        var lastUnit = FixedSplit.FromRapidity(rapidity: Raw(value: 726821L));
-        var firstCone = FixedSplit.FromRapidity(rapidity: Raw(value: 726822L));
-        var mirrorCone = FixedSplit.FromRapidity(rapidity: Raw(value: -726822L));
+        var lastUnit = FixedSplit.FromRapidity(rapidity: Raw(value: 726817L));
+        var firstCone = FixedSplit.FromRapidity(rapidity: Raw(value: 726818L));
+        var mirrorCone = FixedSplit.FromRapidity(rapidity: Raw(value: -726818L));
 
         if (
             !lastUnit.IsUnit ||
             (lastUnit.U.Value == lastUnit.V.Value)
-        ) { return "FromRapidity(726821) is not a unit off the light cone"; }
+        ) { return "FromRapidity(726817) is not a unit off the light cone"; }
         if (
             (firstCone.U.Value != firstCone.V.Value) ||
             firstCone.IsUnit
-        ) { return "FromRapidity(726822) did not collide onto the light cone"; }
+        ) { return "FromRapidity(726818) did not collide onto the light cone"; }
         if (
             (mirrorCone.U.Value != unchecked(-mirrorCone.V.Value)) ||
             mirrorCone.IsUnit
-        ) { return "FromRapidity(-726822) did not collide onto the opposite diagonal"; }
+        ) { return "FromRapidity(-726818) did not collide onto the opposite diagonal"; }
         if (!Throws<DivideByZeroException>(action: () => _ = (FixedSplit.MultiplicativeIdentity / firstCone))) { return "division by the collided pair was not refused"; }
         if ((firstCone * firstCone.Conjugate()) != FixedSplit.AdditiveIdentity) { return "the collided pair times its conjugate is not the zero element"; }
 
@@ -877,34 +877,33 @@ internal static partial class Subjects {
     }
 
     // T3 — the rapidity ladder. Hand-derived from the real hyperbolic cosine and sine of the value each RAPIDITY RAW
-    // denotes. The per-row tolerance is derived: an argument error of at most 0.462·|φ| + 0.5 raws (the Log2E
-    // quantization plus the scaled product's rounding) is a relative error of ln2/2¹⁶ per raw in the exponential,
-    // plus Exp2's own bound at these magnitudes — half a ULP from its closing narrowing and a relative term that is
-    // negligible this far below 2²⁰, 0.51 ULP per term — rounded up to a power of two; the halving is folded into
-    // the exponent (2^(s−1) + 2^(−s−1)), so no halving rounding exists and the sum is exact. The ln 2 row is the
-    // anchor: cosh(ln 2) is exactly 5/4 and sinh(ln 2) exactly 3/4, both on the Q16 grid.
+    // denotes. The per-row tolerance is derived: s = φ·log₂e is formed exactly from a Q62 log₂e and rounded once to
+    // Q56 (relative error ≤ ln2·2⁻⁵⁷ per exponential term), Exp2's mantissa adds < 2⁻⁴⁴ relative and its narrowing
+    // half a ULP, and the halving is folded into the exponent so the sum is exact: each component is within
+    // |U|·(ln2·2⁻⁵⁷ + 2⁻⁴⁴) + 1 raw of the truth, plus half a raw for the expectation's rounding — under 2 at every
+    // row. The ln 2 row is the anchor: cosh(ln 2) is exactly 5/4 and sinh(ln 2) exactly 3/4, both on the Q16 grid.
     private static readonly (long RapidityRaw, long ExpectedU, long ExpectedV, long Tolerance)[] SplitRapidityLadder = [
         (0L, 65536L, 0L, 0L),
         (45426L, 81920L, 49152L, 2L),
-        (16384L, 67595L, 16555L, 4L),
-        (32768L, 73900L, 34151L, 4L),
-        (65536L, 101127L, 77018L, 8L),
-        (-65536L, 101127L, -77018L, 8L),
-        (98304L, 154168L, 139544L, 8L),
-        (131072L, 246559L, 237690L, 16L),
-        (-131072L, 246559L, -237690L, 16L),
-        (196608L, 659794L, 656531L, 48L),
-        (262144L, 1789672L, 1788472L, 160L),
-        (-262144L, 1789672L, -1788472L, 160L),
+        (16384L, 67595L, 16555L, 2L),
+        (32768L, 73900L, 34151L, 2L),
+        (65536L, 101127L, 77018L, 2L),
+        (-65536L, 101127L, -77018L, 2L),
+        (98304L, 154168L, 139544L, 2L),
+        (131072L, 246559L, 237690L, 2L),
+        (-131072L, 246559L, -237690L, 2L),
+        (196608L, 659794L, 656531L, 2L),
+        (262144L, 1789672L, 1788472L, 2L),
+        (-262144L, 1789672L, -1788472L, 2L),
     ];
     // T3b — the saturation ladder. The rapidity-33 row is hand-derived at 200-bit precision (cosh and sinh both
     // round to the same raw: the backward exponential is far below half an ULP at this magnitude) with the T3
-    // tolerance derivation evaluated at φ = 33 and rounded up to 2⁵¹. The remaining rows are EXACT: past a scaled
-    // exponent of 48 the pre-halved terms are pinned to MaxValue and Zero with no rounding left anywhere — including
-    // at 6393185575658021189, the first raw where an un-widened wrapping scale once flipped the sine's sign, and at
-    // both carrier extremes.
+    // tolerance derivation evaluated at φ = 33 — 7.03·10¹⁸·(ln2·2⁻⁵⁷ + 2⁻⁴⁴) + 1.5, about 4.0·10⁵ — rounded up to
+    // 2¹⁹. The remaining rows are EXACT: past a scaled exponent of 48 the pre-halved terms are pinned to MaxValue
+    // and Zero with no rounding left anywhere — including at 6393185575658021189, the first raw where an un-widened
+    // wrapping scale once flipped the sine's sign, and at both carrier extremes.
     private static readonly (long RapidityRaw, long ExpectedU, long ExpectedV, long Tolerance)[] SplitRapiditySaturationLadder = [
-        ((33L << 16), 7033440822424897606L, 7033440822424897606L, (1L << 51)),
+        ((33L << 16), 7033440822424897606L, 7033440822424897606L, (1L << 19)),
         ((34L << 16), long.MaxValue, long.MaxValue, 0L),
         (-(34L << 16), long.MaxValue, -long.MaxValue, 0L),
         (6393185575658021189L, long.MaxValue, long.MaxValue, 0L),
@@ -1112,8 +1111,8 @@ internal static partial class Subjects {
         if (logarithm.Real != FixedQ4816.Log2(value: Raw(value: realRaw))) { return $"the real part of Log2({realRaw}) is not the scalar logarithm"; }
 
         var expectedLogarithmDual = Oracles.RoundDyadicRatio(
-            numerator: (((BigInteger)dualRaw) * Log2ERaw),
-            denominator: new BigInteger(value: realRaw),
+            numerator: (((BigInteger)dualRaw) * Log2EQ62Raw),
+            denominator: (new BigInteger(value: realRaw) << 46),
             shift: 0
         );
 

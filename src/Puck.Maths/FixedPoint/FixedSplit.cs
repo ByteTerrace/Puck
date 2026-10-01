@@ -174,7 +174,7 @@ public readonly record struct FixedSplit(FixedQ4816 U, FixedQ4816 V)
     /// <param name="rapidity">The hyperbolic angle; rapidities add under multiplication, so squeezes compose by summing this parameter.</param>
     /// <returns>The split-complex number <c>cosh φ + j·sinh φ</c>. Its <see cref="Norm"/> tracks one only while the
     /// backward exponential <c>e^−|φ|</c> is comfortably representable; the deviation grows as that term approaches a
-    /// Q16 ULP, and from raw rapidity ±726822 (<c>|φ| &gt; 16·ln 2 ≈ 11.0904</c>, where the term rounds to zero) the
+    /// Q16 ULP, and from raw rapidity ±726818 (<c>|φ| &gt; 16·ln 2 ≈ 11.0904</c>, where the term rounds to zero) the
     /// two components collide bit-for-bit onto the light cone: <see cref="IsUnit"/> is <see langword="false"/> there,
     /// the result has no inverse — division by it throws and multiplying by its <see cref="Conjugate"/> yields the
     /// zero element. Both components saturate to <see cref="FixedQ4816.MaxValue"/> once the true value leaves the
