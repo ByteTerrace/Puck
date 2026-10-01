@@ -8,10 +8,15 @@ public sealed partial class SdfWorldTables {
     private readonly SdfWorldPipelines m_pipelines;
     // The device's mesh pass pipeline and the render pass it draws in, which a view's mesh pass records with.
     private readonly IGpuPipeline m_meshPipeline;
+    // The impostor card pipeline, which draws in the same render pass beside it.
+    private readonly IGpuPipeline m_impostorPipeline;
     private readonly IGpuRenderPass m_meshRenderPass;
 
     // The mesh pass's graphics pipeline.
     internal IGpuPipeline MeshPipeline => m_meshPipeline;
+    // The impostor card pipeline: the mesh pass's layout and render pass, with a fragment stage that searches the impostor's
+    // views for each pixel's surface.
+    internal IGpuPipeline ImpostorPipeline => m_impostorPipeline;
     // The render pass the mesh pass draws in, which a view's framebuffers are created for.
     internal IGpuRenderPass MeshRenderPass => m_meshRenderPass;
     // The views pass's pipeline: the variant UploadProgram selected for the live program (full ISA, core ops or folds;
@@ -40,6 +45,7 @@ public sealed partial class SdfWorldTables {
             (
                 Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles.SequenceEqual(second: other.Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles) &&
                 m_meshPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_meshPipeline.GroupLayoutHandles) &&
+                m_impostorPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_impostorPipeline.GroupLayoutHandles) &&
                 ((m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is not { } resolve) ||
                     ((other.m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is { } otherResolve) &&
                         resolve.GroupLayoutHandles.SequenceEqual(second: otherResolve.GroupLayoutHandles))) &&

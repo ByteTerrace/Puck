@@ -367,13 +367,47 @@ The engine is not ready until the bake schedule has reconciled and, while the
 presentation draws its bakes, settled, so a capture or `world.wait ready` never
 lands between a placement's field and its bake. The mesh region is always
 staged into device-local memory, never a ring in the host-visible device-local
-heap every residency's small tables share. `WorldBakeSchedule.TryGetMesh` hands out a ready prototype's mesh,
-decoded once, and counts the switch from field to bake once per bake
+heap every residency's small tables share. `WorldBakeSchedule.TryGetDraw` hands out a ready prototype's mesh and
+impostor, decoded once, and counts the switch from field to bake once per bake
 (`sdf.bakes.drawn`); a bake landing moves the schedule's revision, so the static
 scene rebuilds on the next frame. A camera-hidden instance
 (`SdfInstanceRange.CameraHidden`, the second-highest bit of its segment-end lane)
 is left out of every camera mask the tile cull writes, so primary never marches
 it, while the shadow and ambient gathers still read it.
+
+**The impostor draws as a card, and each view records the mesh or the card, never
+both.** A baked placement emits two draws bounded by the impostor's sphere: its mesh,
+and a card (`SdfMeshCard.Mesh` with `SdfMeshDraw.Impostor`). A view's mesh part
+records the one its sphere's projected diameter selects (`SdfMeshLodSelector`): the
+card once the diameter, twice the world radius over the center's forward depth in
+the view's render pixels, falls under the impostor's view edge (16 at the standard
+tier, so one impostor texel covers at most one pixel), the mesh again once it passes
+that edge by a quarter. The choice is the CPU's, made from each view's own camera
+(two views at two distances choose apart), and the `sdf.mesh.lod` source counts the
+draws recorded as `near` and `far`. The impostor's four textures pack into their own
+atlases (`SdfMeshImpostor`, `SdfMeshAtlas` over impostors), bound in the World set of
+every pass and, for the depth, in the mesh pass's own set.
+
+The mesh pass draws the cards after its meshes, through a second pipeline. The
+vertex stage places a card on the plane perpendicular to the view that touches the
+sphere's near side, centered on the ray through the sphere's center, as wide as the
+sphere's silhouette can be on that plane. The card's fragment stage
+(`sdf-mesh-impostor.frag.hlsl`) takes the pixel's ray into the prototype's unit-sphere
+coordinates (`frame/sdf-mesh-impostor.hlsli`) and, for each of the three views of
+the grid nearest the direction toward the camera, weighted as a triangle of the grid,
+marches it through the sphere in eight steps against that view's depth, refining the
+first step behind the surface linearly. The ray's hit is the weighted mean of the
+views that hit, and a pixel is covered when views holding half the weight agree; the
+stage discards the rest, so a card never hides what stands behind its empty corners.
+It writes the same three values a mesh pixel writes and the surface's depth,
+promising it is no nearer than the card (`SV_DepthLessEqual`), which Direct3D 12
+allows when the position is interpolated in screen space at the centroid. The hit
+passes shade a card pixel from the same views: albedo, normal and emission blended by
+view weight and texel coverage (`frame/sdf-mesh-impostor-surface.hlsli`), each
+sampled at the level the pixel's footprint wants, bilinear inside the view's tile,
+with the draw's first palette material, since the impostor stores no material
+identity. `SdfImpostorOracle` states the trace in doubles over the decoded depth,
+and `SdfImpostorLawTests` hold it to the field's sphere and box.
 
 ---
 

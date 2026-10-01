@@ -648,6 +648,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_tables = m_pipelines.TryBuild(
             construct: static (pipelines, passes, inputs) => new SdfWorldTables(
                 device: inputs.Device,
+                impostorRaster: passes.ImpostorRaster,
                 meshRaster: passes.MeshRaster,
                 options: inputs.Options,
                 pipelines: pipelines,

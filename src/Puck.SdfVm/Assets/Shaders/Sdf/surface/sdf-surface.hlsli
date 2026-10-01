@@ -58,8 +58,8 @@ void sdfResolveMeshSurface(float3 normal, float ambient, uint record) {
 }
 
 // The surface stage: resolves an active pixel's normal and curvature from the field, or a mesh hit's from its triangle,
-// which the record names, and a textured mesh's normal and occlusion from the atlases, facing the camera as the geometric
-// normal does.
+// which the record names, a textured mesh's normal and occlusion from the atlases, and an impostor card's normal from the
+// impostor's views, facing the camera as the geometric normal does.
 void sdfSurfaceStage(SdfPixel p) {
     if (!p.active) {
         return;
@@ -74,8 +74,14 @@ void sdfSurfaceStage(SdfPixel p) {
         uint draw = sdfVisibilitySource(visibility.identity);
         uint triangleIndex = sdfVisibilityMeshTriangle(record);
         float3 meshPoint = (p.rayOrigin + (p.rayDirection * visibility.t));
-        float3 meshNormal = sdfMeshSurfaceNormal(draw, triangleIndex, meshPoint, p.rayDirection);
         float meshAmbient = 1.0;
+        float3 meshNormal;
+
+        if (sdfMeshIsImpostor(draw)) {
+            meshNormal = sdfImpostorSurfaceAt(draw, p.rayOrigin, p.rayDirection, visibility.t, (p.pixelFootprint * visibility.t)).normal;
+        } else {
+            meshNormal = sdfMeshSurfaceNormal(draw, triangleIndex, meshPoint, p.rayDirection);
+        }
 
         if (sdfMeshTextured(draw)) {
             SdfMeshTexel meshTexel = sdfMeshTexelAt(draw, triangleIndex, meshPoint, (p.pixelFootprint * visibility.t));

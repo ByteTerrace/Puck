@@ -195,7 +195,8 @@ public sealed class CreationBakeLawTests {
     }
     /// <summary>A ready bake draws in place of its field, and the switch is counted once. Before its bake lands, a
     /// placement draws through its field: no mesh draw, and a camera-visible instance. Once the bake is ready it draws
-    /// the baked mesh, with its instance camera-hidden so its field still casts shadows and occludes. A creation whose
+    /// the baked mesh and its impostor's card, with its instance camera-hidden so its field still casts shadows and
+    /// occludes. A creation whose
     /// bake is refused keeps its field, and a later rebuild counts no second switch.</summary>
     [Fact]
     public void AReadyBakeDrawsInPlaceOfItsFieldAndTheSwitchIsCounted() {
@@ -215,7 +216,7 @@ public sealed class CreationBakeLawTests {
             var builder = new Puck.SignedDistance.SdfProgramBuilder();
 
             WorldPlacementStamper.EmitStatic(
-                bakedMeshFor: prototypeId => (schedule.TryGetMesh(mesh: out var mesh, prototypeId: prototypeId) ? mesh : null),
+                bakedFor: prototypeId => (schedule.TryGetDraw(draw: out var baked, prototypeId: prototypeId) ? baked : null),
                 builder: builder,
                 creations: definition.Creations,
                 definition: definition,
@@ -236,7 +237,22 @@ public sealed class CreationBakeLawTests {
         Drain(definition: definition, schedule: schedule);
 
         var ready = Emit();
-        var draw = Assert.Single(collection: ready.Draws);
+        // A ready bake draws two representations of the one placement: its mesh, recorded while it is large on screen, and
+        // its impostor's card, recorded once it is small (the view chooses: SdfMeshLodSelector). Both are bounded by the
+        // impostor's sphere, and the switch is the impostor's view edge.
+        Assert.Equal(expected: 2, actual: ready.Draws.Count);
+
+        var draw = ready.Draws[0];
+        var card = ready.Draws[1];
+
+        Assert.False(condition: draw.Lod!.Value.Far);
+        Assert.Null(@object: draw.Impostor);
+        Assert.True(condition: card.Lod!.Value.Far);
+        Assert.NotNull(@object: card.Impostor);
+        Assert.Same(expected: Puck.SdfVm.SdfMeshCard.Mesh, actual: card.Mesh);
+        Assert.Equal(expected: (card.Impostor!.Center, card.Impostor.Radius, ((float)card.Impostor.ViewTexels)), actual: (draw.Lod!.Value.Center, draw.Lod!.Value.Radius, draw.Lod!.Value.SwitchPixels));
+        Assert.Equal(expected: draw.Material, actual: card.Material);
+        Assert.Equal(expected: draw.ObjectToWorld, actual: card.ObjectToWorld);
 
         Assert.True(condition: (draw.Mesh.TriangleCount > 0));
         // The baked mesh draws its vertex normals and each triangle's palette entry: the block's palette has one.
@@ -295,6 +311,39 @@ public sealed class CreationBakeLawTests {
         Assert.Equal(expected: (3L, 0L, 0L, 0L), actual: Counts(schedule: schedule));
         Assert.Equal(expected: WorldBakeState.Ready, actual: schedule.StateOf(prototypeId: "pip"));
         Assert.Equal(expected: WorldBakeState.Refused, actual: schedule.StateOf(prototypeId: "glint"));
+    }
+    /// <summary>The parity world ships its bakes: compiled beside its companion files, its <c>BAKE</c> chunk names a key for
+    /// every creation it draws and the pack carries each, so a boot from it holds them all, reconciles with nothing
+    /// scheduled and nothing baked, and ships (the leg that <c>puck parity</c> holds the device to).</summary>
+    [Fact]
+    public void TheParityWorldShipsItsBakesAndABootFromItsPackBakesNothing() {
+        using var directory = new TemporaryDirectory();
+
+        foreach (var file in Directory.GetFiles(path: Path.Combine(path1: AuthoredGameFixtures.Root, path2: "tests", path3: "Puck.Parity"))) {
+            File.Copy(
+                destFileName: directory.PathOf(name: Path.GetFileName(path: file)),
+                sourceFileName: file
+            );
+        }
+
+        var path = directory.PathOf(name: "parity.world.json");
+
+        _ = CompileWithPack(path: path);
+
+        var store = new WorldBakeStore();
+        var boot = CompiledWorldLawTests.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
+        var creations = boot.Admission.Definition.Creations.Count;
+
+        Assert.True(condition: (creations > 0));
+        Assert.Equal(expected: creations, actual: store.HeldCount);
+
+        using var schedule = new WorldBakeSchedule(store: store);
+
+        schedule.Pump(definition: boot.Admission.Definition);
+        Assert.False(condition: schedule.IsBusy);
+        Assert.True(condition: schedule.Ships);
+        Assert.Equal(expected: (((long)creations), 0L, 0L, 0L), actual: Counts(schedule: schedule));
+        Assert.Equal(expected: WorldBakeState.Ready, actual: schedule.StateOf(prototypeId: "vocabRig"));
     }
     [Fact]
     public void ReadinessWaitsForAReconcileAndAnEmptyWorldSettles() {

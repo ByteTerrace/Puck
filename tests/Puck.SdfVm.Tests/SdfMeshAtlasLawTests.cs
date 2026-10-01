@@ -6,7 +6,7 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>
 /// THE LAW: the mesh atlases hold every packed texture set's stored bytes unchanged. Each set takes a rectangle whose
-/// origin and extent are multiples of <see cref="SdfMeshAtlas.Alignment"/> texels, the same in all five atlases, so at
+/// origin and extent are multiples of <see cref="SdfMeshAtlas.AlignmentOf"/> texels, the same in all five atlases, so at
 /// every level of the chain its units (a block of a block-compressed format, a texel of the material's R8) sit in the
 /// atlas exactly as they sit in its own texture, at the rectangle's origin shifted by the level; every other unit is zero;
 /// no two rectangles overlap; and a set's placement moves its texture coordinates onto its rectangle. A set listed twice
@@ -46,8 +46,8 @@ public sealed class SdfMeshAtlasLawTests {
 
         Assert.Equal(expected: sets.Length, actual: atlas.MeshCount);
         Assert.Equal(expected: 3, actual: atlas.Levels);
-        Assert.Equal(expected: 0, actual: (atlas.Width % SdfMeshAtlas.Alignment));
-        Assert.Equal(expected: 0, actual: (atlas.Height % SdfMeshAtlas.Alignment));
+        Assert.Equal(expected: 0, actual: (atlas.Width % SdfMeshAtlas.AlignmentOf(levels: atlas.Levels)));
+        Assert.Equal(expected: 0, actual: (atlas.Height % SdfMeshAtlas.AlignmentOf(levels: atlas.Levels)));
 
         var rectangles = new List<(int X, int Y, int Width, int Height)>();
 
@@ -56,7 +56,7 @@ public sealed class SdfMeshAtlasLawTests {
             var x = ((int)MathF.Round(x: (placement.Z * atlas.Width)));
             var y = ((int)MathF.Round(x: (placement.W * atlas.Height)));
 
-            Assert.Equal(actual: ((x % SdfMeshAtlas.Alignment), (y % SdfMeshAtlas.Alignment)), expected: (0, 0));
+            Assert.Equal(actual: ((x % SdfMeshAtlas.AlignmentOf(levels: atlas.Levels)), (y % SdfMeshAtlas.AlignmentOf(levels: atlas.Levels))), expected: (0, 0));
             Assert.Equal(expected: (((float)set.Width) / atlas.Width), actual: placement.X);
             Assert.Equal(expected: (((float)set.Height) / atlas.Height), actual: placement.Y);
             rectangles.Add(item: (x, y, (((set.Width + 15) / 16) * 16), (((set.Height + 15) / 16) * 16)));

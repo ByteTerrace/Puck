@@ -1931,7 +1931,9 @@ hits and each native tool's runs) and the process's SDF kernel loads,
 allocated and released at their allocation sizes, and the peak held; swapchain
 images are never counted), and Vulkan adds `procedures.vulkan`. A rendering
 shape also registers `sdf.bakes`: the creation bakes its cache held, scheduled,
-baked and refused, and the field evaluations the bakes spent. The
+baked and refused, and the field evaluations the bakes spent; and `sdf.mesh.lod`: the
+mesh draws (`near`) and impostor cards (`far`) of baked placements the views
+recorded. The
 client registers `presentation.mirror`, the cells its state mirror read. A
 presented host registers `sdf.transforms`: the dynamic-transform rows packed,
 the bytes compared and the rows owed, summed over the main frame source and the

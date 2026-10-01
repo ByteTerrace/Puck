@@ -38,6 +38,8 @@ public sealed partial class SdfWorldTables {
 
     // The draw list the latest frame staged, whose draws a view's mesh pass records one call each.
     internal IReadOnlyList<SdfMeshDraw>? MeshDraws => m_meshDraws;
+    // One more for every new draw list the region packs, which a view's choice among the draws forgets its last frame at.
+    internal long MeshRevision => m_meshRevision;
 
     // Packs a new draw list, or the list at a new revision, into the region, growing it first when the list needs more
     // bytes; the upload sends the slot what it owes.
@@ -50,6 +52,7 @@ public sealed partial class SdfWorldTables {
             (revision != m_meshDrawsRevision)
         ) {
             var atlas = StageMeshAtlas(draws: draws);
+            var impostors = StageImpostorAtlas(draws: draws);
             var layout = SdfMeshRegion.Plan(
                 draws: draws,
                 meshes: m_meshPlacements
@@ -69,6 +72,7 @@ public sealed partial class SdfWorldTables {
                     atlas: atlas,
                     destination: words,
                     draws: draws,
+                    impostors: impostors,
                     layout: layout,
                     meshes: m_meshPlacements
                 );

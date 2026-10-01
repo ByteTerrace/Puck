@@ -78,7 +78,8 @@ public static class SdfWorldInterfaces {
 
     /// <summary>Gets the interface the mesh pass draws with: the pass block <see cref="World"/> declares, member for member
     /// at the same offsets, so the mesh pass binds the block its node writes for it, then the mesh region and the work
-    /// counters its fragments count the texels they write into (<see cref="ShaderWorkCounters"/>); and the index
+    /// counters its fragments count the texels they write into (<see cref="ShaderWorkCounters"/>), and the impostor depth atlas
+    /// (<see cref="SdfWorldPackage.ImpostorDepth"/>) an impostor card's fragments find their surface in; and the index
     /// each draw call pushes, whose bits from <see cref="MeshViewShift"/> up name the view and whose bits below it name
     /// the draw (<see cref="MeshPushedIndex"/>).</summary>
     public static ShaderInterface Mesh { get; } = new(
@@ -88,6 +89,11 @@ public static class SdfWorldInterfaces {
                 member.IsBlockMember
             )),
             Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshRegion),
+            ShaderInterfaceMember.SampledImage(
+                group: ShaderInterfaceGroup.Pass,
+                name: SdfWorldPackage.ImpostorDepth,
+                type: ShaderValueType.Float4
+            ),
             ShaderWorkCounters.BufferMember,
         ],
         name: "sdf-mesh",

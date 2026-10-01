@@ -293,7 +293,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     // run-table entry. The previous-transform table is seeded device-to-device behind four buffer barriers, adding one
     // counted copy and no host-visible bytes. This fixture has no mesh draws to seed.
     private const string FirstUpload =
-        "work submission=1 revision=1\nwork fillers executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=4 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=2 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0\nwork bricks skipped\nwork upload executed: dispatches=9 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=13 binds.pipeline=9 binds.descriptor-set=9 push-constants=0 descriptor-writes=0 uploads.host-visible=837716 clears=0 copies=1 march.steps=0 texels.written=0 copies.buffer-bytes=48\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=36 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0\n";
+        "work submission=1 revision=1\nwork fillers executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=4 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=2 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0\nwork bricks skipped\nwork upload executed: dispatches=9 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=13 binds.pipeline=9 binds.descriptor-set=9 push-constants=0 descriptor-writes=0 uploads.host-visible=837756 clears=0 copies=1 march.steps=0 texels.written=0 copies.buffer-bytes=48\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=36 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0\n";
     // A still upload that writes one queued 2x2x2 brick: the bricks pass binds the copy pipeline and the brick staging's
     // set and dispatches its copy between the pool's two barriers, and counts the staging's host writes, the eight voxels
     // behind their header and one run-table entry.
@@ -322,6 +322,10 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                 device: gpu,
                 ledger: owned
             );
+            ImpostorRaster = SdfTestPipelines.ImpostorRaster(
+                device: gpu,
+                ledger: owned
+            );
             // A brick pool needs its bake pipeline, so its set is built with a one-byte brick kernel.
             Pipelines = ((brickPoolVoxelCapacity == 0)
                 ? SdfTestPipelines.Build(
@@ -343,6 +347,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                     WorkLedger: owned
                 ),
                 pipelines: Pipelines,
+                impostorRaster: ImpostorRaster,
                 meshRaster: MeshRaster,
                 regionCopy: RegionCopy.Compute!
             );
@@ -372,6 +377,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         public SdfWorldTables Engine { get; }
         public SdfFrame Frame { get; }
         public FakeGpuDevice Gpu { get; }
+        public GpuPassPipeline ImpostorRaster { get; }
         public GpuPassPipeline MeshRaster { get; }
         public SdfWorldPipelines Pipelines { get; }
         public GpuPassPipeline RegionCopy { get; }
@@ -381,6 +387,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             Pipelines.Dispose();
             RegionCopy.Dispose();
             MeshRaster.Dispose();
+            ImpostorRaster.Dispose();
         }
         // Prepares a reload of the rig's pipelines and installs it, as a residency does across two produced frames.
         public int Reload(SdfKernelSet kernels) {

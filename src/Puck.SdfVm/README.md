@@ -73,7 +73,7 @@ staged region of frame data owes, copied into its device-local buffer; see
 fills every pixel of the view's output with the authored sky, before any tile is culled)
 → `sdf-instance-cull.comp` (the per-tile instance mask) → `sdf-beam.comp`
 (cone march over the tile-masked field) → `sdf-cull-args.comp` → the mesh pass
-(`sdf-mesh.vert`/`.frag`, rasterizing the frame's mesh draws) →
+(`sdf-mesh.vert`/`.frag`, rasterizing the frame's mesh draws, and `sdf-mesh-impostor.frag` the baked impostors' cards a view records) →
 `sdf-world-primary.comp` (camera traversal) → `sdf-world-surface.comp`
 (normals and curvature) → `sdf-world-ambient.comp` (ambient occlusion) →
 `sdf-world-shadow.comp` (the key light's soft shadow) → the views kernel

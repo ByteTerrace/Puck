@@ -144,6 +144,7 @@ public sealed class SdfWorldTablesCreationFaultLawTests {
     // and staging buffers are created too) already built on it and the faults' counts cleared.
     private sealed class Rig : IDisposable {
         private readonly SdfWorldPipelines m_pipelines;
+        private readonly GpuPassPipeline m_impostorRaster;
         private readonly GpuPassPipeline m_meshRaster;
         private readonly GpuPassPipeline m_regionCopy;
         private readonly SdfProgram m_program;
@@ -172,6 +173,10 @@ public sealed class SdfWorldTablesCreationFaultLawTests {
                 ledger: m_work
             );
             m_meshRaster = SdfTestPipelines.MeshRaster(
+                device: Device,
+                ledger: m_work
+            );
+            m_impostorRaster = SdfTestPipelines.ImpostorRaster(
                 device: Device,
                 ledger: m_work
             );
@@ -220,6 +225,7 @@ public sealed class SdfWorldTablesCreationFaultLawTests {
                     WorkLedger: m_work
                 ),
                 pipelines: m_pipelines,
+                impostorRaster: m_impostorRaster,
                 meshRaster: m_meshRaster,
                 regionCopy: m_regionCopy.Compute!
             );
@@ -227,6 +233,7 @@ public sealed class SdfWorldTablesCreationFaultLawTests {
             m_pipelines.Dispose();
             m_regionCopy.Dispose();
             m_meshRaster.Dispose();
+            m_impostorRaster.Dispose();
         }
     }
 }

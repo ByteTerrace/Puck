@@ -108,7 +108,8 @@ register.
   sample (`SdfSurfaceSample`) and runs `sdfLightStage`
   (`shade/sdf-light-stage.hlsli`), the volumes and the debug views
   (`debug/sdf-debug-views.hlsli`). The mesh pass before primary is a graphics
-  pass (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) whose target bounds
+  pass (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`, and the impostor card pipeline's
+  `sdf-mesh-impostor.frag.hlsl`) whose target bounds
   primary's march, and only primary reads it: a mesh pixel's record carries the
   mesh kind, its draw and its triangle, which the later stages read, and the
   shadow stage marches nothing for it. The ambient and shadow passes skip a
@@ -248,7 +249,7 @@ These are one-line cautions; the owning pages hold the derivations.
 - **Bakes are presentation only.** `BAKE` does not derive on boot
   (`ICompiledWorldChunk.DerivesOnBoot`); a presentation bakes a missing
   prototype through `WorldBakeSchedule`, never on the frame thread, and draws a
-  ready one only through `WorldBakeSchedule.TryGetMesh` (which counts the
+  ready one only through `WorldBakeSchedule.TryGetDraw` (which counts the
   switch, `sdf.bakes.drawn`) while it draws its bakes: by default exactly when
   the loaded world's `BAKE` chunk supplies every bake from its pack, else when `world.bakes on`
   (`WorldRenderSettings.DrawsBakes`); the engine is not ready until the
@@ -258,6 +259,22 @@ These are one-line cautions; the owning pages hold the derivations.
   `frame/sdf-mesh-textures.hlsli`). A baked placement's
   instances are camera-hidden (`SdfInstanceRange.CameraHidden`): the cull keeps
   them out of every camera mask, never out of the shadow or ambient gathers.
+- **A baked placement is two draws; the view chooses.** `WorldPlacementStamper` emits
+  a mesh draw (`SdfMeshDraw.Lod.Far` false) and an impostor card draw
+  (`SdfMeshCard.Mesh`, `SdfMeshDraw.Impostor`, `Lod.Far` true) bounded by the
+  impostor's sphere. `SdfMeshLodSelector` (the mesh part's recorder, one per view)
+  records exactly one of the pair: the card once the sphere projects under the
+  impostor's view edge in render pixels (`SdfMeshLod`, hysteresis included), so the
+  choice is made on the CPU from that view's own camera, never in a shader; the
+  `sdf.mesh.lod` source counts the draws recorded. Impostors have their own atlases
+  (`SdfMeshAtlas` packs any `SdfTextureSet`, the mesh's `SdfMeshTextures` or an
+  `SdfMeshImpostor`, never both in one atlas). The card pipeline is a second entry
+  of the pass-pipeline cache beside the mesh pass's (`SdfMeshRasterPass.ImpostorKey`),
+  because its fragment stage discards and writes depth, which the mesh stage's forced
+  early test forbids; the hit passes shade a card pixel from the impostor's views
+  (`frame/sdf-mesh-impostor-surface.hlsli`) with the draw's first palette material,
+  and reprojection takes its point through the draw's inverse matrix. A change to
+  the trace moves `SdfImpostorOracle` and `SdfImpostorLawTests` with it.
 
 ## Engine seams that bite
 

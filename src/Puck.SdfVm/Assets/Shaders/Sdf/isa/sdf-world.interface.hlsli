@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/b292875e12f85c45573042f0902a4eb29e929164deeceba843cf2588c401b94c). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/4dab11f110c1999820de0c079b3915740691ec5a3ebd19edd65175f880bca259). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -42,6 +42,10 @@ struct SdfWorldFrame {
 [[vk::binding(17, 1)]] Texture2D<float4> sdfMeshOcclusion : register(t17, space1);
 [[vk::binding(18, 1)]] Texture2D<float4> sdfMeshMaterials : register(t18, space1);
 [[vk::binding(19, 1)]] Texture2D<float4> sdfMeshEmission : register(t19, space1);
+[[vk::binding(20, 1)]] Texture2D<float4> sdfImpostorAlbedo : register(t20, space1);
+[[vk::binding(21, 1)]] Texture2D<float4> sdfImpostorNormals : register(t21, space1);
+[[vk::binding(22, 1)]] Texture2D<float4> sdfImpostorDepth : register(t22, space1);
+[[vk::binding(23, 1)]] Texture2D<float4> sdfImpostorEmission : register(t23, space1);
 
 // The Pass group: descriptor set 3, register space 3.
 struct SdfWorldPass {

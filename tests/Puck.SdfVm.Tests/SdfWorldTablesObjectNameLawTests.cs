@@ -44,6 +44,10 @@ public sealed class SdfWorldTablesObjectNameLawTests {
             device: gpu,
             ledger: ledger
         );
+        using var impostorRaster = SdfTestPipelines.ImpostorRaster(
+            device: gpu,
+            ledger: ledger
+        );
         using var pipelines = SdfTestPipelines.Build(
             device: gpu,
             includeBrickPipelines: true,
@@ -59,6 +63,7 @@ public sealed class SdfWorldTablesObjectNameLawTests {
                 WorkLedger: ledger
             ),
             pipelines: pipelines,
+            impostorRaster: impostorRaster,
             meshRaster: meshRaster,
             regionCopy: regionCopy.Compute!
         );
