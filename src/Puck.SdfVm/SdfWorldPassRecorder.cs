@@ -27,6 +27,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.ViewsArgsWritten,
         SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.VisibilityRecordsWritten,
+        SdfWorldPackage.ReactivityWritten,
     ];
     private static readonly uint OutputBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.Output);
     private static readonly uint MeshVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshVisibility);
@@ -36,6 +37,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly RenderGraphFragmentPass m_fragmentPass;
     private readonly SdfWorldPasses m_owner;
     private readonly string m_part;
+    // Whether the pass belongs to the temporal fragment (SdfWorldPackage.TemporalFragment), and whether to the native
+    // one, whose views pass writes the output and so completes the render.
+    private readonly bool m_temporal;
+    private readonly bool m_native;
 
     // The view the pass records, followed in place when the instance resolves another its passes can record
     // (SdfWorldPasses.CanFollow); one they cannot record rebuilds them instead.
@@ -67,7 +72,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         m_owner = owner;
         m_view = view;
         m_part = (context.Part ?? throw new ArgumentException(message: $"Pass '{context.Pass}' runs no part of '{RenderGraphPackageCatalog.SdfWorld}'.", paramName: nameof(context)));
-        m_fragmentPass = SdfWorldPackage.Fragment.Passes.Single(predicate: pass => string.Equals(
+        // The runtime installs the graph of the fragment the package selects this frame, so every pass of one graph is
+        // created against the same selection.
+        var fragment = owner.FragmentOf(instance: context.Instance)!;
+
+        m_temporal = ReferenceEquals(objA: fragment, objB: SdfWorldPackage.TemporalFragment);
+        m_native = ReferenceEquals(objA: fragment, objB: SdfWorldPackage.NativeFragment);
+        m_fragmentPass = fragment.Passes.Single(predicate: pass => string.Equals(
             a: pass.Name,
             b: m_part,
             comparisonType: StringComparison.Ordinal
@@ -255,10 +266,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         );
 
         var temporal = m_owner.TemporalOf(
-            instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, renderWidth: width, renderHeight: height
+            instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, temporal: m_temporal, renderWidth: width, renderHeight: height
         );
 
-        SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames);
+        SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
         SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
 
         SdfFrameBlock.WriteWorkCounterRow(
@@ -288,7 +299,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 box: recording.Inputs[InputIndexOf(member: SdfWorldPackage.CullBounds)].Version,
                 sample: new SdfReprojectionView(Camera: frame.Views[view].Camera, Jitter: temporal.Jitter, Width: width, Height: height),
                 cut: frame.Views[view].CutRevision);
-            if (ReferenceEquals(objA: m_owner.FragmentOf(instance: m_context.Instance), objB: SdfWorldPackage.NativeFragment)) {
+            if (m_native) {
                 residency.MarkRendered(view: view);
                 m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
             }
@@ -637,6 +648,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.Parts.Arguments => SdfWorldPackage.ViewsArgsWritten,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBoundsWritten,
         SdfWorldPackage.Parts.Visibility or SdfWorldPackage.Parts.SurfaceVisibility or SdfWorldPackage.Parts.AmbientVisibility or SdfWorldPackage.Parts.ShadowVisibility => SdfWorldPackage.VisibilityRecordsWritten,
+        SdfWorldPackage.Parts.SkyReactivity or SdfWorldPackage.Parts.Reactivity => SdfWorldPackage.ReactivityWritten,
         _ => null,
     };
 }

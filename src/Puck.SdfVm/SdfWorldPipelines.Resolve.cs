@@ -23,22 +23,41 @@ public sealed partial class SdfWorldPipelines {
         GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> wait;
 
         lock (m_gate) {
-            ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-            if (m_slots[((int)SdfKernel.Resolve)] is not { } slot) {
-                var description = SdfWorldTables.PipelineLayouts.Specs[((int)SdfKernel.Resolve)].Description;
-
-                slot = new Slot(description: description, lease: cache.Acquire(device: device,
-                    key: GpuPassPipelineKey.OfCompute(bytecode: m_kernels[SdfKernel.Resolve], description: description)));
-                m_slots[((int)SdfKernel.Resolve)] = slot;
-            }
             // Keep a temporary lease while the package build waits. A concurrent reload may retire the slot's
             // lease, but cannot cancel or dispose the build this waiter still holds. Replacements publish ready.
-            wait = cache.Acquire(device: device, key: slot.Lease.Key);
+            wait = cache.Acquire(device: device, key: SlotOfResolve(cache: cache, device: device).Lease.Key);
         }
         try {
             _ = await wait.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
         } finally {
             wait.Release();
         }
+    }
+    /// <summary>Leases the optional reconstruction pipeline into the set's slot table without waiting for it: a set a view
+    /// follows into in place from another set that has it (<see cref="SdfWorldPasses"/>) takes the same pass-pipeline
+    /// cache entry, already built, so the slot is ready at once. A request on a set that holds the slot does
+    /// nothing.</summary>
+    /// <param name="cache">The composition's pass-pipeline cache.</param>
+    /// <param name="device">The device this set was acquired on.</param>
+    public void RequestResolve(GpuPassPipelineCache cache, IGpuDeviceContext device) {
+        ArgumentNullException.ThrowIfNull(argument: cache);
+        ArgumentNullException.ThrowIfNull(argument: device);
+
+        lock (m_gate) {
+            _ = SlotOfResolve(cache: cache, device: device);
+        }
+    }
+
+    // The resolve slot, leased from the cache the first time it is asked for. Called under the gate.
+    private Slot SlotOfResolve(GpuPassPipelineCache cache, IGpuDeviceContext device) {
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        if (m_slots[((int)SdfKernel.Resolve)] is not { } slot) {
+            var description = SdfWorldTables.PipelineLayouts.Specs[((int)SdfKernel.Resolve)].Description;
+
+            slot = new Slot(description: description, lease: cache.Acquire(device: device,
+                key: GpuPassPipelineKey.OfCompute(bytecode: m_kernels[SdfKernel.Resolve], description: description)));
+            m_slots[((int)SdfKernel.Resolve)] = slot;
+        }
+        return slot;
     }
 }

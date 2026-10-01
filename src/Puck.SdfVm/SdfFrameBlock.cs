@@ -59,6 +59,7 @@ public static class SdfFrameBlock {
     private static readonly int PreviousView = Offset(member: SdfWorldPackage.PreviousView);
     private static readonly int Jitter = Offset(member: SdfWorldPackage.Jitter);
     private static readonly int HistoryFrames = Offset(member: SdfWorldPackage.HistoryFrames);
+    private static readonly int Temporal = Offset(member: SdfWorldPackage.Temporal);
     private static readonly int ImageExtent = Offset(member: SdfWorldPackage.ImageExtent);
     private static readonly int InstanceMaskWordCount = Offset(member: SdfWorldPackage.InstanceMaskWordCount);
     private static readonly int MeshDraws = Offset(member: SdfWorldPackage.MeshDraws);
@@ -83,12 +84,16 @@ public static class SdfFrameBlock {
     /// <param name="block">The pass block.</param>
     /// <param name="jitter">The ray offset in render pixels.</param>
     /// <param name="historyFrames">The number of preceding samples in the current epoch.</param>
-    public static void WriteTemporal(Span<byte> block, Vector2 jitter, uint historyFrames) {
+    /// <param name="temporal">Whether the view runs the temporal fragment (<see cref="SdfWorldPackage.TemporalFragment"/>).</param>
+    public static void WriteTemporal(Span<byte> block, Vector2 jitter, uint historyFrames, bool temporal) {
         WriteSingle(block: block, offset: Jitter, value: jitter.X);
         WriteSingle(block: block, offset: (Jitter + sizeof(float)), value: jitter.Y);
         WriteUInt32(block: block, offset: HistoryFrames, value: historyFrames);
+        WriteUInt32(block: block, offset: Temporal, value: (temporal ? 1u : 0u));
     }
-    /// <summary>Writes the preceding render's camera and jittered lens for visibility reprojection.</summary>
+    /// <summary>Writes the preceding render's camera, lens and jitter for visibility reprojection: position and
+    /// validity, right and tangent, up and aspect, forward, the render extent and the jitter in render pixels, then the
+    /// near distance and the unjittered frustum offset (<c>frame/sdf-reprojection.hlsli</c>).</summary>
     /// <param name="block">The pass block.</param>
     /// <param name="view">The preceding view and sample grid.</param>
     /// <param name="valid">Whether the preceding render belongs to this epoch.</param>
@@ -105,10 +110,10 @@ public static class SdfFrameBlock {
         rows[4] = camera.Right.X; rows[5] = camera.Right.Y; rows[6] = camera.Right.Z; rows[7] = camera.TanHalfFieldOfView;
         rows[8] = camera.Up.X; rows[9] = camera.Up.Y; rows[10] = camera.Up.Z; rows[11] = camera.AspectRatio;
         rows[12] = camera.Forward.X; rows[13] = camera.Forward.Y; rows[14] = camera.Forward.Z;
-        rows[16] = view.Width; rows[17] = view.Height;
+        rows[16] = view.Width; rows[17] = view.Height; rows[18] = view.Jitter.X; rows[19] = view.Jitter.Y;
         rows[20] = camera.Near;
-        rows[21] = (camera.FrustumOffset.X + ((((2f * view.Jitter.X) / view.Width) * camera.AspectRatio) * camera.TanHalfFieldOfView));
-        rows[22] = (camera.FrustumOffset.Y - (((2f * view.Jitter.Y) / view.Height) * camera.TanHalfFieldOfView));
+        rows[21] = camera.FrustumOffset.X;
+        rows[22] = camera.FrustumOffset.Y;
     }
     /// <summary>Writes the pass's row of the work counters into its pass block (<see cref="ShaderWorkCounters.Row"/>),
     /// which <see cref="Write"/> leaves alone: the row names the pass, never what the view renders from, so a view's
@@ -143,7 +148,7 @@ public static class SdfFrameBlock {
     public static void Write(Span<byte> block, in SdfPassValues tables, SdfFrame frame, int view, uint width, uint height) {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
-        WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0);
+        WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0, temporal: false);
         WritePreviousView(block: block, valid: false, view: default);
 
         var snapshot = frame.Views[view];

@@ -8,7 +8,7 @@
       "format": "R8G8B8A8Unorm",
       "dimensions": {
         "mode": "Absolute",
-        "width": 60,
+        "width": 61,
         "height": 1
       }
     }
@@ -64,6 +64,7 @@
         "shadowDistanceScale": { "type": "float", "default": 0, "description": "The sdf.world pass's shadow distance scale." },
         "sunScale": { "type": "float", "default": 0, "description": "The sdf.world pass's sun scale." },
         "tanHalfFieldOfView": { "type": "float", "default": 0, "description": "The sdf.world pass's tan half field of view." },
+        "temporal": { "type": "uint", "default": 0, "description": "The sdf.world pass's temporal fragment switch." },
         "tileGrid": { "type": "uint2", "default": [0, 0], "description": "The sdf.world pass's tiles per viewport." },
         "viewBase": { "type": "uint", "default": 0, "description": "The sdf.world pass's view." },
         "viewForward": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's view forward." },

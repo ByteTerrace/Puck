@@ -174,6 +174,24 @@ internal sealed record CanaryImageRegionAssertion(
     double Top,
     int Width
 ) : CanaryAssertion(Name: Name);
+/// <summary>One capture held to a reference capture over a normalized region: the reference, whose extent is a whole
+/// multiple of the capture's on both axes, is box-filtered down to the capture's extent, each region pixel's difference
+/// is the mean of its absolute RGB differences in 8-bit codes, and their mean must not exceed <c>MaximumMeanCodes</c>.
+/// <c>Holds</c> false requires the bound to fail — never a missing capture, a wrong extent, or a reference that is no
+/// whole multiple of it, which fail either way.</summary>
+internal sealed record CanaryImageDifferenceAssertion(
+    double Bottom,
+    string Capture,
+    int Height,
+    bool Holds,
+    double Left,
+    double MaximumMeanCodes,
+    string Name,
+    string Reference,
+    double Right,
+    double Top,
+    int Width
+) : CanaryAssertion(Name: Name);
 internal sealed record CanaryResponseSelector(string Verb, int Occurrence, int Count);
 // Line, when set, reads the field from the first continuation line of the selected response that starts with it
 // (after the transcript's indent) instead of from the response's own first line.

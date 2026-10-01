@@ -15,9 +15,33 @@
 #include "../debug/sdf-debug-views.hlsli"
 
 #ifdef SDF_VIEWS_PASS
+// What motion cannot describe in a pixel the light stage shaded, for a temporal view's resolve: one for a screen, whose
+// content changes on its own, and for emission, which the material model cannot tell animated from steady, the share of
+// the pixel's color it emits.
+float sdfSurfaceReactivity(SdfSurfaceSample s, float3 color) {
+    if (!s.hit) {
+        return 0.0;
+    }
+    if (s.material >= SDF_SCREEN_MATERIAL) {
+        return 1.0;
+    }
+
+    SdfMaterialData material = sdfMaterialLoad(s.material);
+
+    if (material.emissive <= 0.0) {
+        return 0.0;
+    }
+
+    static const float3 Luma = float3(0.2126, 0.7152, 0.0722);
+
+    return saturate(dot((material.albedo * material.emissive), Luma) / max(dot(color, Luma), 1.0e-4));
+}
 // The views stage: the pixel's light stage over its surface sample, the bounded volumes composited last, and the debug
-// view. A lane past the render extent returns black, which the caller never stores.
-float3 sdfViewsStage(SdfPixel p) {
+// view, with the pixel's reactivity (sdfSurfaceReactivity, and one where a volume covers it). A lane past the render
+// extent returns black, which the caller never stores.
+float3 sdfViewsStage(SdfPixel p, out float reactivity) {
+    reactivity = 0.0;
+
     if (!p.active) {
         return float3(0.0, 0.0, 0.0);
     }
@@ -29,10 +53,14 @@ float3 sdfViewsStage(SdfPixel p) {
 
     float3 color = sdfLightStage(p, s);
 
+    reactivity = sdfSurfaceReactivity(s, color);
+
 #ifdef SDF_SCREEN_SOURCES
     // The bounded emissive volumes composite after the surface or sky color is final, and never paint through solid
     // geometry: each is clipped to the span from the near plane to the hit distance, or to the far distance on a miss.
-    color = shadeVolumes(color, p.rayOrigin, p.rayDirection, worldRayDistanceAt(p.view, p.rayDirection, worldNearDistance(p.view)), (s.hit ? s.t : p.farDistance), p.pixel);
+    float covered;
+    color = shadeVolumes(color, p.rayOrigin, p.rayDirection, worldRayDistanceAt(p.view, p.rayDirection, worldNearDistance(p.view)), (s.hit ? s.t : p.farDistance), p.pixel, covered);
+    reactivity = max(reactivity, covered);
 #endif
 
     return sdfDebugView(p, s, color);

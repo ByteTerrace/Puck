@@ -4314,7 +4314,7 @@ export type WorldCaptureRow = {
    */
   palette: (WorldCapturePaletteEntry | null)[];
   /**
-   * The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any views.post pass or the overlay is drawn over it.
+   * The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any views.post pass or the overlay is drawn over it, and a world camera's name (one not relative to a seat) captures that camera's view, which renders while a screen, a HUD frame or a probe export shows it.
    */
   instance?: string | null;
   /**
@@ -8749,6 +8749,10 @@ export type WorldQualityPreset = {
    * The render-scale tier the preset selects.
    */
   renderScale?: WorldRenderScaleTier;
+  /**
+   * Whether the preset reconstructs the world's views over time (world.temporal).
+   */
+  temporal?: boolean;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -8912,9 +8916,13 @@ export type WorldRenderDefaults = {
    */
   renderScale?: WorldRenderScaleTier;
   /**
-   * The boot reduced-resolution reconstruction blend (0 bilinear .. 1 Catmull-Rom).
+   * The boot reconstruction sharpness: the spatial resolve's blend (0 bilinear .. 1 Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect's own extent.
    */
   upscaleSharpness?: number;
+  /**
+   * Whether the world's own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.
+   */
+  temporal?: boolean;
   /**
    * The world.quality low preset.
    */

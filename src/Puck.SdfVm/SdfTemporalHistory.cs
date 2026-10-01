@@ -9,9 +9,11 @@ namespace Puck.SdfVm;
 /// <param name="Width">The output width.</param>
 /// <param name="Height">The output height.</param>
 /// <param name="Ceiling">The render-scale ceiling.</param>
-/// <param name="Enabled">Whether temporal sampling is enabled.</param>
+/// <param name="Enabled">Whether temporal sampling is enabled: the view resolves temporally or a capture converges.</param>
 /// <param name="Debug">The debug view mode.</param>
-public readonly record struct SdfTemporalEpoch(long Binding, long Cut, uint Width, uint Height, float Ceiling, bool Enabled, int Debug);
+/// <param name="Temporal">Whether the view resolves temporally (<c>SdfWorldPackage.TemporalFragment</c>), whose
+/// output converges over one period and then stands.</param>
+public readonly record struct SdfTemporalEpoch(long Binding, long Cut, uint Width, uint Height, float Ceiling, bool Enabled, int Debug, bool Temporal = false);
 /// <summary>A rendered camera and its sample grid, retained for motion reconstruction.</summary>
 /// <param name="Camera">The camera whose basis and off-axis lens projected the sample.</param>
 /// <param name="Jitter">The ray offset in render pixels.</param>
@@ -39,6 +41,8 @@ public sealed class SdfTemporalHistory {
     // The temporal inputs the latest completed render fed its passes, which its output stands for.
     private bool m_rendered;
     private Inputs m_standing;
+    // The renders since the inputs the instance's view is rendered from last changed (Changed).
+    private uint m_settled;
 
     /// <summary>Gets the camera and sample grid of this instance's preceding completed render.</summary>
     public SdfReprojectionView PreviousView { get; private set; }
@@ -105,8 +109,15 @@ public sealed class SdfTemporalHistory {
         m_prepared = false;
         m_rebase = true;
     }
+    /// <summary>Records that the view's rendered inputs changed this frame (a moved pose, camera or frame value): a
+    /// temporally resolved view renders one more period of samples before it stands again.</summary>
+    public void Changed() =>
+        m_settled = 0;
     /// <summary>Accounts for one rendered frame.</summary>
     public void Rendered() {
+        if (m_settled < uint.MaxValue) {
+            m_settled++;
+        }
         m_standing = new Inputs(
             HasPreviousView: HasPreviousView,
             Jitter: Jitter,
@@ -122,7 +133,9 @@ public sealed class SdfTemporalHistory {
     }
     /// <summary>Returns whether a render taken now would feed the instance's passes the temporal inputs its latest
     /// completed render fed them, so that render's output may stand: the same jitter, and, where the pass reads motion
-    /// (<see cref="ReadsMotion"/>), the same previous view and previous poses.</summary>
+    /// (<see cref="ReadsMotion"/>), the same previous view and previous poses. A temporally resolved view instead stands
+    /// once its history holds one <see cref="Period"/> of samples and it has rendered a period since its inputs last
+    /// changed (<see cref="Changed"/>): its converged output stands, whatever jitter would come next.</summary>
     /// <param name="epoch">The epoch a render taken now would be prepared in.</param>
     /// <param name="previousPoses">The pose revision the residency's previous transform tables would hold for that
     /// render: its current tables' revision before the frame's upload.</param>
@@ -134,6 +147,9 @@ public sealed class SdfTemporalHistory {
 
         var continues = Continues(epoch: epoch, previousPoses: previousPoses);
 
+        if (epoch.Temporal && Sampling(epoch: epoch)) {
+            return (continues && (Frames >= Period) && (m_settled >= Period));
+        }
         if (JitterAt(epoch: epoch, frames: (continues ? Frames : 0U)) != m_standing.Jitter) {
             return false;
         }

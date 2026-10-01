@@ -1,7 +1,7 @@
 {
   "id": "portal-walk",
   "title": "A body that walks through a door arrives mapped in the door's destination, and its seat's view shows the destination",
-  "binding": "portal-walk.puck composes two rooms joined by a door: the lobby, whose landmark pillar stands blue ahead and to the left of its arch, and the garden, whose pillar is green. Both render offscreen at 256x144 through the seat's chase camera. The positive leg walks the seat forward from the lobby's arrival through the arch's aperture. The per-step portal scan mints a mapped transfer, and the body arrives in the garden. From then on the seat is presented in the garden: its view draws the garden's own scene from the garden's delivered definition and state, and the capture after the walk shows the green pillar where the blue one stood, with the traveller lit in its roster's color rather than drawn as a dark figure left behind in the lobby. A capture armed before the walk lands on the first frame the seat presents after its route moves, and that frame already shows the garden's green pillar and no blue: the seat's view follows the garden's residency in place, so the crossing holds no frame of the lobby. The discriminating leg makes the same walk four metres to the left of the arch, outside its aperture. No transfer is minted, and the capture still shows the lobby's blue pillar.",
+  "binding": "portal-walk.puck composes two rooms joined by a door: the lobby, whose landmark pillar stands blue ahead and to the left of its arch, and the garden, whose pillar is green. Both render offscreen at 256x144 through the seat's chase camera. The positive leg turns temporal reconstruction on and walks the seat forward from the lobby's arrival through the arch's aperture. The per-step portal scan mints a mapped transfer, and the body arrives in the garden. From then on the seat is presented in the garden: its view draws the garden's own scene from the garden's delivered definition and state, and the capture after the walk shows the green pillar where the blue one stood, with the traveller lit in its roster's color rather than drawn as a dark figure left behind in the lobby. A capture armed before the walk lands on the first frame the seat presents after its route moves, and that frame already shows the garden's green pillar and no blue: the seat's view follows the garden's residency in place, so the crossing holds no frame of the lobby, and the follow resets the view's history, so that first frame is the garden's spatial frame with nothing of the lobby reprojected into it. The discriminating leg makes the same walk four metres to the left of the arch, outside its aperture. No transfer is minted, and the capture still shows the lobby's blue pillar.",
   "bootShape": "offscreen",
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
@@ -11,6 +11,7 @@
     "script": "cross.script.txt",
     "commands": [
       { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.temporal", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
       { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },

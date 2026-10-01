@@ -326,10 +326,10 @@ offers:
 
 | Package | Ports | Renders |
 |---|---|---|
-| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a native fragment (`SdfWorldPackage.NativeFragment`): sky, mask, beam, cull arguments, mesh, then primary, surface, ambient, shadow and views dispatched indirectly from the cull arguments, over transient counted scratch. Those five are stages over the per-pixel visibility record: primary alone reads the mesh target and writes the record, surface, ambient and shadow add to it, and views shades it, every light answering through one interface and the stage adding each light's summed rim and specular totals once. The ambient and shadow passes skip a frame whose levers turn ambient occlusion or soft shadows off. The screens it shows are the instance's reads, not ports. |
+| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a native fragment (`SdfWorldPackage.NativeFragment`): sky, mask, beam, cull arguments, mesh, then primary, surface, ambient, shadow and views dispatched indirectly from the cull arguments, over transient counted scratch. Those five are stages over the per-pixel visibility record: primary alone reads the mesh target and writes the record, surface, ambient and shadow add to it, and views shades it, every light answering through one interface and the stage adding each light's summed rim and specular totals once. The ambient and shadow passes skip a frame whose levers turn ambient occlusion or soft shadows off. A view below a native render ceiling appends `resolve` (`SdfWorldPackage.Fragment`), and a view whose quality asks for temporal reconstruction runs `SdfWorldPackage.TemporalFragment` at any ceiling: the sky and views passes also write a render-extent reactivity buffer, and `resolve` reads the visibility records, the reactivity and the previous frame's history color and surface (each a history version at the output extent) and writes the output and this frame's history. The screens it shows are the instance's reads, not ports. |
 | `sdf.bricks` | no input, one buffer output written by compute | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
 | `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
-| `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes the letterbox color outside the rect instead of the base, 0 by default), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source), `sharpness` and `tonemap` (1 puts the reconstructed source through the filmic curve inside the rect, never the base or the letterbox color, 0 by default); a host that places panes per frame (`IRenderGraphPlacements`) overrides the rect and sharpness, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
+| `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, or, with `sharpen` set, a contrast-adaptive sharpen of the source by `sharpness` there (exact at sharpness 0), otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes the letterbox color outside the rect instead of the base, 0 by default), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source), `sharpen` (0 by default), `sharpness` and `tonemap` (1 puts the reconstructed source through the filmic curve inside the rect, never the base or the letterbox color, 0 by default); a host that places panes per frame (`IRenderGraphPlacements`) overrides the rect, the sharpness and the sharpen switch, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
 | `sdf.film-grain` | one fragment-sampled image input, one color-attachment image output | Film grain over the input: the engine's [post-process package](#post-process-packages), a per-pixel integer-hashed offset keyed on the engine tick. Its stages, `fullscreen.vert` and `sdf-film-grain.frag` in `Assets/Shaders/Sdf/passes`, compile at build, and `PostProcessPackage` records it. |
 | `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` | one raw buffer input read by compute, one image output written by compute | An uploaded source's region (`ImageSourceUploadLayout`) converted by the shipped kernel of that name in `src/Puck.Shaders/Assets/Shaders/Sources` into RGBA8, or half-float linear light for `source-transfer`. `SourceConversionPackage` records them; the runtime runs one in the graph it makes for each uploaded source instance, its region bound as a host buffer port (`ShaderPipelineRenderNode.BindRegion`). |
 
@@ -734,11 +734,14 @@ layout transition's dip moves only that grid, so it rebuilds and allocates
 nothing. A view whose ceiling is below native appends `resolve`, reconstructing
 color at the output extent before placement; `place` copies that output when
 the scheduled extent equals the rect's pixels and otherwise resamples it again.
-A view at a native ceiling renders its output grid directly and does not dip. A view is shown only once the
+A view at a native ceiling renders its output grid directly and does not dip. A
+view that reconstructs over time (`world.temporal`) resolves at any ceiling, and
+its place pass sharpens it by `world.upscale-sharpness` where it copies it
+(`RenderGraphPlacement.Sharpen`). A view is shown only once the
 engine has rendered it, and a single view covering the whole display with no
-tonemap is not placed, so `main` passes
-`world` through unchanged; with a tonemap it is placed like any other, since its
-place pass applies the tonemap. A layout change places its views one frame later, like its panes.
+tonemap and no sharpen is not placed, so `main` passes
+`world` through unchanged; with a tonemap or a sharpen it is placed like any
+other, since its place pass applies them. A layout change places its views one frame later, like its panes.
 The first view's place pass sets the `place` config's `letterbox`, so outside
 its rect it writes the letterbox color, `(0.015, 0.016, 0.02)`, which the
 kernel states, rather than its base; every later place pass keeps its base
@@ -1478,7 +1481,7 @@ more pieces of vocabulary:
   dimensions use the output grid; `Render` dimensions use this render grid,
   falling back to output when no provider exists. Current pass costs use those
   same dimensions, so a reduced SDF view prices ten render-grid passes plus one
-  full-output resolve. An authored camera or session `OutputExtent` stays exact
+  full-output resolve, and a temporal view the same at its ceiling. An authored camera or session `OutputExtent` stays exact
   through display resizing and consumer scale changes; footprints decide demand,
   while the authored pixels decide the image size.
 - A resource's `transient` makes its storage frame-transient: one allocation

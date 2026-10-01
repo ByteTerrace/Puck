@@ -163,8 +163,9 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
 // farthest intersecting volume, integrate it, and composite immediately. This preserves the previous entry-distance
 // ordering (including index ties) without per-pixel arrays or an unrolled copy of the integrator for every capacity
 // slot. Overlapping media still composite as whole volumes; this is not a combined-density integral through their
-// overlap.
-float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float nearDistance, float surfaceDistance, uint2 pixel) {
+// overlap. `covered` is one where any volume composites over the ray's span, which a temporal view treats as reactive.
+float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float nearDistance, float surfaceDistance, uint2 pixel, out float covered) {
+    covered = 0.0;
     float dither = ((sdfR2Dither(pixel) * 2.0) - 1.0);
     float previousNear = 3.402823e+38;
     uint previousIndex = SdfVolumeCount;
@@ -196,6 +197,7 @@ float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float n
         sdfIntegrateVolume(v, localOrigin, localDirection, max(interval.x, nearDistance), min(interval.y, surfaceDistance),
             dither, radiance, transmission);
         color = radiance + transmission * color;
+        covered = 1.0;
         previousNear = selectedNear;
         previousIndex = selected;
     }

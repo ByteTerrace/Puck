@@ -68,12 +68,16 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 #elif defined(SDF_SHADOW_PASS)
     sdfShadowStage(p);
 #else
-    float3 color = sdfViewsStage(p);
+    float reactivity;
+    float3 color = sdfViewsStage(p, reactivity);
 
     if (p.active) {
         // The float working color; the display encode dithers and quantizes it.
         output[pixel] = float4(color, 1.0);
         sdfWorkTexels = 1u;
+        if (passGroup.temporal != 0u) {
+            reactivityRW[sdfReactivityIndex(pixel, viewIndex, passGroup.imageExtent)] = reactivity;
+        }
     }
 #endif
 

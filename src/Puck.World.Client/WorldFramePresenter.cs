@@ -1191,6 +1191,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         }
 
         graphs.BeginFrame(
+            sharpens: (m_settings.Temporal && (m_settings.UpscaleSharpness > 0f)),
             tonemap: m_client.Definition.Render.Tonemap,
             views: m_client.Definition.Views
         );
