@@ -5080,18 +5080,15 @@ packaging, and compiled worlds in the runtime and delivery programme.
 
 ### P18 — Sky and atmosphere
 
-**Starts from:** the sky as the code holds it: its lanes, its passes, its
+**Starts from:** the sky as the code holds it: its records, its passes, its
 clocks and its duplicates.
 
-- **One packed table.** `SdfEnvironment` (`src/Puck.SignedDistance`) packs the
-  lights, the curvature gains, the sky, the softboxes and the studio horizon
-  into 53 hand-numbered `float4` rows, 848 of the pass block's 1,120 bytes.
-  `SdfFrameBlock.BakeEnvironment` writes those rows into every pass block, so
-  all ten `sdf.world` passes (sky, mask, beam, cull-args, mesh, primary,
-  surface, ambient, shadow, views) carry them, though only sky, shadow and
-  views read them. `frame/sdf-lights.hlsli` decodes the sky's rows through 22
-  hand-written accessors, and `SdfEnvironment.BlendOf` classifies every lane's
-  cycle blend (lerp, arc or hold) by row and lane number.
+- **Separate records.** `SdfLights` and `SdfSky` (`src/Puck.SignedDistance`)
+  pack the lights, sky block, gradient stops and studio softboxes into four
+  World-group regions. Their HLSL structures are generated from the C#
+  records. The 496-byte pass block holds the light count, shadow-light index
+  and curvature shading; the sky and light records are read only by the
+  kernels that use them, as P18-4 specifies.
 - **Sky evaluated twice.** `shade/sdf-sky.hlsli` holds the stars, a private 2D
   lattice noise, the clouds, the gradient and the composite in one file. The
   `sky` pre-pass (`passes/sdf-sky.comp.hlsl`) evaluates `skyColor` for every
@@ -5675,8 +5672,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      parity holds every station unchanged.
    - Counted-cost gate: a still view with a visible volume renders when the
      presented tick moves its motion, never on a frame whose tick has not moved;
-     the pass block keeps its 1,120 bytes, and the written pass-block bytes per
-     pass fall from 1,048 to 1,024 (`world-counters`).
+     P18-4 holds the current pass-block size and table bindings.
 3. **P18-3, keys on clocks, for every presentation value.**
    - Landed: the keys substrate. Every colour, scalar, angle, direction and
      vector a document binds may be keyed on a `timeline` clock
@@ -5764,7 +5760,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      referenced by the shadow and views kernels, the sky block and stops by sky
      and views, and the softboxes by views alone; `composite` joins the sky's
      readers when P18-5 lands it. A star or cloud seed is exact now: the old
-     float rows rounded a seed past 2^24.
+     float rows rounded a seed past 2^24. The key-light specular uses a literal
+     unity scale, leaving its clearcoat multiply and add eligible for
+     contraction; exact pixel agreement remains unverified. Making that sum
+     `precise` also constrains upstream BRDF arithmetic, so it needs pixel
+     verification on both backends.
    - Delivers: the lights as a typed table (a World-group region of generated
      structs), the sky as a typed block (frame, layers, bodies, phases, the
      environment coefficients), both written as regions that owe only changed
@@ -5787,12 +5787,12 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
    - Counted-cost gate: the win is block size and binding, not upload bytes.
      Every region already writes only the words that changed, so the new
      tables upload what changed, as the rest do. The generated pass block
-     shrinks from 1,120 bytes to about 272, so the constant data the host writes
-     into the ten pass blocks of a view each frame falls from 11,200 bytes to
-     about 2,720, and each dispatch binds a block a quarter of the size. The sky
-     group is bound by 3 of the 10 passes (`views`, `sky`, `composite`) and the
-     lights table by 2 (`shadow`, `views`). A law holds the block size and each
-     pass's bound groups to the generated interface.
+     shrinks from 1,296 bytes to 496, so the constant data the host writes into
+     the ten pass blocks of a view each frame falls from 12,960 bytes to 4,960.
+     The sky block and stops are read by 2 of the 10 passes (`views`, `sky`),
+     the softboxes by `views` alone, and the lights by 2 (`shadow`, `views`).
+     `composite` joins the sky's readers in P18-5. A law holds the block size
+     and each kernel's table bindings to the generated interface.
 5. **P18-5, the sky once, and a composite last.**
    - Delivers: `views` shading hits only into `lit`, premultiplied, with
      coverage in its alpha; `sky` evaluating the sky's field runs where
