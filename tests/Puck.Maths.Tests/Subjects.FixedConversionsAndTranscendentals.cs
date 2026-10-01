@@ -1219,9 +1219,8 @@ internal static partial class Subjects {
         return null;
     }
     /// <summary>Proves the power on the two families where its answer is EXACT rather than approximate — the
-    /// power-of-two lattice, where every intermediate of the squaring schedule is exactly representable, and the small
-    /// whole-exponent ladder, where a plain sequential fold in arbitrary width reaches the same value by a different
-    /// schedule — and pins the four documented edge policies and the two saturation gates.</summary>
+    /// power-of-two lattice and the small whole-exponent powers — and pins the documented edge policies, exact-half
+    /// rounding, full-width raw extremes and the neighbors of both saturation and underflow thresholds.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? FixedPowExactLattice() {
         for (var scale = -16; (scale <= 46); ++scale) {
@@ -1338,7 +1337,7 @@ internal static partial class Subjects {
             if (actual != expected) { return $"the near-top square of raw {squareRaw} is {actual}, expected {expected}"; }
         }
 
-        return null;
+        return FixedPowWholeBoundaries();
     }
 
     // The interface route: IPowerFunctions<T>.Pow reached through a constrained generic, so the law states the .NET
@@ -1383,10 +1382,10 @@ internal static partial class Subjects {
     ];
 
     /// <summary>Proves the power's WHOLE-exponent path is the single correct rounding of the true power at every
-    /// exponent 2 ≤ |n| ≤ 32, both base signs, and both saturation and underflow verdicts — the base folded so the
-    /// true magnitude lands between 2⁻²⁰ and 2⁵⁰, straddling both ends of the carrier.</summary>
-    /// <param name="left">Its lane supplies the base: the target magnitude from the top byte, the sign from the bit
-    /// below it, the mantissa from the rest.</param>
+    /// exponent 2 ≤ |n| ≤ 32, both base signs, and both saturation and underflow verdicts — each base sampled both
+    /// over the full raw carrier and folded toward output magnitudes around both ends of the carrier.</summary>
+    /// <param name="left">Its lane supplies the full-width base, then a folded base: the target magnitude from the top
+    /// byte, the sign from the bit below it, the mantissa from the rest.</param>
     /// <param name="right">Its lane folds onto the exponent.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? FixedPowWholeCorrectlyRounded(long[] left, long[] right) {
@@ -1394,6 +1393,11 @@ internal static partial class Subjects {
         var exponent = ((exponentIndex < 31)
             ? -(exponentIndex + 2)
             : (exponentIndex - 29));
+
+        if (FixedPowWholeMatchesOracle(baseRaw: left[0], exponent: exponent) is { } fullWidthFailure) {
+            return fullWidthFailure;
+        }
+
         var baseBits = unchecked((ulong)left[0]);
         var targetLog2 = (((int)((baseBits >> 56) % 71UL)) - 20);
         var bitIndex = Math.Clamp(
@@ -1407,35 +1411,7 @@ internal static partial class Subjects {
             baseRaw = -baseRaw;
         }
 
-        var power = BigInteger.Pow(
-            exponent: Math.Abs(value: exponent),
-            value: BigInteger.Abs(value: baseRaw)
-        );
-        var rounded = ((exponent > 0)
-            ? Oracles.RoundRationalTiesToEven(
-                denominator: (BigInteger.One << (16 * (exponent - 1))),
-                numerator: power
-            )
-            : Oracles.RoundRationalTiesToEven(
-                denominator: power,
-                numerator: (BigInteger.One << (16 * (1 - exponent)))
-            ));
-        var negative = ((baseRaw < 0L) && ((exponent & 1) != 0));
-        var expected = ((rounded > long.MaxValue)
-            ? (negative
-                ? long.MinValue
-                : long.MaxValue)
-            : (negative
-                ? -((long)rounded)
-                : ((long)rounded)));
-        var actual = FixedQ4816.Pow(
-            x: Raw(value: baseRaw),
-            y: Raw(value: (((long)exponent) << 16))
-        ).Value;
-
-        return ((actual == expected)
-            ? null
-            : $"Pow({baseRaw}, {exponent}) is {actual}, expected the correct rounding {expected}");
+        return FixedPowWholeMatchesOracle(baseRaw: baseRaw, exponent: exponent);
     }
     /// <summary>Proves the power's FRACTIONAL path — the exponential of the once-rounded Q32 product of the exponent and
     /// the subject's own Q46 logarithm — lies inside the enclosure of the true value widened by the DERIVED envelope: the

@@ -54,7 +54,7 @@ public readonly record struct SecondOrderDynamics {
 
     // Q32 → Q16 to nearest, ties to even — the same narrowing SecondOrderState's accessors use, never a truncating
     // shift, whose downward bias reaches a whole Q16 unit on a rate that then serves as a divisor.
-    private static FixedQ4816 NarrowQ32(long raw) =>
+    private static FixedQ4816 NarrowQ32(Int128 raw) =>
         FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
             fractionBitCount: FixedQ4816.FractionBitCount,
             product: raw
@@ -71,10 +71,10 @@ public readonly record struct SecondOrderDynamics {
     // the Q48 product times FixedQ4816.Log2EQ62 — and rounded once to the Q32 exponent FixedQ4816.Exp2Q32 consumes,
     // so neither the rate·t product nor log₂e is quantized to Q16 first. A natural exponent of 2⁶ or more is far past
     // the kernel's 2⁻¹⁷ underflow floor and answers Zero before the widening, which keeps the product inside Int128.
-    private static FixedQ4816 DecayFactor(long rateRaw, FixedQ4816 t) {
+    private static FixedQ4816 DecayFactor(Int128 rateRaw, FixedQ4816 t) {
         const int ExponentFractionBitCount = (CoefficientFractionBitCount + FixedQ4816.FractionBitCount);
         var limit = (Int128.One << (ExponentFractionBitCount + 6));
-        var naturalExponent = (((Int128)rateRaw) * t.Value);
+        var naturalExponent = (rateRaw * t.Value);
 
         if (naturalExponent >= limit) {
             return FixedQ4816.Zero;
@@ -448,16 +448,19 @@ public readonly record struct SecondOrderDynamics {
                             Velocity: FixedQ4816.Zero
                         );
                     }
-                    // lambda1/lambda2 decay at the positive rates p1 = ζω−σ, p2 = ζω+σ (the poles are −p1, −p2); p1·p2 =
-                    // ω² exactly, which is how the velocity term below reaches ω² without a separate stiffness read. The
-                    // faster pole's factor may underflow to Zero while the slower one still carries the response.
+                    // lambda1/lambda2 decay at the positive rates p1 = ζω−σ, p2 = ζω+σ (the poles are −p1, −p2). Before
+                    // coefficient quantization p1·p2 = ω², the identity the velocity term uses without a stiffness read. The
+                    // faster pole's factor may underflow to Zero while the slower one still carries the response. Its
+                    // Q32 rate can exceed long.MaxValue even though both constituents fit; widen before adding. The
+                    // sum is below 2^64, so its product with the non-negative Q16 duration stays below 2^127.
+                    var fastRateRaw = (((Int128)DecayRateRaw) + OscillationRateRaw);
                     var lambda2 = DecayFactor(
-                        rateRaw: (DecayRateRaw + OscillationRateRaw),
+                        rateRaw: fastRateRaw,
                         t: t
                     );
                     // The poles are narrowed from their exact Q32 difference and sum, not as differences of two narrowings.
                     var p1 = NarrowQ32(raw: (DecayRateRaw - OscillationRateRaw));
-                    var p2 = NarrowQ32(raw: (DecayRateRaw + OscillationRateRaw));
+                    var p2 = NarrowQ32(raw: fastRateRaw);
                     // The closing divisions by 2σ take the Q32 rate directly, each one rounding.
                     var twoSigmaQ32 = (((UInt128)((ulong)OscillationRateRaw)) << 1);
 

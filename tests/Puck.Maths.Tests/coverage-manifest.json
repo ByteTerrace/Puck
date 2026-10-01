@@ -21228,6 +21228,7 @@
     {
       "CoveredBy": [
         "dynamics.decay-factor-vs-series",
+        "dynamics.overdamped-wide-fast-pole",
         "dynamics.step-vs-evaluate-close-agreement"
       ],
       "Id": "Puck.Maths.SecondOrderDynamics.Evaluate(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,System.UInt64,System.UInt64)",

@@ -1627,8 +1627,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.Pow over the power-of-two lattice \u2014 every base 2^j and whole exponent n whose product j\u00B7n lands in [\u221216, 46], which is exactly the whole-exponent path at both exponent signs, INCLUDING the negative-exponent branch that divides a power of two by the exact power",
-        "Against": "the exact 2^(16 \u002B j\u00B7n) as a BigInteger shift. BIT-EXACT on both sides: every exact power is a power of two, so the closing shift or division is itself exact and an error in the power, in the division or in either range gate cannot hide. This lattice CONTAINS the tree\u0027s two named Pow regressions, 0.5^\u221217 and 0.5^\u221218",
+        "Subject": "FixedQ4816.Pow over the power-of-two lattice: bases 2^j for -16 <= j <= 46 and whole exponents -32 <= n <= 32 whose product j*n lands in [-16, 46], including negative exponents that divide a power of two by the exact power",
+        "Against": "the exact raw 1L << (16 + j*n). BIT-EXACT: the result is a representable power of two, so the closing shift or division is exact. This lattice contains 0.5^-17 and 0.5^-18",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1636,7 +1636,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.Pow over the small whole-exponent ladder \u2014 nine integer bases of magnitude at most 100 raised to exponents 0 through 4",
+        "Subject": "FixedQ4816.Pow over nine positive integer bases of magnitude at most 100 raised to exponents 0 through 4",
         "Against": "the exact BigInteger.Pow, scaled \u2014 arbitrary-width integers rather than the subject\u0027s fixed stack limb buffer, reaching the same value because both powers are exact. Bit-exact on both sides",
         "Shared": "",
         "Citation": "",
@@ -1695,6 +1695,15 @@
         "Shared": "",
         "Citation": "",
         "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Every whole exponent 2 <= |n| <= 32 at raw zero, both carrier extremes, both signs of raw one, neighbors of half/unit/two, exact-half bases 98304 and 163840, and the raw neighbors of the saturation and half-to-zero thresholds located independently by BigInteger bisection. Includes the ladder counterexample (-32767 raw)^-10 and both tie parities at exponent 17",
+        "Against": "FixedPowWholeMatchesOracle: BigInteger.Pow followed by Oracles.RoundRationalTiesToEven and signed saturation, independent of the subject limbs, early verdicts and restoring division",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
       }
     ]
   },
@@ -1711,7 +1720,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.Pow at every whole exponent 2 \u2264 |n| \u2264 32 and both base signs, the base folded so the true magnitude lands between 2\u207B\u00B2\u2070 and 2\u2075\u2070 \u2014 straddling both the underflow to Zero and the saturation at the top of the carrier",
+        "Subject": "FixedQ4816.Pow at every whole exponent 2 <= |n| <= 32 and both base signs, sampling each base both over the full raw carrier and folded toward a target output log2 in [-20, 50]; the integer-bin fold and its mantissa can extend beyond that target band, straddling both underflow and saturation",
         "Against": "the exact power in BigInteger \u2014 BigInteger.Pow of the raw, shifted by 16\u00B7(n \u2212 1) or divided into 2^(16\u00B7(1 \u2212 n)) \u2014 rounded once to nearest with ties to even by Oracles.RoundRationalTiesToEven and saturated with the parity\u0027s sign where it leaves the carrier. BIT-EXACT on both sides: the documented contract is the correct rounding, not an envelope",
         "Shared": "",
         "Citation": "",
@@ -1742,7 +1751,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "FixedQ4816.Pow on the FRACTIONAL path \u2014 Exp2 fed the once-rounded Q32 product y\u00B7Log2(x), the logarithm carried at Q46 and the exponential given twenty-five residual bits, which the operand fold reaches by forcing a non-zero exponent fraction",
-        "Against": "Oracles.EncloseExp2 applied to the interval product of the sampled exponent with Oracles.EncloseLog2\u0027s enclosure of log\u2082(x), widened by the DERIVED envelope: with L\u0302 the subject\u0027s logarithm (within 0.75 ULP by scalar.log2-vs-series) and e the Q16 rounding of y\u00B7L\u0302, the exponent error is \u03B5 \u2264 (3\u00B7|yRaw| \u002B 2\u00B9\u2077)/2\u00B3\u2074, so the result carries at most x^y\u00B7\u03B5 \u2014 using 2^\u03B5 \u2212 1 \u2264 \u03B5, valid because the operand fold keeps \u03B5 far below one \u2014 plus Exp2\u0027s own documented envelope. ENVELOPE: Subjects.FixedPowWithinEnvelope bounds the sampled exponent so that |y\u00B7log\u2082 x| stays under sixteen, which is the band where neither saturation gate fires; the gates themselves are pinned by scalar.pow-exact-lattice",
+        "Against": "Oracles.EncloseExp2 applied to the interval product of the sampled exponent with Oracles.EncloseLog2, widened by the derived exponent-error bound (8*|yRaw| + 2^18)/2^51 from the Q46 logarithm and single Q32 rounding, plus the exponential kernel envelope. Since the operand fold keeps the exponent error epsilon far below one, 2^epsilon - 1 <= epsilon bounds the relative result error. The fold keeps |y*log2(x)| under sixteen, and forces a nonzero exponent fraction",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

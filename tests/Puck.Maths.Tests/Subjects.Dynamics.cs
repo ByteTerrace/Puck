@@ -196,6 +196,39 @@ internal static partial class Subjects {
             ))
         );
     }
+    /// <summary>An overdamped fast pole can exceed the signed Q32 carrier or underflow while the slow pole still
+    /// retains the initial offset. Equal rounded Q32 rates make that slow pole exactly zero.</summary>
+    public static string? DynamicsOverdampedWideFastPole() {
+        foreach (var dampingRaw in ((ReadOnlySpan<long>)[(1L << 59), (1L << 60)])) {
+            var dynamics = SecondOrderDynamics.Create(
+                frequencyHz: FixedQ4816.Epsilon,
+                dampingRatio: FixedQ4816.FromRawBits(value: dampingRaw),
+                initialResponse: FixedQ4816.Zero
+            );
+
+            if (dynamics.DecayRateRaw != dynamics.OscillationRateRaw) {
+                return $"the wide fast-pole fixture at damping raw {dampingRaw} does not have a zero slow pole";
+            }
+
+            foreach (var seconds in ((ReadOnlySpan<ulong>)[1UL, (1UL << 32)])) {
+                foreach (var initialRaw in ((ReadOnlySpan<long>)[65536L, -65536L])) {
+                    var sample = dynamics.Evaluate(
+                        initialValue: FixedQ4816.FromRawBits(value: initialRaw),
+                        initialVelocity: FixedQ4816.Zero,
+                        target: FixedQ4816.Zero,
+                        elapsedTicks: seconds,
+                        ticksPerSecond: 1UL
+                    );
+
+                    if ((sample.Value.Value != initialRaw) || (sample.Velocity.Value != 0L)) {
+                        return ((string)$"wide fast pole at damping raw {dampingRaw}, t={seconds}, initial raw {initialRaw}: value raw {sample.Value.Value}, velocity raw {sample.Velocity.Value}; expected {initialRaw}, 0");
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
     /// <summary>ζ ≥ 1 from rest never overshoots a step target; a light-damping control (ζ = ¼) does.</summary>
     public static string? DynamicsCriticalAndOverdampedNeverOvershoot() {
         foreach (var zeta in new[] { 1.0, 1.5, 3.0, 8.0 }) {

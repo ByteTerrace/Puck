@@ -28,6 +28,10 @@ internal static partial class LawRegistry {
             width: 1
         ),
         ClaimCase(
+            claim: Subjects.DynamicsOverdampedWideFastPole,
+            id: "dynamics.overdamped-wide-fast-pole"
+        ),
+        ClaimCase(
             claim: Subjects.DynamicsCriticalAndOverdampedNeverOvershoot,
             id: "dynamics.critical-and-overdamped-never-overshoot"
         ),

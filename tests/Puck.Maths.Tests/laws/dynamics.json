@@ -116,6 +116,24 @@
     ]
   },
   {
+    "Id": "dynamics.overdamped-wide-fast-pole",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Evaluate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Evaluate at frequency raw 1, damping raws 2^59 and 2^60, zero target and velocity, initial offsets of both signs at one unit, after 1 and 2^32 seconds; the fast pole's Q32 sum crosses long.MaxValue, and its product with time crosses the Q16 carrier",
+        "Against": "the closed form at equal rounded Q32 decay and oscillation rates: p1 = 0, lambda1 = 1, lambda2 rounds to zero, p2 = 2 sigma, so the offset is retained and velocity is zero. Narrowing p2 to Q16 changes this unit offset by less than half a raw",
+        "Shared": "",
+        "Citation": "The rate equality is asserted before the check. A wide positive fast pole must remain positive, and its underflow must not erase the slow pole's response",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "dynamics.critical-and-overdamped-never-overshoot",
     "Tier": "Default",
     "Members": [
