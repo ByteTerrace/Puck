@@ -48,6 +48,8 @@ public sealed class SdfStudyBakeExperiment {
         var octreeTotal = 0L;
         var meshTotal = 0L;
         var bakeTotal = 0L;
+        var baked = 0;
+        var pinched = 0;
 
         foreach (var (name, path) in SdfStudyScene.Worlds) {
             var definition = AuthoredGameFixtures.Load(relativePath: path);
@@ -73,10 +75,14 @@ public sealed class SdfStudyBakeExperiment {
                 octreeTotal += octree;
                 meshTotal += bake.Work.MeshEvaluations;
                 bakeTotal += bake.Work.FieldEvaluations;
-                report.AppendLine(value: $"  {name}/{prototype.Id}: mesh {bake.Work.MeshEvaluations}, textures {bake.Work.TextureEvaluations}, impostor {bake.Work.ImpostorEvaluations}; signs flat {flat}, octree {octree}");
+                var (nonManifold, boundary, _) = Topology(mesh: bake.Mesh);
+
+                pinched += ((nonManifold > 0) ? 1 : 0);
+                baked++;
+                report.AppendLine(value: $"  {name}/{prototype.Id}: mesh {bake.Work.MeshEvaluations}, textures {bake.Work.TextureEvaluations}, impostor {bake.Work.ImpostorEvaluations}; signs flat {flat}, octree {octree}; {bake.Mesh.Triangles} triangles, {nonManifold} non-manifold edges, {boundary} boundary edges");
             }
         }
-        report.AppendLine(value: $"  total: mesh {meshTotal}, whole bake {bakeTotal}, signs flat {flatTotal}, octree {octreeTotal}");
+        report.AppendLine(value: $"  total: {baked} prototypes baked, {pinched} with non-manifold edges; mesh {meshTotal}, whole bake {bakeTotal}, signs flat {flatTotal}, octree {octreeTotal}");
         SdfStudyReport.Write(name: "bake.txt", text: report.ToString());
     }
 
@@ -91,8 +97,13 @@ public sealed class SdfStudyBakeExperiment {
         builder.Box(halfExtents: new Vector3(x: 1f, y: ((float)((0.5 * thicknessCells) * cell)), z: 1f), round: 0f, material: material);
 
         var bake = SdfBaker.Bake(center: Vector3.Zero, materials: [new SdfMaterial(Albedo: Vector3.One)], program: builder.Build(buildInstanceGrid: false), reach: Reach, tier: SdfBakeTier.For(quality: SdfBakeQuality.Standard));
-        var mesh = bake.Mesh;
-        // Baked quads carry their own four vertices, so edges are keyed by quantized position.
+
+        var (nonManifold, boundary, vertices) = Topology(mesh: bake.Mesh);
+
+        return (bake.Mesh.Triangles, nonManifold, boundary, vertices);
+    }
+    // Baked quads carry their own four vertices, so edges are keyed by quantized position.
+    private static (int NonManifold, int Boundary, int Vertices) Topology(SdfBakedMesh mesh) {
         var edges = new Dictionary<(long, long, long, long, long, long), int>();
 
         for (var index = 0; (index < mesh.Indices.Length); index += 3) {
@@ -105,9 +116,7 @@ public sealed class SdfStudyBakeExperiment {
             }
         }
 
-        var positions = mesh.Vertices.Select(selector: vertex => Key(p: vertex.Position)).Distinct().Count();
-
-        return (mesh.Triangles, edges.Values.Count(predicate: count => (count > 2)), edges.Values.Count(predicate: count => (count == 1)), positions);
+        return (edges.Values.Count(predicate: count => (count > 2)), edges.Values.Count(predicate: count => (count == 1)), mesh.Vertices.Select(selector: vertex => Key(p: vertex.Position)).Distinct().Count());
 
         static (long, long, long) Key(Vector3 p) => (((long)Math.Round(a: (p.X * 1e5))), ((long)Math.Round(a: (p.Y * 1e5))), ((long)Math.Round(a: (p.Z * 1e5))));
     }
