@@ -444,8 +444,12 @@ These are one-line cautions; the owning pages hold the derivations.
   converts on its CPU tier, never the B8G8R8A8 GPU route.
   An HDR toggle, a move to a display that differs in it, or unavailable display
   discovery ends the native feed; its consumer reopens it with fresh metadata.
+  The frame callback checks the display through `Win32DisplayColorSpaceProbe`,
+  which holds one DXGI factory and opens another only when it goes stale; never
+  read DXGI from `IsEnded`, which the render thread polls.
   Unknown discovery refuses the open instead of guessing SDR. Presented CPU float surfaces pass through
-  `SurfaceEncoder` before capture sinks receive their RGBA8 pixels.
+  `SurfaceEncoder` before capture sinks receive their RGBA8 pixels; `SurfaceEncoderUploadDeviceLawTests`
+  holds that upload route on both backends.
 - **Builder exception safety.** A throwing `Instance`/`DynamicInstance` callback
   leaves the builder with an open instance; discard it.
 - **Captures.** Create the `FrameCaptureRequest`, arm it with
