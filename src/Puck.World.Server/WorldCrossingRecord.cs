@@ -18,7 +18,9 @@ public sealed record WorldCrossingArrival(WorldTransferReservationRequest Reques
 /// its <see cref="Departure"/> before it sends the commit and its <see cref="Settlement"/> before it acknowledges; a
 /// destination records its <see cref="Arrival"/> before it answers the commit. Recovery restores the authority's
 /// latest checkpoint and redoes, in order, every record that checkpoint does not reflect, so a crash at any step
-/// leaves the traveler arrived or never departed and never both.</summary>
+/// leaves the traveler arrived or never departed and never both. A destination whose arrival record is
+/// <see cref="WorldCrossingDurability.Uncertain"/> answers <see cref="WorldTransferStatus.Uncertain"/> until its
+/// recovery decides.</summary>
 public abstract record WorldCrossingRecord {
     private WorldCrossingRecord() { }
 
@@ -41,15 +43,28 @@ public abstract record WorldCrossingRecord {
 /// <param name="Tick">The authority tick the record was made at.</param>
 /// <param name="Record">The record.</param>
 public readonly record struct WorldCrossingEntry(ulong Sequence, ulong Tick, WorldCrossingRecord Record);
+/// <summary>What a crossing log can say about one append.</summary>
+public enum WorldCrossingDurability : byte {
+    /// <summary>The record is durable; recovery redoes it.</summary>
+    Durable = 0,
+
+    /// <summary>The record did not land and never will; recovery cannot see it.</summary>
+    Refused = 1,
+
+    /// <summary>The record may or may not be durable, and only a later activation's recovery from the log can tell.
+    /// The authority records nothing more until it recovers: a later record would take the same sequence.</summary>
+    Uncertain = 2,
+}
 /// <summary>The durable log an authority writes its crossing records ahead through. An implementation answers only
-/// after the record is durable, and refuses an append from an activation its store has fenced off, so a superseded
-/// authority can never claim a step its successor will not recover. An authority with no log installed records
-/// nothing and keeps no crossing beyond its own process.</summary>
+/// once it knows what became of the record, and refuses an append from an activation its store has fenced off, so a
+/// superseded authority can never claim a step its successor will not recover. An authority with no log installed
+/// records nothing and keeps no crossing beyond its own process.</summary>
 public interface IWorldCrossingLog {
-    /// <summary>Makes one record durable.</summary>
+    /// <summary>Appends one record and reports what became of it.</summary>
     /// <param name="entry">The record and its sequence.</param>
-    /// <param name="reason">Why the record did not land, when it did not.</param>
-    /// <returns><see langword="true"/> once the record is durable; <see langword="false"/> refuses the step the
-    /// record was written ahead of.</returns>
-    bool TryAppend(in WorldCrossingEntry entry, out string reason);
+    /// <param name="reason">Why the record is not known to be durable, when it is not; empty otherwise.</param>
+    /// <returns><see cref="WorldCrossingDurability.Durable"/> once the record is durable,
+    /// <see cref="WorldCrossingDurability.Refused"/> when it certainly did not land, or
+    /// <see cref="WorldCrossingDurability.Uncertain"/> when the store's answer was lost.</returns>
+    WorldCrossingDurability Append(in WorldCrossingEntry entry, out string reason);
 }

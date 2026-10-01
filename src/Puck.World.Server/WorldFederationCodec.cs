@@ -512,14 +512,24 @@ public static partial class WorldFederationCodec {
 
         return writer.ToArray();
     }
-    /// <summary>Encodes a commit verdict.</summary>
-    /// <param name="accepted">Whether the commit landed.</param>
-    /// <param name="reason">The refusal narration when it did not.</param>
+    /// <summary>Encodes a commit verdict: one status byte, then the detail.</summary>
+    /// <param name="status">The destination's verdict: <see cref="WorldTransferStatus.Committed"/>,
+    /// <see cref="WorldTransferStatus.Uncertain"/>, or <see cref="WorldTransferStatus.Missing"/> for a refusal.</param>
+    /// <param name="reason">The refusal or uncertainty narration; empty on a commit.</param>
     /// <returns>The encoded leaf.</returns>
-    public static byte[] EncodeCommitReply(bool accepted, string reason) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="status"/> is
+    /// <see cref="WorldTransferStatus.Reserved"/> or undeclared, which no commit answers.</exception>
+    public static byte[] EncodeCommitReply(WorldTransferStatus status, string reason) {
+        if (!IsCommitVerdict(status: status)) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: status,
+                message: "a commit answers Committed, Uncertain, or Missing",
+                paramName: nameof(status)
+            );
+        }
         var writer = new WireWriter();
 
-        writer.WriteBoolean(value: accepted);
+        writer.WriteByte(value: ((byte)status));
         writer.WriteString(value: reason);
 
         return writer.ToArray();
@@ -1016,21 +1026,33 @@ public static partial class WorldFederationCodec {
     }
     /// <summary>Decodes a commit verdict.</summary>
     /// <param name="body">The leaf bytes.</param>
-    /// <param name="accepted">Whether the commit landed.</param>
-    /// <param name="reason">The refusal narration.</param>
+    /// <param name="status">The destination's verdict.</param>
+    /// <param name="reason">The refusal or uncertainty narration.</param>
     /// <param name="failure">The named refusal on failure.</param>
-    /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
-    public static bool TryDecodeCommitReply(ReadOnlySpan<byte> body, out bool accepted, out string reason, out WireFailure failure) {
+    /// <returns><see langword="true"/> when the leaf decoded exactly and names a verdict a commit can answer.</returns>
+    public static bool TryDecodeCommitReply(ReadOnlySpan<byte> body, out WorldTransferStatus status, out string reason, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
-        accepted = reader.ReadBoolean();
+        status = ((WorldTransferStatus)reader.ReadByte());
         reason = reader.ReadString(field: "commit reply reason");
-
-        return Finish(
+        if (!Finish(
             failure: out failure,
             reader: ref reader
-        );
+        )) {
+            return false;
+        }
+        if (!IsCommitVerdict(status: status)) {
+            failure = new WireFailure(
+                Detail: $"commit reply names verdict {((byte)status)}, which no commit answers",
+                Refusal: WireRefusal.PayloadMalformed
+            );
+            return false;
+        }
+        return true;
     }
+
+    private static bool IsCommitVerdict(WorldTransferStatus status) => (status is WorldTransferStatus.Committed or WorldTransferStatus.Uncertain or WorldTransferStatus.Missing);
+
     /// <summary>Decodes a tier-tagged document leaf, hydrating a projection into a locally-valid definition.</summary>
     /// <param name="body">The leaf bytes.</param>
     /// <param name="definition">The definition on success.</param>

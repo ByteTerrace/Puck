@@ -1213,6 +1213,16 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         _ = m_instances.Remove(key: name);
         _ = m_documentShared.Remove(key: name);
+        // A stopped row answers for no transfer. An in-doubt transfer addressed to it waits, by authority, for the
+        // row that next claims it: a destination recovered from its crossing log answers what that log holds.
+        for (var index = 0; (index < m_inDoubtTransfers.Count); index++) {
+            if (ReferenceEquals(
+                objA: m_inDoubtTransfers[index].TargetAuthority?.Local,
+                objB: instance
+            )) {
+                m_inDoubtTransfers[index] = m_inDoubtTransfers[index] with { TargetAuthority = null, RecoveryAuthority = instance.Server.AuthorityIdentity };
+            }
+        }
         RemoveSourceForwarding(source: instance.Server);
         foreach (var forwarded in m_forwardedBodies.Values) {
             if (

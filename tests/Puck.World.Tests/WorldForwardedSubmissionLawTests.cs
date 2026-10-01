@@ -54,7 +54,7 @@ public sealed class WorldForwardedSubmissionLawTests {
 
         Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 members: [new WorldTransferCommitMember(
                     BodyMotionProgramName: "grounded",
                     HasMappedArrival: false,
@@ -67,7 +67,7 @@ public sealed class WorldForwardedSubmissionLawTests {
                 reason: out var reason,
                 sourceAuthority: Source,
                 transferId: 43
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
         Assert.True(condition: fixture.Server.TryTransferredPrincipal(mobility: in Traveler, principal: out var traveler, sourceAuthority: Source));

@@ -110,21 +110,24 @@ public sealed partial class WorldTick {
             expectedBorder: expectedBorder
         );
     /// <summary>Commits detached bodies into a live reservation. A repeated committed id is idempotently accepted;
-    /// an expired or absent reservation is refused.</summary>
+    /// an expired or absent reservation is refused; an arrival whose record the crossing log answered uncertain lands
+    /// nothing and is narrated on <c>world.transfer</c>.</summary>
     /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
     /// <param name="transferId">The source-minted transfer id.</param>
     /// <param name="members">The travelers in reservation order.</param>
-    /// <param name="reason">The named refusal, or empty on success.</param>
-    /// <returns>Whether the commit is authoritative at this destination.</returns>
-    internal bool CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+    /// <param name="reason">The named refusal or uncertainty, or empty on success.</param>
+    /// <returns><see cref="WorldTransferStatus.Committed"/> when the commit is authoritative here,
+    /// <see cref="WorldTransferStatus.Uncertain"/> while only this authority's recovery can decide, and
+    /// <see cref="WorldTransferStatus.Missing"/> for a refusal.</returns>
+    internal WorldTransferStatus CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
         if (
             (m_transferAuthorityAllowed is not null) &&
             !m_transferAuthorityAllowed(sourceAuthority)
         ) {
-            reason = "closed rewind group refuses an external transfer"; return false;
+            reason = "closed rewind group refuses an external transfer"; return WorldTransferStatus.Missing;
         }
         var resolvedReason = string.Empty;
-        var accepted = Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.Commit(
+        var status = Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.Commit(
             members: members,
             reason: out resolvedReason,
             sourceAuthority: sourceAuthority,
@@ -132,7 +135,16 @@ public sealed partial class WorldTick {
         ));
 
         reason = resolvedReason;
-        return accepted;
+        if (
+            (status == WorldTransferStatus.Uncertain) &&
+            Host.Output.HasNarrationSink
+        ) {
+            Host.Output.Narrate(
+                channel: "world.transfer",
+                text: $"[world.transfer: transfer={transferId} from '{sourceAuthority}' UNCERTAIN in '{Host.AuthorityIdentity}' — {resolvedReason}]"
+            );
+        }
+        return status;
     }
     /// <summary>Publishes one authenticated federation stream's latest device image. The image is held as replicated
     /// input state and reapplied once per destination tick; it is not consumed merely because this socket update was

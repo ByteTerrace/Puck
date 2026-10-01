@@ -71,12 +71,12 @@ public sealed class CrossingHandoffTokenLawTests {
         Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
         Assert.Equal(expected: new[] { 1 }, actual: reservation.BodyIndices);
         world.CheckpointDestination();
-        Assert.True(condition: destination.CommitTransfer(
+        Assert.True(condition: (destination.CommitTransfer(
             members: [Member],
             reason: out var reason,
             sourceAuthority: request.SourceAuthority,
             transferId: request.TransferId
-        ), userMessage: reason);
+        ) == WorldTransferStatus.Committed), userMessage: reason);
 
         using var restarted = world.Restart(sourceDied: false, destinationDied: true);
 
@@ -113,17 +113,17 @@ public sealed class CrossingHandoffTokenLawTests {
             )
         );
         Assert.True(
-            condition: destination.CommitTransfer(
+            condition: (destination.CommitTransfer(
                 members: arrival.Members,
                 reason: out var replayReason,
                 sourceAuthority: arrival.Request.SourceAuthority,
                 transferId: arrival.Request.TransferId
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: replayReason
         );
 
         // The red leg: the same token carrying a different commit is refused, and lands nothing a second time.
-        Assert.False(condition: destination.CommitTransfer(
+        Assert.True(condition: (destination.CommitTransfer(
             members: [arrival.Members[0] with { Position = (arrival.Members[0].Position + new Puck.Maths.FixedVector3(
                 X: Puck.Maths.FixedQ4816.One,
                 Y: default,
@@ -132,7 +132,7 @@ public sealed class CrossingHandoffTokenLawTests {
             reason: out var alteredReason,
             sourceAuthority: arrival.Request.SourceAuthority,
             transferId: arrival.Request.TransferId
-        ));
+        ) == WorldTransferStatus.Missing));
         Assert.Contains(
             actualString: alteredReason,
             comparisonType: StringComparison.Ordinal,
@@ -195,12 +195,12 @@ public sealed class CrossingHandoffTokenLawTests {
         for (var tick = 0; (tick < 8); tick++) {
             expired.Step();
         }
-        Assert.False(condition: expired.Server.CommitTransfer(
+        Assert.True(condition: (expired.Server.CommitTransfer(
             members: [Member],
             reason: out var expiredReason,
             sourceAuthority: request.SourceAuthority,
             transferId: request.TransferId
-        ));
+        ) == WorldTransferStatus.Missing));
         Assert.Contains(
             actualString: expiredReason,
             comparisonType: StringComparison.Ordinal,
@@ -219,12 +219,12 @@ public sealed class CrossingHandoffTokenLawTests {
         Assert.True(condition: live.Server.ReserveTransfer(request: request).Accepted);
         live.Step();
         Assert.True(
-            condition: live.Server.CommitTransfer(
+            condition: (live.Server.CommitTransfer(
                 members: [Member],
                 reason: out var liveReason,
                 sourceAuthority: request.SourceAuthority,
                 transferId: request.TransferId
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: liveReason
         );
     }

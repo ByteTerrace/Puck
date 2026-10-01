@@ -84,13 +84,13 @@ public sealed partial class WorldInstanceHost {
                             sourceAuthority: pending.SourceAuthority,
                             transferId: pending.Transfer.TransferId,
                             members: pending.CommitMembers,
-                            accepted: out var committed,
+                            status: out var verdict,
                             reason: out _
                         );
 
                         if (
                             (step == WorldTransferStep.Answered) &&
-                            committed
+                            (verdict == WorldTransferStatus.Committed)
                         ) {
                             status = WorldTransferStatus.Committed;
                         } else if (!targetAuthority.TryStatus(
@@ -104,6 +104,12 @@ public sealed partial class WorldInstanceHost {
                     }
                 }
 
+                // The destination cannot yet say whether its arrival record is durable, so this source neither
+                // completes nor returns the cohort; the destination's recovery from its own log decides.
+                if (status == WorldTransferStatus.Uncertain) {
+                    index++;
+                    continue;
+                }
                 if (status == WorldTransferStatus.Committed) {
                     if (pending.RollbackOnly) {
                         // A contradictory peer verdict cannot authorize another body or crash unrelated worlds.
@@ -1058,18 +1064,18 @@ public sealed partial class WorldInstanceHost {
                 );
             }
         }
-        public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out bool accepted, out string reason) {
+        public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out WorldTransferStatus status, out string reason) {
             if (Fault is not null) {
                 return Fault.Commit(
-                    accepted: out accepted,
                     members: members,
                     reason: out reason,
                     sourceAuthority: sourceAuthority,
+                    status: out status,
                     transferId: transferId
                 );
             }
             if (Local is not null) {
-                accepted = Local.Server.CommitTransfer(
+                status = Local.Server.CommitTransfer(
                     members: members,
                     reason: out reason,
                     sourceAuthority: sourceAuthority,
@@ -1080,27 +1086,27 @@ public sealed partial class WorldInstanceHost {
             }
 
             return Remote!.Commit(
-                accepted: out accepted,
                 members: members,
                 reason: out reason,
                 sourceAuthority: sourceAuthority,
+                status: out status,
                 transferId: transferId
             );
         }
-        public WorldTransferStep PollCommit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out bool accepted, out string reason) =>
+        public WorldTransferStep PollCommit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out WorldTransferStatus status, out string reason) =>
             (((Remote is not null) && (Fault is null))
                 ? Remote.PollCommit(
-                    accepted: out accepted,
                     members: members,
                     reason: out reason,
                     sourceAuthority: sourceAuthority,
+                    status: out status,
                     transferId: transferId
                 )
                 : Commit(
-                    accepted: out accepted,
                     members: members,
                     reason: out reason,
                     sourceAuthority: sourceAuthority,
+                    status: out status,
                     transferId: transferId
                 )
             );

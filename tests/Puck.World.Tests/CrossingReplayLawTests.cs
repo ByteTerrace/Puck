@@ -396,7 +396,7 @@ public sealed class CrossingReplayLawTests {
         // The arrival a remote source commits, then the device image its stream forwards every step after.
         Assert.True(condition: server.ReserveTransfer(request: request).Accepted);
         Assert.True(
-            condition: server.CommitTransfer(
+            condition: (server.CommitTransfer(
                 members: [new WorldTransferCommitMember(
                     Profile: null,
                     HasMappedArrival: false,
@@ -409,7 +409,7 @@ public sealed class CrossingReplayLawTests {
                 reason: out var commitReason,
                 sourceAuthority: request.SourceAuthority,
                 transferId: request.TransferId
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: commitReason
         );
         fixture.Step();

@@ -6,6 +6,7 @@ public sealed partial class WorldServer {
     private readonly List<WorldCrossingArrival> m_arrivalNotes = [];
 
     private IWorldCrossingLog? m_crossingLog;
+    private ulong? m_uncertainCrossing;
 
     // Set while the escrow lands a committed cohort: the admissions it makes are the arrival's own consequences.
     internal bool LandingArrival { get; set; }
@@ -50,30 +51,41 @@ public sealed partial class WorldServer {
             m_crossingLog = log;
         });
     }
+
+    /// <summary>Gets the crossing sequence whose record this activation's log answered
+    /// <see cref="WorldCrossingDurability.Uncertain"/>, or <see langword="null"/> while every record is known. Once
+    /// set it stays set: the authority records no further crossing step until a recovered activation replaces it.</summary>
+    public ulong? UncertainCrossing => ExecuteAuthorityOperation(operation: () => m_uncertainCrossing);
+
     /// <summary>Makes one source-side crossing record durable under this authority's crossing sequence. Succeeds
-    /// without writing anything when no log is installed.</summary>
+    /// without writing anything when no log is installed. A source acts on a record only once it is durable, so an
+    /// uncertain record refuses its step here exactly as a refused one does; recovery redoes it if it landed.</summary>
     /// <param name="record">The record.</param>
-    /// <param name="reason">Why the record did not land, when it did not.</param>
+    /// <param name="reason">Why the record is not known to be durable, when it is not.</param>
     /// <returns><see langword="true"/> once the record is durable or no log is installed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="record"/> is <see langword="null"/>.</exception>
     public bool TryRecordCrossing(WorldCrossingRecord record, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: record);
 
         var refusal = string.Empty;
-        var landed = ExecuteAuthorityOperation(operation: () => RecordCrossingHeld(
+        var durability = ExecuteAuthorityOperation(operation: () => RecordCrossingHeld(
             reason: out refusal,
             record: record
         ));
 
         reason = refusal;
-        return landed;
+        return (durability == WorldCrossingDurability.Durable);
     }
 
     // Callers hold the authority gate: the sequence a record takes and the state it describes are one atomic fact.
-    internal bool RecordCrossingHeld(WorldCrossingRecord record, out string reason) {
+    internal WorldCrossingDurability RecordCrossingHeld(WorldCrossingRecord record, out string reason) {
         if (m_crossingLog is not { } log) {
             reason = string.Empty;
-            return true;
+            return WorldCrossingDurability.Durable;
+        }
+        if (m_uncertainCrossing is { } uncertain) {
+            reason = $"crossing record {uncertain} is uncertain; this authority records nothing more until it recovers";
+            return WorldCrossingDurability.Refused;
         }
 
         var entry = new WorldCrossingEntry(
@@ -81,15 +93,17 @@ public sealed partial class WorldServer {
             Sequence: m_transferEscrow.CrossingSequence,
             Tick: (NextInputTick - 1UL)
         );
-
-        if (!log.TryAppend(
+        var durability = log.Append(
             entry: in entry,
             reason: out reason
-        )) {
-            return false;
+        );
+
+        if (durability == WorldCrossingDurability.Durable) {
+            m_transferEscrow.AdvanceCrossingSequence();
+        } else if (durability == WorldCrossingDurability.Uncertain) {
+            m_uncertainCrossing = entry.Sequence;
         }
-        m_transferEscrow.AdvanceCrossingSequence();
-        return true;
+        return durability;
     }
     // Callers hold the authority gate.
     internal void NoteArrival(WorldCrossingArrival arrival) {

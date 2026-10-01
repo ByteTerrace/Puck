@@ -805,26 +805,46 @@ Every crossing step a peer can see is written ahead to the authority's crossing 
 | Source | settlement: arrived, with its forwarding routes | the arrival is acknowledged |
 | Source | settlement: stayed | the cohort is restored home |
 
-A record that does not land refuses its step: the source aborts and keeps the cohort, the
-destination lands nothing, and a settlement stays pending until it lands. Each authority numbers its
-records in one dense sequence that every checkpoint captures. A restarted authority restores its
-latest checkpoint and redoes, in order, every record past it. An arrival lands again through the
-escrow, a departure detaches its cohort again and puts the transfer back in doubt, and a settlement
-publishes the forwarding routes or restores the cohort. The ordinary drain then reconciles the
-transfer with its peer. Recovery refuses an arrival it cannot re-land and leaves its sequence
-unapplied. A hosted silo row writes its records into its fenced authority journal beside its
-mutations and recovers both kinds in publication order. A checkpoint pins its journal coverage
-at capture, so arrivals after capture remain in the journal suffix. A desktop process installs no
-log, so its crossings live only as long as the process.
+The log answers each append as durable, refused, or uncertain (`WorldCrossingDurability`). Uncertain
+means the store's answer was lost, so the record may or may not have landed. After an uncertain
+record the authority records no further crossing step until it recovers, because the next record
+would take the same sequence.
 
-A failed mutation journal append blocks further publication by that activation: later crossings
-cannot depend on a document edit its successor cannot recover.
+A source acts only on a durable record. If its departure is not durable, it aborts and keeps the
+cohort. If its settlement is not durable, the settlement stays pending until it lands. Recovery
+redoes whichever of these records did land.
 
-An uncertain store publication is an unresolved crossing failure: Silo currently answers it as a
-refusal even when the record may be durable. If a destination's arrival CAS lands but its outcome
-cannot be reconciled, the source can settle home and the destination can re-land the same traveler
-after recovery. Exactly one owner across uncertain store outcomes requires a distinct uncertain
-commit path that keeps the source in doubt and suspends the destination's ingress until recovery.
+A destination that cannot make its arrival durable lands nothing. If the record was refused, it
+answers the commit as a refusal. If the record is uncertain, it cannot refuse, because the arrival
+may already be durable. It answers `Uncertain` (`WorldTransferStatus.Uncertain`) to the commit, to a
+retried commit and to the status query, and it refuses a reservation for any of the travelers.
+
+The source treats an uncertain answer like a lost one. It keeps the transfer in doubt and neither
+completes it nor restores the cohort. Only the destination's recovery decides. A recovered
+destination answers from its log: an arrival found there lands again and the transfer is committed;
+otherwise the transfer is missing and the source restores the cohort. A stopped row answers for no
+transfer. An in-doubt transfer addressed to it waits for the next row that claims the same authority.
+
+Each authority numbers its records in one dense sequence that every checkpoint captures. A restarted
+authority restores its latest checkpoint and redoes, in order, every record past it:
+
+- an arrival lands again through the escrow;
+- a departure detaches its cohort again and puts the transfer back in doubt;
+- a settlement publishes the forwarding routes or restores the cohort.
+
+The ordinary drain then reconciles the transfer with its peer. Recovery refuses an arrival it cannot
+land again and leaves its sequence unapplied. Whichever step a crash or a lost answer interrupts, the
+traveler ends on exactly one authority.
+
+A hosted silo row writes its records into its fenced authority journal beside its mutations, and
+recovers both kinds in publication order. An activation whose journal does not decode or redo is
+refused. A checkpoint pins its journal coverage at capture, so arrivals after the capture remain in
+the journal suffix. A failed mutation journal append blocks the activation's later publications, so
+no crossing depends on a document edit its successor cannot recover. A root compare-and-swap the
+store cannot reconcile is uncertain, and it blocks the activation the same way. A blocked row cannot
+write the final checkpoint a deactivation needs. A new activation replaces it only after its silo
+restarts, and until then a source beside it keeps its doubt. A desktop process installs no log, so
+its crossings live only as long as the process.
 
 Resolution and transfer are ordered authority events, not untaped host side effects. Generation ids
 issue from a counter in the target resolver's ordered domain, recorded before they are exposed—a

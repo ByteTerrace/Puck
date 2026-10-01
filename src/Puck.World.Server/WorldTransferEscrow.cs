@@ -46,8 +46,22 @@ public readonly record struct WorldMobilityIdentity(WorldEntityAddress Incarnati
     /// <summary>Returns the next committed ownership epoch.</summary>
     public WorldMobilityIdentity Advance() => this with { Epoch = checked((Epoch + 1UL)) };
 }
-/// <summary>The destination's idempotent answer for an ambiguous commit.</summary>
-public enum WorldTransferStatus : byte { Missing = 0, Reserved = 1, Committed = 2 }
+/// <summary>The destination's idempotent answer about one source-scoped transfer, and its verdict on a commit.</summary>
+public enum WorldTransferStatus : byte {
+    /// <summary>Nothing for the transfer is live here; a commit answered this way was refused and applied nothing.</summary>
+    Missing = 0,
+
+    /// <summary>A reservation holds destination capacity and awaits its commit.</summary>
+    Reserved = 1,
+
+    /// <summary>The commit is authoritative here: its arrival is landed and its record durable.</summary>
+    Committed = 2,
+
+    /// <summary>The commit's arrival record may or may not be durable. The destination embodies none of its
+    /// travelers and refuses every later step for the transfer and for each traveler; only its recovery from its
+    /// crossing log answers <see cref="Committed"/> or <see cref="Missing"/>.</summary>
+    Uncertain = 3,
+}
 /// <summary>Bounded operational counts for transfer-state churn laws and diagnostics.</summary>
 public readonly record struct WorldTransferTableCounts(int ActiveTransactions, int MobilityCredentials, int MobilityLeases);
 /// <summary>One named channel edge carried across an authority change. Names, rather than ordinals, keep a
@@ -600,12 +614,27 @@ public sealed partial class WorldTransferEscrow {
             comparisonType: StringComparison.Ordinal
         ) &&
         m_borderAdmissions.Remove(key: bodyIndex));
-    public bool Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+    /// <summary>Lands a reserved cohort and makes its arrival durable before answering. An exact replay of a committed
+    /// transfer answers <see cref="WorldTransferStatus.Committed"/> again; a transfer whose arrival record is uncertain
+    /// answers <see cref="WorldTransferStatus.Uncertain"/> and lands nothing.</summary>
+    /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
+    /// <param name="transferId">The source-minted transfer id.</param>
+    /// <param name="members">The travelers in reservation order.</param>
+    /// <param name="reason">The named refusal or uncertainty, or empty when committed.</param>
+    /// <returns><see cref="WorldTransferStatus.Committed"/>, <see cref="WorldTransferStatus.Uncertain"/>, or
+    /// <see cref="WorldTransferStatus.Missing"/> for a refusal.</returns>
+    public WorldTransferStatus Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
         var key = new WorldTransferKey(
             SourceAuthority: sourceAuthority,
             TransferId: transferId
         );
 
+        if (IsUncertain(
+            key: key,
+            reason: out reason
+        )) {
+            return WorldTransferStatus.Uncertain;
+        }
         if (m_committed.Contains(item: key)) {
             if (
                 m_committedMembers.TryGetValue(
@@ -618,11 +647,11 @@ public sealed partial class WorldTransferEscrow {
             )
             ) {
                 reason = string.Empty;
-                return true;
+                return WorldTransferStatus.Committed;
             }
 
             reason = $"transfer {transferId} reuses a committed source-scoped id with a different commit";
-            return false;
+            return WorldTransferStatus.Missing;
         }
 
         if (!m_leases.TryGetValue(
@@ -631,7 +660,7 @@ public sealed partial class WorldTransferEscrow {
         )) {
             reason = $"transfer {transferId} has no live reservation";
 
-            return false;
+            return WorldTransferStatus.Missing;
         }
 
         for (var index = 0; (index < lease.Request.Members.Count); index++) {
@@ -646,7 +675,7 @@ public sealed partial class WorldTransferEscrow {
                 (mobilityLease.ExpectedEpoch != mobility.Epoch)
             ) {
                 reason = $"transfer {transferId} no longer owns traveler {(index + 1)}'s mobility epoch lease";
-                return false;
+                return WorldTransferStatus.Missing;
             }
         }
 
@@ -665,13 +694,13 @@ public sealed partial class WorldTransferEscrow {
         }
     }
 
-    private bool CommitLease(WorldTransferKey key, Lease lease, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+    private WorldTransferStatus CommitLease(WorldTransferKey key, Lease lease, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
         var transferId = key.TransferId;
 
         if ((m_server.NextInputTick - 1UL) >= lease.DeadlineTick) {
             reason = $"transfer {transferId} reservation expired at destination tick {lease.DeadlineTick}";
 
-            return false;
+            return WorldTransferStatus.Missing;
         }
 
         if (!ReferenceEquals(
@@ -680,7 +709,7 @@ public sealed partial class WorldTransferEscrow {
         )) {
             reason = $"transfer {transferId} destination definition moved after reservation; reserve again against the current revision";
 
-            return false;
+            return WorldTransferStatus.Missing;
         }
 
         for (var index = 0; (index < lease.Request.Members.Count); index++) {
@@ -694,19 +723,19 @@ public sealed partial class WorldTransferEscrow {
                 (knownEpoch >= mobility.Epoch)
             ) {
                 reason = $"transfer {transferId} traveler {(index + 1)} lost its mobility epoch compare-and-set; expected {mobility.Epoch}, destination has consumed through {knownEpoch}";
-                return false;
+                return WorldTransferStatus.Missing;
             }
         }
 
         if (members.Count != lease.Slots.Length) {
             reason = $"transfer {transferId} commit carries {members.Count} traveler(s), reservation binds {lease.Slots.Length}";
 
-            return false;
+            return WorldTransferStatus.Missing;
         }
 
         if (members.Any(predicate: static member => ((member.ActionContinuity is { } continuity) && ((continuity.Channels is null) || (continuity.Registers is null))))) {
             reason = $"transfer {transferId} carries invalid action continuity collections";
-            return false;
+            return WorldTransferStatus.Missing;
         }
         members = members.Select(selector: CopyCommitMember).ToArray();
 
@@ -724,7 +753,7 @@ public sealed partial class WorldTransferEscrow {
             ))))
             ) {
                 reason = $"transfer {transferId} traveler {(index + 1)} names unavailable destination motion program '{member.BodyMotionProgramName}'";
-                return false;
+                return WorldTransferStatus.Missing;
             }
             if (
                 (member.Continuum is { } continuum) &&
@@ -735,7 +764,7 @@ public sealed partial class WorldTransferEscrow {
                  (continuum.BoundaryEvents > WorldContinuumTrajectory.MaxBoundaryEvents))
             ) {
                 reason = $"transfer {transferId} traveler {(index + 1)} carries an invalid continuum interval or boundary count";
-                return false;
+                return WorldTransferStatus.Missing;
             }
         }
 
@@ -786,7 +815,7 @@ public sealed partial class WorldTransferEscrow {
                 Unland();
                 reason = $"body:{slot} refused reserved commit — {reply.Reason}";
 
-                return false;
+                return WorldTransferStatus.Missing;
             }
 
             var member = members[index];
@@ -839,23 +868,33 @@ public sealed partial class WorldTransferEscrow {
         }
 
         // Written ahead of the answer: a destination that cannot make its arrival durable lands nothing, so a
-        // restart can never lose a body the source was told had arrived.
+        // restart can never lose a body the source was told had arrived. An uncertain record lands nothing either,
+        // but the record may still be in the log, so the answer is neither a refusal nor a commit.
         var arrival = new WorldCrossingArrival(
             Members: [.. members],
             Request: lease.Request,
             Slots: [.. lease.Slots]
         );
+        var durability = WorldCrossingDurability.Durable;
+        var durabilityReason = string.Empty;
 
-        if (
-            !m_relanding &&
-            !m_server.RecordCrossingHeld(
-            reason: out var durability,
-            record: new WorldCrossingRecord.Arrival(Value: arrival)
-        )
-        ) {
+        if (!m_relanding) {
+            durability = m_server.RecordCrossingHeld(
+                reason: out durabilityReason,
+                record: new WorldCrossingRecord.Arrival(Value: arrival)
+            );
+        }
+        if (durability != WorldCrossingDurability.Durable) {
             Unland();
-            reason = $"transfer {transferId} arrival could not be made durable — {durability}";
-            return false;
+            if (durability == WorldCrossingDurability.Uncertain) {
+                return HoldUncertain(
+                    arrival: arrival,
+                    detail: durabilityReason,
+                    reason: out reason
+                );
+            }
+            reason = $"transfer {transferId} arrival could not be made durable — {durabilityReason}";
+            return WorldTransferStatus.Missing;
         }
 
         m_committed.Add(item: key);
@@ -903,7 +942,7 @@ public sealed partial class WorldTransferEscrow {
         m_server.NoteArrival(arrival: arrival);
         reason = string.Empty;
 
-        return true;
+        return WorldTransferStatus.Committed;
     }
 
     public void ReclaimExpired(ulong tick) {
@@ -927,6 +966,12 @@ public sealed partial class WorldTransferEscrow {
 
         if (m_committed.Contains(item: key)) {
             return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} already committed");
+        }
+        if (IsSuspended(
+            reason: out var suspended,
+            request: request
+        )) {
+            return WorldTransferReservationReply.Refused(reason: suspended);
         }
 
         if (!TryCopyReservation(
@@ -1199,12 +1244,12 @@ public sealed partial class WorldTransferEscrow {
         m_relanding = true;
 
         try {
-            return Commit(
+            return (Commit(
                 members: arrival.Members,
                 reason: out reason,
                 sourceAuthority: request.SourceAuthority,
                 transferId: request.TransferId
-            );
+            ) == WorldTransferStatus.Committed);
         } finally {
             m_relanding = false;
         }
@@ -1237,12 +1282,14 @@ public sealed partial class WorldTransferEscrow {
             TransferId: transferId
         );
 
-        return (m_committed.Contains(item: key)
-            ? WorldTransferStatus.Committed
-            : (m_leases.ContainsKey(key: key)
-                ? WorldTransferStatus.Reserved
-                : WorldTransferStatus.Missing
-        ));
+        return (m_uncertain.ContainsKey(key: key)
+            ? WorldTransferStatus.Uncertain
+            : (m_committed.Contains(item: key)
+                ? WorldTransferStatus.Committed
+                : (m_leases.ContainsKey(key: key)
+                    ? WorldTransferStatus.Reserved
+                    : WorldTransferStatus.Missing
+        )));
     }
     /// <summary>Reads the authenticated source-border identity retained for one active arrived body.</summary>
     public bool TryArrivalBorder(int bodyIndex, out string border) =>

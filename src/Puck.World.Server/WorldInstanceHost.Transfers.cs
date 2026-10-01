@@ -674,15 +674,15 @@ public sealed partial class WorldInstanceHost {
                 sourceAuthority: sourceAuthority,
                 transferId: transfer.TransferId,
                 members: commitMembers,
-                accepted: out var committed,
+                status: out var verdict,
                 reason: out var commitReason
             );
 
-            if (step != WorldTransferStep.Answered) {
+            if ((step != WorldTransferStep.Answered) || (verdict == WorldTransferStatus.Uncertain)) {
                 // Preserve every source recovery record and the exact commit payload. Subsequent fixed-point drains
                 // query the destination's idempotent status and either publish the committed route, retry the live
                 // lease, or restore the source after a confirmed missing/expired reservation. Never infer from a
-                // still-in-flight or failed transport whether the destination applied the commit.
+                // failed transport or an uncertain arrival record whether the destination applied the commit.
                 m_inDoubtTransfers.Add(item: new InDoubtTransfer(
                     Transfer: transfer with { FrozenCohortSlots = [.. members] },
                     TargetAuthority: targetAuthority,
@@ -697,13 +697,13 @@ public sealed partial class WorldInstanceHost {
                 if (m_narration.HasNarrationSink) {
                     m_narration.Narrate(
                         channel: "world.transfer",
-                        text: $"[world.transfer: transfer={transferId} IN-DOUBT ('{targetName}' commit acknowledgement was lost: {commitReason}) — recovery state retained for status reconciliation]"
+                        text: $"[world.transfer: transfer={transferId} IN-DOUBT ('{targetName}' {((step == WorldTransferStep.Answered) ? "answered uncertain" : "commit acknowledgement was lost")}: {commitReason}) — recovery state retained for status reconciliation]"
                     );
                 }
                 return;
             }
 
-            if (!committed) {
+            if (verdict != WorldTransferStatus.Committed) {
                 abortReason = $"'{targetName}' refused reserved commit ({commitReason})";
             }
         }

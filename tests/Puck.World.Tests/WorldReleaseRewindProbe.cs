@@ -459,12 +459,12 @@ public sealed partial class WorldReleaseCutoverLawTests {
             "closed rewind group",
             externalReservation.Reason
         );
-        Assert.False(condition: beta.Server.CommitTransfer(
+        Assert.True(condition: (beta.Server.CommitTransfer(
             members: [],
             reason: out var externalReason,
             sourceAuthority: "external",
             transferId: 99
-        ));
+        ) == WorldTransferStatus.Missing));
         Assert.Contains(
             actualString: externalReason,
             expectedSubstring: "closed rewind group"

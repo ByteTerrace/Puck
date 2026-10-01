@@ -149,7 +149,9 @@ public interface IWorldAuthorityStore {
     /// <param name="receipt">An optional operation receipt published atomically with the append.</param>
     /// <param name="cancellationToken">A token to observe.</param>
     /// <returns>The write outcome; <see cref="WorldAuthorityStoreOutcomeKind.Failed"/> when no checkpoint has ever
-    /// been written for this identity (a journal is always relative to one).</returns>
+    /// been written for this identity (a journal is always relative to one), and
+    /// <see cref="WorldAuthorityStoreOutcomeKind.RecoveryRequired"/> when the root compare-and-swap's outcome could
+    /// not be reconciled, so the entry may or may not be durable. A throw means the entry did not land.</returns>
     Task<WorldAuthorityStoreOutcome> AppendJournalAsync(WorldAuthorityIdentity identity, WorldAuthorityJournalEntry entry, CancellationToken cancellationToken, WorldAuthorityFence? fence = null, WorldAuthorityOperationReceipt? receipt = null);
     /// <summary>Publishes a hosted world's composed definition as an immutable candidate named by the authority root.</summary>
     /// <param name="identity">The hosted world's identity.</param>

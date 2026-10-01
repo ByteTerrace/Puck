@@ -201,8 +201,12 @@ ahead of the step: the source's `Departure` (its complete in-doubt record)
 before the commit, the destination's `Arrival` (reservation, body indices,
 commit) before the commit's answer, and the source's `Settlement` (arrived with
 its forwarding routes, or stayed) before the acknowledgement or the cohort's
-restore. A record that does not land refuses its step; a pending settlement
-narrates `SETTLEMENT-PENDING` once and retries each drain. Records share one
+restore. `IWorldCrossingLog.Append` answers `WorldCrossingDurability`
+(`Durable`, `Refused`, `Uncertain`); after an `Uncertain` record the server
+latches `WorldServer.UncertainCrossing` and refuses every later record until a
+recovered activation replaces it. A source record that is not `Durable` refuses
+its step; a pending settlement narrates `SETTLEMENT-PENDING` once and retries
+each drain. Records share one
 dense per-authority sequence (`WorldTransferEscrow.CrossingSequence`), captured
 by every checkpoint as its watermark. Recovery is
 `WorldInstanceHost.RecoverCrossings(row, entries)` after `Admit` and
@@ -224,11 +228,23 @@ reuses the checkpoint's own escrow and in-doubt leaves.
 A failed mutation journal append blocks the activation's later publications,
 so no crossing commits against a document edit recovery cannot reproduce.
 
-Silo treats an uncertain store publication as a refusal. A destination arrival
-may therefore be durable while the source settles home; destination recovery
-then duplicates the traveler. Exactly one owner across this failure requires
-an uncertain commit outcome that retains the source in doubt and suspends
-destination ingress until recovery.
+An `Uncertain` arrival record lands nothing and is neither a refusal nor a
+commit. The commit door (`WorldServer.CommitTransfer`, `IWorldPeerCall.Commit`,
+the federation commit reply) answers a `WorldTransferStatus`: `Committed`,
+`Missing` for a refusal, or `Uncertain`. The escrow keeps the uncertain arrival
+(`WorldTransferEscrow.Uncertain.cs`), answers `Uncertain` to the status query
+and to a retried commit, and refuses any reservation for its travelers; the
+destination narrates `UNCERTAIN` on `world.transfer`. The source keeps an
+`Uncertain` answer in doubt exactly like an `Unreachable` one, so it neither
+settles home nor completes. Only the destination's recovery resolves it: the
+recovered log either lands the arrival again (`Committed`) or does not hold it
+(`Missing`). `WorldInstanceHost.TryStop` unbinds in-doubt transfers addressed
+to the stopped row so they bind by authority to its recovered successor. In a
+silo, `RowCrossingLog` maps a store `RecoveryRequired` (a root CAS it could not
+reconcile) to `Uncertain`, which also blocks the activation; a store throw is a
+refusal, since the store reconciles its own commit point. Laws:
+`CrossingUncertaintyLawTests` (each crash point, with red legs replaying the
+refusal) and `WorldSiloCrossingRecoveryLawTests`.
 
 Entity identity is `WorldEntityAddress(authority, index, generation)`.
 `WorldAuthorityRoute` carries that complete address plus an epoch, and

@@ -5,11 +5,12 @@ namespace Puck.World.Silo;
 
 public sealed partial class WorldSiloHost {
     // One activation's crossing log: each record joins the row's publication queue behind every checkpoint and
-    // mutation already queued, is appended under the activation's fence, and is answered only once the store holds
-    // it. The store refuses an append from an activation its fence has closed, so that activation can never claim a
-    // crossing step.
+    // mutation already queued, is appended under the activation's fence, and is answered only once the store says
+    // what became of it. The store refuses an append from an activation its fence has closed, so that activation can
+    // never claim a crossing step. A root compare-and-swap whose outcome the store could not reconcile is Uncertain:
+    // the record may be durable, and the activation is blocked until a recovery reads the log back.
     private sealed class RowCrossingLog(WorldSiloHost host, WorldAuthorityIdentity identity, RowBookkeeping bookkeeping, WorldServer server) : IWorldCrossingLog {
-        public bool TryAppend(in WorldCrossingEntry entry, out string reason) {
+        public WorldCrossingDurability Append(in WorldCrossingEntry entry, out string reason) {
             // The caller holds the row's authority gate, so the engine clock it reads here is the step boundary the
             // record describes.
             var journal = new WorldAuthorityJournalEntry(
@@ -18,7 +19,7 @@ public sealed partial class WorldSiloHost {
                 Kind: WorldAuthorityJournalEntryKind.Crossing,
                 Tick: entry.Tick
             );
-            Task<WorldAuthorityStoreOutcome> append;
+            Task<(WorldCrossingDurability Durability, string Reason)> append;
 
             lock (bookkeeping.TailGate) {
                 var previous = bookkeeping.JournalTail;
@@ -32,43 +33,44 @@ public sealed partial class WorldSiloHost {
                 bookkeeping.JournalTail = append;
             }
 
-            WorldAuthorityStoreOutcome outcome;
-
-            try {
-                outcome = append.GetAwaiter().GetResult();
-            } catch (Exception exception) when ((exception is IOException or InvalidDataException or OperationCanceledException or TimeoutException)) {
-                reason = $"the authority store did not take the record ({exception.Message})";
-                return false;
-            }
-            if (!outcome.Ok) {
-                reason = $"the authority store refused the record ({outcome.Kind}: {outcome.Detail})";
-                return false;
-            }
-
-            reason = string.Empty;
-            return true;
+            (var durability, reason) = append.GetAwaiter().GetResult();
+            return durability;
         }
     }
 
-    private async Task<WorldAuthorityStoreOutcome> AppendCrossingAfterAsync(Task previous, RowBookkeeping bookkeeping, WorldAuthorityIdentity identity, WorldAuthorityJournalEntry entry) {
+    private async Task<(WorldCrossingDurability Durability, string Reason)> AppendCrossingAfterAsync(Task previous, RowBookkeeping bookkeeping, WorldAuthorityIdentity identity, WorldAuthorityJournalEntry entry) {
         await ObservePersistenceAsync(
             ct: CancellationToken.None,
             operation: previous
         ).ConfigureAwait(continueOnCapturedContext: false);
-        if (bookkeeping.PersistenceBlocked) { return WorldAuthorityStoreOutcome.RecoveryRequired(detail: "This activation must recover before publishing again."); }
+        if (bookkeeping.PersistenceBlocked) { return (WorldCrossingDurability.Refused, "this activation must recover before publishing again"); }
 
-        var outcome = await m_store.AppendJournalAsync(
-            cancellationToken: CancellationToken.None,
-            entry: entry,
-            fence: bookkeeping.Fence,
-            identity: identity
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        WorldAuthorityStoreOutcome outcome;
 
-        ObservePublication(
-            bookkeeping: bookkeeping,
-            outcome: outcome
-        );
-        return outcome;
+        try {
+            outcome = await m_store.AppendJournalAsync(
+                cancellationToken: CancellationToken.None,
+                entry: entry,
+                fence: bookkeeping.Fence,
+                identity: identity
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (Exception exception) {
+            // The store reconciles its own commit point, so a throw escapes only before the record could land.
+            return (WorldCrossingDurability.Refused, $"the authority store did not take the record ({exception.Message})");
+        }
+        try {
+            ObservePublication(
+                bookkeeping: bookkeeping,
+                outcome: outcome
+            );
+        } catch (InvalidDataException exception) {
+            return (WorldCrossingDurability.Uncertain, exception.Message);
+        }
+        return (outcome.Kind switch {
+            WorldAuthorityStoreOutcomeKind.Ok => (WorldCrossingDurability.Durable, string.Empty),
+            WorldAuthorityStoreOutcomeKind.RecoveryRequired => (WorldCrossingDurability.Uncertain, $"the authority store could not say whether it took the record ({outcome.Detail})"),
+            _ => (WorldCrossingDurability.Refused, $"the authority store refused the record ({outcome.Kind}: {outcome.Detail})"),
+        });
     }
     // Replay the publication order after admission and host-slice restore. A mutation can change the spawn,
     // capacity or admission policy an arrival used, so moving it ahead of that arrival changes the traveler. A record

@@ -22,6 +22,16 @@ internal sealed class MemoryCrossingStore {
     public Type? CrashBefore { get; set; }
     /// <summary>The record kind whose append kills the authority after the record lands, or null.</summary>
     public Type? CrashAfter { get; set; }
+    /// <summary>The record kind whose next append loses the store's answer, or null. The record lands when
+    /// <see cref="LostAnswerLands"/> is set, and the writer answers <see cref="LostAnswer"/> either way.</summary>
+    public Type? LoseAnswerOn { get; set; }
+    /// <summary>Whether a record whose answer is lost is durable all the same.</summary>
+    public bool LostAnswerLands { get; set; }
+
+    /// <summary>What the writer answers for a lost answer: <see cref="WorldCrossingDurability.Uncertain"/>, the log
+    /// contract, or <see cref="WorldCrossingDurability.Refused"/>, the refusal a red leg replays.</summary>
+    public WorldCrossingDurability LostAnswer { get; set; } = WorldCrossingDurability.Uncertain;
+
     /// <summary>Gets how many records are durable.</summary>
     public int Count => m_entries.Count;
 
@@ -45,20 +55,28 @@ internal sealed class MemoryCrossingStore {
     })];
 
     private sealed class Writer(MemoryCrossingStore store, long epoch) : IWorldCrossingLog {
-        public bool TryAppend(in WorldCrossingEntry entry, out string reason) {
+        public WorldCrossingDurability Append(in WorldCrossingEntry entry, out string reason) {
             if (epoch != store.m_epoch) {
                 reason = $"activation {epoch} was superseded by activation {store.m_epoch}";
-                return false;
+                return WorldCrossingDurability.Refused;
             }
             if (store.CrashBefore == entry.Record.GetType()) {
                 throw new AuthorityCrashedException(step: $"{entry.Record.GetType().Name} before it was durable");
+            }
+            if (store.LoseAnswerOn == entry.Record.GetType()) {
+                store.LoseAnswerOn = null;
+                if (store.LostAnswerLands) {
+                    store.m_entries.Add(item: WorldAuthorityCheckpointCodec.EncodeCrossingEntry(entry: in entry));
+                }
+                reason = "the store's answer was lost";
+                return store.LostAnswer;
             }
             store.m_entries.Add(item: WorldAuthorityCheckpointCodec.EncodeCrossingEntry(entry: in entry));
             if (store.CrashAfter == entry.Record.GetType()) {
                 throw new AuthorityCrashedException(step: $"{entry.Record.GetType().Name} after it was durable");
             }
             reason = string.Empty;
-            return true;
+            return WorldCrossingDurability.Durable;
         }
     }
 }
@@ -76,21 +94,21 @@ internal sealed class DyingDestinationPeerCall(WorldServer destination) : IWorld
         sourceAuthority: sourceAuthority,
         transferId: transferId
     );
-    public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out bool accepted, out string reason) {
+    public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out WorldTransferStatus status, out string reason) {
         try {
-            accepted = destination.CommitTransfer(
+            status = destination.CommitTransfer(
                 members: members,
                 reason: out reason,
                 sourceAuthority: sourceAuthority,
                 transferId: transferId
             );
         } catch (AuthorityCrashedException) {
-            accepted = false;
+            status = WorldTransferStatus.Missing;
             reason = "the destination stopped answering";
             return WorldTransferStep.Unreachable;
         }
         if (LoseCommitAnswer) {
-            accepted = false;
+            status = WorldTransferStatus.Missing;
             reason = "the commit's answer was lost";
             return WorldTransferStep.Unreachable;
         }
@@ -131,10 +149,10 @@ internal sealed class CrossingWorld : IDisposable {
         m_owned.Add(item: destination);
     }
 
-    public HostRow Destination { get; }
+    public HostRow Destination { get; private set; }
     public byte[] DestinationImage { get; private set; }
     public MemoryCrossingStore DestinationLog { get; }
-    public IWorldCrossingLog DestinationWriter { get; }
+    public IWorldCrossingLog DestinationWriter { get; private set; }
     public WorldInstanceHost Host { get; }
     public HostRow Source { get; }
     public byte[] SourceImage { get; private set; }
@@ -323,6 +341,43 @@ internal sealed class CrossingWorld : IDisposable {
         }
         return false;
     }
+    /// <summary>Replaces the destination's activation inside this host while the source lives on: the old row stops,
+    /// and a new one restores the destination's durable image, redoes its crossing log on a new activation of that log,
+    /// and is admitted under the same authority, where the source's in-doubt transfers find it.</summary>
+    public void RecoverDestination() {
+        Assert.True(
+            condition: Host.TryStop(
+                name: "row-b",
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: DestinationImage,
+            checkpoint: out var checkpoint,
+            reason: out _
+        ));
+
+        var destination = Restore(
+            image: DestinationImage,
+            name: "row-b"
+        );
+        var writer = DestinationLog.Activate();
+
+        m_owned.Add(item: destination);
+        destination.Server.InstallCrossingLog(log: writer);
+        Host.Admit(row: destination.Instance);
+        Host.RestoreRow(
+            row: destination.Instance,
+            slice: checkpoint!.HostRow
+        );
+        Host.RecoverCrossings(
+            entries: DestinationLog.Read(defaults: destination.Server.Definition.PlayerDefaults),
+            row: destination.Instance
+        );
+        Destination = destination;
+        DestinationWriter = writer;
+    }
     /// <summary>Restarts the authorities that died from their durable images and keeps the survivors' live state:
     /// every authority lands in a fresh host, a dead one at its checkpoint plus every logged crossing record and on a
     /// new activation of its log, a live one at an image of its state this instant on its existing writer.</summary>
@@ -366,6 +421,7 @@ internal sealed class CrossingWorld : IDisposable {
         SourceLog.CrashAfter = null;
         DestinationLog.CrashBefore = null;
         DestinationLog.CrashAfter = null;
+        DestinationLog.LoseAnswerOn = null;
         source.Server.InstallCrossingLog(log: sourceWriter);
         destination.Server.InstallCrossingLog(log: destinationWriter);
 
