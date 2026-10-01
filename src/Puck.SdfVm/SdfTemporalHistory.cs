@@ -13,8 +13,8 @@ namespace Puck.SdfVm;
 /// <param name="Debug">The debug view mode.</param>
 /// <param name="Temporal">Whether the view resolves temporally (<c>SdfWorldPackage.TemporalFragment</c>), whose
 /// output converges over one period and then stands.</param>
-/// <param name="Unread">The frames the instance's render graph has left it unread, nothing showing or reading it: a
-/// view shown again after it was parked renders in a new epoch.</param>
+/// <param name="Unread">The frames the instance's render graph has left it unread and absent from displayed outputs,
+/// including held consumer outputs: a view shown again after it was parked renders in a new epoch.</param>
 public readonly record struct SdfTemporalEpoch(long Binding, long Cut, uint Width, uint Height, float Ceiling, bool Enabled, int Debug, bool Temporal = false, long Unread = 0);
 /// <summary>A rendered camera and its sample grid, retained for motion reconstruction.</summary>
 /// <param name="Camera">The camera whose basis and off-axis lens projected the sample.</param>

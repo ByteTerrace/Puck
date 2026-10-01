@@ -205,13 +205,49 @@ public sealed partial class RenderGraphRuntime {
 
         return true;
     }
-    // Counts a frame for each instance its schedule left unread. It runs once a frame, before any instance renders, so a
-    // render and the cadence question of the next frame both read the count the latest schedule left.
-    private void CountUnread(RenderGraphSchedule schedule) {
+    // A held consumer output still shows its nested views. The scheduler demands those views only when the consumer
+    // renders, so an Unread row alone cannot distinguish parking from cadence. Follow the frame's visible reads even
+    // through consumers that stand, then count only instances both unread and absent from that closure.
+    private void CountUnread(in RenderGraphFrame frame, RenderGraphSchedule schedule) {
+        Array.Clear(array: m_visible);
+        foreach (var root in frame.Roots) {
+            if ((root.Width > 0) && (root.Height > 0)) {
+                m_visible[m_set.IndexOf(name: root.Instance)] = true;
+            }
+        }
+
+        var changed = true;
+
+        while (changed) {
+            changed = false;
+            foreach (var footprint in frame.Footprints) {
+                if ((footprint.Width <= 0) || (footprint.Height <= 0)) {
+                    continue;
+                }
+                var consumer = m_set.IndexOf(name: footprint.Consumer);
+                var producer = m_set.IndexOf(name: footprint.Producer);
+
+                if (m_visible[consumer] && !m_visible[producer]) {
+                    m_visible[producer] = true;
+                    changed = true;
+                }
+            }
+            for (var consumer = 0; (consumer < m_visible.Length); consumer++) {
+                if (!m_visible[consumer]) {
+                    continue;
+                }
+                foreach (var read in m_set.Reads[consumer]) {
+                    if ((read.Kind == ShaderPipelineResourceKind.Buffer) && !m_visible[read.Producer]) {
+                        m_visible[read.Producer] = true;
+                        changed = true;
+                    }
+                }
+            }
+        }
         var instances = schedule.Instances;
 
         for (var index = 0; (index < instances.Count); index++) {
-            if (instances[index].Status == RenderGraphInstanceStatus.Unread) {
+            if ((instances[index].Status == RenderGraphInstanceStatus.Unread) && !m_visible[index]) {
                 m_unreadFrames[index]++;
             }
         }

@@ -4847,7 +4847,8 @@ counted rows recorded in the same change.
      frame with gathered history differs from the spatial one; no world can
      author a crossing that keeps history, so the epoch reset on a crossing is
      held by law (P15-2). The runtime counts the frames each instance's
-     schedule leaves it unread and hands the count to the package's cadence
+     schedule leaves it unread and absent from displayed outputs, including
+     held consumer outputs, and hands the count to the package's cadence
      question and recordings, and the count is part of the epoch, so a parked
      view shown again resets while a spatial view's still output stands.
    - Delivers: the history color and history surface as the fragment's history

@@ -1915,7 +1915,8 @@ binds the tables' fillers at every temporal member. Its first epoch frame calls
 frame exactly. `SdfTemporalHistory.Stands` lets a temporal epoch stand only once
 `Frames` and the renders since `Changed` (which `IsUnchanged` calls when the
 residency reports a change) both reach `Period`. The epoch carries the instance's unread frames, which the render graph counts
-for each frame its schedule leaves the instance unread and hands to
+for each frame its schedule leaves the instance unread and absent from displayed
+outputs, including held consumer outputs, and hands to
 `IsUnchanged` and every recording (`RenderGraphPackageRecording.UnreadFrames`),
 so a parked view shown again starts a new epoch; never infer parking from a
 render gap, which cadence leaves too. `place` sharpens a temporal

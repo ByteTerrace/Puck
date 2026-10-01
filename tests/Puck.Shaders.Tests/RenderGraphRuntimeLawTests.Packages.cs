@@ -160,6 +160,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Reads: [],
         Refresh: RenderGraphRefresh.EveryFrame
     );
+
     // A frame the display shows nothing in parks the instance: its schedule leaves it unread, and the runtime counts the
     // frame. Its package is asked whether it is unchanged, and its next render records, with the count, which moves only
     // while it is parked, so the frame it is shown again in carries a count its preceding render did not.
@@ -194,7 +195,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 return (view.Parts.Count >= SdfWorldPackage.NativeFragment.Passes.Count);
             }
         );
-        Assert.All(collection: view.RecordedUnread, action: static unread => Assert.Equal(expected: 0L, actual: unread));
+        Assert.All(collection: view.RecordedUnread, action: static unread => Assert.Equal(actual: unread, expected: 0L));
 
         var recorded = view.Parts.Count;
 
@@ -215,6 +216,65 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.Equal(expected: 3L, actual: view.RecordedUnread[^1]);
         }
         Assert.True(condition: (view.Parts.Count > recorded));
+    }
+    // A nested view remains visible in held consumer outputs. Skipped consumer renders, whether paced by refresh or
+    // standing unchanged, do not park it and cannot restart its temporal epoch. Removing the roots really parks it.
+    [InlineData(2, false)]
+    [InlineData(3, false)]
+    [InlineData(1, true)]
+    [Theory]
+    public void AHeldConsumerDoesNotParkItsNestedView(int divisor, bool unchanged) {
+        var gpu = new FakePipelineGpu();
+        var recorders = new Recorders();
+        var view = new ViewPackage();
+
+        recorders.Registry.Register(factory: view, package: RenderGraphPackageCatalog.SdfWorld);
+        using var runtime = Runtime(gpu, recorders,
+            Set(PackageInstance(),
+                Instance(name: "portal", reads: new RenderGraphRead(Producer: PackageView)),
+                Instance(name: "main", reads: new RenderGraphRead(Producer: "portal")) with { Refresh = RenderGraphRefresh.Every(divisor: divisor) }),
+            "main", null!,
+            Graph(ScreensGraph(pool: false, "screen"), ("screen", PackageView)),
+            Graph(ScreensGraph(pool: false, "screen"), ("screen", "portal")));
+        var index = 0L;
+
+        void Produce(bool parked = false, bool stands = false) {
+            var frame = new RenderGraphFrame(DisplayHeight: Display, DisplayHertz: 60, DisplayWidth: Display,
+                // Inner first also exercises visibility through more than one held output.
+                Footprints: [new RenderGraphFootprint(Consumer: "portal", Height: 1, Producer: PackageView, Width: 1),
+                    new RenderGraphFootprint(Consumer: "main", Height: 1, Producer: "portal", Width: 1)],
+                Index: index, Roots: (parked ? [] : [new RenderGraphRoot(Height: 1, Instance: "main", Width: 1)]),
+                Tick: index++, Unchanged: (stands ? ["main"] : null));
+
+            _ = runtime.ProduceFrame(context: default, frame: in frame);
+        }
+
+        TestLiveness.Until(step: () => {
+            Produce();
+            return ((view.Parts.Count > 0) && (runtime.Node(instance: 1).FrameCounter > 0) &&
+                (runtime.Node(instance: 2).FrameCounter > 0) &&
+                !runtime.Node(instance: 1).HasPendingCandidate && !runtime.Node(instance: 2).HasPendingCandidate);
+        });
+        var recorded = view.Parts.Count;
+        var unread = false;
+
+        for (var frame = 0; (frame < 24); frame++) {
+            Produce(stands: unchanged);
+            unread |= (runtime.Latest!.Instances[0].Status == RenderGraphInstanceStatus.Unread);
+        }
+        Assert.True(condition: unread);
+        Assert.All(collection: view.AskedUnread, action: static count => Assert.Equal(actual: count, expected: 0L));
+        Assert.All(collection: view.RecordedUnread, action: static count => Assert.Equal(actual: count, expected: 0L));
+        if (unchanged) {
+            Assert.Equal(expected: recorded, actual: view.Parts.Count);
+        } else {
+            Assert.True(condition: (view.Parts.Count > recorded));
+        }
+
+        for (var frame = 0; (frame < 3); frame++) { Produce(parked: true); }
+        Produce();
+        Assert.Equal(expected: 3L, actual: view.AskedUnread[^1]);
+        Assert.Equal(expected: 3L, actual: view.RecordedUnread[^1]);
     }
 
     private static void ProducePackageFrame(RenderGraphRuntime runtime, long frameIndex, int display = Display, double width = 1.0, bool parked = false) {
