@@ -148,21 +148,22 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         return PollAll(slots: m_slots);
     }
-    /// <summary>Blocks until every pipeline of the set is ready, for a holder's own background build or a harness that
-    /// drives tables directly.</summary>
+    /// <summary>Returns a task that completes once every pipeline of the set is ready, for a holder's own background
+    /// build, which awaits it holding no thread, or a harness that drives tables directly.</summary>
     /// <param name="cancellationToken">The token that ends the wait; the entries keep building for their other
     /// holders.</param>
+    /// <returns>The task, which faults as the exceptions below say.</returns>
     /// <exception cref="ObjectDisposedException">The set has been disposed.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="AggregateException">A pipeline's creation failed, named as <see cref="Poll"/> names it.</exception>
     /// <exception cref="DeviceLostException">The device was lost during a creation; thrown alone.</exception>
-    public void Wait(CancellationToken cancellationToken) {
+    public Task WaitAsync(CancellationToken cancellationToken) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
 
-        WaitAll(
+        return WaitAllAsync(
             cancellationToken: cancellationToken,
             slots: m_slots
         );
@@ -196,7 +197,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
     /// (<see cref="SdfKernelSet.InterfaceMismatch"/>), so a kernel compiled against another instruction set, or binding
     /// anything the host does not place where the host places it, refuses the whole reload and the set keeps its kernels.
     /// The replacements build on the thread pool like any entry; the reload is ready once
-    /// <see cref="SdfWorldPipelineReload.Wait"/> returns, and <see cref="SdfWorldTables.InstallReload"/> puts it into
+    /// <see cref="SdfWorldPipelineReload.WaitAsync"/> completes, and <see cref="SdfWorldTables.InstallReload"/> puts it into
     /// service on the render thread. Safe on any thread while no other reload is being installed.</summary>
     /// <param name="cache">The composition's pass-pipeline cache the set was acquired from.</param>
     /// <param name="device">The device the set's pipelines were created on.</param>
@@ -329,7 +330,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         return ready;
     }
-    internal static void WaitAll(IReadOnlyList<Slot?> slots, CancellationToken cancellationToken) {
+    internal static async Task WaitAllAsync(IReadOnlyList<Slot?> slots, CancellationToken cancellationToken) {
         List<(string Name, Exception Failure)>? failures = null;
 
         for (var index = 0; (index < slots.Count); index++) {
@@ -338,7 +339,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             }
 
             try {
-                _ = slot.Lease.Wait(cancellationToken: cancellationToken);
+                _ = await slot.Lease.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             } catch (Exception failure) when ((failure is not OperationCanceledException)) {
                 (failures ??= []).Add(item: (slot.Description.Name, failure));
             }
@@ -388,7 +389,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 }
 /// <summary>
 /// Replacement pipelines for the kernels that changed, leased by <see cref="SdfWorldPipelines.PrepareReload"/> and put
-/// into service by <see cref="SdfWorldTables.InstallReload"/> once built (<see cref="Wait"/>). Disposing a reload that
+/// into service by <see cref="SdfWorldTables.InstallReload"/> once built (<see cref="WaitAsync"/>). Disposing a reload that
 /// was never installed releases its leases; a committed reload releases the leases it replaced.
 /// </summary>
 public sealed class SdfWorldPipelineReload : IDisposable {
@@ -413,15 +414,17 @@ public sealed class SdfWorldPipelineReload : IDisposable {
     internal SdfKernelSet Baseline { get; }
     internal SdfWorldPipelines Target { get; }
 
-    /// <summary>Blocks until every replacement is built, for the holder's own background build.</summary>
+    /// <summary>Returns a task that completes once every replacement is built, for the holder's own background build,
+    /// which awaits it holding no thread.</summary>
     /// <param name="cancellationToken">The token that ends the wait.</param>
+    /// <returns>The task, which faults as the exceptions below say.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="AggregateException">A replacement's creation failed, for malformed or unsupported bytecode among
     /// other causes. The message names every pipeline whose creation failed, and the inner exceptions are those
     /// failures in the same order.</exception>
     /// <exception cref="DeviceLostException">The device was lost during a creation; thrown alone.</exception>
-    public void Wait(CancellationToken cancellationToken) =>
-        SdfWorldPipelines.WaitAll(
+    public Task WaitAsync(CancellationToken cancellationToken) =>
+        SdfWorldPipelines.WaitAllAsync(
             cancellationToken: cancellationToken,
             slots: [.. m_replacements.Select(selector: replacement => new SdfWorldPipelines.Slot(
                 description: SdfWorldTables.PipelineLayouts.Specs[replacement.Index].Description,

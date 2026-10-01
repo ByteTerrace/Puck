@@ -198,11 +198,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
         // The sample index each render of the fragment's last part took from the latest convergence, while it converges.
         public List<int> Served { get; } = [];
 
-        public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
+        public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
             BuildGate?.Wait(cancellationToken: cancellationToken);
             _ = Interlocked.Increment(location: ref m_builds);
 
-            return null;
+            return ValueTask.FromResult<IDisposable?>(result: null);
         }
         public ShaderPipelineStorageCounts CountsAt(uint width, uint height) => new(
             Height: height,

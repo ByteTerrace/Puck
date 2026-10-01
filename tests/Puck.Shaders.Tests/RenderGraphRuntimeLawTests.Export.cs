@@ -112,7 +112,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public bool SamplesReads => true;
         public HashSet<nint> Wrote { get; } = [];
 
-        public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => null;
+        public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => ValueTask.FromResult<IDisposable?>(result: null);
         public ShaderPipelineStorageCounts CountsAt(uint width, uint height) => new(
             Height: height,
             Width: width
@@ -156,7 +156,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public bool SamplesReads => true;
         public List<nint> Seen { get; } = [];
 
-        public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => null;
+        public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => ValueTask.FromResult<IDisposable?>(result: null);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder(owner: this);
 
         private sealed class Recorder(ScreenPackage owner) : IRenderGraphPackageRecorder {

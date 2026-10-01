@@ -15,7 +15,8 @@ internal static class SdfTestPipelines {
         path2: $"{SdfKernelSet.StemOf(kernel: kernel)}.comp.spv"
     ))))]);
 
-    // Leases a set from a pass-pipeline cache and waits for it on the calling thread; the cache counts what it creates.
+    // Leases a set from a pass-pipeline cache and blocks the calling thread until it is built; the cache counts what it
+    // creates.
     public static SdfWorldPipelines Build(IGpuDeviceContext device, SdfKernelSet kernels, GpuPassPipelineCache cache, bool includeBrickPipelines = false) {
         var set = SdfWorldPipelines.Acquire(
             cache: cache,
@@ -25,7 +26,7 @@ internal static class SdfTestPipelines {
         );
 
         try {
-            set.Wait(cancellationToken: CancellationToken.None);
+            set.WaitAsync(cancellationToken: CancellationToken.None).GetAwaiter().GetResult();
 
             return set;
         } catch {

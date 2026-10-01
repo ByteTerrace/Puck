@@ -16,7 +16,7 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfWorldPipelinesLawTests {
     [Fact]
-    public void ASetLeasesEveryEnginePipelineAndAReloadOnlyTheChangedOnes() {
+    public async Task ASetLeasesEveryEnginePipelineAndAReloadOnlyTheChangedOnes() {
         var device = new PersistingDevice(services: new FakeGpuDevice().Services);
         var cache = new GpuPassPipelineCache();
 
@@ -45,7 +45,7 @@ public sealed class SdfWorldPipelinesLawTests {
             kernels: SdfTestPipelines.Kernels(beam: 2),
             reflector: reflector
         )) {
-            changed.Wait(cancellationToken: CancellationToken.None);
+            await changed.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(expected: 1, actual: changed.ChangedPipelines);
         }
 
@@ -66,7 +66,7 @@ public sealed class SdfWorldPipelinesLawTests {
     // other's places, each refuse the reload by name, and the set keeps its kernels and creates nothing; the same kernels
     // compiled as the host was prepare.
     [Fact]
-    public void AReloadWhoseKernelsDoNotReadTheHostsInterfaceIsRefusedAndTheSetKeepsItsKernels() {
+    public async Task AReloadWhoseKernelsDoNotReadTheHostsInterfaceIsRefusedAndTheSetKeepsItsKernels() {
         var gpu = new FakeGpuDevice();
         var cache = new GpuPassPipelineCache();
         using var pipelines = SdfTestPipelines.Build(
@@ -129,7 +129,7 @@ public sealed class SdfWorldPipelinesLawTests {
             reflector: reflector
         );
 
-        reload.Wait(cancellationToken: CancellationToken.None);
+        await reload.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(expected: 1, actual: reload.ChangedPipelines);
     }
     [Fact]
@@ -173,10 +173,7 @@ public sealed class SdfWorldPipelinesLawTests {
         }
 
         driver.Open();
-        await Task.Run(
-            action: () => pipelines.Wait(cancellationToken: TestContext.Current.CancellationToken),
-            cancellationToken: TestContext.Current.CancellationToken
-        );
+        await pipelines.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(
             actual: (driver.MostInDriver, started.Distinct().Count(), Created(cache: cache)),
@@ -219,7 +216,7 @@ public sealed class SdfWorldPipelinesLawTests {
         );
     }
     [Fact]
-    public void TwoCreationsFailingInTheDriverAtOnceAreBothNamedAndEverythingCreatedIsReleased() {
+    public async Task TwoCreationsFailingInTheDriverAtOnceAreBothNamedAndEverythingCreatedIsReleased() {
         Assert.SkipWhen(
             condition: (GpuPassPipelineCache.BuildConcurrency < 2),
             reason: "Two creations are in the driver at once only when the cache's concurrency is at least two."
@@ -250,7 +247,7 @@ public sealed class SdfWorldPipelinesLawTests {
             includeBrickPipelines: false,
             kernels: SdfTestPipelines.Kernels(beam: 1)
         );
-        var failure = Assert.Throws<AggregateException>(testCode: () => pipelines.Wait(cancellationToken: CancellationToken.None));
+        var failure = await Assert.ThrowsAsync<AggregateException>(testCode: () => pipelines.WaitAsync(cancellationToken: CancellationToken.None));
 
         pipelines.Dispose();
         Assert.StartsWith(

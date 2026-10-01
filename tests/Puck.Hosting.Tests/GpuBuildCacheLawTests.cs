@@ -222,6 +222,7 @@ public sealed class GpuBuildCacheLawTests {
         public GpuBuildCache<string, Built> Cache() =>
             new(
                 build: Build,
+                concurrency: 1,
                 workSourceName: "gpu.test-builds"
             );
 

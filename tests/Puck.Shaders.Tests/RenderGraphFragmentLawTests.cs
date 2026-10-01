@@ -537,9 +537,9 @@ public sealed class RenderGraphFragmentLawTests {
     // is told to skip skips every frame.
     private sealed class Silent(IShaderPipelineStorageCounter? counter, FakePipelineGpu? gpu = null, List<(string Pass, GpuKernelCounterRow? Counters)>? recordings = null, string? skipped = null) : IRenderGraphPackageFactory {
         public IShaderPipelineStorageCounter? CounterOf(string instance) => counter;
-        public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
+        public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
             if (counter is not Counter control) {
-                return null;
+                return ValueTask.FromResult<IDisposable?>(result: null);
             }
 
             var revision = control.Revision;
@@ -547,7 +547,7 @@ public sealed class RenderGraphFragmentLawTests {
             control.BuildEntered?.Set();
             control.BuildGate?.Wait(cancellationToken: cancellationToken);
 
-            return new Built(Revision: revision);
+            return ValueTask.FromResult<IDisposable?>(result: new Built(Revision: revision));
         }
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) {
             if ((counter is Counter control) && (built is Built revision)) {
