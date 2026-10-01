@@ -20,7 +20,7 @@
         <None Include="$(MSBuildThisFileDirectory)..\..\build\PuckShaderHashSidecars.cs" Pack="true" PackagePath="buildTransitive\PuckShaderHashSidecars.cs" Visible="false" />
         <None Include="$(MSBuildThisFileDirectory)..\..\build\PuckDirect3D11KernelBytecode.cs" Pack="true" PackagePath="buildTransitive\PuckDirect3D11KernelBytecode.cs" Visible="false" />
         <None Include="$(MSBuildThisFileDirectory)..\..\build\Shaders.targets" Pack="true" PackagePath="buildTransitive\ByteTerrace.Puck.Shaders.targets" Visible="false" />
-        <None Include="$(MSBuildThisFileDirectory)..\..\build\ShaderRecipe.props" Pack="true" PackagePath="buildTransitive\ShaderRecipe.props" Visible="false" />
+        <None Include="$(MSBuildThisFileDirectory)..\..\build\ShaderRecipe.targets" Pack="true" PackagePath="buildTransitive\ShaderRecipe.targets" Visible="false" />
     </ItemGroup>
     <ItemGroup>
         <!-- The image-source conversion passes (Puck.Abstractions.Sources.ImageSourceConversion), the region copy, the

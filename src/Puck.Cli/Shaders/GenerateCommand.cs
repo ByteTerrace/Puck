@@ -96,7 +96,7 @@ internal static class GenerateCommand {
         writes each one whose text the model has changed before any kernel compiles, so a kernel
         reading a declaration the model has just gained builds in one pass.
 
-        The build's shader recipe, build/ShaderRecipe.props, is generated from
+        The build's shader recipe, build/ShaderRecipe.targets, is generated from
         Puck.Shaders.ShaderCompiler.StepsOf: the DXC options build/Shaders.targets compiles every
         stage source with, the options the runtime shader compiler runs. A build reads it when it
         is evaluated, so only this verb writes it.

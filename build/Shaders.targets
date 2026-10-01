@@ -74,7 +74,7 @@
 
     <!-- The DXC options of every stage and target, generated from Puck.Shaders.ShaderCompiler.StepsOf, which the
          runtime shader compiler runs too: one recipe. -->
-    <Import Project="$(MSBuildThisFileDirectory)ShaderRecipe.props" />
+    <Import Project="$(MSBuildThisFileDirectory)ShaderRecipe.targets" />
 
     <PropertyGroup>
         <DxcCommand Condition="'$(DxcCommand)' == ''">dxc</DxcCommand>
@@ -99,7 +99,7 @@
     </Target>
 
     <!-- Compiles each declared source to SPIR-V (Vulkan; entry renamed to "main") always, and to DXIL (DirectX)
-         when its category's opt-out property is true, with the options ShaderRecipe.props holds for the stage and
+         when its category's opt-out property is true, with the options ShaderRecipe.targets holds for the stage and
          target (generated from ShaderCompiler.StepsOf: the capability floor, explicit -O3 and -enable-16bit-types,
          and on DXIL the suppressed "attribute ignored" warnings for the SPIR-V-only vk:: attributes).
          $(MSBuildThisFileFullPath) and the recipe ride Inputs alongside $(MSBuildProjectFullPath): editing either
@@ -120,7 +120,7 @@
         <_PuckExpectedBytecode Condition="'$(PuckComputeShaderDxilEnabled)' == 'true'" Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" />
     </ItemGroup>
     <Target Name="CompileShaders" AfterTargets="ResolveProjectReferences"
-            Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath);$(MSBuildThisFileDirectory)ShaderRecipe.props"
+            Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath);$(MSBuildThisFileDirectory)ShaderRecipe.targets"
             Outputs="@(_PuckExpectedBytecode);@(_PuckExpectedBytecode -> '%(Identity).hash')">
         <!-- Guards the DXC version probe and its <Error> below: a buildTransitive consumer with no shaders and no
              DXC installed (PackageReference'd only for IShaderModuleLoader/ShaderBytecode) must not fail its build

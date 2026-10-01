@@ -601,7 +601,7 @@ enums and packed-layout constants, generated from `Puck.SignedDistance` by
 `Puck.SdfVm.SdfIsaHlsl`; the instruction set's fingerprint, recorded in
 `src/Puck.SdfVm/SdfIsaFingerprint.cs`; every generated shader interface
 (`<name>.interface.hlsli`); and the build's shader recipe,
-`build/ShaderRecipe.props`. An engine package that declares pass-group members,
+`build/ShaderRecipe.targets`. An engine package that declares pass-group members,
 such as `overlay`, `place` and `sdf.film-grain`, owns the one include named by
 its interface, found by that file name; the SDF kernels' interfaces sit at fixed
 paths. A checked-in interface include that no package owns, and a package whose

@@ -1043,7 +1043,7 @@ an assembly it runs has changed. A kernel reading a declaration the model has
 only just gained builds in one pass, with no header seeded by hand.
 
 `puck shaders generate` writes the same list, and the build's shader recipe
-(`build/ShaderRecipe.props`), which a build reads when it is evaluated and so
+(`build/ShaderRecipe.targets`), which a build reads when it is evaluated and so
 only the verb writes; `--check` holds every file to the model, and CI runs it
 on a fresh checkout. Generated files are checked in: a hot reload compiles the
 tree's kernels against them, and the build only brings them level with the
@@ -2501,7 +2501,7 @@ loads the `dxcompiler.dll` of an installed DXC at run time. The package also
 ships `build/Shaders.targets` under
 `buildTransitive/ByteTerrace.Puck.Shaders.targets`—the shared HLSL-to-
 SPIR-V/DXIL compile recipe every in-repo shader project imports, which also
-ships each project's bytecode beside its executable—with `ShaderRecipe.props`
+ships each project's bytecode beside its executable—with `ShaderRecipe.targets`
 beside it, the DXC options of every stage, which `puck shaders generate`
 writes from `ShaderCompiler.StepsOf`, so the build and the runtime compiler
 run one recipe. A consumer that authors

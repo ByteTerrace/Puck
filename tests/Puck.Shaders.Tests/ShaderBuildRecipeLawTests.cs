@@ -5,7 +5,7 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// The build and the runtime shader compiler run one DXC recipe. <c>build/Shaders.targets</c> compiles every stage
-/// source with the options <c>build/ShaderRecipe.props</c> holds for its stage and target, and that file is
+/// source with the options <c>build/ShaderRecipe.targets</c> holds for its stage and target, and that file is
 /// <see cref="ShaderCompiler.GenerateBuildRecipe"/>'s output, so a stage source compiles with exactly the arguments
 /// <see cref="ShaderCompiler.StepsOf"/> gives the compiler, followed by the output and the source.
 /// </summary>
