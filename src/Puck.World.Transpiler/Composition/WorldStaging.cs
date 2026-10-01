@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
+using Puck.Abstractions.Machines;
 using Puck.Assets;
 
 namespace Puck.World.Transpiler.Composition;
@@ -17,11 +18,13 @@ public static class WorldStaging {
     /// <param name="worlds">The worlds the source's compile declared.</param>
     /// <param name="entry">The world a boot was asked to start in, or <see langword="null"/> for the declared entry.</param>
     /// <param name="directory">The directory the source's worlds are staged into; deleted and recreated.</param>
+    /// <param name="catalog">The host's machine catalog, whose providers name the content and asset paths of each
+    /// world's machine configurations, which staging relocates.</param>
     /// <param name="entryPath">The full path of the entry world's staged document on success.</param>
     /// <param name="entryName">The entry world's declared name on success.</param>
     /// <param name="reason">The named refusal, or empty on success.</param>
     /// <returns><see langword="true"/> when an entry was chosen and every world composed and was written.</returns>
-    public static bool TryStageComposition(string path, IReadOnlyList<WorldCompiledWorld> worlds, string? entry, string directory, out string entryPath, out string entryName, out string reason) {
+    public static bool TryStageComposition(string path, IReadOnlyList<WorldCompiledWorld> worlds, string? entry, string directory, IMachineValidationCatalog catalog, out string entryPath, out string entryName, out string reason) {
         entryPath = string.Empty;
         entryName = string.Empty;
 
@@ -73,6 +76,7 @@ public static class WorldStaging {
 
             foreach (var world in worlds) {
                 if (!TryWrite(
+                    catalog: catalog,
                     directory: directory,
                     name: world.Name,
                     path: out var staged,
@@ -101,16 +105,21 @@ public static class WorldStaging {
         return true;
     }
     /// <summary>Writes one compiled world into <paramref name="directory"/> as its document file, its basis and
-    /// imports composed beside its source first. File references are relocated once, and fonts that cannot retain a
-    /// relative path across drives are stored beneath the staging directory without changing their declared pins.</summary>
+    /// imports composed beside its source first. File references are relocated once, a machine configuration's content
+    /// and asset paths among them, and fonts that cannot retain a relative path across drives are stored beneath the
+    /// staging directory without changing their declared pins.</summary>
     /// <param name="world">The compiled world document.</param>
     /// <param name="name">The world's document name, which names the file it is written to.</param>
     /// <param name="sourceDirectory">The full path of the directory of the source the world was compiled from.</param>
     /// <param name="directory">The directory the world is staged into; created when absent.</param>
+    /// <param name="catalog">The host's machine catalog, whose providers name the content and asset paths of the
+    /// world's machine configurations.</param>
     /// <param name="path">The full path of the written document on success.</param>
-    /// <param name="reason">The composition or font-staging refusal, or empty on success.</param>
+    /// <param name="reason">The composition, machine-path or font-staging refusal, or empty on success.</param>
     /// <returns><see langword="true"/> when the world composed and was written.</returns>
-    public static bool TryWrite(JsonObject world, string name, string sourceDirectory, string directory, out string path, out string reason) {
+    public static bool TryWrite(JsonObject world, string name, string sourceDirectory, string directory, IMachineValidationCatalog catalog, out string path, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: catalog);
+
         _ = Directory.CreateDirectory(path: directory);
         path = Path.GetFullPath(path: Path.Combine(
             path1: directory,
@@ -138,6 +147,17 @@ public static class WorldStaging {
         var document = (composed ?? world);
 
         WorldDocumentPaths.RelocateDocumentFields(module: document, origins: origins, sourceDocumentPath: authored, targetDocumentPath: path);
+
+        if (!WorldModuleNamespace.TryRelocateConfigurationAssets(
+            catalog: catalog,
+            module: document,
+            reason: out reason,
+            sourceDocumentPath: authored,
+            targetDocumentPath: path
+        )) {
+            return false;
+        }
+
         ContentAddressedStore? assets = null;
 
         foreach (var row in ((document["text"]?["fonts"] as JsonArray) ?? []).OfType<JsonObject>()) {

@@ -230,6 +230,7 @@ internal static partial class CanaryCommand {
             throw new InvalidOperationException(message: $"authority source '{source}' declares no worlds; a federated leg stages a composition's worlds or boots a document.");
         }
         if (!WorldStaging.TryStageComposition(
+            catalog: CliWorldVocabulary.EnsureInstalled(),
             directory: directory,
             entry: entry,
             entryName: out _,

@@ -13,9 +13,15 @@ namespace Puck.World;
 // after its own views, through the world's own mirror (WorldSessionSceneEmitter.ResolveCamera), and the binder records
 // the index each one landed at, which the camera's instance renders.
 internal sealed partial class WorldScreenBinder {
-    // Where each camera view of another world rendered at its residency's last dress, by its view name.
-    private readonly Dictionary<string, NestedFilm> m_nestedFilms = new(comparer: StringComparer.Ordinal);
+    // Where each camera view of another world rendered at its residency's last dress, by its view name: a dress drops
+    // the views of its residency it no longer films, and a nesting move drops those no live level shows
+    // (PruneNestedFilms).
+    private readonly WorldFilmedViews<WorldNestedScreens<SessionFeed>> m_nestedFilms = new();
 
+    private Func<string, bool>? m_showsNestedCamera;
+
+    // Drops every camera view of another world no live level shows, whatever residency filmed it last.
+    private void PruneNestedFilms() => m_nestedFilms.Retain(shows: (m_showsNestedCamera ??= name => (NestedCameraLevel(name: name) is not null)));
     // Sets the camera views of every level the presentation renders: a routed world's, read by every view of the worlds
     // the display shows, and a session's, read by the session whose world's screens show it. Each reads what its world's
     // screens show within the frame, and the world's camera views at their previous frame.
@@ -142,9 +148,9 @@ internal sealed partial class WorldScreenBinder {
 
         view = new SdfWorldView(
             Residency: residency,
-            View: ((m_nestedFilms.TryGetValue(
-                key: name,
-                value: out var film
+            View: ((m_nestedFilms.TryGet(
+                film: out var film,
+                name: name
             ) && ReferenceEquals(
                 objA: film.Target,
                 objB: target
@@ -158,6 +164,8 @@ internal sealed partial class WorldScreenBinder {
     // Films the cameras of every level a routed scene's residency renders: the routed world's own, and the destination's
     // of every window joined to the scene, which is the same world.
     private void FilmScene(WorldRoutedScene scene, List<SdfViewSnapshot> views) {
+        m_nestedFilms.Begin(target: scene);
+
         if (m_routedScreens.TryGetValue(
             key: scene,
             value: out var routed
@@ -187,9 +195,13 @@ internal sealed partial class WorldScreenBinder {
                 );
             }
         }
+
+        m_nestedFilms.End(target: scene);
     }
     // Films the cameras of a session's own level into its own residency's frame.
     private void FilmFeed(SessionFeed feed, List<SdfViewSnapshot> views) {
+        m_nestedFilms.Begin(target: feed);
+
         if (feed.Nested is { } level) {
             FilmLevel(
                 level: level,
@@ -198,6 +210,8 @@ internal sealed partial class WorldScreenBinder {
                 views: views
             );
         }
+
+        m_nestedFilms.End(target: feed);
     }
     // Films each camera of a level into a frame after the views already in it, at the quality of the frame's first view
     // restricted as a camera view is (CameraViewQuality), and records where each landed.
@@ -218,21 +232,13 @@ internal sealed partial class WorldScreenBinder {
                 width: camera.Camera.RenderWidth
             );
 
-            if (!m_nestedFilms.TryGetValue(
-                key: camera.Name,
-                value: out var film
-            )) {
-                film = new NestedFilm();
-                m_nestedFilms.Add(
-                    key: camera.Name,
-                    value: film
-                );
-            }
-
-            film.Camera = snapshot;
-            film.Index = views.Count;
-            film.Level = level;
-            film.Target = target;
+            m_nestedFilms.Record(
+                camera: in snapshot,
+                index: views.Count,
+                level: level,
+                name: camera.Name,
+                target: target
+            );
             views.Add(item: new SdfViewSnapshot(
                 Camera: snapshot,
                 Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
@@ -242,27 +248,16 @@ internal sealed partial class WorldScreenBinder {
         }
     }
     // The level a view of a routed scene's frame past its seats and windows films: a camera view's.
-    private WorldNestedScreens<SessionFeed>? FilmedLevelOf(WorldRoutedScene scene, int view) {
-        foreach (var film in m_nestedFilms.Values) {
-            if (
-                (film.Index == view) &&
-                ReferenceEquals(
-                    objA: film.Target,
-                    objB: scene
-                )
-            ) {
-                return film.Level;
-            }
-        }
-
-        return null;
-    }
+    private WorldNestedScreens<SessionFeed>? FilmedLevelOf(WorldRoutedScene scene, int view) => m_nestedFilms.LevelAt(
+        index: view,
+        target: scene
+    );
     // The camera a camera view of another world last filmed from, in that world's space.
     private bool TryNestedCamera(string name, out CameraSnapshot camera) {
         if (
-            m_nestedFilms.TryGetValue(
-                key: name,
-                value: out var film
+            m_nestedFilms.TryGet(
+                film: out var film,
+                name: name
             ) &&
             (NestedCameraLevel(name: name) is not null)
         ) {
@@ -276,12 +271,4 @@ internal sealed partial class WorldScreenBinder {
         return false;
     }
 
-    // Where a camera view of another world rendered at its residency's last dress: the residency's owner (a routed scene
-    // or a session), its index in that frame, the camera it filmed from, and the level whose screens show it.
-    private sealed class NestedFilm {
-        public CameraSnapshot Camera { get; set; }
-        public int Index { get; set; }
-        public WorldNestedScreens<SessionFeed>? Level { get; set; }
-        public object? Target { get; set; }
-    }
 }

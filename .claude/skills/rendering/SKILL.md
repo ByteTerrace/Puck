@@ -1672,7 +1672,8 @@ world filmed under the level (`WorldViewNames.NestedCamera`,
 `WorldNestedScreens.Cameras`) into the residency the level renders through, after
 its own views, by the dresser's `Film` hook (`WorldSessionSceneEmitter.Film`,
 `WorldRoutedScene.Film`; `WorldScreenBinder.NestedCameras.cs` records each
-index), reading the level's sessions and sources within the frame and its camera
+index in a `WorldFilmedViews`, which drops a view its residency's dress no
+longer films and, on a nesting move, every view no live level shows), reading the level's sessions and sources within the frame and its camera
 views at their previous frame (`WorldView.PreviousReads`); text draws through
 the world's own font catalog (`WorldTextCatalog` resolved beside the delivered
 definition's `DocumentDirectory`), whose decals the dresser hands the residency

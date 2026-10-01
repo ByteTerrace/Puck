@@ -150,6 +150,7 @@ internal sealed partial class WorldScreenBinder {
 
         RebuildFeeds();
         PublishNesting();
+        PruneNestedFilms();
         ReconcileViews();
     }
     // Follows one level's screens and every feed they show.
