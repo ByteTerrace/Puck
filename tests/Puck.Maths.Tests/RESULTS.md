@@ -23,22 +23,22 @@ any question asked of it. Cost is measured outside the suite, by `puck bench`.
 ## Smoke
 
 - law cases executed: 22
-- last run: 2026-09-27
+- last run: 2026-10-01
 
 ## Default
 
-- law cases executed: 634
-- last run: 2026-09-27
+- law cases executed: 635
+- last run: 2026-10-01
 
 ## Deep
 
 - law cases executed: 112
-- last run: 2026-09-27
+- last run: 2026-10-01
 
 ## Exhaustive
 
 - law cases executed: 7
-- last run: 2026-09-27
+- last run: 2026-10-01
 
 ## Coverage
 
@@ -46,13 +46,13 @@ any question asked of it. Cost is measured outside the suite, by `puck bench`.
 - waived: 43
 - uncovered: 634
 - total public members: 2832
-- last run: 2026-09-27
+- last run: 2026-10-01
 
 ## Legs
 
 | leg kind | legs |
 | --- | --- |
-| classical | 836 |
+| classical | 837 |
 | in-tree-independent | 31 |
 | presented-twin | 9 |
 | relative-canary | 18 |
@@ -63,135 +63,135 @@ any question asked of it. Cost is measured outside the suite, by `puck bench`.
 | shared-substrate:shared-upstream | 22 |
 | shared-substrate:transcription | 28 |
 | structural | 1199 |
-| **total** | **2326** |
+| **total** | **2327** |
 
-- statements: 775
+- statements: 776
 - statements with no independent leg: 213
-- last run: 2026-09-27
+- last run: 2026-10-01
 
 ## Frontier
 
 | domain | block | index |
 | --- | --- | --- |
-| algebra-fractional | 512 | 10626 |
-| binary-field | 256 | 459 |
-| binary-field-axioms | 256 | 459 |
-| binary-field-group | 256 | 554 |
-| binary-polynomial | 256 | 557 |
-| binary-polynomial-division | 256 | 557 |
-| binary-polynomial-gcd | 256 | 557 |
-| clifford-motor | 512 | 376 |
-| clifford-multivector | 512 | 376 |
-| clifford-planar-complex | 512 | 376 |
-| clifford-planar-dual | 512 | 376 |
-| clifford-planar-split | 512 | 376 |
-| clifford-quaternion-even | 512 | 376 |
-| clifford-reverse | 512 | 376 |
-| closed-unit | 512 | 610 |
-| complex | 512 | 10627 |
-| complex-direction | 512 | 504 |
-| complex-divide | 512 | 617 |
-| complex-rotate | 512 | 617 |
-| contribution-fold-analog | 512 | 295 |
-| contribution-fold-formula | 512 | 295 |
-| contribution-fold-no-pool | 512 | 295 |
-| contribution-fold-order | 512 | 295 |
-| contribution-fold-quantization | 512 | 295 |
-| core-word-modular | 512 | 1 |
-| cost-bound-arithmetic | 512 | 42 |
-| cost-model-budgets | 512 | 42 |
-| cost-model-conversions | 512 | 42 |
-| directed-magnitude | 512 | 227 |
-| directed-product | 512 | 227 |
-| directed-product-sum | 512 | 227 |
-| directed-quotient | 512 | 227 |
-| directed-root | 512 | 227 |
-| dual | 512 | 8394 |
-| dual-divide | 512 | 504 |
-| dual-generic | 512 | 504 |
-| dual-quaternion | 512 | 617 |
-| dynamics | 512 | 112 |
-| extension-field | 256 | 543 |
-| extension-field-inverse | 256 | 452 |
-| extension-field-norm | 256 | 543 |
-| extension-field-power | 256 | 452 |
-| extension-field-product | 256 | 543 |
-| fixed-saturate | 512 | 42 |
-| integer-bit-align | 256 | 16 |
-| integer-bit-morton | 128 | 16 |
-| integer-bit-scatter | 128 | 16 |
-| integer-bit-smear | 256 | 16 |
-| integer-hexagonal-index | 512 | 81 |
-| integer-magic-constants | 512 | 73 |
-| integer-try-arithmetic | 512 | 6 |
-| integer-try-multiplication | 512 | 1 |
-| mass-box | 256 | 227 |
-| mass-capsule | 256 | 227 |
-| mass-compound | 256 | 227 |
-| mass-cylinder | 256 | 227 |
-| mass-parallel-axis | 256 | 227 |
-| mass-sphere | 256 | 227 |
-| mass-volume | 256 | 227 |
-| meet-associative | 512 | 286 |
-| meet-bottom-absorption | 512 | 286 |
-| meet-commutative | 512 | 286 |
-| meet-idempotent | 512 | 286 |
-| meet-monotonicity | 512 | 286 |
-| meet-order-coherence | 512 | 286 |
-| meet-product-composition | 512 | 286 |
-| meet-top-identity | 512 | 286 |
-| mixed-scale | 512 | 227 |
-| mixed-scale-triple | 512 | 227 |
-| mobius | 512 | 8394 |
-| monogenic-exact | 512 | 376 |
-| monogenic-fusion | 512 | 376 |
-| position | 512 | 491 |
-| position-delta | 512 | 600 |
-| position-translate | 512 | 600 |
-| presented | 512 | 898 |
-| prime-field | 256 | 548 |
-| prime-field-chain | 256 | 548 |
-| prime-field-lucas | 256 | 548 |
-| prime-field-primality | 256 | 548 |
-| prime-field-root | 256 | 548 |
-| q1648-scalar | 512 | 277 |
-| q1648-scalar-division | 512 | 275 |
-| q3232-scalar | 512 | 240 |
-| q3232-scalar-division | 512 | 239 |
-| quaternion | 512 | 617 |
-| quaternion-direction | 512 | 504 |
-| quaternion-rotate | 512 | 504 |
-| quaternion-sublattice | 256 | 504 |
-| rate | 512 | 601 |
-| rigid | 512 | 640 |
-| rigid-direction | 512 | 515 |
-| rigid-point | 512 | 640 |
-| scalar | 512 | 8398 |
-| scalar-division | 512 | 635 |
-| scalar-text | 512 | 635 |
-| scalar-transcendental | 512 | 637 |
-| smoke | 64 | 2124 |
-| split | 512 | 10627 |
-| split-divide | 512 | 617 |
-| split-transform | 512 | 617 |
-| square-grid | 512 | 70 |
-| sublattice | 256 | 4554 |
-| symmetric-apply2 | 512 | 227 |
-| symmetric-apply3 | 512 | 227 |
-| symmetric-invert2 | 256 | 270 |
-| symmetric-invert3 | 256 | 270 |
-| symmetric-solve2 | 512 | 270 |
-| symmetric-solve3 | 512 | 271 |
-| unit-fraction16 | 512 | 524 |
-| unit-fraction32 | 512 | 642 |
-| unsigned-scalar | 512 | 628 |
-| vector | 512 | 612 |
-| vector-componentwise-helpers | 512 | 6 |
-| vector-direction | 512 | 612 |
-| vector-lattice | 512 | 500 |
-| vector-narrow | 512 | 612 |
-| vector-norm | 512 | 500 |
-| vector-orthonormal-basis | 512 | 163 |
-| vector-ray-plane | 512 | 4 |
+| algebra-fractional | 512 | 10629 |
+| binary-field | 256 | 462 |
+| binary-field-axioms | 256 | 462 |
+| binary-field-group | 256 | 557 |
+| binary-polynomial | 256 | 560 |
+| binary-polynomial-division | 256 | 560 |
+| binary-polynomial-gcd | 256 | 560 |
+| clifford-motor | 512 | 379 |
+| clifford-multivector | 512 | 379 |
+| clifford-planar-complex | 512 | 379 |
+| clifford-planar-dual | 512 | 379 |
+| clifford-planar-split | 512 | 379 |
+| clifford-quaternion-even | 512 | 379 |
+| clifford-reverse | 512 | 379 |
+| closed-unit | 512 | 613 |
+| complex | 512 | 10630 |
+| complex-direction | 512 | 507 |
+| complex-divide | 512 | 620 |
+| complex-rotate | 512 | 620 |
+| contribution-fold-analog | 512 | 298 |
+| contribution-fold-formula | 512 | 298 |
+| contribution-fold-no-pool | 512 | 298 |
+| contribution-fold-order | 512 | 298 |
+| contribution-fold-quantization | 512 | 298 |
+| core-word-modular | 512 | 4 |
+| cost-bound-arithmetic | 512 | 45 |
+| cost-model-budgets | 512 | 45 |
+| cost-model-conversions | 512 | 45 |
+| directed-magnitude | 512 | 230 |
+| directed-product | 512 | 230 |
+| directed-product-sum | 512 | 230 |
+| directed-quotient | 512 | 230 |
+| directed-root | 512 | 230 |
+| dual | 512 | 8397 |
+| dual-divide | 512 | 507 |
+| dual-generic | 512 | 507 |
+| dual-quaternion | 512 | 620 |
+| dynamics | 512 | 115 |
+| extension-field | 256 | 546 |
+| extension-field-inverse | 256 | 455 |
+| extension-field-norm | 256 | 546 |
+| extension-field-power | 256 | 455 |
+| extension-field-product | 256 | 546 |
+| fixed-saturate | 512 | 45 |
+| integer-bit-align | 256 | 19 |
+| integer-bit-morton | 128 | 19 |
+| integer-bit-scatter | 128 | 19 |
+| integer-bit-smear | 256 | 19 |
+| integer-hexagonal-index | 512 | 84 |
+| integer-magic-constants | 512 | 76 |
+| integer-try-arithmetic | 512 | 9 |
+| integer-try-multiplication | 512 | 4 |
+| mass-box | 256 | 230 |
+| mass-capsule | 256 | 230 |
+| mass-compound | 256 | 230 |
+| mass-cylinder | 256 | 230 |
+| mass-parallel-axis | 256 | 230 |
+| mass-sphere | 256 | 230 |
+| mass-volume | 256 | 230 |
+| meet-associative | 512 | 289 |
+| meet-bottom-absorption | 512 | 289 |
+| meet-commutative | 512 | 289 |
+| meet-idempotent | 512 | 289 |
+| meet-monotonicity | 512 | 289 |
+| meet-order-coherence | 512 | 289 |
+| meet-product-composition | 512 | 289 |
+| meet-top-identity | 512 | 289 |
+| mixed-scale | 512 | 230 |
+| mixed-scale-triple | 512 | 230 |
+| mobius | 512 | 8397 |
+| monogenic-exact | 512 | 379 |
+| monogenic-fusion | 512 | 379 |
+| position | 512 | 494 |
+| position-delta | 512 | 603 |
+| position-translate | 512 | 603 |
+| presented | 512 | 901 |
+| prime-field | 256 | 551 |
+| prime-field-chain | 256 | 551 |
+| prime-field-lucas | 256 | 551 |
+| prime-field-primality | 256 | 551 |
+| prime-field-root | 256 | 551 |
+| q1648-scalar | 512 | 280 |
+| q1648-scalar-division | 512 | 278 |
+| q3232-scalar | 512 | 243 |
+| q3232-scalar-division | 512 | 242 |
+| quaternion | 512 | 620 |
+| quaternion-direction | 512 | 507 |
+| quaternion-rotate | 512 | 507 |
+| quaternion-sublattice | 256 | 507 |
+| rate | 512 | 604 |
+| rigid | 512 | 643 |
+| rigid-direction | 512 | 518 |
+| rigid-point | 512 | 643 |
+| scalar | 512 | 8401 |
+| scalar-division | 512 | 638 |
+| scalar-text | 512 | 638 |
+| scalar-transcendental | 512 | 640 |
+| smoke | 64 | 2127 |
+| split | 512 | 10630 |
+| split-divide | 512 | 620 |
+| split-transform | 512 | 620 |
+| square-grid | 512 | 73 |
+| sublattice | 256 | 4557 |
+| symmetric-apply2 | 512 | 230 |
+| symmetric-apply3 | 512 | 230 |
+| symmetric-invert2 | 256 | 273 |
+| symmetric-invert3 | 256 | 273 |
+| symmetric-solve2 | 512 | 273 |
+| symmetric-solve3 | 512 | 274 |
+| unit-fraction16 | 512 | 527 |
+| unit-fraction32 | 512 | 645 |
+| unsigned-scalar | 512 | 631 |
+| vector | 512 | 615 |
+| vector-componentwise-helpers | 512 | 9 |
+| vector-direction | 512 | 615 |
+| vector-lattice | 512 | 503 |
+| vector-narrow | 512 | 615 |
+| vector-norm | 512 | 503 |
+| vector-orthonormal-basis | 512 | 166 |
+| vector-ray-plane | 512 | 7 |
 
-- last run: 2026-09-27
+- last run: 2026-10-01

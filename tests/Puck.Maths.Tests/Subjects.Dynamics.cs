@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 
 namespace Puck.Maths.Tests;
 
@@ -152,6 +153,47 @@ internal static partial class Subjects {
         return (((deltaValue <= valueBound) && (deltaVelocity <= velocityBound))
             ? null
             : $"step vs evaluate diverged: dValue={deltaValue} (bound {valueBound}) dVelocity={deltaVelocity} (bound {velocityBound}) (f={frequencyRaw} zeta={dampingRaw} target={targetRaw})"
+        );
+    }
+    /// <summary>Proves <see cref="SecondOrderDynamics.Evaluate"/>'s decay factor stays within half a ULP of
+    /// <c>exp(−ζω·t)</c>, read where nothing else rounds: critically damped, from zero offset with unit velocity,
+    /// over a whole number <c>n</c> of seconds, the value is <c>e·(0·(1 + x) + 1·n) = n·e</c> with every product
+    /// exact — including past the underflow floor, where the settled read answers exactly zero.</summary>
+    /// <param name="left">Its first lane folds onto f in (0, 2] Hz, so ζω = ω spans (0, 4π].</param>
+    /// <param name="right">Its first lane folds onto n in [1, 4] seconds.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? DynamicsDecayFactorVsSeries(long[] left, long[] right) {
+        const ulong TicksPerSecond = 240UL;
+
+        var frequencyRaw = (1L + ((long)(DynamicsMagnitude(value: left[0]) % (2UL << 16))));
+        var seconds = (1L + ((long)(DynamicsMagnitude(value: right[0]) % 4UL)));
+        var dynamics = SecondOrderDynamics.Create(
+            frequencyHz: FixedQ4816.FromRawBits(value: frequencyRaw),
+            dampingRatio: FixedQ4816.One,
+            initialResponse: FixedQ4816.Zero
+        );
+        var sample = dynamics.Evaluate(
+            elapsedTicks: (((ulong)seconds) * TicksPerSecond),
+            initialValue: FixedQ4816.Zero,
+            initialVelocity: FixedQ4816.One,
+            target: FixedQ4816.Zero,
+            ticksPerSecond: TicksPerSecond
+        );
+        var factor = Oracles.EncloseExpNegative(rateRaw: (dynamics.DecayRateRaw * seconds));
+
+        // Per unit of n: half a ULP for Exp2Q32's closing narrowing, plus the relative error of the once-rounded Q32
+        // exponent (ln 2·2⁻³³) and of the mantissa (2⁻⁴⁴) on a factor at most one — under 2⁻¹⁷ ULP together.
+        return Oracles.WithinEnvelope(
+            enclosure: new(
+                High: (factor.High * seconds),
+                Low: (factor.Low * seconds)
+            ),
+            name: $"{seconds}·the {seconds}-second decay factor at f={frequencyRaw} (ζω raw {dynamics.DecayRateRaw})",
+            subjectRaw: sample.Value.Value,
+            toleranceUnits: (seconds * (
+                (BigInteger.One << (Oracles.GuardBitCount - 1)) +
+                (BigInteger.One << (Oracles.GuardBitCount - 17))
+            ))
         );
     }
     /// <summary>ζ ≥ 1 from rest never overshoots a step target; a light-damping control (ζ = ¼) does.</summary>

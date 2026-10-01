@@ -92,16 +92,16 @@ public static class FixedDual {
             );
         }
 
-        // Dual = (b·log2(e))/a at full width: the raw Q32 product b·log2e over a raw Q16 a scaled by 2^16, so the ratio
-        // is b·log2e/a, with one ties-to-even rounding. The prior round(b·log2e)/a rounded twice.
+        // Dual = (b·log2(e))/a at full width: the exact product of b's raw with log2(e) at Q62, over a's raw scaled by
+        // 2^62, so the ratio is b·log2e/a with one ties-to-even rounding and no Q16 quantization of the constant.
         return new(
             Real: FixedQ4816.Log2(value: value.Real),
             Dual: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
                 numerator: FusedArithmetic.Product(
                     left: value.Dual.Value,
-                    right: FixedQ4816.Log2E.Value
+                    right: FixedQ4816.Log2EQ62
                 ),
-                denominator: (((UInt128)FusedArithmetic.RawMagnitude(value: value.Real.Value)) << FixedQ4816.FractionBitCount)
+                denominator: (((UInt128)FusedArithmetic.RawMagnitude(value: value.Real.Value)) << 62)
             ))
         );
     }

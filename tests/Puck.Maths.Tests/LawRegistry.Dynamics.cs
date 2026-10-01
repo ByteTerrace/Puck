@@ -21,6 +21,12 @@ internal static partial class LawRegistry {
             id: "dynamics.step-vs-evaluate-close-agreement",
             width: 3
         ),
+        SweptCase(
+            claim: Subjects.DynamicsDecayFactorVsSeries,
+            domain: Dynamics,
+            id: "dynamics.decay-factor-vs-series",
+            width: 1
+        ),
         ClaimCase(
             claim: Subjects.DynamicsCriticalAndOverdampedNeverOvershoot,
             id: "dynamics.critical-and-overdamped-never-overshoot"

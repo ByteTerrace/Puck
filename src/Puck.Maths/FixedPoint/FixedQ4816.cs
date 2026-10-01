@@ -33,13 +33,15 @@ public readonly partial record struct FixedQ4816(long Value)
     // Past this scaled exponent CoshSinh's two halved terms are already MaxValue and Zero, so clamping there changes
     // no answer while keeping the ±1 offsets and the negation inside the carrier.
     private const long RawCoshSinhExponentLimit = (48L << FractionBitCount);
-    private const long RawLog2E = 94548L;                          // round(log2(e) · 2^16), in the value domain
     private const long RawOneHalf = (1L << (FractionBitCount - 1)); // the raw representation of 0.5, in the value domain
     private const long RawOne = (1L << FractionBitCount);          // the raw representation of 1.0, in the value domain
     private const double RawOneInverse = (1d / RawOne);
 
     // Atan2 constant: the half turn at Q61 for the octant fold-back; the full turn is the public <see cref="PiQ61"/>.
     internal const long Atan2HalfPiQ61 = 3622009729038561421L;  // round(π/2 · 2^61)
+    // log2(e), the factor converting a natural-base argument into a base-2 exponent, at Q62: carried wide so a product
+    // with a Q16 raw stays exact in Int128 and only the caller's own closing rounding remains.
+    internal const long Log2EQ62 = 6653256548922161246L;         // round(log2(e) · 2^62)
 
     /// <summary>The number of fraction bits <see cref="PiQ61"/> is carried at (<c>61</c>).</summary>
     public const int PiQ61FractionBitCount = 61;
@@ -456,9 +458,6 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <summary>Gets the smallest representable positive value, one unit in the last place (<c>2⁻¹⁶</c>).</summary>
     public static FixedQ4816 Epsilon => new(Value: RawEpsilon);
 
-    /// <summary>Gets <c>log2(e)</c> — the factor converting a natural-base argument into the base-2 argument <see cref="Exp2"/> consumes.</summary>
-    internal static FixedQ4816 Log2E => new(Value: RawLog2E);
-
     /// <summary>Gets the largest representable value.</summary>
     public static FixedQ4816 MaxValue => new(Value: long.MaxValue);
     /// <summary>Gets the smallest (most negative) representable value.</summary>
@@ -591,7 +590,8 @@ public readonly partial record struct FixedQ4816(long Value)
 
     /// <summary>Returns <c>2^value</c> for an exponent carried at Q32 rather than Q16 — the same table and polynomial
     /// as <see cref="Exp2"/> fed twenty-five residual bits instead of nine, so a caller that formed its exponent at
-    /// full width (<see cref="Pow"/>, <see cref="CoshSinh"/>) does not quantize it to the Q16 grid first.</summary>
+    /// full width (<see cref="Pow"/>, <see cref="CoshSinh"/>, <see cref="SecondOrderDynamics.Evaluate"/>'s decay
+    /// factors) does not quantize it to the Q16 grid first.</summary>
     /// <param name="exponentQ32">The exponent, at thirty-two fraction bits.</param>
     /// <returns><c>2^exponent</c> under <see cref="Exp2"/>'s saturation and underflow rules.</returns>
     internal static FixedQ4816 Exp2Q32(long exponentQ32) {
@@ -659,23 +659,31 @@ public readonly partial record struct FixedQ4816(long Value)
     /// Built from <see cref="Exp2"/> with the halving folded into the exponent: for <c>s = φ·log2 e</c>,
     /// <c>cosh φ = 2^(s−1) + 2^(−s−1)</c> and <c>sinh φ = 2^(s−1) − 2^(−s−1)</c>. Halving after the sum would cap the
     /// pair at <c>2⁴⁶</c>, discarding the representable band up to <see cref="MaxValue"/> and answering half the
-    /// saturated value beyond it. The scaled exponent is formed at <see cref="Int128"/> width and clamped to ±48
-    /// before narrowing, so a large argument cannot wrap the product's sign; the clamp is beyond the point where both
-    /// terms are already constant, so it changes no answer. One rounding per term, and the sum is exact — a term can
-    /// only approach <see cref="MaxValue"/> once the other has rounded to <see cref="Zero"/>. Deterministic; the
-    /// exponential's relative error grows with the magnitude of <paramref name="argument"/>.
+    /// saturated value beyond it. The scaled exponent is the exact <see cref="Int128"/> product of the argument with
+    /// <see cref="Log2EQ62"/>, clamped to ±48 and rounded once to the Q32 exponent <see cref="Exp2Q32"/> consumes,
+    /// so a large argument cannot wrap the product's sign; the clamp is beyond the point where both terms are already
+    /// constant, so it changes no answer. One rounding per term, and the sum is exact — a term can only approach
+    /// <see cref="MaxValue"/> once the other has rounded to <see cref="Zero"/>. Each term is within half a ULP plus a
+    /// relative error below <c>ln 2·2⁻³³ + 2⁻⁴⁴</c> (the Q32 exponent's rounding and the exponential's mantissa), so
+    /// that relative term adds less than one ULP while the result is below <c>2¹⁷</c> and dominates above it.
+    /// Deterministic and bit-identical across machines.
     /// </remarks>
     internal static (FixedQ4816 Cosh, FixedQ4816 Sinh) CoshSinh(FixedQ4816 argument) {
-        // The product of two Q16 raws is the exponent at Q32 exactly; it feeds Exp2Q32 unrounded, with the −1 of the
-        // halving applied on the same grid.
+        // The Q16 raw times log2(e) at Q62 is the exponent at Q78 exactly (below 2¹²⁶, so Int128 cannot wrap). It is
+        // clamped, then rounded once to the Q32 exponent Exp2Q32 consumes, with the −1 of the halving applied on that
+        // grid. Rounding ties to even on the magnitude keeps cosh exactly even and sinh exactly odd.
+        const int ProductFractionBitCount = (FractionBitCount + 62);
         const long OneQ32 = (1L << (2 * FractionBitCount));
-        var product = (((Int128)argument.Value) * RawLog2E);
-        var limit = (((Int128)RawCoshSinhExponentLimit) << FractionBitCount);
-        var scaled = ((long)Int128.Clamp(
-            max: limit,
-            min: -limit,
-            value: product
-        ));
+        var product = (((Int128)argument.Value) * Log2EQ62);
+        var limit = (((Int128)RawCoshSinhExponentLimit) << (ProductFractionBitCount - FractionBitCount));
+        var scaled = RoundProduct(
+            fractionBitCount: (ProductFractionBitCount - (2 * FractionBitCount)),
+            product: Int128.Clamp(
+                max: limit,
+                min: -limit,
+                value: product
+            )
+        );
         var forward = Exp2Q32(exponentQ32: (scaled - OneQ32));
         var backward = Exp2Q32(exponentQ32: (-scaled - OneQ32));
 
