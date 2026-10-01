@@ -19,18 +19,14 @@
         <None Include="$(MSBuildThisFileDirectory)..\..\build\ShaderRecipe.props" Pack="true" PackagePath="buildTransitive\ShaderRecipe.props" Visible="false" />
     </ItemGroup>
     <ItemGroup>
-        <!-- The display encode (SurfaceEncoder): the fullscreen triangle and the encode every swapchain compositor, the
-             float preview and a capture of a float output draw with. -->
-        <VertexShaderSource Include="Assets\Runtime\display.vert.hlsl" />
-        <FragmentShaderSource Include="Assets\Runtime\display-encode.frag.hlsl" />
-        <Content Include="Assets\Runtime\display.vert.hlsl;Assets\Runtime\display-encode.frag.hlsl;Assets\Runtime\display.vert.spv;Assets\Runtime\display-encode.frag.spv;Assets\Runtime\display.vert.dxil;Assets\Runtime\display-encode.frag.dxil" CopyToOutputDirectory="PreserveNewest" />
-    </ItemGroup>
-    <ItemGroup>
-        <!-- The image-source conversion passes (Puck.Abstractions.Sources.ImageSourceConversion), the region copy and the
-             graph's place package, compiled to SPIR-V and DXIL at build and shipped by the shared CollectShaderBytecode
-             target. -->
+        <!-- The image-source conversion passes (Puck.Abstractions.Sources.ImageSourceConversion), the region copy, the
+             graph's place package, and the display encode under Runtime (SurfaceEncoder: the fullscreen triangle and the
+             encode every swapchain compositor, the float preview and a capture of a float output draw with), compiled to
+             SPIR-V and DXIL at build and shipped by the shared CollectShaderBytecode target behind its freshness gate. -->
         <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
         <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
+        <VertexShaderSource Include="Assets\Shaders\**\*.vert.hlsl" />
+        <FragmentShaderSource Include="Assets\Shaders\**\*.frag.hlsl" />
         <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" />
         <ShaderInclude Include="Assets\Shaders\**\*.hlsli" />
     </ItemGroup>

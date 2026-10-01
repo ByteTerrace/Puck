@@ -1738,7 +1738,7 @@ frame converter's conversion kernels compile at build too
 `ProbeKindManifest.KernelBytecodePath`, `Win32D3D11CameraFrameConverter.KernelPath`);
 a camera device only creates them, and the colorimetry is constant-buffer data.
 Both surface compositors write the root's surface through the display encode
-(`SurfaceEncoder`, `Assets/Runtime/display-encode.frag.hlsl` in `Puck.Shaders`,
+(`SurfaceEncoder`, `Assets/Shaders/Runtime/display-encode.frag.hlsl` in `Puck.Shaders`,
 build SPIR-V and DXIL), binding `DisplayEncodeLayout` (the pass group, `t0`, `s1`
 and the encode block at `b2` in space 3), and lease it from the device's
 `GpuPassPipelineCache` for a render pass in the swapchain's format, so no
