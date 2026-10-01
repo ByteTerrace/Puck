@@ -208,8 +208,12 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     if (accepted) {
         float4 previous = sdfHistoryAt(historyPosition, extent);
 
-        historyWeight = (clamp(previous.a, 0.0, SdfHistoryWeightCap) * (1.0 - reactive));
-        history = sdfFromYCoCg(sdfClipToBox(sdfToYCoCg(max(previous.rgb, 0.0)), boxMin, boxMax));
+        // Clipping infinity can produce NaN, and even zero history weight cannot remove it (NaN * 0 is NaN).
+        accepted = all(isfinite(previous));
+        if (accepted) {
+            historyWeight = (clamp(previous.a, 0.0, SdfHistoryWeightCap) * (1.0 - reactive));
+            history = sdfFromYCoCg(sdfClipToBox(sdfToYCoCg(max(previous.rgb, 0.0)), boxMin, boxMax));
+        }
     }
 
     float total = (historyWeight + weightSum);
@@ -220,7 +224,11 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     output[id.xy] = float4(resolved, spatial.a);
     sdfWorkTexels = 1u;
-    historyColorRW[id.xy] = float4(accumulated, min(total, SdfHistoryWeightCap));
+    // The working history is half-float. A non-finite current sample contributes no reusable history, and a finite
+    // reconstruction must remain representable when stored, so one bright transient cannot poison later frames.
+    historyColorRW[id.xy] = ((all(isfinite(accumulated)) && isfinite(total))
+        ? float4(clamp(accumulated, -65504.0, 65504.0), min(total, SdfHistoryWeightCap))
+        : float4(0.0, 0.0, 0.0, 0.0));
     historySurfaceRW[word] = asuint(hit ? hitT : 0.0);
     historySurfaceRW[word + 1u] = hitIdentity;
     puckCountWork(sdfWorkSteps, sdfWorkTexels);

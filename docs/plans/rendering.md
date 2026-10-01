@@ -4846,6 +4846,10 @@ counted rows recorded in the same change.
      but no canary compares its crossing frame to the spatial path exactly; the
      epoch reset on a crossing (P15-2) and the epoch's spatial first frame cover
      it by law only.
+     Open: a parked temporal instance shown again with unchanged binding,
+     camera, poses and extent retains its history. The scheduler needs to
+     notify the package of the visibility transition before cadence decides
+     whether the old output stands.
    - Delivers: the history color and history surface as the fragment's history
      versions at output extent; reprojection through `sdfReprojection`, rejected
      by identity and depth; neighbourhood rectification; the `reactivity` image

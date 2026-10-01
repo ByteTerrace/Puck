@@ -160,24 +160,57 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.True(condition: rig.Stood(), userMessage: $"frame {frame} after the period");
         }
     }
+    [InlineData(16u)]
+    [InlineData(128u)]
+    [Theory]
+    public void AResizeAllocatesTheHistorySurfaceAtTheNewOutputExtent(uint extent) {
+        using var rig = new TemporalRig(views: 1, temporal: true);
 
-    // One sdf.world instance, "world", over a fixed frame on the upload model, optionally reading a feed that hands out a
+        Assert.Equal(expected: ((8 * Extent) * Extent), actual: rig.HistorySurfaceBytes());
+        rig.OutputExtent = extent;
+        TestLiveness.Until(step: () => {
+            rig.Produce();
+            return ((rig.World.Extent == (extent, extent)) && !rig.World.IsBuildingCandidate);
+        }, reason: () => rig.World.LastSwapError?.Message);
+        Assert.Equal(expected: ((8 * extent) * extent), actual: rig.HistorySurfaceBytes());
+    }
+    [Fact]
+    public void ARenderGridDipRendersAFullPeriodBeforeStandingAgain() {
+        using var rig = new TemporalRig(views: 1, cadence: true, temporal: true, renderScale: 0.5f);
+
+        for (var frame = 0; (frame <= SdfTemporalHistory.Period); frame++) { rig.Produce(); }
+        Assert.True(condition: rig.Stood());
+        foreach (var scale in new[] { 0.25f, 0.5f }) {
+            rig.ResolvedScale = scale;
+            for (var sample = 0U; (sample < SdfTemporalHistory.Period); sample++) {
+                rig.Produce();
+                Assert.False(condition: rig.Stood(), userMessage: $"scale {scale}, sample {sample}");
+            }
+            rig.Produce();
+            Assert.True(condition: rig.Stood());
+        }
+    }
+
+    // One sdf.world instance, "world", over a frame on the upload model, optionally reading a feed that hands out a
     // tainted image until it fills. Construction produces until the view has rendered its installed graph.
     private sealed class TemporalRig : IDisposable {
         private readonly UploadModelGpu m_gpu = new();
+
         private readonly FrameContext m_context;
         private readonly TaintingFeed? m_feed;
 
+        private SdfFrame m_sourceFrame;
         private long m_index;
         private ulong m_rendered;
 
-        public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false, bool temporal = false) {
+        public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false, bool temporal = false, float renderScale = 1f) {
             var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
             var frame = Frame() with { EnableCadenceGate = cadence };
 
-            frame = frame with { Views = [frame.Views[0] with { Quality = new SdfViewQuality { Temporal = temporal } }] };
+            frame = frame with { Views = [frame.Views[0] with { Quality = new SdfViewQuality { Temporal = temporal }, RenderScale = renderScale }] };
 
             frame = frame with { Views = [.. Enumerable.Repeat(element: frame.Views[0], count: views)] };
+            m_sourceFrame = frame;
             Selected = Residency(name: "first");
             Second = (secondResidency ? Residency(name: "second") : null);
             Passes = new SdfWorldPasses(resolve: _ => new SdfWorldView(Residency: Selected, View: ViewIndex));
@@ -211,7 +244,7 @@ public sealed partial class SdfWorldPassesLawTests {
             Produce();
 
             SdfWorldResidency Residency(string name) => new(
-                brickPoolVoxelCapacity: 0, frameSource: new FixedFrameSource(frame: frame),
+                brickPoolVoxelCapacity: 0, frameSource: new CapturingFrameSource(capture: () => m_sourceFrame),
                 height: Extent, kernels: SdfTestPipelines.Kernels(), name: name, pipelines: pipelines, width: Extent);
         }
 
@@ -223,15 +256,23 @@ public sealed partial class SdfWorldPassesLawTests {
         public SdfWorldResidency? Second { get; }
         public SdfWorldResidency Selected { get; set; }
         public int ViewIndex { get; set; }
+
+        public uint OutputExtent { get; set; } = Extent;
+
+        public float ResolvedScale {
+            set => m_sourceFrame = m_sourceFrame with { Views = [.. m_sourceFrame.Views.Select(selector: view => view with { ResolvedRenderScale = value })] };
+        }
         public ShaderPipelineRenderNode World => Runtime.Node(instance: Runtime.Instances.IndexOf(name: "world"));
 
         public void Produce() {
             m_rendered = World.FrameCounter;
-            var scheduled = new RenderGraphFrame(DisplayHeight: ((int)Extent), DisplayHertz: 60, DisplayWidth: ((int)Extent),
+            var scheduled = new RenderGraphFrame(DisplayHeight: ((int)OutputExtent), DisplayHertz: 60, DisplayWidth: ((int)OutputExtent),
                 Footprints: ((m_feed is null) ? [] : [new RenderGraphFootprint(Consumer: "world", Height: 1.0, Producer: "feed", Width: 1.0)]),
                 Index: m_index, Roots: [new RenderGraphRoot(Height: 1, Instance: "world", Width: 1)], Tick: m_index++);
 
-            _ = Runtime.ProduceFrame(context: in m_context, frame: in scheduled);
+            var context = m_context with { TargetHeight = OutputExtent, TargetWidth = OutputExtent };
+
+            _ = Runtime.ProduceFrame(context: in context, frame: in scheduled);
         }
         // Whether the latest frame let the view's previous output stand.
         public bool Stood() => (World.FrameCounter == m_rendered);
@@ -244,6 +285,9 @@ public sealed partial class SdfWorldPassesLawTests {
             return new Vector2(x: BitConverter.ToSingle(startIndex: jitter, value: block), y: BitConverter.ToSingle(startIndex: (jitter + sizeof(float)), value: block));
         }
         public bool PreviousValid() => (BitConverter.ToSingle(value: Block(), startIndex: (Offset(member: SdfWorldPackage.PreviousView) + (3 * sizeof(float)))) != 0f);
+        public uint HistorySurfaceBytes() => ((uint)m_gpu.Memory(bufferHandle: m_gpu.BufferAt(
+            set: m_gpu.BoundSet(group: 3),
+            binding: SdfWorldInterfaces.BindingOf(layout: SdfWorldInterfaces.ResolveParameters.Layout, member: SdfWorldPackage.HistorySurfaceWritten))).Length);
         public void Dispose() {
             Runtime.Dispose();
             m_feed?.Dispose();

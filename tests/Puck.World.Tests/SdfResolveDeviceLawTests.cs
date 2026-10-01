@@ -48,6 +48,20 @@ public sealed class SdfResolveDeviceLawTests {
 
         Check(color: native, value: 0f, width: RenderWidth, x: 7, y: 8);
         Check(color: native, value: 1f, width: RenderWidth, x: 8, y: 8);
+
+        foreach (var poison in new[] { Half.NaN, Half.PositiveInfinity, Half.NegativeInfinity }) {
+            var recovered = Run(extension: extension, height: RenderHeight, services: services,
+                sharpness: 1f, width: RenderWidth, poisonedHistory: poison);
+
+            Assert.Equal(actual: recovered, expected: native);
+        }
+        var history = Run(extension: extension, height: RenderHeight, services: services,
+            sharpness: 1f, width: RenderWidth, poisonCurrent: true);
+
+        Assert.All(collection: history, action: value => Assert.True(condition: Half.IsFinite(value: value)));
+        for (var pixel = 0; (pixel < (history.Length / 4)); pixel++) {
+            Assert.Equal(expected: ((Half)0f), actual: history[((pixel * 4) + 3)]);
+        }
     }
     private static void Check(Half[] color, uint width, uint x, uint y, float value) {
         var offset = ((int)(((y * width) + x) * 4));
@@ -57,7 +71,8 @@ public sealed class SdfResolveDeviceLawTests {
         }
         Assert.Equal(expected: ((Half)1f), actual: color[(offset + 3)]);
     }
-    private static Half[] Run(GpuDeviceServices services, string extension, float sharpness, uint width, uint height) {
+    private static Half[] Run(GpuDeviceServices services, string extension, float sharpness, uint width, uint height, Half? poisonedHistory = null, bool poisonCurrent = false) {
+        var temporal = (poisonedHistory.HasValue || poisonCurrent);
         var parameters = SdfWorldInterfaces.ResolveParameters;
         var block = new byte[parameters.SizeBytes];
 
@@ -67,6 +82,26 @@ public sealed class SdfResolveDeviceLawTests {
         Word(member: SdfWorldPackage.ImageExtent, value: RenderWidth);
         Word(lane: 1, member: SdfWorldPackage.ImageExtent, value: RenderHeight);
         Word(member: SdfWorldPackage.UpscaleSharpness, value: BitConverter.SingleToUInt32Bits(value: sharpness));
+        if (temporal) {
+            void Float(string member, float value, int lane = 0) => Word(member: member, value: BitConverter.SingleToUInt32Bits(value: value), lane: lane);
+
+            Word(member: SdfWorldPackage.Temporal, value: 1u);
+            Word(member: SdfWorldPackage.HistoryFrames, value: 1u);
+            Float(member: SdfWorldPackage.ViewRight, value: 1f);
+            Float(lane: 1, member: SdfWorldPackage.ViewUp, value: 1f);
+            Float(lane: 2, member: SdfWorldPackage.ViewForward, value: 1f);
+            Float(member: SdfWorldPackage.TanHalfFieldOfView, value: 0.5f);
+            Float(member: SdfWorldPackage.AspectRatio, value: 1f);
+            Float(member: SdfWorldPackage.FarDistance, value: 40f);
+            Float(lane: 3, member: SdfWorldPackage.PreviousView, value: 1f);
+            Float(lane: 4, member: SdfWorldPackage.PreviousView, value: 1f);
+            Float(lane: 7, member: SdfWorldPackage.PreviousView, value: 0.5f);
+            Float(lane: 9, member: SdfWorldPackage.PreviousView, value: 1f);
+            Float(lane: 11, member: SdfWorldPackage.PreviousView, value: 1f);
+            Float(lane: 14, member: SdfWorldPackage.PreviousView, value: 1f);
+            Float(lane: 16, member: SdfWorldPackage.PreviousView, value: RenderWidth);
+            Float(lane: 17, member: SdfWorldPackage.PreviousView, value: RenderHeight);
+        }
         var source = new byte[((RenderWidth * RenderHeight) * 4)];
 
         for (var y = 0u; (y < RenderHeight); y++) {
@@ -87,14 +122,34 @@ public sealed class SdfResolveDeviceLawTests {
         block.CopyTo(array: padded, index: 0);
         using var constants = services.BufferFactory.CreateHostVisible(data: padded, name: default, usage: GpuBufferUsage.Uniform);
         using var fillerBlock = services.BufferFactory.CreateHostVisible(data: new byte[padded.Length], name: default, usage: GpuBufferUsage.Uniform);
-        using var fillerBuffer = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 4096, usage: GpuBufferUsage.Storage);
+        using var fillerBuffer = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: Math.Max(val1: 4096UL, val2: ((8UL * width) * height)), usage: GpuBufferUsage.Storage);
         using var fillerStorage = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: 1, name: default, usage: GpuImageUsage.Storage, width: 1);
+        using var historyOutput = (temporal ? services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: height, name: default, usage: GpuImageUsage.Storage, width: width) : null);
+        using var historySurface = (temporal ? services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((8UL * width) * height), usage: GpuBufferUsage.Storage) : null);
         using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 16, usage: GpuBufferUsage.Storage);
         using var output = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: height, name: default, usage: GpuImageUsage.Storage, width: width);
         using var upload = services.SurfaceTransferFactory.CreateUpload();
-        var sourceView = upload.Upload(pixels: source, format: GpuPixelFormat.R8G8B8A8Unorm, width: RenderWidth, height: RenderHeight);
+        var sourceFormat = GpuPixelFormat.R8G8B8A8Unorm;
+
+        if (poisonCurrent) {
+            source = MemoryMarshal.AsBytes(span: Enumerable.Repeat(element: Half.PositiveInfinity, count: source.Length).ToArray().AsSpan()).ToArray();
+            sourceFormat = GpuPixelFormat.R16G16B16A16Float;
+        }
+        var sourceView = upload.Upload(pixels: source, format: sourceFormat, width: RenderWidth, height: RenderHeight);
         using var fillerUpload = services.SurfaceTransferFactory.CreateUpload();
         var fillerSampled = fillerUpload.Upload(pixels: new byte[4], format: GpuPixelFormat.R8G8B8A8Unorm, width: 1, height: 1);
+        using var historyUpload = services.SurfaceTransferFactory.CreateUpload();
+        var historyView = fillerSampled;
+
+        if (temporal) {
+            var previous = new Half[((width * height) * 4)];
+
+            for (var pixel = 0; (pixel < (previous.Length / 4)); pixel++) {
+                for (var channel = 0; (channel < 3); channel++) { previous[((pixel * 4) + channel)] = (poisonedHistory ?? ((Half)0.5f)); }
+                previous[((pixel * 4) + 3)] = ((Half)8f);
+            }
+            historyView = historyUpload.Upload(pixels: MemoryMarshal.AsBytes(span: previous.AsSpan()).ToArray(), format: GpuPixelFormat.R16G16B16A16Float, width: width, height: height);
+        }
         var sampler = services.Bindings.CreateSampler();
         using var readback = services.SurfaceTransferFactory.CreateReadback();
         using var commands = services.CommandPoolFactory.Create(name: default);
@@ -105,6 +160,8 @@ public sealed class SdfResolveDeviceLawTests {
             var named = new Dictionary<uint, nint> {
                 [Binding(member: SdfWorldPackage.CurrentColor)] = sourceView,
                 [Binding(member: SdfWorldPackage.Output)] = output.ImageViewHandle,
+                [Binding(member: SdfWorldPackage.HistoryColor)] = historyView,
+                [Binding(member: SdfWorldPackage.HistoryColorWritten)] = (historyOutput?.ImageViewHandle ?? fillerStorage.ImageViewHandle),
             };
             var counterBinding = Binding(member: ShaderWorkCounters.Buffer);
             var sets = new List<(uint Group, nint Set)>();
@@ -136,6 +193,10 @@ public sealed class SdfResolveDeviceLawTests {
                             default:
                                 var storage = ((resolves && (binding.Binding == counterBinding)) ? counters : fillerBuffer);
 
+                                if (resolves && (binding.Binding == Binding(member: SdfWorldPackage.HistorySurfaceWritten)) && (historySurface is not null)) {
+                                    storage = historySurface;
+                                }
+
                                 services.Bindings.WriteBuffer(descriptorSetHandle: set, binding: binding.Binding, bufferHandle: storage.BufferHandle,
                                     bufferSize: storage.SizeBytes, kind: binding.Kind, elementStride: binding.ElementStride);
                                 break;
@@ -147,6 +208,21 @@ public sealed class SdfResolveDeviceLawTests {
             var command = commands.CommandBufferHandle;
 
             recorder.BeginCommandBuffer(commandBufferHandle: command);
+            if (temporal) {
+                recorder.TransitionImageLayout(commandBufferHandle: command, imageHandle: historyOutput!.ImageHandle,
+                    sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe, oldLayout: GpuImageLayout.Undefined,
+                    destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader, newLayout: GpuImageLayout.General);
+                recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: historySurface!.BufferHandle,
+                    sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
+                    destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+                recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: fillerBuffer.BufferHandle,
+                    sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
+                    destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+                recorder.ClearStorageBuffer(commandBufferHandle: command, bufferHandle: fillerBuffer.BufferHandle, sizeBytes: fillerBuffer.SizeBytes);
+                recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: fillerBuffer.BufferHandle,
+                    sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
+                    destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
+            }
             recorder.TransitionImageLayout(commandBufferHandle: command, imageHandle: output.ImageHandle,
                 sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe, oldLayout: GpuImageLayout.Undefined,
                 destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader, newLayout: GpuImageLayout.General);
@@ -166,7 +242,7 @@ public sealed class SdfResolveDeviceLawTests {
             recorder.EndCommandBuffer(commandBufferHandle: command);
             services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [command]);
             var colors = readback.Read(bytesPerPixel: 8, format: GpuPixelFormat.R16G16B16A16Float, height: height, width: width,
-                sourceImageHandle: output.ImageHandle, sourceLayout: GpuImageLayout.General);
+                sourceImageHandle: (poisonCurrent ? historyOutput!.ImageHandle : output.ImageHandle), sourceLayout: GpuImageLayout.General);
 
             return MemoryMarshal.Cast<byte, Half>(span: colors.Span).ToArray();
         } finally {

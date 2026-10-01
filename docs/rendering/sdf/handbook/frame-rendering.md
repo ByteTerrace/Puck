@@ -218,7 +218,8 @@ view.
 
 Each view's history is its own fragment's: two versions at the output extent,
 one allocation a frame slot each, that the next frame reads through
-`ResourceReference.PreviousFrame`.
+`ResourceReference.PreviousFrame`. A resize carries a history buffer only when
+its resolved byte capacity and element size still match.
 
 - The **history color** holds, per output pixel, the weighted mean of every sample
   the pixel has gathered in its RGB and their summed weight in its alpha, capped
@@ -229,7 +230,8 @@ one allocation a frame slot each, that the next frame reads through
 The sky and views passes also write a one-channel **reactivity** buffer at the
 render extent, which only the resolve reads: one where a screen or a bounded
 volume covers the pixel, and, since the material model cannot tell steady
-emission from animated, the share of the pixel's color its material emits.
+emission from animated, the share of the pixel's color it emits after detail
+material selection, material layers and mesh-atlas sampling.
 Coverage stays in the color's alpha.
 
 The temporal resolve takes, for each output pixel, the 3x3 render samples
@@ -243,6 +245,9 @@ ray distance more than 5% from the reprojected one; the pixel then shows the
 spatial path at this frame's sample grid and its history restarts. Surviving
 history is clipped to the 3x3's YCoCg box, weighted down by the reactivity, and
 joined by this frame's samples.
+Non-finite history colors are rejected before clipping. History writes stay
+within the half-float range; a non-finite accumulation stores zero weight, so a
+bright transient cannot contaminate later history after its source recovers.
 
 History epochs are free: a reset sets the instance's frame count to zero, and the
 resolve then reads no history, so the first frame after a cut, a follow or a
@@ -250,7 +255,11 @@ portal crossing, a view or extent change, a debug view turned on or off, or
 reconstruction turned on is the spatial path's frame exactly, at the sequence's
 first sample, the pixel center. Under `world.cadence on`, a still temporal view
 renders one jitter period after its inputs last change and then stands, its
-output converged (`SdfTemporalHistory.Stands`).
+output converged (`SdfTemporalHistory.Stands`). A render-grid dip or recovery
+restarts this settling period, including a grid change that takes effect only
+when a replacement graph installs. Showing a parked instance currently does
+not reset its history when its binding, camera, poses and extent remain
+unchanged; the scheduler does not notify the package of that transition.
 
 A temporal view that follows a portal crossing into another world keeps
 reconstructing there. The other world's residency builds its resolve pipeline
