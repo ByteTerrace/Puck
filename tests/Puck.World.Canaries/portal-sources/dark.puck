@@ -1,0 +1,8 @@
+// The portal-sources rooms with the gallery's three screens showing nothing: the discriminating leg.
+
+schema: "puck.world.definition.v1"
+
+import "rooms.puck"
+
+entry world lobby = lobby(there: "gallery", nesting: 3)
+world gallery = darkGallery(nesting: 3)
