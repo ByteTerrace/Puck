@@ -117,11 +117,13 @@ public static class WorldKeyResolver {
             return (0, 0, 0d);
         }
 
-        var position = (phase * span);
+        // Compare in phase space: multiplying a rounded phase by span can put an exact key tick just before
+        // its key (29 / 100 * 100 < 29), holding the previous value for a Step segment.
+        var position = phase;
         var from = (count - 1);
 
         for (var index = 0; (index < count); index++) {
-            if (keys[index].At <= position) {
+            if ((keys[index].At / span) <= position) {
                 from = index;
             } else {
                 break;
@@ -129,14 +131,14 @@ public static class WorldKeyResolver {
         }
 
         var to = ((from + 1) % count);
-        var fromAt = keys[from].At;
+        var fromAt = (keys[from].At / span);
         var length = ((to == 0)
-            ? ((span - fromAt) + keys[0].At)
-            : (keys[to].At - fromAt)
+            ? ((1d - fromAt) + (keys[0].At / span))
+            : ((keys[to].At / span) - fromAt)
         );
         var offset = ((position >= fromAt)
             ? (position - fromAt)
-            : ((span - fromAt) + position)
+            : ((1d - fromAt) + position)
         );
         var t = ((length > 0d)
             ? Math.Clamp(

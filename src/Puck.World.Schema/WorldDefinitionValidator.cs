@@ -916,13 +916,10 @@ public static partial class WorldDefinitionValidator {
             definition: definition,
             errors: errors
         );
-        ValidateRenderSectionKeys(
+        var (expandedLighting, expandedSky) = ValidateAndExpandRenderKeys(
             definition: definition,
             errors: errors
         );
-
-        // A keyed section is judged as it resolves: each field its keys state keyed on its clock.
-        var expandedLighting = WorldRenderKeys.Expand(lighting: definition.Render.Lighting);
 
         ValidateRenderLighting(
             definition: definition,
@@ -931,7 +928,7 @@ public static partial class WorldDefinitionValidator {
         );
         ValidateRenderSky(
             definition: definition,
-            sky: WorldRenderKeys.Expand(sky: definition.Render.Sky),
+            sky: expandedSky,
             errors: errors,
             lighting: ResolvedLightingShape(lighting: expandedLighting)
         );

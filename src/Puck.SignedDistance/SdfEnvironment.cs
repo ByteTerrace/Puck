@@ -530,8 +530,9 @@ public sealed class SdfEnvironment {
             value: 0f
         );
     }
-    /// <summary>Sets a row's first three lanes.</summary>
-    public void SetVector(int row, Vector3 value) {
+
+    // Raw row writes stay behind the typed setters, including SetLight's slot check.
+    private void SetVector(int row, Vector3 value) {
         m_lanes[(row * 4)] = value.X; m_lanes[((row * 4) + 1)] = value.Y; m_lanes[((row * 4) + 2)] = value.Z;
     }
 

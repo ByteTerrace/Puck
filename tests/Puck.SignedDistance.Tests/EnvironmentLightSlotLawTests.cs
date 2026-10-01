@@ -11,6 +11,14 @@ namespace Puck.SignedDistance.Tests;
 /// (<see cref="SdfEnvironment.CopyFrom(SdfEnvironment)"/>), whose lanes that door wrote.
 /// </summary>
 public sealed class EnvironmentLightSlotLawTests {
+    [Fact]
+    public void Raw_row_writes_cannot_bypass_the_typed_light_setter() {
+        // SetVector(LightsRow + 2, new Vector3(1, 0, MaxDynamicTransformSlot + 1)) used to overwrite a point's
+        // slot directly. Removing that public door is part of the contract, as with the raw-lane CopyFrom door.
+        Assert.Null(@object: typeof(SdfEnvironment).GetMethod(name: "SetVector"));
+        Assert.Null(@object: typeof(SdfEnvironment).GetMethod(name: "SetLane"));
+    }
+
     // The lane a light's dynamic slot packs into: the third row of its rows, lane 2.
     private static int SlotLane(int light) => ((((SdfEnvironment.LightsRow + (light * SdfEnvironment.RowsPerLight)) + 2) * 4) + 2);
     private static SdfLight Light(SdfLightKind kind, int slot) => new(
