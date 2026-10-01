@@ -134,7 +134,12 @@ register.
 - **Every `map*` call site is a full inlined copy of the interpreter.** Keep
   sample loops rolled (`[loop]`) and reuse an existing call site through a loop
   rather than adding one; a new call site costs register pressure in the
-  hottest kernels.
+  hottest kernels and a driver translation on every cold boot. The surface's
+  field probes (the tetrahedron normal and curvature taps, the curvature
+  centre, the soften stencil) share one site, `sdfProbeField` in
+  `surface/sdf-normals.hlsli`, which a kernel calls once with flags for every
+  probe it needs; the debug views' field reads share one loop over
+  `marchOvershootDepth`. A new probe joins those, never a call of its own.
 - **Keep control flow uniform around barriers and groupshared gathers.** The
   views wrapper converts its extent test into an `active` flag so inactive
   lanes still reach the barriers.

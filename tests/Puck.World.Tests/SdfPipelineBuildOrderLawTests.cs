@@ -8,7 +8,7 @@ namespace Puck.World.Tests;
 /// so with at most <c>GpuPassPipelineCache.BuildConcurrency</c> creations at once the kernel whose cold translation
 /// decides when the set is ready takes a turn first instead of waiting behind every other build. Every kernel but the
 /// on-demand resolve kernel is leased exactly once; equal lengths keep <see cref="SdfKernel"/> order. Over the build's
-/// own SPIR-V and DXIL the full views kernel, the longest, starts first.
+/// own SPIR-V and DXIL every kernel starts in descending bytecode length, the longest of them first.
 /// </summary>
 public sealed class SdfPipelineBuildOrderLawTests {
     [Fact]
@@ -43,13 +43,13 @@ public sealed class SdfPipelineBuildOrderLawTests {
     [InlineData(".spv")]
     [InlineData(".dxil")]
     [Theory]
-    public void TheBuildsOwnFullViewsKernelStartsFirst(string bytecodeExtension) {
+    public void TheBuildsOwnKernelsStartLongestFirst(string bytecodeExtension) {
         var kernels = SdfKernelSet.Load(bytecodeExtension: bytecodeExtension);
         var order = SdfWorldPipelines.BuildOrder(kernels: kernels);
 
         Assert.Equal(
-            actual: order[0],
-            expected: SdfKernel.Views
+            actual: kernels[order[0]].Length,
+            expected: SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel != SdfKernel.Resolve)).Max(selector: kernel => kernels[kernel].Length)
         );
         Assert.Equal(
             actual: order.Select(selector: kernel => kernels[kernel].Length),

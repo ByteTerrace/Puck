@@ -41,7 +41,7 @@ static const int DebugViewModeVisibility = 11;
 static const int DebugViewModeMotion = 12;
 
 // The analytic-normal A/B toggle (the forward-mode dual's debug lever): 0 (the default) selects the analytic dual normal
-// (calculateNormalAnalytic), 1 selects the 4-tap finite-difference probe (calculateNormal) for comparison under
+// (calculateNormalAnalytic), 1 selects the 4-tap finite-difference probe (calculateTapNormal) for comparison under
 // world.debug-view normals.
 bool worldUseTapNormals() {
     return (passGroup.finiteDifferenceNormals != 0u);
