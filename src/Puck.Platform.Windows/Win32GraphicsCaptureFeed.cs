@@ -34,8 +34,9 @@ namespace Puck.Platform.Windows;
 /// <see cref="CaptureOutputOf"/>): an SDR display is captured in B8G8R8A8 sRGB, and an HDR display in half-float scRGB,
 /// which keeps its luminance above SDR white where an 8-bit capture would clip it. An HDR capture rides the CPU path
 /// alone, since the shared targets are B8G8R8A8. An HDR toggle, a move to a display that differs in it, or failed display
-/// discovery ends the feed at the next frame that arrives, the frame callback reading the display through a held DXGI
-/// factory (<see cref="Win32DisplayColorSpaceProbe"/>); its consumer reopens it with the current display contract.
+/// discovery ends the feed, with display checks on frame callbacks and background checks queued by consumer liveness
+/// polls even when no frames arrive. Both read through a held DXGI factory (<see cref="Win32DisplayColorSpaceProbe"/>);
+/// its consumer reopens it with the current display contract.
 /// </para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.19041")]
@@ -85,11 +86,16 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         );
     }
     /// <summary>Creates and starts a fully owned monitor feed, or returns false without retaining native resources.</summary>
-    public static bool TryCreateForMonitor(nint monitorHandle, int width, int height, double refreshRateHz, [NotNullWhen(true)] out Win32GraphicsCaptureFeed? feed, long? adapterLuid = null) {
+    /// <remarks><paramref name="openOutputs"/> supplies owned display enumerations and defaults to system DXGI.
+    /// <paramref name="allocatePixels"/> supplies each buffer of the requested byte length and defaults to a GC array.
+    /// Failed initialization releases the display enumeration even when buffer allocation fails.</remarks>
+    public static bool TryCreateForMonitor(nint monitorHandle, int width, int height, double refreshRateHz, [NotNullWhen(true)] out Win32GraphicsCaptureFeed? feed, long? adapterLuid = null, Func<IDisplayAdapterOutputs?>? openOutputs = null, Func<int, byte[]>? allocatePixels = null) {
         return TryCreateCore(
             adapterLuid: adapterLuid,
+            allocatePixels: allocatePixels,
             feed: out feed,
             height: height,
+            openOutputs: openOutputs,
             refreshRateHz: refreshRateHz,
             targetHandle: monitorHandle,
             targetKind: CaptureTargetKind.Monitor,
@@ -97,7 +103,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         );
     }
 
-    private static bool TryCreateCore(CaptureTargetKind targetKind, nint targetHandle, int width, int height, double refreshRateHz, [NotNullWhen(true)] out Win32GraphicsCaptureFeed? feed, long? adapterLuid) {
+    private static bool TryCreateCore(CaptureTargetKind targetKind, nint targetHandle, int width, int height, double refreshRateHz, [NotNullWhen(true)] out Win32GraphicsCaptureFeed? feed, long? adapterLuid, Func<IDisplayAdapterOutputs?>? openOutputs = null, Func<int, byte[]>? allocatePixels = null) {
         feed = null;
         ValidateOutputExtent(
             height: height,
@@ -119,7 +125,9 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         try {
             feed = new Win32GraphicsCaptureFeed(
                 adapterLuid: adapterLuid,
+                allocatePixels: allocatePixels,
                 height: height,
+                openOutputs: openOutputs,
                 refreshRateHz: refreshRateHz,
                 targetHandle: targetHandle,
                 targetKind: targetKind,
@@ -152,6 +160,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     private readonly Lock m_publicationGate = new();
 
     private readonly Win32CaptureDisplay m_display;
+    private readonly Win32CaptureDisplayPoll m_displayPoll;
     private readonly Win32DisplayColorSpaceProbe m_displayProbe;
     private readonly long m_refreshPeriodTicks;
     private readonly TypedEventHandler<GraphicsCaptureItem, object> m_targetClosedHandler;
@@ -192,7 +201,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             // window is gone. The HWND alone is unreliable — Win32 recycles handles — so the fallback also matches the
             // owning process/thread. A monitor target has no owner window; disconnect surfaces through
             // GraphicsCaptureItem.Closed, which latches m_isEnded. The display's color space is not read here: consumers
-            // poll this on the render thread, so the frame callback checks it (IsDisplayCurrent).
+            // poll this on the render thread, so queue the check off-thread even when captured content stays still.
             if (m_isEnded) {
                 return true;
             }
@@ -208,6 +217,8 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
                     m_lastLivenessCheckTicks = now;
                     if (!IsTargetAlive()) {
                         EndAndScheduleDispose();
+                    } else {
+                        m_displayPoll.Poll(milliseconds: now);
                     }
                 }
 
@@ -344,7 +355,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         ? m_targetHandle
         : User32.MonitorFromWindow(flags: MonitorDefaultToNearest, windowHandle: m_targetHandle));
 
-    private Win32GraphicsCaptureFeed(CaptureTargetKind targetKind, nint targetHandle, int width, int height, double refreshRateHz, long? adapterLuid) {
+    private Win32GraphicsCaptureFeed(CaptureTargetKind targetKind, nint targetHandle, int width, int height, double refreshRateHz, long? adapterLuid, Func<IDisplayAdapterOutputs?>? openOutputs, Func<int, byte[]>? allocatePixels) {
         m_targetHandle = targetHandle;
         m_targetHeight = height;
         m_targetKind = targetKind;
@@ -356,27 +367,35 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             );
             Window = new Win32PassthroughWindow(windowHandle: targetHandle);
         }
-        m_displayProbe = Win32DisplayColorSpaceProbe.Dxgi();
+        allocatePixels ??= static length => GC.AllocateUninitializedArray<byte>(length: length);
+        m_displayProbe = ((openOutputs is null)
+            ? Win32DisplayColorSpaceProbe.Dxgi()
+            : new Win32DisplayColorSpaceProbe(openOutputs: openOutputs));
         try {
             m_display = new Win32CaptureDisplay(colorSpace: m_displayProbe.ColorSpaceOf(monitorHandle: MonitorHandle()));
-        } catch {
-            m_displayProbe.Dispose();
-            throw;
-        }
-        m_lastDisplayCheckTicks = Environment.TickCount64;
-        var outputByteLength = checked(((width * height) * ((int)GpuPixelFormats.UnitBytes(format: Output.Format))));
+            m_lastDisplayCheckTicks = Environment.TickCount64;
+            m_displayPoll = new Win32CaptureDisplayPoll(
+                check: CheckDisplayOnWorker,
+                queue: static action => {
+                    _ = ThreadPool.UnsafeQueueUserWorkItem(
+                        callBack: static (Action check) => check(),
+                        state: action,
+                        preferLocal: false
+                    );
+                }
+            );
+            var outputByteLength = checked(((width * height) * ((int)GpuPixelFormats.UnitBytes(format: Output.Format))));
 
-        m_consumerPixels = GC.AllocateUninitializedArray<byte>(length: outputByteLength);
-        m_publishedPixels = GC.AllocateUninitializedArray<byte>(length: outputByteLength);
-        m_workingPixels = GC.AllocateUninitializedArray<byte>(length: outputByteLength);
-        m_refreshPeriodTicks = Math.Max(
-            val1: 1L,
-            val2: ((long)Math.Round(a: (Stopwatch.Frequency / refreshRateHz)))
-        );
-        m_frameArrivedHandler = OnFrameArrived;
-        m_targetClosedHandler = OnTargetClosed;
+            m_consumerPixels = allocatePixels(outputByteLength);
+            m_publishedPixels = allocatePixels(outputByteLength);
+            m_workingPixels = allocatePixels(outputByteLength);
+            m_refreshPeriodTicks = Math.Max(
+                val1: 1L,
+                val2: ((long)Math.Round(a: (Stopwatch.Frequency / refreshRateHz)))
+            );
+            m_frameArrivedHandler = OnFrameArrived;
+            m_targetClosedHandler = OnTargetClosed;
 
-        try {
             m_device = new Win32GraphicsCaptureDevice(
                 adapterLuid: adapterLuid,
                 format: Output.Format
@@ -683,10 +702,9 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         _ = Interlocked.Increment(location: ref m_gpuRevision);
     }
     // Whether the display the target shows on still takes the capture's opening format and encoding (an HDR toggle, or a
-    // move to a display that differs in it, ends the feed). It runs on the frame callback, under m_callbackGate, so the
-    // render thread never pays for DXGI, at most once per liveness interval; the probe re-reads the held output's
-    // description while its factory is current and only a display change makes it enumerate again. Only an arriving
-    // frame could carry the new encoding, so a capture whose content stays still keeps its last frame until one does.
+    // move to a display that differs in it, ends the feed). It runs on a frame callback or a worker, under m_callbackGate,
+    // so the render thread never pays for DXGI, at most once per liveness interval; the probe re-reads the held output's
+    // description while its factory is current and only a display change makes it enumerate again.
     private bool IsDisplayCurrent() {
         var now = Environment.TickCount64;
 
@@ -696,6 +714,31 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
 
         m_lastDisplayCheckTicks = now;
         return m_display.IsCurrent(colorSpace: m_displayProbe.ColorSpaceOf(monitorHandle: MonitorHandle()));
+    }
+    private void CheckDisplayOnWorker() {
+        if (!TryAcquireCallback()) {
+            return;
+        }
+
+        var ended = false;
+
+        try {
+            lock (m_callbackGate) {
+                if (!m_isEnded && !IsDisplayCurrent()) {
+                    m_isEnded = true;
+                    ended = true;
+                }
+            }
+        } catch {
+            m_isEnded = true;
+            ended = true;
+        } finally {
+            ReleaseCallback();
+        }
+
+        if (ended) {
+            EndAndScheduleDispose();
+        }
     }
     private bool ShouldRunCpuReadback(int divisor) {
         if (divisor <= 0) {
@@ -799,7 +842,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
 
         m_device?.Dispose();
         m_device = null;
-        // Read only on the frame callback, which has drained, and in the constructor.
+        // Frame callbacks and display-check workers have drained; queued workers cannot acquire the stopped feed.
         m_displayProbe.Dispose();
     }
     private static void ReleaseTargetSet(GpuTargetSet? targets) {

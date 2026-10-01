@@ -5000,12 +5000,13 @@ source has landed too:
   HDR one in either color space (`INativeImageCaptureFeed.Output`). An SDR
   capture is unchanged: its frames, its Direct3D 12 GPU route and its
   `source-rgba` copy are what they were.
-  The feed's frame callback checks its display at a bounded cadence, off the
-  render thread. It holds one DXGI factory and the output it found, re-reading
+  Frame callbacks and background checks queued by consumer liveness polls check
+  the display at a bounded cadence, off the render thread, including when no
+  frames arrive. The feed holds one DXGI factory and the output it found, re-reading
   that output's description while the factory is current; a stale factory, which
   is how DXGI reports a display change, is replaced and the output found again.
   An HDR toggle, a move to a display that differs in it, or failed discovery ends
-  the feed at the next frame that arrives; the consumer reopens it with fresh
+  the feed when a check detects the change; the consumer reopens it with fresh
   metadata. Unknown display discovery refuses an open instead of guessing SDR.
 - An HDR capture hands its CPU frames over as `R16G16B16A16Float` CPU pixels,
   downscaled in linear light, and converts on its CPU tier, never the GPU

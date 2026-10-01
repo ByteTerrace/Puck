@@ -444,7 +444,8 @@ These are one-line cautions; the owning pages hold the derivations.
   converts on its CPU tier, never the B8G8R8A8 GPU route.
   An HDR toggle, a move to a display that differs in it, or unavailable display
   discovery ends the native feed; its consumer reopens it with fresh metadata.
-  The frame callback checks the display through `Win32DisplayColorSpaceProbe`,
+  Frame callbacks and background checks queued by consumer liveness polls check
+  the display through `Win32DisplayColorSpaceProbe`, including when no frames arrive,
   which holds one DXGI factory and opens another only when it goes stale; never
   read DXGI from `IsEnded`, which the render thread polls.
   Unknown discovery refuses the open instead of guessing SDR. Presented CPU float surfaces pass through
