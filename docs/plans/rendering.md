@@ -6265,7 +6265,8 @@ blockers. Each is still required before the programme is done.
 - **Hardware: P16's HDR-display checks.** On an HDR display the swapchain
   reports an HDR color space, a test ramp exceeds SDR white, an HDR desktop
   capture displays without clipping, toggling HDR during a desktop capture ends
-  and reopens the feed in the new encoding, and the HUD renders at paper white.
+  and reopens the feed in the new encoding, on a still desktop as well as a
+  changing one, and the HUD renders at paper white.
 - **Review: cross-backend agreement.** A change's own GPU checks run on the
   backends at hand as it lands; whether Vulkan and Direct3D 12 agree across
   those checks is judged in one final review pass.
