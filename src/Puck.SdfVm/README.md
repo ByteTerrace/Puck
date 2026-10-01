@@ -282,8 +282,8 @@ draining the console and stepping the simulation meanwhile, so a `world.wait` or
 `pipeline.wait` still reaches its deadline. The one exception is the offscreen
 host with a capture armed: it steps no further tick until the capture is served
 or refused, and a capture refused while the world's residency is not ready names
-its `NotReadyReason`, such as "the engine's pipeline set is building (5 of
-10 pipelines created)" (see [the World guide](../Puck.World/README.md#usage)).
+its `NotReadyReason`, such as "the engine's pipeline set is building (10 of
+11 pipelines created; waiting on sdf-world-views)" (see [the World guide](../Puck.World/README.md#usage)).
 A residency is `IsReady` once its set is installed and its tables hold its
 first captured frame; the World is ready once the world's residency is and the
 render graph's root has rendered over a completed view, which is the fact
