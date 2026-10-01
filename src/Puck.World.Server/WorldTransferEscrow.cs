@@ -737,12 +737,14 @@ public sealed partial class WorldTransferEscrow {
                 reply = (reservationMember.Source.IsLive
                     ? m_server.GrantTable.AdmitTransferredPeer(
                         slot: slot,
+                        travelTurn: members[index].TravelTurn,
                         verdict: lease.Arrival
                     )
                     : m_server.GrantTable.AdmitTransferredEntity(
                         slot: slot,
                         source: reservationMember.Source,
-                        identity: reservationMember.Identity
+                        identity: reservationMember.Identity,
+                        travelTurn: members[index].TravelTurn
                     )
                 );
             } else {

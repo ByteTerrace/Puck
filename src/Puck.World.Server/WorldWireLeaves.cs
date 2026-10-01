@@ -12,8 +12,8 @@ namespace Puck.World.Server;
 /// (<see cref="WireReader.ReadRequiredString"/>) rather than accepting one and reading a mobility credential no live
 /// address can ever hold — deliberately stricter than the checkpoint codec's own leaf used to be, since a checkpoint
 /// is trusted local state while a federation peer's bytes are not: the one shared reader applies the untrusted-input
-/// discipline everywhere.</summary>
-internal static class WorldWireLeaves {
+/// discipline everywhere. Public so a law can read and write exactly the leaf a tape or checkpoint carries.</summary>
+public static class WorldWireLeaves {
     /// <summary>Reads a <see cref="WorldEntityAddress"/>, refusing a blank authority.</summary>
     public static WorldEntityAddress ReadEntityAddress(ref WireReader reader) => new(
         Authority: reader.ReadRequiredString(field: "entity address authority"),
@@ -56,6 +56,10 @@ internal static class WorldWireLeaves {
         var authorityTransferred = reader.ReadBoolean();
         var placementId = reader.ReadNullableString(field: "peer placement id");
         var catalogRig = reader.ReadByte();
+        var travelTurn = ReadTravelTurn(
+            field: "peer event entry travel turn",
+            reader: ref reader
+        );
 
         if (catalogRig >= WorldLookSource.Catalog.RigCount) {
             reader.Fail(
@@ -82,7 +86,8 @@ internal static class WorldWireLeaves {
             IdentityDomain: identityDomain,
             IdentitySubject: identitySubject,
             PlacementId: placementId,
-            Source: source
+            Source: source,
+            TravelTurn: travelTurn
         );
     }
     /// <summary>Writes a <see cref="WorldPeerEventEntry"/> in <see cref="ReadPeerEventEntry"/>'s order. The caller
@@ -110,6 +115,7 @@ internal static class WorldWireLeaves {
         writer.WriteBoolean(value: peer.AuthorityTransferred);
         writer.WriteNullableString(value: peer.PlacementId);
         writer.WriteByte(value: peer.CatalogRig);
+        writer.WriteFixed(value: peer.TravelTurn);
 
         return true;
     }

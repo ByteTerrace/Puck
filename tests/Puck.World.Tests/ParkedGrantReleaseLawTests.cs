@@ -86,7 +86,8 @@ public sealed class ParkedGrantReleaseLawTests {
         IdentitySubject: "peer",
         AuthorityTransferred: false,
         PlacementId: null,
-        CatalogRig: 0
+        CatalogRig: 0,
+        TravelTurn: default
     );
     private static WorldDefinition WithGrace(float seconds, int rateHz = 240) {
         var definition = Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz);

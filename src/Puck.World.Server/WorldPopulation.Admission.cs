@@ -142,7 +142,8 @@ public sealed partial class WorldPopulation {
             IdentitySubject: entry.IdentitySubject,
             AuthorityTransferred: entry.IsAuthorityTransferred,
             PlacementId: entry.PlacementId,
-            CatalogRig: entry.CatalogRig
+            CatalogRig: entry.CatalogRig,
+            TravelTurn: entry.TravelTurn
         );
     }
     // Retire an inhabited peer slot back to an inactive census peer (its body dropped, its placement tag cleared). The
@@ -159,7 +160,7 @@ public sealed partial class WorldPopulation {
         entry.NavigationState.Clear();
         ClearDesignations(entry: entry);
     }
-    private bool TryAdmitTransferredEntityAtCore(int slot, IntentSource source, bool remoteHuman, bool authorityTransferred, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal) {
+    private bool TryAdmitTransferredEntityAtCore(int slot, IntentSource source, bool remoteHuman, bool authorityTransferred, FixedQ4816 travelTurn, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal) {
         ArgumentNullException.ThrowIfNull(argument: grantTemplates);
 
         if (
@@ -203,6 +204,8 @@ public sealed partial class WorldPopulation {
         entry.Active = true;
         entry.IsRemoteHuman = remoteHuman;
         entry.IsAuthorityTransferred = authorityTransferred;
+        // Before the admitted event is taken, so the event a tape records carries the arrival's turn.
+        entry.TravelTurn = travelTurn;
         // The server-authored PeerAdmitted event applies the requested rows through the live grant door immediately
         // after this allocation and then records ONLY the rows that succeeded. Nothing is installed yet at this
         // point, so the revocation baseline must begin empty rather than containing authored attempts.
@@ -311,7 +314,7 @@ public sealed partial class WorldPopulation {
         entry.IsAuthorityTransferred = peer.AuthorityTransferred;
         entry.PlacementId = peer.PlacementId;
         entry.CatalogRig = peer.CatalogRig;
-        entry.TravelTurn = FixedQ4816.Zero;
+        entry.TravelTurn = peer.TravelTurn;
 
         // Live admission already installed these fields before emitting the event, so this is idempotent there.
         // Replay reaches this path with a fresh population and needs the verified identity restored so a later
@@ -1131,7 +1134,8 @@ public sealed partial class WorldPopulation {
     /// <param name="authorityTransferred">Whether the peer arrived through authority transfer and is therefore not
     /// eligible for destination census reconciliation.</param>
     /// <returns><see langword="true"/> on success.</returns>
-    public bool TryAdmitRemotePeerAt(int slot, IntentSource source, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal, bool authorityTransferred = false) {
+    /// <param name="travelTurn">The arriving traveler's accumulated arrival turn, which the admitted event records.</param>
+    public bool TryAdmitRemotePeerAt(int slot, IntentSource source, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal, bool authorityTransferred = false, FixedQ4816 travelTurn = default) {
         return TryAdmitTransferredEntityAtCore(
             admitted: out admitted,
             authorityTransferred: authorityTransferred,
@@ -1141,11 +1145,12 @@ public sealed partial class WorldPopulation {
             refusal: out refusal,
             remoteHuman: true,
             slot: slot,
-            source: source
+            source: source,
+            travelTurn: travelTurn
         );
     }
     /// <summary>Admits an autonomous traveler at the peer body index already bound by a transfer reservation.</summary>
-    public bool TryAdmitTransferredEntityAt(int slot, IntentSource source, out WorldPeerEventEntry admitted, out string refusal) =>
+    public bool TryAdmitTransferredEntityAt(int slot, IntentSource source, FixedQ4816 travelTurn, out WorldPeerEventEntry admitted, out string refusal) =>
         TryAdmitTransferredEntityAtCore(
             admitted: out admitted,
             authorityTransferred: true,
@@ -1155,7 +1160,8 @@ public sealed partial class WorldPopulation {
             refusal: out refusal,
             remoteHuman: false,
             slot: slot,
-            source: source
+            source: source,
+            travelTurn: travelTurn
         );
     /// <summary>Captures the generation-bearing row for any active entity-table peer before authority transfer.
     /// Unlike <see cref="TryCaptureTransferredPeer"/>, this includes autonomous census and inhabitant bodies.</summary>

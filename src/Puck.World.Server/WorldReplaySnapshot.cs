@@ -273,9 +273,9 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
     // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
-    // Shape 4 carries each recorded intent's optional pointer ray. Refuse earlier tapes at intake instead of reporting
-    // their old shape as a simulation divergence.
-    private const uint ShapeToken = 4u;
+    // Shape 5 carries each peer event entry's accumulated arrival turn. Refuse earlier tapes at intake instead of
+    // reporting their old shape as a simulation divergence.
+    private const uint ShapeToken = 5u;
 
     /// <summary>Gets the record-start world definition as its canonical UTF-8 JSON — the rehydrated starting state.</summary>
     public required byte[] DefinitionJson { get; init; }
