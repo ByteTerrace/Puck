@@ -392,7 +392,9 @@ and continuous terrain without adding a separate crossing transform.
 That isometry is a rotation about world up — the validator refuses a pair whose map is anything else
 — and the turn it applies is `counterpartYaw - thisYaw - 180` degrees. Two faces pointing at each
 other are 180 degrees apart and map as the identity, so a body arrives at the same world point,
-keeping its heading and its velocity, and any other authored pair turns it by the remainder. A
+keeping its heading and its velocity, and any other authored pair turns it by the remainder. A local
+seat following the body turns its view by the same turn, its eased chase boom included, so it looks
+along what the door's window showed. A
 boundary's rectangle takes its right axis from its yaw whatever its pitch, so the formula holds
 unchanged for a boundary lying flat: there the yaw no longer contributes to the outward direction
 and becomes the rectangle's roll about the vertical, which means an untwisted floor seam authors its

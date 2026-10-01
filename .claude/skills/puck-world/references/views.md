@@ -142,7 +142,9 @@ facing snap turns the body, so binding it needs those three channels declared an
 `seatControl.yawReference: World` (the validator refuses otherwise).
 
 `seatControl.yawReference` is `World` for standard camera-relative movement or
-`Body` for an explicitly body-relative camera. Pitch values are radians,
+`Body` for an explicitly body-relative camera. A mapped arrival turns a followed seat's
+view by the door's turn (`WorldSeatViewState.Cross`): a `World` yaw turns, a
+`Body` yaw already rides the turned heading, and the chase boom turns either way. Pitch values are radians,
 finite, ordered, and within `[-pi/2, pi/2]`.
 
 `seatLook` carries pointer radians-per-pixel, right-stick radians-per-second,
