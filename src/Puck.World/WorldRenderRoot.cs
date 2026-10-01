@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Overlays;
 using Puck.SdfVm;
@@ -280,6 +281,15 @@ internal static class WorldRenderRoot {
         probe.Residency = residency;
         probe.Root = root;
         probe.Settings = sp.GetService<WorldRenderSettings>();
+        probe.DynamicResolution = frameSource.DynamicResolution;
+        // Dynamic resolution reads the views' GPU frame time, the presenter's present timing, resolved on the first frame
+        // it reads it, the views' counted march steps, and their budget for the device's backend.
+        frameSource.FrameLoad = new WorldFrameLoadSource(
+            backend: () => sp.GetService<IGpuWorkRegistry>()?.DeviceIdentity?.Backend,
+            presentTiming: () => (sp.GetService<ISurfacePresenter>() as IPresentTimingFeedback),
+            probe: probe,
+            timing: timing
+        );
         sp.GetRequiredService<WorldPostPasses>().Attach(
             graph: () => host.Synthesized,
             root: () => runtime.NodeOf(instance: WorldViewGraphs.MainInstance)

@@ -71,11 +71,14 @@ public static class WorldApplicationDefaults {
 /// <param name="AmbientOcclusion">Whether the preset enables ambient occlusion.</param>
 /// <param name="RenderScale">The render-scale tier the preset selects.</param>
 /// <param name="Temporal">Whether the preset reconstructs the world's views over time (<c>world.temporal</c>).</param>
+/// <param name="DynamicResolution">Whether the preset moves each view's render extent with the load
+/// (<c>world.dynamic-resolution</c>).</param>
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
     bool AmbientOcclusion,
     WorldRenderScaleTier RenderScale,
-    bool Temporal = false
+    bool Temporal = false,
+    bool DynamicResolution = false
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
@@ -88,6 +91,13 @@ public readonly record struct WorldQualityPreset(
 /// Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect's own extent.</param>
 /// <param name="Temporal">Whether the world's own views boot reconstructing over time (<c>world.temporal</c>): each
 /// jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.</param>
+/// <param name="DynamicResolution">Whether the world's own views boot with dynamic resolution
+/// (<c>world.dynamic-resolution</c>): each frame one controller moves each view's render grid between
+/// <paramref name="DynamicResolutionFloor"/> and the render-scale ceiling, by the present timing or, where the presenter
+/// reports none, by the views' counted march steps against the budget the floor tier's committed counters ceilings give
+/// per output pixel. A native ceiling is lowered to three-quarter while it is on, since a native view reconstructs
+/// nothing.</param>
+/// <param name="DynamicResolutionFloor">The lowest render-scale tier dynamic resolution moves a view's grid to.</param>
 /// <param name="LowRaw">The <c>world.quality low</c> preset.</param>
 /// <param name="MediumRaw">The <c>world.quality medium</c> preset.</param>
 /// <param name="HighRaw">The <c>world.quality high</c> preset.</param>
@@ -119,6 +129,8 @@ public sealed record WorldRenderDefaults(
     WorldRenderScaleTier RenderScale = WorldRenderScaleTier.Native,
     float UpscaleSharpness = 0f,
     bool Temporal = false,
+    bool DynamicResolution = false,
+    WorldRenderScaleTier DynamicResolutionFloor = WorldRenderScaleTier.Quarter,
     [property: JsonPropertyName("low"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? LowRaw = null,
     [property: JsonPropertyName("medium"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? MediumRaw = null,
     [property: JsonPropertyName("high"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? HighRaw = null,

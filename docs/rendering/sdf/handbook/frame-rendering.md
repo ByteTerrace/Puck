@@ -204,6 +204,29 @@ tier a view uses is a host decision, not baked into the content. In `Puck.World`
 `world.render-scale` sets it for every player view and `world.upscale-sharpness`
 sets the reconstruction blend.
 
+### Dynamic resolution
+
+With dynamic resolution on (`world.dynamic-resolution`), one controller,
+`WorldDynamicResolution`, moves the world's own views' render grid each frame
+between a floor and the render-scale ceiling. The grid is
+`SdfViewSnapshot.ResolvedRenderScale`, the same grid a layout transition dips,
+so the two compose; it moves inside the allocation the ceiling sized, so no
+frame reallocates, rebuilds or resets history. A view at a native ceiling
+reconstructs nothing, so while dynamic resolution is on a native tier
+allocates its views at three-quarter.
+
+Each fresh load sample moves the grid through one response: within 10% of its
+budget the grid holds, and outside it the grid moves toward the scale whose
+area meets the budget by at most a sixteenth of itself down or a thirty-second
+up. The sample is the views' GPU frame time against the display period, from
+the same pass timestamps `world.gpu-timing` reads; a present-paced swapchain
+reports every kept present as exactly its period, so only the GPU's time shows
+the headroom to raise the grid again. A device that times nothing falls back to
+the present interval, and a host with neither, an offscreen one, to the views'
+counted march steps against the floor tier's committed ceilings per output
+pixel. Counted work per frame then scales with the grid, which
+`world.counters gpu` shows as the sky pass's texels written.
+
 ## Temporal reconstruction
 
 A view whose quality asks for it (`SdfViewQuality.Temporal`) reconstructs over

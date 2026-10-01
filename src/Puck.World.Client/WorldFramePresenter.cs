@@ -1185,6 +1185,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // this frame instead of showing dark glass until the next. The capture's own call is then a no-op.
         ReconcileDelivery();
         m_binder.Publish(context: in context);
+        AdvanceDynamicResolution(context: in context);
 
         if (m_graphs is not { } graphs) {
             return;
@@ -1448,8 +1449,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     ) {
                         CutRevision = ViewCut(index: m_views.Count, source: m_namedCameraRigCache[cameraName], revision: m_namedCameraRigCache[cameraName].Revision),
                         Quality = quality,
-                        RenderScale = m_settings.RenderScale,
-                        ResolvedRenderScale = (m_settings.RenderScale * transitionScale),
+                        RenderScale = m_settings.RenderCeiling,
+                        ResolvedRenderScale = (RenderGrid() * transitionScale),
                         UpscaleSharpness = m_settings.UpscaleSharpness,
                     });
                     if (!hasSeatViewFallback) {
@@ -1513,8 +1514,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 CutRevision = ViewCut(index: m_views.Count, source: m_seatCameraRigs[slot]!, revision: m_roster.Seat(slot: slot)!.View.CutRevision),
                 Grid = SeatGrid(slot: slot),
                 Quality = quality,
-                RenderScale = m_settings.RenderScale,
-                ResolvedRenderScale = (m_settings.RenderScale * transitionScale),
+                RenderScale = m_settings.RenderCeiling,
+                ResolvedRenderScale = (RenderGrid() * transitionScale),
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
             // A seat presented elsewhere keeps its place among the views, so every view keeps its index, and its view
@@ -1606,7 +1607,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             ) {
                 CutRevision = ViewCut(index: m_views.Count, source: this, revision: 0),
                 Quality = quality,
-                RenderScale = m_settings.RenderScale,
+                RenderScale = m_settings.RenderCeiling,
+                ResolvedRenderScale = (m_settings.DynamicResolution ? RenderGrid() : 0f),
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
         } else {

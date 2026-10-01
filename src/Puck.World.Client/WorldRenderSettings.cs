@@ -31,6 +31,9 @@ public sealed class WorldRenderSettings {
     private AmbientOcclusionMode m_ambientOcclusionQuality;
     private volatile int m_bakes;
     private bool m_cadenceGate;
+    private bool m_dynamicResolution;
+    private float m_dynamicResolutionFloor;
+    private float m_dynamicResolutionForced;
     private bool m_farBound;
     private float m_renderScale;
     private int m_revision;
@@ -58,6 +61,8 @@ public sealed class WorldRenderSettings {
         RenderScale = WorldRenderScaleTiers.Scale(tier: defaults.RenderScale);
         UpscaleSharpness = defaults.UpscaleSharpness;
         Temporal = defaults.Temporal;
+        DynamicResolution = defaults.DynamicResolution;
+        DynamicResolutionFloor = WorldRenderScaleTiers.Scale(tier: defaults.DynamicResolutionFloor);
         FarBound = true;
         CadenceGate = true;
 
@@ -101,6 +106,22 @@ public sealed class WorldRenderSettings {
     /// <c>world.cadence off</c>) to render every frame, so <c>world.counters gpu</c> measures a still scene. Session state, never
     /// durable config; rides <see cref="Puck.SdfVm.SdfFrame.EnableCadenceGate"/>.</summary>
     public bool CadenceGate { get => m_cadenceGate; set { m_cadenceGate = value; m_revision++; } }
+    /// <summary>Whether dynamic resolution moves the world's own views' render grid each frame
+    /// (<c>world.dynamic-resolution</c>; <see cref="Client.WorldDynamicResolution"/>), between
+    /// <see cref="DynamicResolutionFloor"/> and <see cref="RenderCeiling"/>. The grid moves inside the allocation, so a
+    /// frame never rebuilds; turning it on or off rebuilds a native view once, since it moves its ceiling.</summary>
+    public bool DynamicResolution { get => m_dynamicResolution; set { m_dynamicResolution = value; m_revision++; } }
+    /// <summary>The lowest render grid dynamic resolution moves a view to, as a fraction of its output on each axis.</summary>
+    public float DynamicResolutionFloor { get => m_dynamicResolutionFloor; set { m_dynamicResolutionFloor = value; m_revision++; } }
+    /// <summary>A forced dynamic-resolution grid in (0, 1] (<c>world.dynamic-resolution &lt;fraction&gt;</c>), which no load
+    /// moves and the ceiling bounds, or zero for the controller's own choice.</summary>
+    public float DynamicResolutionForced { get => m_dynamicResolutionForced; set { m_dynamicResolutionForced = value; m_revision++; } }
+    /// <summary>Gets the render-scale ceiling each of the world's own views is allocated at: <see cref="RenderScale"/>,
+    /// except that a native scale is lowered to the three-quarter tier while <see cref="DynamicResolution"/> is on, since
+    /// a view at a native ceiling reconstructs nothing and so has no grid to move.</summary>
+    public float RenderCeiling => ((m_dynamicResolution && (m_renderScale >= 1f))
+        ? WorldRenderScaleTiers.Scale(tier: WorldRenderScaleTier.ThreeQuarter)
+        : m_renderScale);
     /// <summary>The engine-wide internal render-scale fraction, applied to every player view's
     /// <see cref="Puck.SdfVm.SdfViewSnapshot.RenderScale"/> each frame. Named tiers initialize it, while
     /// <c>world.render-scale</c> also accepts a live numeric fraction/percentage for performance sweeps. Native 1.0 is

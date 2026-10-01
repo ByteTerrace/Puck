@@ -194,8 +194,10 @@ internal sealed record CanaryImageDifferenceAssertion(
 ) : CanaryAssertion(Name: Name);
 internal sealed record CanaryResponseSelector(string Verb, int Occurrence, int Count);
 // Line, when set, reads the field from the first continuation line of the selected response that starts with it
-// (after the transcript's indent) instead of from the response's own first line.
-internal sealed record CanaryValueExtraction(string Field, int? Component, string Name, string? Line = null);
+// (after the transcript's indent) instead of from the response's own first line. After, when set, starts that search
+// past the first continuation line that starts with it, so one of several lines alike is read by the line heading it.
+// A Line naming a whole counter kind reads that "<kind> <value>" line's value under the kind as the Field.
+internal sealed record CanaryValueExtraction(string Field, int? Component, string Name, string? Line = null, string? After = null);
 // Minus, when set, names a second extracted value subtracted from ValueName's: the operand is then the numeric
 // difference, so a relation can hold the change between two reads of one counter against another's.
 internal sealed record CanaryOperand(string? ValueName, string? StringLiteral, double? NumberLiteral, string? Minus = null);

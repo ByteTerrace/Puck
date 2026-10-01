@@ -1928,6 +1928,24 @@ backends with `--debug-layers` after changing the resolve, the fragment or the
 reprojection; `SdfPassPlanLawTests.Temporal` and `SdfWorldPassesLawTests.Temporal`
 hold the plan and the convergence rule without a device.
 
+## Dynamic resolution
+
+`WorldDynamicResolution` (`src/Puck.World.Client`) is the one controller; the
+presenter (`WorldFramePresenter.DynamicResolution.cs`) advances it once a
+frame and writes its grid as `ResolvedRenderScale`, times the transition dip,
+with `RenderScale = WorldRenderSettings.RenderCeiling`. Off, every view's
+values are exactly what they were without it. Never add a second grid or
+quantizer: the grid reaches `RenderGraphExtent.Quantize`. All three signals go
+through `WorldDynamicResolution.Respond`, so a policy change is one edit there.
+The load reaches it only through `IWorldFrameLoadSource`; the World's
+`WorldFrameLoadSource` reads the GPU frame time from
+`ShaderPipelineRenderNode.LatestTimingMilliseconds` and `TimingFrames` under
+`WorldGpuTiming.Require` (the operator's `world.gpu-timing` demand and the
+controller's are one demand), and the step budget from the embedded
+`counters.ceilings.json`, so `puck counters --record` moves the budget. Run
+`WorldDynamicResolutionLawTests` and the `dynamic-resolution` canary on both
+backends with `--debug-layers` after changing it.
+
 ## Route adjacent work
 
 | Skill | Route there for |

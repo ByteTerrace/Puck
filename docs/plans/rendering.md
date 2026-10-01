@@ -4610,16 +4610,24 @@ resolution, and stay there.
   only when its residency's levers turn reconstruction on; by default it does
   not, so it renders at its render extent with the spatial resolve and keeps no
   history storage. The world's own views follow `world.temporal`.
-- **Dynamic resolution follows present timing.** One controller consumes one
-  load signal and sets each view's per-frame render extent from it. The signal
-  is the presenter's confirmed-present timing (`IPresentTimingFeedback`) at
-  runtime: presentation-only, read by nothing in the simulation, and outside the
-  determinism contract. It reaches the controller through an injectable timing
-  source, so laws drive the controller with a fake. Where present timing is
-  unavailable (`PresentTimingSample.Unavailable`, an offscreen host, a
-  presenter without the capability), the same controller reads the previous
-  frame's counted `gpu.march.steps` against a per-tier step budget instead.
-  The counters workload and the parity world pin dynamic resolution off.
+- **Dynamic resolution follows the GPU's frame time.** One controller
+  (`WorldDynamicResolution`) consumes one load signal and sets each view's
+  per-frame render extent from it. Against a known display rate the signal is
+  the GPU's own time for the world's views' latest timed frame, the pass
+  timestamps `world.gpu-timing` reads (`ShaderPipelineRenderNode.Timing`), held
+  to the display period: a present-paced (FIFO) swapchain reports every kept
+  present as exactly its period, so present timing can lower the grid on a miss
+  but never shows the headroom to raise it again. Where the device times
+  nothing, the signal is the presenter's confirmed-present timing
+  (`IPresentTimingFeedback`) against the period; where neither is available
+  (an offscreen host has no display rate and presents nothing), the previous
+  frame's counted `gpu.march.steps` against the step budget. Every signal is
+  presentation-only, read by nothing in the simulation, and outside the
+  determinism contract. It reaches the controller through an injectable source
+  (`IWorldFrameLoadSource`), so laws drive the controller with a fake; the
+  World's source (`WorldFrameLoadSource`) asks `WorldGpuTiming` for timestamps
+  only while dynamic resolution is on against a known display rate. The
+  counters workload and the parity world pin dynamic resolution off.
 - **Dynamic-resolution policy.** A fresh load sample within 90–110% of its
   budget leaves the scale unchanged. Outside that band the scale falls by at
   most 1/16 or rises by at most 1/32 per fresh sample, clamped to the view's
@@ -4630,7 +4638,7 @@ resolution, and stay there.
   Counted fallback budgets derive from the committed RTX 2060 ceiling rows
   and scale by output pixel area, so recording new floor evidence also updates
   the controller's budgets. No copied numeric budget constants are maintained.
-  The timing trace and counted fallback hold the same exact response,
+  The GPU time, the present timing and the counted fallback hold the same exact response,
   including both step bounds and floor/ceiling clamps. Extent changes allocate
   nothing inside the ceiling. Ordinary canaries and parity pin the lever off;
   P15-8 decides default enablement from its counted comparison.
@@ -4870,8 +4878,17 @@ counted rows recorded in the same change.
    - Counted-cost gate: with reconstruction on, the resolve's dispatch, its
      texels, the history's barriers and its device-local bytes; a still view's
      rendered frames stop after one period (`world.cadence on`).
-6. **P15-6, dynamic resolution.** The render extent moves inside its ceiling
-   each frame.
+6. **P15-6, dynamic resolution.** Landed. The render extent moves inside its
+   ceiling each frame. `world.dynamic-resolution on|off|<tier>|<fraction>`
+   turns it on, or forces a grid for a sweep; `render.dynamicResolution` and
+   `render.dynamicResolutionFloor` set it at boot, and every shipped preset
+   leaves it off. A step moves the grid by a share of itself, so "1/16" and
+   "1/32" below are relative bounds (`WorldDynamicResolution.MaximumFall`,
+   `MaximumRise`). The step budget is the floor run's `world` node march-step
+   ceilings over its output pixels, read from the committed ceilings file,
+   which the World compiles in; it is one budget for every tier, scaled by the
+   output's pixels. A native tier's ceiling while the lever is on is
+   three-quarter (`WorldRenderSettings.RenderCeiling`).
    - Delivers: one controller that sets each view's per-frame render extent
      between a floor and the tier's ceiling, never reallocating, and resets no
      history (the resolve reads the extent each frame). It writes
@@ -4880,18 +4897,22 @@ counted rows recorded in the same change.
      A view at a native ceiling reconstructs nothing and ignores that grid, so
      dynamic resolution on a native tier gives its views a ceiling below
      native for as long as it is on (one rebuild when the lever moves), never a
-     per-frame choice of fragment; its one load signal,
-     present timing through an injectable timing source with the counted
-     march-step budget where present timing is unavailable; the lever with its
-     presets.
+     per-frame choice of fragment; its one load signal through an injectable
+     source, the GPU's frame time first, present timing where the device times
+     nothing, and the counted march-step budget where neither is available; the
+     lever with its presets.
    - Touches: `WorldFramePresenter`, `WorldRenderSettings`, `SdfFrameBlock`, the
      controller in `src/Puck.World.Client`, `WorldSessionLevers`,
      `quality.puck`.
    - Done when: a law drives the controller through a fake timing source over a
      scripted signal and holds its extents, and a second law makes the fake
-     unavailable and holds the controller to the step budget; a `dynamic-resolution` canary forces a sweep of extents through the
+     unavailable and holds the controller to the step budget; a law raises the
+     grid again under a present-paced display when the GPU's time drops, and
+     one holds the fallback order; a `dynamic-resolution` canary forces a sweep of extents through the
      lever and reads no `gpu.created.*` rise and no rebuild across it, each
-     forced extent's capture within tolerance of its reference.
+     forced extent's capture within tolerance of its reference. Held by
+     `WorldDynamicResolutionLawTests` and the `dynamic-resolution` canary, whose
+     grid captures equal their tiers' captures exactly on both backends.
    - Counted-cost gate: zero created objects across the sweep; per-frame counts
      scale with the render extent the frame chose.
 7. **P15-7, march seeding.** The previous frame's depth starts the march where
