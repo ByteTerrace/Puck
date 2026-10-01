@@ -99,6 +99,110 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Refresh: RenderGraphRefresh.Every(divisor: divisor)
     );
 
+    /// <summary>A reader of a slow standing view resolves the camera at the frame it reads, even after the camera's
+    /// two recorded outputs are newer than the view's last render. A previous-frame reader takes the camera's previous
+    /// output; a same-frame reader takes its current one. The view keeps its cadence.</summary>
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void AReaderOfASlowStandingViewFollowsItsCamera(bool previousFrame) {
+        using var scene = new StandingScene(
+            "mid",
+            Set(
+                Instance(name: "camera"),
+                Refreshed("mid", 64, new RenderGraphRead(Producer: "camera")),
+                Instance("main", reads: [
+                    new RenderGraphRead(PreviousFrame: previousFrame, Producer: "mid"),
+                    new RenderGraphRead(Producer: "camera"),
+                ])
+            ),
+            Graph(pipeline: CameraGraph()),
+            Graph(OverGraph(reader: false), ("world", "camera")),
+            Graph(OverGraph(reader: false), ("world", "mid"))
+        );
+        RenderGraphFootprint[] filmed = [
+            new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "mid", Width: 1.0),
+            new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "camera", Width: 1.0),
+            new RenderGraphFootprint(Consumer: "mid", Height: 1.0, Producer: "camera", Width: 1.0),
+        ];
+
+        TestLiveness.Until(
+            reason: () => "The view never stood for the camera's output.",
+            step: () => {
+                _ = scene.Produce(footprints: filmed, roots: MainRoot);
+
+                return (
+                    scene.Runtime.IsSettled &&
+                    (scene.Node(instance: "mid").PublishedBinding == "world") &&
+                    scene.Runtime.TryLatestImage(image: out var image, instance: "mid") &&
+                    (image.ImageHandle == scene.Recorders.Of(instance: "camera").OutputImage)
+                );
+            }
+        );
+        var rendered = scene.Node(instance: "mid").FrameCounter;
+
+        for (var frame = 0; (frame < 8); frame++) {
+            var priorCamera = scene.Recorders.Of(instance: "camera").OutputImage;
+
+            _ = scene.Produce(footprints: filmed, roots: MainRoot);
+            Assert.Equal(
+                actual: scene.Recorders.Of(instance: "main").InputImage,
+                expected: (previousFrame ? priorCamera : scene.Recorders.Of(instance: "camera").OutputImage)
+            );
+        }
+
+        Assert.Equal(actual: scene.Node(instance: "mid").FrameCounter, expected: rendered);
+    }
+    /// <summary>A capture waiting on a slow root that stands for a view that stands for a camera keeps both producers
+    /// when their footprints disappear. Its image stays live while the root waits for its next refresh.</summary>
+    [Fact]
+    public void APendingCaptureKeepsEveryProducerInAStandingChain() {
+        using var scene = new StandingScene(
+            "main",
+            Set(
+                Instance(name: "camera"),
+                Refreshed("mid", 64, new RenderGraphRead(Producer: "camera")),
+                Refreshed("main", 64, new RenderGraphRead(Producer: "mid"))
+            ),
+            Graph(pipeline: CameraGraph()),
+            Graph(OverGraph(reader: false), ("world", "camera")),
+            Graph(OverGraph(reader: false), ("world", "mid"))
+        );
+        RenderGraphFootprint[] filmed = [
+            new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "mid", Width: 1.0),
+            new RenderGraphFootprint(Consumer: "mid", Height: 1.0, Producer: "camera", Width: 1.0),
+        ];
+
+        TestLiveness.Until(
+            reason: () => "The root never stood for the camera through the view.",
+            step: () => {
+                if (scene.Recorders.ByInstance.TryGetValue(key: "mid", value: out var counter)) {
+                    counter.Outcome = RenderGraphPackageOutcome.DrewNothing;
+                }
+
+                _ = scene.Produce(footprints: filmed, named: [], roots: MainRoot);
+
+                return (
+                    scene.Runtime.IsSettled &&
+                    (scene.Node(instance: "main").PublishedBinding == "world") &&
+                    (scene.Node(instance: "mid").PublishedBinding == "world") &&
+                    scene.Runtime.TryLatestImage(image: out var image, instance: "main") &&
+                    (image.ImageHandle == scene.Recorders.Of(instance: "camera").OutputImage)
+                );
+            }
+        );
+        var camera = scene.Recorders.Of(instance: "camera").OutputImage;
+        var rendered = scene.Node(instance: "main").FrameCounter;
+        var request = CaptureRequest();
+
+        scene.Runtime.RequestCapture(request: request);
+        var shown = scene.Produce(footprints: [], named: [], roots: MainRoot);
+
+        Assert.False(condition: scene.Gpu.IsReleased(handle: camera));
+        Assert.Equal(actual: shown.ImageHandle, expected: camera);
+        Assert.Equal(actual: scene.Node(instance: "main").FrameCounter, expected: rendered);
+        Assert.Equal(actual: scene.Runtime.PendingCapturePath, expected: request.Path);
+    }
     /// <summary>A root refreshed every other frame draws nothing over the camera, publishing the camera's image. On a frame
     /// it waits, the camera loses its footprint and nothing names it, so its graph is released: that same frame the root
     /// renders again over the camera's stand-in, and the display is never handed the released image.</summary>

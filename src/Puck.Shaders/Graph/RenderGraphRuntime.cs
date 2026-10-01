@@ -749,7 +749,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     producer: binding.ProducerName,
                     schedule: schedule
                 ),
-                producer: binding.Producer
+                producer: binding.Producer,
+                readFrame: (schedule.Frame - (binding.PreviousFrame ? 1L : 0L))
             );
 
             if (buffered.Buffer is not { } buffer) {
@@ -844,7 +845,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             );
             var output = OutputAt(
                 frame: frame,
-                producer: binding.Producer
+                producer: binding.Producer,
+                readFrame: (schedule.Frame - (binding.PreviousFrame ? 1L : 0L))
             );
 
             if (
@@ -920,10 +922,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         return -1L;
     }
-    // The newest completed output of a producer that is no newer than the frame asked for, resolved through what it
-    // stands for (RenderGraphRuntime.Standing.cs), or none.
-    private Output OutputAt(int producer, long frame) => Resolve(
-        frame: frame,
+    // Selects the producer's recorded output at the scheduled frame, then resolves what it stands for at the reader's
+    // frame. A slow standing output follows its owner even when its own last render is older than the owner's history.
+    private Output OutputAt(int producer, long frame, long readFrame) => Resolve(
+        frame: readFrame,
         output: RecordedAt(
             frame: frame,
             producer: producer

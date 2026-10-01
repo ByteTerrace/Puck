@@ -130,7 +130,8 @@ public sealed partial class RenderGraphRuntime {
                     producer: binding.ProducerName,
                     schedule: schedule
                 ),
-                producer: binding.Producer
+                producer: binding.Producer,
+                readFrame: (schedule.Frame - (binding.PreviousFrame ? 1L : 0L))
             );
 
             return (((bound.Frame >= 0L) && (bound.Image.ImageHandle == surface.ImageHandle))

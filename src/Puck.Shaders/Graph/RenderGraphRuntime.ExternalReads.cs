@@ -172,7 +172,10 @@ public sealed partial class RenderGraphRuntime {
                 frame: ((frame < 0)
                     ? long.MaxValue
                     : frame),
-                producer: producer
+                producer: producer,
+                readFrame: ((frame < 0)
+                    ? long.MaxValue
+                    : (schedule.Frame - (previousFrame ? 1L : 0L)))
             );
 
             if (
