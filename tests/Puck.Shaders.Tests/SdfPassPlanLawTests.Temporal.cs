@@ -53,6 +53,22 @@ public sealed partial class SdfPassPlanLawTests {
         Assert.Contains(collection: resolve.Parameters.Interface.Members, filter: static member => (member.Name == SdfWorldPackage.HistoryColor));
         Assert.Contains(collection: resolve.Parameters.Interface.Members, filter: static member => (member.Group == ShaderInterfaceGroup.World));
     }
+    // Primary seeds its march from the history surface the previous frame's resolve wrote: it reads that version alone of
+    // the history, and only the temporal fragment gives it one to read.
+    [Fact]
+    public void PrimaryReadsLastFramesHistorySurfaceToSeedItsMarch() {
+        var plan = TemporalPlan.Pipeline;
+        var surface = Storage(plan: plan, version: SdfWorldPackage.Parts.HistorySurface);
+        var primary = plan.Passes.Single(predicate: static pass => (pass.Package!.Part == SdfWorldPackage.Parts.Primary));
+        var history = Assert.Single(collection: primary.Accesses, predicate: access => (access.Storage == surface.Index));
+
+        Assert.True(condition: history.PreviousFrame);
+        Assert.False(condition: history.Use.Writes);
+        Assert.DoesNotContain(
+            collection: ResolvedPlan.Pipeline.Passes.Single(predicate: static pass => (pass.Package!.Part == SdfWorldPackage.Parts.Primary)).Accesses,
+            filter: static access => access.PreviousFrame
+        );
+    }
     // Reconstruction over time adds to the spatial graph at the same ceiling only its history, an output-sized color and
     // surface of eight bytes a pixel each, once a frame slot, and the reactivity, four bytes a render pixel held once: at
     // 1920x1080 and half scale over three frame slots, 99,532,800 bytes of history and 2,073,600 of reactivity.

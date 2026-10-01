@@ -1928,6 +1928,24 @@ backends with `--debug-layers` after changing the resolve, the fragment or the
 reprojection; `SdfPassPlanLawTests.Temporal` and `SdfWorldPassesLawTests.Temporal`
 hold the plan and the convergence rule without a device.
 
+**March seeding.** A temporal view whose quality asks
+(`SdfViewQuality.MarchSeed`, `world.march-seed`, the presets off at every tier)
+starts primary's march at the history surface's ray distance, carried through
+the camera's motion, where one ball test proves the skipped segment empty
+(`sdfSeededMarchStart` in `march/sdf-primary.hlsli` over the helpers in
+`march/sdf-march-seed.hlsli`). The temporal fragment's primary reads the previous
+frame's history surface; every other fragment binds the dummy there, and the
+`marchSeed`, `temporal`, `historyFrames` and debug-mode gates keep it unread. The
+ball test reads the same tile-masked field the march does, with parts included,
+`min(distance, sdfMapStepBound)`: that field is already divided by the program's
+step scale, so never scale it again or read `abs` of it, and never seed past a
+fold without the step bound. The evaluation adds to `sdfWorkSteps` and
+`sdfEvalCount`. A change to the candidate, the ball test or the accepted band
+reruns `SdfMarchSeedLawTests` (whose red legs must still fail), the `march-seed`
+canary on both backends with `--debug-layers`, and `puck counters compare` over
+the `march-seed-off` and `march-seed-on` scripts on `counters.world.json` and
+`counters-pan.world.json`.
+
 ## Route adjacent work
 
 | Skill | Route there for |

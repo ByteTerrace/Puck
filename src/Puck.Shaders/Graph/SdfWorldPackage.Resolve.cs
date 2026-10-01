@@ -25,7 +25,7 @@ public static partial class SdfWorldPackage {
     /// <summary>The history surface the resolve writes for the next frame.</summary>
     public const string HistorySurfaceWritten = "historySurfaceRW";
     /// <summary>The words one output pixel holds in the history surface: its ray distance and its identity. KEEP IN
-    /// SYNC with <c>SdfHistorySurfaceWords</c> in <c>passes/sdf-resolve.comp.hlsl</c>.</summary>
+    /// SYNC with <c>SdfHistorySurfaceWords</c> in <c>frame/sdf-reprojection.hlsli</c>.</summary>
     public const uint HistorySurfaceWords = 2;
 
     /// <summary>The resolve interface: the common frame values, the render-grid color, the output color, and what the
@@ -64,7 +64,8 @@ public static partial class SdfWorldPackage {
     /// keeps at the output extent: the history color and the history surface, each one allocation a frame slot that the
     /// next frame reads (<see cref="ResourceReference.PreviousFrame"/>), zero until the resolve first writes it. The
     /// resolve reads the visibility records and the dispatch box to reproject each pixel through
-    /// <c>sdfReprojection</c>, and writes the output, the history color and the history surface.</summary>
+    /// <c>sdfReprojection</c>, and writes the output, the history color and the history surface. Primary reads the
+    /// preceding history surface too, to seed its march (<see cref="MarchSeed"/>).</summary>
     public static RenderGraphPackageFragment TemporalFragment => TemporalDeclaration.Value;
 
     private static class ResolveFragment {
@@ -117,6 +118,12 @@ public static partial class SdfWorldPackage {
             Passes: [
                 .. ResolveFragment.Value.Passes.Select(selector: static pass => pass.Name switch {
                     Parts.Sky => Pass(name: Parts.Sky, outputs: [Parts.SkyImage, Parts.SkyReactivity]),
+                    // Primary reads the history surface the previous frame's resolve wrote, from which it seeds its march
+                    // when the view asks for seeding (MarchSeed).
+                    Parts.Primary => pass with {
+                        InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead],
+                        Inputs = [.. pass.Inputs, new ResourceReference(Name: Parts.HistorySurface, PreviousFrame: true)],
+                    },
                     Parts.Views => pass with {
                         OutputAccesses = [RenderGraphPortAccess.ComputeWrite, RenderGraphPortAccess.ComputeWrite],
                         Outputs = [new ResourceReference(Name: CurrentColor), new ResourceReference(Name: Parts.Reactivity)],

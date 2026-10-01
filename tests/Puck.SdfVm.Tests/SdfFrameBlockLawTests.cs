@@ -35,6 +35,7 @@ public sealed class SdfFrameBlockLawTests {
         DisableAmbientOcclusion = true,
         DisableFarBound = true,
         DisableSoftShadows = true,
+        MarchSeed = true,
         ShadowDistanceScale = 0.5f,
         UseCameraTileShadowMask = true,
         UseFastAmbientOcclusion = true,
@@ -47,6 +48,7 @@ public sealed class SdfFrameBlockLawTests {
         (SdfWorldPackage.DisableSoftShadows, new() { DisableSoftShadows = true }, 1u),
         (SdfWorldPackage.FastAmbientOcclusion, new() { UseFastAmbientOcclusion = true }, 1u),
         (SdfWorldPackage.FastSoftShadowMarch, new() { UseFastSoftShadowMarch = true }, 1u),
+        (SdfWorldPackage.MarchSeed, new() { MarchSeed = true }, 1u),
         (SdfWorldPackage.ShadowDistanceScale, new() { ShadowDistanceScale = 0.5f }, BitConverter.SingleToUInt32Bits(value: 0.5f)),
     ];
 
@@ -120,7 +122,7 @@ public sealed class SdfFrameBlockLawTests {
             width: 300u
         );
 
-        SdfFrameBlock.WriteTemporal(block: block, jitter: new Vector2(x: 0.25f, y: -0.125f), historyFrames: 3, temporal: true);
+        SdfFrameBlock.WriteTemporal(block: block, historyHeight: 400u, historyFrames: 3, historyWidth: 600u, jitter: new Vector2(x: 0.25f, y: -0.125f), temporal: true);
         var parameters = SdfWorldInterfaces.WorldParameters;
 
         // The row names the pass, so the view's writer leaves it to the recorder.
@@ -193,6 +195,7 @@ public sealed class SdfFrameBlockLawTests {
             (SdfWorldPackage.FastAmbientOcclusion, WithQuality(quality: new() { UseFastAmbientOcclusion = true })),
             (SdfWorldPackage.FastSoftShadowMarch, WithQuality(quality: new() { UseFastSoftShadowMarch = true })),
             (SdfWorldPackage.FiniteDifferenceNormals, (defaults with { UseFiniteDifferenceNormals = true })),
+            (SdfWorldPackage.MarchSeed, WithQuality(quality: new() { MarchSeed = true })),
         ];
 
         static byte[] Block(SdfFrame frame) {

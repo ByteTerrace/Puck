@@ -40,6 +40,11 @@
       "type": "boolean",
       "default": false
     },
+    "marchSeed": {
+      "description": "Whether the world\u0027s own temporal views boot seeding their primary march from their history (world.march-seed): each ray starts where its surface lay last frame wherever a ball test proves the skipped segment empty. A view that is not temporal never seeds.",
+      "type": "boolean",
+      "default": false
+    },
     "low": {
       "$ref": "./common.schema.json#/$defs/WorldQualityPreset",
       "description": "The world.quality low preset.",

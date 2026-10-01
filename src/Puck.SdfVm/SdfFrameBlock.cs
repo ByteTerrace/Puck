@@ -60,10 +60,12 @@ public static class SdfFrameBlock {
     private static readonly int GridWorldPitch = Offset(member: SdfWorldPackage.GridWorldPitch);
     private static readonly int PreviousView = Offset(member: SdfWorldPackage.PreviousView);
     private static readonly int Jitter = Offset(member: SdfWorldPackage.Jitter);
+    private static readonly int HistoryExtent = Offset(member: SdfWorldPackage.HistoryExtent);
     private static readonly int HistoryFrames = Offset(member: SdfWorldPackage.HistoryFrames);
     private static readonly int Temporal = Offset(member: SdfWorldPackage.Temporal);
     private static readonly int ImageExtent = Offset(member: SdfWorldPackage.ImageExtent);
     private static readonly int InstanceMaskWordCount = Offset(member: SdfWorldPackage.InstanceMaskWordCount);
+    private static readonly int MarchSeed = Offset(member: SdfWorldPackage.MarchSeed);
     private static readonly int MeshDraws = Offset(member: SdfWorldPackage.MeshDraws);
     private static readonly int NearDistance = Offset(member: SdfWorldPackage.NearDistance);
     private static readonly int ScreenCount = Offset(member: SdfWorldPackage.ScreenCount);
@@ -92,11 +94,15 @@ public static class SdfFrameBlock {
     /// <param name="jitter">The ray offset in render pixels.</param>
     /// <param name="historyFrames">The number of preceding samples in the current epoch.</param>
     /// <param name="temporal">Whether the view runs the temporal fragment (<see cref="SdfWorldPackage.TemporalFragment"/>).</param>
-    public static void WriteTemporal(Span<byte> block, Vector2 jitter, uint historyFrames, bool temporal) {
+    /// <param name="historyWidth">The width of the history the resolve keeps, the view's output width.</param>
+    /// <param name="historyHeight">The height of the history the resolve keeps, the view's output height.</param>
+    public static void WriteTemporal(Span<byte> block, Vector2 jitter, uint historyFrames, bool temporal, uint historyWidth, uint historyHeight) {
         WriteSingle(block: block, offset: Jitter, value: jitter.X);
         WriteSingle(block: block, offset: (Jitter + sizeof(float)), value: jitter.Y);
         WriteUInt32(block: block, offset: HistoryFrames, value: historyFrames);
         WriteUInt32(block: block, offset: Temporal, value: (temporal ? 1u : 0u));
+        WriteUInt32(block: block, offset: HistoryExtent, value: historyWidth);
+        WriteUInt32(block: block, offset: (HistoryExtent + sizeof(uint)), value: historyHeight);
     }
     /// <summary>Writes the preceding render's camera, lens and jitter for visibility reprojection: position and
     /// validity, right and tangent, up and aspect, forward, the render extent and the jitter in render pixels, then the
@@ -155,7 +161,7 @@ public static class SdfFrameBlock {
     public static void Write(Span<byte> block, in SdfPassValues tables, SdfFrame frame, int view, uint width, uint height) {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
-        WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0, temporal: false);
+        WriteTemporal(block: block, historyHeight: 0, historyFrames: 0, historyWidth: 0, jitter: Vector2.Zero, temporal: false);
         WritePreviousView(block: block, valid: false, view: default);
 
         var snapshot = frame.Views[view];
@@ -215,6 +221,7 @@ public static class SdfFrameBlock {
         WriteFlag(block: block, offset: FastSoftShadowMarch, value: quality.UseFastSoftShadowMarch);
         WriteFlag(block: block, offset: FastAmbientOcclusion, value: quality.UseFastAmbientOcclusion);
         WriteFlag(block: block, offset: DisableFarBound, value: quality.DisableFarBound);
+        WriteFlag(block: block, offset: MarchSeed, value: quality.MarchSeed);
         MemoryMarshal.AsBytes(span: tables.Environment.Span).CopyTo(destination: block[Environment..]);
     }
     /// <summary>Bakes a frame's environment into the rows every pass block carries: <see cref="SdfEnvironment.Lanes"/>

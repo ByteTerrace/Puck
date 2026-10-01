@@ -81,7 +81,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         SdfFrameBlock.Write(block: frameBlock, tables: tables.PassValues, frame: frame, view: index, width: render.Width, height: render.Height);
         var temporal = m_owner.TemporalOf(instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, temporal: m_temporal, renderWidth: render.Width, renderHeight: render.Height);
 
-        SdfFrameBlock.WriteTemporal(block: frameBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
+        SdfFrameBlock.WriteTemporal(block: frameBlock, historyHeight: recording.FrameHeight, historyFrames: temporal.Frames, historyWidth: recording.FrameWidth, jitter: temporal.Jitter, temporal: m_temporal);
         SdfFrameBlock.WritePreviousView(block: frameBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
         foreach (var copy in FrameCopies) {
             frameBlock.Slice(length: copy.Length, start: copy.Source).CopyTo(destination: recording.PassBlock.Slice(length: copy.Length, start: copy.Destination));

@@ -225,6 +225,7 @@ motion terms.
 | `ambientOcclusion` | bool | false | `world.ao` |
 | `renderScale` | `Native`..`Eighth` | `Native` | `world.render-scale` |
 | `temporal` | bool | false | `world.temporal` |
+| `marchSeed` | bool | false | `world.march-seed` |
 | `upscaleSharpness` | [0, 1] | 0 | `world.upscale-sharpness` |
 | `farDistance` | [1, 8192] | 40 | `world.budget` |
 | `tonemap` | `None`/`Filmic` | `None` | `world.lighting` |

@@ -7,6 +7,15 @@
 #include "sdf-visibility.hlsli"
 #include "../field/sdf-quaternion.hlsli"
 
+// The words one output pixel holds in the history surface the temporal resolve writes: its ray distance as a float's
+// bits, then its visibility identity. KEEP IN SYNC with SdfWorldPackage.HistorySurfaceWords.
+static const uint SdfHistorySurfaceWords = 2u;
+
+// The first word of an output texel's entry in the history surface, laid out row by row at the history's extent.
+uint sdfHistorySurfaceWord(uint2 texel, uint2 extent) {
+    return (SdfHistorySurfaceWords * ((texel.y * extent.x) + texel.x));
+}
+
 // Returns the point carried by the same rigid shape or mesh triangle in the preceding consumed frame.
 bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint, out float3 previousPoint) {
     previousPoint = currentPoint;

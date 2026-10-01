@@ -1878,12 +1878,12 @@ on the one world and proves them with `probe.status`, `body.channels`, and
 
 All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
-`world.temporal`, `world.upscale-sharpness`, `world.target`, `world.shadow-mask`,
+`world.temporal`, `world.march-seed`, `world.upscale-sharpness`, `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
 `world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
 world's own `render.low`, `render.medium` or `render.high` preset, each a
-shadow tier, an ambient-occlusion switch, a temporal-reconstruction switch and a
-render-scale tier; the names are
+shadow tier, an ambient-occlusion switch, a temporal-reconstruction switch, a
+march-seeding switch and a render-scale tier; the names are
 the engine's one quality vocabulary (`QualityTiers`), and a preset the world
 does not author is refused by name. The shipped worlds share one table,
 `Assets/worlds/quality.puck`: the standard world imports it, and a world on
@@ -1897,7 +1897,13 @@ the world's own views over time at any render scale: each jitters its samples,
 resolves them over its history, and under `world.cadence on` stands once a still
 view has converged; `world.upscale-sharpness` then sharpens what it resolves.
 Camera and session views never reconstruct. The render section's `temporal`
-member sets it at boot, and `world.save` folds it back.
+member sets it at boot, and `world.save` folds it back. `world.march-seed on`
+seeds each temporal view's primary march from its history surface: a ray starts
+where its surface lay last frame, carried through the camera's motion, wherever
+one field evaluation proves the skipped segment empty, and at its tile's start
+otherwise. A view that does not reconstruct over time never seeds; the render
+section's `marchSeed` member sets it at boot, `world.save` folds it back, and the
+shipped presets carry it off at every tier.
 Named tiers are
 facades over continuous values. Do not assume a lower render scale is
 monotonic for a large instance field—read both `world.counters gpu` and

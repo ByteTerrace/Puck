@@ -26,6 +26,8 @@ public static partial class WorldSessionLevers {
     public const string CadenceGate = "cadence";
     /// <summary>The per-tile far-bound cull (<c>world.far-field bound</c>).</summary>
     public const string FarBound = "far-field.bound";
+    /// <summary>March seeding of the world's own temporal views (<c>world.march-seed</c>).</summary>
+    public const string MarchSeed = "march-seed";
     /// <summary>The audio mix master gain (<c>world.volume</c>), folding into <c>audio</c>.</summary>
     public const string MasterVolume = "volume";
     /// <summary>The render scale (<c>world.render-scale</c>).</summary>
@@ -108,6 +110,10 @@ public static partial class WorldSessionLevers {
         sink.Register(
             name: Temporal,
             setter: lever => settings.Temporal = Flag(lever: lever)
+        );
+        sink.Register(
+            name: MarchSeed,
+            setter: lever => settings.MarchSeed = Flag(lever: lever)
         );
         sink.Register(
             name: UpscaleSharpness,

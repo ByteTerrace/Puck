@@ -86,10 +86,16 @@ public readonly record struct SdfViewQuality {
     /// output, at native or reduced render scale. Its costs are the resolve's dispatch and the history's bytes and
     /// barriers. The default asks for none.</summary>
     public bool Temporal { get; init; }
+    /// <summary>Gets whether a temporal view seeds its primary march: each ray starts at the ray distance the history
+    /// surface held for it, reprojected through the camera's motion, wherever one field evaluation at the skipped
+    /// segment's midpoint proves the segment empty, and at its tile's start otherwise. A view that is not
+    /// <see cref="Temporal"/> keeps no history surface and never seeds. The pass block carries it as
+    /// <c>marchSeed</c>.</summary>
+    public bool MarchSeed { get; init; }
 
     /// <summary>Returns this quality with another's restrictions added: a term either skips stays skipped, an
-    /// approximation either takes stays taken, the shorter shadow reach holds, and the view reconstructs over time only
-    /// when both ask. Neither can lift a restriction the other set.</summary>
+    /// approximation either takes stays taken, the shorter shadow reach holds, and the view reconstructs over time, or
+    /// seeds its march, only when both ask. Neither can lift a restriction the other set.</summary>
     /// <param name="other">The restrictions to add.</param>
     /// <returns>The restricted quality.</returns>
     public SdfViewQuality Restrict(in SdfViewQuality other) => new() {
@@ -104,6 +110,7 @@ public readonly record struct SdfViewQuality {
         UseFastAmbientOcclusion = (UseFastAmbientOcclusion || other.UseFastAmbientOcclusion),
         UseFastSoftShadowMarch = (UseFastSoftShadowMarch || other.UseFastSoftShadowMarch),
         Temporal = (Temporal && other.Temporal),
+        MarchSeed = (MarchSeed && other.MarchSeed),
     };
 }
 /// <summary>Contains the scene program and presentation state consumed by one SDF render frame.</summary>
