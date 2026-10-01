@@ -284,8 +284,13 @@ host with a capture armed: it steps no further tick until the capture is served
 or refused, and a capture refused while the world's residency is not ready names
 its `NotReadyReason`, such as "the engine's pipeline set is building (10 of
 11 pipelines created; waiting on sdf-world-views)" (see [the World guide](../Puck.World/README.md#usage)).
-A residency is `IsReady` once its set is installed and its tables hold its
-first captured frame; the World is ready once the world's residency is and the
+A residency is `IsReady` once its tables are built from every pipeline but the
+views variants, hold its first captured frame, and the views kernel its program
+selects (or a fuller one) is built, so a program that selects the core or folds
+variant never waits for the full ISA's translation. A captured program whose
+views kernel is still building is not uploaded: the residency holds the frame it
+last packed, which keeps rendering, and is not ready, naming the kernel, until
+that kernel is built; the World is ready once the world's residency is and the
 render graph's root has rendered over a completed view, which is the fact
 `world.wait ready` waits on. A host that produces frames on its own thread and
 has nothing to present until the builds finish blocks between frames on

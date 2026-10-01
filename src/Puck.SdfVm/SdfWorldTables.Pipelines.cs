@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -15,12 +16,41 @@ public sealed partial class SdfWorldTables {
     // The render pass the mesh pass draws in, which a view's framebuffers are created for.
     internal IGpuRenderPass MeshRenderPass => m_meshRenderPass;
     // The views pass's pipeline: the variant UploadProgram selected for the live program (full ISA, core ops or folds;
-    // SdfViewsKernelVariant), all of one layout, so a pass's set binds against whichever it is.
-    internal IGpuComputePipeline ViewsPipeline => m_pipelines.Pipeline(kernel: m_viewsVariant switch {
+    // SdfViewsKernelVariant), or, while that one builds, a fuller variant that is built, since a fuller variant renders
+    // every program a stripped one does. All are of one layout, so a pass's set binds against whichever it is.
+    internal IGpuComputePipeline ViewsPipeline => m_pipelines.Pipeline(kernel: (BuiltViews(variant: m_viewsVariant) ?? ViewsKernelOf(variant: m_viewsVariant)));
+
+    // The views kernel a program waits on: null when the variant it selects (SdfViewsKernelVariants.Select), or a fuller
+    // one, is built, so its views can render it; otherwise the selected variant's kernel. A null program asks for the live
+    // program's variant.
+    internal SdfKernel? ViewsWaiting(SdfProgram? program) {
+        var variant = ((program is null)
+            ? m_viewsVariant
+            : SdfViewsKernelVariants.Select(program: program).Variant);
+
+        return ((BuiltViews(variant: variant) is null)
+            ? ViewsKernelOf(variant: variant)
+            : null);
+    }
+
+    // The first built views kernel that renders a program selecting the variant: the variant's own, then each fuller one.
+    private SdfKernel? BuiltViews(SdfViewsKernelVariant variant) {
+        if ((variant == SdfViewsKernelVariant.CoreOps) && m_pipelines.IsBuilt(kernel: SdfKernel.ViewsCore)) {
+            return SdfKernel.ViewsCore;
+        }
+        if ((variant != SdfViewsKernelVariant.Full) && m_pipelines.IsBuilt(kernel: SdfKernel.ViewsFolds)) {
+            return SdfKernel.ViewsFolds;
+        }
+
+        return (m_pipelines.IsBuilt(kernel: SdfKernel.Views)
+            ? SdfKernel.Views
+            : null);
+    }
+    private static SdfKernel ViewsKernelOf(SdfViewsKernelVariant variant) => variant switch {
         SdfViewsKernelVariant.CoreOps => SdfKernel.ViewsCore,
         SdfViewsKernelVariant.Folds => SdfKernel.ViewsFolds,
         _ => SdfKernel.Views,
-    });
+    };
 
     // One of the per-view compute pipelines by its kernel.
     internal IGpuComputePipeline Pipeline(SdfKernel kernel) => m_pipelines.Pipeline(kernel: kernel);

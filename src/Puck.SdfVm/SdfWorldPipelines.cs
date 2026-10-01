@@ -163,6 +163,31 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         return PollAll(slots: m_slots);
     }
+    /// <summary>Returns whether every pipeline the tables are built from is ready: all but the views variants, of which a
+    /// residency's views need only the one its program selects or a fuller one (<see cref="IsBuilt"/>), so a program that
+    /// selects a stripped variant never waits for the full ISA's translation. Polls every pipeline, the views variants
+    /// included, so a failed build is named whichever it is.</summary>
+    /// <returns><see langword="true"/> once every pipeline but the views variants is ready.</returns>
+    /// <exception cref="ObjectDisposedException">The set has been disposed.</exception>
+    /// <exception cref="AggregateException">A pipeline's creation failed, named as <see cref="Poll"/> names it.</exception>
+    /// <exception cref="DeviceLostException">The device was lost during a creation; thrown alone.</exception>
+    public bool PollRequired() {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        return PollAll(
+            slots: m_slots,
+            viewsRequired: false
+        );
+    }
+    /// <summary>Returns whether one of the set's pipelines is built, taking a build that has just finished. Allocates
+    /// nothing.</summary>
+    /// <param name="kernel">The kernel.</param>
+    /// <returns><see langword="true"/> when the set leases the kernel and its pipeline is built.</returns>
+    /// <exception cref="Exception">The pipeline's creation failed, or the device was lost during it.</exception>
+    public bool IsBuilt(SdfKernel kernel) => ((m_slots[((int)kernel)] is { } slot) && (slot.Lease.Poll() is not null));
     /// <summary>Returns a task that completes once every pipeline of the set is ready, for a holder's own background
     /// build, which awaits it holding no thread, or a harness that drives tables directly.</summary>
     /// <param name="cancellationToken">The token that ends the wait; the entries keep building for their other
@@ -324,8 +349,11 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             throw new InvalidOperationException(message: "The reload was prepared against kernels that are no longer installed.");
         }
     }
-    // Polls every lease, so each build that failed is named, in the set's order; a device loss is thrown alone.
-    internal static bool PollAll(IReadOnlyList<Slot?> slots) {
+    // The views variants, one of which a program dispatches its views with (SdfWorldTables.ViewsPipeline).
+    internal static bool IsViews(SdfKernel kernel) => (kernel is (SdfKernel.Views or SdfKernel.ViewsCore or SdfKernel.ViewsFolds));
+    // Polls every lease, so each build that failed is named, in the set's order; a device loss is thrown alone. The
+    // slots are a set's, in kernel order. Without viewsRequired, a views variant still building leaves the set ready.
+    internal static bool PollAll(IReadOnlyList<Slot?> slots, bool viewsRequired = true) {
         var ready = true;
         List<(string Name, Exception Failure)>? failures = null;
 
@@ -335,7 +363,9 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             }
 
             try {
-                ready &= (slot.Lease.Poll() is not null);
+                var built = (slot.Lease.Poll() is not null);
+
+                ready &= (built || (!viewsRequired && IsViews(kernel: ((SdfKernel)index))));
             } catch (Exception failure) {
                 (failures ??= []).Add(item: (slot.Description.Name, failure));
             }

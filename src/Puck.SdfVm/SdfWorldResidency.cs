@@ -192,9 +192,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets the mesh draws of the last captured frame, the ones the mesh region holds once the frame
     /// renders.</summary>
     public int MeshDrawCount => Volatile.Read(location: ref m_meshDrawCount);
-    /// <summary>Gets whether the residency's tables are built: its pipeline set is installed and its first frame captured
-    /// and packed. It is false again after a device loss until the rebuilt tables are.</summary>
-    public bool IsReady => (m_tables is not null);
+    /// <summary>Gets whether the residency renders its current frame: its tables are built from its pipeline set, its
+    /// first frame captured and packed, and the views kernel its program selects, or a fuller one, is built. A program that
+    /// selects a stripped views variant never waits for the full ISA's. It is false again after a device loss until the
+    /// rebuilt tables are, and while a captured program waits for a views kernel that is still building, during which
+    /// the residency holds the frame it last packed.</summary>
+    public bool IsReady => ((m_tables is not null) && (m_viewsWaiting is null));
     /// <summary>Gets whether every hold on the residency has been released (<see cref="Release"/>), after which it renders
     /// nothing.</summary>
     public bool IsReleased => m_disposed;
@@ -206,7 +209,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
         ? null
         : ((m_frame is null)
             ? $"residency '{Name}' has captured no frame"
-            : m_pipelines.Describe()));
+            : (((m_tables is not null) && (m_viewsWaiting is { } views))
+                ? $"residency '{Name}' holds its frame until the views kernel its program selects, '{SdfKernelSet.StemOf(kernel: views)}', is built: {m_pipelines.Describe()}"
+                : m_pipelines.Describe())));
     /// <summary>Gets the GPU work the residency's uploads recorded (<see cref="SdfWorldTables.Work"/>); submission
     /// identities keep increasing across a device-loss rebuild.</summary>
     public IGpuWorkSource Work => m_work;
@@ -342,12 +347,15 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public bool Prepare(in FrameContext context) {
         _ = HostFrame(context: in context);
 
-        if (m_packed) {
-            return (m_tables is not null);
+        if (!m_packed) {
+            m_packed = true;
+            m_renders = PrepareOnce(context: in context);
         }
 
-        m_packed = true;
-
+        return m_renders;
+    }
+    // The frame's one preparation, whose answer Prepare repeats for the rest of the frame.
+    private bool PrepareOnce(in FrameContext context) {
         if (
             (m_frame is not { } frame) ||
             !context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device) ||
@@ -404,6 +412,15 @@ public sealed partial class SdfWorldResidency : IDisposable {
             objB: m_packedFrame
         )) {
             if (m_programPending) {
+                // A program whose views kernel is still building is not uploaded: the residency holds the frame it last
+                // packed, which the live program's views render, until that kernel is built, as any rebuild does.
+                if (tables.ViewsWaiting(program: frame.Program) is { } waiting) {
+                    m_viewsWaiting = waiting;
+                    m_frame = (m_packedFrame ?? frame);
+
+                    return (tables.ViewsWaiting(program: null) is null);
+                }
+
                 m_programPending = false;
                 UploadProgram(
                     program: frame.Program,
@@ -417,6 +434,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
         }
 
         tables.UpdateTablesSignature();
+        // The views render once the live program's views kernel, or a fuller one, is built; the residency is ready then.
+        m_viewsWaiting = tables.ViewsWaiting(program: null);
+
+        if (m_viewsWaiting is not null) {
+            return false;
+        }
+
+        _ = Volatile.Read(location: ref m_ready).TrySetResult();
 
         return true;
     }
@@ -587,6 +612,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
 
     private bool m_programPending;
+    // The views kernel the residency waits on: the live program's while the tables are built and it is not yet, or a
+    // captured program's while the residency holds its packed frame until it is (SdfWorldTables.ViewsWaiting).
+    private SdfKernel? m_viewsWaiting;
+    // Whether the frame's preparation left the tables holding a frame the views can render.
+    private bool m_renders;
 
     // Captures the frame from the frame source when it films one this frame, first advancing its brick planner against
     // the live tables, whose Ready flip bumps the source's content revision so the capture emits the brick this frame.
@@ -668,7 +698,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_packedFrame = null;
         m_programPending = false;
         Array.Clear(array: m_renderedSignatures);
-        _ = Volatile.Read(location: ref m_ready).TrySetResult();
 
         return true;
     }
