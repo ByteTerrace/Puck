@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Puck.Abstractions.Pacing;
@@ -36,6 +35,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
     private readonly ISnapshotInputCapture[] m_snapshotInputCaptures;
     private readonly TerminalControl m_terminal;
     private readonly TextCommandSource m_textSource;
+    private readonly TimeProvider m_time;
 
     public HeadlessTickHostedService(
         IHostApplicationLifetime applicationLifetime,
@@ -50,9 +50,11 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         CommandRegistry registry,
         TextCommandSource textSource,
         TerminalControl terminal,
-        StandardInputBacklog inputBacklog
+        StandardInputBacklog inputBacklog,
+        TimeProvider time
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
+        ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(bufferedOutput);
         ArgumentNullException.ThrowIfNull(inputClock);
         ArgumentNullException.ThrowIfNull(inputRouters);
@@ -79,6 +81,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         m_registry = registry;
         m_snapshotInputCaptures = [.. snapshotInputCaptures];
         m_textSource = textSource;
+        m_time = time;
         m_simulation = LauncherHostLoop.SingleOrDefault(
             items: simulations,
             name: nameof(IFixedStepSimulation),
@@ -105,7 +108,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 m_logger.LogInformation(message: "Headless boot: no window, no GPU device, no swapchain, no audio device — the authoritative server, console, and tape only.");
             }
 
-            var clock = TickClock.Start(time: TimeProvider.System);
+            var clock = TickClock.Start(time: m_time);
             // Mirrors LauncherWindowHostedService's own null-simulation tolerance: a composition root that registers
             // no fixed-step sim still runs the console pump alone.
             var pump = FixedStepPump.CreateHosted(
@@ -119,7 +122,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 terminal: m_terminal,
                 textSource: m_textSource
             );
-            var frequency = Stopwatch.Frequency;
+            var frequency = m_time.TimestampFrequency;
             var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
             // The registered simulation declares its own rate; DefaultUpdateRate is the null-simulation fallback
             // (console pump alone) and the fallback while the registered simulation reports 0 (an authored
@@ -135,7 +138,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
             // rate.
             var spinThreshold = LauncherHostLoop.SpinThreshold(frequency: frequency);
             var hostFrame = 0UL;
-            var nextDeadline = Stopwatch.GetTimestamp();
+            var nextDeadline = m_time.GetTimestamp();
             var exitAfterTimestamp = ((m_options.ExitAfter is { } exitAfter)
                 ? (nextDeadline + ((long)(exitAfter.TotalSeconds * frequency)))
                 : (long?)null
@@ -150,7 +153,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
 
                 if (
                     (exitAfterTimestamp is { } deadline) &&
-                    (Stopwatch.GetTimestamp() >= deadline)
+                    (m_time.GetTimestamp() >= deadline)
                 ) {
                     m_terminal.RequestExit();
                 }
@@ -202,7 +205,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
 
                 nextDeadline += period;
 
-                var nowTimestamp = Stopwatch.GetTimestamp();
+                var nowTimestamp = m_time.GetTimestamp();
 
                 // CATCH-UP: fell more than a whole slot behind (a scripted burst, a stalled thread) — re-origin the
                 // grid at now instead of accumulating debt as a scheduling storm of steps. The FIXED-STEP ACCUMULATOR
@@ -216,7 +219,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                         deadlineTimestamp: nextDeadline,
                         precisionWaiter: m_precisionWaiter,
                         spinThreshold: spinThreshold,
-                        time: TimeProvider.System
+                        time: m_time
                     );
                 }
             }

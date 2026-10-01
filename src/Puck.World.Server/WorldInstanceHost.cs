@@ -661,6 +661,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
                 try {
                     _ = WorldServerStepShell.Step(
+                        allowReplayBurst: true,
                         context: in context,
                         publishTick: instance.PublishTick,
                         server: instance.Server,

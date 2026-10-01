@@ -33,7 +33,8 @@ public static class LauncherServiceRegistration {
 
         // The shared monotonic capture clock: every input backend stamps CaptureTick from this one instance, and
         // the window pump uses it to time-stamp drained input. One origin so all stamps are comparable.
-        services.TryAddSingleton<InputClock>(implementationFactory: static _ => InputClock.Start());
+        services.TryAddSingleton<TimeProvider>(instance: TimeProvider.System);
+        services.TryAddSingleton<InputClock>(implementationFactory: static sp => InputClock.Start(time: sp.GetRequiredService<TimeProvider>()));
         services.TryAddSingleton<IInputClock>(implementationFactory: static sp => sp.GetRequiredService<InputClock>());
 
         // The genlock (latency phase-align) ingestion seam: external rhythm producers (cameras, capture cards, network

@@ -206,11 +206,17 @@ authority steps its own ticks the same way while the authority keeps its own
 wall clock, so a client script reads what the authority did, never a tick count
 of it.
 
-The offscreen host reads its clock through a `TimeProvider`, the system clock
-unless the container registers one. `OffscreenTickPacingLawTests` runs the real
+All three hosts and their shared input capture clock read the same registered
+`TimeProvider`, which defaults to the system clock. Device recovery uses it for
+its reacquire budget and waits too. `OffscreenTickPacingLawTests` runs the real
 loop over a manual clock whose frames cost seconds and holds every frame to one
 tick, and a capture to the tick its frame composed; each law replays the same
 frame costs through `Advance` as its red leg.
+
+The offscreen boot authority also limits a fast-forwarding replay fork to one
+authority tick per host step. Windowed and headless authorities keep replay
+bursts. The tape retains its cursor between steps, so the offscreen limit
+changes pacing without dropping recorded input.
 
 ## Render lifecycle and publication
 
@@ -239,6 +245,8 @@ them, a device that does not return in time, or a host with nothing to rebuild
 through ends the run; the windowed host closes, and the offscreen host faults.
 A run that ends has still drained and released the render root first, so every
 capture armed at the loss is refused by name rather than left unserved.
+After recovery the offscreen host retries the completed step's frame with the
+same frame context before it takes another step.
 
 On Direct3D 12 both hosts follow one retry rule, in
 `DirectXDeviceContext.Recreate`: a rebuild that fails in Direct3D 12 itself,

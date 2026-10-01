@@ -10,7 +10,8 @@ namespace Puck.World.Server;
 /// sink, then closes the tick's replay-tape input group — the same two calls a boot shape used to make itself,
 /// now made ONCE so no boot shape can let them drift. A tape in <see cref="WorldReplayMode.Replaying"/> is also
 /// served here: its recorded tick is fed into the server's doors immediately before the step, and a fast-forwarding
-/// drive steps again inside the same call, up to its burst, so no boot shape paces a drive differently.
+/// drive steps again inside the same call, up to its burst, when the host permits replay bursts. The offscreen
+/// host permits only one tick so each driven tick gets its frame.
 /// </summary>
 public static class WorldServerStepShell {
     /// <summary>Steps the server for one fixed tick — or, while a fast-forwarding replay drive wants more, for a
@@ -25,6 +26,8 @@ public static class WorldServerStepShell {
     /// <c>Puck.Launcher</c>'s <c>ITextCommandHoldGate</c> it implements — both sit above this project's
     /// exact-equality closure (<c>build/Architecture.props</c>) — so the shell takes the one member either shape
     /// actually calls, as a delegate, rather than the type.</param>
+    /// <param name="allowReplayBurst">Whether this host may fast-forward several replay ticks in one call. False
+    /// for the offscreen boot authority, which produces a frame for every tick.</param>
     /// <param name="context">Host pacing coordinates and step width. Only the width advances simulation state:
     /// <see cref="WorldServer.Advance"/> uses the authority's checkpointed tick and engine-time coordinates.
     /// <see cref="FixedStepContext.Tick"/> supplies the independent count returned and published to the host.</param>
@@ -35,7 +38,7 @@ public static class WorldServerStepShell {
     /// <returns>The completed tick count — <c>context.Tick + 1</c>, or further along by the number of extra ticks a
     /// fast-forwarding drive stepped; a caller derives its own elapsed engine time from the difference times
     /// <see cref="FixedStepContext.StepTicks"/>.</returns>
-    public static ulong Step(WorldServer server, WorldReplayTape? tape, Action<ulong> publishTick, in FixedStepContext context, WorldPeerHost? peerHost = null) {
+    public static ulong Step(WorldServer server, WorldReplayTape? tape, Action<ulong> publishTick, in FixedStepContext context, bool allowReplayBurst, WorldPeerHost? peerHost = null) {
         var current = context;
         var burst = 0;
 
@@ -62,6 +65,7 @@ public static class WorldServerStepShell {
             }
 
             if (
+                !allowReplayBurst ||
                 (tape is not { WantsFastForwardStep: true }) ||
                 (++burst >= tape.FastForwardBurst)
             ) {

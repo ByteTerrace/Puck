@@ -143,6 +143,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
 
         public void Step(in FixedStepContext context, in CommandSnapshot commands) {
             _ = WorldServerStepShell.Step(
+                allowReplayBurst: true,
                 context: in context,
                 publishTick: _ => scheduler.PublishTick(tick: (server.NextInputTick - 1UL)),
                 server: server,

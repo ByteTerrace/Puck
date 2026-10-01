@@ -318,6 +318,7 @@ public sealed partial class PortalInputLawTests {
             );
 
             m_steps = WorldServerStepShell.Step(
+                allowReplayBurst: true,
                 context: in context,
                 publishTick: static _ => { },
                 server: Boot.Server,

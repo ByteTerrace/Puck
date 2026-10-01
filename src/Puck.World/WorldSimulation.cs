@@ -21,6 +21,7 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
     private readonly WorldPerceptionAnchor m_anchor = anchor;
     private readonly WorldViewComposer m_composer = composer;
     private readonly WorldHostStep m_step = new(
+        allowReplayBurst: true,
         captureScheduler: captureScheduler,
         extensions: extensions,
         instances: instances,

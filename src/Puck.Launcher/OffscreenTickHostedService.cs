@@ -68,11 +68,11 @@ public sealed class OffscreenTickHostedService : BackgroundService {
         StandardInputBacklog inputBacklog,
         IEnumerable<IDeviceRebuild> deviceRebuilds,
         IEnumerable<GpuCreationFaults> faults,
-        IEnumerable<TimeProvider> clocks
+        TimeProvider time
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
         ArgumentNullException.ThrowIfNull(bufferedOutput);
-        ArgumentNullException.ThrowIfNull(clocks);
+        ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(deviceRebuilds);
         ArgumentNullException.ThrowIfNull(faults);
         ArgumentNullException.ThrowIfNull(inputClock);
@@ -123,11 +123,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
         );
         m_terminal = terminal;
         m_inputBacklog = inputBacklog;
-        m_time = (LauncherHostLoop.SingleOrDefault(
-            items: clocks,
-            name: nameof(TimeProvider),
-            hostDescription: "offscreen host"
-        ) ?? TimeProvider.System);
+        m_time = time;
 
         if ((m_simulation is null) != (m_inputRouter is null)) {
             throw new InvalidOperationException(message: "A fixed-step simulation and its InputRouter must be registered together. Use AddFixedStepSimulation<TSimulation>().");
@@ -172,14 +168,21 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                 textSource: m_textSource
             );
             var frequency = time.TimestampFrequency;
+            var spinThreshold = LauncherHostLoop.SpinThreshold(frequency: frequency);
 
             var deviceLoss = new DeviceLossRecovery(
                 logger: m_logger,
                 root: m_root,
                 rootHostContext: m_rootHostContext,
+                sleep: duration => LauncherHostLoop.WaitUntil(
+                    deadlineTimestamp: (time.GetTimestamp() + ((long)(duration.TotalSeconds * frequency))),
+                    precisionWaiter: m_precisionWaiter,
+                    spinThreshold: spinThreshold,
+                    time: time
+                ),
+                time: time,
                 writeLine: m_bufferedOutput.WriteErrorLine
             );
-            var spinThreshold = LauncherHostLoop.SpinThreshold(frequency: frequency);
             var hostFrame = 0UL;
             var nextDeadline = time.GetTimestamp();
             var exitAfterTimestamp = ((m_options.ExitAfter is { } exitAfter)
@@ -251,24 +254,25 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                         TargetWidth: targetWidth
                     );
 
-                    // A loss follows the windowed host's policy: captures armed at it are refused by name, the device
-                    // is rebuilt in place, and the loop steps on. A loss it cannot recover from ends the run as a fault.
-                    try {
-                        // The operator's gpu.faults lose loses the device on its armed frame, here, like a real loss.
-                        m_faults?.ThrowIfLossDue();
-                        _ = m_root.ProduceFrame(context: in frameContext);
-                        deviceLoss.NoteFrameProduced();
-                    } catch (DeviceLostException deviceLost) {
-                        if (!deviceLoss.TryRecover(
-                            deviceLost: deviceLost,
-                            rebuild: m_deviceRebuild
-                        )) {
-                            throw;
+                    // Recovery refuses captures on the lost device, but the completed step still owes its frame.
+                    // Retry that same context before another step; an unrecoverable loss faults the run.
+                    while (true) {
+                        try {
+                            m_faults?.ThrowIfLossDue();
+                            _ = m_root.ProduceFrame(context: in frameContext);
+                            deviceLoss.NoteFrameProduced();
+
+                            break;
+                        } catch (DeviceLostException deviceLost) {
+                            if (!deviceLoss.TryRecover(
+                                deviceLost: deviceLost,
+                                rebuild: m_deviceRebuild
+                            )) {
+                                throw;
+                            }
+
+                            m_bufferedOutput.Flush();
                         }
-
-                        m_bufferedOutput.Flush();
-
-                        continue;
                     }
 
                     m_bufferedOutput.Flush();
