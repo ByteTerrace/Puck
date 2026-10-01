@@ -259,17 +259,19 @@ public sealed class SdfEnvironment {
             index: 0
         );
     }
-    /// <summary>Copies every lane from a lane span.</summary>
-    public void CopyFrom(ReadOnlySpan<float> lanes) {
-        if (lanes.Length != LaneCount) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(lanes),
-                message: $"An environment carries {LaneCount} lanes, not {lanes.Length}."
-            );
-        }
 
-        lanes.CopyTo(destination: m_lanes);
-    }
+    // What a point or occluder light's dynamic slot may be.
+    private static string LightSlotRule => $"a point or occluder light's dynamic slot must be {SdfProgram.NoDynamicTransformSlot} or in [0, {SdfProgram.MaxDynamicTransformSlot}].";
+
+    // The one rule a light's dynamic slot holds to, which SetLight, the one door that writes it, enforces: a point or
+    // occluder light's slot is the static sentinel or a whole slot in the table; every other kind's lane is not read as
+    // a slot. An environment copies whole only from another environment, whose lanes SetLight wrote.
+    private static bool IsLightSlot(SdfLightKind kind, float slot) => (
+        (kind is not (SdfLightKind.Point or SdfLightKind.Occluder)) ||
+        (slot == SdfProgram.NoDynamicTransformSlot) ||
+        ((slot >= 0f) && (slot <= SdfProgram.MaxDynamicTransformSlot) && (slot == MathF.Floor(x: slot)))
+    );
+
     /// <summary>Creates the environment an unauthored world renders: the pinned sun with shadows and the pinned
     /// hemisphere ambient, no sky.</summary>
     public static SdfEnvironment Default() {
@@ -371,8 +373,8 @@ public sealed class SdfEnvironment {
         z: m_lanes[((row * 4) + 2)]
     );
 
-    // Sets one lane for the table's setters. Individual light writes go through SetLight's range check;
-    // CopyFrom also imports complete lane tables.
+    // Sets one lane for the table's setters, so a light's transform slot reaches its lane only through SetLight's range
+    // check.
     private void SetLane(int row, int lane, float value) => m_lanes[((row * 4) + lane)] = value;
 
     /// <summary>Sets one light and, when it shadows, makes it the shadow light.</summary>
@@ -386,13 +388,12 @@ public sealed class SdfEnvironment {
         ) {
             throw new ArgumentOutOfRangeException(paramName: nameof(index));
         }
-        if (
-            (light.Kind is SdfLightKind.Point or SdfLightKind.Occluder) &&
-            (light.DynamicSlot != SdfProgram.NoDynamicTransformSlot) &&
-            ((light.DynamicSlot < 0) || (light.DynamicSlot > SdfProgram.MaxDynamicTransformSlot))
-        ) {
+        if (!IsLightSlot(
+            kind: light.Kind,
+            slot: light.DynamicSlot
+        )) {
             throw new ArgumentOutOfRangeException(
-                message: $"A point or occluder light's dynamic slot must be {SdfProgram.NoDynamicTransformSlot} or in [0, {SdfProgram.MaxDynamicTransformSlot}].",
+                message: $"light {index}'s dynamic slot is {light.DynamicSlot}; {LightSlotRule}",
                 paramName: nameof(light)
             );
         }
