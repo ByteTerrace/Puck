@@ -279,6 +279,9 @@ public static class SdfIsaHlsl {
         declarations.Signed(name: "SDF_TRANSFORM_SLOT_NONE", value: SdfProgram.NoDynamicTransformSlot);
         declarations.Count(name: "SDF_VISIBILITY_BOX_EDGE", value: SdfVisibility.BoxEdgePixels);
         declarations.Expression(name: "SDF_VISIBILITY_CURRENT(pixel, bounds)", value: SdfVisibility.CurrencyHlsl);
+        declarations.Section(title: "The packed transform-slot word a rigid segment and a part binding store (SdfProgram.PackTransformSlot).");
+        declarations.Count(name: "SDF_TRANSFORM_SLOT_STATIC_WORD", value: SdfProgram.StaticTransformSlotWord);
+        declarations.Expression(name: "SDF_TRANSFORM_SLOT_UNPACK(word)", value: "((int)(word) + SDF_TRANSFORM_SLOT_NONE)");
 
         return declarations.Text();
     }
