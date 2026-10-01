@@ -305,6 +305,8 @@ internal static class SchemaCommand {
                 relativePath: RenderGraphRelativePath,
                 repositoryRoot: repositoryRoot,
                 text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportDocument(
+                    // The graph's own records and the pipeline model's resources and passes it embeds.
+                    documentation: [typeof(RenderGraphDefinition), typeof(ShaderPipelineResource)],
                     options: RenderGraphJsonContext.Default.Options,
                     schemaId: RenderGraphSchemas.Graph,
                     title: $"Puck frame graph ({RenderGraphSchemas.Graph})",
