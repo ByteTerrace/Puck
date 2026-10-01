@@ -4842,10 +4842,11 @@ counted rows recorded in the same change.
      `converge` station holds on both backends under its vocabulary contract.
      The resolve binds the World set as well as the frame and pass sets, one
      more descriptor-set bind a resolve dispatch, and writes its pass set once a
-     frame slot. Open: `portal-walk` asserts its arrival with reconstruction on,
-     but no canary compares its crossing frame to the spatial path exactly; the
-     epoch reset on a crossing (P15-2) and the epoch's spatial first frame cover
-     it by law only.
+     frame slot. `portal-walk` crosses with reconstruction on and holds its
+     crossing frame to a relaunch's spatial crossing frame exactly, while a
+     frame with gathered history differs from the spatial one; no world can
+     author a crossing that keeps history, so the epoch reset on a crossing is
+     held by law (P15-2).
    - Delivers: the history color and history surface as the fragment's history
      versions at output extent; reprojection through `sdfReprojection`, rejected
      by identity and depth; neighbourhood rectification; the `reactivity` image

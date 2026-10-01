@@ -796,16 +796,18 @@ leg-private, disposable `<run>/install/` tree, never the shared build path,
 and observes two successive process launches rather than one—the
 `self-update` canary is the only user today.
 
-A leg that runs one World process can declare a `relaunch`: a `world` file
-name, a `script`, and its own `commands`. After the first process ends, the
-runner boots the World again under the same state directory. That boot runs
-on the named document in the leg's run directory, which the first script
-writes with `world.save {run}/<name>`. The second boot runs its script with the
+A leg that runs one World process can declare a `relaunch`: a `script`, its
+own `commands`, and optionally a `world` file name. After the first process
+ends, the runner boots the World again under the same state directory. That
+boot runs on the named document in the leg's run directory, which the first
+script writes with `world.save {run}/<name>`, or, with no `world`, on the leg's
+own world again. The second boot runs its script with the
 same runner-owned ending. Each boot's commands are accounted against its own
 process, and each boot gets the exit, timeout and boot-origin checks.
 Assertions read both boots' streams in order, and captures from either land in
 the one run directory. The leg's budget counts both boots. `pipeline-override`
-uses it to prove that a committed value survives an exit.
+uses it to prove that a committed value survives an exit, and `portal-walk` to
+walk the same crossing a second time with reconstruction off.
 
 A single-process leg can set `runSchedule: true` to arm the world document's
 existing command schedule. The runner passes `--schedule-dir {run}/schedule`,

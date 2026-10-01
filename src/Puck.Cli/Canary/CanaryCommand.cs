@@ -1050,7 +1050,8 @@ internal static partial class CanaryCommand {
         var exitCode = process.ExitCode;
         var timedOut = process.TimedOut;
 
-        // The relaunch boots only after a first boot that ran its script to the end, on the document that boot wrote.
+        // The relaunch boots only after a first boot that ran its script to the end, on the document that boot wrote or on
+        // the leg's own world.
         if (
             (leg.Relaunch is { } relaunch) &&
             (unsupported is null) &&
@@ -1064,10 +1065,12 @@ internal static partial class CanaryCommand {
                 );
             }
 
-            var relaunchWorld = Path.Combine(
-                path1: runDirectory,
-                path2: relaunch.WorldFileName
-            );
+            var relaunchWorld = ((relaunch.WorldFileName is { } relaunchFile)
+                ? Path.Combine(
+                    path1: runDirectory,
+                    path2: relaunchFile
+                )
+                : executionWorld);
             var relaunchInput = File.ReadAllText(path: relaunch.ScriptPath)
                 .Replace(
                 oldValue: "{fixtures}",
