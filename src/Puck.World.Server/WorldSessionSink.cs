@@ -16,13 +16,30 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     /// <summary>Gets what the observer threw, once it has.</summary>
     public Exception? Fault { get; private set; }
 
+    private bool CanObserve => (
+        (Tier != WorldDisclosureTier.Frames) &&
+        server.ObservesAsSession(session: observation.Session)
+    );
     private WorldDisclosureTier Tier => observation.Tier;
 
+    // Queries are read doors into the same disclosed view as deliveries. Only state observations have their own
+    // recipient-filtered projection; the remaining readbacks describe authoritative state that a Presentation or
+    // redacted Replica mirror does not carry, so they require the whole replica.
+    internal bool AllowsQuery(WorldQuery query) => (
+        CanObserve &&
+        ((query is WorldQuery.StateObservations) || DisclosesFullReplica)
+    );
+
+    private bool DisclosesFullReplica => (
+        (Tier == WorldDisclosureTier.Replica) &&
+        new WorldSinkDisclosure(
+            ObserverBodyIndex: -1,
+            Policy: server.Definition.Population.ObserverDisclosure
+        ).IsFull
+    );
+
     private bool Discloses() {
-        if (
-            (Tier != WorldDisclosureTier.Frames) &&
-            server.ObservesAsSession(session: observation.Session)
-        ) {
+        if (CanObserve) {
             return true;
         }
 
@@ -161,7 +178,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         Forward(deliver: () => {
             if (
                 m_withheld ||
-                (Tier != WorldDisclosureTier.Replica)
+                !DisclosesFullReplica
             ) {
                 m_withheld = false;
                 inner.DeliverDefinition(

@@ -1,4 +1,5 @@
 using Puck.Commands;
+using System.Text;
 using System.Threading.Channels;
 using Puck.World.Protocol;
 
@@ -6,13 +7,23 @@ namespace Puck.World.Server;
 
 /// <summary>Samples borrowed authority snapshots at the live disclosure cadence, redacts only frames that are due,
 /// and copies them into a bounded wire queue; no socket writes run on the authority tick.</summary>
-internal sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, string authority, Func<int> revision,
+public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, string authority, Func<int> revision,
     Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, Principal? recipient = null) : IClientSink {
-    private readonly Channel<(WorldFederationResponse Kind, byte[] Body)> m_frames = Channel.CreateBounded<(WorldFederationResponse, byte[])>(options: new BoundedChannelOptions(capacity: 8) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = true });
+    /// <summary>The maximum encoded records one projection subscriber retains while its wire consumer is behind.</summary>
+    public const int PendingDeliveryLimit = 8;
+    /// <summary>The named reason for detaching an observer whose wire queue fills.</summary>
+    public const string BackpressureDetachReason = "world.observation.backpressure";
+
+    private readonly Channel<(WorldFederationResponse Kind, byte[] Body)> m_frames = Channel.CreateBounded<(WorldFederationResponse, byte[])>(options: new BoundedChannelOptions(capacity: PendingDeliveryLimit) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = true });
     private readonly WorldProjectionSampler m_sampler = new(updateSeconds: disclosure().Policy.UpdateSeconds);
     private EntitySnapshot[] m_redacted = [];
 
     private bool m_invalidated;
+
+    /// <summary>The number of encoded records currently retained for this subscriber.</summary>
+    public int PendingDeliveries => m_frames.Reader.Count;
+    /// <summary>The detach reason, when overflow ended this subscription.</summary>
+    public string? DetachReason { get; private set; }
 
     private bool Current() {
         if (m_invalidated) { return false; }
@@ -32,7 +43,9 @@ internal sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, st
         }
         if (m_invalidated) {
             await WorldFederationCodec.WriteResponseAsync(
-                body: default,
+                body: ((DetachReason is { } reason)
+                    ? Encoding.UTF8.GetBytes(s: reason)
+                    : ReadOnlyMemory<byte>.Empty),
                 ct: ct,
                 kind: WorldFederationResponse.ProjectionInvalidated,
                 stream: output
@@ -40,8 +53,15 @@ internal sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, st
         }
     }
     private void Write(WorldFederationResponse kind, byte[] body) {
+        if (m_invalidated) {
+            return;
+        }
         if (!m_frames.Writer.TryWrite(item: (kind, body))) {
-            m_frames.Writer.TryComplete(error: new IOException(message: "federation observer exceeded its bounded projection backlog"));
+            // The stream's primer, definition revisions, and authority route cannot be reconstructed from a lone
+            // latest snapshot. Detach so the peer reopens with a fresh primer instead of accepting an ambiguous gap.
+            DetachReason = BackpressureDetachReason;
+            m_invalidated = true;
+            m_frames.Writer.TryComplete();
         }
     }
 
@@ -113,6 +133,7 @@ internal sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, st
             ct
         );
 }
+
 /// <summary>Ends a one-way projection when either its producer ends or its consumer disconnects.</summary>
 internal static class WorldProjectionStream {
     public static async Task RunAsync(Stream output, Func<CancellationToken, Task> produce, CancellationToken ct) {

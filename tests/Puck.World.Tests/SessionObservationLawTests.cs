@@ -73,6 +73,33 @@ public sealed class SessionObservationLawTests {
     }
 
     [Fact]
+    public void APresentationSessionCannotQueryTheBodyPoseItsProjectionDoesNotCarry() {
+        bool QueryLeaksPose(WorldDisclosureTier tier) {
+            using var fixture = Fixtures.FreshServer(definition: Document(tier: tier));
+
+            _ = fixture.JoinSeat();
+            var (observation, _, refusal) = Observe(fixture: fixture);
+
+            Assert.NotNull(@object: observation);
+            Assert.True(condition: string.IsNullOrEmpty(value: refusal));
+
+            var answer = fixture.Server.AnswerSubmittedQuery(
+                principal: observation.Session,
+                query: new WorldQuery.PlayerWhere(Index: 0)
+            );
+
+            observation.Dispose();
+
+            return !answer.Refused;
+        }
+
+        Laws.RefusalWithControl(
+            lawId: "session.presentation-query-fidelity",
+            deniedOutcome: () => QueryLeaksPose(tier: WorldDisclosureTier.Presentation),
+            controlOutcome: () => QueryLeaksPose(tier: WorldDisclosureTier.Replica)
+        );
+    }
+    [Fact]
     public void AnObservation_AdmitsExactlyOneSession_AndReleasingItEndsThatSession() {
         using var fixture = Fixtures.FreshServer(definition: Document(tier: WorldDisclosureTier.Replica));
 
@@ -257,6 +284,16 @@ public sealed class SessionObservationLawTests {
             fixture.Step();
             fixture.Step();
 
+            var answer = fixture.Server.AnswerSubmittedQuery(
+                principal: observation!.Session,
+                query: new WorldQuery.PlayerWhere(Index: 0)
+            );
+
+            Assert.Equal(
+                expected: mirror.IsActive(index: 0),
+                actual: !answer.Refused
+            );
+
             return mirror.IsActive(index: 0);
         }
 
@@ -439,6 +476,41 @@ public sealed class SessionObservationLawTests {
         };
     }
 
+    [Fact]
+    public void APresentationQueryUsesTheSameRecipientFilteredStateAsItsDelivery() {
+        int QueryCells(StateVisibility visibility) {
+            using var fixture = Fixtures.FreshServer(definition: WithHue(
+                bound: false,
+                visibility: visibility
+            ));
+
+            var (observation, mirror, refusal) = Observe(fixture: fixture);
+
+            Assert.NotNull(@object: observation);
+            Assert.True(condition: string.IsNullOrEmpty(value: refusal));
+
+            var answer = fixture.Server.AnswerSubmittedQuery(
+                principal: observation.Session,
+                query: new WorldQuery.StateObservations(Row: "hue")
+            );
+
+            Assert.False(condition: answer.Refused, userMessage: answer.Text);
+            var rows = Assert.IsAssignableFrom<IReadOnlyList<WorldObservedRow>>(@object: answer.Payload);
+            var count = rows.Sum(selector: row => row.Cells.Count);
+
+            Assert.Equal(
+                expected: mirror.Definition.State.Where(predicate: row => (row.Name.Value == "hue")).Sum(selector: row => (row.Cells?.Count ?? 0)),
+                actual: count
+            );
+
+            observation.Dispose();
+
+            return count;
+        }
+
+        Assert.Equal(expected: 0, actual: QueryCells(visibility: new StateVisibility(Readers: ["seat1"])));
+        Assert.Equal(expected: 1, actual: QueryCells(visibility: new StateVisibility()));
+    }
     [Fact]
     public void ACandidateIsMeasuredAsTheMostAnySessionCouldReceive_AndOneWhoseStoreCannotBeLaidOutIsRefused() {
         using var fixture = Fixtures.FreshServer(definition: Document(tier: WorldDisclosureTier.Presentation));

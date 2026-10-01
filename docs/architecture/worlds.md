@@ -652,6 +652,19 @@ An observation feed provides:
 - redaction and fidelity enforcement at every projection/read door, including queries;
 - the destination presentation clock and step width.
 
+The in-process output hub delivers synchronously on the tick thread. Its snapshots borrow reused storage,
+so each sink consumes or copies them before returning. The federation projection sink copies encoded records
+into a per-subscription queue of at most eight pending deliveries (`WorldFederationProjectionSink.PendingDeliveryLimit`).
+When that queue fills, it detaches with `world.observation.backpressure` and ends the stream with a projection
+invalidation. A peer reopens for a fresh primer: a snapshot alone cannot repair a missed definition revision
+or authority route. The queued records retain their original order and authority/session epochs until that
+invalidation; no later record enters a detached queue. Faulting sinks still detach independently.
+
+Session queries cross the same disclosure decision as delivery. A `Frames` session reads no query result;
+`Presentation` sessions can query only recipient-filtered state observations, whose projection is also used
+for delivery. Authoritative readbacks require a `Replica` admission and disclose-all observer policy. A
+session whose observation has ended has no query read door.
+
 A session screen observes its destination as a session. When the screen binds,
 `WorldServer.TryObserveAsSession` admits one against the destination's own `admission` rows for
 the viewer's authority, and releasing the screen ends it. The screen's mirror starts knowing nothing

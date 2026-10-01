@@ -23,6 +23,13 @@ public sealed partial class WorldServer {
     public bool IsLiveSession(Principal principal) => m_grants.IsLiveSession(principal: principal);
     /// <inheritdoc cref="WorldGrants.ObservesAsSession"/>
     public bool ObservesAsSession(Principal session) => m_grants.ObservesAsSession(session: session);
+
+    internal bool AllowsSessionQuery(Principal session, WorldQuery query) => (
+        m_sessionSinks.TryGetValue(key: session, value: out var attached) &&
+        !attached.Observation.Ended &&
+        attached.Observation.AllowsQuery(query: query)
+    );
+
     /// <inheritdoc cref="WorldGrants.TryAdmitSession"/>
     public bool TryAdmitSession(string sourceAuthority, out Principal session, out WorldDisclosureTier tier, out string refusal) => m_grants.TryAdmitSession(
         refusal: out refusal,

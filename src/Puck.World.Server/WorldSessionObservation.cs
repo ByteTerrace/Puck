@@ -53,6 +53,7 @@ public sealed class WorldSessionObservation : IDisposable {
     );
 
     internal void Attach(WorldSessionSink sink) => m_sink = sink;
+    internal bool AllowsQuery(WorldQuery query) => (m_sink?.AllowsQuery(query: query) == true);
     internal void MarkEnded() => m_ended = true;
 
     /// <summary>Discloses a candidate definition as it would reach this observation's renderer, for a consumer that
