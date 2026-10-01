@@ -41,12 +41,21 @@ public sealed class SdfPassBindingLawTests {
             collection: tables
         );
     }
+    // Every pass of a view binds the residency's one World set, the resolve pass among them, so the World group its
+    // pipeline is created from is the world interface's, binding for binding; a group missing a table is a set layout
+    // the bound set does not match.
+    [Fact]
+    public void TheResolvePassLaysOutTheWorldGroupItBinds() =>
+        Assert.Equal(
+            actual: Group(group: ShaderInterfaceGroup.World, layout: SdfWorldInterfaces.ResolveParameters.Layout).Bindings,
+            expected: Group(group: ShaderInterfaceGroup.World, layout: SdfWorldInterfaces.WorldLayout).Bindings
+        );
     [Fact]
     public void EachDeployedKernelBindsALightOrSkyTableOnlyWhenItsPassReadsIt() {
         var kernels = SdfKernelSet.Load(bytecodeExtension: ".spv");
         var world = Group(group: ShaderInterfaceGroup.World, layout: SdfWorldInterfaces.WorldLayout);
 
-        foreach (var kernel in SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel is not (SdfKernel.BrickBake or SdfKernel.Resolve)))) {
+        foreach (var kernel in SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel != SdfKernel.BrickBake))) {
             var reflected = SpirvInterfaceReader.Read(module: kernels[kernel].Span);
 
             // The kernel's bindings are its interface's, stamp included.

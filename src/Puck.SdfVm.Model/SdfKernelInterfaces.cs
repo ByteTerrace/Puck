@@ -68,9 +68,11 @@ public sealed class SdfKernelInterfaces {
             package: RenderGraphPackageCatalog.SdfWorld,
             members: [.. SdfWorldPackage.Members, .. LightAndSkyTables]
         ).Stamped(stamp: stamp);
+        // The resolve pass binds the residency's World set, so its World group is the world interface's, the lights
+        // and sky tables included.
         ResolveParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
-            members: SdfWorldPackage.ResolveMembers,
+            members: [.. SdfWorldPackage.ResolveMembers, .. LightAndSkyTables],
             package: "sdf-resolve"
         ).Stamped(stamp: stamp);
         BrickBakeParameters = ShaderPipelineParameterLayout.ForPackage(

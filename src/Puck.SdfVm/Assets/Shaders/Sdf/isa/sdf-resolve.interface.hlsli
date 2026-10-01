@@ -1,6 +1,65 @@
-// Generated from shader interface 'sdf-resolve' (sha256/4c03e8daca41a078f782a1d05fc933487b09b73bb8fb40e693164155b6440df3). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/e253a464c8fcc9e38167e68dd66645b1f10be33ba475ba6adc6569c9925bded4). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
+
+struct SdfLight {
+    [[vk::offset(0)]] float3 Direction;
+    [[vk::offset(12)]] float Weight;
+    [[vk::offset(16)]] float3 Color;
+    [[vk::offset(28)]] uint Kind;
+    [[vk::offset(32)]] float Param;
+    [[vk::offset(36)]] uint Shadows;
+    [[vk::offset(40)]] int DynamicSlot;
+    [[vk::offset(44)]] uint _pad44;
+};
+
+struct SdfSkyBlock {
+    [[vk::offset(0)]] uint Enabled;
+    [[vk::offset(4)]] float FogDensity;
+    [[vk::offset(8)]] uint StopCount;
+    [[vk::offset(12)]] uint SoftboxCount;
+    [[vk::offset(16)]] float3 DiscDirection;
+    [[vk::offset(28)]] float DiscIntensity;
+    [[vk::offset(32)]] float DiscExponent;
+    [[vk::offset(36)]] int DiscLight;
+    [[vk::offset(40)]] float StarDensity;
+    [[vk::offset(44)]] float StarBrightness;
+    [[vk::offset(48)]] uint StarSeed;
+    [[vk::offset(52)]] float TwinkleShare;
+    [[vk::offset(56)]] float TwinkleDepth;
+    [[vk::offset(60)]] float TwinklePhase;
+    [[vk::offset(64)]] float3 CloudColor;
+    [[vk::offset(76)]] float CloudCoverage;
+    [[vk::offset(80)]] float CloudSoftness;
+    [[vk::offset(84)]] float CloudScale;
+    [[vk::offset(88)]] uint CloudSeed;
+    [[vk::offset(92)]] float CloudCurl;
+    [[vk::offset(96)]] float2 CloudDriftOffset;
+    [[vk::offset(104)]] float2 CloudShearOffset;
+    [[vk::offset(112)]] float3 CloudLightDirection;
+    [[vk::offset(124)]] float CloudSpinAngle;
+    [[vk::offset(128)]] float3 CloudLightColor;
+    [[vk::offset(140)]] uint _pad140;
+    [[vk::offset(144)]] float3 HorizonLow;
+    [[vk::offset(156)]] uint _pad156;
+    [[vk::offset(160)]] float3 HorizonHigh;
+    [[vk::offset(172)]] uint _pad172;
+};
+
+struct SdfSkyStop {
+    [[vk::offset(0)]] float3 Color;
+    [[vk::offset(12)]] float Elevation;
+};
+
+struct SdfSoftbox {
+    [[vk::offset(0)]] float3 Direction;
+    [[vk::offset(12)]] float Weight;
+    [[vk::offset(16)]] float3 Color;
+    [[vk::offset(28)]] uint _pad28;
+    [[vk::offset(32)]] float2 Size;
+    [[vk::offset(40)]] float Blur;
+    [[vk::offset(44)]] uint _pad44;
+};
 
 // The Frame group: descriptor set 0, register space 0.
 struct SdfResolveFrame {
@@ -42,6 +101,14 @@ struct SdfResolveFrame {
 [[vk::binding(17, 1)]] Texture2D<float4> sdfMeshOcclusion : register(t17, space1);
 [[vk::binding(18, 1)]] Texture2D<float4> sdfMeshMaterials : register(t18, space1);
 [[vk::binding(19, 1)]] Texture2D<float4> sdfMeshEmission : register(t19, space1);
+[[vk::binding(20, 1)]] StructuredBuffer<SdfLight> sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2 : register(t20, space1);
+#define sdfLights sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2
+[[vk::binding(21, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutc0ed0ac58f3374cb5cb9598dc3d2b22bbbd50fed7bd9ae30a7a319c2c56eccd4 : register(t21, space1);
+#define sdfSky sdfSkyLayoutc0ed0ac58f3374cb5cb9598dc3d2b22bbbd50fed7bd9ae30a7a319c2c56eccd4
+[[vk::binding(22, 1)]] StructuredBuffer<SdfSkyStop> sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224 : register(t22, space1);
+#define sdfSkyStops sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224
+[[vk::binding(23, 1)]] StructuredBuffer<SdfSoftbox> sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf : register(t23, space1);
+#define sdfSoftboxes sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf
 
 // The Pass group: descriptor set 3, register space 3.
 struct SdfResolvePass {
