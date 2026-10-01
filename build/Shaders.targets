@@ -24,6 +24,7 @@
         <ParameterGroup>
             <BytecodeFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
             <Includes ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <Token ParameterType="System.String" />
         </ParameterGroup>
         <Task>
             <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckShaderHashSidecars.cs" Type="Class" />
@@ -133,6 +134,9 @@
         </ItemGroup>
         <PropertyGroup>
             <_PuckHasShaderItems Condition="'@(_PuckShaderItems)' != ''">true</_PuckHasShaderItems>
+            <!-- DXC writes each file under a name only this run uses, and PuckWriteShaderHashSidecars moves it into place
+                 whole, so a reader in this or another build of the checkout never sees half a file. -->
+            <_PuckShaderToken>$([System.Guid]::NewGuid().ToString('N'))</_PuckShaderToken>
         </PropertyGroup>
         <Exec Condition="'$(_PuckHasShaderItems)' == 'true'" Command="&quot;$(DxcCommand)&quot; --version" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="High" StandardOutputImportance="Low">
             <Output PropertyName="DxcProbeExitCode" TaskParameter="ExitCode" />
@@ -140,18 +144,18 @@
         <Error Condition="'$(_PuckHasShaderItems)' == 'true' and '$(DxcProbeExitCode)' != '0'" Text="$(MSBuildProjectName) shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;." />
 
         <!-- Vertex. -->
-        <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcVertexSpirv) -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).spv&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
-        <Exec Condition="'$(PuckShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcVertexDxil) -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).dxil&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcVertexSpirv) -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).spv.$(_PuckShaderToken).tmp&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcVertexDxil) -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).dxil.$(_PuckShaderToken).tmp&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
 
         <!-- Fragment. -->
-        <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcFragmentSpirv) -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
-        <Exec Condition="'$(PuckShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcFragmentDxil) -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).dxil&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcFragmentSpirv) -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv.$(_PuckShaderToken).tmp&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcFragmentDxil) -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).dxil.$(_PuckShaderToken).tmp&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
 
         <!-- Compute kernels: SPIR-V (Vulkan; entry renamed to "main") and DXIL (DirectX) when enabled. The vk::
              binding/push-constant attributes are SPIR-V-only, so the DXIL pass suppresses the "attribute ignored"
              warnings; the register() slots drive the Direct3D 12 root signature. -->
-        <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcComputeSpirv) -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
-        <Exec Condition="'$(PuckComputeShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcComputeDxil) -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).dxil&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcComputeSpirv) -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv.$(_PuckShaderToken).tmp&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckComputeShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcComputeDxil) -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).dxil.$(_PuckShaderToken).tmp&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
 
         <!-- The full set of bytecode files this pass just produced, one item per stage/extension combination that
              was actually enabled — a project declaring no VertexShaderSource contributes zero vertex items via the
@@ -176,7 +180,7 @@
                 <SourcePath>%(ComputeShaderSource.FullPath)</SourcePath>
             </_PuckCompiledBytecode>
         </ItemGroup>
-        <PuckWriteShaderHashSidecars Condition="'$(DxcProbeExitCode)' == '0'" BytecodeFiles="@(_PuckCompiledBytecode)" Includes="@(ShaderInclude)" />
+        <PuckWriteShaderHashSidecars Condition="'$(DxcProbeExitCode)' == '0'" BytecodeFiles="@(_PuckCompiledBytecode)" Includes="@(ShaderInclude)" Token="$(_PuckShaderToken)" />
     </Target>
 
     <!-- Shared by every shader project: one that declares no VertexShaderSource never triggers a vertex Exec above,

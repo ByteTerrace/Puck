@@ -49,7 +49,8 @@ public sealed partial class ShaderBuildRecipeLawTests {
         }
     }
 
-    // One build invocation: DXC, a recipe property, and -Fo the stage source's bytecode beside it, then the source.
-    [GeneratedRegex(pattern: "Command=\"&quot;\\$\\(DxcCommand\\)&quot; \\$\\((?<property>PuckDxc\\w+)\\) -Fo &quot;%\\((?<item>\\w+)\\.RootDir\\)%\\(\\k<item>\\.Directory\\)%\\(\\k<item>\\.Filename\\)\\.(?<extension>spv|dxil)&quot; &quot;%\\(\\k<item>\\.FullPath\\)&quot;\"")]
+    // One build invocation: DXC, a recipe property, and -Fo the stage source's bytecode beside it under this run's
+    // temporary name, which the sidecar task moves into place, then the source.
+    [GeneratedRegex(pattern: "Command=\"&quot;\\$\\(DxcCommand\\)&quot; \\$\\((?<property>PuckDxc\\w+)\\) -Fo &quot;%\\((?<item>\\w+)\\.RootDir\\)%\\(\\k<item>\\.Directory\\)%\\(\\k<item>\\.Filename\\)\\.(?<extension>spv|dxil)\\.\\$\\(_PuckShaderToken\\)\\.tmp&quot; &quot;%\\(\\k<item>\\.FullPath\\)&quot;\"")]
     private static partial Regex ExecCommand();
 }

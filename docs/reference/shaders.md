@@ -91,6 +91,10 @@ or sidecars cause the build to regenerate them. Keep HLSL sources in Git.
 A pack or publish that skips the build (`--no-build`, as CI packs over a
 finished build) still collects the bytecode the build left, Direct3D 11 probe
 kernels included, and refuses a declared kernel whose bytecode is missing.
+DXC writes each file under a name only its build uses, and the build moves it
+and then its sidecar into place whole, retrying while another process holds
+the file, so two builds sharing a checkout never read half a file or refuse
+each other's writes.
 
 Deleting a source leaves its bytecode behind in any checkout that built it. The
 build removes that bytecode and its sidecar and prints one line naming each
