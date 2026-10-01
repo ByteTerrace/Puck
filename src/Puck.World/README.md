@@ -2024,11 +2024,16 @@ fog(density: 0) } } ]`), each field keyed through the keys that state it. A
 key states values only: a count, a seed, a kind, a name, a light's shadowing,
 the sun disc's light slot and a gradient's stop count are structure and
 refused by name, as is a field keyed both by its own keys and by the
-section's. A cloud's `drift`, `shear` and `spin` and a twinkle's `rate` are
+section's. Values that must hold an order (a gradient's stop elevations, the
+ink band's `inkLow` below its `inkHigh`) key on one clock and bind no state
+row, and are judged over every phase of that clock, between keys as well as at
+them: a pair that may meet anywhere is refused by name. A cloud's `drift`, `shear` and `spin` and a twinkle's `rate` are
 rates the tick integrates in closed form, so a key changing one never jumps
 the layer; a rate keys only on a tick clock and binds no state row. Keys are
 presentation: a clock reads the tick or a state row and nothing keyed feeds
-the simulation. `world.timeline` echoes each clock's source, its period and
+the simulation. A presentation-tier projection carries the tick clocks, which
+the recipient evaluates at the tick it presents, and no state clock, so a
+projection whose values key on a state clock refuses to hydrate by name. `world.timeline` echoes each clock's source, its period and
 start in engine ticks, its phase and reading at the authority's tick, and how
 many keyed values the presentation has resolved, which rises only while a
 clock a key reads moves.

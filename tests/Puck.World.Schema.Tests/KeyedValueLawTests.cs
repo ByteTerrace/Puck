@@ -313,7 +313,7 @@ public sealed class KeyedValueLawTests {
         );
 
         Assert.Contains(
-            expectedSubstring: "render.sky.layers[0].stops[1].elevation must exceed the previous stop's, and resolves [1, 1] at 12 on clock 'day'",
+            expectedSubstring: "render.sky.layers[0].stops[1].elevation must exceed render.sky.layers[0].stops[0].elevation wherever they resolve; at 12 on clock 'day' the value below resolves 1 and the value above 1",
             actualString: Validate(definition: Definition(sky: Sky(lowAtNoon: 1f)))
         );
         Assert.Equal(actual: Validate(definition: Definition(sky: Sky(lowAtNoon: 0.5f))), expected: string.Empty);
