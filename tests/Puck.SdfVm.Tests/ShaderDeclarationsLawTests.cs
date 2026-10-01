@@ -28,9 +28,9 @@ public sealed class ShaderDeclarationsLawTests {
             );
         }
     }
-    [Theory]
     [InlineData(true)]
     [InlineData(false)]
+    [Theory]
     public void AReconcileNamesOnlyTheDriftedDeclarationAndWritesItOnlyWhenAsked(bool write) {
         var source = RepositoryPaths.RequireRoot();
         var declarations = ShaderDeclarations.Of(files: ShaderDeclarations.InterfaceFiles(repositoryRoot: source), packages: RenderGraphPackageCatalog.Engine, problems: []);

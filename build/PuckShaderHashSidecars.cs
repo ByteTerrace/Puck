@@ -213,7 +213,7 @@ internal static class PuckShaderHashing {
         for (var attempt = 1; ; attempt++) {
             try {
                 return operation();
-            } catch (Exception error) when (((error is IOException) || (error is UnauthorizedAccessException)) && (attempt < Attempts)) {
+            } catch (Exception error) when ((((error is IOException) || (error is UnauthorizedAccessException)) && (attempt < Attempts))) {
                 log?.LogMessage(importance: MessageImportance.Low, message: $"Retrying '{path}' (attempt {attempt}): {error.Message}");
                 Thread.Sleep(millisecondsTimeout: (50 * attempt));
             }
@@ -242,7 +242,7 @@ internal static class PuckShaderHashing {
         Retry(log: null, operation: () => ReadOnce(path: path), path: path);
 
     private static byte[] ReadOnce(string path) {
-        using (var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: path, share: (FileShare.ReadWrite | FileShare.Delete))) {
+        using (var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: path, share: FileShare.ReadWrite | FileShare.Delete)) {
             var bytes = new byte[stream.Length];
             var read = 0;
 
@@ -258,6 +258,7 @@ internal static class PuckShaderHashing {
             return bytes;
         }
     }
+
     /// <summary>Streams <paramref name="firstPath"/> followed by every item in <paramref name="includes"/>, in
     /// order, through one SHA-256 instance — a real byte concatenation, not a hash-of-hashes. Carriage returns are
     /// dropped before hashing so the hash is a function of the committed text, not of the checkout's line-ending
