@@ -23,6 +23,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteByte(value: entry.KitIndex);
         writer.WriteVector(value: entry.BodyColor);
         writer.WriteByte(value: entry.CatalogRig);
+        writer.WriteFixed(value: entry.TravelTurn);
         writer.WriteArray(
             items: entry.Designations,
             writeItem: WriteTargetDesignation
@@ -128,6 +129,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         var kitIndex = reader.ReadByte();
         var bodyColor = reader.ReadFiniteVector(field: "population entry body color");
         var catalogRig = reader.ReadByte();
+        var travelTurn = WorldWireLeaves.ReadTravelTurn(
+            field: "population entry travel turn",
+            reader: ref reader
+        );
         var designations = reader.ReadArray(
             field: "population entry designations",
             readItem: static (ref WireReader r) => ReadTargetDesignation(reader: ref r),
@@ -271,6 +276,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             Residue: residue,
             SpawnPosition: spawnPosition,
             SpawnYaw: spawnYaw,
+            TravelTurn: travelTurn,
             Yaw: yaw
         );
     }

@@ -394,7 +394,10 @@ That isometry is a rotation about world up — the validator refuses a pair whos
 other are 180 degrees apart and map as the identity, so a body arrives at the same world point,
 keeping its heading and its velocity, and any other authored pair turns it by the remainder. A local
 seat following the body turns its view by the same turn, its eased chase boom included, so it looks
-along what the door's window showed. A
+along what the door's window showed. Every traveler carries its accumulated arrival turn, the sum of
+those turns reduced to `[-pi, pi)`, through each transfer. When an authority in another process hands
+the traveler on through doors of its own, the route it describes carries that turn, and the following
+seat turns by the change since it last turned. A
 boundary's rectangle takes its right axis from its yaw whatever its pitch, so the formula holds
 unchanged for a boundary lying flat: there the yaw no longer contributes to the outward direction
 and becomes the rectangle's roll about the vertical, which means an untwisted floor seam authors its

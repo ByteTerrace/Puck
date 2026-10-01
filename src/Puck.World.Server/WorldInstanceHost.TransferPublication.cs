@@ -1,3 +1,4 @@
+using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -231,11 +232,29 @@ public sealed partial class WorldInstanceHost {
                                 )
                                 ) {
                                     publishedEndpoint.SeedRoute(route: in route);
-                                    _ = m_seats.TryUpdateRoutedEntity(
+
+                                    // The traveler may have gone on through turned doors of its own: the seat's view
+                                    // turns by the turn the route accumulated since this host last turned it.
+                                    if (!m_seats.TryUpdateRoutedEntity(
                                         slot: trackedSlot,
                                         expectedEndpoint: expectedEndpoint,
                                         replacement: route.Entity
+                                    )) {
+                                        return;
+                                    }
+
+                                    var turn = m_routedTurns.Follow(
+                                        slot: trackedSlot,
+                                        travelTurn: route.TravelTurn
                                     );
+
+                                    if (turn != FixedQ4816.Zero) {
+                                        m_seats.CrossView(
+                                            slot: trackedSlot,
+                                            yawDelta: turn,
+                                            yawReference: route.Definition.Views.SeatControl.YawReference
+                                        );
+                                    }
                                 }
                             }
                         );
@@ -272,19 +291,27 @@ public sealed partial class WorldInstanceHost {
                     Generation: (targetAuthority.Local?.Server.Population.Generation(index: member.TargetSlot) ?? 0)
                 ));
 
+                // Held before the route is published, so a route the destination describes at once turns nothing.
+                m_routedTurns.Hold(
+                    slot: followedSlot,
+                    travelTurn: commits[landedOrdinal].TravelTurn
+                );
                 m_seats.PublishRoute(
                     endpoint: endpoint,
                     entity: routedEntity,
                     slot: followedSlot
                 );
 
-                // A mapped arrival turned the body by the boundary pair's yaw delta: the commit member's arrival yaw
-                // less the landed member's departure yaw, at the same ordinal. The seat's view turns with it, so it
-                // looks along what the door's window showed.
+                // A mapped arrival turned the body by the turn between the landed member's departure yaw and the
+                // commit member's arrival yaw, at the same ordinal. The seat's view turns with it, so it looks along
+                // what the door's window showed.
                 if (commits[landedOrdinal].HasMappedArrival) {
                     m_seats.CrossView(
                         slot: followedSlot,
-                        yawDelta: (commits[landedOrdinal].YawRadians - member.Yaw),
+                        yawDelta: WorldFrameIsometry.TurnBetween(
+                            after: commits[landedOrdinal].YawRadians,
+                            before: member.Yaw
+                        ),
                         yawReference: (targetAuthority.Local?.Server.Definition ?? targetAuthority.Remote!.Definition).Views.SeatControl.YawReference
                     );
                 }

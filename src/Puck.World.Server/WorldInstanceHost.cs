@@ -99,6 +99,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // The local seats this host embodies — the ONE seam into a desktop's client/roster/seat-router/input-router.
     // WorldEmbodiedSeats.None for a host with no local seats.
     private readonly IWorldEmbodiedSeats m_seats;
+    private readonly WorldRoutedSeatTurns m_routedTurns;
     private readonly WorldStateRoot m_stateRoot;
 
     private readonly Dictionary<string, WorldInstance> m_instances = new(comparer: StringComparer.Ordinal);
@@ -1290,6 +1291,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
 
         m_seats = seats;
+        m_routedTurns = new WorldRoutedSeatTurns(seatCount: seats.SeatCount);
         m_resolver = resolver;
         m_machineId = machineId;
         m_stateRoot = stateRoot;

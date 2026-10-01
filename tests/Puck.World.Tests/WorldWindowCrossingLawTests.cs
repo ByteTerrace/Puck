@@ -14,10 +14,10 @@ namespace Puck.World.Tests;
 /// (<see cref="WorldSeatViewState.Cross"/>). Both must agree for any authored pair, including one that turns the
 /// traveler.</summary>
 public sealed class WorldWindowCrossingLawTests {
-    private const float Tolerance = 1e-3f;
+    internal const float Tolerance = 1e-3f;
 
     // The (Right, Up, Normal) triad WorldFaceCatalog derives for an unrotated face at an authored yaw.
-    private static WorldFaceGeometry Face(Vector3 origin, float yawDegrees) {
+    internal static WorldFaceGeometry Face(Vector3 origin, float yawDegrees) {
         var yaw = (yawDegrees * (MathF.PI / 180f));
 
         return new WorldFaceGeometry(
@@ -37,7 +37,7 @@ public sealed class WorldWindowCrossingLawTests {
             HalfHeight: 1.5f
         );
     }
-    private static WorldFaceFrame Frame(WorldFaceGeometry face) => new(
+    internal static WorldFaceFrame Frame(WorldFaceGeometry face) => new(
         Origin: FixedVector3.FromVector3(value: face.Origin),
         Right: FixedVector3.FromVector3(value: face.Right),
         Up: FixedVector3.FromVector3(value: face.Up),
@@ -46,16 +46,16 @@ public sealed class WorldWindowCrossingLawTests {
         HalfHeight: FixedQ4816.FromDouble(value: face.HalfHeight),
         HalfDepth: FixedQ4816.Zero
     );
-    private static Quaternion Heading(FixedQ4816 yaw) => Quaternion.CreateFromAxisAngle(
+    internal static Quaternion Heading(FixedQ4816 yaw) => Quaternion.CreateFromAxisAngle(
         angle: ((float)((double)yaw)),
         axis: Vector3.UnitY
     );
-    private static void Near(Vector3 expected, Vector3 actual, string what) => Assert.True(
+    internal static void Near(Vector3 expected, Vector3 actual, string what) => Assert.True(
         condition: (Vector3.Distance(value1: expected, value2: actual) <= Tolerance),
         userMessage: $"{what}: expected {expected}, actual {actual}"
     );
     // The seat camera the presenter frames a body with: the seat's compiled chase rig, posed at the body.
-    private static (Vector3 Eye, Vector3 Target) Camera(WorldSeatViewState view, WorldDefinition definition, WorldStateMirror mirror, Vector3 position, Quaternion orientation) {
+    internal static (Vector3 Eye, Vector3 Target) Camera(WorldSeatViewState view, WorldDefinition definition, WorldStateMirror mirror, Vector3 position, Quaternion orientation) {
         var rig = view.ResolveChase(
             bodyOrientation: orientation,
             definition: definition,

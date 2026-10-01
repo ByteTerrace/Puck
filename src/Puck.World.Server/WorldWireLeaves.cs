@@ -20,6 +20,23 @@ internal static class WorldWireLeaves {
         Index: reader.ReadInt32(),
         Generation: reader.ReadInt32()
     );
+    /// <summary>Reads a traveler's accumulated arrival turn (<see cref="WorldFrameIsometry.AccumulateTurn"/>), refusing a
+    /// value outside the reduced interval <c>[-pi, pi)</c>, which no accumulation produces.</summary>
+    public static Puck.Maths.FixedQ4816 ReadTravelTurn(ref WireReader reader, string field) {
+        var turn = reader.ReadFixed();
+
+        if (
+            !reader.Failed &&
+            !WorldFrameIsometry.IsTurn(turn: turn)
+        ) {
+            reader.Fail(
+                detail: $"{field} {turn} is outside the reduced turn interval [-pi, pi)",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return turn;
+    }
     /// <summary>Reads a <see cref="WorldMobilityIdentity"/>.</summary>
     public static WorldMobilityIdentity ReadMobility(ref WireReader reader) => new(
         Incarnation: ReadEntityAddress(reader: ref reader),

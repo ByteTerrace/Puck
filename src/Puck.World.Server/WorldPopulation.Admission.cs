@@ -53,6 +53,7 @@ public sealed partial class WorldPopulation {
         entry.KitIndex = kitIndex;
         entry.LookIndex = ResolveInhabitLook(placement: placement);
         entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: index);
+        entry.TravelTurn = FixedQ4816.Zero;
         entry.ProducerState.PreferredAltitude = altitude;
         entry.ProducerState.AcquiredTarget = -1;
         entry.ProducerState.CurveArcRaw = 0L;
@@ -67,6 +68,7 @@ public sealed partial class WorldPopulation {
     // Warp/Face is a server-authoritative spawn (a one-time write into the sim); from here the pose flows only out.
     private void ActivateSimulated(int index, int? generation = null, IntentSource? source = null) {
         m_entries[index].CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: index);
+        m_entries[index].TravelTurn = FixedQ4816.Zero;
         SeedSimulated(index: index);
 
         var entry = m_entries[index];
@@ -259,6 +261,7 @@ public sealed partial class WorldPopulation {
         entry.Body = body;
         entry.BodyColor = (profile?.Color ?? Vector3.Zero);
         entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: slot);
+        entry.TravelTurn = FixedQ4816.Zero;
         entry.Generation = checked((entry.Generation + 1));
         entry.Active = true;
         m_revision++;
@@ -308,6 +311,7 @@ public sealed partial class WorldPopulation {
         entry.IsAuthorityTransferred = peer.AuthorityTransferred;
         entry.PlacementId = peer.PlacementId;
         entry.CatalogRig = peer.CatalogRig;
+        entry.TravelTurn = FixedQ4816.Zero;
 
         // Live admission already installed these fields before emitting the event, so this is idempotent there.
         // Replay reaches this path with a fresh population and needs the verified identity restored so a later

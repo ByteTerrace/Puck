@@ -116,6 +116,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteFixed(value: member.YawRadians);
         writer.WriteFixedVector(value: member.PlanarVelocity);
         writer.WriteFixed(value: member.VerticalVelocity);
+        writer.WriteFixed(value: member.TravelTurn);
         writer.WriteOptionalClass(
             value: member.ActionContinuity,
             writeValue: WriteActionContinuity
@@ -139,6 +140,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         var yaw = reader.ReadFixed();
         var planarVelocity = reader.ReadFixedVector();
         var verticalVelocity = reader.ReadFixed();
+        var travelTurn = WorldWireLeaves.ReadTravelTurn(
+            field: "commit member travel turn",
+            reader: ref reader
+        );
         var actionContinuity = reader.ReadOptionalClass(
             readValue: static (ref WireReader r) => ReadActionContinuity(reader: ref r)
         );
@@ -154,6 +159,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             PlanarVelocity: planarVelocity,
             Position: position,
             Profile: profile,
+            TravelTurn: travelTurn,
             VerticalVelocity: verticalVelocity,
             YawRadians: yaw
         );

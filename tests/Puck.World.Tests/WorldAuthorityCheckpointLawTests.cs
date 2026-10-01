@@ -303,7 +303,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         );
         Assert.Equal(
             actual: WorldFederationCodec.WireKey,
-            expected: 0x354445464B435550UL
+            expected: 0x364445464B435550UL
         );
         Assert.True(
             condition: WorldAuthorityCheckpointCodec.TryDecode(

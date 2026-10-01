@@ -32,8 +32,8 @@ public static partial class WorldAuthorityCheckpointCodec {
 
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader.</summary>
-    // Version 15 carries the grant table's retired session epochs.
-    public const ushort SupportedVersion = 15;
+    // Version 16 carries each occupant's and each committed traveler's accumulated arrival turn.
+    public const ushort SupportedVersion = 16;
 
     /// <summary>Encodes a full checkpoint.</summary>
     /// <param name="checkpoint">The checkpoint to encode.</param>

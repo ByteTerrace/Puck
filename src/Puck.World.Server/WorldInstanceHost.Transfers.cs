@@ -537,6 +537,9 @@ public sealed partial class WorldInstanceHost {
                 slot: sourceSlot
             );
 
+            // Read before the detach, which hands the slot back: the turn the traveler has accumulated so far.
+            var departureTurn = source.Server.Population.TravelTurn(index: sourceSlot);
+
             if (!TryDetachAndCaptureMember(
                 source: source,
                 sourceSlot: sourceSlot,
@@ -583,6 +586,7 @@ public sealed partial class WorldInstanceHost {
             var arrivalYaw = yaw;
             var arrivalPlanarVelocity = dynamicState.PlanarVelocity;
             var arrivalVerticalVelocity = dynamicState.VerticalVelocity;
+            var arrivalTurn = departureTurn;
             WorldContinuumTrajectory? continuum = null;
 
             // Overrides the destination's own fresh spawn pose with the positional-continuity mapping
@@ -607,6 +611,11 @@ public sealed partial class WorldInstanceHost {
                 arrivalYaw = mapped.YawRadians;
                 arrivalPlanarVelocity = mapped.PlanarVelocity;
                 arrivalVerticalVelocity = mapped.VerticalVelocity;
+                arrivalTurn = WorldFrameIsometry.AccumulateTurn(
+                    arrivalYaw: mapped.YawRadians,
+                    departureYaw: yaw,
+                    travelTurn: departureTurn
+                );
 
                 // An adjacency is not a teleport: this source step has already evaluated input, actions, authored
                 // motion, gravity, and timers. The destination receives only the remaining geometric image from its
@@ -645,7 +654,8 @@ public sealed partial class WorldInstanceHost {
                 PlanarVelocity: arrivalPlanarVelocity,
                 VerticalVelocity: arrivalVerticalVelocity,
                 ActionContinuity: actionContinuity,
-                Continuum: continuum
+                Continuum: continuum,
+                TravelTurn: arrivalTurn
             ));
         }
 

@@ -99,7 +99,9 @@ public sealed record WorldTransferReservationReply(bool Accepted, string Reason,
         Reason: reason
     );
 }
-/// <summary>One detached source body carried into a previously reserved destination index.</summary>
+/// <summary>One detached source body carried into a previously reserved destination index. <c>TravelTurn</c> is the
+/// traveler's accumulated arrival turn once it lands (<see cref="WorldFrameIsometry.AccumulateTurn"/>), which the
+/// destination keeps on the occupant for the routes it describes.</summary>
 public sealed record WorldTransferCommitMember(
     WorldIdentity? Profile,
     bool HasMappedArrival,
@@ -109,7 +111,8 @@ public sealed record WorldTransferCommitMember(
     FixedVector3 PlanarVelocity,
     FixedQ4816 VerticalVelocity,
     WorldTransferActionContinuity? ActionContinuity = null,
-    WorldContinuumTrajectory? Continuum = null
+    WorldContinuumTrajectory? Continuum = null,
+    FixedQ4816 TravelTurn = default
 );
 /// <summary>The transfer escrow table shared by colocated and QUIC authority transports. It owns destination capacity
 /// from reserve until commit, explicit abort, or deterministic deadline expiry; it never queues a full request.</summary>
@@ -345,6 +348,7 @@ public sealed partial class WorldTransferEscrow {
                 (a.YawRadians != b.YawRadians) ||
                 (a.PlanarVelocity != b.PlanarVelocity) ||
                 (a.VerticalVelocity != b.VerticalVelocity) ||
+                (a.TravelTurn != b.TravelTurn) ||
                 (a.Continuum != b.Continuum) ||
                 !ActionContinuityMatches(
                 left: a.ActionContinuity,
@@ -691,6 +695,10 @@ public sealed partial class WorldTransferEscrow {
         for (var index = 0; (index < members.Count); index++) {
             var member = members[index];
 
+            if (!WorldFrameIsometry.IsTurn(turn: member.TravelTurn)) {
+                reason = $"transfer {transferId} traveler {(index + 1)} carries an unreduced arrival turn {member.TravelTurn}";
+                return false;
+            }
             if (
                 member.HasMappedArrival &&
                 (string.IsNullOrWhiteSpace(value: member.BodyMotionProgramName)
@@ -781,6 +789,10 @@ public sealed partial class WorldTransferEscrow {
             m_server.Population.SetCatalogRig(
                 slot: slot,
                 catalogRig: reservationMember.CatalogRig
+            );
+            m_server.Population.SetTravelTurn(
+                slot: slot,
+                travelTurn: member.TravelTurn
             );
 
             // The occupant is identified before it is placed: placing resolves contact, and the identity is what
