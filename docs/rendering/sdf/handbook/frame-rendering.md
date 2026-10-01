@@ -251,15 +251,17 @@ bright transient cannot contaminate later history after its source recovers.
 
 History epochs are free: a reset sets the instance's frame count to zero, and the
 resolve then reads no history, so the first frame after a cut, a follow or a
-portal crossing, a view or extent change, a debug view turned on or off, or
+portal crossing, a view or extent change, a parked view shown again, a debug view turned on or off, or
 reconstruction turned on is the spatial path's frame exactly, at the sequence's
 first sample, the pixel center. Under `world.cadence on`, a still temporal view
 renders one jitter period after its inputs last change and then stands, its
 output converged (`SdfTemporalHistory.Stands`). A render-grid dip or recovery
 restarts this settling period, including a grid change that takes effect only
-when a replacement graph installs. Showing a parked instance currently does
-not reset its history when its binding, camera, poses and extent remain
-unchanged; the scheduler does not notify the package of that transition.
+when a replacement graph installs. A view the display stopped showing is parked:
+the render graph counts the frames its schedule leaves an instance unread
+(`RenderGraphPackageRecording.UnreadFrames`, which `IsUnchanged` is asked with
+too), and the count is part of the epoch, so a temporal view shown again starts
+a new epoch while a spatial view's still output stands without a render.
 
 A temporal view that follows a portal crossing into another world keeps
 reconstructing there. The other world's residency builds its resolve pipeline

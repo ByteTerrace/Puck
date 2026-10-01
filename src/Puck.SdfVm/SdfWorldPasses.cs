@@ -144,8 +144,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// render fed them (<see cref="SdfTemporalHistory.Stands"/>): a sample jittered for a converging capture renders
     /// once more at the pixel center, the <c>motion</c> view renders until its previous view and previous poses
     /// settle, and a temporally resolved view renders one jitter period after its inputs last changed, then stands
-    /// converged. A view whose installed graph is not the one its temporal ask selects renders.</remarks>
-    public bool IsUnchanged(string instance, in FrameContext context) {
+    /// converged. A view whose installed graph is not the one its temporal ask selects renders, and so does a temporal
+    /// view shown again after frames nothing showed it (<paramref name="unreadFrames"/>), whose epoch starts anew.</remarks>
+    public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) {
         var entry = Refresh(instance: instance);
 
         if (
@@ -175,6 +176,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                     entry: entry,
                     height: entry.Temporal.Epoch.Height,
                     temporal: entry.InstalledTemporal,
+                    unread: unreadFrames,
                     view: view,
                     width: entry.Temporal.Epoch.Width
                 ),
@@ -198,8 +200,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
     // Prepares an instance's history once a frame, after its residency's upload for the frame: the tables then hold this
     // render's poses as current and the preceding upload's as previous. Temporal names whether the recording pass belongs
-    // to the temporal fragment, which every pass of one installed graph agrees on.
-    internal SdfTemporalHistory TemporalOf(string instance, SdfWorldView view, uint width, uint height, int debug, bool temporal, uint renderWidth = 0, uint renderHeight = 0) {
+    // to the temporal fragment, which every pass of one installed graph agrees on; unread is the instance's unread frames
+    // the recording carries.
+    internal SdfTemporalHistory TemporalOf(string instance, SdfWorldView view, uint width, uint height, int debug, bool temporal, long unread, uint renderWidth = 0, uint renderHeight = 0) {
         var entry = Refresh(instance: instance);
 
         if (entry.TemporalFrame != m_frame) {
@@ -216,6 +219,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                     entry: entry,
                     height: height,
                     temporal: temporal,
+                    unread: unread,
                     view: view,
                     width: width
                 ),
@@ -235,7 +239,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             val2: (views.Count - 1)
         )];
     }
-    private static SdfTemporalEpoch EpochOf(Entry entry, SdfWorldView view, uint width, uint height, int debug, bool temporal) {
+    private static SdfTemporalEpoch EpochOf(Entry entry, SdfWorldView view, uint width, uint height, int debug, bool temporal, long unread) {
         var snapshot = SnapshotOf(view: view);
 
         return new SdfTemporalEpoch(
@@ -246,6 +250,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             Enabled: (temporal || (entry.Convergence is { IsActive: true })),
             Height: height,
             Temporal: temporal,
+            Unread: unread,
             Width: width
         );
     }

@@ -321,7 +321,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         Assert.True(condition: residency.IsUnchanged(context: in context, view: 0));
         var passes = new SdfWorldPasses(resolve: _ => new SdfWorldView(Residency: residency, View: 0));
 
-        Assert.False(condition: passes.IsUnchanged(context: in context, instance: "world"));
+        Assert.False(condition: passes.IsUnchanged(context: in context, instance: "world", unreadFrames: 0));
     }
 
     private sealed class SilentAudio : IWorldAudioCueSink {

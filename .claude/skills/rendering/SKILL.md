@@ -1914,7 +1914,11 @@ binds the tables' fillers at every temporal member. Its first epoch frame calls
 `puckReconstruct`, the spatial path itself, so a reset frame is the spatial
 frame exactly. `SdfTemporalHistory.Stands` lets a temporal epoch stand only once
 `Frames` and the renders since `Changed` (which `IsUnchanged` calls when the
-residency reports a change) both reach `Period`. `place` sharpens a temporal
+residency reports a change) both reach `Period`. The epoch carries the instance's unread frames, which the render graph counts
+for each frame its schedule leaves the instance unread and hands to
+`IsUnchanged` and every recording (`RenderGraphPackageRecording.UnreadFrames`),
+so a parked view shown again starts a new epoch; never infer parking from a
+render gap, which cadence leaves too. `place` sharpens a temporal
 view at its own extent (`RenderGraphPlacement.Sharpen`), and the root places a
 lone view when one sharpens (`WorldRootGraph.Sharpens`). A residency builds its
 resolve pipeline only on request, so `SdfWorldPasses.Refresh` requests the

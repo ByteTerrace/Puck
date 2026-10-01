@@ -191,6 +191,38 @@ public sealed partial class SdfWorldPassesLawTests {
         }
     }
 
+    // A view the display stops showing is parked: nothing renders it. Shown again, a temporal view starts a new epoch, its
+    // first render at the pixel center with no history and a full period before it stands, even though its binding,
+    // camera, poses and extent never moved; a spatial view's still output stands at once, costing no render.
+    [InlineData(true)]
+    [InlineData(false)]
+    [Theory]
+    public void AParkedViewShownAgainStartsANewEpochOnlyWhereItReconstructs(bool temporal) {
+        using var rig = new TemporalRig(views: 1, cadence: true, temporal: temporal);
+
+        for (var frame = 0; (frame <= SdfTemporalHistory.Period); frame++) { rig.Produce(); }
+        Assert.True(condition: rig.Stood());
+        rig.Parked = true;
+        for (var frame = 0; (frame < 3); frame++) {
+            rig.Produce();
+            Assert.True(condition: rig.Stood(), userMessage: $"parked frame {frame}");
+        }
+        rig.Parked = false;
+        rig.Produce();
+        if (!temporal) {
+            Assert.True(condition: rig.Stood());
+            return;
+        }
+        for (var sample = 0U; (sample < SdfTemporalHistory.Period); sample++) {
+            if (sample != 0U) { rig.Produce(); }
+            Assert.False(condition: rig.Stood(), userMessage: $"sample {sample} after it is shown again");
+            Assert.Equal(expected: sample, actual: rig.HistoryFrames());
+            Assert.Equal(expected: SdfTemporalHistory.Sample(index: sample), actual: rig.Jitter());
+        }
+        rig.Produce();
+        Assert.True(condition: rig.Stood());
+    }
+
     // One sdf.world instance, "world", over a frame on the upload model, optionally reading a feed that hands out a
     // tainted image until it fills. Construction produces until the view has rendered its installed graph.
     private sealed class TemporalRig : IDisposable {
@@ -258,6 +290,8 @@ public sealed partial class SdfWorldPassesLawTests {
         public int ViewIndex { get; set; }
 
         public uint OutputExtent { get; set; } = Extent;
+        // Whether the display shows nothing, so the scheduler leaves the view unread.
+        public bool Parked { get; set; }
 
         public float ResolvedScale {
             set => m_sourceFrame = m_sourceFrame with { Views = [.. m_sourceFrame.Views.Select(selector: view => view with { ResolvedRenderScale = value })] };
@@ -268,7 +302,7 @@ public sealed partial class SdfWorldPassesLawTests {
             m_rendered = World.FrameCounter;
             var scheduled = new RenderGraphFrame(DisplayHeight: ((int)OutputExtent), DisplayHertz: 60, DisplayWidth: ((int)OutputExtent),
                 Footprints: ((m_feed is null) ? [] : [new RenderGraphFootprint(Consumer: "world", Height: 1.0, Producer: "feed", Width: 1.0)]),
-                Index: m_index, Roots: [new RenderGraphRoot(Height: 1, Instance: "world", Width: 1)], Tick: m_index++);
+                Index: m_index, Roots: (Parked ? [] : [new RenderGraphRoot(Height: 1, Instance: "world", Width: 1)]), Tick: m_index++);
 
             var context = m_context with { TargetHeight = OutputExtent, TargetWidth = OutputExtent };
 

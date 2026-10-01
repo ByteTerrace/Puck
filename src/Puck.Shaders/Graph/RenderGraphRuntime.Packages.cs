@@ -130,7 +130,8 @@ public sealed partial class RenderGraphRuntime {
                 PackagesUnchanged(
                     context: in context,
                     instance: m_set.Instances[index].Name,
-                    plan: graph.Pipeline.Plan
+                    plan: graph.Pipeline.Plan,
+                    unreadFrames: m_unreadFrames[index]
                 ) &&
                 MatchesAllocatedExtent(frame: in frame, index: index)
             ) {
@@ -178,7 +179,7 @@ public sealed partial class RenderGraphRuntime {
         );
     }
     // Whether a plan runs only package passes, each of whose packages says nothing the instance renders from changed.
-    private bool PackagesUnchanged(ShaderPipelinePlan plan, string instance, in FrameContext context) {
+    private bool PackagesUnchanged(ShaderPipelinePlan plan, string instance, long unreadFrames, in FrameContext context) {
         var passes = plan.Passes;
 
         if (passes.Count == 0) {
@@ -194,7 +195,8 @@ public sealed partial class RenderGraphRuntime {
                 ) ||
                 !factory.IsUnchanged(
                     context: in context,
-                    instance: instance
+                    instance: instance,
+                    unreadFrames: unreadFrames
                 )
             ) {
                 return false;
@@ -202,6 +204,17 @@ public sealed partial class RenderGraphRuntime {
         }
 
         return true;
+    }
+    // Counts a frame for each instance its schedule left unread. It runs once a frame, before any instance renders, so a
+    // render and the cadence question of the next frame both read the count the latest schedule left.
+    private void CountUnread(RenderGraphSchedule schedule) {
+        var instances = schedule.Instances;
+
+        for (var index = 0; (index < instances.Count); index++) {
+            if (instances[index].Status == RenderGraphInstanceStatus.Unread) {
+                m_unreadFrames[index]++;
+            }
+        }
     }
     // Tells every package's factory the device was lost.
     private void PackagesLostDevice() {

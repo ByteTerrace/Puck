@@ -4846,11 +4846,10 @@ counted rows recorded in the same change.
      crossing frame to a relaunch's spatial crossing frame exactly, while a
      frame with gathered history differs from the spatial one; no world can
      author a crossing that keeps history, so the epoch reset on a crossing is
-     held by law (P15-2).
-     Open: a parked temporal instance shown again with unchanged binding,
-     camera, poses and extent retains its history. The scheduler needs to
-     notify the package of the visibility transition before cadence decides
-     whether the old output stands.
+     held by law (P15-2). The runtime counts the frames each instance's
+     schedule leaves it unread and hands the count to the package's cadence
+     question and recordings, and the count is part of the epoch, so a parked
+     view shown again resets while a spatial view's still output stands.
    - Delivers: the history color and history surface as the fragment's history
      versions at output extent; reprojection through `sdfReprojection`, rejected
      by identity and depth; neighbourhood rectification; the `reactivity` image
