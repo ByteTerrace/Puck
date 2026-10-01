@@ -438,6 +438,11 @@ only in the main view, and the slice cannot be moved.
    record's K row) and `ao` (the occlusion half of the S row). The mode names in
    `DebugViewModes` and the kernel's count and switch
    (`frame/sdf-levers.hlsli`, `debug/sdf-debug-views.hlsli`) move together.
+6. **A slice that shows a broken field.** The slice view marks a sample whose
+   distance is NaN or infinite, and a gradient-magnitude mode shows where the
+   field departs from a distance (its gradient's length away from one).
+7. **A slice of the selection.** Once E2 selects a placement, the slice can
+   show that placement's field alone.
 
 Debug views and shading levers are session levers: `world.save` never folds
 them into the document.
@@ -453,9 +458,12 @@ binder holds and one it creates later; red leg: the main residency alone, as
 today); presenter laws that the slice and the four levers reach the frame.
 Canary `debug-views`: a screen showing a camera view changes to the `normals`
 colors when the mode is on. This package supplies the missing checks for the
-rendering plan's debug-view and shading-lever capability rows.
+rendering plan's debug-view and shading-lever capability rows. The NaN marker
+and the gradient-magnitude mode join the mode-count sync law; a law over a
+program with a NaN-producing primitive holds the marker on that sample, and
+the selected-placement slice holds every other placement's field out.
 
-**Depends on:** nothing.
+**Depends on:** nothing; the selected-placement slice (7) follows E2.
 
 ### E5 — The inspector
 
