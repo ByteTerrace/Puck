@@ -290,7 +290,9 @@ selects (or a fuller one) is built, so a program that selects the core or folds
 variant never waits for the full ISA's translation. A captured program whose
 views kernel is still building is not uploaded: the residency holds the frame it
 last packed, which keeps rendering, and is not ready, naming the kernel, until
-that kernel is built; the World is ready once the world's residency is and the
+that kernel is built. The pending frame survives a film gate that captures
+nothing, and `WaitReadyAsync` waits for the hold to release. A newer capture
+replaces the pending frame. The World is ready once the world's residency is and the
 render graph's root has rendered over a completed view, which is the fact
 `world.wait ready` waits on. A host that produces frames on its own thread and
 has nothing to present until the builds finish blocks between frames on

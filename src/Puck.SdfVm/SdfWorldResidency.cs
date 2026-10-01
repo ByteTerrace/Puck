@@ -48,7 +48,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private readonly ISdfScreenSources? m_screenSources;
     private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
 
-    // Completed while the tables exist, which a view's passes await before they install (SdfWorldPasses.BuildAsync). A
+    // Completed while the residency is ready, which a view's passes await before they install (SdfWorldPasses.BuildAsync). A
     // reset replaces only a completed source, so every wait begun before the next build sees it complete; its
     // continuations run on the thread pool, never on the frame thread that completes it.
     private TaskCompletionSource m_ready = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
@@ -197,7 +197,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// selects a stripped views variant never waits for the full ISA's. It is false again after a device loss until the
     /// rebuilt tables are, and while a captured program waits for a views kernel that is still building, during which
     /// the residency holds the frame it last packed.</summary>
-    public bool IsReady => ((m_tables is not null) && (m_viewsWaiting is null));
+    public bool IsReady => ((m_tables is not null) && (m_viewsWaiting is null) && Volatile.Read(location: ref m_ready).Task.IsCompletedSuccessfully);
     /// <summary>Gets whether every hold on the residency has been released (<see cref="Release"/>), after which it renders
     /// nothing.</summary>
     public bool IsReleased => m_disposed;
@@ -275,7 +275,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
     /// <summary>Gives back the creator's hold (<see cref="Release"/>).</summary>
     public void Dispose() => Release();
-    /// <summary>Returns a task that completes once the tables are built (<see cref="IsReady"/>), for a build on the thread
+    /// <summary>Returns a task that completes once the residency is ready (<see cref="IsReady"/>), for a build on the thread
     /// pool, which awaits it and holds no thread meanwhile. It never completes on the frame thread's stack.</summary>
     /// <param name="cancellationToken">Cancels the wait.</param>
     /// <returns>The task, canceled with <paramref name="cancellationToken"/>.</returns>
@@ -354,10 +354,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         return m_renders;
     }
+
     // The frame's one preparation, whose answer Prepare repeats for the rest of the frame.
     private bool PrepareOnce(in FrameContext context) {
         if (
-            (m_frame is not { } frame) ||
+            ((m_pendingFrame ?? m_frame) is not { } frame) ||
             !context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device) ||
             !EnsureTables(
                 device: device,
@@ -416,7 +417,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 // packed, which the live program's views render, until that kernel is built, as any rebuild does.
                 if (tables.ViewsWaiting(program: frame.Program) is { } waiting) {
                     m_viewsWaiting = waiting;
+                    m_pendingFrame = frame;
                     m_frame = (m_packedFrame ?? frame);
+                    ResetReady();
 
                     return (tables.ViewsWaiting(program: null) is null);
                 }
@@ -430,6 +433,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
             tables.Pack(frame: frame);
             m_packedFrame = frame;
+            m_frame = frame;
+            m_pendingFrame = null;
             LiveVolumes = frame.Volumes.Count;
         }
 
@@ -438,6 +443,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_viewsWaiting = tables.ViewsWaiting(program: null);
 
         if (m_viewsWaiting is not null) {
+            ResetReady();
             return false;
         }
 
@@ -445,6 +451,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         return true;
     }
+
     /// <summary>Returns whether a view's latest render stands for this frame: the frame forces no render
     /// (<see cref="SdfWorldTables.ForcesRender"/>) and the view's signature is the one it last rendered at. A residency
     /// that filmed nothing this frame keeps its latest frame, which every view rendered already.</summary>
@@ -597,6 +604,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
     // The frame the tables last packed, which a frame that films nothing leaves standing, and whether a frame captured
     // since the tables last uploaded a program carries another one.
     private SdfFrame? m_packedFrame;
+    // A captured frame waiting for its program's views kernel. It survives a frame whose film gate captures nothing,
+    // while m_frame exposes the packed frame the views render; a newer capture replaces it.
+    private SdfFrame? m_pendingFrame;
     private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
     private SdfFrame? m_frozenFrame;
 
@@ -629,6 +639,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         if (converging && (m_frozenFrame is { } frozen)) {
             m_frame = frozen with { ProgramChanged = false };
+            m_pendingFrame = null;
             return;
         }
         if (!converging) {
@@ -647,6 +658,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         );
 
         m_frame = frame;
+        m_pendingFrame = null;
         if (converging) {
             m_frozenFrame = frame;
         }

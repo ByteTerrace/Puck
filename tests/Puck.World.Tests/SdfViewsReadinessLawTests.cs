@@ -15,14 +15,17 @@ namespace Puck.World.Tests;
 /// variant is ready while the full ISA's and the folds' translations are still in the driver, which is how a cold floor
 /// machine boots a world whose program needs neither. A captured program that selects a views kernel still building is not
 /// uploaded: the residency holds the frame it last packed, which the live program's views keep rendering, and its reason
-/// names the kernel; once the kernel is built the program uploads and the residency is ready again. The fake driver holds
-/// the full and folds kernels' creations until the law releases them.
+/// names the kernel; once the kernel is built the program uploads and the residency is ready again, even if the film gate
+/// captures nothing during the hold. A readiness wait started during the hold completes only after it releases. The fake
+/// driver holds the full and folds kernels' creations until the law releases them.
 /// </summary>
 public sealed class SdfViewsReadinessLawTests {
     private const uint Extent = 32;
 
-    [Fact]
-    public void AResidencyIsReadyOnItsProgramsViewsKernelAndHoldsItsFrameForAnotherStillBuilding() {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void AResidencyHoldsAndReleasesItsPendingFrameWhetherOrNotItKeepsFilming(bool keepsFilming) {
         using var gate = new ManualResetEventSlim(initialState: false);
         var gpu = new FakeGpuDevice() {
             BeforeComputePipeline = description => {
@@ -32,9 +35,11 @@ public sealed class SdfViewsReadinessLawTests {
             },
         };
         var source = new SwitchingFrameSource(frame: Frame(program: Sphere()));
+        var films = true;
 
         using var residency = new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,
+            film: _ => films,
             frameSource: source,
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),
@@ -68,27 +73,38 @@ public sealed class SdfViewsReadinessLawTests {
             }
         );
         Assert.False(condition: gate.IsSet);
+        Assert.True(condition: residency.WaitReadyAsync(cancellationToken: CancellationToken.None).IsCompletedSuccessfully);
+        var packedWords = residency.CopyLiveProgramWords();
 
         // A trapezoid selects the full ISA, still held: the program waits, the packed sphere frame stands and renders, and
-        // the reason names the kernel.
-        source.Frame = Frame(program: Trapezoid()) with { ProgramChanged = true };
+        // the reason names the kernel. Its camera also moves, so holding only the program would mismatch the packed frame.
+        var pending = Frame(program: Trapezoid(), cameraZ: -8f) with { ProgramChanged = true };
+
+        source.Frame = pending;
 
         for (var frame = 0; (frame < 4); frame++) {
             Assert.True(condition: residency.Produce(context: in context));
             Assert.False(condition: residency.IsReady);
             Assert.Same(
-                actual: residency.Frame!.Program,
-                expected: source.First.Program
+                actual: residency.Frame,
+                expected: source.First
             );
+            Assert.Equal(actual: residency.CopyLiveProgramWords(), expected: packedWords);
+            films = keepsFilming;
         }
 
         Assert.Contains(
             actualString: residency.NotReadyReason,
             expectedSubstring: "holds its frame until the views kernel its program selects, 'sdf-world-views', is built"
         );
+        using var cancellation = new CancellationTokenSource();
+        var ready = residency.WaitReadyAsync(cancellationToken: cancellation.Token);
 
-        // Released, the full kernel builds, the trapezoid uploads and the residency is ready on it.
-        source.Frame = Frame(program: Trapezoid());
+        Assert.False(condition: ready.IsCompleted);
+
+        // Released, the full kernel builds, the trapezoid uploads and its captured camera becomes current, including
+        // when the film gate has stayed closed since the switch.
+        source.Frame = pending with { ProgramChanged = false };
         gate.Set();
         TestLiveness.Until(
             reason: () => residency.NotReadyReason,
@@ -99,10 +115,14 @@ public sealed class SdfViewsReadinessLawTests {
             },
             wait: residency.WaitPipelineBuilds
         );
-        Assert.NotSame(
+        TestLiveness.Until(step: () => ready.IsCompleted);
+        Assert.True(condition: ready.IsCompletedSuccessfully);
+        Assert.Same(
             actual: residency.Frame!.Program,
-            expected: source.First.Program
+            expected: pending.Program
         );
+        Assert.Equal(actual: residency.Frame.Views, expected: pending.Views);
+        Assert.Equal(actual: residency.CopyLiveProgramWords(), expected: pending.Program.Words.ToArray());
     }
 
     private static SdfProgram Sphere() {
@@ -129,14 +149,14 @@ public sealed class SdfViewsReadinessLawTests {
 
         return builder.Build();
     }
-    private static SdfFrame Frame(SdfProgram program) => new(
+    private static SdfFrame Frame(SdfProgram program, float cameraZ = -5f) => new(
         Program: program,
         ProgramChanged: false,
         Time: 0f,
         Views: [new SdfViewSnapshot(
             Camera: CameraSnapshot.LookAt(
                 fieldOfViewRadians: 1f,
-                position: new Vector3(x: 0f, y: 0f, z: -5f),
+                position: new Vector3(x: 0f, y: 0f, z: cameraZ),
                 target: Vector3.Zero,
                 viewportHeight: Extent,
                 viewportWidth: Extent
