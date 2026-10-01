@@ -729,17 +729,23 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             );
         }
 
+        var placed = PlacedExtent(height: height, region: region, width: width);
+
         return CameraSnapshot.LookAt(
+            fieldOfViewRadians: fieldOfView,
             position: eye,
             target: target,
-            fieldOfViewRadians: fieldOfView,
-            viewportWidth: CameraExtent(fraction: region.Width, pixels: width),
-            viewportHeight: CameraExtent(fraction: region.Height, pixels: height)
+            viewportHeight: placed.Y,
+            viewportWidth: placed.X
         );
     }
-    // An arriving slot starts collapsed. Keep its camera and view ordinal alive for prewarming, with a finite
-    // projection while it draws no pixels; positive extents retain their exact fractional-pixel aspect.
-    private static float CameraExtent(float fraction, uint pixels) => ((fraction == 0f) ? 1f : (fraction * pixels));
+    // The extent, in display pixels, of a placed rect: what a camera projects for and what a pane's frame values carry,
+    // so a pane's shader and a hit through its paired camera share one aspect. A collapsed axis of an arriving slot
+    // counts one pixel, keeping a finite projection while it draws nothing; a positive axis stays fractional.
+    private static Vector2 PlacedExtent(NormalizedRect region, uint width, uint height) => new(
+        x: ((region.Width == 0f) ? 1f : (region.Width * width)),
+        y: ((region.Height == 0f) ? 1f : (region.Height * height))
+    );
     // The one shared anchor→pose resolver the camera path reads: entity/part ride the live snapshot pose, a
     // placement rides its stamped transform (WorldAnchorGeometry, the same math speakers read), a group rides its
     // smoothed centroid + spread, a seat-relative anchor rides the seat's perceived body (or the recent speaker),
@@ -916,12 +922,14 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             clock: in clock
         );
 
+        var placed = PlacedExtent(height: height, region: region, width: width);
+
         camera = CameraSnapshot.LookAt(
+            fieldOfViewRadians: fieldOfView,
             position: eye,
             target: target,
-            fieldOfViewRadians: fieldOfView,
-            viewportWidth: CameraExtent(fraction: region.Width, pixels: width),
-            viewportHeight: CameraExtent(fraction: region.Height, pixels: height)
+            viewportHeight: placed.Y,
+            viewportWidth: placed.X
         );
 
         return true;
@@ -1294,6 +1302,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 CameraPosition = cameraPos,
                 CameraTarget = cameraTarget,
                 CameraUp = cameraUp,
+                PlacedExtent = PlacedExtent(height: height, region: region, width: width),
                 Pointer = entry.Pointer,
                 PointerDown = entry.PointerWasDown,
                 PointerPresses = entry.PointerPresses,

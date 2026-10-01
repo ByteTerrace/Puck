@@ -134,7 +134,7 @@
         "name": "inspect-echoes-the-policy-for-the-parameter-region",
         "stream": "stdout",
         "match": "contains",
-        "text": "  residency: parameters=144 bytes policy=",
+        "text": "  residency: parameters=160 bytes policy=",
         "present": true
       },
       {

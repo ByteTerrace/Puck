@@ -1698,11 +1698,17 @@ binding: a load refuses a module whose reflected bindings differ from its layout
 `ShaderPipelineParameterLayout.WriteFrame` and the extent through `WriteExtent`
 alone, so a new frame value is a row in `ShaderFrameInterface.FrameGroupMembers`
 and a write there, nothing else. The node writes `ShaderPipelineRenderNode.Frame`
-whole and derives no value of it: `tick` and `time` come from the World's one
+whole and derives no other value of it: `tick` and `time` come from the World's one
 presentation clock, the state mirror (`WorldViewGraphHost.PresentedFrame` over
 `WorldStateMirror.PresentedEngineTick`), never the frame context or a wall
 clock, and a pane's time is that clock through its `timeScale` and the
-`pipeline.time` controls (`WorldPresentedFrameLawTests`). `ShaderFrameBlockLawTests` compiles every shipped pipeline source
+`pipeline.time` controls (`WorldPresentedFrameLawTests`). The one value
+`WriteFrame` completes is `placedExtent`: the presenter names a pane's placed
+rect in display pixels (`WorldFramePresenter.PlacedExtent`, the same extent its
+paired camera projects for), and values naming none are written with the node's
+own extent. A pane renders at its allocation envelope while its rect eases, so
+a pane shader projects at the placed aspect, never its output's
+(`WorldCameraPlacementLawTests`). `ShaderFrameBlockLawTests` compiles every shipped pipeline source
 and holds the offsets DXC assigned in both bytecodes to the host writer's, so a
 new shipped pass joins its data; `ShaderInterfaceEcho` generates the echo passes
 the `pipeline-echo` and `interface-echo` canaries run with `pipeline.sentinels`

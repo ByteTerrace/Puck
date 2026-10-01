@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
@@ -62,6 +63,86 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
         Assert.True(condition: (growing.Views[1].Region.Width > 0f));
         Assert.Equal(expected: ((2f * growing.Views[1].Region.Width) / growing.Views[1].Region.Height),
             actual: growing.Views[1].Camera.AspectRatio);
+    }
+    [Fact]
+    public void APairedPaneProjectsAtItsPlacedAspectWhileItsAllocationKeepsTheEnvelope() {
+        Assert.SkipWhen(
+            condition: (new ShaderToolchain().Locate(name: ShaderCompiler.DxcTool) is null),
+            reason: "DXC is required to compile the pane's pipeline."
+        );
+
+        const string Pane = "pane";
+        using var host = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: m_directory,
+            world: "tests/Puck.Counters/counters.world.json",
+            edit: definition => definition with {
+                ViewsRaw = definition.Views with {
+                    Graphs = [new WorldViewGraph(
+                        Camera: definition.Views.Layouts[0].Slots[0].Camera,
+                        Name: Pane,
+                        Source: "../../src/Puck.World/Assets/pipelines/ink.graph.json")],
+                    Layouts = [
+                        new WorldViewLayout(Name: "full", Slots: [new WorldViewSlot(Instance: Pane)], TransitionSeconds: 0.6f),
+                        new WorldViewLayout(Name: "quarter", Slots: [new WorldViewSlot(Instance: Pane, Width: 0.25f)], TransitionSeconds: 0.6f),
+                    ],
+                },
+            }).Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var graphs = host.Services.GetRequiredService<WorldViewGraphHost>();
+        var composition = host.Services.GetRequiredService<WorldCompositionState>();
+        using var instances = FakeGraphInstances.Attach(
+            host: graphs,
+            create: static name => new ShaderPipelineRenderNode(
+                deviceContext: new RefusingGpuDevice(), height: 4, hostsOnDirectX: false,
+                name: name, pipelines: new GpuPassPipelineCache(), width: 4));
+        // The frame block a node writes, its own extent the allocation envelope the root reads the pane at.
+        var layout = ShaderPipelineParameterLayout.ForPackage(config: null, members: [], package: "placed");
+        var placedOffset = ((int)layout.Layout.Bindings
+            .Single(predicate: static binding => ((binding.Set == 0) && (binding.Members.Count != 0)))
+            .Members.Single(predicate: static member => (member.Name == ShaderFrameInterface.PlacedExtent)).Offset);
+        var block = new byte[layout.FrameBlockSizeBytes];
+        var frames = new List<(float Width, float Height, float CameraAspect, float PlacedWidth, float PlacedHeight)>();
+
+        presenter.ResizeDisplay(height: 500, width: 1000);
+        presenter.ViewRendered = static _ => true;
+        composition.ActiveLayout = "full";
+        for (var index = 0; (index < 20); index++) {
+            if (index == 2) { composition.ActiveLayout = "quarter"; }
+            var context = new FrameContext(
+                AccumulatorTicks: 0, DeltaTicks: 5040, ElapsedTicks: (((ulong)index) * 5040),
+                FrameDeltaTicks: 5040, Host: null!, StepTicks: 5040, TargetHeight: 500, TargetWidth: 1000);
+
+            presenter.PrepareGraph(context: in context);
+            _ = presenter.CaptureFrame(deltaSeconds: 0.1f, height: 500, interpolationAlpha: 1f, width: 1000);
+            Assert.True(condition: graphs.TryGet(instance: WorldViewGraphs.MainInstance, pass: Pane, placement: out var placement));
+            var footprint = Assert.Single(collection: graphs.Footprints, predicate: static footprint => (footprint.Producer == Pane));
+            var envelope = (Width: ((uint)(footprint.Width * 1000d)), Height: ((uint)(footprint.Height * 500d)));
+
+            Assert.True(condition: ((IRenderGraphHitScene)graphs).TryCamera(
+                camera: out var camera, instance: instances.Instances.IndexOf(name: Pane)));
+            layout.WriteFrame(block: block, extent: envelope, frame: 0UL, values: instances.NodeOf(instance: Pane)!.Frame);
+            var placedWidth = BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: placedOffset));
+            var placedHeight = BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: (placedOffset + 4)));
+
+            // The allocation holds the full display through the ease.
+            Assert.Equal(actual: envelope, expected: (1000u, 500u));
+            frames.Add(item: (placement.Width, placement.Height, camera.AspectRatio, placedWidth, placedHeight));
+        }
+        // Settled at a quarter of a 1000x500 display, the pane's 2:1 allocation is shown at 1:2, and its pass projects at
+        // the camera's 1:2, not the allocation's 2:1.
+        var settled = frames[^1];
+
+        Assert.Equal(actual: settled.Width, expected: 0.25f);
+        Assert.Equal(actual: settled.CameraAspect, expected: 0.5f);
+        Assert.Equal(actual: (settled.PlacedWidth / settled.PlacedHeight), expected: settled.CameraAspect);
+        // Every eased frame between: the pass maps its output onto the rect the camera projects for.
+        Assert.True(condition: (frames.Select(selector: static frame => frame.Width).Distinct().Count() > 3));
+        Assert.All(collection: frames, action: static frame => {
+            Assert.Equal(actual: frame.PlacedWidth, expected: (frame.Width * 1000f));
+            Assert.Equal(actual: frame.PlacedHeight, expected: (frame.Height * 500f));
+            Assert.Equal(actual: (frame.PlacedWidth / frame.PlacedHeight), expected: frame.CameraAspect);
+        });
     }
     [Fact]
     public void AResidencyReusingAFrozenCaptureStillPlacesEveryPreparedFrame() {
