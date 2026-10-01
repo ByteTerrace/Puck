@@ -27,7 +27,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+        TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         var copies = 0;
         var boxes = 0;
@@ -108,7 +108,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+        TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         var copies = new List<ulong>();
 
@@ -180,7 +180,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+        TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         var copied = new List<(uint X, uint Y)>();
         var answered = new List<(uint X, uint Y)>();
@@ -245,7 +245,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+        TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         gpu.WriteReadback = bytes => WriteBox(box: WholeBox, bytes: bytes);
         var node = view.Runtime.Node(instance: 0);
@@ -257,7 +257,7 @@ public sealed partial class SdfWorldPassesLawTests {
         current = current with { Views = [current.Views[0] with { RenderScale = 0.5f, ResolvedRenderScale = 0.5f }] };
         var request = picker.Request(x: 0.25f, y: 0.75f);
 
-        SdfTestPipelines.ProduceUntil(frame: () => {
+        TestLiveness.Until(step: () => {
             _ = view.Produce(context: in context);
 
             return (!ReferenceEquals(objA: node.Plan, objB: installed) && !node.IsBuildingCandidate);
@@ -280,7 +280,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
         var context = ContextOf(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context),
+        TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         gpu.WriteReadback = bytes => WriteBox(box: WholeBox, bytes: bytes);
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);

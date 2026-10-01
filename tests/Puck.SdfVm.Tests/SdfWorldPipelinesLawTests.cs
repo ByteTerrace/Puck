@@ -204,8 +204,8 @@ public sealed class SdfWorldPipelinesLawTests {
             cancellationToken: TestContext.Current.CancellationToken
         );
 
-        SdfTestPipelines.ProduceUntil(
-            frame: () => (cache.SharedPipelines == 0),
+        TestLiveness.Until(
+            step: () => (cache.SharedPipelines == 0),
             reason: () => $"{cache.SharedPipelines} pipelines are still leased"
         );
         driver.Open();
@@ -233,7 +233,7 @@ public sealed class SdfWorldPipelinesLawTests {
                 }
 
                 Assert.True(
-                    condition: bothInDriver.SignalAndWait(timeout: SdfTestPipelines.Liveness),
+                    condition: bothInDriver.SignalAndWait(timeout: TestLiveness.Bound),
                     userMessage: $"{description.Name} waited out the liveness bound for the other failing creation to reach the driver."
                 );
 
@@ -322,7 +322,7 @@ public sealed class SdfWorldPipelinesLawTests {
             Assert.True(condition: m_entered.TryTake(
                 cancellationToken: TestContext.Current.CancellationToken,
                 item: out var name,
-                millisecondsTimeout: ((int)SdfTestPipelines.Liveness.TotalMilliseconds)
+                millisecondsTimeout: ((int)TestLiveness.Bound.TotalMilliseconds)
             ));
 
             return name!;

@@ -89,14 +89,13 @@ public sealed class WorldPipelineResizedWaitLawTests {
             Source: "fill.hlsl"
         )]));
         node.Swap(pipeline: Fill());
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        TestLiveness.Until(
+            step: () => {
                 _ = node.ProduceFrame(context: default);
 
                 return node.IsReady;
-            },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            }
+        );
         node.Paused = paused;
 
         // The driver holds every pipeline creation: the resize cannot install. The gate opens however the law ends, so the
@@ -130,14 +129,13 @@ public sealed class WorldPipelineResizedWaitLawTests {
             gate.Set();
         }
 
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        TestLiveness.Until(
+            step: () => {
                 _ = node.ProduceFrame(context: default);
 
                 return !hold();
-            },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            }
+        );
         Assert.Equal(
             actual: (Extent: node.Extent, Paused: node.Paused),
             expected: (Extent: ((Extent * 2), (Extent * 2)), Paused: paused)

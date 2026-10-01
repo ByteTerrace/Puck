@@ -74,13 +74,12 @@ public sealed class WorldPipelineWaitLawTests : IDisposable {
     private void PumpUntilCompiled() {
         var entry = m_runtime.Entries["ink"];
 
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        TestLiveness.Until(
+            step: () => {
                 m_runtime.PumpWatches();
                 return !entry.IsCompiling;
-            },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            }
+        );
     }
 
     public void Dispose() {

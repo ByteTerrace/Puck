@@ -29,8 +29,8 @@ public sealed class GpuPassPipelineTurnLawTests {
             BeforeComputePipeline = description => {
                 _ = Interlocked.Increment(location: ref entered);
                 Assert.True(
-                    condition: driver.Wait(timeout: SdfTestPipelines.Liveness),
-                    userMessage: $"A creation waited out the liveness bound ({SdfTestPipelines.Liveness}) for the law to let it through."
+                    condition: driver.Wait(timeout: TestLiveness.Bound),
+                    userMessage: $"A creation waited out the liveness bound ({TestLiveness.Bound}) for the law to let it through."
                 );
             },
         };
@@ -45,8 +45,8 @@ public sealed class GpuPassPipelineTurnLawTests {
         try {
             // Every build has started once the turns' creations are in the driver and the pool's queues are empty: each
             // build either holds a turn or waits for one.
-            SdfTestPipelines.ProduceUntil(
-                frame: () => ((Volatile.Read(location: ref entered) == turns) && (ThreadPool.PendingWorkItemCount == 0L)),
+            TestLiveness.Until(
+                step: () => ((Volatile.Read(location: ref entered) == turns) && (ThreadPool.PendingWorkItemCount == 0L)),
                 reason: () => $"{Volatile.Read(location: ref entered)} of {turns} creations are in the driver and {ThreadPool.PendingWorkItemCount} work items are queued"
             );
 

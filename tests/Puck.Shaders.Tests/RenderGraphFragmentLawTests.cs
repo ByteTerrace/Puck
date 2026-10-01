@@ -1,5 +1,6 @@
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -325,7 +326,7 @@ public sealed class RenderGraphFragmentLawTests {
 
         try {
             _ = node.ProduceFrame(context: default);
-            Assert.True(condition: entered.Wait(timeout: TimeSpan.FromSeconds(value: 30), cancellationToken: TestContext.Current.CancellationToken));
+            Assert.True(condition: entered.Wait(timeout: TestLiveness.Bound, cancellationToken: TestContext.Current.CancellationToken));
             Assert.Equal(expected: submitted, actual: node.FrameCounter);
             // Another residency can have identical capacities, but its recorders belong to another revision.
             counter.Instances = 7;
@@ -333,14 +334,13 @@ public sealed class RenderGraphFragmentLawTests {
             gate.Set();
         }
 
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        TestLiveness.Until(
+            step: () => {
                 _ = node.ProduceFrame(context: default);
 
                 return (node.FrameCounter > submitted);
-            },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            }
+        );
         Assert.DoesNotContain(expected: 1L, collection: counter.InstalledRevisions);
         Assert.Contains(expected: 2L, collection: counter.InstalledRevisions);
         Assert.Equal(expected: ((Elements * 7) * 4), actual: node.ResourceStatus.Single(predicate: static status => (status.Name == "scratch")).AllocationBytes);

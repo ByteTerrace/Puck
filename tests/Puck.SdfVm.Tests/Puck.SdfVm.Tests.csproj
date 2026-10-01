@@ -19,6 +19,7 @@
         <Compile Include="..\Shared\FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
         <Compile Include="..\Shared\RecordingGpuObjectNaming.cs" Link="RecordingGpuObjectNaming.cs" />
         <Compile Include="..\Shared\SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
+        <Compile Include="..\Shared\TestLiveness.cs" Link="TestLiveness.cs" />
         <Compile Include="..\Shared\SpirvEdits.cs" Link="SpirvEdits.cs" />
         <Compile Include="..\Shared\TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
         <Compile Include="..\Shared\SdfTestView.cs" Link="SdfTestView.cs" />

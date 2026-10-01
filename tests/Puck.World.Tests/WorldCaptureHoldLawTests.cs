@@ -238,16 +238,13 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         }
         // Iterates until the scheduler has decided the given number of captures; the bound is liveness for a build
         // over a fake device, and decides nothing.
-        public void IterateUntilDecided(int captures, ulong? hostTicks = null) => Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    Iterate(hostTicks: hostTicks);
+        public void IterateUntilDecided(int captures, ulong? hostTicks = null) => TestLiveness.Until(
+            reason: () => $"Only {Scheduler.Entries.Count} of {captures} captures were decided.",
+            step: () => {
+                Iterate(hostTicks: hostTicks);
 
-                    return (Scheduler.Entries.Count >= captures);
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: $"Only {Scheduler.Entries.Count} of {captures} captures were decided."
+                return (Scheduler.Entries.Count >= captures);
+            }
         );
         public void Release() => m_gate.Set();
         // Iterates until the residency's build is held in the driver and the view names it, so a refusal's reason reads the
@@ -256,19 +253,18 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             Iterate();
             Assert.True(condition: m_entered.Wait(
                 cancellationToken: TestContext.Current.CancellationToken,
-                timeout: TimeSpan.FromSeconds(value: 30)
+                timeout: TestLiveness.Bound
             ));
-            Assert.True(condition: SpinWait.SpinUntil(
-                condition: () => {
+            TestLiveness.Until(
+                step: () => {
                     Iterate();
 
                     return (View.NotReadyReason?.StartsWith(
                         comparisonType: StringComparison.Ordinal,
                         value: "the engine's pipeline set is building"
                     ) ?? false);
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ));
+                }
+            );
         }
         // The offscreen host's teardown order: settle what is owed a frame, then dispose the render root. The gate
         // opens first only because the residency's disposal waits out its build.
@@ -435,14 +431,13 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         );
 
         run.Release();
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        TestLiveness.Until(
+            step: () => {
                 run.Iterate();
 
                 return run.View.IsReady;
-            },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            }
+        );
         run.Iterate();
         run.EndRun();
 

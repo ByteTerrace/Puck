@@ -1,5 +1,6 @@
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -31,19 +32,16 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var parts = SdfWorldPackage.NativeFragment.Passes.Select(selector: static pass => pass.Name).ToArray();
         var index = 0L;
 
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    ProducePackageFrame(
-                        frameIndex: index++,
-                        runtime: runtime
-                    );
+        TestLiveness.Until(
+            reason: () => $"The view recorded {view.Parts.Count} part(s).",
+            step: () => {
+                ProducePackageFrame(
+                    frameIndex: index++,
+                    runtime: runtime
+                );
 
-                    return (view.Parts.Count >= parts.Length);
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: $"The view recorded {view.Parts.Count} part(s)."
+                return (view.Parts.Count >= parts.Length);
+            }
         );
         Assert.Null(@object: runtime.Producer(instance: 0));
         Assert.Equal(
@@ -100,14 +98,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
         using var runtime = Runtime(gpu, recorders, Set(PackageInstance()), PackageView, new RenderGraphRuntimeGraph[1]);
         var index = 0L;
 
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        TestLiveness.Until(
+            step: () => {
                 ProducePackageFrame(frameIndex: index++, runtime: runtime);
 
                 return (view.Parts.Count > 0);
-            },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            }
+        );
 
         var display = (displayResize ? (Display * 2) : Display);
         var width = (displayResize ? 1.0 : 0.5);
@@ -127,14 +124,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         var expected = (Width: ((uint)(display * width)), Height: ((uint)display));
 
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        TestLiveness.Until(
+            step: () => {
                 ProducePackageFrame(display: display, frameIndex: index++, runtime: runtime, width: width);
 
                 return (runtime.Node(instance: 0).Extent == expected);
-            },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            }
+        );
         ProducePackageFrame(display: display, frameIndex: index++, runtime: runtime, width: width);
         Assert.Equal(expected: RenderGraphInstanceStatus.Waiting, actual: runtime.Latest!.Instances[0].Status);
     }

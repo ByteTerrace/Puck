@@ -29,12 +29,12 @@ public sealed partial class SdfWorldPassesLawTests {
         using var gate = new ManualResetEventSlim(initialState: false);
         var context = GridContext(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => view.Produce(context: in context), reason: () => (view.Runtime.Node(instance: 0).LastSwapError?.ToString() ?? view.NotReadyReason),
+        TestLiveness.Until(step: () => view.Produce(context: in context), reason: () => (view.Runtime.Node(instance: 0).LastSwapError?.ToString() ?? view.NotReadyReason),
             wait: view.Residency.WaitPipelineBuilds);
         var node = view.Runtime.Node(instance: 0);
         var passes = ((ceiling < 1f) ? 11 : 10);
 
-        SdfTestPipelines.ProduceUntil(frame: () => (view.Produce(context: in context) && (node.Plan!.Passes.Count == passes) && !node.IsBuildingCandidate),
+        TestLiveness.Until(step: () => (view.Produce(context: in context) && (node.Plan!.Passes.Count == passes) && !node.IsBuildingCandidate),
             reason: () => node.LastSwapError?.ToString(), wait: view.Residency.WaitPipelineBuilds);
         _ = view.Produce(context: in context);
         var buffers = gpu.BufferBytes;
@@ -84,7 +84,7 @@ public sealed partial class SdfWorldPassesLawTests {
             kernels: SdfTestPipelines.Kernels().With(bytecode: container, kernel: SdfKernel.Resolve));
         var context = GridContext(gpu: gpu);
 
-        SdfTestPipelines.ProduceUntil(frame: () => (view.Produce(context: in context) && (view.Runtime.Node(instance: 0).Plan!.Passes.Count == 11) &&
+        TestLiveness.Until(step: () => (view.Produce(context: in context) && (view.Runtime.Node(instance: 0).Plan!.Passes.Count == 11) &&
             !view.Runtime.Node(instance: 0).IsBuildingCandidate), reason: () => (view.Runtime.Node(instance: 0).LastSwapError?.ToString() ?? view.NotReadyReason),
             wait: view.Residency.WaitPipelineBuilds);
         Assert.Null(@object: view.Runtime.Node(instance: 0).LastSwapError);

@@ -111,7 +111,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         Assert.True(
             condition: entered.Wait(
                 cancellationToken: TestContext.Current.CancellationToken,
-                timeout: TimeSpan.FromSeconds(value: 30)
+                timeout: TestLiveness.Bound
             ),
             userMessage: "The first produced frame did not start the pipeline build."
         );
@@ -121,14 +121,13 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         session.Enqueue(line: "probe after");
 
         // The bound is liveness for the law itself; the one-second wait deadline is what it observes.
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        TestLiveness.Until(
+            step: () => {
                 Pump();
 
                 return answered.Contains(item: "probe after");
-            },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            }
+        );
 
         Assert.False(condition: gate.IsSet);
         Assert.False(condition: node.IsReady);
@@ -149,14 +148,15 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         );
 
         gate.Set();
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        TestLiveness.Until(
+            reason: () => node.NotReadyReason,
+            step: () => {
                 Pump();
 
                 return node.IsReady;
             },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            wait: node.WaitPipelineBuilds
+        );
         Assert.True(condition: node.Produce(context: in context));
     }
     [Fact]
@@ -200,10 +200,10 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         var loss = new Thread(start: node.OnDeviceLost);
 
         loss.Start();
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => (cache.Pipelines.SharedPipelines <= 2),
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+        TestLiveness.Until(
+            reason: () => $"{cache.Pipelines.SharedPipelines} pipelines are still leased",
+            step: () => (cache.Pipelines.SharedPipelines <= 2)
+        );
         driver.Open();
         loss.Join();
 
@@ -213,14 +213,15 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         );
         Assert.False(condition: node.IsReady);
 
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        TestLiveness.Until(
+            reason: () => node.NotReadyReason,
+            step: () => {
                 _ = node.Produce(context: in context);
 
                 return node.IsReady;
             },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            wait: node.WaitPipelineBuilds
+        );
     }
     [Fact]
     public void OnlyTheLastReleaseCancelsAndItWaitsOnlyForThePipelinesInTheDriver() {
@@ -255,10 +256,10 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         var release = new Thread(start: last.Dispose);
 
         release.Start();
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => (cache.Pipelines.SharedPipelines == 0),
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+        TestLiveness.Until(
+            reason: () => $"{cache.Pipelines.SharedPipelines} pipelines are still leased",
+            step: () => (cache.Pipelines.SharedPipelines == 0)
+        );
         driver.Open();
         release.Join();
 
@@ -355,7 +356,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         // Waits until as many creations as a build runs at once are held; the bound is liveness, and decides nothing.
         public void WaitUntilFull() => Assert.True(condition: m_full.Wait(
             cancellationToken: TestContext.Current.CancellationToken,
-            timeout: TimeSpan.FromSeconds(value: 30)
+            timeout: TestLiveness.Bound
         ));
     }
     private sealed class FixedFrameSource(SdfFrame frame) : ISdfFrameSource {

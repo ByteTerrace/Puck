@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -70,16 +71,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
         }
 
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    Produce();
+        TestLiveness.Until(
+            reason: () => $"The view read {view.Read.Count} frame(s), the screen {screen.Seen.Count} and the export {gpu.CopiedImages.Count} copies.",
+            step: () => {
+                Produce();
 
-                    return ((view.Read.Count >= 2) && (screen.Seen.Count >= 2) && (gpu.CopiedImages.Count >= 2));
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: $"The view read {view.Read.Count} frame(s), the screen {screen.Seen.Count} and the export {gpu.CopiedImages.Count} copies."
+                return ((view.Read.Count >= 2) && (screen.Seen.Count >= 2) && (gpu.CopiedImages.Count >= 2));
+            }
         );
 
         var exported = runtime.NodeOf(instance: ExportedView)!.ExportedImage!;

@@ -459,8 +459,8 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
             var context = m_context;
             var node = Node;
 
-            SdfTestPipelines.ProduceUntil(
-                frame: () => {
+            TestLiveness.Until(
+                step: () => {
                     produced = node.Produce(context: in context);
 
                     return (node.NotReadyReason?.Contains(

@@ -356,16 +356,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
         // consumer has read a completed output of each producer that frame scheduled. An instance refreshed at a divisor
         // that frame did not schedule may still be building.
         public void Settle() {
-            Assert.True(
-                condition: SpinWait.SpinUntil(
-                    condition: () => {
-                        _ = Next();
+            TestLiveness.Until(
+                reason: () => "The runtime's scheduled instances never all produced.",
+                step: () => {
+                    _ = Next();
 
-                        return runtime.IsSettled;
-                    },
-                    timeout: TimeSpan.FromSeconds(value: 30)
-                ),
-                userMessage: "The runtime's scheduled instances never all produced."
+                    return runtime.IsSettled;
+                }
             );
             _ = Next();
         }

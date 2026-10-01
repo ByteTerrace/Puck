@@ -598,9 +598,11 @@ These are one-line cautions; the owning pages hold the derivations.
   own, deployed or reflected by the reload that installed it. A new SDF pipeline is a row in
   `SdfWorldTables.PipelineLayouts.Specs`, never a create call in the tables. A harness that drives a residency produces frames
   and blocks between them on `SdfWorldResidency.WaitPipelineBuilds`, never spinning
-  (`SdfTestPipelines.ProduceUntil` and `ProduceFirstFrame` in `tests/Shared`, whose
-  `Liveness` is the one bound a harness gives thread-pool work and whose `Kernels`
-  is the one fake kernel set);
+  (`SdfTestPipelines.ProduceFirstFrame` in `tests/Shared`, whose `Kernels` is the
+  one fake kernel set, over `TestLiveness.Until`: every harness in the Hosting,
+  Shaders, SdfVm and World tests waits for thread-pool work through
+  `tests/Shared/TestLiveness.cs`, blocking on the work's own completion under its
+  one `Bound`, and polls with a pause only a condition with no completion signal);
   `SdfPipelineBuildLivenessLawTests` holds the factory and proves the pump
   still drains the console, and that a device loss or the last release waits
   for exactly the `BuildConcurrency` creations in the driver, counted through

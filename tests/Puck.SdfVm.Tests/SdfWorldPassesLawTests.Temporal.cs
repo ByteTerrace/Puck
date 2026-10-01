@@ -142,7 +142,7 @@ public sealed partial class SdfWorldPassesLawTests {
             m_context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
                 Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = m_gpu }),
                 StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent);
-            SdfTestPipelines.ProduceUntil(frame: () => {
+            TestLiveness.Until(step: () => {
                 Produce();
                 return (Selected.IsReady && Passes.HasRenderedResolvedView(instance: "world") &&
                     (World.Extent == (Extent, Extent)) && !World.IsBuildingCandidate);

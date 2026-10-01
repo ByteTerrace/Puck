@@ -2,6 +2,7 @@ using System.Text;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -86,18 +87,15 @@ public sealed partial class RenderGraphRuntimeLawTests {
             var renderedPane = new List<bool>();
             var renderedCamera = new List<bool>();
 
-            Assert.True(
-                condition: SpinWait.SpinUntil(
-                    condition: () => {
-                        var frame = next();
+            TestLiveness.Until(
+                reason: () => "The runtime's scheduled instances never all produced.",
+                step: () => {
+                    var frame = next();
 
-                        _ = runtime.ProduceFrame(context: default, frame: in frame);
+                    _ = runtime.ProduceFrame(context: default, frame: in frame);
 
-                        return runtime.IsSettled;
-                    },
-                    timeout: TimeSpan.FromSeconds(value: 30)
-                ),
-                userMessage: "The runtime's scheduled instances never all produced."
+                    return runtime.IsSettled;
+                }
             );
 
             for (var frame = 0; (frame < 4); frame++) {

@@ -1,4 +1,5 @@
 using Puck.Abstractions.Presentation;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -21,16 +22,13 @@ internal static class ShaderPipelineRenderNodeBuilds {
     public static Surface ProduceUntilInstalled(this ShaderPipelineRenderNode node) {
         var surface = default(Surface);
 
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    surface = node.ProduceFrame(context: default);
+        TestLiveness.Until(
+            reason: () => $"The first graph never installed: {node.LastSwapError}",
+            step: () => {
+                surface = node.ProduceFrame(context: default);
 
-                    return node.IsReady;
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: $"The first graph never installed: {node.LastSwapError}"
+                return node.IsReady;
+            }
         );
 
         return surface;
@@ -39,12 +37,9 @@ internal static class ShaderPipelineRenderNodeBuilds {
     // frame installs it: the frame sequence is the one a synchronous selection gave.
     public static void SelectOutputBuilt(this ShaderPipelineRenderNode node, string name) {
         node.SelectOutput(name: name);
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => !node.IsBuildingPreview,
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The preview never finished building."
+        TestLiveness.Until(
+            reason: () => "The preview never finished building.",
+            step: () => !node.IsBuildingPreview
         );
     }
     // Produces the frame that starts a queued build, with the driver held so the build cannot finish within it: that
@@ -68,11 +63,8 @@ internal static class ShaderPipelineRenderNodeBuilds {
         return surface;
     }
     public static void WaitForBuild(this ShaderPipelineRenderNode node) =>
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => !node.IsBuildingCandidate,
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The candidate's build did not finish."
+        TestLiveness.Until(
+            reason: () => "The candidate's build did not finish.",
+            step: () => !node.IsBuildingCandidate
         );
 }
