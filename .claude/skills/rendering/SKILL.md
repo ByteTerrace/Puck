@@ -1921,8 +1921,9 @@ resolve pipeline only on request, so `SdfWorldPasses.Refresh` requests the
 arrival residency's (`SdfWorldPipelines.RequestResolve`, from the build source
 `BuildAsync` last used) whenever a followed view changes residency; without it
 `CanFollow` fails and a temporal view crossing a portal holds the departed world
-(`ATemporalViewCrossesToAnotherResidencyInPlace`, and `portal-walk` runs with
-`world.temporal on`). Run `temporal-convergence`,
+(`ATemporalViewCrossesToAnotherResidencyInPlace`; `portal-walk` crosses with
+`world.temporal on` and holds its crossing frame to a relaunch's spatial one
+exactly). Run `temporal-convergence`,
 `temporal-ghosting`, `temporal-disocclusion` and `temporal-reset` on both
 backends with `--debug-layers` after changing the resolve, the fragment or the
 reprojection; `SdfPassPlanLawTests.Temporal` and `SdfWorldPassesLawTests.Temporal`

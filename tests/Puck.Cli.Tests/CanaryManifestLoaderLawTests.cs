@@ -189,13 +189,14 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
         }
     }
-    // A relaunch names the document the first boot writes by its bare file name in the run directory; a path, which
-    // could reach outside that directory, is refused by name.
+    // A relaunch names the document the first boot writes by its bare file name in the run directory, or names none and
+    // boots the leg's own world again; a path, which could reach outside that directory, is refused by name.
     [InlineData("saved.world.json", true)]
+    [InlineData(null, true)]
     [InlineData("../saved.world.json", false)]
     [InlineData("nested/saved.world.json", false)]
     [Theory]
-    public void ARelaunchNamesItsSavedDocumentByABareFileName(string world, bool loads) {
+    public void ARelaunchBootsABareNamedSavedDocumentOrItsOwnWorld(string? world, bool loads) {
         var goodDirectory = Path.Combine(
             path1: m_root,
             path2: "tests",
@@ -216,7 +217,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
                 id: "good-one",
                 relaunch: $$"""
 
-                "relaunch": { "world": "{{world}}", "script": "positive.script.txt", "commands": [ { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" } ] },
+                "relaunch": { {{((world is null) ? string.Empty : $"\"world\": \"{world}\", ")}}"script": "positive.script.txt", "commands": [ { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" } ] },
                 """,
                 worldPrefix: "tests/Puck.World.Canaries/good-one/"
             ),

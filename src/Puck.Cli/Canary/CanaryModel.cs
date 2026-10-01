@@ -87,10 +87,10 @@ internal sealed record CanaryLeg(
 // the copy; before a leg's first boot it copies the package to <run>/<OutputName>. Alter, a logical path inside the
 // package, then has a line appended in the leg's copy, so its pin no longer holds.
 internal sealed record CanaryPackage(string SourcePath, string OutputName, string? Alter);
-// A second boot of a leg: the World relaunches on a document the first boot wrote into the leg's run directory, under
-// the same state directory, and runs its own script. Assertions read both boots' streams in order; each boot's
+// A second boot of a leg: the World relaunches on a document the first boot wrote into the leg's run directory, or, with
+// no file name, on the leg's own world again, under the same state directory, and runs its own script. Assertions read both boots' streams in order; each boot's
 // commands are accounted against its own process.
-internal sealed record CanaryRelaunch(IReadOnlyList<CanaryCommandClaim> Commands, string ScriptPath, string WorldFileName);
+internal sealed record CanaryRelaunch(IReadOnlyList<CanaryCommandClaim> Commands, string ScriptPath, string? WorldFileName);
 // One listener in a federated mesh leg: its own world document, its own driving script, addressed by Id everywhere
 // a manifest assertion or a peer's admission row needs to name it. Deliberately silent about HOW it is hosted — see
 // CANARY-SHAPE.md item 7 — so a future non-Process launch strategy (a Silo grain standing in for one entry) is an
