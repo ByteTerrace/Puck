@@ -8695,6 +8695,10 @@ export type WorldQualityPreset = {
    * The render-scale tier the preset selects.
    */
   renderScale?: WorldRenderScaleTier;
+  /**
+   * Whether the preset reconstructs the world's views over time (world.temporal).
+   */
+  temporal?: boolean;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -8884,9 +8888,13 @@ export type WorldRenderDefaults = {
    */
   renderScale?: WorldRenderScaleTier;
   /**
-   * The boot reduced-resolution reconstruction blend (0 bilinear .. 1 Catmull-Rom).
+   * The boot reconstruction sharpness: the spatial resolve's blend (0 bilinear .. 1 Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect's own extent.
    */
   upscaleSharpness?: number;
+  /**
+   * Whether the world's own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.
+   */
+  temporal?: boolean;
   /**
    * The world.quality low preset.
    */
