@@ -18,6 +18,7 @@ public sealed partial class ShaderPipelineRenderNode {
     private string? m_timingRefusal;
     private long m_timingFrames;
     private double m_timingLatest;
+    private long m_timingLatestSubmission;
     private long m_timingRefusedFaultsRevision;
 
     /// <summary>Gets or sets whether pass timestamp queries are recorded. Off by default: no pools, buffers or query
@@ -151,6 +152,7 @@ public sealed partial class ShaderPipelineRenderNode {
     private void SubmitTiming(int slot, IGpuSubmissionFence fence) {
         if (TimingActive && (m_timingSlots.Length != 0) && (m_timingSlots[slot].Pool is not null)) {
             m_timingSlots[slot].Fence = fence;
+            m_timingSlots[slot].Submission = m_submissions;
         }
     }
     private void PollTimings() {
@@ -182,7 +184,11 @@ public sealed partial class ShaderPipelineRenderNode {
                 m_timingNext[pass] = ((m_timingNext[pass] + 1) % TimingWindow);
                 m_timings[pass] = entry with { Milliseconds = (total / count), Samples = count };
             }
-            m_timingLatest = frame;
+            // Slots wrap independently of completion: the highest slot need not hold the newest submission.
+            if (slot.Submission > m_timingLatestSubmission) {
+                m_timingLatest = frame;
+                m_timingLatestSubmission = slot.Submission;
+            }
             m_timingFrames++;
         }
     }
@@ -206,6 +212,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public bool[] Recorded = [];
         public long Revision;
         public long Epoch;
+        public long Submission;
 
         public void Dispose() {
             Pool?.Dispose();

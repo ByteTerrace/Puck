@@ -98,7 +98,7 @@ public sealed class WorldDynamicResolution {
         var low = Math.Min(val1: floor, val2: ceiling);
         var share = (load / budget);
 
-        if (!double.IsFinite(d: share) || (share < 0d) || (Math.Abs(value: (share - 1d)) <= Deadband)) {
+        if (!double.IsFinite(d: share) || (share < 0d) || ((share >= (1d - Deadband)) && (share <= (1d + Deadband)))) {
             return Math.Clamp(max: ceiling, min: low, value: scale);
         }
 

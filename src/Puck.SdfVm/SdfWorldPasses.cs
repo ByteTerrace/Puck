@@ -143,8 +143,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// <remarks>An instance stands only while a render taken now would feed its passes the temporal inputs its latest
     /// render fed them (<see cref="SdfTemporalHistory.Stands"/>): a sample jittered for a converging capture renders
     /// once more at the pixel center, the <c>motion</c> view renders until its previous view and previous poses
-    /// settle, and a temporally resolved view renders one jitter period after its inputs last changed, then stands
-    /// converged. A view whose installed graph is not the one its temporal ask selects renders.</remarks>
+    /// settle, and a temporally resolved view renders one jitter period after its inputs or sample grid last changed,
+    /// then stands converged. A view whose installed graph is not the one its temporal ask selects renders.</remarks>
     public bool IsUnchanged(string instance, in FrameContext context) {
         var entry = Refresh(instance: instance);
 
@@ -153,7 +153,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             !view.Residency.IsUnchanged(
                 context: in context,
                 view: view.View
-            )
+            ) ||
+            (entry.RenderedScale != entry.CurrentScale)
         ) {
             entry.Temporal.Changed();
 
@@ -163,7 +164,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         return (
             !entry.Picker.Pending &&
             (entry.RenderedBindings == entry.Bindings) &&
-            (entry.RenderedScale == entry.CurrentScale) &&
             (entry.RenderedSharpness == entry.CurrentSharpness) &&
             (entry.InstalledTemporal == entry.RequestsTemporal) &&
             (view.Residency.Tables is { } tables) &&

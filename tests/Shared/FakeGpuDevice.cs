@@ -88,7 +88,7 @@ internal sealed class FakeGpuDevice :
     public Action<ulong, ulong>? OnBufferCopy { get; set; }
     public Action<int>? OnReadback { get; set; }
 
-    public delegate void ReadbackWriter(Span<byte> destination);
+    public delegate void ReadbackWriter(GpuObjectName name, Span<byte> destination);
 
     public ReadbackWriter? WriteReadback { get; set; }
     /// <summary>Gets or sets whether each image created from now on carries an image and view handle of its own rather than
@@ -525,6 +525,7 @@ internal sealed class FakeGpuDevice :
             resource: new Resource(
                 creation: Track(kind: "readback buffer"),
                 gpu: this,
+                readbackName: name,
                 sizeBytes: sizeBytes
             )
         );
@@ -729,7 +730,7 @@ internal sealed class FakeGpuDevice :
             ? ((nint)(20 + ordinal))
             : 0))]);
 
-    private sealed class Resource(FakeGpuDevice gpu, Creation? creation = null, uint width = 1, uint height = 1, ulong sizeBytes = 0, IReadOnlyList<nint>? groupLayouts = null, nint imageHandle = 4, nint imageViewHandle = 5) :
+    private sealed class Resource(FakeGpuDevice gpu, Creation? creation = null, uint width = 1, uint height = 1, ulong sizeBytes = 0, IReadOnlyList<nint>? groupLayouts = null, nint imageHandle = 4, nint imageViewHandle = 5, GpuObjectName readbackName = default) :
         IGpuCommandPool,
         IGpuComputePipeline,
         IGpuFramebuffer,
@@ -766,7 +767,7 @@ internal sealed class FakeGpuDevice :
             gpu.OnReadback?.Invoke(obj: destination.Length);
             gpu.Hit(key: "IGpuReadbackBuffer.Read");
             destination.Clear();
-            gpu.WriteReadback?.Invoke(destination: destination);
+            gpu.WriteReadback?.Invoke(name: readbackName, destination: destination);
         }
     }
     // Every upload lands on one fixed view handle.

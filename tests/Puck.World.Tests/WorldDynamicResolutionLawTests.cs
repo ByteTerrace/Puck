@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.SdfVm;
 using Puck.World.Client;
 using Xunit;
 
@@ -28,6 +29,23 @@ public sealed class WorldDynamicResolutionLawTests {
     private const int Hertz = 60;
     private const long OutputPixels = (256L * 144L);
     private const float Rise = ((float)(1d + WorldDynamicResolution.MaximumRise));
+
+    [Theory]
+    [InlineData(1f)]
+    [InlineData(0.99f)]
+    [InlineData(0.9376f)]
+    public void EveryCeilingThatQuantizesToNativeReconstructsWhileDynamicResolutionIsOn(float scale) {
+        var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults()) { RenderScale = scale };
+
+        Assert.Equal(expected: 1d, actual: new SdfViewSnapshot { RenderScale = settings.RenderCeiling }.RenderCeiling);
+        settings.DynamicResolution = true;
+        var view = new SdfViewSnapshot { RenderScale = settings.RenderCeiling, ResolvedRenderScale = 0.5f };
+
+        Assert.Equal(expected: 0.875d, actual: view.RenderCeiling);
+        Assert.Equal(expected: 0.5d, actual: view.RenderGrid);
+        settings.DynamicResolution = false;
+        Assert.Equal(expected: scale, actual: settings.RenderCeiling);
+    }
 
     [Fact]
     public void PresentTimingHoldsKeptPeriodsAndStepsTheGridByBoundedShares() {
@@ -160,6 +178,12 @@ public sealed class WorldDynamicResolutionLawTests {
         Assert.Equal(expected: 0.81f, actual: WorldDynamicResolution.Respond(budget: 100d, ceiling: 0.81f, floor: 0.25f, load: 1d, scale: 0.8f));
         Assert.Equal(expected: (0.8f * Fall), actual: WorldDynamicResolution.Respond(budget: 100d, ceiling: 1f, floor: 0.25f, load: 400d, scale: 0.8f), tolerance: 1e-6f);
     }
+    [Theory]
+    [InlineData(90d)]
+    [InlineData(100d)]
+    [InlineData(110d)]
+    public void TheDeadbandIncludesBothBoundaries(double load) =>
+        Assert.Equal(expected: 0.8f, actual: WorldDynamicResolution.Respond(budget: 100d, ceiling: 1f, floor: 0.25f, load: load, scale: 0.8f));
     [Fact]
     public void WithoutPresentTimingTheStepBudgetHoldsTheFrameAndNoBudgetHoldsTheCeiling() {
         var controller = new WorldDynamicResolution();
