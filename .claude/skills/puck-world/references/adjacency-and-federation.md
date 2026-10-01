@@ -211,13 +211,24 @@ lands again through `WorldTransferEscrow.TryReland` (preferring its recorded
 body indices, without writing the record twice), a departure detaches its
 cohort by incarnation and puts the transfer back in doubt, a settlement
 publishes the routes or restores the cohort — and the next drain reconciles
-the rest. Whichever step a death interrupts, the traveler ends on exactly one
-authority. A silo row's log is its authority journal
+the rest. A failed arrival redo refuses recovery and leaves its sequence
+unapplied. A silo row's log is its authority journal
 (`WorldAuthorityJournalEntryKind.Crossing` entries appended under the
-activation fence; activation redoes them after restoring the row); a desktop
+activation fence; activation redoes them and mutations in publication order
+after restoring the row). Checkpoint coverage is pinned at capture, so a later
+arrival remains in the journal suffix. A desktop
 process installs none. The record codec
 (`WorldAuthorityCheckpointCodec.EncodeCrossingEntry`/`TryDecodeCrossingEntry`)
 reuses the checkpoint's own escrow and in-doubt leaves.
+
+A failed mutation journal append blocks the activation's later publications,
+so no crossing commits against a document edit recovery cannot reproduce.
+
+Silo treats an uncertain store publication as a refusal. A destination arrival
+may therefore be durable while the source settles home; destination recovery
+then duplicates the traveler. Exactly one owner across this failure requires
+an uncertain commit outcome that retains the source in doubt and suspends
+destination ingress until recovery.
 
 Entity identity is `WorldEntityAddress(authority, index, generation)`.
 `WorldAuthorityRoute` carries that complete address plus an epoch, and

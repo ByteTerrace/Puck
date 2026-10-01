@@ -811,10 +811,20 @@ records in one dense sequence that every checkpoint captures. A restarted author
 latest checkpoint and redoes, in order, every record past it. An arrival lands again through the
 escrow, a departure detaches its cohort again and puts the transfer back in doubt, and a settlement
 publishes the forwarding routes or restores the cohort. The ordinary drain then reconciles the
-transfer with its peer. Whichever step a death interrupts, the traveler ends either arrived or never
-departed, and never on both authorities. A hosted silo row writes its records into its fenced
-authority journal beside its mutations. A desktop process installs no log, so its crossings live
-only as long as the process.
+transfer with its peer. Recovery refuses an arrival it cannot re-land and leaves its sequence
+unapplied. A hosted silo row writes its records into its fenced authority journal beside its
+mutations and recovers both kinds in publication order. A checkpoint pins its journal coverage
+at capture, so arrivals after capture remain in the journal suffix. A desktop process installs no
+log, so its crossings live only as long as the process.
+
+A failed mutation journal append blocks further publication by that activation: later crossings
+cannot depend on a document edit its successor cannot recover.
+
+An uncertain store publication is an unresolved crossing failure: Silo currently answers it as a
+refusal even when the record may be durable. If a destination's arrival CAS lands but its outcome
+cannot be reconciled, the source can settle home and the destination can re-land the same traveler
+after recovery. Exactly one owner across uncertain store outcomes requires a distinct uncertain
+commit path that keeps the source in doubt and suspends the destination's ingress until recovery.
 
 Resolution and transfer are ordered authority events, not untaped host side effects. Generation ids
 issue from a counter in the target resolver's ordered domain, recorded before they are exposed—a

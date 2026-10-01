@@ -144,6 +144,8 @@ public sealed partial class WorldInstanceHost {
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The log skips or repeats a sequence past the checkpoint, or a departure
     /// record is malformed. Records before the first malformed one stay redone.</exception>
+    /// <exception cref="InvalidOperationException">A durable arrival cannot land again. Its sequence stays
+    /// unapplied so recovery cannot discard the traveler.</exception>
     public void RecoverCrossings(WorldInstance row, IReadOnlyList<WorldCrossingEntry> entries) {
         ArgumentNullException.ThrowIfNull(argument: row);
         ArgumentNullException.ThrowIfNull(argument: entries);
@@ -196,14 +198,8 @@ public sealed partial class WorldInstanceHost {
             reason: out reason
         ));
 
-        if (
-            !landed &&
-            m_narration.HasNarrationSink
-        ) {
-            m_narration.Narrate(
-                channel: "world.transfer",
-                text: $"[world.transfer: transfer={arrival.Request.TransferId} from '{arrival.Request.SourceAuthority}' could not land again in '{row.Name}' during recovery — {reason}]"
-            );
+        if (!landed) {
+            throw new InvalidOperationException(message: $"crossing recovery refused: transfer={arrival.Request.TransferId} from '{arrival.Request.SourceAuthority}' could not land again in '{row.Name}' — {reason}");
         }
     }
     private void RedoDeparture(WorldInstance row, WorldInDoubtTransferCheckpoint record) {

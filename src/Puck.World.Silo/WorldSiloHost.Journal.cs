@@ -24,6 +24,9 @@ public sealed partial class WorldSiloHost {
                 bookkeeping: bookkeeping,
                 outcome: outcome
             );
+            // This mutation is already installed in the live document. A later crossing cannot be recovered
+            // against that document unless the mutation landed too; stop the publication queue on any failure.
+            if (!outcome.Ok) { bookkeeping.PersistenceBlocked = true; }
 
             Post(action: () => {
                 if (
@@ -47,6 +50,7 @@ public sealed partial class WorldSiloHost {
                 }
             });
         } catch (Exception error) {
+            bookkeeping.PersistenceBlocked = true;
             Post(action: () => {
                 if (
                     m_rows.TryGetValue(
@@ -93,6 +97,7 @@ public sealed partial class WorldSiloHost {
             failure: out var failure,
             mutation: mutation
         )) {
+            bookkeeping.PersistenceBlocked = true;
             bookkeeping.JournalFailed = true;
             bookkeeping.JournalFailureTick = tick;
             bookkeeping.LastJournalOutcome = $"failed (encoding: {failure})";

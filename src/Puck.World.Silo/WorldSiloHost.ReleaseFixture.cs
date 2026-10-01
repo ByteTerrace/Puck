@@ -79,6 +79,7 @@ public sealed partial class WorldSiloHost {
                         throw new InvalidOperationException(message: "fixture export found an unavailable managed row");
                     }
                     if (!TryCaptureRow(
+                        capturedJournalSequence: out _,
                         encoded: out var bytes,
                         outcome: out var reason,
                         row: row,

@@ -20,6 +20,22 @@ namespace Puck.World.Tests;
 public sealed class WorldSiloCrossingRecoveryLawTests {
     private const int Slot = WorldBodiesLimits.LocalSeatCount;
 
+    private sealed class FailingJournalStore(IObjectBlobStore inner) : IObjectBlobStore {
+        private int m_fail;
+
+        public void FailNextJournalWrite() => Interlocked.Exchange(location1: ref m_fail, value: 1);
+        public ValueTask<IReadOnlyList<string>> ListAsync(ObjectStorageTarget target, Guid objectId, string keyPrefix, CancellationToken cancellationToken = default) =>
+            inner.ListAsync(cancellationToken: cancellationToken, keyPrefix: keyPrefix, objectId: objectId, target: target);
+        public ValueTask<ObjectBlobContent?> ReadAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) =>
+            inner.ReadAsync(address: address, cancellationToken: cancellationToken, target: target);
+        public ValueTask<ObjectBlobWriteResult> WriteAsync(ObjectStorageTarget target, ObjectBlobAddress address, ReadOnlyMemory<byte> content, ObjectBlobWriteMode mode, string? ifMatchVersion = null, CancellationToken cancellationToken = default) {
+            if (address.Key.Contains(comparisonType: StringComparison.Ordinal, value: "/journal/") && (Interlocked.Exchange(location1: ref m_fail, value: 0) == 1)) {
+                return ValueTask.FromException<ObjectBlobWriteResult>(exception: new IOException(message: "journal write failed before publication"));
+            }
+            return inner.WriteAsync(address: address, cancellationToken: cancellationToken, content: content, ifMatchVersion: ifMatchVersion, mode: mode, target: target);
+        }
+    }
+
     private static WorldSiloHost Host(string directory, IObjectBlobStore store, BufferedConsoleOutput output, WorldSiloWorldRow[] worlds) {
         var source = new TextCommandSource(new CommandRegistry(modules: []));
 
@@ -83,8 +99,13 @@ public sealed class WorldSiloCrossingRecoveryLawTests {
         return count;
     }
 
-    [Fact]
-    public async Task ACrossingBetweenSiloRowsRecoversFromTheAuthorityStore() {
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    [Theory]
+    public async Task ACrossingBetweenSiloRowsRecoversFromTheAuthorityStore(bool changeSpawnsAfterArrival, bool crossDuringCapture, bool failPrecedingMutation) {
+        var travelerSlot = (changeSpawnsAfterArrival ? 0 : Slot);
         using var directory = new TemporaryDirectory();
         using var output = new BufferedConsoleOutput();
         using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
@@ -106,7 +127,7 @@ public sealed class WorldSiloCrossingRecoveryLawTests {
             Owner: owner,
             World: SafeName.Parse(candidate: "rowb")
         );
-        var store = PuckStorageTestComposition.BuildStore();
+        var store = new FailingJournalStore(inner: PuckStorageTestComposition.BuildStore());
         var backend = new WorldAuthorityBlobStore(
             store: store,
             target: new DirectoryObjectStorageTarget(directory.RootPath),
@@ -160,7 +181,14 @@ public sealed class WorldSiloCrossingRecoveryLawTests {
             instance: out var rowA,
             name: "rowa"
         ));
-        Assert.True(condition: rowA!.Server.ExecuteAuthorityOperation(operation: () => rowA.Server.Population.TryAdmitRemotePeerAt(
+        Assert.True(condition: rowA!.Server.ExecuteAuthorityOperation(operation: () => (changeSpawnsAfterArrival
+            ? rowA.Server.ApplySession(request: new SessionRequest.Join(
+                IdentityName: null,
+                Principal: Principal.Seat(slot: travelerSlot),
+                Slot: travelerSlot,
+                WireProtocolKey: WorldProtocol.WireProtocolKey
+            )).Accepted
+            : rowA.Server.Population.TryAdmitRemotePeerAt(
             slot: Slot,
             source: IntentSource.Live,
             grantTemplates: [],
@@ -168,11 +196,20 @@ public sealed class WorldSiloCrossingRecoveryLawTests {
             identitySubject: "traveler",
             admitted: out _,
             refusal: out _
-        )));
+        ))));
         var traveler = rowA.Server.Population.ResolveIncarnation(
             authority: rowA.Server.AuthorityIdentity,
-            index: Slot
+            index: travelerSlot
         )!.Value;
+
+        if (changeSpawnsAfterArrival) {
+            Assert.True(condition: rowA.Server.ApplySession(request: new SessionRequest.Join(
+                IdentityName: null,
+                Principal: Principal.Seat(slot: 1),
+                Slot: 1,
+                WireProtocolKey: WorldProtocol.WireProtocolKey
+            )).Accepted);
+        }
         var checkpoint = original.CheckpointNowAsync(
             source,
             TestContext.Current.CancellationToken
@@ -184,14 +221,54 @@ public sealed class WorldSiloCrossingRecoveryLawTests {
         );
         Assert.True(condition: await checkpoint);
 
+        if (failPrecedingMutation) {
+            store.FailNextJournalWrite();
+            Assert.True(condition: rowA.Server.TryApplyJournalTailMutation(
+                mutation: new WorldMutation.SetSpawns(
+                    Principal: Principal.Console,
+                    Spawns: [.. rowA.Server.Definition.SpawnPoints.Select(selector: point => point with {
+                        Position = new System.Numerics.Vector3(x: 100f, y: 0f, z: 0f),
+                    })]
+                ),
+                tick: rowA.CompletedTicks,
+                engineTick: rowA.Server.CompletedEngineTicks
+            ));
+        }
+
         _ = original.Instances.EnqueueTransfer(
             actingPrincipal: Principal.Console,
             destination: WorldInstanceHost.TransferDestination.Existing(name: "rowb"),
             scope: WorldInstanceHost.TransferScope.Body,
             sourceInstance: "rowa",
-            sourceSlot: Slot
+            sourceSlot: travelerSlot
         );
-        original.Instances.DrainPendingTransfers();
+        if (crossDuringCapture) {
+            // Order the race explicitly: the destination snapshot is empty, then ingress commits, then the
+            // snapshot is queued for publication. That later arrival must remain in its journal suffix.
+            original.CheckpointCaptureTap = row => {
+                if (row.Name == "rowb") {
+                    original.CheckpointCaptureTap = null;
+                    original.Instances.DrainPendingTransfers();
+                }
+            };
+            var destinationCheckpoint = original.CheckpointNowAsync(destination, TestContext.Current.CancellationToken);
+
+            await PumpAsync(host: original, operation: destinationCheckpoint);
+            Assert.True(condition: await destinationCheckpoint);
+            var tail = await backend.LoadRecoveryAsync(destination, TestContext.Current.CancellationToken);
+
+            Assert.Contains(collection: tail!.Value.Journal.Entries, filter: entry => (entry.Kind == WorldAuthorityJournalEntryKind.Crossing));
+        } else {
+            original.Instances.DrainPendingTransfers();
+        }
+        if (failPrecedingMutation) {
+            Assert.True(condition: rowA.Server.Population.IsActive(index: travelerSlot));
+            Assert.Equal(expected: 0UL, actual: rowA.Server.CrossingSequence);
+            var recovered = await backend.LoadRecoveryAsync(source, TestContext.Current.CancellationToken);
+
+            Assert.Empty(collection: recovered!.Value.Journal.Entries);
+            return;
+        }
         Assert.Equal(
             expected: 1,
             actual: CountTraveler(
@@ -199,7 +276,29 @@ public sealed class WorldSiloCrossingRecoveryLawTests {
                 traveler: traveler
             )
         );
-        Assert.False(condition: rowA.Server.Population.IsActive(index: Slot));
+        Assert.False(condition: rowA.Server.Population.IsActive(index: travelerSlot));
+
+        Assert.True(condition: original.Instances.TryGet(instance: out var rowB, name: "rowb"));
+        var arrivalPosition = rowB!.Server.Body(index: travelerSlot)!.FixedPosition;
+
+        if (changeSpawnsAfterArrival) {
+            // A spawn edit affects the next activation, while the traveler already landed at the previous pose.
+            Assert.True(condition: rowB.Server.ExecuteAuthorityOperation(operation: () => rowB.Server.TryApplyJournalTailMutation(
+                mutation: new WorldMutation.SetSpawns(
+                    Principal: Principal.Console,
+                    Spawns: [.. rowB.Server.Definition.SpawnPoints.Select(selector: point => point with {
+                        Position = new System.Numerics.Vector3(x: 100f, y: 0f, z: 0f),
+                    })]
+                ),
+                tick: rowB.CompletedTicks,
+                engineTick: rowB.Server.CompletedEngineTicks
+            )));
+            var publish = original.PublishDefinitionAsync(destination, rowB.Server.Definition, TestContext.Current.CancellationToken);
+
+            await PumpAsync(host: original, operation: publish);
+            Assert.True(condition: (await publish).Ok);
+            Assert.Equal(expected: arrivalPosition, actual: rowB.Server.Body(index: travelerSlot)!.FixedPosition);
+        }
 
         // The source's durable checkpoint still holds the traveler: only the journal says it left.
         var latest = (await backend.LoadLatestAsync(
@@ -214,7 +313,7 @@ public sealed class WorldSiloCrossingRecoveryLawTests {
         ), userMessage: imageReason);
         Assert.Contains(
             collection: image!.Population.Entries,
-            filter: static entry => (entry.Index == Slot)
+            filter: entry => (entry.Index == travelerSlot)
         );
 
         var replacement = Host(
@@ -256,5 +355,8 @@ public sealed class WorldSiloCrossingRecoveryLawTests {
                 index: slot
             ) == traveler)
         );
+        if (changeSpawnsAfterArrival) {
+            Assert.Equal(expected: arrivalPosition, actual: restoredB.Server.Body(index: travelerSlot)!.FixedPosition);
+        }
     }
 }

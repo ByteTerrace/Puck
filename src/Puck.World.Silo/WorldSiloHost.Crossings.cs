@@ -70,26 +70,70 @@ public sealed partial class WorldSiloHost {
         );
         return outcome;
     }
-    // A recovered journal interleaves committed mutations with crossing records. Mutations replay onto the restored
-    // server before the row is admitted; crossing records need the admitted row and its host slice, so they are kept
-    // apart and redone after the slice is restored.
-    private static bool TryDecodeCrossings(IReadOnlyList<WorldAuthorityJournalEntry> entries, WorldPlayerDefaults defaults, out List<WorldCrossingEntry> crossings, out string reason) {
-        crossings = [];
+    // Replay the publication order after admission and host-slice restore. A mutation can change the spawn,
+    // capacity or admission policy an arrival used, so moving it ahead of that arrival changes the traveler. A record
+    // that does not decode or redo refuses the activation and leaves its crossing watermark where it stopped.
+    private bool TryRecoverJournal(WorldInstance row, IReadOnlyList<WorldAuthorityJournalEntry> entries, out string reason) {
         foreach (var entry in entries) {
-            if (entry.Kind != WorldAuthorityJournalEntryKind.Crossing) {
-                continue;
+            switch (entry.Kind) {
+                case WorldAuthorityJournalEntryKind.Crossing:
+                    if (!WorldAuthorityCheckpointCodec.TryDecodeCrossingEntry(
+                        bytes: entry.Encoded.Span,
+                        defaults: row.Server.Definition.PlayerDefaults,
+                        entry: out var crossing,
+                        reason: out var decodeReason
+                    )) {
+                        reason = $"crossing decode: {decodeReason}";
+                        return false;
+                    }
+                    try {
+                        Instances.RecoverCrossings(
+                            entries: [crossing],
+                            row: row
+                        );
+                    } catch (Exception redo) when ((redo is ArgumentException or InvalidOperationException)) {
+                        reason = redo.Message;
+                        return false;
+                    }
+                    break;
+                case WorldAuthorityJournalEntryKind.Mutation:
+                    if (
+                        !WorldSubmissionCodec.TryDecodeCommittedMutation(
+                        bytes: entry.Encoded.Span,
+                        failure: out var failure,
+                        mutation: out var mutation
+                    ) ||
+                        (mutation is null)
+                    ) {
+                        reason = $"mutation decode: {failure}";
+                        return false;
+                    }
+                    if (!row.Server.TryApplyJournalTailMutation(
+                        engineTick: entry.EngineTick,
+                        mutation: mutation,
+                        tick: entry.Tick
+                    )) {
+                        reason = "replay rejected a recorded mutation";
+                        return false;
+                    }
+                    break;
+                default:
+                    reason = $"undeclared entry kind '{entry.Kind}'";
+                    return false;
             }
-            if (!WorldAuthorityCheckpointCodec.TryDecodeCrossingEntry(
-                bytes: entry.Encoded.Span,
-                defaults: defaults,
-                entry: out var crossing,
-                reason: out reason
-            )) {
-                return false;
-            }
-            crossings.Add(item: crossing);
         }
         reason = string.Empty;
         return true;
+    }
+    // Runs on the mailbox: an activation that admitted its row but cannot finish leaves no row and no bookkeeping.
+    private void DiscardActivation(WorldInstance row) {
+        row.Server.FreezeForRetirement();
+        if (!Instances.TryStop(
+            name: row.Name,
+            reason: out _
+        )) {
+            row.Dispose();
+        }
+        _ = m_rows.Remove(key: row.Name);
     }
 }

@@ -1168,9 +1168,13 @@ public sealed partial class WorldTransferEscrow {
             return false;
         }
 
-        var request = arrival.Request with {
-            Members = [.. arrival.Request.Members.Select(selector: (member, index) => member with { PreferredSlot = arrival.Slots[index] })],
-        };
+        // A checkpoint can hold the original reservation, including a preference the destination could not honor.
+        // Reuse that exact request while its lease exists; rewriting the preference would change the bound token.
+        var request = (m_leases.ContainsKey(key: arrival.Key)
+            ? arrival.Request
+            : arrival.Request with {
+                Members = [.. arrival.Request.Members.Select(selector: (member, index) => member with { PreferredSlot = arrival.Slots[index] })],
+            });
         var reply = Reserve(request: request);
 
         if (!reply.Accepted) {

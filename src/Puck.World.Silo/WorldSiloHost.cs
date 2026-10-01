@@ -493,6 +493,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     row.Door?.SuspendIngress();
                     row.Server.FreezeForRetirement();
                     if (!TryCaptureRow(
+                        capturedJournalSequence: out var capturedJournalSequence,
                         encoded: out var encoded,
                         outcome: out var outcome,
                         row: row,
@@ -511,7 +512,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         row.Name,
                         tick,
                         bookkeeping,
-                        ct
+                        ct,
+                        capturedJournalSequence
                     )));
                 }
                 capture.TrySetResult(result: rows);
@@ -689,6 +691,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             }
 
             if (TryCaptureRow(
+                capturedJournalSequence: out var capturedJournalSequence,
                 encoded: out var encoded,
                 outcome: out var outcome,
                 row: row,
@@ -715,6 +718,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     tick: capturedTick,
                     worldId: name,
                     bookkeeping: m_rows[name],
+                    capturedJournalSequence: capturedJournalSequence,
                     cancellationToken: CancellationToken.None
                 ));
             } else {
@@ -874,26 +878,44 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             )
             : federation
         );
-    private bool TryCaptureRow(WorldInstance row, out byte[] encoded, out string outcome, out ulong tick) {
-        var hostRow = Instances.CaptureRow(row: row);
 
-        if (!row.Server.TryCaptureCheckpoint(
-            checkpoint: out var checkpoint,
-            hostRow: hostRow,
-            reason: out var reason
-        )) {
-            encoded = [];
-            outcome = reason;
-            tick = 0;
+    /// <summary>Observes a checkpoint after its image and journal boundary are captured, before its upload is
+    /// queued. Later ingress belongs to the journal suffix and remains recoverable beside this image.</summary>
+    public Action<WorldInstance>? CheckpointCaptureTap { get; set; }
 
-            return false;
+    private bool TryCaptureRow(WorldInstance row, out byte[] encoded, out string outcome, out ulong tick, out Task<long> capturedJournalSequence) {
+        WorldAuthorityCheckpoint? checkpoint;
+
+        lock (row.Server.AuthorityGate) {
+            if (!row.Server.TryCaptureCheckpoint(
+                checkpoint: out checkpoint,
+                hostRow: Instances.CaptureRow(row: row),
+                reason: out var reason
+            )) {
+                encoded = [];
+                outcome = reason;
+                tick = 0;
+                capturedJournalSequence = Task.FromResult(result: -1L);
+                return false;
+            }
+            var bookkeeping = m_rows[row.Name];
+
+            lock (bookkeeping.TailGate) {
+                capturedJournalSequence = CaptureJournalCoverageAsync(bookkeeping: bookkeeping, previous: bookkeeping.JournalTail);
+                bookkeeping.JournalTail = capturedJournalSequence;
+            }
         }
 
         encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!);
         outcome = "ok";
         tick = row.CompletedTicks;
+        CheckpointCaptureTap?.Invoke(obj: row);
 
         return true;
+    }
+    private static async Task<long> CaptureJournalCoverageAsync(Task previous, RowBookkeeping bookkeeping) {
+        await ObservePersistenceAsync(operation: previous, ct: CancellationToken.None).ConfigureAwait(continueOnCapturedContext: false);
+        return bookkeeping.PublishedJournalSequence;
     }
     private void RecordCheckpointFailure(string worldId, RowBookkeeping bookkeeping, Exception error) {
         Post(action: () => {
@@ -912,11 +934,12 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         });
     }
     private Task<WorldAuthorityStoreOutcome> QueueCheckpoint(byte[] encoded, WorldAuthorityIdentity identity, string worldId, ulong tick,
-        RowBookkeeping bookkeeping, CancellationToken cancellationToken) {
+        RowBookkeeping bookkeeping, CancellationToken cancellationToken, Task<long> capturedJournalSequence) {
         lock (bookkeeping.TailGate) {
             var queued = UploadCheckpointAsync(
                 bookkeeping: bookkeeping,
                 cancellationToken: cancellationToken,
+                capturedJournalSequence: capturedJournalSequence,
                 encoded: encoded,
                 identity: identity,
                 previous: bookkeeping.JournalTail,
@@ -929,7 +952,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         }
     }
     private async Task<WorldAuthorityStoreOutcome> UploadCheckpointAsync(byte[] encoded, WorldAuthorityIdentity identity, string worldId, ulong tick,
-        RowBookkeeping bookkeeping, Task previous, CancellationToken cancellationToken) {
+        RowBookkeeping bookkeeping, Task previous, CancellationToken cancellationToken, Task<long> capturedJournalSequence) {
         try {
             await ObservePersistenceAsync(
                 ct: cancellationToken,
@@ -942,7 +965,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 identity: identity,
                 tick: tick,
                 fence: bookkeeping.Fence,
-                capturedJournalSequence: bookkeeping.PublishedJournalSequence
+                capturedJournalSequence: await capturedJournalSequence.ConfigureAwait(continueOnCapturedContext: false)
             );
 
             ObservePublication(
@@ -1474,62 +1497,6 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 return false;
             }
 
-            if (!TryDecodeCrossings(
-                crossings: out var crossings,
-                defaults: definition.PlayerDefaults,
-                entries: recovery.Journal.Entries,
-                reason: out var crossingReason
-            )) {
-                Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (journal decode: {crossingReason})]");
-                adjacencies.Dispose();
-                machines.Dispose();
-
-                return false;
-            }
-
-            {
-                foreach (var entry in recovery.Journal.Entries.Where(predicate: static entry => (entry.Kind == WorldAuthorityJournalEntryKind.Mutation))) {
-                    if (
-                        !WorldSubmissionCodec.TryDecodeCommittedMutation(
-                        bytes: entry.Encoded.Span,
-                        failure: out var failure,
-                        mutation: out var mutation
-                    ) ||
-                        (mutation is null)
-                    ) {
-                        Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (journal decode: {failure})]");
-                        adjacencies.Dispose();
-                        machines.Dispose();
-
-                        return false;
-                    }
-
-                    if (!server.TryApplyJournalTailMutation(
-                        mutation: mutation,
-                        tick: entry.Tick,
-                        engineTick: entry.EngineTick
-                    )) {
-                        Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (journal replay rejected a recorded mutation)]");
-                        adjacencies.Dispose();
-                        machines.Dispose();
-
-                        return false;
-                    }
-                }
-            }
-
-            // Wired AFTER the tail replay above: a replayed entry is already durable (it came FROM the store), so
-            // re-journaling it here would append a duplicate. Every mutation applied from here on — this row's live
-            // operation — is new and gets appended.
-            server.MutationJournalTap = (tick, engineTick, mutation) => ScheduleJournalAppend(
-                identity: identity,
-                mutation: mutation,
-                tick: tick,
-                engineTick: engineTick,
-                worldId: identity.World.Value,
-                source: server
-            );
-
             if (!TryBuildFederationIdentity(
                 definition: definition,
                 trustEntries: () => server.Definition.Admission,
@@ -1617,9 +1584,24 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     m_rows[row.Name] = bookkeeping;
                     // The journal's crossing records the restored checkpoint does not reflect are redone before
                     // the row steps; every later crossing step writes ahead through this activation's fence.
-                    Instances.RecoverCrossings(
-                        entries: crossings,
+                    if (!TryRecoverJournal(
+                        entries: recovery.Journal.Entries,
+                        reason: out var recoveryReason,
                         row: row
+                    )) {
+                        Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (journal recovery: {recoveryReason})]");
+                        DiscardActivation(row: row);
+                        tcs.TrySetResult(result: false);
+                        return;
+                    }
+                    // Recovered entries already belong to the store; only live mutations are appended.
+                    server.MutationJournalTap = (tick, engineTick, mutation) => ScheduleJournalAppend(
+                        identity: identity,
+                        mutation: mutation,
+                        tick: tick,
+                        engineTick: engineTick,
+                        worldId: identity.World.Value,
+                        source: server
                     );
                     server.InstallCrossingLog(log: new RowCrossingLog(
                         bookkeeping: bookkeeping,
@@ -1629,6 +1611,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     ));
                     tcs.TrySetResult(result: true);
                 } catch (Exception exception) {
+                    DiscardActivation(row: row);
                     tcs.TrySetException(exception: exception);
                 }
             });
@@ -1759,6 +1742,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     }
 
                     if (TryCaptureRow(
+                        capturedJournalSequence: out var capturedJournalSequence,
                         encoded: out var encoded,
                         outcome: out var outcome,
                         row: row,
@@ -1770,7 +1754,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                             worldId,
                             tick,
                             m_rows[worldId],
-                            ct
+                            ct,
+                            capturedJournalSequence
                         ));
                     } else {
                         if (m_rows.TryGetValue(
@@ -1839,6 +1824,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     row.Door?.SuspendIngress();
                     row.Server.FreezeForRetirement();
                     if (TryCaptureRow(
+                        capturedJournalSequence: out var capturedJournalSequence,
                         encoded: out var encoded,
                         outcome: out _,
                         row: row,
@@ -1849,6 +1835,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         captureTcs.TrySetResult(result: (bookkeeping, QueueCheckpoint(
                             bookkeeping: bookkeeping,
                             cancellationToken: ct,
+                            capturedJournalSequence: capturedJournalSequence,
                             encoded: encoded,
                             identity: identity,
                             tick: tick,

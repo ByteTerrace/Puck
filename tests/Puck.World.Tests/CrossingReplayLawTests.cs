@@ -141,9 +141,25 @@ public sealed class CrossingReplayLawTests {
         value: "arrival #"
     );
 
-    [Fact]
-    public void ALocalCrossingIsTapedAtBothAuthorities_AndTheSetVerifiesIt() {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ALocalCrossingIsTapedAtBothAuthorities_AndTheSetVerifiesIt(bool destinationOwnsTape) {
         using var scenario = new Scenario();
+        WorldReplayTape? destinationTape = null;
+
+        if (destinationOwnsTape) {
+            destinationTape = new WorldReplayTape(
+                addonHostFactory: static (_, _) => new NullAddonHost(),
+                engines: [],
+                liveServer: scenario.Destination.Server,
+                machineHostFactory: Fixtures.MachineHostFactory,
+                profiles: scenario.Destination.Server.Profiles,
+                stateRoot: new WorldStateRoot(path: scenario.Tape.Directory()),
+                transport: ((LoopbackTransport)scenario.Destination.Instance.Link)
+            );
+            scenario.Destination.Instance.Tape = destinationTape;
+        }
         var name = $"crossing-{Guid.NewGuid():N}";
         var stop = scenario.RecordCrossing(
             name: name,
@@ -185,6 +201,26 @@ public sealed class CrossingReplayLawTests {
             condition: reread.Passing,
             userMessage: reread.Describe()
         );
+        Assert.Same(expected: destinationTape, actual: scenario.Destination.Instance.Tape);
+        if (destinationTape is not null) {
+            Assert.Equal(expected: WorldReplayMode.Idle, actual: destinationTape.Mode);
+        }
+    }
+    [Fact]
+    public void WorldExitCancelsTheRecordingAndItsCompanions() {
+        using var scenario = new Scenario();
+
+        Assert.True(condition: scenario.Tape.TryBeginRecording(name: "exit", refusal: out _));
+        scenario.Host.RecordCompanions(tape: scenario.Tape);
+        var companion = scenario.Destination.Instance.Tape;
+
+        Assert.NotNull(@object: companion);
+        scenario.Host.Dispose();
+        Assert.Equal(expected: WorldReplayMode.Idle, actual: scenario.Tape.Mode);
+        Assert.Equal(expected: WorldReplayMode.Idle, actual: companion.Mode);
+        Assert.Null(@object: scenario.Destination.Instance.Tape);
+        Assert.Null(@object: scenario.Source.Server.ArrivalTap);
+        Assert.Null(@object: scenario.Destination.Server.ArrivalTap);
     }
     [Fact]
     public void WithoutTheDestinationTape_TheCrossingIsNotVerified_HoweverExactlyTheSourceReplays() {

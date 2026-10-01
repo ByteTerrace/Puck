@@ -15,6 +15,37 @@ public sealed class CrossingRecoveryLawTests {
     // Steps long enough for any destination lease taken during the crossing to expire.
     private const int PastEveryLease = 90;
 
+    [Fact]
+    public void ARefusedDurableArrivalDoesNotAdvanceTheRecoveryWatermark() {
+        using var world = CrossingWorld.Build();
+
+        _ = world.Cross();
+        var arrival = world.DestinationLog.Read(defaults: world.Destination.Server.Definition.PlayerDefaults);
+        using var restarted = world.Restart(sourceDied: true, destinationDied: true, destinationLogLost: true);
+        var server = restarted.Destination.Server;
+
+        Assert.True(condition: server.ApplySession(request: new Puck.World.Protocol.SessionRequest.Join(
+            IdentityName: null,
+            Principal: Puck.Commands.Principal.Seat(slot: 0),
+            Slot: 0,
+            WireProtocolKey: Puck.World.Protocol.WorldProtocol.WireProtocolKey
+        )).Accepted);
+
+        var failure = Assert.Throws<InvalidOperationException>(testCode: () => restarted.Host.RecoverCrossings(
+            row: restarted.Destination.Instance,
+            entries: arrival
+        ));
+
+        Assert.Contains(expectedSubstring: "crossing recovery refused", actualString: failure.Message);
+        Assert.Equal(expected: 0UL, actual: server.CrossingSequence);
+
+        _ = server.Population.TryDetachSeatForTransfer(profile: out _, slot: 0);
+        restarted.Host.RecoverCrossings(row: restarted.Destination.Instance, entries: arrival);
+        restarted.Host.RecoverCrossings(row: restarted.Destination.Instance, entries: arrival);
+        Assert.Equal(expected: 1UL, actual: server.CrossingSequence);
+        Assert.Equal(expected: 1, actual: restarted.CountTraveler());
+    }
+
     private static void AssertConverged(CrossingWorld world, bool arrived) {
         world.Step(ticks: PastEveryLease);
         Assert.Equal(

@@ -140,6 +140,9 @@ internal sealed class CrossingWorld : IDisposable {
     public byte[] SourceImage { get; private set; }
     public MemoryCrossingStore SourceLog { get; }
     public IWorldCrossingLog SourceWriter { get; }
+
+    public void CheckpointDestination() => DestinationImage = Image(host: Host, row: Destination);
+
     /// <summary>The traveler's stable identity: seat 0 of the source as it was first minted.</summary>
     public WorldEntityAddress Traveler { get; private set; }
 

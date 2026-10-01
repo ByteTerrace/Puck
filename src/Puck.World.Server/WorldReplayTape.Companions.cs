@@ -3,7 +3,7 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 public sealed partial class WorldReplayTape {
-    private readonly List<(WorldInstance Row, WorldReplayTape Tape)> m_companions = [];
+    private readonly List<(WorldInstance Row, WorldReplayTape Tape, bool Owned)> m_companions = [];
 
     /// <summary>Arms a companion recording on another row of this process under this recording's name, so the
     /// recording becomes a set: each row's own tape rides beside this one in the same file, and verification pairs
@@ -34,12 +34,13 @@ public sealed partial class WorldReplayTape {
             refusal = "the row is driven through no local loopback";
             return false;
         }
-        if (row.Tape is not null) {
-            refusal = "the row already carries a tape";
+        if (row.Tape is { Mode: not WorldReplayMode.Idle }) {
+            refusal = "the row's tape is already recording or replaying";
             return false;
         }
 
-        var companion = new WorldReplayTape(
+        var owned = (row.Tape is null);
+        var companion = (row.Tape ?? new WorldReplayTape(
             addonHostFactory: m_addonHostFactory,
             engines: m_engines,
             liveServer: row.Server,
@@ -49,7 +50,7 @@ public sealed partial class WorldReplayTape {
             transport: transport
         ) {
             m_documentPath = row.SourcePath,
-        };
+        });
 
         if (!companion.TryBeginRecording(
             name: name,
@@ -59,16 +60,16 @@ public sealed partial class WorldReplayTape {
         }
 
         row.Tape = companion;
-        m_companions.Add(item: (row, companion));
+        m_companions.Add(item: (row, companion, owned));
         return true;
     }
 
     private void CancelCompanions() {
-        foreach (var (row, companion) in m_companions) {
+        foreach (var (row, companion, owned) in m_companions) {
             if (companion.Mode == WorldReplayMode.Recording) {
                 _ = companion.CancelRecording();
             }
-            if (ReferenceEquals(
+            if (owned && ReferenceEquals(
                 objA: row.Tape,
                 objB: companion
             )) {
@@ -82,13 +83,13 @@ public sealed partial class WorldReplayTape {
     private WorldReplaySnapshot[] StopCompanions() {
         var tapes = new List<WorldReplaySnapshot>(capacity: m_companions.Count);
 
-        foreach (var (row, companion) in m_companions) {
+        foreach (var (row, companion, owned) in m_companions) {
             if (companion.Mode == WorldReplayMode.Recording) {
                 tapes.Add(item: companion.SnapshotRecording());
                 companion.DetachTaps();
                 companion.ResetRecordingState();
             }
-            if (ReferenceEquals(
+            if (owned && ReferenceEquals(
                 objA: row.Tape,
                 objB: companion
             )) {

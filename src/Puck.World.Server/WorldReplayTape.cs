@@ -263,6 +263,8 @@ public sealed partial class WorldReplayTape {
         m_liveHashes.Clear();
         m_liveAuthoritativeHashes.Clear();
         m_openMutationEntryIndices.Clear();
+        m_currentAuthority.Clear();
+        m_currentIntents.Clear();
     }
 
     /// <summary>Aborts the active recording without persisting it: detaches the taps and drops the captured stream.</summary>

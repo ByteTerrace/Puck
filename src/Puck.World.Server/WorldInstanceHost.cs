@@ -344,6 +344,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <summary>Disposes every instance this host owns. The boot instance's own graph belongs to the container and
     /// is untouched.</summary>
     public void Dispose() {
+        foreach (var instance in m_instances.Values) {
+            if (instance.Tape is { Mode: WorldReplayMode.Recording } tape) {
+                _ = tape.CancelRecording();
+            }
+        }
         foreach (var owner in m_screenSessions.Keys.ToList()) { CloseScreenSessions(owner: owner); }
         foreach (var forwarded in m_forwardedBodies.Values) { (forwarded.Authority as IDisposable)?.Dispose(); }
         m_forwardedBodies.Clear();

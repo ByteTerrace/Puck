@@ -55,6 +55,39 @@ public sealed class CrossingHandoffTokenLawTests {
     );
 
     [Fact]
+    public void AnArrivalRecoversFromACheckpointHoldingItsReservationInADifferentSlot() {
+        using var world = CrossingWorld.Build();
+        var destination = world.Destination.Server;
+
+        Assert.True(condition: destination.ApplySession(request: new SessionRequest.Join(
+            IdentityName: null,
+            Principal: Principal.Seat(slot: 0),
+            Slot: 0,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
+        var request = Reservation(epoch: 0, transferId: 31);
+        var reservation = destination.ReserveTransfer(request: request);
+
+        Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
+        Assert.Equal(expected: new[] { 1 }, actual: reservation.BodyIndices);
+        world.CheckpointDestination();
+        Assert.True(condition: destination.CommitTransfer(
+            members: [Member],
+            reason: out var reason,
+            sourceAuthority: request.SourceAuthority,
+            transferId: request.TransferId
+        ), userMessage: reason);
+
+        using var restarted = world.Restart(sourceDied: false, destinationDied: true);
+
+        Assert.True(condition: restarted.Destination.Server.Population.IsActive(index: 1));
+        Assert.Equal(expected: WorldTransferStatus.Committed, actual: restarted.Destination.Server.TransferStatus(
+            sourceAuthority: request.SourceAuthority,
+            transferId: request.TransferId
+        ));
+        Assert.Equal(expected: 1UL, actual: restarted.Destination.Server.CrossingSequence);
+    }
+    [Fact]
     public void AnExactReplayOfACommittedTokenIsIdempotentAcrossADestinationRestart_AndADifferentCommitIsRefused() {
         using var world = CrossingWorld.Build();
 
