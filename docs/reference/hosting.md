@@ -239,8 +239,9 @@ node moves that work off: it starts a build on the thread pool, the node polls
 `TryTake` once per produced frame and installs the result at that frame
 boundary, and until then it presents what it already has. A newer request
 cancels the pending build with `Cancel`, and the discarded result is released
-when the build finishes. Before the device goes away, `CancelAndWait` blocks
-until the build's current unit of work returns, so nothing is created on a
+on the pool after the build and its cancellation callbacks finish. Callback
+failures are observed along with detached build failures. Before the device
+goes away, `CancelAndWait` blocks until both finish, so nothing is created on a
 device being torn down. An owner with nothing to present until the build
 finishes, such as an offscreen host producing its first frame, blocks on
 `WaitFinished` between frames instead of producing empty ones: it takes

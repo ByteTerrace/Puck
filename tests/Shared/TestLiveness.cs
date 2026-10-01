@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Puck.Testing;
 
 /// <summary>
@@ -19,20 +21,43 @@ internal static class TestLiveness {
     /// <param name="wait">Blocks until the work the step waits for finishes, returning whether any was in flight, or
     /// <see langword="null"/> when the condition has no completion signal.</param>
     public static void Until(Func<bool> step, Func<string?>? reason = null, Func<CancellationToken, bool>? wait = null) {
-        using var liveness = new CancellationTokenSource(delay: Bound);
+        using var liveness = new CancellationTokenSource();
+        using var finished = new ManualResetEventSlim(initialState: false);
         var token = liveness.Token;
+        var started = Stopwatch.GetTimestamp();
+        // A pool timer cannot enforce a bound on a starved pool. Only a blocking wait needs a watchdog thread;
+        // polling checks elapsed time on the calling thread.
+        var deadline = ((wait is null) ? Task.CompletedTask : Task.Factory.StartNew(
+            action: () => {
+                var remaining = (Bound - Stopwatch.GetElapsedTime(startingTimestamp: started));
 
-        while (!step()) {
-            try {
-                if (!(wait?.Invoke(arg: token) ?? false)) {
-                    _ = token.WaitHandle.WaitOne(millisecondsTimeout: 1);
+                if ((remaining <= TimeSpan.Zero) || !finished.Wait(timeout: remaining)) {
+                    liveness.Cancel();
                 }
-            } catch (OperationCanceledException) when (token.IsCancellationRequested) {
+            },
+            cancellationToken: CancellationToken.None,
+            creationOptions: TaskCreationOptions.LongRunning,
+            scheduler: TaskScheduler.Default
+        ));
+
+        try {
+            while (!token.IsCancellationRequested && (Stopwatch.GetElapsedTime(startingTimestamp: started) < Bound)) {
+                if (step()) {
+                    return;
+                }
+
+                try {
+                    if (!(wait?.Invoke(arg: token) ?? false)) {
+                        Thread.Sleep(millisecondsTimeout: 1);
+                    }
+                } catch (OperationCanceledException) when (token.IsCancellationRequested) {
+                }
             }
 
-            if (token.IsCancellationRequested) {
-                Xunit.Assert.Fail(message: $"The condition did not hold within {Bound}: {(reason?.Invoke() ?? "no reason given")}");
-            }
+            Xunit.Assert.Fail(message: $"The condition did not hold within {Bound}: {(reason?.Invoke() ?? "no reason given")}");
+        } finally {
+            finished.Set();
+            deadline.GetAwaiter().GetResult();
         }
     }
 }

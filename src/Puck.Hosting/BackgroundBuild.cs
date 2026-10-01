@@ -35,6 +35,13 @@ public sealed class BackgroundBuild<T> where T : class {
     /// waits for another awaits it rather than blocking, so it holds no pool thread while it waits.</summary>
     public Task? Completion => m_task;
 
+    // Cancellation callbacks can outlive the build and fault independently. Keep the source and the build's
+    // dependencies alive until both finish, and observe callback failures like other detached failures.
+    private static async Task<T> CompleteCancellationAsync(Task<T> task, CancellationTokenSource cancellation) {
+        await cancellation.CancelAsync().ConfigureAwait(options: ConfigureAwaitOptions.SuppressThrowing);
+
+        return await task.ConfigureAwait(continueOnCapturedContext: false);
+    }
     // A faulted build's one exception, or every one; an asynchronous build that was canceled has none of its own.
     private static Exception FailureOf(Task<T> task) {
         if (task.Exception is not { } exception) {
@@ -59,7 +66,8 @@ public sealed class BackgroundBuild<T> where T : class {
     }
 
     /// <summary>Cancels the pending build without waiting for it. The build stops at its next check of the token; if it
-    /// completes anyway, <paramref name="discard"/> receives the result on the pool thread that finished it. Use this
+    /// completes anyway, <paramref name="discard"/> receives the result on a pool thread after the cancellation callbacks
+    /// finish. Use this
     /// only when whatever the result depends on — the GPU device, above all — outlives the build; otherwise use
     /// <see cref="CancelAndWait"/>. Does nothing when no build is pending.</summary>
     /// <param name="discard">Releases a result that completed after the cancel, or <see langword="null"/> when the result
@@ -73,8 +81,7 @@ public sealed class BackgroundBuild<T> where T : class {
 
         m_task = null;
         m_cancellation = null;
-        _ = cancellation.CancelAsync();
-        _ = task.ContinueWith(
+        _ = CompleteCancellationAsync(cancellation: cancellation, task: task).ContinueWith(
             cancellationToken: CancellationToken.None,
             continuationAction: static (completed, state) => {
                 var (cancellation, discard) = ((ValueTuple<CancellationTokenSource, Action<T>?>)state!);
@@ -85,13 +92,13 @@ public sealed class BackgroundBuild<T> where T : class {
                     task: completed
                 );
             },
-            continuationOptions: TaskContinuationOptions.ExecuteSynchronously,
+            continuationOptions: TaskContinuationOptions.None,
             scheduler: TaskScheduler.Default,
             state: (cancellation, discard)
         );
     }
-    /// <summary>Cancels the pending build and blocks until it returns, then hands a completed result to
-    /// <paramref name="discard"/> on this thread. The wait is bounded by the build's current unit of work. Use this
+    /// <summary>Cancels the pending build and blocks until it and its cancellation callbacks return, then hands a
+    /// completed result to <paramref name="discard"/> on this thread. Use this
     /// before releasing what the build depends on: a device about to be destroyed must not have an object creation in
     /// flight. Does nothing when no build is pending.</summary>
     /// <param name="discard">Releases a result that completed, or <see langword="null"/> when the result owns nothing.</param>
@@ -111,11 +118,9 @@ public sealed class BackgroundBuild<T> where T : class {
 
         m_task = null;
         m_cancellation = null;
-        _ = cancellation.CancelAsync();
-
         return new CanceledBuild<T>(
             cancellation: cancellation,
-            task: task
+            task: CompleteCancellationAsync(cancellation: cancellation, task: task)
         );
     }
     /// <summary>Starts a build that only works on the thread pool, such as a compilation or a bake.</summary>
@@ -224,8 +229,8 @@ public readonly struct CanceledBuild<T> where T : class {
         m_task = task;
     }
 
-    /// <summary>Blocks until the canceled build returns, then hands a completed result to
-    /// <paramref name="discard"/> on this thread. The wait is bounded by the build's current unit of work.</summary>
+    /// <summary>Blocks until the canceled build and its cancellation callbacks return, then hands a completed result to
+    /// <paramref name="discard"/> on this thread.</summary>
     /// <param name="discard">Releases a result that completed, or <see langword="null"/> when the result owns
     /// nothing.</param>
     public void Wait(Action<T>? discard = null) {
