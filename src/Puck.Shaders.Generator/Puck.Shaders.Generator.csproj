@@ -22,9 +22,4 @@
     <Target Name="PuckGenerateShaderDeclarations" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
         <Exec Command="dotnet &quot;$(TargetPath)&quot; &quot;$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../..').TrimEnd('/'))&quot;" />
     </Target>
-    <!-- An explicit validation operation, run before CI builds. CoreBuild builds the host and its model references
-         without invoking Build's generation hook, so the check observes the original checkout with the current model. -->
-    <Target Name="CheckShaderDeclarations" DependsOnTargets="CoreBuild">
-        <Exec Command="dotnet &quot;$(TargetPath)&quot; &quot;$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../..').TrimEnd('/'))&quot; --check" />
-    </Target>
 </Project>

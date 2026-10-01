@@ -42,17 +42,18 @@ jobs:
         run: dotnet workload install wasm-tools
       - name: Install pinned DXC
         uses: ./.github/actions/setup-dxc
-      - name: Restore and build semantic context
-        run: |
-          dotnet restore Puck.slnx --locked-mode
-          dotnet build src/Puck.Shaders.Generator -c Release --no-restore -t:CheckShaderDeclarations
-          dotnet build Puck.slnx -c Release --no-restore
-      - name: Package the already-compiled candidate formatter
-        run: dotnet pack src/Puck.Cli -c Release --no-build --no-restore -o artifacts/formatter-cli
-      - name: Install the candidate formatter
+      - name: Restore locked dependencies
+        run: dotnet restore Puck.slnx --locked-mode
+      # The candidate CLI is this checkout's own, packed by setup-puck, and is also the formatter below.
+      - name: Install the candidate CLI
         uses: ./.github/actions/setup-puck
-        with:
-          directory: artifacts/formatter-cli
+      # Before any further build: a build writes every generated declaration the model has changed, so the check also
+      # holds each file to what the commit carries.
+      - name: puck shaders generate --check
+        run: puck shaders generate --check
+        shell: bash
+      - name: Build semantic context
+        run: dotnet build Puck.slnx -c Release --no-restore
       - name: Test formatter safety
         run: dotnet test tests/Puck.Cli.Tests -c Release --no-build --no-restore --filter FullyQualifiedName~Format
       - env:
@@ -64,9 +65,7 @@ jobs:
         shell: bash
       - if: steps.format.outputs.changed == 'true'
         name: Compile the formatted result
-        run: |
-          dotnet build src/Puck.Shaders.Generator -c Release --no-restore -t:CheckShaderDeclarations
-          dotnet build Puck.slnx -c Release --no-restore
+        run: dotnet build Puck.slnx -c Release --no-restore
       - name: Upload the formatting patch
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

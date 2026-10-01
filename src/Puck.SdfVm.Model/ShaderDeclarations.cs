@@ -17,9 +17,8 @@ public sealed record ShaderDeclaration(string Path, Func<string> Generate);
 /// never the recorded one, so one run brings every file level.</para>
 /// <para>The model compiles no shader, so a project whose kernels include these files generates them first: it
 /// references <c>Puck.Shaders.Generator</c>, whose build runs <see cref="Reconcile"/> over the tree before any kernel
-/// compiles. A file that already holds its text is left untouched, so an unchanged model recompiles no kernel. The
-/// <c>CheckShaderDeclarations</c> target builds the generator and its model without running generation, then names each
-/// file that differs and fails, as <c>puck shaders generate --check</c> does. CI invokes it before building.</para>
+/// compiles. A file that already holds its text is left untouched, so an unchanged model recompiles no kernel.
+/// <c>puck shaders generate --check</c> holds the same list to the model, and to what git has staged.</para>
 /// </summary>
 public static class ShaderDeclarations {
     /// <summary>The suffix of a generated interface include's file name.</summary>
@@ -125,20 +124,18 @@ public static class ShaderDeclarations {
             .Where(predicate: static file => !file.Split(separator: '/').Any(predicate: static segment => (segment is "bin" or "obj")))
             .Order(comparer: StringComparer.Ordinal)];
     }
-    /// <summary>Finds every declaration the model owns under a tree whose text differs from the file's, and, when asked,
-    /// writes each one, leaving every other file untouched, so a build that runs it before its kernels recompiles only the
+    /// <summary>Writes every declaration the model owns under a tree whose text differs from the file's, a missing file
+    /// included, and leaves every other file untouched, so a build that runs it before its kernels recompiles only the
     /// kernels a changed declaration reaches. Line endings never count as a difference, and each write replaces its file
     /// whole.</summary>
     /// <param name="repositoryRoot">The repository root.</param>
-    /// <param name="write">Whether to write each differing file, rather than only name it.</param>
-    /// <param name="differing">Receives the repository-relative path of each file whose text differs from the model's,
-    /// written or not.</param>
+    /// <param name="written">Receives the repository-relative path of each file written.</param>
     /// <param name="problems">Receives one line per include no generator owns and per package whose include is missing or
     /// named twice (<see cref="Of"/>).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public static void Reconcile(string repositoryRoot, bool write, List<string> differing, List<string> problems) {
+    public static void Reconcile(string repositoryRoot, List<string> written, List<string> problems) {
         ArgumentNullException.ThrowIfNull(argument: repositoryRoot);
-        ArgumentNullException.ThrowIfNull(argument: differing);
+        ArgumentNullException.ThrowIfNull(argument: written);
         ArgumentNullException.ThrowIfNull(argument: problems);
 
         foreach (var declaration in Of(files: InterfaceFiles(repositoryRoot: repositoryRoot), packages: RenderGraphPackageCatalog.Engine, problems: problems)) {
@@ -153,12 +150,7 @@ public static class ShaderDeclarations {
                 continue;
             }
 
-            differing.Add(item: declaration.Path);
-
-            if (!write) {
-                continue;
-            }
-
+            written.Add(item: declaration.Path);
             var temporary = $"{path}.{Guid.NewGuid():N}.tmp";
 
             try {

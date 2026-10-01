@@ -615,11 +615,12 @@ include a generated declaration references `Puck.Shaders.Generator`, whose build
 writes each declaration the model has changed before those kernels compile. A
 change that adds a declaration and a kernel reading it builds with an ordinary
 `dotnet build`; the verb is needed to write the recipe and to check the tree,
-and never to seed a header by hand. CI runs the explicit
-`CheckShaderDeclarations` target before building: it builds the model and host,
-then fails naming each generated file that disagrees with the model and writes
-no declaration
-([generated declarations](shaders.md#generated-declarations)).
+and never to seed a header by hand
+([generated declarations](shaders.md#generated-declarations)). Because a build
+writes every declaration the model changed, `--check` in a git work tree also
+fails on a file that matches the model only in the working tree while its
+staged copy differs: the commit, not the build, is what it judges. CI's
+artifacts and formatting jobs run it with their candidate CLI before building.
 
 `interface` prints the [frame-block](shaders.md#frame-values-extent-and-ports) declarations
 each pass of a graph document or one-off shader reads, or, with

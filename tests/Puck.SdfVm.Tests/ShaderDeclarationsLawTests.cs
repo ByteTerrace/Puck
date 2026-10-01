@@ -28,10 +28,8 @@ public sealed class ShaderDeclarationsLawTests {
             );
         }
     }
-    [InlineData(true)]
-    [InlineData(false)]
-    [Theory]
-    public void AReconcileNamesOnlyTheDriftedDeclarationAndWritesItOnlyWhenAsked(bool write) {
+    [Fact]
+    public void AReconcileRewritesOnlyTheDriftedDeclaration() {
         var source = RepositoryPaths.RequireRoot();
         var declarations = ShaderDeclarations.Of(files: ShaderDeclarations.InterfaceFiles(repositoryRoot: source), packages: RenderGraphPackageCatalog.Engine, problems: []);
         var root = Directory.CreateTempSubdirectory(prefix: "puck-shader-declarations-");
@@ -53,14 +51,14 @@ public sealed class ShaderDeclarationsLawTests {
 
             File.WriteAllText(contents: driftedText, path: driftedPath);
 
-            var differing = new List<string>();
+            var written = new List<string>();
             var problems = new List<string>();
 
-            ShaderDeclarations.Reconcile(differing: differing, problems: problems, repositoryRoot: root.FullName, write: write);
+            ShaderDeclarations.Reconcile(problems: problems, repositoryRoot: root.FullName, written: written);
 
             Assert.Empty(collection: problems);
-            Assert.Equal(actual: differing, expected: [drifted.Path]);
-            Assert.Equal(actual: File.ReadAllText(path: driftedPath), expected: (write ? drifted.Generate() : driftedText));
+            Assert.Equal(actual: written, expected: [drifted.Path]);
+            Assert.Equal(actual: File.ReadAllText(path: driftedPath), expected: drifted.Generate());
 
             foreach (var declaration in declarations.Where(predicate: declaration => !ReferenceEquals(objA: declaration, objB: drifted))) {
                 Assert.Equal(actual: File.GetLastWriteTimeUtc(path: Path.Combine(path1: root.FullName, path2: declaration.Path)), expected: settled);

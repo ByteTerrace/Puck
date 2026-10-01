@@ -9,8 +9,9 @@ do not need a compiler.
 
 Kernel projects build their declaration generator before compiling shaders.
 The generator reconciles on every build and leaves equal files untouched.
-CI runs `CheckShaderDeclarations` on `src/Puck.Shaders.Generator` before the
-solution build, after restore, to reject drift without regenerating it.
+CI runs `puck shaders generate --check` with its candidate CLI before the
+solution build; because a build may already have reconciled the tree, the check
+also refuses a generated file whose staged copy differs from the model's.
 Packing with `--no-build` collects built bytecode and refuses missing kernels;
 it compiles none.
 Missing outputs, including sidecars, invalidate the incremental compile target.

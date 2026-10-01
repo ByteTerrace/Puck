@@ -61,10 +61,9 @@ over `RotatePlane`). A new instruction touches every partner in one change:
    which writes every declaration in `ShaderDeclarations` whose text moved, so a
    new member and the kernel reading it build in one pass, and
    `puck shaders generate` writes the same files by hand. Never seed a header.
-   CI runs the explicit `CheckShaderDeclarations` target on
-   `Puck.Shaders.Generator` before the solution build: it fails naming a drifted
-   generated file and writes no declaration. Ordinary builds generate on every
-   machine; `ContinuousIntegrationBuild` does not change that behavior.
+   Builds generate on every machine, CI included; `puck shaders generate
+   --check` also refuses a generated file whose staged copy differs from the
+   model, so a build's rewrite never hides a forgotten regeneration.
    The new member appears as its enum's
    prefix plus its name in upper snake case (`SdfOp.CellDisplace` is
    `SDF_OP_CELL_DISPLACE`). Never hand-write a `#define` for an ISA value: a new

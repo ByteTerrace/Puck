@@ -1054,18 +1054,19 @@ restored include participates in compilation and freshness checking immediately.
 A kernel reading a declaration the model has only just gained builds in one
 pass, with no header seeded by hand.
 
-CI explicitly runs
-`dotnet build src/Puck.Shaders.Generator -c Release --no-restore -t:CheckShaderDeclarations`
-after restore and before the solution build. This target builds the host and
-its model references without invoking generation, then checks each declaration
-and fails naming any drifted file. The formatting workflow checks again before
-building its formatted result. Ordinary builds generate identically locally
-and on CI; `ContinuousIntegrationBuild` does not select generator behavior.
+Builds generate identically on every machine, CI included. The generator is
+one process start per build of `Puck.Shaders.Generator`, which a solution build
+or any one kernel project's build runs once.
+
 
 `puck shaders generate` writes the same list, and the build's shader recipe
 (`build/ShaderRecipe.targets`), which a build reads when it is evaluated and so
-only the verb writes; `--check` holds every file to the model, and CI runs it
-on a fresh checkout. Generated files are checked in: a hot reload compiles the
+only the verb writes; `--check` holds every file to the model. A build may
+already have brought the working tree level with the model, so in a git work
+tree the check also refuses a file whose staged copy differs: CI's artifacts
+and formatting jobs run it with their candidate CLI before building, and the
+ledgers job on a fresh checkout. No CI step after a build can therefore carry a
+regenerated file the change forgot. Generated files are checked in: a hot reload compiles the
 tree's kernels against them, and the build only brings them level with the
 model it built.
 

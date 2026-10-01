@@ -1,26 +1,20 @@
 using Puck.SdfVm;
 
 // The kernel builds' host of the declaration generator: the one list `puck shaders generate` writes and checks
-// (ShaderDeclarations), run over the checkout named by the first argument. It writes only the files whose text the model
-// has changed and prints one line for each. With --check, which CheckShaderDeclarations passes, it writes nothing
-// and exits 1 naming each file that differs. Either way it exits 1 naming every include it cannot own.
-var check = ((args.Length == 2) && (args[1] == "--check"));
-if ((args.Length != 1) && !check) {
-    Console.Error.WriteLine(value: "Puck.Shaders.Generator: expected the repository root, then optionally --check.");
+// (ShaderDeclarations), run over the checkout named by the one argument. It writes only the files whose text the model
+// has changed, prints one line for each, and exits 1 naming every include it cannot own.
+if (args.Length != 1) {
+    Console.Error.WriteLine(value: "Puck.Shaders.Generator: expected the repository root as the one argument.");
 
     return 2;
 }
-var differing = new List<string>();
+var written = new List<string>();
 var problems = new List<string>();
-ShaderDeclarations.Reconcile(differing: differing, problems: problems, repositoryRoot: Path.GetFullPath(path: args[0]), write: !check);
-foreach (var path in differing) {
-    if (check) {
-        Console.Error.WriteLine(value: $"Puck.Shaders.Generator: {path} disagrees with the model; run `puck shaders generate` (or build) and commit it.");
-    } else {
-        Console.Out.WriteLine(value: $"Puck.Shaders.Generator: wrote {path}.");
-    }
+ShaderDeclarations.Reconcile(problems: problems, repositoryRoot: Path.GetFullPath(path: args[0]), written: written);
+foreach (var path in written) {
+    Console.Out.WriteLine(value: $"Puck.Shaders.Generator: wrote {path}.");
 }
 foreach (var problem in problems) {
     Console.Error.WriteLine(value: $"Puck.Shaders.Generator: {problem}.");
 }
-return ((((differing.Count == 0) || !check) && (problems.Count == 0)) ? 0 : 1);
+return ((problems.Count == 0) ? 0 : 1);

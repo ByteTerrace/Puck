@@ -6,8 +6,7 @@ using Xunit;
 namespace Puck.Cli.Tests;
 
 /// <summary>Runs the generator project's actual targets over a scratch checkout, using the already-built host.
-/// Generated files remain inputs to reconciliation even when every assembly and an old stamp are unchanged. Checking
-/// is an explicit operation that builds its host before reading the tree and never invokes the generation hook.</summary>
+/// Generated files remain inputs to reconciliation even when every assembly and an old stamp are unchanged.</summary>
 public sealed class ShaderDeclarationBuildLawTests {
     [InlineData(false)]
     [InlineData(true)]
@@ -27,21 +26,6 @@ public sealed class ShaderDeclarationBuildLawTests {
             Directory.Delete(path: Path.GetDirectoryName(path: path)!, recursive: true);
             RequireSuccess(run: Run(continuousIntegration: continuousIntegration, project: project, target: "Build"));
             Assert.Equal(expected: declaration.Generate(), actual: File.ReadAllText(path: path));
-        });
-    }
-    [Fact]
-    public void AnExplicitCheckBuildsTheHostAndRefusesDriftWithoutRepairingItOrTrustingAnOldStamp() {
-        WithProject(action: (root, project, declaration) => {
-            var path = Path.Combine(path1: root, path2: declaration.Path);
-
-            File.WriteAllText(contents: "drift", path: path);
-
-            var check = Run(continuousIntegration: false, project: project, target: "CheckShaderDeclarations");
-
-            Assert.NotEqual(expected: 0, actual: check.ExitCode);
-            Assert.Contains(expectedSubstring: declaration.Path, actualString: (check.Stdout + check.Stderr));
-            Assert.Equal(expected: "drift", actual: File.ReadAllText(path: path));
-            Assert.True(condition: File.Exists(path: Path.Combine(path1: Path.GetDirectoryName(path: project)!, path2: "host-built.txt")));
         });
     }
 
@@ -74,7 +58,6 @@ public sealed class ShaderDeclarationBuildLawTests {
                     new XElement(name: "IntermediateOutputPath", content: (intermediate.FullName + "/")),
                 ]),
                 new XElement(name: "Target", content: new XAttribute(name: "Name", value: "Build")),
-                XElement.Parse(text: "<Target Name=\"CoreBuild\"><WriteLinesToFile File=\"host-built.txt\" Lines=\"built\" Overwrite=\"true\" /></Target>"),
                 .. targets.Select(selector: static target => new XElement(other: target)),
             ]);
             var projectPath = Path.Combine(path1: directory, path2: "fixture.proj");
