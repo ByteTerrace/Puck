@@ -500,7 +500,7 @@ halving folded into the exponent (`cosh φ = 2^(s−1) + 2^(−s−1)` for
 `φ`, the squeeze's own additive measure) add under multiplication. The result
 is a *unit* squeeze only over a bounded band: the norm tracks one while the
 backward exponential `e^−|φ|` is comfortably representable, degrades as that
-term approaches a Q16 ULP, and from raw rapidity ±726822 (`|φ| > 16·ln 2 ≈
+term approaches a Q16 ULP, and from raw rapidity ±726818 (`|φ| > 16·ln 2 ≈
 11.09`, where the term rounds to zero) the two components collide bit-for-bit
 onto the light cone—`IsUnit` false, no inverse, division throws. Past
 `|φ| ≈ 33.27` both components saturate to `MaxValue`, the sine carrying the
