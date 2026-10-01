@@ -139,7 +139,11 @@ register.
   centre, the soften stencil) share one site, `sdfProbeField` in
   `surface/sdf-normals.hlsli`, which a kernel calls once with flags for every
   probe it needs; the debug views' field reads share one loop over
-  `marchOvershootDepth`. A new probe joins those, never a call of its own.
+  `marchOvershootDepth`; the primary march's scene march, its exhaustion arm
+  and the attribute resolve are passes of one `sdfTracePrimaryField` call
+  (`sdfTracePrimary`), and the beam's entry, gap and far searches are phases of
+  one loop (`coneMarchTileBounds`). A new probe joins those, never a call of its
+  own.
 - **Keep control flow uniform around barriers and groupshared gathers.** The
   views wrapper converts its extent test into an `active` flag so inactive
   lanes still reach the barriers.
