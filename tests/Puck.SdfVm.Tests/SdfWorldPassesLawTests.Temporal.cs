@@ -101,6 +101,65 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.True(condition: rig.Stood());
         Assert.True(condition: rig.PreviousValid());
     }
+    // A temporal view's resolve pipeline is leased into the residency it crosses to, so its passes follow in place, with
+    // no rebuild and so no frame held of the departed world, and its history restarts at the pixel center.
+    [Fact]
+    public void ATemporalViewCrossesToAnotherResidencyInPlace() {
+        using var rig = new TemporalRig(views: 1, secondResidency: true, temporal: true);
+        var revision = rig.Passes.CounterOf(instance: "world")!.Revision;
+
+        rig.Produce();
+        Assert.NotEqual(expected: 0u, actual: rig.HistoryFrames());
+        rig.Selected = rig.Second!;
+        rig.Produce();
+        Assert.Equal(expected: revision, actual: rig.Passes.CounterOf(instance: "world")!.Revision);
+        Assert.True(condition: rig.Passes.HasRenderedResolvedView(instance: "world"));
+        Assert.Equal(expected: 0u, actual: rig.HistoryFrames());
+        Assert.Equal(expected: Vector2.Zero, actual: rig.Jitter());
+    }
+    // A view that asks for temporal reconstruction runs the temporal fragment even at native scale: a resolve after views,
+    // and history the next frame reads, one image and one surface a frame slot at the output extent.
+    [Fact]
+    public void ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput() {
+        using var rig = new TemporalRig(views: 1, temporal: true);
+
+        Assert.Same(expected: SdfWorldPackage.TemporalFragment, actual: rig.Passes.FragmentOf(instance: "world"));
+        var plan = rig.World.Plan!;
+
+        Assert.EndsWith(expectedEndString: $"${SdfWorldPackage.Resolve}", actualString: plan.Passes[^1].Name);
+        var history = plan.Storages.Where(predicate: static storage => storage.Declaration.History).Select(selector: static storage => storage.Name).Order(comparer: StringComparer.Ordinal);
+
+        Assert.Equal(actual: history, expected: [$"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistoryColor}", $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistorySurface}"]);
+        Assert.Contains(collection: plan.Passes[^1].Accesses, filter: static access => access.PreviousFrame);
+        Assert.True(condition: rig.Temporal());
+        // Every render advances the sequence with no capture converging.
+        var frames = rig.HistoryFrames();
+
+        rig.Produce();
+        Assert.Equal(expected: (frames + 1u), actual: rig.HistoryFrames());
+        Assert.NotEqual(expected: Vector2.Zero, actual: rig.Jitter());
+    }
+    // Under cadence a still temporal view renders one jitter period from the frame its inputs last changed, the first at
+    // the pixel center with no history, and then stands converged, whatever sample would come next.
+    [Fact]
+    public void AStillTemporalViewRendersOnePeriodAndThenStands() {
+        using var rig = new TemporalRig(views: 1, cadence: true, temporal: true);
+
+        // A debug view resets the epoch twice: on, then off again.
+        rig.Selected.DebugMode = 1;
+        rig.Produce();
+        rig.Selected.DebugMode = 0;
+        for (var sample = 0U; (sample < SdfTemporalHistory.Period); sample++) {
+            rig.Produce();
+            Assert.False(condition: rig.Stood(), userMessage: $"sample {sample}");
+            Assert.Equal(expected: sample, actual: rig.HistoryFrames());
+            Assert.Equal(expected: SdfTemporalHistory.Sample(index: sample), actual: rig.Jitter());
+        }
+        for (var frame = 0; (frame < 3); frame++) {
+            rig.Produce();
+            Assert.True(condition: rig.Stood(), userMessage: $"frame {frame} after the period");
+        }
+    }
 
     // One sdf.world instance, "world", over a fixed frame on the upload model, optionally reading a feed that hands out a
     // tainted image until it fills. Construction produces until the view has rendered its installed graph.
@@ -112,9 +171,11 @@ public sealed partial class SdfWorldPassesLawTests {
         private long m_index;
         private ulong m_rendered;
 
-        public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false) {
+        public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false, bool temporal = false) {
             var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
             var frame = Frame() with { EnableCadenceGate = cadence };
+
+            frame = frame with { Views = [frame.Views[0] with { Quality = new SdfViewQuality { Temporal = temporal } }] };
 
             frame = frame with { Views = [.. Enumerable.Repeat(element: frame.Views[0], count: views)] };
             Selected = Residency(name: "first");
@@ -162,8 +223,7 @@ public sealed partial class SdfWorldPassesLawTests {
         public SdfWorldResidency? Second { get; }
         public SdfWorldResidency Selected { get; set; }
         public int ViewIndex { get; set; }
-
-        private ShaderPipelineRenderNode World => Runtime.Node(instance: Runtime.Instances.IndexOf(name: "world"));
+        public ShaderPipelineRenderNode World => Runtime.Node(instance: Runtime.Instances.IndexOf(name: "world"));
 
         public void Produce() {
             m_rendered = World.FrameCounter;
@@ -176,6 +236,7 @@ public sealed partial class SdfWorldPassesLawTests {
         // Whether the latest frame let the view's previous output stand.
         public bool Stood() => (World.FrameCounter == m_rendered);
         public uint HistoryFrames() => BitConverter.ToUInt32(value: Block(), startIndex: Offset(member: SdfWorldPackage.HistoryFrames));
+        public bool Temporal() => (BitConverter.ToUInt32(value: Block(), startIndex: Offset(member: SdfWorldPackage.Temporal)) != 0u);
         public Vector2 Jitter() {
             var block = Block();
             var jitter = Offset(member: SdfWorldPackage.Jitter);

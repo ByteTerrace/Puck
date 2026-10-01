@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.Shaders;
 
@@ -42,6 +43,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     // prepared with before the instance decides whether its passes follow it in place.
     private FrameContext m_context;
     private RenderGraphConvergence? m_convergence;
+    // The cache and device a resolve pass was built from, which a residency a view follows into leases the resolve from.
+    private ResolveSource? m_resolveSource;
 
     /// <summary>Initializes a new instance of the <see cref="SdfWorldPasses"/> class.</summary>
     /// <param name="resolve">Returns the view an instance renders, or <see langword="null"/> when the host renders no view
@@ -88,6 +91,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         try {
             await view.Residency.WaitReadyAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             if (context.Part == SdfWorldPackage.Resolve) {
+                Volatile.Write(location: ref m_resolveSource, value: new ResolveSource(Cache: context.Pipelines, Device: context.Device));
                 await view.Residency.Tables!.Pipelines.BuildResolveAsync(cache: context.Pipelines, device: context.Device, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             }
         } catch {
@@ -138,21 +142,30 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// <inheritdoc/>
     /// <remarks>An instance stands only while a render taken now would feed its passes the temporal inputs its latest
     /// render fed them (<see cref="SdfTemporalHistory.Stands"/>): a sample jittered for a converging capture renders
-    /// once more at the pixel center, and the <c>motion</c> view renders until its previous view and previous poses
-    /// settle.</remarks>
+    /// once more at the pixel center, the <c>motion</c> view renders until its previous view and previous poses
+    /// settle, and a temporally resolved view renders one jitter period after its inputs last changed, then stands
+    /// converged. A view whose installed graph is not the one its temporal ask selects renders.</remarks>
     public bool IsUnchanged(string instance, in FrameContext context) {
         var entry = Refresh(instance: instance);
 
-        return (
-            !entry.Picker.Pending &&
-            (entry.View is { } view) &&
-            view.Residency.IsUnchanged(
+        if (
+            (entry.View is not { } view) ||
+            !view.Residency.IsUnchanged(
                 context: in context,
                 view: view.View
-            ) &&
+            )
+        ) {
+            entry.Temporal.Changed();
+
+            return false;
+        }
+
+        return (
+            !entry.Picker.Pending &&
             (entry.RenderedBindings == entry.Bindings) &&
             (entry.RenderedScale == entry.CurrentScale) &&
             (entry.RenderedSharpness == entry.CurrentSharpness) &&
+            (entry.InstalledTemporal == entry.RequestsTemporal) &&
             (view.Residency.Tables is { } tables) &&
             entry.Temporal.Stands(
                 // Asked before any pass of the frame records, so no upload has advanced the tables this frame: the poses
@@ -161,6 +174,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                     debug: tables.PassValues.DebugMode,
                     entry: entry,
                     height: entry.Temporal.Epoch.Height,
+                    temporal: entry.InstalledTemporal,
                     view: view,
                     width: entry.Temporal.Epoch.Width
                 ),
@@ -183,12 +197,14 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     }
 
     // Prepares an instance's history once a frame, after its residency's upload for the frame: the tables then hold this
-    // render's poses as current and the preceding upload's as previous.
-    internal SdfTemporalHistory TemporalOf(string instance, SdfWorldView view, uint width, uint height, int debug, uint renderWidth = 0, uint renderHeight = 0) {
+    // render's poses as current and the preceding upload's as previous. Temporal names whether the recording pass belongs
+    // to the temporal fragment, which every pass of one installed graph agrees on.
+    internal SdfTemporalHistory TemporalOf(string instance, SdfWorldView view, uint width, uint height, int debug, bool temporal, uint renderWidth = 0, uint renderHeight = 0) {
         var entry = Refresh(instance: instance);
 
         if (entry.TemporalFrame != m_frame) {
             entry.TemporalFrame = m_frame;
+            entry.InstalledTemporal = temporal;
             var tables = view.Residency.Tables!;
 
             entry.Temporal.Prepare(
@@ -199,6 +215,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                     debug: debug,
                     entry: entry,
                     height: height,
+                    temporal: temporal,
                     view: view,
                     width: width
                 ),
@@ -218,7 +235,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             val2: (views.Count - 1)
         )];
     }
-    private static SdfTemporalEpoch EpochOf(Entry entry, SdfWorldView view, uint width, uint height, int debug) {
+    private static SdfTemporalEpoch EpochOf(Entry entry, SdfWorldView view, uint width, uint height, int debug, bool temporal) {
         var snapshot = SnapshotOf(view: view);
 
         return new SdfTemporalEpoch(
@@ -226,8 +243,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             Ceiling: snapshot.RenderScale,
             Cut: snapshot.CutRevision,
             Debug: debug,
-            Enabled: (entry.Convergence is { IsActive: true }),
+            Enabled: (temporal || (entry.Convergence is { IsActive: true })),
             Height: height,
+            Temporal: temporal,
             Width: width
         );
     }
@@ -373,6 +391,19 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                 )
             )
         );
+    // Leases the resolve pipeline into the residency a view moves to when the residency it leaves has one, so passes
+    // with a resolve follow in place (CanFollow) rather than rebuilding and holding the departed image: the destination
+    // takes the cache entry the departure built, ready at once.
+    private void RequestResolve(SdfWorldView from, SdfWorldView to) {
+        if (
+            !ReferenceEquals(objA: from.Residency, objB: to.Residency) &&
+            (from.Residency.Tables?.Pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is not null) &&
+            (to.Residency.Tables is { } tables) &&
+            (Volatile.Read(location: ref m_resolveSource) is { } source)
+        ) {
+            tables.Pipelines.RequestResolve(cache: source.Cache, device: source.Device);
+        }
+    }
     // Resolves the view an instance renders this frame, on the frame thread, once a frame. A residency the instance meets
     // for the first time is prepared at once, so its tables exist when the instance decides whether its passes follow it
     // in place or rebuild against it.
@@ -433,6 +464,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                 _ = current.Residency.Prepare(context: in m_context);
             }
         }
+        if ((entry.Followed is { } departed) && (view is { } arrived)) {
+            RequestResolve(from: departed, to: arrived);
+        }
         if (entry.Followed != view) {
             if (
                 (entry.Followed is not { } from) ||
@@ -454,6 +488,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         return entry;
     }
 
+    // Where a resolve pass's pipeline came from.
+    private sealed record ResolveSource(GpuPassPipelineCache Cache, IGpuDeviceContext Device);
     // What a pass's build hands its recorder: the view, whose residency the build holds until the recorder takes it.
     private sealed class Built(SdfWorldView view) : IDisposable {
         private bool m_taken;
@@ -485,6 +521,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         public long TemporalFrame { get; set; } = -1;
         public SdfTemporalHistory Temporal { get; } = new();
 
+        // Whether the installed graph's passes run the temporal fragment, as the latest prepared render's recorders said.
+        public bool InstalledTemporal { get; set; }
         public RenderGraphConvergence? Convergence { get; set; }
         // The residency last resolved.
         public SdfWorldResidency? Residency { get; set; }

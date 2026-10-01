@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'sdf-world' (sha256/989269b4ad043d1317448c7cfe7e452cd6f41bfb2cd4794900d0dd5b6285f2fd), generated from the interface; never edit it.
+// The echo pass of shader interface 'sdf-world' (sha256/c0675be1036a7de2a0c3525b605b3a8eee159754a0be6f46e5f40df1ae44b321), generated from the interface; never edit it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "sdf-world.interface.hlsli"
 
@@ -59,12 +59,13 @@ void main(uint3 id : SV_DispatchThreadID) {
     echo[uint2(49, 0)] = ((asuint(passGroup.shadowDistanceScale) == 0x401263A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(50, 0)] = ((asuint(passGroup.sunScale) == 0x401273A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(51, 0)] = ((asuint(passGroup.tanHalfFieldOfView) == 0x401283A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(52, 0)] = ((asuint(passGroup.tileGrid.x) == 0x401293A5u) && (asuint(passGroup.tileGrid.y) == 0x4012A3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(53, 0)] = ((asuint(passGroup.viewBase) == 0x4012B3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(54, 0)] = ((asuint(passGroup.viewForward.x) == 0x4012D3A5u) && (asuint(passGroup.viewForward.y) == 0x4012E3A5u) && (asuint(passGroup.viewForward.z) == 0x4012F3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(55, 0)] = ((asuint(passGroup.viewPosition.x) == 0x401313A5u) && (asuint(passGroup.viewPosition.y) == 0x401323A5u) && (asuint(passGroup.viewPosition.z) == 0x401333A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(56, 0)] = ((asuint(passGroup.viewRight.x) == 0x401353A5u) && (asuint(passGroup.viewRight.y) == 0x401363A5u) && (asuint(passGroup.viewRight.z) == 0x401373A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(57, 0)] = ((asuint(passGroup.viewUp.x) == 0x401393A5u) && (asuint(passGroup.viewUp.y) == 0x4013A3A5u) && (asuint(passGroup.viewUp.z) == 0x4013B3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(58, 0)] = ((asuint(passGroup.viewportCount) == 0x4013C3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(59, 0)] = ((asuint(passGroup.workCounterRow) == 0x4013D3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(52, 0)] = ((asuint(passGroup.temporal) == 0x401293A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(53, 0)] = ((asuint(passGroup.tileGrid.x) == 0x4012B3A5u) && (asuint(passGroup.tileGrid.y) == 0x4012C3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(54, 0)] = ((asuint(passGroup.viewBase) == 0x4012D3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(55, 0)] = ((asuint(passGroup.viewForward.x) == 0x401313A5u) && (asuint(passGroup.viewForward.y) == 0x401323A5u) && (asuint(passGroup.viewForward.z) == 0x401333A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(56, 0)] = ((asuint(passGroup.viewPosition.x) == 0x401353A5u) && (asuint(passGroup.viewPosition.y) == 0x401363A5u) && (asuint(passGroup.viewPosition.z) == 0x401373A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(57, 0)] = ((asuint(passGroup.viewRight.x) == 0x401393A5u) && (asuint(passGroup.viewRight.y) == 0x4013A3A5u) && (asuint(passGroup.viewRight.z) == 0x4013B3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(58, 0)] = ((asuint(passGroup.viewUp.x) == 0x4013D3A5u) && (asuint(passGroup.viewUp.y) == 0x4013E3A5u) && (asuint(passGroup.viewUp.z) == 0x4013F3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(59, 0)] = ((asuint(passGroup.viewportCount) == 0x401403A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(60, 0)] = ((asuint(passGroup.workCounterRow) == 0x401413A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
 }

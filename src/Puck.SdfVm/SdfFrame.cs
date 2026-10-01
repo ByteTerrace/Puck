@@ -51,9 +51,9 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     public SdfViewQuality Quality { get; init; }
 }
 /// <summary>The quality levers one view renders with: each trades a shading term's cost against its fidelity. The
-/// default is full quality, every term on at full reach with its exact path. The pass block carries each under its own
-/// name (<see cref="SdfFrameBlock"/>), and the view's cadence signature folds it, so a change renders the view
-/// again.</summary>
+/// default is full quality, every term on at full reach with its exact path, and no temporal reconstruction. The pass
+/// block carries each shading lever under its own name (<see cref="SdfFrameBlock"/>), and the view's cadence signature
+/// folds it, so a change renders the view again; <see cref="Temporal"/> chooses the view's fragment instead.</summary>
 public readonly record struct SdfViewQuality {
     /// <summary>Gets whether the view skips ambient occlusion: occlusion reads 1, so creases read brighter, and the
     /// ambient pass does not run. The pass block carries it as <c>disableAmbientOcclusion</c>.</summary>
@@ -81,10 +81,15 @@ public readonly record struct SdfViewQuality {
     /// and a sub-visible darkness early-out, instead of the exact 48-step path. The pass block carries it as
     /// <c>fastSoftShadowMarch</c>.</summary>
     public bool UseFastSoftShadowMarch { get; init; }
+    /// <summary>Gets whether the view asks for temporal reconstruction: it runs the temporal fragment
+    /// (<c>SdfWorldPackage.TemporalFragment</c>), jitters its samples and resolves them over its history into its
+    /// output, at native or reduced render scale. Its costs are the resolve's dispatch and the history's bytes and
+    /// barriers. The default asks for none.</summary>
+    public bool Temporal { get; init; }
 
     /// <summary>Returns this quality with another's restrictions added: a term either skips stays skipped, an
-    /// approximation either takes stays taken, and the shorter shadow reach holds. Neither can lift a restriction the
-    /// other set.</summary>
+    /// approximation either takes stays taken, the shorter shadow reach holds, and the view reconstructs over time only
+    /// when both ask. Neither can lift a restriction the other set.</summary>
     /// <param name="other">The restrictions to add.</param>
     /// <returns>The restricted quality.</returns>
     public SdfViewQuality Restrict(in SdfViewQuality other) => new() {
@@ -98,6 +103,7 @@ public readonly record struct SdfViewQuality {
         UseCameraTileShadowMask = (UseCameraTileShadowMask || other.UseCameraTileShadowMask),
         UseFastAmbientOcclusion = (UseFastAmbientOcclusion || other.UseFastAmbientOcclusion),
         UseFastSoftShadowMarch = (UseFastSoftShadowMarch || other.UseFastSoftShadowMarch),
+        Temporal = (Temporal && other.Temporal),
     };
 }
 /// <summary>Contains the scene program and presentation state consumed by one SDF render frame.</summary>
