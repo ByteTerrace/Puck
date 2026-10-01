@@ -44,7 +44,7 @@ namespace Puck.Cli.Docs;
 // Exit 0 every citation resolved, 1 unresolved citations (each named, on stdout), 2 usage error, no repository
 // root, the enumeration boot/build refused, or the enumeration is provably incomplete and nothing was reported
 // against it.
-internal static class DocsCitationsCommand {
+public static class DocsCitationsCommand {
     private const string ScratchPrefix = "puck-citations-";
     private const string Verb = "docs citations";
 
@@ -60,18 +60,17 @@ internal static class DocsCitationsCommand {
     // segments (`world.mutation.activation_mismatch`), so a cited code and the literal that carries it read whole.
     private const string DottedName = @"[a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9_-]*)+";
 
-    // A verb-shaped token in a document's code span. Trailing argument text inside the same span is ignored —
-    // `world.row.set views.seatRig` cites `world.row.set`.
-    internal static readonly Regex MarkdownToken = new(
+    // A verb-shaped token in a document's code span. Only whitespace separates a name from argument text —
+    // `world.row.set views.seatRig` cites `world.row.set`, but an attached suffix never cites a shorter prefix.
+    public static readonly Regex MarkdownToken = new(
         options: RegexOptions.Compiled,
-        pattern: $@"`({DottedName})[^`]*`"
+        pattern: $@"`({DottedName})(?:\s[^`]*)?`"
     );
     // A verb-shaped token in an XML documentation code span.
-    internal static readonly Regex XmlDocToken = new(
+    public static readonly Regex XmlDocToken = new(
         options: RegexOptions.Compiled,
-        pattern: $@"<c>({DottedName})[^<]*</c>"
+        pattern: $@"<c>({DottedName})(?:\s[^<]*)?</c>"
     );
-
     // A verb registration's own name argument — the lower bound the staleness gate rests on.
     //
     // ANCHORED TO LINE START, which is the whole discriminator: a command registration spells `name:` on its
@@ -80,15 +79,14 @@ internal static class DocsCitationsCommand {
     // "audio.masterGain", …)` in the document validator, for one. An unanchored pattern sweeps those in too:
     // a sweep confident enough to refuse a run must be narrow enough to be right, or it becomes the accusing
     // instrument it exists to replace.
-    private static readonly Regex Registration = new(
+    public static readonly Regex Registration = new(
         options: RegexOptions.Compiled,
         pattern: $@"^\s*name:\s*""({DottedName})"""
     );
-
     // Any verb-shaped string literal in source: a refusal door, a HUD binding token, a session lever, a
     // document member path. Not a console verb, but a name the code genuinely carries — a document citing
     // one is describing a real mechanism, not a dead verb.
-    internal static readonly Regex SourceLiteral = new(
+    public static readonly Regex SourceLiteral = new(
         options: RegexOptions.Compiled,
         pattern: $@"""({DottedName})"""
     );
