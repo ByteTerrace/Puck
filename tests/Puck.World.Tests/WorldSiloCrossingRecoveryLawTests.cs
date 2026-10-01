@@ -19,7 +19,7 @@ namespace Puck.World.Tests;
 /// traveler. A destination whose store cannot reconcile the root compare-and-swap of its arrival record answers the
 /// commit uncertain: neither row embodies the traveler, the source keeps its doubt, and the replacement settles the
 /// transfer from what the destination's journal holds.</summary>
-public sealed class WorldSiloCrossingRecoveryLawTests {
+public sealed partial class WorldSiloCrossingRecoveryLawTests {
     private const int Slot = WorldBodiesLimits.LocalSeatCount;
 
     // Fails one journal page write before publication, or loses one row's next root compare-and-swap answer: that
@@ -29,6 +29,32 @@ public sealed class WorldSiloCrossingRecoveryLawTests {
         private string? m_loseRootAnswer;
         private bool m_lostRootLands;
         private string? m_failRootRead;
+        private RootReadHold? m_rootReadHold;
+
+        private sealed record JournalObservation(string World, TaskCompletionSource Observed);
+
+        private JournalObservation? m_journalObservation;
+
+        public sealed class RootReadHold(string world) : IDisposable {
+            public string World { get; } = world;
+            public TaskCompletionSource<int> Started { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+            public TaskCompletionSource Released { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+            public void Dispose() => Released.TrySetResult();
+        }
+
+        public RootReadHold HoldNextRootRead(string world) {
+            var hold = new RootReadHold(world: world);
+
+            Volatile.Write(location: ref m_rootReadHold, value: hold);
+            return hold;
+        }
+        public Task ObserveNextJournalWrite(string world) {
+            var observed = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+            Volatile.Write(location: ref m_journalObservation, value: new JournalObservation(Observed: observed, World: world));
+            return observed.Task;
+        }
 
         private static bool IsRoot(ObjectBlobAddress address, string? world) => ((world is not null) && address.Key.EndsWith(
             comparisonType: StringComparison.Ordinal,
@@ -43,6 +69,14 @@ public sealed class WorldSiloCrossingRecoveryLawTests {
         public ValueTask<IReadOnlyList<string>> ListAsync(ObjectStorageTarget target, Guid objectId, string keyPrefix, CancellationToken cancellationToken = default) =>
             inner.ListAsync(cancellationToken: cancellationToken, keyPrefix: keyPrefix, objectId: objectId, target: target);
         public ValueTask<ObjectBlobContent?> ReadAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) {
+            var hold = Volatile.Read(location: ref m_rootReadHold);
+
+            if ((hold is not null) && IsRoot(address: address, world: hold.World) && ReferenceEquals(
+                objA: Interlocked.CompareExchange(comparand: hold, location1: ref m_rootReadHold, value: null), objB: hold
+            )) {
+                hold.Started.TrySetResult(result: Environment.CurrentManagedThreadId);
+                return ReadAfterReleaseAsync(address: address, cancellationToken: cancellationToken, hold: hold, target: target);
+            }
             var failing = Volatile.Read(location: ref m_failRootRead);
 
             if (IsRoot(address: address, world: failing) && (Interlocked.CompareExchange(comparand: failing, location1: ref m_failRootRead, value: null) == failing)) {
@@ -50,7 +84,19 @@ public sealed class WorldSiloCrossingRecoveryLawTests {
             }
             return inner.ReadAsync(address: address, cancellationToken: cancellationToken, target: target);
         }
+
+        private async ValueTask<ObjectBlobContent?> ReadAfterReleaseAsync(RootReadHold hold, ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken) {
+            await hold.Released.Task.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            return await inner.ReadAsync(address: address, cancellationToken: cancellationToken, target: target).ConfigureAwait(continueOnCapturedContext: false);
+        }
+
         public async ValueTask<ObjectBlobWriteResult> WriteAsync(ObjectStorageTarget target, ObjectBlobAddress address, ReadOnlyMemory<byte> content, ObjectBlobWriteMode mode, string? ifMatchVersion = null, CancellationToken cancellationToken = default) {
+            if ((Volatile.Read(location: ref m_journalObservation) is { } observation) && address.Key.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: $"/{observation.World}/authority/journal/"
+            ) && ReferenceEquals(objA: Interlocked.CompareExchange(comparand: observation, location1: ref m_journalObservation, value: null), objB: observation)) {
+                observation.Observed.TrySetResult();
+            }
             if (address.Key.Contains(comparisonType: StringComparison.Ordinal, value: "/journal/") && (Interlocked.Exchange(location1: ref m_fail, value: 0) == 1)) {
                 throw new IOException(message: "journal write failed before publication");
             }

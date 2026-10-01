@@ -838,8 +838,11 @@ traveler ends on exactly one authority.
 
 A hosted silo row writes its records into its fenced authority journal beside its mutations, and
 recovers both kinds in publication order. An activation whose journal does not decode or redo is
-refused. A checkpoint pins its journal coverage at capture, so arrivals after the capture remain in
-the journal suffix. A failed mutation journal append blocks the activation's later publications, so
+refused. A checkpoint pins its journal coverage at capture and queues its upload under the same
+authority gate, so arrivals after the capture remain in the journal suffix. Uploads run off the tick
+thread. `WorldSiloHost.WaitForCheckpointUploadsAsync` waits for each active row's latest queued upload,
+including cadence captures, without taking another snapshot; retirement uses this barrier before its
+final capture. A failed mutation journal append blocks the activation's later publications, so
 no crossing depends on a document edit its successor cannot recover. A root compare-and-swap the
 store cannot reconcile is uncertain, and it blocks the activation the same way. A blocked row cannot
 write the final checkpoint a deactivation needs. A new activation replaces it only after its silo
