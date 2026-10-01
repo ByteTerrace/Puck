@@ -4,9 +4,9 @@ namespace Puck.Hosting;
 
 /// <summary>What the scheduler decided for one instance in one frame.</summary>
 public enum RenderGraphInstanceStatus : byte {
-    /// <summary>Nothing the display shows reaches it: it is no root, and no instance the display reaches shows or reads
-    /// it, whether or not that instance renders this frame. It does not render, and a render-graph runtime releases its
-    /// graph until something shows it again.</summary>
+    /// <summary>Nothing the display shows reaches it this frame, though something still names it
+    /// (<see cref="RenderGraphFrame.Named"/>): it does not render, and keeps everything it has, so it shows its last image
+    /// the next frame something shows it.</summary>
     Unread = 1,
     /// <summary>Something shows or reads it, but it does not render this frame: its refresh or a source's cadence is not
     /// due, a source's producer declares no extent, or no consumer that shows or reads it renders. Its consumers read its
@@ -21,6 +21,11 @@ public enum RenderGraphInstanceStatus : byte {
     /// (<see cref="RenderGraphFrame.DisplayHertz"/> zero), so its rate cannot be counted in frames: it does not render
     /// until the display's rate is known, and this row names it.</summary>
     Refused = 5,
+    /// <summary>Nothing names it any more: the display does not reach it, the host does not name it
+    /// (<see cref="RenderGraphFrame.Named"/>), and nothing named shows or reads it, as a seat's view once its seat leaves
+    /// or a pane once no layout slot places it. It does not render, and a render-graph runtime releases its graph until
+    /// something names and shows it again.</summary>
+    Unnamed = 6,
 }
 /// <summary>One instance's row in a frame's schedule: its decision and its price.</summary>
 /// <param name="Instance">The instance name.</param>
@@ -124,7 +129,7 @@ public sealed class RenderGraphHistory {
         Latest[index] = previous.Latest[index];
         Ticks[index] = previous.Ticks[index];
     }
-    /// <summary>Forgets an instance whose targets were released, such as one nothing reads any more: it reads as never
+    /// <summary>Forgets an instance whose targets were released, such as one nothing names any more: it reads as never
     /// rendered and never allocated, so it is due, at the extent its consumers demand, the next frame something shows it,
     /// and its consumers bind no output of it until then.</summary>
     /// <param name="index">The instance's index in its set.</param>

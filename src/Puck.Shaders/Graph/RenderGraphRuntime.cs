@@ -1097,7 +1097,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_history = schedule.Next;
         m_latest = schedule;
         m_unproduced = 0;
-        ReleaseUnread(schedule: schedule);
+        ReleaseUnnamed(schedule: schedule);
 
         var renders = schedule.Renders;
         var holdingConvergence = ((m_convergence is { IsActive: true } convergence) &&

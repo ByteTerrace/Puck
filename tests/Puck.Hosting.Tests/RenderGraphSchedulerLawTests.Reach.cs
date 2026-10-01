@@ -1,8 +1,8 @@
 namespace Puck.Hosting.Tests;
 
-// Unread against waiting: an instance is unread only when nothing the display shows reaches it. One that a consumer shows
-// waits while that consumer's refresh is not due, however many frames it waits, because a render-graph runtime releases
-// an unread instance's graph and a skipped frame must keep it.
+// Waiting, unread and unnamed: an instance a consumer shows waits while that consumer's refresh is not due, however many
+// frames it waits. One nothing the display shows reaches is unread while something still names it, and unnamed, whose
+// graph a render-graph runtime releases, only once nothing does.
 public sealed partial class RenderGraphSchedulerLawTests {
     [Fact]
     public void AnInstanceOnlyAWaitingConsumerShowsWaitsAndOneNothingShowsIsUnread() {
@@ -66,5 +66,65 @@ public sealed partial class RenderGraphSchedulerLawTests {
             ),
             collection: schedules
         );
+    }
+    [Fact]
+    public void AnInstanceTheHostNamesIsUnreadAndOneNothingNamesIsUnnamed() {
+        var set = Set(
+            Instance(name: "screen"),
+            Instance(name: "seat"),
+            Instance(name: "camera"),
+            Instance(
+                name: "pane",
+                reads: [new RenderGraphRead(Producer: "camera")]
+            ),
+            Instance(
+                name: "main",
+                reads: [
+                    new RenderGraphRead(Producer: "screen"),
+                    new RenderGraphRead(Producer: "seat"),
+                    new RenderGraphRead(Producer: "pane"),
+                ]
+            )
+        );
+        // The root shows nothing but a zero-extent pane; the host names the screen.
+        RenderGraphFootprint[] footprints = [
+            new RenderGraphFootprint(Consumer: "main", Height: 0.0, Producer: "pane", Width: 0.0),
+            new RenderGraphFootprint(Consumer: "pane", Height: 1.0, Producer: "camera", Width: 1.0),
+        ];
+        var schedule = Run(
+            count: 1,
+            frame: index => (Frame(
+                footprints: footprints,
+                index: index,
+                roots: [Full(instance: "main")]
+            ) with {
+                Named = ["screen"],
+            }),
+            set: set
+        )[0];
+
+        Assert.Equal(
+            actual: new[] { "screen", "seat", "pane", "camera" }.Select(selector: name => Row(
+                name: name,
+                schedule: schedule,
+                set: set
+            ).Status),
+            expected: [
+                RenderGraphInstanceStatus.Unread,
+                RenderGraphInstanceStatus.Unnamed,
+                RenderGraphInstanceStatus.Unread,
+                RenderGraphInstanceStatus.Unread,
+            ]
+        );
+        Assert.Throws<ArgumentException>(testCode: () => Run(
+            count: 1,
+            frame: index => (Frame(
+                index: index,
+                roots: [Full(instance: "main")]
+            ) with {
+                Named = ["nowhere"],
+            }),
+            set: set
+        ));
     }
 }

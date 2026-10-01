@@ -264,7 +264,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
     /// <summary>Gets whether the node holds anything of a graph: an installed or building graph's objects, its frame slots'
     /// command buffers and fences, a preview, a readback or objects waiting to retire. A node that has never been demanded,
-    /// or whose graph <see cref="ReleaseUnread"/> released, holds none.</summary>
+    /// or whose graph <see cref="ReleaseUnnamed"/> released, holds none.</summary>
     internal bool HoldsGraphObjects {
         get {
             foreach (var slot in m_slots) {
@@ -289,12 +289,12 @@ public sealed partial class ShaderPipelineRenderNode {
         }
     }
 
-    /// <summary>Releases the graph of a node nothing reads any more: its targets, history, buffers, descriptor sets, frame
+    /// <summary>Releases the graph of a node nothing names any more: its targets, history, buffers, descriptor sets, frame
     /// slots, preview and readback, and any build in flight. The host calls it only once the device has finished every
     /// submission that may read them, the node's own and its consumers'. The node keeps its installed pipeline, the regions
     /// and bindings its host gave it, and its region-copy pipeline, and rebuilds at the extent it is demanded at the next
     /// time it renders, with fresh history, as after a device loss. A capture armed on it is left armed.</summary>
-    internal void ReleaseUnread() {
+    internal void ReleaseUnnamed() {
         CancelBuilds();
         ReleaseGraph();
     }
