@@ -59,6 +59,28 @@ public sealed class GpuImageLeasesLawTests {
         Assert.Throws<InvalidOperationException>(testCode: second.Retire);
     }
     [Fact]
+    public void ALeaseStaysRetiredAfterThousandsOfReusesOfItsSlot() {
+        var images = new GpuImageLeases();
+        var factory = new CountingImages();
+        var image = images.Wrap(factory: factory).Create(format: GpuPixelFormat.R8G8B8A8Unorm, height: 1, name: default, usage: GpuImageUsage.Sampled, width: 1);
+
+        Assert.True(condition: images.TryLease(imageHandle: image.ImageHandle, lease: out var first));
+        first.Retire();
+
+        for (var reuse = 1; (reuse < 2048); reuse++) {
+            Assert.True(condition: images.TryLease(imageHandle: image.ImageHandle, lease: out var transient));
+            transient.Retire();
+        }
+
+        Assert.True(condition: images.TryLease(imageHandle: image.ImageHandle, lease: out var pending));
+        image.Dispose();
+        Assert.Equal(expected: 0, actual: factory.Disposed);
+        Assert.Throws<InvalidOperationException>(testCode: first.Retire);
+        Assert.Equal(expected: (0, 1), actual: (factory.Disposed, images.Deferred));
+        pending.Retire();
+        Assert.Equal(expected: (1, 0), actual: (factory.Disposed, images.Deferred));
+    }
+    [Fact]
     public void AnUnleasedImageIsDisposedAtOnceAndAStrangerIsNotLeased() {
         var images = new GpuImageLeases();
         var factory = new CountingImages();

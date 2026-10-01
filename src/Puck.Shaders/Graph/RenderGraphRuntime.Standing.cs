@@ -28,6 +28,9 @@ namespace Puck.Shaders;
 // (RescheduleAfterRelease), so the reader binds the released producer's stand-in in the same frame. Only an output
 // standing for a one-frame image costs a render every frame it is shown.
 public sealed partial class RenderGraphRuntime {
+    // The frame outputs are read at, retained when a reconfiguration replaces the scheduling history.
+    private long m_readFrame = -1;
+
     // The instances whose latest output resolves to nothing, or stands for a one-frame image, reused from frame to frame.
     private readonly List<string> m_standing = [];
     // The instances the frame's release forgot, reused from frame to frame.
@@ -91,36 +94,9 @@ public sealed partial class RenderGraphRuntime {
 
         return Output.None;
     }
-    // The instance whose own output an instance's latest output resolves to, or -1 when it resolves to nothing or to a
-    // one-frame image, which no instance owns.
-    private int OwnerOf(int index) {
-        var owner = index;
-        var output = m_current[index];
-        var frame = long.MaxValue;
-
-        for (var depth = 0; (depth <= (2 * m_nodes.Length)); depth++) {
-            var standing = output.StandsFor;
-
-            if (standing.IsOwn) {
-                return ((output.Frame >= 0) ? owner : -1);
-            }
-            if (standing.IsOneFrame) {
-                return -1;
-            }
-
-            frame -= (standing.PreviousFrame ? 1L : 0L);
-            owner = standing.Producer;
-            output = RecordedAt(
-                frame: frame,
-                producer: owner
-            );
-        }
-
-        return -1;
-    }
     // An instance's latest output as the display, a host or a capture sees it now.
     private Output LatestOf(int index) => Resolve(
-        frame: long.MaxValue,
+        frame: m_readFrame,
         output: in m_current[index]
     );
     // What an instance's new output stands for: nothing when its node published an image of its own, otherwise the

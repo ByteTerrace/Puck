@@ -2,6 +2,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -106,6 +107,49 @@ public sealed partial class RenderGraphRuntimeLawTests {
             world.Held.RetireAll();
             Assert.Equal(expected: (2, 2), actual: (source.Acquired, source.Released));
         }
+    }
+    [Fact]
+    public void AThrowingExternalReaderLeavesNoLeaseOnAReleasedGraphImage() {
+        var gpu = new FakePipelineGpu();
+        var recorders = new Recorders(Camera);
+        var world = new ReadingWorld();
+
+        recorders.Registry.RegisterProducer(factory: _ => world, package: World);
+        using var runtime = Runtime(
+            gpu,
+            recorders,
+            Set(
+                Instance(name: ReadSource),
+                new RenderGraphInstance(
+                    ExternalPackage: World,
+                    Name: "world",
+                    Passes: WorldPasses,
+                    Reads: [new RenderGraphRead(Producer: ReadSource)],
+                    Refresh: RenderGraphRefresh.EveryFrame
+                )
+            ),
+            "world",
+            Graph(pipeline: CameraGraph()),
+            null!
+        );
+        var frame = 0L;
+
+        TestLiveness.Until(
+            reason: () => "The external reader never received a graph image.",
+            step: () => {
+                _ = ProduceReading(hertz: 60, index: frame++, runtime: runtime, tick: frame);
+
+                return ((world.Seen.Count == 1) && (world.Seen[0].ImageView != 0));
+            }
+        );
+        world.Throws = true;
+        Assert.Throws<InvalidOperationException>(testCode: () => ProduceReading(hertz: 60, index: frame++, runtime: runtime, tick: frame));
+        var read = Assert.Single(collection: world.Seen).ImageView;
+
+        Assert.NotEqual(actual: read, expected: 0);
+        runtime.OnDeviceLost();
+        Assert.True(condition: gpu.IsReleased(handle: read));
+        Assert.Empty(collection: gpu.UsesAfterRelease);
     }
     [Fact]
     public void ASourceProducerRendersAtItsDeclaredCadenceAndExtent() {
@@ -421,6 +465,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public List<(string Producer, nint ImageView)> Seen { get; } = [];
 
         public bool Takes { get; set; }
+        public bool Throws { get; set; }
 
         public IGpuWorkSource Work { get; } = new GpuWorkLedger(
             framesInFlight: 3,
@@ -438,6 +483,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 if (Takes) {
                     Held.Hold(lease: reads.Take(index: index));
                 }
+            }
+
+            if (Throws) {
+                throw new InvalidOperationException(message: "Injected external reader failure.");
             }
 
             return true;

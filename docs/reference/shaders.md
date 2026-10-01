@@ -578,23 +578,33 @@ another instance's own output. A capture moves to an instance's node only while
 its output resolves to an image, and the instances a captured output stands for
 keep their graphs while the capture waits.
 
+Standing chains with multiple previous-frame edges can require an image older
+than the runtime's two recorded outputs. For example, a root reading a view's
+previous frame, where that view stands for a camera's previous frame, needs
+the camera's output from two frames ago. Once that record is gone, the chain
+resolves to nothing and a reader binds a stand-in. Supporting such chains
+requires an intermediate drawn output or additional retained history.
+
 Image lifetime is tracked per image and per reader (`GpuImageLeases`, in
 `Puck.Hosting`). Every image an instance's node creates is one of the runtime's
 table's, and every reader the runtime hands an image to holds a
 `GpuImageLease` naming its own completion: a consumer node's binding and a
 package's or an external producer's read hold theirs in the frame slot's
 `LeaseRetireList`, retired once the submission that sampled the image has
-finished, and the display's lease moves to the first submission made after the
-host presented the image. An image its owner drops, because its graph is
-released, retired in a reconfiguration or replaced, is disposed only once every
-lease on it has retired. A kept consumer whose installed graph still samples an
+finished, and the display's leases move to a node submission made after the
+host presented the images. Without a new submission, repeated presentations
+share one lease per image. A failed frame retires external reads that no
+submitter took. An image its owner drops, because its graph is released, retired
+in a reconfiguration or replaced, is disposed only once every lease on it has
+retired. A kept consumer whose installed graph still samples an
 image of a retired instance holds that image under a lease of its own,
 whichever instance owns it, so the retired instances themselves are disposed at
 once; only a buffer binding still holds its retired producer
 (`RenderGraphRuntime.RetiredProducers`). Whose image a reader binds does not
 matter, so a reader of an output standing for another instance's image keeps
 that image alive past the retirement of every instance the chain ran through.
-Each lease retires once; a second retirement is refused by name.
+Each lease retires once; a second retirement is refused by name. Reused lease
+slots retain their identity and advance their generation without wrapping.
 
 A lease keeps an image alive, not its pixels: its owner renders into every
 image of its frame-slot ring again within a few frames, and the ring cannot step
@@ -604,11 +614,19 @@ at install. So a capture an instance serves without rendering (paused, or while
 its encoder builds) while it publishes another instance's image reads a copy:
 the runtime offers the node the image its output stands for that frame, and the
 node copies it into an image of its own, publishes the copy and serves the
-capture from it, with the tick its owner rendered it from.
+capture from it, with the tick stored with the resolved output. The runtime
+records that publication even though a copy advances no render sample.
 An external image is bound in the layout its producer declares for its lease,
 which is the layout the producer's own submissions leave it in, and the planner
 plans its barriers from it. `PostProcessPackage` serves every post-process
 package and `OverlayPackage` serves `overlay`.
+
+A paused instance has one open lifetime gap across a reconfiguration. When the
+producer its output stands for retires, the instance's recorded output becomes
+nothing, which the capture guard reads as the node's own image, while the node
+still publishes the retired producer's image. Once a drain retires the frame
+leases and the replacement graph drops the binding hold, a capture forwarded to
+that node reads an image that is already released.
 
 An instance whose `ExternalPackage` names a package no external producer or
 upload serves, but a recorder does, is a package instance: when the package

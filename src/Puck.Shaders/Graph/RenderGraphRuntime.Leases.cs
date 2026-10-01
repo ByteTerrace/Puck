@@ -13,7 +13,16 @@ namespace Puck.Shaders;
 public sealed partial class RenderGraphRuntime {
     // The leases of images handed to the display, waiting for a submission made after the host presented them.
     private readonly LeaseRetireList m_shown = new();
+    private readonly HashSet<nint> m_shownImages = [];
 
+    /// <summary>Gets how many displayed images await a submission ordered after their presentation. Repeated
+    /// presentations without a node submission share one lease per image.</summary>
+    public int PendingDisplayLeases => m_shown.Count;
+
+    private void RetireShownLeases() {
+        m_shown.RetireAll();
+        m_shownImages.Clear();
+    }
     // A reader's lease on an image: from the table when one of the runtime's nodes created it, otherwise the image's view
     // alone, which needs no retirement (a stand-in, which lives until the device is lost or the runtime disposed).
     private GpuImageLease LeaseOf(Surface image) => (m_images.TryLease(
@@ -30,7 +39,7 @@ public sealed partial class RenderGraphRuntime {
             node?.RetireDrainedLeases();
         }
 
-        m_shown.RetireAll();
+        RetireShownLeases();
     }
     // Offers a node a pending capture's source when the node publishes another instance's image: the image its output
     // stands for this frame, under a lease, with the tick its owner rendered it from. A node that serves the capture
@@ -52,8 +61,6 @@ public sealed partial class RenderGraphRuntime {
             return;
         }
 
-        var owner = OwnerOf(index: index);
-
         node.OfferCaptureSource(
             image: new ShaderPipelineExternalImage(
                 Format: latest.Image.Format,
@@ -64,9 +71,7 @@ public sealed partial class RenderGraphRuntime {
                 Width: latest.Image.Width
             ),
             lease: LeaseOf(image: latest.Image),
-            tick: ((owner >= 0)
-                ? m_nodes[owner]?.PublishedStateTick
-                : null)
+            tick: latest.StateTick
         );
     }
     // Hands the display the root's image under a lease. The host presents it in a submission before its next call, so the
@@ -75,9 +80,16 @@ public sealed partial class RenderGraphRuntime {
     private Surface Shown(Surface image, ShaderPipelineRenderNode? submitter) {
         if (submitter is not null) {
             submitter.HoldUntilLatestSubmission(leases: m_shown);
+            m_shownImages.Clear();
         }
 
-        m_shown.Hold(lease: LeaseOf(image: image));
+        if (
+            !m_shownImages.Contains(item: image.ImageHandle) &&
+            m_images.TryLease(imageHandle: image.ImageHandle, lease: out var lease)
+        ) {
+            _ = m_shownImages.Add(item: image.ImageHandle);
+            m_shown.Hold(lease: in lease);
+        }
 
         return image;
     }

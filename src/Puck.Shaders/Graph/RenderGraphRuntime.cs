@@ -941,7 +941,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         )
     );
     private void Release() {
-        m_shown.RetireAll();
+        RetireShownLeases();
         Array.Fill(
             array: m_current,
             value: Output.None
@@ -955,6 +955,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         Array.Clear(array: m_producerTainted);
         m_history = RenderGraphHistory.Empty(set: m_set);
         m_latest = null;
+        m_readFrame = -1;
         m_unproduced = 0;
     }
     // Why a capture of an instance would not be served by the frame the runtime produces now, or null when it would.
@@ -1030,7 +1031,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             producers: m_producers
         );
         DisposeSources(sources: m_sources);
-        m_shown.RetireAll();
+        RetireShownLeases();
         ReleaseStandIns(wait: true);
     }
     /// <summary>Releases every instance's device objects after the device was lost and recreated, so nothing of the old
@@ -1070,8 +1071,19 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// history.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A root or footprint fraction, or the budget, is out of
     /// range.</exception>
-    public Surface ProduceFrame(in RenderGraphFrame frame, in FrameContext context) =>
-        ProduceFrameCore(frame: in frame, context: ConvergenceContext(context: in context));
+    public Surface ProduceFrame(in RenderGraphFrame frame, in FrameContext context) {
+        try {
+            return ProduceFrameCore(frame: in frame, context: ConvergenceContext(context: in context));
+        } catch {
+            // A binding or producer may throw before its normal retirement point. Taken reads still belong to their
+            // submitters; every untaken acquisition must retire before recovery can release the device's images.
+            foreach (var reads in m_externalReads) {
+                reads?.RetireUntaken();
+            }
+
+            throw;
+        }
+    }
 
     private Surface ProduceFrameCore(in RenderGraphFrame frame, in FrameContext context) {
         ObjectDisposedException.ThrowIf(
@@ -1100,6 +1112,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_turn ^= 1;
         m_history = schedule.Next;
         m_latest = schedule;
+        m_readFrame = frame.Index;
         m_unproduced = 0;
         ReleaseUnnamed(schedule: schedule);
         RescheduleAfterRelease(
@@ -1238,7 +1251,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 node: node
             );
 
-            var submitted = node.FrameCounter;
+            var rendered = node.FrameCounter;
+            var submitted = node.SubmissionCount;
             Surface surface;
 
             // The root is shown as the display, at its own extent; every other instance is resampled by what reads it.
@@ -1251,7 +1265,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 node.Reads = null;
             }
 
-            if (node.FrameCounter == submitted) {
+            if (node.FrameCounter == rendered) {
                 m_unproduced++;
 
                 // A source whose conversion has not built yet is asked again, since its cadence may never ask twice.
@@ -1262,11 +1276,13 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     );
                 }
 
-                continue;
+                if (node.SubmissionCount == submitted) {
+                    continue;
+                }
             }
 
             // A sample rendered at an extent the node was not asked for is one its capture never reads.
-            if ((index == m_captureInstance) && IsConverging(index: index) &&
+            if ((node.FrameCounter != rendered) && (index == m_captureInstance) && IsConverging(index: index) &&
                 (m_standInReads[index] is null) && (m_taintedReads[index] is null) && (node.Extent == node.RequestedExtent)) {
                 m_convergence!.Count();
             }
@@ -1285,6 +1301,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 Frame: frame.Index,
                 Image: surface,
                 Layout: node.PublishedLayout,
+                StateTick: node.PublishedStateTick,
                 StandsFor: standsFor,
                 Tainted: (m_taintedReads[index] is not null)
             );
@@ -1436,7 +1453,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     // One completed output of an instance: the frame it belongs to, its published image and the layout it is in, its
     // buffer when it is one, whether it was rendered from a tainted input, and what the image stands for when it is not
     // the instance's own (RenderGraphRuntime.Standing.cs).
-    private readonly record struct Output(long Frame, Surface Image, GpuImageLayout Layout, IGpuBuffer? Buffer, bool Tainted, Standing StandsFor) {
+    private readonly record struct Output(long Frame, Surface Image, GpuImageLayout Layout, IGpuBuffer? Buffer, bool Tainted, Standing StandsFor, ulong? StateTick = null) {
         public static Output None => new(
             Buffer: null,
             Frame: -1,

@@ -9,6 +9,78 @@ namespace Puck.Shaders.Tests;
 // retired, and a reader's pending submission outlives the retirement that dropped the image it reads. Every frame of
 // every law checks that the display is handed no released image and the fake device records no command naming one.
 public sealed partial class RenderGraphRuntimeLawTests {
+    [Fact]
+    public void APausedDisplayKeepsOneLeaseUntilAnotherSubmission() {
+        using var scene = new StandingScene([], Set(Instance(name: "main")), Graph(pipeline: CameraGraph()));
+
+        TestLiveness.Until(
+            reason: () => "The root never rendered.",
+            step: () => {
+                _ = scene.Produce(footprints: [], roots: MainRoot);
+
+                return scene.Runtime.IsSettled;
+            }
+        );
+        scene.Node(instance: "main").Paused = true;
+        var submissions = scene.Gpu.SubmissionsMade;
+
+        for (var frame = 0; (frame < 128); frame++) {
+            _ = scene.Produce(footprints: [], roots: MainRoot);
+            Assert.Equal(expected: submissions, actual: scene.Gpu.SubmissionsMade);
+            Assert.Equal(expected: 1, actual: scene.Runtime.PendingDisplayLeases);
+        }
+
+        scene.Node(instance: "main").Paused = false;
+        _ = scene.Produce(footprints: [], roots: MainRoot);
+        Assert.True(condition: (scene.Gpu.SubmissionsMade > submissions));
+        Assert.Equal(expected: 1, actual: scene.Runtime.PendingDisplayLeases);
+        scene.Runtime.Dispose();
+        Assert.Equal(expected: 0, actual: scene.Runtime.PendingDisplayLeases);
+        Assert.Empty(collection: scene.Gpu.UsesAfterRelease);
+    }
+    [Fact]
+    public void AStandingPreviousFrameOutputShowsThePreviousCameraImage() {
+        using var scene = new StandingScene(
+            ["main"],
+            Set(
+                Instance(name: "camera"),
+                Instance("main", reads: new RenderGraphRead(PreviousFrame: true, Producer: "camera"))
+            ),
+            Graph(pipeline: CameraGraph()),
+            Graph(OverGraph(reader: false), ("world", "camera"))
+        );
+        RenderGraphFootprint[] filmed = [new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "camera", Width: 1.0)];
+
+        TestLiveness.Until(
+            reason: () => "The root never stood for its previous-frame input.",
+            step: () => {
+                _ = scene.Produce(footprints: filmed, roots: MainRoot);
+
+                return (scene.Runtime.IsSettled && (scene.Node(instance: "main").PublishedBinding == "world"));
+            }
+        );
+
+        for (var frame = 0; (frame < 8); frame++) {
+            var previous = scene.Recorders.Of(instance: "camera").OutputImage;
+
+            scene.Node(instance: "camera").Frame = (scene.Node(instance: "camera").Frame with { StateTick = ((ulong)(frame + 1)), });
+            var shown = scene.Produce(footprints: filmed, roots: MainRoot);
+
+            Assert.NotEqual(expected: previous, actual: scene.Recorders.Of(instance: "camera").OutputImage);
+            Assert.Equal(expected: previous, actual: shown.ImageHandle);
+        }
+
+        scene.Gpu.ReadbackSupported = true;
+        scene.Node(instance: "main").Paused = true;
+        scene.Node(instance: "camera").Frame = (scene.Node(instance: "camera").Frame with { StateTick = 9UL, });
+        var request = CaptureRequest();
+
+        scene.Runtime.RequestCapture(request: request);
+        _ = scene.Produce(footprints: filmed, roots: MainRoot);
+        Assert.True(condition: request.Completion.IsCompleted);
+        Assert.Null(@object: Outcome(request: request).Error);
+        Assert.Equal(expected: 8UL, actual: Outcome(request: request).Tick);
+    }
     /// <summary>A root reads its own previous frame through a pass that draws over it. Once the pass would draw nothing,
     /// standing for that previous image would publish an image the root renders into again a few frames later, so the pass
     /// is told it may not stand in and draws: the root keeps a completed image of its own every frame, never
@@ -149,6 +221,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
             expected: (served, read),
             collection: scene.Gpu.CopiedImages
         );
+        Assert.True(condition: scene.Runtime.TryLatestImage(image: out var published, instance: "main"));
+        Assert.Equal(expected: read, actual: published.ImageHandle);
+
+        for (var frame = 0; (frame < 4); frame++) {
+            Assert.Equal(expected: read, actual: scene.Produce(footprints: filmed, roots: MainRoot).ImageHandle);
+        }
     }
     /// <summary>A view stands for the camera, and a kept root's installed graph reads the view. A reconfiguration retires
     /// both while the root's replacement waits in the driver: the root keeps sampling the image it bound, the camera's,

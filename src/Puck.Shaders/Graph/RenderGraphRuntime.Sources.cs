@@ -233,6 +233,7 @@ public sealed partial class RenderGraphRuntime {
             Frame: frame,
             Image: surface,
             Layout: node.PublishedLayout,
+            StateTick: node.PublishedStateTick,
             StandsFor: Standing.Own,
             Tainted: false
         );
