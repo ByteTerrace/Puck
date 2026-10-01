@@ -24,6 +24,12 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <summary>Gets this frame's footprints: the synthesized root showing the world, then each pane at its slot's
     /// extent. The render root reads this list, which the host rewrites in place every frame.</summary>
     public IReadOnlyList<RenderGraphFootprint> Footprints => m_footprints;
+    /// <summary>Gets the instances the host names whether or not the display shows them this frame: every camera and
+    /// session view a screen, a HUD frame or a probe export is bound to, parked or not. A seat's view and a pane are named
+    /// by the footprints the root shows them through, while their seat is presented or a layout slot places them; the
+    /// runtime releases the graph of an instance nothing names (<see cref="RenderGraphFrame.Named"/>). The host rewrites
+    /// the list in place whenever the set is composed again.</summary>
+    public IReadOnlyList<string> Named => m_named;
     /// <summary>Gets the views the display shows directly beside the root, a HUD frame's or a probe export's camera, each
     /// at the fraction of the display its declared extent covers. The host rewrites the list in place whenever the set is
     /// composed again.</summary>
@@ -254,6 +260,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
     private readonly Dictionary<string, Entry> m_entries = new(comparer: StringComparer.Ordinal);
     private readonly List<RenderGraphFootprint> m_footprints = [];
+    private readonly List<string> m_named = [];
     private readonly Dictionary<string, RenderGraphPlacement> m_placements = new(comparer: StringComparer.Ordinal);
 
     // Whether this frame's lone whole-display view is shown only so its place pass applies the tonemap: the display shows
@@ -1197,6 +1204,12 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             set: set
         );
         m_screenFootprints.AddRange(collection: DisplayFootprints(scene: scene));
+        m_named.Clear();
+
+        foreach (var view in rendered.Views) {
+            m_named.Add(item: view.Name);
+        }
+
         m_roots.Clear();
 
         foreach (var view in rendered.Views) {

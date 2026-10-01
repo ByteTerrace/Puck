@@ -81,7 +81,8 @@ public static class GpuWorkReport {
         );
     }
     /// <summary>Appends one node's lines: <c>node &lt;name&gt; </c> followed by its newest completed submission's lines
-    /// (<see cref="AppendCompleted"/>), then, when the node counts object lifetimes, its lifetime line.</summary>
+    /// (<see cref="AppendCompleted"/>), then, when the node counts object lifetimes, its lifetime line, then, when it reports
+    /// them, <c>owned-bytes=N</c> on a line of its own.</summary>
     /// <param name="builder">The text to append to.</param>
     /// <param name="node">The node to write.</param>
     /// <param name="sample">The caller's sample, overwritten by the read.</param>
@@ -98,16 +99,20 @@ public static class GpuWorkReport {
             source: node.Work
         );
 
-        return ((node.Lifetime is { } lifetime)
-            ? AppendLifetime(
+        if (node.Lifetime is { } lifetime) {
+            _ = AppendLifetime(
                 builder: builder,
                 source: lifetime
-            )
+            );
+        }
+
+        return ((node.OwnedBytes is { } owned)
+            ? builder.Append(value: "owned-bytes=").Append(value: owned).Append(value: '\n')
             : builder
         );
     }
     /// <summary>Writes one node as the JSON object
-    /// <c>{"name":…,"sample":{"submission":S,"revision":R,"passes":[{"label":…,"class":"deterministic|per-backend-deterministic","state":"executed|skipped|not-reached","counts":{…}}],"outside":{…}}|null,"lifetime":{…}|null}</c>.
+    /// <c>{"name":…,"sample":{"submission":S,"revision":R,"passes":[{"label":…,"class":"deterministic|per-backend-deterministic","state":"executed|skipped|not-reached","counts":{…}}],"outside":{…}}|null,"lifetime":{…}|null,"owned-bytes":N|null}</c>.
     /// A pass's <c>class</c> is <see cref="GpuWorkSample.GetPassClass"/>. A pass that did not execute carries no
     /// <c>counts</c>; <c>sample</c> is <see langword="null"/> while no submission has completed.</summary>
     /// <param name="writer">The writer to write to.</param>
@@ -141,6 +146,14 @@ public static class GpuWorkReport {
                 source: lifetime,
                 writer: writer
             );
+        } else {
+            writer.WriteNullValue();
+        }
+
+        writer.WritePropertyName(propertyName: "owned-bytes");
+
+        if (node.OwnedBytes is { } owned) {
+            writer.WriteNumberValue(value: owned);
         } else {
             writer.WriteNullValue();
         }

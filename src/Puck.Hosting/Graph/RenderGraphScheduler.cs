@@ -55,6 +55,8 @@ public static class RenderGraphScheduler {
             Height = new int[count];
             IsRoot = new bool[count];
             PositionOf = new int[count];
+            Reached = new bool[count];
+            Named = new bool[count];
             Price = new long[count];
             Passes = new int[count];
             ScaleHeight = new double[count];
@@ -87,6 +89,12 @@ public static class RenderGraphScheduler {
         public int[] Passes { get; }
         public int[] PositionOf { get; }
         public long[] Price { get; }
+        // Whether something the display shows reaches the instance through what it shows, whether or not those
+        // consumers render this frame.
+        public bool[] Reached { get; }
+        // Whether the frame names the instance: what it shows, what the host names whether or not it is shown, and what
+        // either shows or reads at any extent.
+        public bool[] Named { get; }
         public double[] ScaleHeight { get; }
         public double[] ScaleWidth { get; }
         public List<Shown>[] Shows { get; }
@@ -107,6 +115,8 @@ public static class RenderGraphScheduler {
             Array.Clear(array: Height);
             Array.Clear(array: IsRoot);
             Array.Clear(array: Price);
+            Array.Clear(array: Reached);
+            Array.Clear(array: Named);
             Array.Clear(array: ScaleHeight);
             Array.Clear(array: ScaleWidth);
             Array.Clear(array: Width);
@@ -314,6 +324,30 @@ public static class RenderGraphScheduler {
             }
 
             forced[index] = true;
+        }
+    }
+    // Marks each instance the host names, refusing a name that is no instance; a frame naming none names every instance.
+    private static void Names(RenderGraphInstanceSet set, RenderGraphFrame frame, bool[] named) {
+        if (frame.Named is not { } names) {
+            Array.Fill(
+                array: named,
+                value: true
+            );
+
+            return;
+        }
+
+        for (var position = 0; (position < names.Count); position++) {
+            var index = set.IndexOf(name: (names[position] ?? string.Empty));
+
+            if (index < 0) {
+                throw new ArgumentException(
+                    message: $"Named '{names[position]}' names no instance.",
+                    paramName: nameof(frame)
+                );
+            }
+
+            named[index] = true;
         }
     }
     private static void Unchangeds(RenderGraphInstanceSet set, RenderGraphFrame frame, bool[] unchanged) {
@@ -547,6 +581,14 @@ public static class RenderGraphScheduler {
             frame: frame,
             set: set,
             unchanged: unchanged
+        );
+
+        var named = work.Named;
+
+        Names(
+            frame: frame,
+            named: named,
+            set: set
         );
 
         var divisor = work.Divisor;
@@ -793,6 +835,74 @@ public static class RenderGraphScheduler {
             admitted[index] = read;
         }
 
+        // An instance a decided consumer shows or reads stays waiting while that consumer does not render this frame, and so
+        // does everything it shows in turn: only an instance nothing the display shows reaches is unread.
+        var reached = work.Reached;
+        var grew = true;
+
+        Array.Copy(
+            destinationArray: reached,
+            length: count,
+            sourceArray: decided
+        );
+
+        while (grew) {
+            grew = false;
+
+            for (var position = (count - 1); (position >= 0); position--) {
+                var index = set.Order[position];
+
+                if (!reached[index]) {
+                    continue;
+                }
+
+                foreach (var entry in shown[index]) {
+                    if (!reached[entry.Producer]) {
+                        reached[entry.Producer] = true;
+                        grew = true;
+                    }
+                }
+            }
+        }
+
+        // An instance stays named while anything named shows or reads it, at any extent, whether or not it is shown this
+        // frame: only one neither reached nor named is unnamed, and a frame naming none names every instance.
+        if (frame.Named is not null) {
+            var footprints = frame.Footprints;
+
+            for (var index = 0; (index < count); index++) {
+                named[index] |= reached[index];
+            }
+
+            grew = true;
+
+            while (grew) {
+                grew = false;
+
+                for (var position = 0; (position < footprints.Count); position++) {
+                    var consumer = set.IndexOf(name: footprints[position].Consumer);
+                    var producer = set.IndexOf(name: footprints[position].Producer);
+
+                    if (named[consumer] && !named[producer]) {
+                        named[producer] = true;
+                        grew = true;
+                    }
+                }
+                for (var index = 0; (index < count); index++) {
+                    if (!named[index]) {
+                        continue;
+                    }
+
+                    foreach (var entry in shown[index]) {
+                        if (!named[entry.Producer]) {
+                            named[entry.Producer] = true;
+                            grew = true;
+                        }
+                    }
+                }
+            }
+        }
+
         var rows = schedule.InstanceRows;
         var renders = schedule.RenderRows;
         var reads = schedule.ReadRows;
@@ -819,7 +929,11 @@ public static class RenderGraphScheduler {
                         ? (RefusesRate(frame: frame, index: index, sourceState: sourceState)
                             ? RenderGraphInstanceStatus.Refused
                             : RenderGraphInstanceStatus.Waiting)
-                        : RenderGraphInstanceStatus.Unread)))
+                        : (reached[index]
+                            ? RenderGraphInstanceStatus.Waiting
+                            : (named[index]
+                                ? RenderGraphInstanceStatus.Unread
+                                : RenderGraphInstanceStatus.Unnamed)))))
             ;
 
             following.Latest[index] = (admitted[index]

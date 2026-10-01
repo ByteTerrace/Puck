@@ -1280,10 +1280,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         );
     }
     private void Release(bool wait) {
-        // A build in flight creates objects on the device being released, so it is waited out and discarded first.
-        m_build.CancelAndWait(discard: static built => built.Dispose());
-        m_buildKey = default;
-        CancelPreviewBuild();
+        CancelBuilds();
         // A node that never allocated submitted nothing, so it drains nothing and touches no device context.
         if (
             wait &&
@@ -1292,6 +1289,20 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             WaitAll();
             m_device.WaitIdle();
         }
+        ReleaseGraph();
+        ReleaseRegions();
+        ReleaseRegionCopy();
+    }
+    // A build in flight creates objects on the device being released, so it is waited out and discarded first.
+    private void CancelBuilds() {
+        m_build.CancelAndWait(discard: static built => built.Dispose());
+        m_buildKey = default;
+        CancelPreviewBuild();
+    }
+    // Disposes the installed graph and everything that follows it: timing, cadence recovery, objects waiting to retire,
+    // leases, binding holds, the preview, readback and encoder, and the frame slots. The regions and the region-copy
+    // pipeline the host's bindings rest on are the caller's to release.
+    private void ReleaseGraph() {
         ReleaseTiming();
         ReleaseCadenceRecovery();
         DisposeGraph(
@@ -1301,8 +1312,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         ReleaseRetired();
         RetireAllLeases();
         RetireBindingHolds();
-        ReleaseRegions();
-        ReleaseRegionCopy();
+        // The installed graph's copy pool went with its first pass, and the copies a frame owed with its slots.
+        m_regionCopies = null;
+        m_copyRecording = null;
         // The published images were the released graph's or held from one, so nothing stays published.
         m_lastSurface = default;
         m_publishedStateTick = null;

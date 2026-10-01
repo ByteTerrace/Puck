@@ -458,7 +458,27 @@ presentation after them; only the copies of the regions the passes wrote record
 in a list of their own, submitted first. A
 `RenderGraphRuntimeGraph` binds each external version to a producer instance;
 the runtime binds it to the frame of that producer's output the schedule
-names, and to a transparent-black stand-in while the producer has none. A
+names, and to a transparent-black stand-in while the producer has none.
+
+An instance nothing names any more is unnamed in the schedule, and the runtime
+releases its graph. Naming is structural: the roots, whatever the host names in
+`RenderGraphFrame.Named` (the World names every camera and session view a
+screen, HUD frame or probe export is bound to, parked or not), and whatever a
+named instance shows or reads at any extent. A seat's view is named while its
+seat is presented, through the footprint the root places it with, and a pane
+while a layout slot places it. A frame that names nothing (`Named` null) names
+every instance, so the runtime releases none. The release frees the instance's
+targets, history, buffers, descriptor sets and frame slots once the device has
+finished every submission that may read them, and keeps its node, installed
+pipeline and host-bound regions. The next frame something names and shows the
+instance, it rebuilds at the extent it is shown at, with fresh history, while
+its readers bind the stand-in. An instance that is named but not shown this
+frame, such as a screen out of view, is unread and keeps everything, so it shows
+its last image the moment it is shown again; so does one a frame only skips,
+because its refresh is not due, the budget defers it or every consumer that
+shows it is waiting.
+
+A
 bound image may have any extent, but its format must be the one its producer
 publishes, and a bound buffer may be no larger than its producer's; the
 runtime refuses a mismatch by name when it installs. A package recorder's
@@ -669,7 +689,9 @@ untonemapped. `world.counters gpu` counts every graph instance under its
 instance name: `world` is the first view's node, whose passes are
 `sdf.world$sky` through `sdf.world$views`, `main` the scene's node, whose
 passes are the place and post passes, `main$overlay` the overlay's, and each
-pane its own node. It counts
+pane its own node. Each graph instance's node also reports `owned-bytes`, the
+bytes of every GPU resource it owns now, which falls to zero while the instance
+is unnamed. It counts
 each residency's upload beside them: the world's as `sdf:world`, and each
 session or routed scene's as `sdf:<name>`. Camera instances share the world's
 upload and tables; their passes and scratch count under their instance names.
