@@ -129,8 +129,8 @@ public sealed class CreationBakeLawTests {
     public void BakingOneCreationTwiceGivesOneKeyAndTheSameBytes() {
         var request = WorldBakeStore.RequestsOf(definition: Definition(), quality: SdfBakeQuality.Preview)[0];
         var again = WorldBakeStore.RequestsOf(definition: Definition(), quality: SdfBakeQuality.Preview)[0];
-        var first = WorldBakeStore.Bake(request: request, work: out var work);
-        var second = WorldBakeStore.Bake(request: again, work: out _);
+        var first = WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: request, work: out var work);
+        var second = WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: again, work: out _);
 
         Assert.Equal(expected: request.Key, actual: again.Key);
         Assert.Equal(expected: request.Key.Pin, actual: again.Key.Pin);
@@ -143,7 +143,7 @@ public sealed class CreationBakeLawTests {
     public void TheCodecRefusesAnImpostorTextureInAnotherUsagesSlot() {
         var request = WorldBakeStore.RequestsOf(definition: Definition(), quality: SdfBakeQuality.Preview)[0];
 
-        Assert.True(condition: CreationBakeCodec.TryDecode(bake: out var bake, content: WorldBakeStore.Bake(request: request, work: out _), refusal: out _));
+        Assert.True(condition: CreationBakeCodec.TryDecode(bake: out var bake, content: WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: request, work: out _), refusal: out _));
 
         var swapped = CreationBakeCodec.Encode(bake: (bake with { Impostor = (bake.Impostor with { Depth = bake.Impostor.Emission, Emission = bake.Impostor.Depth }) }));
 
@@ -193,6 +193,34 @@ public sealed class CreationBakeLawTests {
         Assert.True(condition: later.HasReconciled);
         Assert.False(condition: later.Ships);
     }
+    /// <summary>A disposed schedule writes nothing more under its store's directory, so the directory's owner may delete
+    /// it: the bake it was running stops at its next field evaluation, and disposal returns once it has. Red leg: a
+    /// schedule that only signals its bake leaves it to finish and keep its outcome after disposal.</summary>
+    [Fact]
+    public void ADisposedScheduleWritesNothingMoreUnderItsStore() {
+        using var directory = new TemporaryDirectory();
+        var definition = Definition();
+        var store = directory.PathOf(name: "bakes");
+
+        using (var schedule = new WorldBakeSchedule(quality: SdfBakeQuality.Preview, store: new WorldBakeStore(directory: store))) {
+            schedule.Pump(definition: definition);
+            Assert.True(condition: schedule.IsBusy);
+        }
+
+        var disposed = Entries(directory: store);
+
+        // Baking every prototype here takes at least as long as the one bake the schedule started would.
+        foreach (var request in WorldBakeStore.RequestsOf(definition: definition, quality: SdfBakeQuality.Preview)) {
+            _ = WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: request, work: out _);
+        }
+
+        Assert.Equal(expected: disposed, actual: Entries(directory: store));
+    }
+
+    private static string[] Entries(string directory) => (Directory.Exists(path: directory)
+        ? [.. Directory.EnumerateFileSystemEntries(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*").Order(comparer: StringComparer.Ordinal)]
+        : []);
+
     /// <summary>A ready bake draws in place of its field, and the switch is counted once. Before its bake lands, a
     /// placement draws through its field: no mesh draw, and a camera-visible instance. Once the bake is ready it draws
     /// the baked mesh, with its instance camera-hidden so its field still casts shadows and occludes. A creation whose
@@ -284,7 +312,7 @@ public sealed class CreationBakeLawTests {
 
         foreach (var request in WorldBakeStore.RequestsOf(definition: boot.Admission.Definition, quality: WorldBakeChunk.Quality)) {
             Assert.True(condition: store.TryGetHeld(key: request.Key.Pin, outcome: out var loaded));
-            Assert.Equal(expected: WorldBakeStore.Bake(request: request, work: out _), actual: loaded.ToArray());
+            Assert.Equal(expected: WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: request, work: out _), actual: loaded.ToArray());
         }
 
         using var schedule = new WorldBakeSchedule(store: store);
@@ -449,8 +477,8 @@ public sealed class CreationBakeLawTests {
         var request = WorldBakeStore.RequestsOf(definition: Definition(), quality: SdfBakeQuality.Preview)[0];
         var other = WorldBakeStore.RequestsOf(definition: Definition(), quality: SdfBakeQuality.Preview)[2];
         var outcomes = new[] {
-            KeyValuePair.Create(key: request.Key.Pin, value: ((ReadOnlyMemory<byte>)WorldBakeStore.Bake(request: request, work: out _))),
-            KeyValuePair.Create(key: other.Key.Pin, value: ((ReadOnlyMemory<byte>)WorldBakeStore.Bake(request: other, work: out _))),
+            KeyValuePair.Create(key: request.Key.Pin, value: ((ReadOnlyMemory<byte>)WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: request, work: out _))),
+            KeyValuePair.Create(key: other.Key.Pin, value: ((ReadOnlyMemory<byte>)WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: other, work: out _))),
         };
         var pack = WorldBakePack.Encode(outcomes: outcomes);
 

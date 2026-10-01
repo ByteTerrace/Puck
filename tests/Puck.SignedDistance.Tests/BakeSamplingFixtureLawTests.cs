@@ -42,6 +42,7 @@ public sealed class BakeSamplingFixtureLawTests {
         _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: 0.45f, z: 0f)).Sphere(material: 1, radius: 0.3f);
 
         return SdfBaker.Bake(
+            cancellationToken: TestContext.Current.CancellationToken,
             center: Vector3.Zero,
             materials: Materials,
             program: builder.Build(buildInstanceGrid: false),

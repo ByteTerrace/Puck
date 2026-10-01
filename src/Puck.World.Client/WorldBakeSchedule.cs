@@ -228,10 +228,11 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     /// <exception cref="ArgumentException"><paramref name="kind"/> is not one of <see cref="Kinds"/>.</exception>
     public long Read(WorkKind kind) =>
         m_counts.Read(kind: kind);
-    /// <summary>Cancels the running bake without waiting for it, so a shutdown never waits out a bake. A bake that
-    /// finishes anyway only fills the store, which outlives the schedule.</summary>
+    /// <summary>Cancels the running bake and waits for it to stop. A bake stops at its next field evaluation, so a
+    /// shutdown never waits out a bake, and once this returns nothing the schedule started writes under the store's
+    /// directory, which its owner may then delete.</summary>
     public void Dispose() =>
-        m_build.Cancel();
+        m_build.CancelAndWait();
 
     private readonly record struct Outcome(ContentPin Key, bool Baked, bool Refusal, long Evaluations);
 
@@ -295,7 +296,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
                 continue;
             }
 
-            var bytes = WorldBakeStore.Bake(request: request, work: out var work);
+            var bytes = WorldBakeStore.Bake(cancellationToken: token, request: request, work: out var work);
 
             _ = store.Keep(key: key, outcome: bytes);
             outcomes.Add(item: new Outcome(Baked: true, Evaluations: work.FieldEvaluations, Key: key, Refusal: (bytes[0] == 0)));
