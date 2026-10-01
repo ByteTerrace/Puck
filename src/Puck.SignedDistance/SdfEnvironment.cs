@@ -590,8 +590,8 @@ public sealed class SdfEnvironment {
         z: m_lanes[((row * 4) + 2)]
     );
 
-    // Sets one lane. Private, so the table's own setters are its only writers: a light's transform slot reaches its
-    // lane only through SetLight's range check.
+    // Sets one lane for the table's setters. Individual light writes go through SetLight's range check;
+    // CopyFrom also imports complete lane tables.
     private void SetLane(int row, int lane, float value) => m_lanes[((row * 4) + lane)] = value;
 
     /// <summary>Sets one light and, when it shadows, makes it the shadow light.</summary>
