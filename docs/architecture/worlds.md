@@ -787,10 +787,48 @@ and enters its ordered domain; it never reads wall clock or compares raw tick or
 with different rates. Abort restores each body's original pose/state, not merely source spawn. The
 source releases authority only after destination acknowledgement.
 
+The handoff token is the source-scoped transfer key: the source's authority identity and the transfer
+id it minted. Three fences hold it. The traveler's ownership epoch admits one commit per epoch, so a
+reservation for an epoch the destination has already consumed is refused as stale. The
+destination's lease deadline refuses a commit after it expires. The destination's crossing log
+refuses an append from an activation its store has fenced off, so a superseded destination cannot
+commit. An exact replay of a committed token is answered as committed, including by a destination
+rebuilt from its checkpoint and log; the same token carrying a different commit is refused.
+
+Every crossing step a peer can see is written ahead to the authority's crossing log
+(`IWorldCrossingLog`) before the step happens:
+
+| Authority | Record | Written before |
+|---|---|---|
+| Source | departure: the complete in-doubt recovery record | the commit is sent |
+| Destination | arrival: the reservation, its body indices and the commit | the commit is answered |
+| Source | settlement: arrived, with its forwarding routes | the arrival is acknowledged |
+| Source | settlement: stayed | the cohort is restored home |
+
+A record that does not land refuses its step: the source aborts and keeps the cohort, the
+destination lands nothing, and a settlement stays pending until it lands. Each authority numbers its
+records in one dense sequence that every checkpoint captures. A restarted authority restores its
+latest checkpoint and redoes, in order, every record past it. An arrival lands again through the
+escrow, a departure detaches its cohort again and puts the transfer back in doubt, and a settlement
+publishes the forwarding routes or restores the cohort. The ordinary drain then reconciles the
+transfer with its peer. Whichever step a death interrupts, the traveler ends either arrived or never
+departed, and never on both authorities. A hosted silo row writes its records into its fenced
+authority journal beside its mutations. A desktop process installs no log, so its crossings live
+only as long as the process.
+
 Resolution and transfer are ordered authority events, not untaped host side effects. Generation ids
 issue from a counter in the target resolver's ordered domain, recorded before they are exposed—a
 pure function of event order. Wall time, UUIDs and discovery order never decide identity. A
 remote-issued id enters the source as a verified foreign value at a named tape boundary.
+
+An arrival is taped by its destination. The destination's tape records the reservation, body indices
+and commit as one entry and lands it again through the shadow's own escrow at the tick it landed. It
+also records the federated device images that forwarded and federated travelers drive the authority
+with, because that input reaches the authority through no loopback. `replay.record` tapes every row
+of the process beside the boot row in one file. Verification replays the tape and every companion a
+crossing involves, and pairs every crossing's departure with its arrival by handoff token. A
+crossing whose other half is on a remote authority, or on a row nothing taped, is reported as not
+verified, and `replay.verify` fails.
 
 Each authority tape records the initial authored rate and every ordered rate write, pause and resume
 that changes which steps occur. Replay drives from the tape's recorded rate history and refuses a
@@ -821,10 +859,10 @@ and frame compatibility, and the crossing record—so a lying destination cannot
 the wrong size. It rides the trust tiers rather than adding a second trust list.
 
 **A vanished source needs no reaper at the destination.** The body is the source's until commit, so
-transfer durability is the source journal's durability, and a reservation held for a source that dies
-expires at its deadline with capacity released. What dies with a host is in-world body state only:
-identity and its attested facts—items, currency, achievements—live on the identity document, so a
-player loses position rather than possessions.
+transfer durability is the source's crossing log, and a reservation held for a source that dies
+before its departure is durable expires at its deadline with capacity released. What dies with a
+host is in-world body state only: identity and its attested facts—items, currency, achievements—live
+on the identity document, so a player loses position rather than possessions.
 
 For population-backed admission, the connection receives a body index, so its
 principal and body arrive together. During transfer, the source authority holds

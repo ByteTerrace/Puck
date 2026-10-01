@@ -103,7 +103,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] The playthrough substrate remainder; composed play.
 - [ ] The content wave and the One World re-authoring; the seat; parties and matching.
 - [ ] The federation wave; admission and release; MCP's remote surface; the gated ladder.
-- [ ] The federation remainder; `Puck.Audio`.
+- [ ] The federation remainder (durable crossings, destination tapes, and multi-authority replay within one process are in); `Puck.Audio`.
 - [ ] Housekeeping, last: the client seam, the signing chain, namespace normalization.
 - [ ] Owner-run: the live smoke against `Web.Functions`, the feel sitting.
 
