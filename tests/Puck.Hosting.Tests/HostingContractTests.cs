@@ -271,6 +271,51 @@ public sealed class HostingContractTests {
             expected: 1
         );
     }
+    [InlineData(GpuPixelFormat.R16G16B16A16Float)]
+    [InlineData(GpuPixelFormat.R32G32B32A32Float)]
+    [Theory]
+    public void CpuFloatPixelsAreEncodedBeforeTheCaptureSinkSeesThem(GpuPixelFormat format) {
+        using var sink = new CountingCaptureSink();
+        using var controller = new FrameCaptureController();
+        var context = FrameContext(elapsedTicks: 7UL);
+        var working = Surface.CpuPixels(
+            format: format,
+            height: 1U,
+            pixels: new byte[Surface.RequiredByteLength(format: format, height: 1U, width: 1U)],
+            width: 1U
+        );
+        var readback = new RecordingReadback(format: GpuPixelFormat.R8G8B8A8Unorm);
+
+        controller.Arm(options: new CaptureOptions { MaxFrames = 1 }, sink: sink);
+        controller.Capture(context: in context, readback: readback, surface: working);
+
+        Assert.Null(@object: controller.Fault);
+        Assert.Equal(expected: working, actual: readback.LastSurface);
+        Assert.Equal(expected: 1, actual: sink.Count);
+        Assert.Equal(expected: GpuPixelFormat.R8G8B8A8Unorm, actual: sink.LastFrame.Surface.Format);
+        Assert.Equal(expected: new byte[] { 0, 0, 0, 255 }, actual: sink.LastFrame.Surface.Pixels.ToArray());
+    }
+    [InlineData(GpuPixelFormat.R16G16B16A16Float)]
+    [InlineData(GpuPixelFormat.R32G32B32A32Float)]
+    [Theory]
+    public void AReadbackThatReturnsUnencodedFloatPixelsNeverReachesTheCaptureSink(GpuPixelFormat format) {
+        using var sink = new CountingCaptureSink();
+        using var controller = new FrameCaptureController();
+        var context = FrameContext(elapsedTicks: 7UL);
+        var working = Surface.CpuPixels(
+            format: format,
+            height: 1U,
+            pixels: new byte[Surface.RequiredByteLength(format: format, height: 1U, width: 1U)],
+            width: 1U
+        );
+
+        controller.Arm(options: new CaptureOptions { MaxFrames = 1 }, sink: sink);
+        controller.Capture(context: in context, readback: new PassthroughReadback(), surface: working);
+
+        Assert.IsType<InvalidOperationException>(@object: controller.Fault);
+        Assert.Equal(expected: 0, actual: sink.Count);
+        Assert.False(condition: controller.WantsFrames);
+    }
     [InlineData(0, 0)]
     [InlineData(30, -1)]
     [Theory]
@@ -322,6 +367,9 @@ public sealed class HostingContractTests {
 
             throw new InvalidOperationException(message: "readback fault");
         }
+    }
+    private sealed class PassthroughReadback : IPresentSurfaceReadback {
+        public Surface ReadSurface(Surface surface) => surface;
     }
     // Reads a surface back as one opaque black pixel in the source's format, or in the format it is told to answer in.
     private sealed class RecordingReadback(GpuPixelFormat? format = null) : IPresentSurfaceReadback {

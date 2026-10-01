@@ -33,7 +33,8 @@ namespace Puck.Platform.Windows;
 /// The captured display decides the frames' format and color space once, at open (<see cref="Output"/>,
 /// <see cref="CaptureOutputOf"/>): an SDR display is captured in B8G8R8A8 sRGB, and an HDR display in half-float scRGB,
 /// which keeps its luminance above SDR white where an 8-bit capture would clip it. An HDR capture rides the CPU path
-/// alone, since the shared targets are B8G8R8A8.
+/// alone, since the shared targets are B8G8R8A8. An HDR toggle, a move to a display that differs in it, or failed display
+/// discovery ends the feed; its consumer reopens it with the current display contract.
 /// </para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.19041")]
@@ -142,13 +143,14 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     private readonly TypedEventHandler<Direct3D11CaptureFramePool, object> m_frameArrivedHandler;
 
     private readonly object m_lifetimeGate = new();
+    private readonly Lock m_livenessGate = new();
 
     private readonly uint m_ownerProcessId;
     private readonly uint m_ownerThreadId;
 
     private readonly Lock m_publicationGate = new();
 
-    private readonly DisplayOutput m_output;
+    private readonly Win32CaptureDisplay m_display;
     private readonly long m_refreshPeriodTicks;
     private readonly TypedEventHandler<GraphicsCaptureItem, object> m_targetClosedHandler;
     private readonly nint m_targetHandle;
@@ -185,22 +187,30 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             // GraphicsCaptureItem.Closed is the fast path, but Win32 destruction can precede that callback by an
             // unbounded compositor delay. Consumers poll this property, so also retire a window feed once its owner
             // window is gone. The HWND alone is unreliable — Win32 recycles handles — so the fallback also matches the
-            // owning process/thread, and is rate-limited to keep the per-poll syscall cost off the hot path. A monitor
-            // target has no owner window; disconnect surfaces through GraphicsCaptureItem.Closed, which latches m_isEnded.
+            // owning process/thread. A monitor target has no owner window; disconnect surfaces through
+            // GraphicsCaptureItem.Closed, which latches m_isEnded. The same rate-limited check ends either target once its
+            // display's capture would take another format or encoding (an HDR toggle, or a move to a display that differs
+            // in it), and publication and consumption share its gate so they never race the discovery state.
             if (m_isEnded) {
                 return true;
             }
 
-            var now = Environment.TickCount64;
-
-            if ((now - m_lastLivenessCheckTicks) >= LivenessCheckIntervalMilliseconds) {
-                m_lastLivenessCheckTicks = now;
-                if (!IsTargetAlive()) {
-                    m_isEnded = true;
+            lock (m_livenessGate) {
+                if (m_isEnded) {
+                    return true;
                 }
-            }
 
-            return m_isEnded;
+                var now = Environment.TickCount64;
+
+                if ((now - m_lastLivenessCheckTicks) >= LivenessCheckIntervalMilliseconds) {
+                    m_lastLivenessCheckTicks = now;
+                    if (!IsTargetAlive() || !m_display.IsCurrent(colorSpace: Win32D3D11.ColorSpaceOfMonitor(monitorHandle: MonitorHandle()))) {
+                        EndAndScheduleDispose();
+                    }
+                }
+
+                return m_isEnded;
+            }
         }
     }
     /// <inheritdoc/>
@@ -208,7 +218,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     /// none.</remarks>
     public ISourcePassthroughWindow? Window { get; }
     /// <inheritdoc/>
-    public DisplayOutput Output => m_output;
+    public DisplayOutput Output => m_display.Output;
     /// <inheritdoc/>
     public int SourceWidth => Volatile.Read(location: ref m_sourceWidth);
     /// <inheritdoc/>
@@ -235,7 +245,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     public void AttachGpuTargets(NativeImageGpuCaptureTargets targets) {
         ArgumentNullException.ThrowIfNull(argument: targets);
 
-        if (m_output.IsHdr) {
+        if (Output.IsHdr) {
             throw new NotSupportedException(message: "An HDR capture's frames are half-float scRGB, which the B8G8R8A8 shared targets cannot hold; it converts through its CPU path.");
         }
 
@@ -328,6 +338,9 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             (processId == m_ownerProcessId)
         );
     }
+    private nint MonitorHandle() => ((m_targetKind == CaptureTargetKind.Monitor)
+        ? m_targetHandle
+        : User32.MonitorFromWindow(flags: MonitorDefaultToNearest, windowHandle: m_targetHandle));
 
     private Win32GraphicsCaptureFeed(CaptureTargetKind targetKind, nint targetHandle, int width, int height, double refreshRateHz, long? adapterLuid) {
         m_targetHandle = targetHandle;
@@ -341,13 +354,8 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             );
             Window = new Win32PassthroughWindow(windowHandle: targetHandle);
         }
-        m_output = CaptureOutputOf(display: Win32D3D11.ColorSpaceOfMonitor(monitorHandle: ((targetKind == CaptureTargetKind.Monitor)
-            ? targetHandle
-            : User32.MonitorFromWindow(
-                flags: MonitorDefaultToNearest,
-                windowHandle: targetHandle
-            ))));
-        var outputByteLength = checked(((width * height) * ((int)GpuPixelFormats.UnitBytes(format: m_output.Format))));
+        m_display = new Win32CaptureDisplay(colorSpace: Win32D3D11.ColorSpaceOfMonitor(monitorHandle: MonitorHandle()));
+        var outputByteLength = checked(((width * height) * ((int)GpuPixelFormats.UnitBytes(format: Output.Format))));
 
         m_consumerPixels = GC.AllocateUninitializedArray<byte>(length: outputByteLength);
         m_publishedPixels = GC.AllocateUninitializedArray<byte>(length: outputByteLength);
@@ -362,7 +370,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         try {
             m_device = new Win32GraphicsCaptureDevice(
                 adapterLuid: adapterLuid,
-                format: m_output.Format
+                format: Output.Format
             );
             m_captureItem = CreateCaptureItem(
                 targetHandle: targetHandle,
@@ -382,7 +390,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             );
             m_framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
                 device: m_device.RuntimeDevice,
-                pixelFormat: FramePoolFormatOf(format: m_output.Format),
+                pixelFormat: FramePoolFormatOf(format: Output.Format),
                 numberOfBuffers: FramePoolBufferCount,
                 size: initialSize
             );
@@ -414,6 +422,11 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
 
     /// <inheritdoc/>
     public bool TryCapture(out Surface surface) {
+        if (IsEnded) {
+            surface = default;
+            return false;
+        }
+
         lock (m_publicationGate) {
             if (
                 !m_hasFrame ||
@@ -431,7 +444,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         }
 
         surface = Surface.CpuPixels(
-            format: m_output.Format,
+            format: Output.Format,
             height: checked((uint)m_targetHeight),
             pixels: m_consumerPixels,
             width: checked((uint)m_targetWidth)
@@ -535,6 +548,10 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         }
     }
     private void PumpFrame(Direct3D11CaptureFramePool sender) {
+        if (IsEnded) {
+            return;
+        }
+
         var resize = false;
         var contentSize = default(SizeInt32);
         var frame = sender.TryGetNextFrame();
@@ -675,7 +692,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         );
         m_framePool!.Recreate(
             device: m_device.RuntimeDevice,
-            pixelFormat: FramePoolFormatOf(format: m_output.Format),
+            pixelFormat: FramePoolFormatOf(format: Output.Format),
             numberOfBuffers: FramePoolBufferCount,
             size: size
         );

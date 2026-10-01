@@ -1432,7 +1432,10 @@ The engine ships four producers, each with its settings record in
 | `camera` | `sensor` (`Color`), `seat`, `profile`, `controls` | imported | external |
 | `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (a staged copy under Vulkan) | external |
 
-A capture reads the display it captures, decided once when it opens. An SDR
+A capture selects its format and encoding from its display when it opens. An
+HDR toggle, a move to a display that differs in it, or failed display discovery
+ends the feed, which the consumer reopens with fresh metadata; unknown discovery
+refuses the open. An SDR
 display is captured in B8G8R8A8 sRGB, which a Direct3D 12 host copies into
 shared targets the screen samples and a Vulkan host converts through
 `source-rgba`. An HDR display is captured in half-float scRGB on either host
