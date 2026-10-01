@@ -69,10 +69,25 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value holding the debug view mode, an index into the debug view names; zero renders the
     /// final image (<c>uint</c>).</summary>
     public const string DebugMode = "debugMode";
-    /// <summary>The pass-group value scaling the lit path's ambient terms (<c>float</c>).</summary>
-    public const string AmbientScale = "ambientScale";
-    /// <summary>The pass-group value scaling the lit path's sun term (<c>float</c>).</summary>
-    public const string SunScale = "sunScale";
+    /// <summary>The pass-group value holding the lights the lights table holds this frame, at most its records
+    /// (<c>uint</c>).</summary>
+    public const string LightCount = "lightCount";
+    /// <summary>The pass-group value holding the index of the light that drives the soft-shadow march, or −1 when none
+    /// does (<c>int</c>).</summary>
+    public const string ShadowLight = "shadowLight";
+    /// <summary>The pass-group value holding the curvature shading's cavity-darkening gain (<c>float</c>).</summary>
+    public const string CurvatureCavity = "curvatureCavity";
+    /// <summary>The pass-group value holding the curvature shading's rim gain (<c>float</c>).</summary>
+    public const string CurvatureRim = "curvatureRim";
+    /// <summary>The pass-group value holding the curvature shading's ink outline gain (<c>float</c>).</summary>
+    public const string CurvatureInk = "curvatureInk";
+    /// <summary>The pass-group value holding the curvature magnitude at which the ink outline starts (<c>float</c>).</summary>
+    public const string CurvatureInkLow = "curvatureInkLow";
+    /// <summary>The pass-group value holding the curvature magnitude at which the ink outline saturates
+    /// (<c>float</c>).</summary>
+    public const string CurvatureInkHigh = "curvatureInkHigh";
+    /// <summary>The pass-group value holding the ink outline's linear color (<c>float3</c>).</summary>
+    public const string CurvatureInkColor = "curvatureInkColor";
     /// <summary>The pass-group value selecting the slice debug view's plane: zero camera-locked, one to three the world
     /// X, Y or Z axis (<c>float</c>).</summary>
     public const string DebugSliceAxis = "debugSliceAxis";
@@ -135,12 +150,6 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value set to one to march past the beam's per-tile far bound to the far distance
     /// (<c>uint</c>).</summary>
     public const string DisableFarBound = "disableFarBound";
-    /// <summary>The pass-group block array holding the frame's environment, <c>SdfEnvironment</c>'s lane table row for row
-    /// with its host bakes, <see cref="EnvironmentRows"/> <c>float4</c> rows.</summary>
-    public const string Environment = "environment";
-    /// <summary>The rows of <see cref="Environment"/>: <c>SdfEnvironment.RowCount</c>, which the SDF engine holds it to
-    /// when it writes the block.</summary>
-    public const uint EnvironmentRows = 53;
     /// <summary>The program word stream.</summary>
     public const string ProgramWords = "sdfWords";
     /// <summary>The dynamic-transform table, three float4 rows per slot.</summary>
@@ -259,8 +268,9 @@ public static partial class SdfWorldPackage {
     public const string Color = "color";
 
     /// <summary>Gets the values every pass of the fragment reads from its pass block beside the extent, which the mesh
-    /// pass's interface shares so its block lies alike: the world values, the view, the frame's levers and its
-    /// environment.</summary>
+    /// pass's interface shares so its block lies alike: the world values, the view, the frame's levers, its light count
+    /// and shadow light, and its curvature shading. The lights and the sky are World-group tables the SDF engine's
+    /// kernel interface adds (<c>SdfKernelInterfaces</c>), bound only by the passes that read them.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Values { get; } = [
         Value(name: ImageExtent, type: ShaderValueType.Uint2),
         Value(name: InstanceMaskWordCount, type: ShaderValueType.Uint),
@@ -283,8 +293,14 @@ public static partial class SdfWorldPackage {
         Value(name: NearDistance, type: ShaderValueType.Float),
         Value(name: FarDistance, type: ShaderValueType.Float),
         Value(name: DebugMode, type: ShaderValueType.Uint),
-        Value(name: AmbientScale, type: ShaderValueType.Float),
-        Value(name: SunScale, type: ShaderValueType.Float),
+        Value(name: LightCount, type: ShaderValueType.Uint),
+        Value(name: ShadowLight, type: ShaderValueType.Int),
+        Value(name: CurvatureCavity, type: ShaderValueType.Float),
+        Value(name: CurvatureRim, type: ShaderValueType.Float),
+        Value(name: CurvatureInk, type: ShaderValueType.Float),
+        Value(name: CurvatureInkLow, type: ShaderValueType.Float),
+        Value(name: CurvatureInkHigh, type: ShaderValueType.Float),
+        Value(name: CurvatureInkColor, type: ShaderValueType.Float3),
         Value(name: DebugSliceAxis, type: ShaderValueType.Float),
         Value(name: DebugSliceOffset, type: ShaderValueType.Float),
         Value(name: GridFlags, type: ShaderValueType.Uint),
@@ -309,12 +325,6 @@ public static partial class SdfWorldPackage {
         Value(name: FastAmbientOcclusion, type: ShaderValueType.Uint),
         Value(name: DisableFarBound, type: ShaderValueType.Uint),
         ShaderWorkCounters.RowMember,
-        ShaderInterfaceMember.Value(
-            group: ShaderInterfaceGroup.Pass,
-            length: EnvironmentRows,
-            name: Environment,
-            type: ShaderValueType.Float4
-        ),
     ];
     /// <summary>Gets the World group's members: what every pass of every view reads alike, the residency's tables, the
     /// brick pool, the glyph atlas, the samplers and the mesh atlases (<see cref="MeshAtlases"/>), which the residency

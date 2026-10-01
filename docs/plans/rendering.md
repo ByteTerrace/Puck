@@ -5753,6 +5753,18 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `world.timeline`.
 4. **P18-4, the sky block, the lights table and generated decoders.** The
    environment leaves the pass blocks, and nothing it draws changes.
+   - Built, its GPU checks outstanding: the lights table (`SdfLight` records),
+     the sky block (`SdfSkyBlock`) and the sky's stops and softboxes
+     (`SdfSkyStop`, `SdfSoftbox`) are World-group regions whose HLSL structs
+     `puck shaders generate` writes from the C# types; `SdfLights` and `SdfSky`
+     hold the authored values and pack the records with their host bakes (the
+     disc's direction and exponent, the light the clouds are lit by). The pass
+     block keeps the light count, the shadow light and the curvature shading,
+     which the surface pass reads, and is 496 bytes. The lights table is
+     referenced by the shadow and views kernels, the sky block and stops by sky
+     and views, and the softboxes by views alone; `composite` joins the sky's
+     readers when P18-5 lands it. A star or cloud seed is exact now: the old
+     float rows rounded a seed past 2^24.
    - Delivers: the lights as a typed table (a World-group region of generated
      structs), the sky as a typed block (frame, layers, bodies, phases, the
      environment coefficients), both written as regions that owe only changed
@@ -6059,13 +6071,13 @@ fraction in live tiles, at least h.
 - **Bounded media.** Today a single volume re-renders every view every frame.
   After P18-2 and P18-6, `composite` alone, and only on frames whose presented
   tick moves.
-- **Pass-block size and binding.** Today the pass block is 1,120 bytes, 848 of
-  them the environment, written into each of 10 blocks: 11,200 bytes of
-  constant data per view per frame, every dispatch binding the whole block.
-  After P18-4 the block is about 272 bytes (about 2,720 per view per frame), and
-  the sky group and lights table are bound only by the passes that read them.
-  This is not an upload win: every region already uploads only the words that
-  changed, and the new tables do the same.
+- **Pass-block size and binding.** With P15-5's temporal values the pass block
+  was 1,296 bytes, 848 of them the environment, written into each of the
+  view's pass blocks, every dispatch binding the whole block. With P18-4 it is
+  496 bytes, of which 40 are the light count, the shadow light and the
+  curvature shading, and the lights and sky tables are referenced only by the
+  kernels that read them. This is not an upload win: every region already
+  uploads only the words that changed, and the new tables do the same.
 - **Clouds.** Today 128 hash evaluations per covered pixel (four thickness taps,
   two fractal sums of four octaves, four lattice corners) and 32 per clear one.
   At `low`, 24 per covered pixel, a fall of 81%.

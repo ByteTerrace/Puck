@@ -1,4 +1,4 @@
-// The star field, the cloud layer and the sky gradient.
+// The star field, the cloud layer and the sky gradient, read from the sky block (sdfSky) and its stops (sdfSkyStops).
 #ifndef SHADE_SDF_SKY_HLSLI
 #define SHADE_SDF_SKY_HLSLI
 // The star field's cell-grid domain is the octahedral sky projection (sdf-octahedral.hlsli).
@@ -120,7 +120,7 @@ float sdfCloudThickness(float2 p, float2 shearOffset, uint seed, float threshold
 
     return smoothstep(threshold, (threshold + softness), density);
 }
-float4 sdfCloudLayer(float3 direction, float3 color, float coverage, float softness, float scale, uint seed, float2 offset, float2 shearOffset, float spinAngle, float curl) {
+float4 sdfCloudLayer(float3 direction, float3 color, float coverage, float softness, float scale, uint seed, float2 offset, float2 shearOffset, float spinAngle, float curl, float3 sun, float3 sunColor) {
     if ((coverage <= 0.0) || (direction.y <= 0.0)) {
         return float4(0.0, 0.0, 0.0, 0.0);
     }
@@ -145,7 +145,6 @@ float4 sdfCloudLayer(float3 direction, float3 color, float coverage, float softn
     }
 
     // The sun in the layer's turned frame (the same rotation the layer point took), so the lighting follows the wind.
-    float3 sun = worldSunDirection();
     float2 sunTurned = float2(((sun.x * cosAngle) - (sun.z * sinAngle)), ((sun.x * sinAngle) + (sun.z * cosAngle)));
     float thicknessX = sdfCloudThickness((p + float2(CloudNormalTap, 0.0)), shearOffset, seed, threshold, softness);
     float thicknessY = sdfCloudThickness((p + float2(0.0, CloudNormalTap)), shearOffset, seed, threshold, softness);
@@ -154,7 +153,7 @@ float4 sdfCloudLayer(float3 direction, float3 color, float coverage, float softn
     float diffuse = saturate(dot(normal, normalize(float3(sunTurned.x, sun.y, sunTurned.y))));
     float shadow = (1.0 - (CloudSelfShadow * saturate(thicknessSunward - thickness)));
     float lining = ((CloudSilverLining * pow(saturate(dot(direction, sun)), 8.0)) * (1.0 - thickness));
-    float3 shade = ((color * (lerp(0.45, 1.0, diffuse) * shadow)) + (worldSunColor() * lining));
+    float3 shade = ((color * (lerp(0.45, 1.0, diffuse) * shadow)) + (sunColor * lining));
     float alpha = ((1.0 - exp(-(thickness * CloudOpacity))) * smoothstep(0.0, CloudHorizonFade, direction.y));
 
     return float4(shade, alpha);
@@ -162,7 +161,9 @@ float4 sdfCloudLayer(float3 direction, float3 color, float coverage, float softn
 // The sky's GRADIENT alone — what distance fog and the silhouette-edge blend fade toward. The sun disc, stars and
 // clouds are miss-pixel content (skyColor); folding them into fog would let a low sun bleed through a fogged floor.
 float3 skyGradient(float3 direction) {
-    if (!worldSkyEnabled()) {
+    SdfSkyBlock sky = sdfSky[0];
+
+    if (sky.Enabled == 0u) {
         // The pinned two-stop gradient, UNCHANGED from before render.sky existed: the identical instructions in the
         // identical order, so a world that never authors render.sky renders bit-identically.
         float t = clamp((0.5 * (direction.y + 1.0)), 0.0, 1.0);
@@ -172,65 +173,55 @@ float3 skyGradient(float3 direction) {
 
     // The authored stops, ascending in elevation (the validator orders them): piecewise-linear in direction.y,
     // clamped to the end stops beyond the first and last.
-    uint stops = worldSkyStopCount();
+    uint stops = sky.StopCount;
     float elevation = direction.y;
-    float4 previous = worldSkyStop(0u);
+    SdfSkyStop previous = sdfSkyStops[0];
 
-    if ((stops <= 1u) || (elevation <= previous.w)) {
-        return previous.rgb;
+    if (elevation <= previous.Elevation) {
+        return previous.Color;
     }
 
     [loop]
     for (uint index = 1u; (index < stops); index++) {
-        float4 next = worldSkyStop(index);
+        SdfSkyStop next = sdfSkyStops[index];
 
-        if (elevation <= next.w) {
-            float t = saturate((elevation - previous.w) / max((next.w - previous.w), 1.0e-5));
+        if (elevation <= next.Elevation) {
+            float t = saturate((elevation - previous.Elevation) / max((next.Elevation - previous.Elevation), 1.0e-5));
 
-            return lerp(previous.rgb, next.rgb, t);
+            return lerp(previous.Color, next.Color, t);
         }
 
         previous = next;
     }
 
-    return previous.rgb;
+    return previous.Color;
 }
 float3 skyColor(float3 direction) {
     float3 color = skyGradient(direction);
+    SdfSkyBlock sky = sdfSky[0];
 
-    if (!worldSkyEnabled()) {
+    if (sky.Enabled == 0u) {
         return color;
     }
 
-    // The sun disc: an additive pow(cosAngle, k) highlight about its light's direction. k is HOST-BAKED from the
-    // authored angular radius (SdfFrameBlock.BakeEnvironment) so this pays one pow() rather than deriving the
+    // The sun disc: an additive pow(cosAngle, k) highlight about its light's direction. The direction and k are
+    // host-baked (SdfSky.Pack), k from the authored angular radius, so this pays one pow() rather than deriving the
     // exponent from an angle per pixel.
-    int discLight = worldSkySunDiscLightIndex();
+    if (sky.DiscLight >= 0) {
+        float cosAngle = dot(direction, sky.DiscDirection);
 
-    if (discLight >= 0) {
-        float cosAngle = dot(direction, worldLight((uint)discLight).direction);
-
-        color += (worldSkySunDiscIntensity() * pow(saturate(cosAngle), worldSkySunDiscExponent())).xxx;
+        color += (sky.DiscIntensity * pow(saturate(cosAngle), sky.DiscExponent)).xxx;
     }
 
     // Stars read only above the local horizon — a night sky under the ground plane is never visible to the camera
     // and would otherwise tile through geometry for nothing.
     if (direction.y > 0.0) {
-        color += sdfStarField(direction, worldSkyStarDensity(), worldSkyStarBrightness(), worldSkyStarSeed(), worldSkyStarTwinkleShare(), worldSkyStarTwinkleDepth(), worldSkyStarTwinklePhase());
+        color += sdfStarField(direction, sky.StarDensity, sky.StarBrightness, sky.StarSeed, sky.TwinkleShare, sky.TwinkleDepth, sky.TwinklePhase);
     }
 
     // Clouds sit over everything above them — the gradient, the sun disc and the stars — by their own coverage mask.
-    float4 clouds = sdfCloudLayer(direction, worldSkyCloudColor(), worldSkyCloudCoverage(), worldSkyCloudSoftness(), worldSkyCloudScale(), worldSkyCloudSeed(), worldSkyCloudOffset(), worldSkyCloudShearOffset(), worldSkyCloudSpinAngle(), worldSkyCloudCurl());
+    float4 clouds = sdfCloudLayer(direction, sky.CloudColor, sky.CloudCoverage, sky.CloudSoftness, sky.CloudScale, sky.CloudSeed, sky.CloudDriftOffset, sky.CloudShearOffset, sky.CloudSpinAngle, sky.CloudCurl, sky.CloudLightDirection, sky.CloudLightColor);
 
     return lerp(color, clouds.rgb, clouds.a);
 }
-// A distinct, stable hue per material id (an HSV hue ramp), not the table albedo — so id boundaries read clearly
-// in the material-id debug view.
-float3 materialPalette(int material) {
-    float hue = frac(float(material) * 0.61803399);
-    float3 ramp = (abs((frac(hue + float3(0.0, 0.33333333, 0.66666667)) * 6.0) - 3.0) - 1.0);
-
-    return saturate(ramp);
-}
-
 #endif

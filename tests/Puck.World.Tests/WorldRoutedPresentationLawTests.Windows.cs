@@ -141,16 +141,17 @@ public sealed partial class WorldRoutedPresentationLawTests {
             revision: north.Mirror.DefinitionRevision
         );
 
-        Assert.Equal(actual: frame.Environment.Lanes.ToArray(), expected: sky.Lanes.ToArray());
-        Assert.NotEqual(expected: SdfEnvironment.Default().Lanes.ToArray(), actual: frame.Environment.Lanes.ToArray());
+        Assert.Equal(actual: frame.Sky.Stops.ToArray(), expected: sky.Sky.Stops.ToArray());
+        Assert.Equal(actual: frame.Sky.Block, expected: sky.Sky.Block);
+        Assert.NotEqual(expected: new SdfSky().Stops.ToArray(), actual: frame.Sky.Stops.ToArray());
 
-        var retained = frame.Environment.Lanes.ToArray();
+        var retained = frame.Sky.Stops.ToArray();
 
         north.Mirror.DeliverDefinition(definition: AwayDocument(), version: default);
         _ = Capture(source: scene.FrameSource);
         var changed = Capture(source: scene.FrameSource);
 
-        Assert.NotEqual(expected: retained, actual: changed.Environment.Lanes.ToArray());
+        Assert.NotEqual(expected: retained, actual: changed.Sky.Stops.ToArray());
     }
     // A routed view's sky clock (its stars' twinkle, its clouds' drift, its media's motion) is the destination's presented
     // tick: the sky it shows moves as its world does, whatever the viewer's own world has reached. Its presentation time

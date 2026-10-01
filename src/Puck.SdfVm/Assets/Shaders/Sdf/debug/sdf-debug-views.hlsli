@@ -7,6 +7,15 @@
 #ifdef SDF_VIEWS_PASS
 #include "../frame/sdf-reprojection.hlsli"
 
+// A distinct, stable hue per material id (an HSV hue ramp), not the table albedo — so id boundaries read clearly
+// in the material-id debug view.
+float3 materialPalette(int material) {
+    float hue = frac(float(material) * 0.61803399);
+    float3 ramp = (abs((frac(hue + float3(0.0, 0.33333333, 0.66666667)) * 6.0) - 3.0) - 1.0);
+
+    return saturate(ramp);
+}
+
 float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
     float3 viewColor = color;
 

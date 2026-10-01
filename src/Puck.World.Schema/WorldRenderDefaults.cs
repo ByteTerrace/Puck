@@ -162,7 +162,7 @@ public sealed record WorldRenderDefaults(
 /// kind. Every value a light or the curvature carries may be keyed on a clock on its own; the section may instead be
 /// keyed whole (<paramref name="Clock"/>, <paramref name="Keys"/>), each key a partial record addressing lights by
 /// name.</summary>
-/// <param name="Lights">The lights, at most <c>SdfEnvironment.MaxLights</c>, in slot order. At most one directional
+/// <param name="Lights">The lights, at most <c>SdfLights.MaxLights</c>, in slot order. At most one directional
 /// may shadow: the soft-shadow march runs once per lit pixel.</param>
 /// <param name="Curvature">The stylized curvature enrichment — cavity darkening, curvature rim light, and an ink
 /// outline. Optional; absent (and all-zero) shades exactly as a world that declares none.</param>
@@ -198,7 +198,7 @@ public sealed record WorldRenderLightingKey(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderCurvature? Curvature = null
 );
 /// <summary>One light. The <c>$type</c> string is the JSON discriminator; a new kind is a new derived record, its
-/// <see cref="JsonDerivedTypeAttribute"/> line, and its lane semantics in <c>SdfEnvironment</c>.</summary>
+/// <see cref="JsonDerivedTypeAttribute"/> line, and its kind in <c>SdfLightKind</c>.</summary>
 [JsonDerivedType(typeof(WorldRenderLight.Directional), typeDiscriminator: "directional")]
 [JsonDerivedType(typeof(WorldRenderLight.Hemisphere), typeDiscriminator: "hemisphere")]
 [JsonDerivedType(typeof(WorldRenderLight.Rim), typeDiscriminator: "rim")]
@@ -373,7 +373,7 @@ public abstract record WorldRenderSkyLayer {
     public abstract string? LayerName { get; }
 
     /// <summary>The colour gradient over elevation: piecewise-linear between stops, clamped to the end stops.</summary>
-    /// <param name="Stops">Two to <c>SdfEnvironment.MaxSkyStops</c> stops, strictly ascending in elevation.</param>
+    /// <param name="Stops">Two to <c>SdfSky.MaxStops</c> stops, strictly ascending in elevation.</param>
     /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
     public sealed record Gradient(
         IReadOnlyList<WorldRenderSkyStop>? Stops = null,
@@ -479,7 +479,7 @@ public enum WorldTonemap {
 }
 /// <summary>The analytic studio reflections a GGX specular lobe reflects — see
 /// <see cref="WorldRenderDefaults.Environment"/>.</summary>
-/// <param name="Softboxes">The reflection softboxes, at most <c>SdfEnvironment.MaxSoftboxes</c>. Absent or empty
+/// <param name="Softboxes">The reflection softboxes, at most <c>SdfSky.MaxSoftboxes</c>. Absent or empty
 /// contributes nothing.</param>
 /// <param name="Horizon">The reflection horizon gradient. Absent is black — contributes nothing.</param>
 public sealed record WorldRenderEnvironment(IReadOnlyList<WorldRenderSoftbox>? Softboxes = null, WorldRenderHorizon? Horizon = null);

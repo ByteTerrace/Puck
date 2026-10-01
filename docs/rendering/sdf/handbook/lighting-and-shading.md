@@ -140,7 +140,7 @@ occluders just beside the ray. A wider cone is always safe (a superset can't
 drop a needed occluder); too narrow leaks light. The chord is three penumbra
 half-slopes, `worldShadowPenumbraChord()` (`march/sdf-march-constants.hlsli`) `= 3 * worldShadowPenumbraSlope()`
 (`frame/sdf-lights.hlsli`): every occluder that can lower the estimate lies inside that
-cone with margin. `SdfEnvironment.MaxPenumbraSlope` keeps the chord below one.
+cone with margin. `SdfLights.MaxPenumbraSlope` keeps the chord below one.
 
 **When the gather wins and when it doesn't** is a clean story about density:
 
@@ -180,9 +180,9 @@ gain, and zero architectural disturbance.
 
 ## Every light answers through one interface
 
-The views pass lights a surface by walking one list of lights: the
-environment's (directional, hemisphere, point, rim and occluder, in authored
-order), then every bound screen. Each is one `SdfLight`, and one function,
+The views pass lights a surface by walking one list of lights: the lights
+table's (directional, hemisphere, point, rim and occluder, in authored order),
+then every bound screen. Each is one `SdfLightSource`, and one function,
 `sdfLightResponse` in `shade/sdf-light.hlsli`, answers what it adds at the
 surface: a diffuse term that joins the radiance the material shade lights by, a
 specular lobe (a point light's own), a rim brighten, and a factor on reflected
@@ -211,9 +211,7 @@ room, one of the lights the views pass walks. Its position and orientation come 
 color is the per-frame average of what it's displaying—so a screen showing a
 green field spills green onto the wall beside it. A `dot(screenNormal, −L)` gate
 enforces "light through the glass": a screen only lights what sits in front of
-its face, never behind it. `SdfFrame.AmbientScale` and `SunScale` can dim the
-ambient and sun terms so the diegetic glow dominates; no `Puck.World` host sets
-them, so both stay at 1.
+its face, never behind it.
 
 ## The shadow-proxy switch uses the union hull
 

@@ -7,7 +7,8 @@ namespace Puck.World.Client;
 
 /// <summary>
 /// Resolves a definition's environment for a frame: <c>render.lighting</c>, <c>render.sky</c> and
-/// <c>render.environment</c> written into an <see cref="SdfEnvironment"/>, every value read through the client's
+/// <c>render.environment</c> written into the frame's <see cref="SdfLights"/> and <see cref="SdfSky"/>, every value read
+/// through the client's
 /// <see cref="WorldStateMirror"/>, the one binding path: a literal as authored, a binding as its slot presents it, and
 /// keys at their clock's presented phase (<see cref="WorldKeyResolver"/>). A keyed section is expanded once per
 /// definition revision (<see cref="WorldRenderKeys.Expand(WorldRenderSky)"/>), so a section key resolves as the value
@@ -23,11 +24,14 @@ namespace Puck.World.Client;
 /// </summary>
 public sealed class WorldEnvironmentResolve {
     // An unauthored lighting section seeds from the pinned sun and hemisphere; an authored list seeds from nothing.
-    private static readonly SdfEnvironment Pinned = SdfEnvironment.Default();
-    private static readonly SdfEnvironment Empty = new();
+    private static readonly SdfLights Pinned = SdfLights.Default();
+    private static readonly SdfLights Empty = new();
+    private static readonly SdfSky Unauthored = new();
     private readonly List<int> m_bound = [];
-    private readonly SdfEnvironment[] m_output = [new SdfEnvironment(), new SdfEnvironment()];
-    private readonly SdfEnvironment m_resolved = new();
+    private readonly SdfLights[] m_outputLights = [new SdfLights(), new SdfLights()];
+    private readonly SdfSky[] m_outputSky = [new SdfSky(), new SdfSky()];
+    private readonly SdfLights m_resolvedLights = new();
+    private readonly SdfSky m_resolvedSky = new();
 
     private WorldDefinition? m_definition;
     private int m_generation;
@@ -47,17 +51,17 @@ public sealed class WorldEnvironmentResolve {
     /// resolution.</summary>
     public int Resolutions => m_resolutions;
 
-    /// <summary>Resolves this frame's environment. The returned instance is reused every other call; a consumer that
-    /// must hold one across frames copies it.</summary>
+    /// <summary>Resolves this frame's lights and sky. The returned instances are reused every other call; a consumer
+    /// that must hold them across frames copies them.</summary>
     /// <param name="definition">The live definition.</param>
     /// <param name="revision">The definition revision; a keyed section is expanded once per revision.</param>
     /// <param name="mirror">The state mirror every binding and keyed value reads through.</param>
     /// <param name="resolveLightAnchor">Resolves a positional light anchor to its current pose. Missing targets
     /// return null and disable the light for this frame.</param>
-    /// <returns>The environment.</returns>
+    /// <returns>The lights and the sky.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="mirror"/> is
     /// <see langword="null"/>.</exception>
-    public SdfEnvironment Resolve(WorldDefinition definition, int revision, WorldStateMirror mirror, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) {
+    public WorldResolvedEnvironment Resolve(WorldDefinition definition, int revision, WorldStateMirror mirror, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
@@ -99,29 +103,31 @@ public sealed class WorldEnvironmentResolve {
             m_resolutions++;
         }
 
-        var output = m_output[m_outputIndex];
+        var lights = m_outputLights[m_outputIndex];
+        var sky = m_outputSky[m_outputIndex];
 
         m_outputIndex ^= 1;
-        output.CopyFrom(source: m_resolved);
+        lights.CopyFrom(source: m_resolvedLights);
+        sky.CopyFrom(source: m_resolvedSky);
         ApplyAnchors(
             lighting: m_lighting,
-            output: output,
+            output: lights,
             resolveLightAnchor: resolveLightAnchor
         );
 
-        return output;
+        return new WorldResolvedEnvironment(Lights: lights, Sky: sky);
     }
 
     // A point light's anchor rides the live dynamic-transform slot every call, never the cached resolution: an anchored
     // placement's pool slot can differ from frame to frame independently of the definition.
-    private static void ApplyAnchors(SdfEnvironment output, WorldRenderLighting? lighting, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor) {
+    private static void ApplyAnchors(SdfLights output, WorldRenderLighting? lighting, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor) {
         if (lighting?.Lights is not { } lights) {
             return;
         }
 
         var count = Math.Min(
             val1: lights.Count,
-            val2: output.LightCount
+            val2: output.Count
         );
 
         for (var index = 0; (index < count); index++) {
@@ -136,9 +142,9 @@ public sealed class WorldEnvironmentResolve {
             }
 
             var pose = resolveLightAnchor?.Invoke(anchor);
-            var light = output.GetLight(index: index);
+            var light = output[index];
 
-            output.SetLight(
+            output.Set(
                 index: index,
                 light: ((pose is { } frame)
                     ? light with {
@@ -152,9 +158,9 @@ public sealed class WorldEnvironmentResolve {
             );
         }
     }
-    private static int FirstDirectional(SdfEnvironment environment) {
-        for (var index = 0; (index < environment.LightCount); index++) {
-            if (environment.GetLight(index: index).Kind == SdfLightKind.Directional) {
+    private static int FirstDirectional(SdfLights lights) {
+        for (var index = 0; (index < lights.Count); index++) {
+            if (lights[index].Kind == SdfLightKind.Directional) {
                 return index;
             }
         }
@@ -164,18 +170,18 @@ public sealed class WorldEnvironmentResolve {
     private static SdfLight PinnedLight(WorldRenderLight light) => (light switch {
         WorldRenderLight.Directional => new SdfLight(
             Kind: SdfLightKind.Directional,
-            Direction: SdfEnvironment.DefaultSunDirection,
+            Direction: SdfLights.DefaultSunDirection,
             Color: Vector3.One,
-            Weight: SdfEnvironment.DefaultSunWeight,
-            Param: SdfEnvironment.DefaultPenumbraSlope,
+            Weight: SdfLights.DefaultSunWeight,
+            Param: SdfLights.DefaultPenumbraSlope,
             Shadows: false
         ),
         WorldRenderLight.Hemisphere => new SdfLight(
             Kind: SdfLightKind.Hemisphere,
             Direction: Vector3.Zero,
             Color: Vector3.One,
-            Weight: SdfEnvironment.DefaultAmbientBase,
-            Param: SdfEnvironment.DefaultAmbientHemisphere,
+            Weight: SdfLights.DefaultAmbientBase,
+            Param: SdfLights.DefaultAmbientHemisphere,
             Shadows: false
         ),
         WorldRenderLight.Occluder => new SdfLight(
@@ -190,8 +196,8 @@ public sealed class WorldEnvironmentResolve {
             Kind: SdfLightKind.Point,
             Direction: Vector3.Zero,
             Color: Vector3.One,
-            Weight: SdfEnvironment.DefaultPointWeight,
-            Param: SdfEnvironment.DefaultPointRadius,
+            Weight: SdfLights.DefaultPointWeight,
+            Param: SdfLights.DefaultPointRadius,
             Shadows: false
         ),
         _ => new SdfLight(
@@ -199,7 +205,7 @@ public sealed class WorldEnvironmentResolve {
             Direction: Vector3.Zero,
             Color: Vector3.One,
             Weight: 0f,
-            Param: SdfEnvironment.DefaultRimPower,
+            Param: SdfLights.DefaultRimPower,
             Shadows: false
         ),
     });
@@ -365,29 +371,31 @@ public sealed class WorldEnvironmentResolve {
             rate: in value
         );
     }
-    // The one document-to-lanes writer. The lanes seed from the pinned environment when the world authors no light
-    // list (the pinned sun and hemisphere) and from nothing when it does, and an absent field takes its kind's default.
+    // The one document-to-records writer. The lights seed from the pinned ones when the world authors no light list (the
+    // pinned sun and hemisphere) and from nothing when it does, the sky from the unauthored one, and an absent field
+    // takes its kind's default.
     // The sky is enabled by any layer that draws (a gradient, the sun disc, stars, clouds), since each is miss-pixel
     // content the shader composites only on the authored path; fog alone leaves the pinned branch, which renders
     // bit-identically to a world with no sky.
     private void Write(WorldStateMirror mirror, WorldRenderLighting? lighting, WorldRenderSky? sky, WorldRenderEnvironment? environment) {
-        var into = m_resolved;
+        var into = m_resolvedLights;
 
         into.CopyFrom(source: ((lighting?.Lights is null)
             ? Pinned
             : Empty));
+        m_resolvedSky.CopyFrom(source: Unauthored);
 
         if (lighting?.Lights is { } lights) {
             var count = Math.Min(
                 val1: lights.Count,
-                val2: SdfEnvironment.MaxLights
+                val2: SdfLights.MaxLights
             );
 
             for (var index = 0; (index < count); index++) {
                 var authored = lights[index];
                 var pinned = PinnedLight(light: authored);
 
-                into.SetLight(
+                into.Set(
                     index: index,
                     light: (authored switch {
                         WorldRenderLight.Directional directional => pinned with {
@@ -408,7 +416,7 @@ public sealed class WorldEnvironmentResolve {
                                     mirror: mirror
                                 ))
                                 : pinned.Param),
-                            Shadows = (directional.Shadows ?? pinned.Shadows),
+                            Shadows = ((directional.Shadows ?? (pinned.Shadows != 0u)) ? 1u : 0u),
                             Weight = Scalar(
                                 fallback: pinned.Weight,
                                 mirror: mirror,
@@ -493,57 +501,64 @@ public sealed class WorldEnvironmentResolve {
                 );
             }
 
-            into.LightCount = count;
+            into.Count = count;
         }
 
         if (lighting?.Curvature is { } curvature) {
-            into.CurvatureCavity = Scalar(
-                fallback: into.CurvatureCavity,
-                mirror: mirror,
-                scalar: curvature.Cavity
-            );
-            into.CurvatureRim = Scalar(
-                fallback: into.CurvatureRim,
-                mirror: mirror,
-                scalar: curvature.Rim
-            );
-            into.CurvatureInk = Scalar(
-                fallback: into.CurvatureInk,
-                mirror: mirror,
-                scalar: curvature.Ink
-            );
-            into.CurvatureInkLow = Scalar(
-                fallback: into.CurvatureInkLow,
-                mirror: mirror,
-                scalar: curvature.InkLow
-            );
-            into.CurvatureInkHigh = Scalar(
-                fallback: into.CurvatureInkHigh,
-                mirror: mirror,
-                scalar: curvature.InkHigh
-            );
-            into.CurvatureInkColor = Rgb(
-                color: curvature.InkColor,
-                fallback: into.CurvatureInkColor,
-                mirror: mirror
+            var seed = into.Curvature;
+
+            into.Curvature = new SdfCurvature(
+                Cavity: Scalar(
+                    fallback: seed.Cavity,
+                    mirror: mirror,
+                    scalar: curvature.Cavity
+                ),
+                Rim: Scalar(
+                    fallback: seed.Rim,
+                    mirror: mirror,
+                    scalar: curvature.Rim
+                ),
+                Ink: Scalar(
+                    fallback: seed.Ink,
+                    mirror: mirror,
+                    scalar: curvature.Ink
+                ),
+                InkLow: Scalar(
+                    fallback: seed.InkLow,
+                    mirror: mirror,
+                    scalar: curvature.InkLow
+                ),
+                InkHigh: Scalar(
+                    fallback: seed.InkHigh,
+                    mirror: mirror,
+                    scalar: curvature.InkHigh
+                ),
+                InkColor: Rgb(
+                    color: curvature.InkColor,
+                    fallback: seed.InkColor,
+                    mirror: mirror
+                )
             );
         }
 
         foreach (var layer in (sky?.Layers ?? [])) {
             WriteLayer(
-                into: into,
+                into: m_resolvedSky,
                 layer: layer,
+                lights: into,
                 mirror: mirror
             );
         }
 
         WriteEnvironment(
             environment: environment,
-            into: into,
+            into: m_resolvedSky,
             mirror: mirror
         );
     }
-    private void WriteLayer(WorldStateMirror mirror, WorldRenderSkyLayer layer, SdfEnvironment into) {
+    private void WriteLayer(WorldStateMirror mirror, WorldRenderSkyLayer layer, SdfLights lights, SdfSky into) {
+        ref var block = ref into.Block;
+
         switch (layer) {
             case WorldRenderSkyLayer.Gradient gradient: {
                     if (gradient.Stops is not { } stops) {
@@ -552,35 +567,37 @@ public sealed class WorldEnvironmentResolve {
 
                     var count = Math.Min(
                         val1: stops.Count,
-                        val2: SdfEnvironment.MaxSkyStops
+                        val2: SdfSky.MaxStops
                     );
 
                     for (var index = 0; (index < count); index++) {
                         var stop = stops[index];
 
-                        into.SetSkyStop(
-                            color: Rgb(
-                                color: stop?.Color,
-                                fallback: Vector3.One,
-                                mirror: mirror
-                            ),
-                            elevation: Scalar(
-                                fallback: 0f,
-                                mirror: mirror,
-                                scalar: stop?.Elevation
-                            ),
-                            index: index
+                        into.SetStop(
+                            index: index,
+                            stop: new SdfSkyStop(
+                                Color: Rgb(
+                                    color: stop?.Color,
+                                    fallback: Vector3.One,
+                                    mirror: mirror
+                                ),
+                                Elevation: Scalar(
+                                    fallback: 0f,
+                                    mirror: mirror,
+                                    scalar: stop?.Elevation
+                                )
+                            )
                         );
                     }
 
-                    into.SkyStopCount = count;
-                    into.SkyEnabled |= (count > 0);
+                    into.StopCount = count;
+                    block.Enabled |= ((count > 0) ? 1u : 0u);
 
                     break;
                 }
             case WorldRenderSkyLayer.Fog fog: {
-                    into.FogDensity = Scalar(
-                        fallback: into.FogDensity,
+                    block.FogDensity = Scalar(
+                        fallback: block.FogDensity,
                         mirror: mirror,
                         scalar: fog.Density
                     );
@@ -588,54 +605,54 @@ public sealed class WorldEnvironmentResolve {
                     break;
                 }
             case WorldRenderSkyLayer.SunDisc disc: {
-                    into.SunDiscLightIndex = (disc.Light ?? ((into.ShadowLightIndex >= 0)
-                        ? into.ShadowLightIndex
-                        : FirstDirectional(environment: into)));
+                    block.DiscLight = (disc.Light ?? ((lights.ShadowLight >= 0)
+                        ? lights.ShadowLight
+                        : FirstDirectional(lights: lights)));
                     into.SunDiscRadians = Angle(
                         angle: disc.Radius,
                         fallback: into.SunDiscRadians,
                         mirror: mirror
                     );
-                    into.SunDiscIntensity = Scalar(
-                        fallback: into.SunDiscIntensity,
+                    block.DiscIntensity = Scalar(
+                        fallback: block.DiscIntensity,
                         mirror: mirror,
                         scalar: disc.Intensity
                     );
-                    into.SkyEnabled = true;
+                    block.Enabled = 1u;
 
                     break;
                 }
             case WorldRenderSkyLayer.Stars stars: {
-                    into.StarDensity = (stars.Density ?? into.StarDensity);
-                    into.StarBrightness = Scalar(
-                        fallback: into.StarBrightness,
+                    block.StarDensity = (stars.Density ?? block.StarDensity);
+                    block.StarBrightness = Scalar(
+                        fallback: block.StarBrightness,
                         mirror: mirror,
                         scalar: stars.Brightness
                     );
-                    into.StarSeed = (stars.Seed ?? into.StarSeed);
-                    into.SkyEnabled = true;
+                    block.StarSeed = (stars.Seed ?? block.StarSeed);
+                    block.Enabled = 1u;
 
                     if (stars.Twinkle is not { } twinkle) {
                         break;
                     }
 
-                    into.TwinkleShare = Scalar(
-                        fallback: into.TwinkleShare,
+                    block.TwinkleShare = Scalar(
+                        fallback: block.TwinkleShare,
                         mirror: mirror,
                         scalar: twinkle.Share
                     );
-                    into.TwinkleDepth = Scalar(
-                        fallback: into.TwinkleDepth,
+                    block.TwinkleDepth = Scalar(
+                        fallback: block.TwinkleDepth,
                         mirror: mirror,
                         scalar: twinkle.Depth
                     );
 
-                    var rate = (twinkle.Rate ?? new BindableScalar(literal: SdfEnvironment.DefaultTwinkleRate));
+                    var rate = (twinkle.Rate ?? new BindableScalar(literal: SdfSky.DefaultTwinkleRate));
                     var visible = (
-                        (into.StarBrightness > 0f) &&
-                        (into.StarDensity > 0f) &&
-                        (into.TwinkleShare > 0f) &&
-                        (into.TwinkleDepth > 0f) &&
+                        (block.StarBrightness > 0f) &&
+                        (block.StarDensity > 0f) &&
+                        (block.TwinkleShare > 0f) &&
+                        (block.TwinkleDepth > 0f) &&
                         (mirror.Scalar(
                         fallback: 0f,
                         scalar: in rate
@@ -650,7 +667,7 @@ public sealed class WorldEnvironmentResolve {
                             rate: rate
                         );
 
-                        into.TwinklePhase = ((float)((cycles < 0d)
+                        block.TwinklePhase = ((float)((cycles < 0d)
                             ? (cycles + 1d)
                             : cycles));
                     }
@@ -658,57 +675,57 @@ public sealed class WorldEnvironmentResolve {
                     break;
                 }
             case WorldRenderSkyLayer.Clouds clouds: {
-                    into.CloudCoverage = Scalar(
-                        fallback: into.CloudCoverage,
+                    block.CloudCoverage = Scalar(
+                        fallback: block.CloudCoverage,
                         mirror: mirror,
                         scalar: clouds.Coverage
                     );
-                    into.CloudSoftness = Scalar(
-                        fallback: into.CloudSoftness,
+                    block.CloudSoftness = Scalar(
+                        fallback: block.CloudSoftness,
                         mirror: mirror,
                         scalar: clouds.Softness
                     );
-                    into.CloudScale = Scalar(
-                        fallback: into.CloudScale,
+                    block.CloudScale = Scalar(
+                        fallback: block.CloudScale,
                         mirror: mirror,
                         scalar: clouds.Scale
                     );
-                    into.CloudSeed = (clouds.Seed ?? into.CloudSeed);
-                    into.CloudColor = Rgb(
+                    block.CloudSeed = (clouds.Seed ?? block.CloudSeed);
+                    block.CloudColor = Rgb(
                         color: clouds.Color,
-                        fallback: into.CloudColor,
+                        fallback: block.CloudColor,
                         mirror: mirror
                     );
-                    into.CloudCurl = Angle(
+                    block.CloudCurl = Angle(
                         angle: clouds.Curl,
-                        fallback: into.CloudCurl,
+                        fallback: block.CloudCurl,
                         mirror: mirror
                     );
-                    into.CloudDriftOffset = Integrate(
+                    block.CloudDriftOffset = Integrate(
                         mirror: mirror,
                         modulus: SdfVolume.NoisePeriodCells,
                         rate: clouds.Drift
                     );
-                    into.CloudShearOffset = Integrate(
+                    block.CloudShearOffset = Integrate(
                         mirror: mirror,
                         modulus: SdfVolume.NoisePeriodCells,
                         rate: clouds.Shear
                     );
-                    into.CloudSpinAngle = ((float)Integrate(
+                    block.CloudSpinAngle = ((float)Integrate(
                         mirror: mirror,
                         modulus: Math.Tau,
                         rate: clouds.Spin
                     ));
-                    into.SkyEnabled = true;
+                    block.Enabled = 1u;
 
                     break;
                 }
         }
     }
-    private void WriteEnvironment(WorldStateMirror mirror, WorldRenderEnvironment? environment, SdfEnvironment into) {
+    private void WriteEnvironment(WorldStateMirror mirror, WorldRenderEnvironment? environment, SdfSky into) {
         var count = Math.Min(
             val1: (environment?.Softboxes?.Count ?? 0),
-            val2: SdfEnvironment.MaxSoftboxes
+            val2: SdfSky.MaxSoftboxes
         );
 
         for (var index = 0; (index < count); index++) {
@@ -731,15 +748,20 @@ public sealed class WorldEnvironmentResolve {
         }
 
         into.SoftboxCount = count;
-        into.HorizonLow = Rgb(
+        into.Block.HorizonLow = Rgb(
             color: environment?.Horizon?.Low,
             fallback: Vector3.Zero,
             mirror: mirror
         );
-        into.HorizonHigh = Rgb(
+        into.Block.HorizonHigh = Rgb(
             color: environment?.Horizon?.High,
             fallback: Vector3.Zero,
             mirror: mirror
         );
     }
 }
+/// <summary>A frame's resolved lights and sky (<see cref="WorldEnvironmentResolve.Resolve"/>), which the frame carries as
+/// <see cref="SdfFrame.Lights"/> and <see cref="SdfFrame.Sky"/>.</summary>
+/// <param name="Lights">The lights table.</param>
+/// <param name="Sky">The sky.</param>
+public readonly record struct WorldResolvedEnvironment(SdfLights Lights, SdfSky Sky);

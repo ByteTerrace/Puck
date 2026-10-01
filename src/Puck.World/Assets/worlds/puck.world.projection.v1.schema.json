@@ -283,13 +283,13 @@
           ],
           "properties": {
             "lights": {
-              "description": "The lights, at most SdfEnvironment.MaxLights, in slot order. At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
+              "description": "The lights, at most SdfLights.MaxLights, in slot order. At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
               "type": [
                 "array",
                 "null"
               ],
               "items": {
-                "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its lane semantics in SdfEnvironment.",
+                "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its kind in SdfLightKind.",
                 "type": [
                   "object",
                   "null"
@@ -2373,7 +2373,7 @@
                         "const": "gradient"
                       },
                       "stops": {
-                        "description": "Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation.",
+                        "description": "Two to SdfSky.MaxStops stops, strictly ascending in elevation.",
                         "type": [
                           "array",
                           "null"
@@ -3532,7 +3532,7 @@
           ],
           "properties": {
             "softboxes": {
-              "description": "The reflection softboxes, at most SdfEnvironment.MaxSoftboxes. Absent or empty contributes nothing.",
+              "description": "The reflection softboxes, at most SdfSky.MaxSoftboxes. Absent or empty contributes nothing.",
               "type": [
                 "array",
                 "null"

@@ -6,9 +6,9 @@ using Puck.Shaders;
 namespace Puck.SdfVm;
 
 // One pass of an sdf.world instance (SdfWorldPasses): a part of the package's fragment, recorded into the instance's
-// command buffer for the pass. Every part writes its pass block (SdfFrameBlock): the view's camera, the frame's levers and
-// environment and the world values. Every compute part binds the residency's World set of the ring slot the frame's upload
-// wrote, which holds its tables, and the world interface's pass group: the fragment storages its ports bind and, at every
+// command buffer for the pass. Every part writes its pass block (SdfFrameBlock): the view's camera, the frame's levers,
+// light count and curvature shading, and the world values. Every compute part binds the residency's World set of the ring
+// slot the frame's upload wrote, which holds its tables (the lights and the sky among them), and the world interface's pass group: the fragment storages its ports bind and, at every
 // member its ports do not, a dummy of the residency's; the node's work counters for the frame slot, whose row it writes
 // into its pass block; and the screens, whose host images are rewritten every frame. The mesh part draws the frame's
 // mesh draws into its target through the mesh pipeline, with a set of its own per frame slot binding its pass block. A
@@ -234,7 +234,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             return quality.DisableAmbientOcclusion;
         }
 
-        return (quality.DisableSoftShadows || (frame.Environment.ShadowLightIndex < 0));
+        return (quality.DisableSoftShadows || (frame.Lights.ShadowLight < 0));
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         Follow();

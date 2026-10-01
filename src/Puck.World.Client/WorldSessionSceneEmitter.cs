@@ -367,6 +367,13 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             Quality = ReducedQuality,
         };
 
+        // The mirrored world's own sky and lighting, its keys on the mirrored world's own clocks.
+        var environment = m_environment.Resolve(
+            definition: m_mirror.Definition,
+            mirror: m_mirror.FollowState(),
+            revision: m_mirror.DefinitionRevision
+        );
+
         return new SdfFrame(
             Program: program,
             ProgramChanged: programChanged,
@@ -380,12 +387,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
             FarDistance = m_dressedFarDistance,
-            // The mirrored world's own sky and lighting, its keys on the mirrored world's own clocks.
-            Environment = m_environment.Resolve(
-                definition: m_mirror.Definition,
-                mirror: m_mirror.FollowState(),
-                revision: m_mirror.DefinitionRevision
-            ),
+            Lights = environment.Lights,
+            Sky = environment.Sky,
             // The mirrored world's static placements' meshes, then its stamp pool's.
             MeshDraws = meshDraws,
             MeshDrawsRevision = meshDrawsRevision,

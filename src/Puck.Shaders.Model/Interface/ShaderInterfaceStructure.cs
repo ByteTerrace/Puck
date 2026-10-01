@@ -66,7 +66,8 @@ public sealed record ShaderInterfaceStructure {
     ));
 
     /// <summary>Describes a native record once, when its interface is created. The record has only public instance fields
-    /// of <see cref="float"/>, <see cref="int"/>, <see cref="uint"/>, or two-, three-, or four-component float vectors.
+    /// of <see cref="float"/>, <see cref="int"/>, <see cref="uint"/>, an enum whose underlying type is one of the two
+    /// integers, or two-, three-, or four-component float vectors.
     /// Its explicit or sequential layout must align fields for both graphics backends.</summary>
     /// <typeparam name="T">The unmanaged record whose native field offsets are the source of truth.</typeparam>
     /// <returns>The immutable description used by the existing interface generator.</returns>
@@ -79,9 +80,12 @@ public sealed record ShaderInterfaceStructure {
             if (!field.IsPublic) {
                 throw new InvalidDataException(message: $"Shader structure '{type.Name}' field '{field.Name}' must be public; hidden storage is not shader padding.");
             }
-            var valueType = ((field.FieldType == typeof(float)) ? ShaderValueType.Float :
-                ((field.FieldType == typeof(int)) ? ShaderValueType.Int :
-                ((field.FieldType == typeof(uint)) ? ShaderValueType.Uint :
+            // An enum field is its underlying integer, so a record names its kind by the C# enum the kernels' generated
+            // constants come from.
+            var fieldType = (field.FieldType.IsEnum ? Enum.GetUnderlyingType(enumType: field.FieldType) : field.FieldType);
+            var valueType = ((fieldType == typeof(float)) ? ShaderValueType.Float :
+                ((fieldType == typeof(int)) ? ShaderValueType.Int :
+                ((fieldType == typeof(uint)) ? ShaderValueType.Uint :
                 ((field.FieldType == typeof(Vector2)) ? ShaderValueType.Float2 :
                 ((field.FieldType == typeof(Vector3)) ? ShaderValueType.Float3 :
                 ((field.FieldType == typeof(Vector4)) ? ShaderValueType.Float4 :

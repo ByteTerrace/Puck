@@ -125,9 +125,9 @@ public sealed class KeyedValueResolutionLawTests {
             revision: 0
         );
 
-        Assert.Equal(expected: 0f, actual: night.FogDensity);
-        Assert.Equal(expected: 0f, actual: night.SunDiscIntensity);
-        Assert.Equal(expected: (0xB6 / 255f), actual: night.GetSkyStop(index: 3).Color.X, precision: 6);
+        Assert.Equal(expected: 0f, actual: night.Sky.Block.FogDensity);
+        Assert.Equal(expected: 0f, actual: night.Sky.Block.DiscIntensity);
+        Assert.Equal(expected: (0xB6 / 255f), actual: night.Sky.Stops[3].Color.X, precision: 6);
 
         var dayDefinition = WithRow(definition: courtyard, row: "skyMode", value: 0.5d);
         var day = new WorldEnvironmentResolve().Resolve(
@@ -136,16 +136,16 @@ public sealed class KeyedValueResolutionLawTests {
             revision: 0
         );
 
-        Assert.Equal(expected: 0.004f, actual: day.FogDensity, precision: 6);
-        Assert.Equal(expected: 1.5f, actual: day.SunDiscIntensity, precision: 6);
-        Assert.Equal(expected: (0x3C / 255f), actual: day.GetSkyStop(index: 3).Color.X, precision: 6);
+        Assert.Equal(expected: 0.004f, actual: day.Sky.Block.FogDensity, precision: 6);
+        Assert.Equal(expected: 1.5f, actual: day.Sky.Block.DiscIntensity, precision: 6);
+        Assert.Equal(expected: (0x3C / 255f), actual: day.Sky.Stops[3].Color.X, precision: 6);
 
         // A quarter of the way round the night's density holds the line between the two keys.
         var dusk = WithRow(definition: courtyard, row: "skyMode", value: 0.25d);
 
         Assert.Equal(
             expected: 0.002f,
-            actual: new WorldEnvironmentResolve().Resolve(definition: dusk, mirror: ClientFixtures.StateMirror(definition: dusk), revision: 0).FogDensity,
+            actual: new WorldEnvironmentResolve().Resolve(definition: dusk, mirror: ClientFixtures.StateMirror(definition: dusk), revision: 0).Sky.Block.FogDensity,
             precision: 6
         );
     }
@@ -200,7 +200,7 @@ public sealed class KeyedValueResolutionLawTests {
         mirror.Advance(engineTick: (EngineTicks.PerSecond / 4UL), tick: 1UL);
         mirror.Apply(fraction: 1f);
 
-        Assert.Equal(expected: 0.05f, actual: environment.Resolve(definition: keyed, mirror: mirror, revision: 0).FogDensity, precision: 6);
+        Assert.Equal(expected: 0.05f, actual: environment.Resolve(definition: keyed, mirror: mirror, revision: 0).Sky.Block.FogDensity, precision: 6);
         Assert.Equal(expected: 2, actual: environment.Resolutions);
 
         // Red leg: a still literal sky never resolves again while the tick moves.
@@ -228,12 +228,12 @@ public sealed class KeyedValueResolutionLawTests {
         var before = new WorldEnvironmentResolve().Resolve(definition: definition, mirror: ClientFixtures.StateMirror(definition: definition, engineTick: (Wrap - 1UL)), revision: 0);
         var after = new WorldEnvironmentResolve().Resolve(definition: definition, mirror: ClientFixtures.StateMirror(definition: definition, engineTick: Wrap), revision: 0);
         (float Before, float After, double Rate, double Modulus)[] lanes = [
-            (before.CloudDriftOffset.X, after.CloudDriftOffset.X, 0.02d, SdfVolume.NoisePeriodCells),
-            (before.CloudDriftOffset.Y, after.CloudDriftOffset.Y, -0.01d, SdfVolume.NoisePeriodCells),
-            (before.CloudShearOffset.X, after.CloudShearOffset.X, 0.005d, SdfVolume.NoisePeriodCells),
-            (before.CloudShearOffset.Y, after.CloudShearOffset.Y, 0.003d, SdfVolume.NoisePeriodCells),
-            (before.CloudSpinAngle, after.CloudSpinAngle, 0.1d, Math.Tau),
-            (before.TwinklePhase, after.TwinklePhase, 2d, 1d),
+            (before.Sky.Block.CloudDriftOffset.X, after.Sky.Block.CloudDriftOffset.X, 0.02d, SdfVolume.NoisePeriodCells),
+            (before.Sky.Block.CloudDriftOffset.Y, after.Sky.Block.CloudDriftOffset.Y, -0.01d, SdfVolume.NoisePeriodCells),
+            (before.Sky.Block.CloudShearOffset.X, after.Sky.Block.CloudShearOffset.X, 0.005d, SdfVolume.NoisePeriodCells),
+            (before.Sky.Block.CloudShearOffset.Y, after.Sky.Block.CloudShearOffset.Y, 0.003d, SdfVolume.NoisePeriodCells),
+            (before.Sky.Block.CloudSpinAngle, after.Sky.Block.CloudSpinAngle, 0.1d, Math.Tau),
+            (before.Sky.Block.TwinklePhase, after.Sky.Block.TwinklePhase, 2d, 1d),
         ];
 
         // Across 2^32 engine ticks each offset moves by one tick's worth of its rate.
@@ -250,6 +250,6 @@ public sealed class KeyedValueResolutionLawTests {
             ])),
         };
 
-        Assert.Equal(expected: 0f, actual: new WorldEnvironmentResolve().Resolve(definition: dark, mirror: ClientFixtures.StateMirror(definition: dark, engineTick: (Wrap + 1234UL)), revision: 0).TwinklePhase);
+        Assert.Equal(expected: 0f, actual: new WorldEnvironmentResolve().Resolve(definition: dark, mirror: ClientFixtures.StateMirror(definition: dark, engineTick: (Wrap + 1234UL)), revision: 0).Sky.Block.TwinklePhase);
     }
 }

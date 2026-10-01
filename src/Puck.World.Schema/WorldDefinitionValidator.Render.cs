@@ -26,8 +26,8 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (lighting.Lights is { } lights) {
-            if (lights.Count > SdfEnvironment.MaxLights) {
-                errors.Add(item: $"{path}.lights carries {lights.Count} lights; at most {SdfEnvironment.MaxLights} fit the environment.");
+            if (lights.Count > SdfLights.MaxLights) {
+                errors.Add(item: $"{path}.lights carries {lights.Count} lights; at most {SdfLights.MaxLights} fit the lights table.");
             }
 
             var shadowing = 0;
@@ -65,7 +65,7 @@ public static partial class WorldDefinitionValidator {
                                 errors: errors,
                                 judge: (value, name) => RequireRange(
                                     errors: errors,
-                                    max: MathF.Atan(x: SdfEnvironment.MaxPenumbraSlope),
+                                    max: MathF.Atan(x: SdfLights.MaxPenumbraSlope),
                                     min: 0f,
                                     name: name,
                                     value: value
@@ -245,8 +245,8 @@ public static partial class WorldDefinitionValidator {
                     : $"{path}.curvature.inkLow ({values[0]}) must be below {path}.curvature.inkHigh ({values[1]}){{0}}; an absent end is the engine default."),
                 path: $"{path}.curvature",
                 scalars: [
-                    (curvature.InkLow ?? new BindableScalar(literal: SdfEnvironment.DefaultCurvatureInkLow)),
-                    (curvature.InkHigh ?? new BindableScalar(literal: SdfEnvironment.DefaultCurvatureInkHigh)),
+                    (curvature.InkLow ?? new BindableScalar(literal: SdfCurvature.DefaultInkLow)),
+                    (curvature.InkHigh ?? new BindableScalar(literal: SdfCurvature.DefaultInkHigh)),
                 ]
             );
 
@@ -536,13 +536,13 @@ public static partial class WorldDefinitionValidator {
     }
     private static void ValidateGradient(WorldDefinition definition, WorldRenderSkyLayer.Gradient gradient, string path, List<string> errors) {
         if (gradient.Stops is not { } stops) {
-            errors.Add(item: $"{path}.stops must carry two to {SdfEnvironment.MaxSkyStops} stops.");
+            errors.Add(item: $"{path}.stops must carry two to {SdfSky.MaxStops} stops.");
 
             return;
         }
 
-        if ((stops.Count < 2) || (stops.Count > SdfEnvironment.MaxSkyStops)) {
-            errors.Add(item: $"{path}.stops carries {stops.Count} stops; a gradient carries two to {SdfEnvironment.MaxSkyStops}.");
+        if ((stops.Count < 2) || (stops.Count > SdfSky.MaxStops)) {
+            errors.Add(item: $"{path}.stops carries {stops.Count} stops; a gradient carries two to {SdfSky.MaxStops}.");
         }
 
         var elevations = new List<BindableScalar>(capacity: stops.Count);
@@ -790,8 +790,8 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (environment.Softboxes is { } softboxes) {
-            if (softboxes.Count > SdfEnvironment.MaxSoftboxes) {
-                errors.Add(item: $"{path}.softboxes carries {softboxes.Count} softboxes; at most {SdfEnvironment.MaxSoftboxes} fit the environment.");
+            if (softboxes.Count > SdfSky.MaxSoftboxes) {
+                errors.Add(item: $"{path}.softboxes carries {softboxes.Count} softboxes; at most {SdfSky.MaxSoftboxes} fit the softbox table.");
             }
 
             for (var index = 0; (index < softboxes.Count); index++) {

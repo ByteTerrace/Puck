@@ -1,4 +1,5 @@
 using Puck.Shaders;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -15,10 +16,11 @@ namespace Puck.SdfVm;
 /// <para><see cref="ResolveParameters"/> serves the optional output reconstruction pass with its own resource bindings
 /// and the same frame values. Its common values copy by declared member offsets; the native pass block stays unchanged.</para>
 /// <para><see cref="World"/> serves the native per-view dispatches: sky, mask, beam, cull-args, primary, surface, ambient,
-/// shadow and the three views variants. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>): its
-/// World group is the residency's tables (<see cref="SdfWorldPackage.Tables"/>), one set per upload ring slot that every
-/// pass of every view binds, and its pass group one set per frame slot and pass, whose block holds the view's render
-/// extent and the frame's values.</para>
+/// shadow and the three views variants. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>)
+/// and the lights and sky tables (<see cref="LightAndSkyTables"/>): its World group is the residency's tables
+/// (<see cref="SdfWorldPackage.Tables"/> and those), one set per upload ring slot that every pass of every view binds,
+/// and its pass group one set per frame slot and pass, whose block holds the view's render extent and the frame's
+/// values.</para>
 /// <para><see cref="BrickBake"/> serves the carve-bake baker, the <c>sdf.bricks</c> pass: it binds the ring slot's frame
 /// set and one pass set per brick slot binding that slot's request buffer and the brick pool, whose block's extent is one
 /// slice as one row, the voxels one bake dispatch writes at most, with the slice ordinal pushed per dispatch.</para>
@@ -42,6 +44,17 @@ public sealed class SdfKernelInterfaces {
     /// <summary>The directory, repository-relative, the kernels' module tree lives in: the generated interface includes
     /// in its <c>isa</c> directory and the pass entry points in <c>passes</c>.</summary>
     public const string KernelDirectory = "src/Puck.SdfVm/Assets/Shaders/Sdf";
+    /// <summary>The lights table: <see cref="SdfLights.MaxLights"/> <see cref="SdfLight"/> records, read by the shadow
+    /// and views passes.</summary>
+    public const string Lights = "sdfLights";
+    /// <summary>The sky block: one <see cref="SdfSkyBlock"/> record, read by the sky and views passes.</summary>
+    public const string Sky = "sdfSky";
+    /// <summary>The sky gradient's stops: <see cref="SdfSky.MaxStops"/> <see cref="SdfSkyStop"/> records, read by the sky
+    /// and views passes.</summary>
+    public const string SkyStops = "sdfSkyStops";
+    /// <summary>The studio reflection's softboxes: <see cref="SdfSky.MaxSoftboxes"/> <see cref="SdfSoftbox"/> records, read
+    /// by the views pass.</summary>
+    public const string Softboxes = "sdfSoftboxes";
 
     /// <summary>Initializes a new instance of the <see cref="SdfKernelInterfaces"/> class.</summary>
     /// <param name="stamp">The instruction set's stamp (<see cref="SdfIsaHlsl.StampOf"/>).</param>
@@ -53,7 +66,7 @@ public sealed class SdfKernelInterfaces {
         WorldParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
             package: RenderGraphPackageCatalog.SdfWorld,
-            members: SdfWorldPackage.Members
+            members: [.. SdfWorldPackage.Members, .. LightAndSkyTables]
         ).Stamped(stamp: stamp);
         ResolveParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
@@ -90,6 +103,16 @@ public sealed class SdfKernelInterfaces {
         ];
     }
 
+    /// <summary>Gets the World-group tables <see cref="World"/> adds to the <c>sdf.world</c> package's members: the lights
+    /// table and the sky's block and tables, each a structured buffer of a record whose declaration is generated from
+    /// its C# type (<see cref="ShaderInterfaceStructure.From{T}"/>). The residency writes each as a region of its
+    /// tables, and a kernel binds one only when it reads it.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> LightAndSkyTables { get; } = [
+        ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Lights, structure: ShaderInterfaceStructure.From<SdfLight>()),
+        ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Sky, structure: ShaderInterfaceStructure.From<SdfSkyBlock>()),
+        ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: SkyStops, structure: ShaderInterfaceStructure.From<SdfSkyStop>()),
+        ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Softboxes, structure: ShaderInterfaceStructure.From<SdfSoftbox>()),
+    ];
     /// <summary>Gets the instruction set's stamp the interfaces carry.</summary>
     public string Stamp { get; }
     /// <summary>Gets the frame data of every per-view SDF dispatch: the standard frame group, the World group of the

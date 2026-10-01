@@ -28,7 +28,7 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | CPU interpreter and queries | `src/Puck.SignedDistance/Queries` (`SdfFieldEvaluator`, `SdfBandedFieldEvaluator`, `BakedWorldQuery`); seams `IWorldQuery`/`IFieldEvaluator` in `src/Puck.Maths/FixedPoint` | [queries and determinism](../../../docs/rendering/sdf/handbook/queries-and-determinism.md) |
 | Prototype bakes (mesh, textures, impostor) | `src/Puck.SignedDistance/Baking` (`SdfBaker`, `SdfBakeTier`, `SdfBakedTexture`); `src/Puck.Assets/Textures` (BC4/BC5/BC6H/BC7 codecs, `TextureMipChain`, `OctahedralNormal`); `CreationBaker`, `CreationBakeKey`, `CreationBakeCodec` in `src/Puck.World.Authoring/Authoring`; `WorldBakeStore`, `WorldBakeChunk` in `src/Puck.World.Schema`; `WorldBakeSchedule` in `src/Puck.World.Client` | [prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes), [creation bakes](../../../docs/architecture/worlds.md#creation-bakes) |
 | GPU engine and render assembly | `src/Puck.SdfVm` (`SdfWorldResidency`, `SdfWorldTables.*.cs`, `SdfWorldPasses`, `SdfWorldPassRecorder`, `SdfWorldRenderSpec`/`SdfWorldRenderBuilder`, `SdfCompositionFrameSource`, `ISdfSceneEmitter`); the `sdf.world` fragment `SdfWorldPackage` in `src/Puck.Shaders/Graph` | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
-| Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf` — `isa/sdf-isa.hlsli` the generated instruction-set declarations (`puck shaders generate`), the `field/` modules the interpreter (`mapCore` in `sdf-map.hlsli`, `mapGradCore` in `sdf-map-grad.hlsli`), the `frame/` modules the frame's data and its row decoders (environment, lights, levers), the `march/`/`surface/`/`shade/`/`debug/` modules the view logic, `field/sdf-vm.hlsli` and `passes/sdf-world.hlsli` the two aggregators, one `*.comp.hlsl` wrapper per dispatch under `passes/` | [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md), [lighting and shading](../../../docs/rendering/sdf/handbook/lighting-and-shading.md), [shading, AO and shadows](../../../docs/rendering/sdf/reference/shading-ao-shadows.md) |
+| Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf` — `isa/sdf-isa.hlsli` the generated instruction-set declarations (`puck shaders generate`), the `field/` modules the interpreter (`mapCore` in `sdf-map.hlsli`, `mapGradCore` in `sdf-map-grad.hlsli`), the `frame/` modules the frame's data (the screen tables, the key light, the levers), the `march/`/`surface/`/`shade/`/`debug/` modules the view logic, `field/sdf-vm.hlsli` and `passes/sdf-world.hlsli` the two aggregators, one `*.comp.hlsl` wrapper per dispatch under `passes/` | [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md), [lighting and shading](../../../docs/rendering/sdf/handbook/lighting-and-shading.md), [shading, AO and shadows](../../../docs/rendering/sdf/reference/shading-ao-shadows.md) |
 | Cameras and views | `src/Puck.SdfVm/Views` (`SdfCameraProgram`, rigs, `ViewTransition`); `WorldViewInstances` (`src/Puck.World.Client/Sources`); `WorldScreenBinder.CameraViews.cs`/`.Session.cs`/`.Views.cs` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`, `WorldRigCatalog`, `WorldCameraRigCompiler`, `WorldViewGraphHost`, `WorldRootGraph`); `src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs` | `puck-world` skill for document meaning; [authoring README](../../../src/Puck.World.Authoring/README.md) |
 | Shader manifests, pipelines, builds | `src/Puck.Shaders`; the model its declarations are generated from, `src/Puck.Shaders.Model` and `src/Puck.SdfVm.Model` (`ShaderDeclarations`, `SdfKernelInterfaces`), which compile no shader; `src/Puck.Shaders.Generator`, the build-only reference whose build writes them before any kernel compiles; `build/Shaders.targets` | [Shader manifests and pipelines](../../../docs/reference/shaders.md) |
@@ -128,8 +128,9 @@ register.
   `sdfResolveMeshSurface`.
 - **Every light answers through one interface.** `sdfLightResponse`
   (`shade/sdf-light.hlsli`) is the one place a kernel branches on a light's
-  kind, the environment's (`SDF_LIGHT_*`) and a bound screen's
-  (`SdfLightScreen`); the light stage walks `sdfLightAt` over them once, sums
+  kind, a lights-table record's (`SDF_LIGHT_*`) and a bound screen's
+  (`SdfLightScreen`), each one `SdfLightSource`; the light stage walks
+  `sdfLightAt` over them once, sums
   each kind of term over the walk and adds each total once, so the order terms
   combine in is the walk's, not the kinds'. A new kind is a branch there, and
   `SdfLightInterfaceLawTests` refuses a kind branch anywhere else and a
@@ -732,7 +733,8 @@ These are one-line cautions; the owning pages hold the derivations.
 - **Host uploads go through regions.** Every table the SDF kernels read from
   the host that a residency writes (program words, dynamic transforms, the frame
   instance grid, screen surfaces, screen mappings, screen lights, volumes, glyph
-  decals, mesh draws) is a `GpuRegion` of its `SdfWorldTables`
+  decals, mesh draws, the lights table and the sky's block, stops and softboxes)
+  is a `GpuRegion` of its `SdfWorldTables`
   (`SdfWorldTables.Regions.cs`, created by `CreateRegion` under
   `GpuResidency.Select` with a reader in flight), and brick staging is a staged
   region whose destination is the brick pool (`Target` names the brick's slot).
@@ -741,10 +743,14 @@ These are one-line cautions; the owning pages hold the derivations.
   `GpuRegionCopySets` slice of the tables' one `GpuRegionCopyPool` (whatever
   policy the device selects), so the tables create and admit two pools, their
   own and the copy pool, and no region the frame thread creates or grows takes
-  a descriptor range; a new region takes a slice of that pool too. A view's
-  camera and quality, the frame's bench levers and its environment are no table: each
-  `sdf.world` pass writes them into its pass block (`SdfFrameBlock`, the values
-  `SdfWorldPackage.Values` declares). Change
+  a descriptor range; a new region takes a slice of that pool too. The lights
+  and the sky are tables of generated records (`SdfWorldTables.LightsAndSky.cs`:
+  `SdfLights.Pack` and `SdfSky.Pack` fill the lights table, the sky block, its
+  stops and its softboxes with their host bakes, each written whole into its
+  region), which only the kernels that read them reference. A view's camera and
+  quality, the frame's bench levers, its light count, shadow light and
+  curvature shading are no table: each `sdf.world` pass writes them into its
+  pass block (`SdfFrameBlock`, the values `SdfWorldPackage.Values` declares). Change
   a table only through its
   region's `Write`, which owes each run of words that differs; a direct buffer
   write is lost or overwritten. The residency's upload records the slot's owed
@@ -1129,17 +1135,18 @@ explanation is [Qualifying a package](../../../docs/development/qualification.md
 
 `WorldFramePresenter` re-reads `render.lighting`, `render.sky` (their keyed values
 resolved through the state mirror by `WorldEnvironmentResolve`, which also
-integrates every cloud and twinkle rate to the presented tick, so the
-environment rows carry offsets and a phase, never a rate),
+integrates every cloud and twinkle rate to the presented tick, so the sky
+block carries offsets and a phase, never a rate),
 `render.environment`, `render.tonemap`, and `render.farDistance` from the live
 definition every frame, so a `world.row.set render …` lands on the next frame
 without a program rebuild; `render.tonemap` reaches the root graph
 (`WorldViewGraphHost.BeginFrame`), which it recomposes, never an SDF kernel. Creation volumes become `SdfFrame.Volumes`, not
 instructions. Validation ranges live in `WorldDefinitionValidator`; a new render
-field needs its validator bound, its `SdfFrame`/`SdfEnvironment` lane, its
-pass-block value (`SdfWorldPackage.Values`, written by `SdfFrameBlock`, generated
-into `sdf-world.interface.hlsli` by `puck shaders generate`), and its shader
-consumer in the same change. What a document field means belongs to
+field needs its validator bound, its field on the record that carries it (a
+light's on `SdfLight`, the sky's on `SdfSkyBlock`, `SdfSkyStop` or `SdfSoftbox`,
+whose declarations `puck shaders generate` writes into `sdf-world.interface.hlsli`
+from the C# type) or else its pass-block value (`SdfWorldPackage.Values`, written
+by `SdfFrameBlock`), and its shader consumer in the same change. What a document field means belongs to
 `puck-world`.
 
 Every state read reaches a program, a decal or a pass through the state

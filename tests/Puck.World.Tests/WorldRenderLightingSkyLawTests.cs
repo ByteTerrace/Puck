@@ -10,9 +10,9 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Laws for <c>render.lighting</c>/<c>render.sky</c> resolution (<see cref="WorldEnvironmentResolve"/>):
-/// absence resolves to the pinned environment bit-exactly, an authored list is exactly the lights it names, every
+/// absence resolves to the pinned lights and sky bit-exactly, an authored list is exactly the lights it names, every
 /// authored field threads through untouched, a state-bound colour reads its cell live, and the validator refuses the
-/// shapes the lane table cannot carry.</summary>
+/// shapes the lights table and the sky's tables cannot carry.</summary>
 public sealed class WorldRenderLightingSkyLawTests {
     private static WorldRenderDefaults BaseDefaults() => WorldRenderDefaults.Absent;
     private static WorldStateRow ColorsRow(string hex) => new(
@@ -23,7 +23,7 @@ public sealed class WorldRenderLightingSkyLawTests {
                 Value: CellValue.Text(value: hex)
             )]
     );
-    private static SdfEnvironment Resolve(WorldRenderDefaults defaults, IReadOnlyList<WorldStateRow>? state = null, int revision = 0, WorldEnvironmentResolve? track = null, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) {
+    private static WorldResolvedEnvironment Resolve(WorldRenderDefaults defaults, IReadOnlyList<WorldStateRow>? state = null, int revision = 0, WorldEnvironmentResolve? track = null, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) {
         var definition = (Fixtures.BuildDocument().WithWorldState(rows: (state ?? [])) with { RenderRaw = defaults });
 
         return (track ?? new WorldEnvironmentResolve()).Resolve(
@@ -91,47 +91,50 @@ public sealed class WorldRenderLightingSkyLawTests {
 
         Assert.Equal(
             expected: 0,
-            actual: resolved.SoftboxCount
+            actual: resolved.Sky.SoftboxCount
         );
         Assert.Equal(
             expected: Vector3.Zero,
-            actual: resolved.HorizonLow
+            actual: resolved.Sky.Block.HorizonLow
         );
         Assert.Equal(
             expected: Vector3.Zero,
-            actual: resolved.HorizonHigh
+            actual: resolved.Sky.Block.HorizonHigh
         );
     }
     [Fact]
     public void AbsentLightingAndSky_ResolveToThePinnedEnvironmentBitExact() {
         var resolved = Resolve(defaults: BaseDefaults());
-        var pinned = SdfEnvironment.Default();
+        var pinned = SdfLights.Default();
+        var unauthored = new SdfSky();
 
-        Assert.True(condition: pinned.Lanes.SequenceEqual(other: resolved.Lanes));
+        Assert.True(condition: pinned.Records.SequenceEqual(other: resolved.Lights.Records));
+        Assert.Equal(expected: unauthored.Block, actual: resolved.Sky.Block);
+        Assert.True(condition: unauthored.Stops.SequenceEqual(other: resolved.Sky.Stops));
         Assert.Equal(
             expected: 2,
-            actual: resolved.LightCount
+            actual: resolved.Lights.Count
         );
         Assert.Equal(
             expected: 0,
-            actual: resolved.ShadowLightIndex
+            actual: resolved.Lights.ShadowLight
         );
         Assert.Equal(
-            expected: SdfEnvironment.DefaultSunDirection,
-            actual: resolved.GetLight(index: 0).Direction
+            expected: SdfLights.DefaultSunDirection,
+            actual: resolved.Lights[0].Direction
         );
         Assert.Equal(
-            expected: SdfEnvironment.DefaultPenumbraSlope,
-            actual: resolved.GetLight(index: 0).Param
+            expected: SdfLights.DefaultPenumbraSlope,
+            actual: resolved.Lights[0].Param
         );
         Assert.Equal(
-            expected: SdfEnvironment.DefaultAmbientBase,
-            actual: resolved.GetLight(index: 1).Weight
+            expected: SdfLights.DefaultAmbientBase,
+            actual: resolved.Lights[1].Weight
         );
-        Assert.False(condition: resolved.SkyEnabled);
+        Assert.Equal(expected: 0u, actual: resolved.Sky.Block.Enabled);
         Assert.Equal(
-            expected: SdfEnvironment.DefaultFogDensity,
-            actual: resolved.FogDensity
+            expected: SdfSky.DefaultFogDensity,
+            actual: resolved.Sky.Block.FogDensity
         );
     }
     [Fact]
@@ -196,11 +199,11 @@ public sealed class WorldRenderLightingSkyLawTests {
 
         Assert.Equal(
             expected: 2,
-            actual: resolved.SoftboxCount
+            actual: resolved.Sky.SoftboxCount
         );
 
-        var first = resolved.GetSoftbox(index: 0);
-        var second = resolved.GetSoftbox(index: 1);
+        var first = resolved.Sky.Softboxes[0];
+        var second = resolved.Sky.Softboxes[1];
 
         Assert.Equal(
             expected: new Vector3(
@@ -219,8 +222,8 @@ public sealed class WorldRenderLightingSkyLawTests {
             actual: first.Color
         );
         Assert.Equal(
-            expected: 0.8f,
-            actual: first.Weight
+            actual: first.Weight,
+            expected: 0.8f
         );
         Assert.Equal(
             expected: new Vector2(
@@ -230,8 +233,8 @@ public sealed class WorldRenderLightingSkyLawTests {
             actual: first.Size
         );
         Assert.Equal(
-            expected: 0.1f,
-            actual: first.Blur
+            actual: first.Blur,
+            expected: 0.1f
         );
 
         // Unset weight/blur/color take their engine defaults (white, weight 1, blur 0), not the previous softbox's.
@@ -240,12 +243,12 @@ public sealed class WorldRenderLightingSkyLawTests {
             actual: second.Color
         );
         Assert.Equal(
-            expected: 1f,
-            actual: second.Weight
+            actual: second.Weight,
+            expected: 1f
         );
         Assert.Equal(
-            expected: 0f,
-            actual: second.Blur
+            actual: second.Blur,
+            expected: 0f
         );
 
         Assert.Equal(
@@ -254,7 +257,7 @@ public sealed class WorldRenderLightingSkyLawTests {
                 y: (0x0D / 255f),
                 z: (0x14 / 255f)
             ),
-            actual: resolved.HorizonLow
+            actual: resolved.Sky.Block.HorizonLow
         );
         Assert.Equal(
             expected: new Vector3(
@@ -262,7 +265,7 @@ public sealed class WorldRenderLightingSkyLawTests {
                 y: (0x23 / 255f),
                 z: (0x50 / 255f)
             ),
-            actual: resolved.HorizonHigh
+            actual: resolved.Sky.Block.HorizonHigh
         );
     }
     [Fact]
@@ -298,16 +301,16 @@ public sealed class WorldRenderLightingSkyLawTests {
 
         Assert.Equal(
             expected: 3,
-            actual: resolved.LightCount
+            actual: resolved.Lights.Count
         );
         Assert.Equal(
             expected: 0,
-            actual: resolved.ShadowLightIndex
+            actual: resolved.Lights.ShadowLight
         );
 
-        var key = resolved.GetLight(index: 0);
-        var fill = resolved.GetLight(index: 1);
-        var rim = resolved.GetLight(index: 2);
+        var key = resolved.Lights[0];
+        var fill = resolved.Lights[1];
+        var rim = resolved.Lights[2];
 
         Assert.Equal(
             expected: new Vector3(
@@ -318,8 +321,8 @@ public sealed class WorldRenderLightingSkyLawTests {
             actual: key.Direction
         );
         Assert.Equal(
-            expected: 0.42f,
-            actual: key.Weight
+            actual: key.Weight,
+            expected: 0.42f
         );
         Assert.Equal(
             expected: new Vector3(
@@ -333,31 +336,31 @@ public sealed class WorldRenderLightingSkyLawTests {
             expected: MathF.Tan(x: 0.2f),
             actual: key.Param
         );
-        Assert.True(condition: key.Shadows);
+        Assert.True(condition: key.CastsShadow);
         Assert.Equal(
-            expected: SdfLightKind.Directional,
-            actual: fill.Kind
+            actual: fill.Kind,
+            expected: SdfLightKind.Directional
         );
-        Assert.False(condition: fill.Shadows);
+        Assert.False(condition: fill.CastsShadow);
         Assert.Equal(
             expected: Vector3.One,
             actual: fill.Color
         );
         Assert.Equal(
-            expected: SdfEnvironment.DefaultPenumbraSlope,
-            actual: fill.Param
+            actual: fill.Param,
+            expected: SdfLights.DefaultPenumbraSlope
         );
         Assert.Equal(
-            expected: SdfLightKind.Rim,
-            actual: rim.Kind
+            actual: rim.Kind,
+            expected: SdfLightKind.Rim
         );
         Assert.Equal(
-            expected: 0.7f,
-            actual: rim.Weight
+            actual: rim.Weight,
+            expected: 0.7f
         );
         Assert.Equal(
-            expected: 5f,
-            actual: rim.Param
+            actual: rim.Param,
+            expected: 5f
         );
     }
     [Fact]
@@ -390,56 +393,56 @@ public sealed class WorldRenderLightingSkyLawTests {
         ]);
         var resolved = Resolve(defaults: BaseDefaults() with { Lighting = SunAndSky(), Sky = sky });
 
-        Assert.True(condition: resolved.SkyEnabled);
+        Assert.Equal(expected: 1u, actual: resolved.Sky.Block.Enabled);
         Assert.Equal(
             expected: 3,
-            actual: resolved.SkyStopCount
+            actual: resolved.Sky.StopCount
         );
         Assert.Equal(
-            expected: (new Vector3(
+            expected: new SdfSkyStop(Color: new Vector3(
                 x: (0xE0 / 255f),
                 y: (0x8F / 255f),
                 z: (0x6B / 255f)
-            ), 0f),
-            actual: resolved.GetSkyStop(index: 1)
+            ), Elevation: 0f),
+            actual: resolved.Sky.Stops[1]
         );
         Assert.Equal(
             expected: 0.02f,
-            actual: resolved.FogDensity
+            actual: resolved.Sky.Block.FogDensity
         );
         Assert.Equal(
             expected: 0,
-            actual: resolved.SunDiscLightIndex
+            actual: resolved.Sky.Block.DiscLight
         );
         Assert.Equal(
             expected: 0.045f,
-            actual: resolved.SunDiscRadians
+            actual: resolved.Sky.SunDiscRadians
         );
         Assert.Equal(
             expected: 6f,
-            actual: resolved.SunDiscIntensity
+            actual: resolved.Sky.Block.DiscIntensity
         );
         Assert.Equal(
             expected: 64f,
-            actual: resolved.StarDensity
+            actual: resolved.Sky.Block.StarDensity
         );
         Assert.Equal(
             expected: 0.85f,
-            actual: resolved.StarBrightness
+            actual: resolved.Sky.Block.StarBrightness
         );
         Assert.Equal(
             expected: 1337u,
-            actual: resolved.StarSeed
+            actual: resolved.Sky.Block.StarSeed
         );
     }
     [Fact]
     public void AuthoredSky_FogAlone_LeavesThePinnedGradient() {
         var resolved = Resolve(defaults: BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: 0.05f)]) });
 
-        Assert.False(condition: resolved.SkyEnabled);
+        Assert.Equal(expected: 0u, actual: resolved.Sky.Block.Enabled);
         Assert.Equal(
             expected: 0.05f,
-            actual: resolved.FogDensity
+            actual: resolved.Sky.Block.FogDensity
         );
     }
     [Fact]
@@ -448,22 +451,22 @@ public sealed class WorldRenderLightingSkyLawTests {
         // two-stop one seeded into every environment — not a zeroed stop table.
         var resolved = Resolve(defaults: BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Stars(Brightness: 1f)]) });
 
-        Assert.True(condition: resolved.SkyEnabled);
+        Assert.Equal(expected: 1u, actual: resolved.Sky.Block.Enabled);
         Assert.Equal(
             expected: 1f,
-            actual: resolved.StarBrightness
+            actual: resolved.Sky.Block.StarBrightness
         );
         Assert.Equal(
             expected: 2,
-            actual: resolved.SkyStopCount
+            actual: resolved.Sky.StopCount
         );
         Assert.Equal(
-            expected: (SdfEnvironment.DefaultSkyGroundColor, -1f),
-            actual: resolved.GetSkyStop(index: 0)
+            expected: new SdfSkyStop(Color: SdfSky.DefaultGroundColor, Elevation: -1f),
+            actual: resolved.Sky.Stops[0]
         );
         Assert.Equal(
-            expected: (SdfEnvironment.DefaultSkyZenithColor, 1f),
-            actual: resolved.GetSkyStop(index: 1)
+            expected: new SdfSkyStop(Color: SdfSky.DefaultZenithColor, Elevation: 1f),
+            actual: resolved.Sky.Stops[1]
         );
     }
     [Fact]
@@ -499,7 +502,7 @@ public sealed class WorldRenderLightingSkyLawTests {
                 RenderRaw = BaseDefaults() with {
                     Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(
                 Ink: 1f,
-                InkLow: SdfEnvironment.DefaultCurvatureInkHigh
+                InkLow: SdfCurvature.DefaultInkHigh
             )),
                 },
             })),
@@ -507,7 +510,7 @@ public sealed class WorldRenderLightingSkyLawTests {
                 RenderRaw = BaseDefaults() with {
                     Lighting = new WorldRenderLighting(Curvature: new WorldRenderCurvature(
                 Ink: 1f,
-                InkLow: (SdfEnvironment.DefaultCurvatureInkHigh - 1f)
+                InkLow: (SdfCurvature.DefaultInkHigh - 1f)
             )),
                 },
             }))
@@ -552,14 +555,14 @@ public sealed class WorldRenderLightingSkyLawTests {
 
         Assert.Equal(
             expected: 8,
-            actual: resolved.LightCount
+            actual: resolved.Lights.Count
         );
 
-        var eighth = resolved.GetLight(index: 7);
+        var eighth = resolved.Lights[7];
 
         Assert.Equal(
-            expected: 0.8f,
             actual: eighth.Weight,
+            expected: 0.8f,
             precision: 5
         );
     }
@@ -644,14 +647,14 @@ public sealed class WorldRenderLightingSkyLawTests {
 
         Assert.Equal(
             expected: 5,
-            actual: resolved.LightCount
+            actual: resolved.Lights.Count
         );
 
-        var fifth = resolved.GetLight(index: 4);
+        var fifth = resolved.Lights[4];
 
         Assert.Equal(
-            expected: SdfLightKind.Directional,
-            actual: fifth.Kind
+            actual: fifth.Kind,
+            expected: SdfLightKind.Directional
         );
         Assert.Equal(
             expected: new Vector3(
@@ -662,30 +665,26 @@ public sealed class WorldRenderLightingSkyLawTests {
             actual: fifth.Direction
         );
         Assert.Equal(
-            expected: 0.9f,
-            actual: fifth.Weight
+            actual: fifth.Weight,
+            expected: 0.9f
         );
 
-        // The packed lane table (what the engine uploads, row for row) must carry the fifth light's direction and
-        // weight too — not only what GetLight's own row math reads back.
-        var lanes = resolved.Lanes;
-        var row = (SdfEnvironment.LightsRow + (4 * SdfEnvironment.RowsPerLight));
+        // The packed lights table (what the engine uploads, record for record) must carry the fifth light's direction
+        // and weight too.
+        var records = new SdfLight[SdfLights.MaxLights];
 
+        resolved.Lights.Pack(records: records);
         Assert.Equal(
-            expected: 0f,
-            actual: lanes[((row * 4) + 0)]
-        );
-        Assert.Equal(
-            expected: 0f,
-            actual: lanes[((row * 4) + 1)]
-        );
-        Assert.Equal(
-            expected: 1f,
-            actual: lanes[((row * 4) + 2)]
+            expected: new Vector3(
+                x: 0f,
+                y: 0f,
+                z: 1f
+            ),
+            actual: records[4].Direction
         );
         Assert.Equal(
             expected: 0.9f,
-            actual: lanes[((row * 4) + 3)]
+            actual: records[4].Weight
         );
     }
     [Fact]
@@ -737,11 +736,11 @@ public sealed class WorldRenderLightingSkyLawTests {
         var missing = Resolve(
             defaults,
             track: track
-        ).GetLight(index: 0);
+        ).Lights[0];
 
         Assert.Equal(
-            0f,
-            missing.Weight
+            actual: missing.Weight,
+            expected: 0f
         );
         var live = Resolve(
             defaults,
@@ -754,19 +753,19 @@ public sealed class WorldRenderLightingSkyLawTests {
                 ),
                 Quaternion.Identity
             )
-        ).GetLight(index: 0);
+        ).Lights[0];
 
         Assert.Equal(
-            0.6f,
-            live.Weight
+            actual: live.Weight,
+            expected: 0.6f
         );
         Assert.Equal(
-            SdfProgram.NoDynamicTransformSlot,
-            live.DynamicSlot
+            actual: live.DynamicSlot,
+            expected: SdfProgram.NoDynamicTransformSlot
         );
         Assert.Equal(
-            SdfLightKind.Occluder,
-            live.Kind
+            actual: live.Kind,
+            expected: SdfLightKind.Occluder
         );
         Assert.Equal(
             new Vector3(
@@ -816,15 +815,15 @@ public sealed class WorldRenderLightingSkyLawTests {
 
         Assert.Equal(
             expected: 2,
-            actual: resolved.LightCount
+            actual: resolved.Lights.Count
         );
         Assert.Equal(
             expected: SdfLightKind.Point,
-            actual: resolved.GetLight(index: 0).Kind
+            actual: resolved.Lights[0].Kind
         );
         Assert.Equal(
             expected: SdfProgram.NoDynamicTransformSlot,
-            actual: resolved.GetLight(index: 0).DynamicSlot
+            actual: resolved.Lights[0].DynamicSlot
         );
         Assert.Equal(
             new Vector3(
@@ -832,15 +831,15 @@ public sealed class WorldRenderLightingSkyLawTests {
                 y: 2f,
                 z: 4f
             ),
-            resolved.GetLight(index: 0).Direction
+            resolved.Lights[0].Direction
         );
         Assert.Equal(
             expected: SdfLightKind.Point,
-            actual: resolved.GetLight(index: 1).Kind
+            actual: resolved.Lights[1].Kind
         );
         Assert.Equal(
             expected: SdfProgram.NoDynamicTransformSlot,
-            actual: resolved.GetLight(index: 1).DynamicSlot
+            actual: resolved.Lights[1].DynamicSlot
         );
     }
     [Fact]
@@ -873,7 +872,7 @@ public sealed class WorldRenderLightingSkyLawTests {
 
         Assert.Equal(
             expected: SdfProgram.NoDynamicTransformSlot,
-            actual: resolved.GetLight(index: 0).DynamicSlot
+            actual: resolved.Lights[0].DynamicSlot
         );
     }
     [Fact]
@@ -1013,27 +1012,27 @@ public sealed class WorldRenderLightingSkyLawTests {
 
         Assert.Equal(
             expected: 0f,
-            actual: resolved.CurvatureCavity
+            actual: resolved.Lights.Curvature.Cavity
         );
         Assert.Equal(
             expected: 0f,
-            actual: resolved.CurvatureRim
+            actual: resolved.Lights.Curvature.Rim
         );
         Assert.Equal(
             expected: 0f,
-            actual: resolved.CurvatureInk
+            actual: resolved.Lights.Curvature.Ink
         );
         Assert.Equal(
-            expected: SdfEnvironment.DefaultCurvatureInkLow,
-            actual: resolved.CurvatureInkLow
+            expected: SdfCurvature.DefaultInkLow,
+            actual: resolved.Lights.Curvature.InkLow
         );
         Assert.Equal(
-            expected: SdfEnvironment.DefaultCurvatureInkHigh,
-            actual: resolved.CurvatureInkHigh
+            expected: SdfCurvature.DefaultInkHigh,
+            actual: resolved.Lights.Curvature.InkHigh
         );
         Assert.Equal(
-            expected: SdfEnvironment.DefaultCurvatureInkColor,
-            actual: resolved.CurvatureInkColor
+            expected: SdfCurvature.DefaultInkColor,
+            actual: resolved.Lights.Curvature.InkColor
         );
     }
     [Fact]
@@ -1051,15 +1050,15 @@ public sealed class WorldRenderLightingSkyLawTests {
 
         Assert.Equal(
             expected: 0.6f,
-            actual: resolved.CurvatureCavity
+            actual: resolved.Lights.Curvature.Cavity
         );
         Assert.Equal(
             expected: 0.9f,
-            actual: resolved.CurvatureInk
+            actual: resolved.Lights.Curvature.Ink
         );
         Assert.Equal(
             expected: 11f,
-            actual: resolved.CurvatureInkHigh
+            actual: resolved.Lights.Curvature.InkHigh
         );
         Assert.Equal(
             expected: new Vector3(
@@ -1067,12 +1066,12 @@ public sealed class WorldRenderLightingSkyLawTests {
                 y: (0x10 / 255f),
                 z: (0x18 / 255f)
             ),
-            actual: resolved.CurvatureInkColor
+            actual: resolved.Lights.Curvature.InkColor
         );
         // Curvature alone leaves the pinned lights in place.
         Assert.Equal(
             expected: 2,
-            actual: resolved.LightCount
+            actual: resolved.Lights.Count
         );
     }
     [Fact]
@@ -1091,7 +1090,7 @@ public sealed class WorldRenderLightingSkyLawTests {
             definition: definition,
             mirror: mirror,
             revision: 1
-        ).GetLight(index: 0).Color;
+        ).Lights[0].Color;
 
         // A value-only delivery: the definition revision holds, the mirror refreshes the moved row.
         definition = (Fixtures.BuildDocument().WithWorldState(rows: [ColorsRow(hex: "#4C5C8C")]) with { RenderRaw = BaseDefaults() with { Lighting = lighting } });
@@ -1106,12 +1105,12 @@ public sealed class WorldRenderLightingSkyLawTests {
             definition: definition,
             mirror: mirror,
             revision: 1
-        ).GetLight(index: 0).Color;
+        ).Lights[0].Color;
         var held = track.Resolve(
             definition: definition,
             mirror: mirror,
             revision: 1
-        ).GetLight(index: 0).Color;
+        ).Lights[0].Color;
 
         Assert.Equal(
             expected: new Vector3(

@@ -63,7 +63,7 @@
       ],
       "properties": {
         "lights": {
-          "description": "The lights, at most SdfEnvironment.MaxLights, in slot order. At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
+          "description": "The lights, at most SdfLights.MaxLights, in slot order. At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
           "type": [
             "array",
             "null"
@@ -219,7 +219,7 @@
       ],
       "properties": {
         "softboxes": {
-          "description": "The reflection softboxes, at most SdfEnvironment.MaxSoftboxes. Absent or empty contributes nothing.",
+          "description": "The reflection softboxes, at most SdfSky.MaxSoftboxes. Absent or empty contributes nothing.",
           "type": [
             "array",
             "null"

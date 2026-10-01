@@ -125,7 +125,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var stampPool = $"stamp pool {WorldPlacementPolicy.MaxShapesPerStamp} shape(s)/stamp x {WorldPlacementPolicy.MaxStampRegistrations} registration(s) = {stampPoolWorstCase} worst-case instance(s) of {Puck.SignedDistance.SdfProgramBuilder.MaxInstances} ceiling ({(Puck.SignedDistance.SdfProgramBuilder.MaxInstances - stampPoolWorstCase)} headroom for statics/screens/avatars)";
         var farDistance = WorldRenderFarDistance.Resolve(defaults: server.Definition.Render);
         // A keyed fog is judged at its thinnest key, where the most of the far plane shows through.
-        var fogDensity = (server.Definition.Render.Sky?.Layers?.OfType<WorldRenderSkyLayer.Fog>().FirstOrDefault()?.Density?.AuthoredValues().DefaultIfEmpty(defaultValue: Puck.SignedDistance.SdfEnvironment.DefaultFogDensity).Min() ?? Puck.SignedDistance.SdfEnvironment.DefaultFogDensity);
+        var fogDensity = (server.Definition.Render.Sky?.Layers?.OfType<WorldRenderSkyLayer.Fog>().FirstOrDefault()?.Density?.AuthoredValues().DefaultIfEmpty(defaultValue: Puck.SignedDistance.SdfSky.DefaultFogDensity).Min() ?? Puck.SignedDistance.SdfSky.DefaultFogDensity);
         var far = string.Create(
             provider: CultureInfo.InvariantCulture,
             handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldTables.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###})"

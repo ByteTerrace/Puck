@@ -53,7 +53,7 @@ void sdfShadowStage(SdfPixel p) {
         float3 keyDirection = worldSunDirection();
         float sunDiffuse = max(dot(surfaceNormal.normal, keyDirection), 0.0);
 
-        if ((sunDiffuse > 0.0) && (worldShadowLightIndex() >= 0) && !worldSoftShadowsDisabled()) {
+        if ((sunDiffuse > 0.0) && (passGroup.shadowLight >= 0) && !worldSoftShadowsDisabled()) {
             float3 surfacePoint = (p.rayOrigin + (p.rayDirection * traveled));
             // The program's march clamp composed with the hit's local gradient magnitude (GradientMagnitudeFloor): the
             // one de-scale factor the shadow estimate divides by.

@@ -4,7 +4,7 @@ using Puck.Shaders;
 namespace Puck.SdfVm;
 
 // What a view's pass binds of the tables: the World set of the ring slot the frame's upload wrote, holding every table's
-// buffer in that slot, the brick pool, the samplers, the glyph atlas and the mesh atlases; and what it binds at a member
+// buffer in that slot (the lights and the sky's among them), the brick pool, the samplers, the glyph atlas and the mesh atlases; and what it binds at a member
 // of its pass set whose storage it does not touch. The tables own one World set per ring slot and write both once. They
 // write them again only when what they bind moves (the binding revision), which happens only in a frame's upload or a
 // host call between frames, before any view records the frame; the rewrite waits for the device to go idle, since every
@@ -73,6 +73,7 @@ public sealed partial class SdfWorldTables {
         WriteWorldBuffer(buffer: m_volumeRegion.Buffer(slot: slot), member: SdfWorldPackage.Volumes, set: set);
         WriteWorldBuffer(buffer: m_meshRegion.Buffer(slot: slot), member: SdfWorldPackage.MeshRegion, set: set);
         WriteWorldBuffer(buffer: m_brickPoolBuffer, member: SdfWorldPackage.BrickPool, set: set);
+        WriteLightAndSkySet(set: set, slot: slot);
 
         var samplers = WorldBinding(member: SdfWorldPackage.Samplers);
 
