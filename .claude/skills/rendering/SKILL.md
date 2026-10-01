@@ -237,8 +237,10 @@ These are one-line cautions; the owning pages hold the derivations.
   Direct3D 12 hardware and WARP; a fixture regeneration is checked there on the
   GPU.
 - **One pixel-format vocabulary.** `GpuPixelFormat` is the format of a GPU
-  image, a swapchain, a `Surface` (which admits only `R8G8B8A8Unorm` and
-  `B8G8R8A8Unorm`, `Surface.IsSurfaceFormat`) and a baked texture's levels;
+  image, a swapchain, a `Surface` (whose shared texture admits only
+  `R8G8B8A8Unorm` and `B8G8R8A8Unorm`, `Surface.IsSurfaceFormat`, and whose CPU
+  pixels and same-device image the float formats too, `Surface.IsImageFormat`)
+  and a baked texture's levels;
   `GpuPixelFormats.UnitBytes` is the one statement of a texel's or block's
   bytes, which the codecs, `LevelByteLength` and the pipeline budget read. Never
   add a second format enum or a conversion between two; a new format is a member
@@ -432,8 +434,14 @@ These are one-line cautions; the owning pages hold the derivations.
   An uploaded
   source's region layout and the conversion kernels are a
   sync pair ([references/sync-pairs.md](references/sync-pairs.md#image-sources));
-  a change to either moves `ImageSourceConversionLawTests`, the
-  `source-conversion` canary and `SourceConversionCanaryFixtureTests` together.
+  a change to either moves `ImageSourceConversionLawTests`,
+  `ImageSourceWorkingSpaceLawTests`, the `source-conversion` canary and
+  `SourceConversionCanaryFixtureTests` together. Every conversion writes
+  working values; `source-transfer` writes them relative to the host's paper
+  white, the pass-block value `SourceConversionPackage` writes each frame, so
+  an HDR sample shows at its own luminance. A desktop capture of an HDR display
+  hands over half-float scRGB (`INativeImageCaptureFeed.Output`), which
+  converts on its CPU tier, never the B8G8R8A8 GPU route.
 - **Builder exception safety.** A throwing `Instance`/`DynamicInstance` callback
   leaves the builder with an open instance; discard it.
 - **Captures.** Create the `FrameCaptureRequest`, arm it with

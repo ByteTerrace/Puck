@@ -1,3 +1,4 @@
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Platform;
 using Puck.Platform.Probes;
@@ -62,6 +63,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // The factory is non-null only on the D3D12 host, and the render adapter LUID is resolved once from the render device
     // context at the first publish (the device does not exist at construction), so capture feeds open on the render GPU.
     private readonly bool m_hostsOnDirectX;
+    // The host's paper-white level, which an HDR capture's room glow is measured against.
+    private readonly double m_paperWhiteNits;
     // The process's running world instances. Its observation resolver door owns destination lookup, origin adoption,
     // generation resolution and start/reuse, so a screen and a crossing cannot grow independent routing rules.
     private readonly WorldInstanceHost m_instanceHost;
@@ -199,8 +202,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// captures and <c>puck parity</c>, so external content never reaches any frame it produces.</param>
     /// <param name="producers">The image producers the host registers beside the four the engine ships, or
     /// <see langword="null"/> for none; each must match a shape in <see cref="WorldImageProducerVocabulary"/>.</param>
+    /// <param name="paperWhiteNits">The host's paper-white level, in cd/m², the luminance a working value of one shows at,
+    /// which an HDR capture's room glow is measured against.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<WorldOverlayFacts> facts, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null) {
+    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<WorldOverlayFacts> facts, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits) {
         ArgumentNullException.ThrowIfNull(argument: screens);
         m_renderProbe = renderProbe;
         ArgumentNullException.ThrowIfNull(argument: machines);
@@ -230,6 +235,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_facts = facts;
         m_hostsOnDirectX = hostsOnDirectX;
         m_instanceHost = instanceHost;
+        m_paperWhiteNits = DisplayOutput.RequirePaperWhite(nits: paperWhiteNits);
         m_roster = roster;
         // Windows-10240 guarded because DirectXGpuSurfaceExportFactory is platform-attributed; hostsOnDirectX already
         // implies that floor (Program.cs rejects the D3D12 backend below it), so the check only satisfies the analyzer.

@@ -7,6 +7,7 @@ using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D10;
 using Windows.Win32.Graphics.Direct3D11;
 using Windows.Win32.Graphics.Dxgi;
+using Windows.Win32.Graphics.Dxgi.Common;
 using Windows.Win32.System.Com;
 
 namespace Puck.Platform.Windows;
@@ -62,6 +63,77 @@ internal static unsafe class Win32D3D11 {
 
         context = createdContext;
         device = createdDevice;
+    }
+    // The color space a monitor shows: Hdr10 when the adapter output driving it reports
+    // DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 (IDXGIOutput6::GetDesc1), which is how Windows reports HDR turned on, and
+    // Srgb otherwise, for a monitor no output names and for a system DXGI cannot describe.
+    [SupportedOSPlatform("windows10.0.10240")]
+    public static DisplayColorSpace ColorSpaceOfMonitor(nint monitorHandle) {
+        if (PInvoke.CreateDXGIFactory1(
+            ppFactory: out var factoryPointer,
+            riid: IDXGIFactory1.IID_Guid
+        ).Failed) {
+            return DisplayColorSpace.Srgb;
+        }
+
+        var factory = ((IDXGIFactory1*)factoryPointer);
+
+        try {
+            for (var adapterIndex = 0u; ; adapterIndex++) {
+                IDXGIAdapter1* adapter;
+
+                if (factory->EnumAdapters1(
+                    Adapter: adapterIndex,
+                    ppAdapter: &adapter
+                ).Failed) {
+                    return DisplayColorSpace.Srgb;
+                }
+
+                try {
+                    for (var outputIndex = 0u; ; outputIndex++) {
+                        IDXGIOutput* output;
+
+                        if (((IDXGIAdapter*)adapter)->EnumOutputs(
+                            Output: outputIndex,
+                            ppOutput: &output
+                        ).Failed) {
+                            break;
+                        }
+
+                        try {
+                            var output6Iid = IDXGIOutput6.IID_Guid;
+
+                            if (((IUnknown*)output)->QueryInterface(
+                                ppvObject: out var output6,
+                                riid: in output6Iid
+                            ).Failed) {
+                                continue;
+                            }
+
+                            try {
+                                var description = ((IDXGIOutput6*)output6)->GetDesc1();
+
+                                if (((nint)description.Monitor.Value) == monitorHandle) {
+                                    return ((DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 == description.ColorSpace)
+                                        ? DisplayColorSpace.Hdr10
+                                        : DisplayColorSpace.Srgb);
+                                }
+                            } finally {
+                                _ = ((IUnknown*)output6)->Release();
+                            }
+                        } finally {
+                            _ = ((IUnknown*)output)->Release();
+                        }
+                    }
+                } finally {
+                    _ = ((IUnknown*)adapter)->Release();
+                }
+            }
+        } catch (COMException) {
+            return DisplayColorSpace.Srgb;
+        } finally {
+            _ = ((IUnknown*)factory)->Release();
+        }
     }
     public static void ThrowIfFailed(HRESULT hr, string operation) {
         if (hr.Value < 0) {

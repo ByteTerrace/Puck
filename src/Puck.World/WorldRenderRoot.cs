@@ -176,9 +176,13 @@ internal static class WorldRenderRoot {
         }
 
         // An uploaded producer's source instance and a machine source convert the region their upload writes through
-        // the conversion its descriptor names; any other producer's instance, and a probe source, renders through an
-        // external producer that hands out its image through the binder's capture gate.
-        SourceConversionPackage.RegisterAll(packages: packages);
+        // the conversion its descriptor names, into working values relative to the host's paper white; any other
+        // producer's instance, and a probe source, renders through an external producer that hands out its image through
+        // the binder's capture gate.
+        SourceConversionPackage.RegisterAll(
+            packages: packages,
+            paperWhiteNits: hostSettings.PaperWhiteNits
+        );
         packages.RegisterSource(package: WorldFrameComparison.SourcePackage, factory: context => {
             var slot = WorldComparisonGraph.SeatOf(source: context.Instance);
             var snapshot = ((slot >= 0) ? comparison.Seat(slot: slot) : null);
