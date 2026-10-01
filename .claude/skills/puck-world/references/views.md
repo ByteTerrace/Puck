@@ -305,8 +305,9 @@ the rows the document names then. A probe parameter's `post` target
 writes a row's float config field live (`WorldPostPasses`). A pane the
 active layout does not show is not scheduled. The world's capture composes
 cameras and places the current layout before scheduling that same frame. View
-and pane allocations reserve their largest layout extent, so easing changes
-placement without rebuilding a node. The `rendering` skill owns the graph document, the scheduler
+and pane allocations reserve the largest extent of the transition in flight and
+exactly their rect once it settles, so easing changes placement without
+rebuilding a node and a transition rebuilds one once. The `rendering` skill owns the graph document, the scheduler
 and the host (`WorldViewGraphHost`).
 
 ## Pointer, cursor, Free Cam

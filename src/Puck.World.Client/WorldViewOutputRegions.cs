@@ -2,100 +2,116 @@ using Puck.Abstractions.Presentation;
 
 namespace Puck.World.Client;
 
-/// <summary>The allocation envelope of each layout occupant. Selection and easing belong to
-/// <see cref="WorldViewComposer"/>; these extents reserve every rect that composition can place without resizing a node.</summary>
+/// <summary>The allocation envelope of each view and pane the composition places: the largest width and height its
+/// rect reaches over the transition in flight (<see cref="WorldViewComposer.StartSlots"/> to
+/// <see cref="WorldViewComposer.EndSlots"/>), so easing between the two never resizes a node. A settled composition
+/// allocates each occupant exactly its rect, and the allocation changes once a transition, when it starts or settles,
+/// never as its rect eases. An envelope sizes an image, not a placement, so its origin is zero.</summary>
 public static class WorldViewOutputRegions {
-    /// <summary>Returns the largest width and height a view ordinal can occupy across authored slot transitions and,
-    /// when there is no catch-all layout, the built-in seat ladder. The origin is zero: this sizes an image, not a placement.</summary>
-    /// <param name="views">The world's view defaults.</param>
-    /// <param name="view">The zero-based view ordinal.</param>
-    /// <returns>The view's output envelope.</returns>
-    public static NormalizedRect View(WorldViewDefaults views, int view) {
-        ArgumentNullException.ThrowIfNull(argument: views);
-        ArgumentOutOfRangeException.ThrowIfNegative(value: view);
-        var width = 0f;
-        var height = 0f;
-        var catchall = false;
+    /// <summary>Fills one envelope per view ordinal the presenter renders. A view's ordinal counts the slots before it
+    /// that render a view, as the presenter counts them: a camera slot whose camera the definition authors, and a seat
+    /// slot whose seat order is joined; a pane renders none. An ordinal covers the slot it holds at the start and the
+    /// slot it holds at the end, since an occupant cuts at the transition's midpoint and a cut can move an ordinal to
+    /// another slot, each slot over both its endpoints, which every rect it eases through lies between. With no slot
+    /// rendering a view, the one view is the presenter's whole-display spectator.</summary>
+    /// <param name="composer">The composer, after this frame's composition.</param>
+    /// <param name="joinedCount">The joined local-seat count the presenter binds seat slots against.</param>
+    /// <param name="cameras">The definition's cameras, which decide whether a camera slot renders a view.</param>
+    /// <param name="envelopes">The list to fill, cleared first: one envelope per view ordinal.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public static void Views(WorldViewComposer composer, int joinedCount, IReadOnlyList<WorldCamera> cameras, List<NormalizedRect> envelopes) {
+        ArgumentNullException.ThrowIfNull(argument: composer);
+        ArgumentNullException.ThrowIfNull(argument: cameras);
+        ArgumentNullException.ThrowIfNull(argument: envelopes);
 
-        for (var layoutIndex = 0; (layoutIndex < views.Layouts.Count); layoutIndex++) {
-            var layout = views.Layouts[layoutIndex];
-
-            catchall |= (layout.SeatCount == 0);
-            var ordinal = 0;
-
-            for (var slotIndex = 0; (slotIndex < layout.Slots.Count); slotIndex++) {
-                var slot = layout.Slots[slotIndex];
-
-                // Transitions pair physical slots, not camera ordinals. A camera can ease toward a pane's rect,
-                // and a padded departing camera survives after a destination camera has been inserted before it.
-                // Skipped seat slots can also compact the rendered ordinals. Ordinal N can occupy any slot >= N.
-                if (slotIndex >= view) {
-                    width = MathF.Max(x: width, y: slot.Width);
-                    height = MathF.Max(x: height, y: slot.Height);
-                }
-                if (slot.Instance is null) { ordinal++; }
-            }
-            // An instance-only composition still films the spectator beneath its panes.
-            if ((ordinal == 0) && (view == 0)) { width = 1f; height = 1f; }
+        envelopes.Clear();
+        Cover(cameras: cameras, endpoint: composer.StartSlots, envelopes: envelopes, joinedCount: joinedCount, other: composer.EndSlots);
+        Cover(cameras: cameras, endpoint: composer.EndSlots, envelopes: envelopes, joinedCount: joinedCount, other: composer.StartSlots);
+        if (envelopes.Count == 0) {
+            envelopes.Add(item: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f));
         }
-        if (!catchall) {
-            for (var count = 1; (count <= PlayerRoster.MaxSlots); count++) {
-                if (view >= count) { continue; }
-                var region = WorldFramePresenter.LayoutRegion(count: count, index: view);
-
-                width = MathF.Max(x: width, y: region.Width);
-                height = MathF.Max(x: height, y: region.Height);
-            }
-        }
-        return new NormalizedRect(Height: height, Width: width, X: 0f, Y: 0f);
     }
-    /// <summary>Returns the largest width and height of every physical slot a pane transitions through, or the
-    /// supplied region when no authored slot names it.</summary>
-    /// <param name="views">The world's view defaults.</param>
-    /// <param name="instance">The pane's instance name.</param>
-    /// <param name="region">The current placement, used when no layout declares the pane.</param>
-    /// <returns>The pane's output envelope.</returns>
-    public static NormalizedRect Pane(WorldViewDefaults views, string instance, NormalizedRect region) {
-        ArgumentNullException.ThrowIfNull(argument: views);
+    /// <summary>Returns a pane's envelope: every slot it holds at either endpoint of the transition in flight, each over
+    /// both its endpoints, or its current rect when neither endpoint shows it.</summary>
+    /// <param name="composer">The composer, after this frame's composition.</param>
+    /// <param name="instance">The pane's <c>views.graphs</c> instance name.</param>
+    /// <param name="region">The pane's current rect.</param>
+    /// <returns>The pane's envelope.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="composer"/> or <paramref name="instance"/> is
+    /// <see langword="null"/>.</exception>
+    public static NormalizedRect Pane(WorldViewComposer composer, string instance, NormalizedRect region) {
+        ArgumentNullException.ThrowIfNull(argument: composer);
+        ArgumentNullException.ThrowIfNull(argument: instance);
+
+        var start = composer.StartSlots;
+        var end = composer.EndSlots;
         var width = 0f;
         var height = 0f;
-        var catchall = HasCatchall(views: views);
+        var held = false;
 
-        for (var layoutIndex = 0; (layoutIndex < views.Layouts.Count); layoutIndex++) {
-            var layout = views.Layouts[layoutIndex];
-
-            for (var slotIndex = 0; (slotIndex < layout.Slots.Count); slotIndex++) {
-                var slot = layout.Slots[slotIndex];
-
-                if (!string.Equals(a: slot.Instance, b: instance, comparisonType: StringComparison.Ordinal)) { continue; }
-                // Before the midpoint the pane still occupies its old slot while that slot eases toward another
-                // occupant's rectangle; after the midpoint it can inherit a larger starting rectangle.
-                for (var otherIndex = 0; (otherIndex < views.Layouts.Count); otherIndex++) {
-                    var other = views.Layouts[otherIndex];
-
-                    if (slotIndex >= other.Slots.Count) { continue; }
-                    width = MathF.Max(x: width, y: other.Slots[slotIndex].Width);
-                    height = MathF.Max(x: height, y: other.Slots[slotIndex].Height);
-                }
-                if (!catchall) {
-                    for (var count = (slotIndex + 1); (count <= PlayerRoster.MaxSlots); count++) {
-                        var builtin = WorldFramePresenter.LayoutRegion(count: count, index: slotIndex);
-
-                        width = MathF.Max(x: width, y: builtin.Width);
-                        height = MathF.Max(x: height, y: builtin.Height);
-                    }
-                }
+        for (var index = 0; (index < start.Count); index++) {
+            if (
+                string.Equals(a: start[index].Instance, b: instance, comparisonType: StringComparison.Ordinal) ||
+                string.Equals(a: end[index].Instance, b: instance, comparisonType: StringComparison.Ordinal)
+            ) {
+                held = true;
+                width = MathF.Max(x: width, y: MathF.Max(x: start[index].Region.Width, y: end[index].Region.Width));
+                height = MathF.Max(x: height, y: MathF.Max(x: start[index].Region.Height, y: end[index].Region.Height));
             }
         }
-        return (((width > 0f) && (height > 0f))
+
+        return (held
             ? new NormalizedRect(Height: height, Width: width, X: 0f, Y: 0f)
-            : region);
+            : (region with { X = 0f, Y = 0f }));
     }
 
-    private static bool HasCatchall(WorldViewDefaults views) {
-        for (var index = 0; (index < views.Layouts.Count); index++) {
-            if (views.Layouts[index].SeatCount == 0) { return true; }
+    // Widens each ordinal's envelope by the slot it holds at one endpoint, the slot spanning both its endpoints.
+    private static void Cover(IReadOnlyList<WorldComposedSlot> endpoint, IReadOnlyList<WorldComposedSlot> other, int joinedCount, IReadOnlyList<WorldCamera> cameras, List<NormalizedRect> envelopes) {
+        var ordinal = 0;
+
+        for (var index = 0; (index < endpoint.Count); index++) {
+            var slot = endpoint[index];
+
+            if (!RendersView(cameras: cameras, joinedCount: joinedCount, slot: slot)) {
+                continue;
+            }
+
+            var width = MathF.Max(x: slot.Region.Width, y: other[index].Region.Width);
+            var height = MathF.Max(x: slot.Region.Height, y: other[index].Region.Height);
+
+            if (ordinal == envelopes.Count) {
+                envelopes.Add(item: new NormalizedRect(Height: height, Width: width, X: 0f, Y: 0f));
+            } else {
+                var envelope = envelopes[ordinal];
+
+                envelopes[ordinal] = new NormalizedRect(
+                    Height: MathF.Max(x: envelope.Height, y: height),
+                    Width: MathF.Max(x: envelope.Width, y: width),
+                    X: 0f,
+                    Y: 0f
+                );
+            }
+
+            ordinal++;
         }
+    }
+    // Whether the presenter renders a view for a slot: a camera slot whose camera the definition authors, or a seat slot
+    // whose seat order is joined.
+    private static bool RendersView(WorldComposedSlot slot, int joinedCount, IReadOnlyList<WorldCamera> cameras) {
+        if (slot.Instance is not null) {
+            return false;
+        }
+
+        if (slot.Camera is not { } camera) {
+            return (((uint)slot.SeatOrder) < ((uint)joinedCount));
+        }
+
+        for (var index = 0; (index < cameras.Count); index++) {
+            if (string.Equals(a: cameras[index].Name, b: camera, comparisonType: StringComparison.Ordinal)) {
+                return true;
+            }
+        }
+
         return false;
     }
 }

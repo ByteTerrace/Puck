@@ -155,6 +155,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly Dictionary<string, WorldCameraRigCompiler.Cache> m_namedCameraRigCache = new(comparer: StringComparer.Ordinal);
     private readonly WorldGroupAnchors m_groupAnchors = new();
     private readonly List<SdfViewSnapshot> m_views = new(capacity: PlayerRoster.MaxSlots);
+    // The extent the root reads each of m_views at, over the layout transition in flight (WorldViewOutputRegions).
+    private readonly List<NormalizedRect> m_viewEnvelopes = new(capacity: PlayerRoster.MaxSlots);
     // The frame's views: the presentation's own (m_views), which it places, then the camera views filming the frame.
     private readonly List<SdfViewSnapshot> m_frameViews = new(capacity: PlayerRoster.MaxSlots);
     private DynamicTransform[] m_transforms = [];
@@ -1232,6 +1234,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         }
 
         graphs.PlaceViews(
+            envelopes: m_viewEnvelopes,
             panesCover: panesCover,
             rendered: ViewRendered,
             sharpness: m_settings.UpscaleSharpness,
@@ -1245,6 +1248,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             if (
                 (composed.Instance is not { } name) ||
                 !graphs.Place(
+                    envelope: WorldViewOutputRegions.Pane(
+                        composer: m_composer,
+                        instance: name,
+                        region: region
+                    ),
                     instance: name,
                     region: region,
                     sharpness: m_settings.UpscaleSharpness
@@ -1634,6 +1642,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         } else {
             m_noLocalSeatsNarrated = false;
         }
+
+        WorldViewOutputRegions.Views(
+            cameras: m_client.Definition.Cameras,
+            composer: m_composer,
+            envelopes: m_viewEnvelopes,
+            joinedCount: joinedRosterCount
+        );
 
         // The camera the frame's first view renders with, the spectator above included: the viewer a window fits its
         // eye to while no seat resolves a view (WorldSeatViewports.Viewer).

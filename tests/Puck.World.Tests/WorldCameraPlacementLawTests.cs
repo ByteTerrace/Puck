@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
@@ -24,7 +25,7 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
         Run(checkPlacement: true, interrupted: interrupted, subpixel: subpixel);
     }
     [Fact]
-    public void AnEasedRectCrossesQuantizationStepsWithoutChangingTheNodesExtent() {
+    public void AnEasedRectCrossesQuantizationStepsWithoutRebuildingItsNodeUntilTheTransitionSettles() {
         Run(checkPlacement: false, interrupted: false, subpixel: false);
     }
     [Fact]
@@ -102,7 +103,7 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
             .Single(predicate: static binding => ((binding.Set == 0) && (binding.Members.Count != 0)))
             .Members.Single(predicate: static member => (member.Name == ShaderFrameInterface.PlacedExtent)).Offset);
         var block = new byte[layout.FrameBlockSizeBytes];
-        var frames = new List<(float Width, float Height, float CameraAspect, float PlacedWidth, float PlacedHeight)>();
+        var frames = new List<(float Width, float Height, float CameraAspect, float PlacedWidth, float PlacedHeight, (uint Width, uint Height) Envelope)>();
 
         presenter.ResizeDisplay(height: 500, width: 1000);
         presenter.ViewRendered = static _ => true;
@@ -125,17 +126,18 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
             var placedWidth = BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: placedOffset));
             var placedHeight = BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: (placedOffset + 4)));
 
-            // The allocation holds the full display through the ease.
-            Assert.Equal(actual: envelope, expected: (1000u, 500u));
-            frames.Add(item: (placement.Width, placement.Height, camera.AspectRatio, placedWidth, placedHeight));
+            // The allocation holds the full display through the ease and is a quarter once the layout settles.
+            Assert.Equal(actual: envelope, expected: ((placement.Width == 0.25f) ? (250u, 500u) : (1000u, 500u)));
+            frames.Add(item: (placement.Width, placement.Height, camera.AspectRatio, placedWidth, placedHeight, envelope));
         }
-        // Settled at a quarter of a 1000x500 display, the pane's 2:1 allocation is shown at 1:2, and its pass projects at
-        // the camera's 1:2, not the allocation's 2:1.
-        var settled = frames[^1];
+        // The last eased frame shows the pane's 2:1 allocation nearly at a quarter of a 1000x500 display, under 3:4,
+        // and its pass projects at the camera's aspect, not the allocation's 2:1.
+        var eased = frames.Last(predicate: static frame => (frame.Envelope == (1000u, 500u)));
 
-        Assert.Equal(actual: settled.Width, expected: 0.25f);
-        Assert.Equal(actual: settled.CameraAspect, expected: 0.5f);
-        Assert.Equal(actual: (settled.PlacedWidth / settled.PlacedHeight), expected: settled.CameraAspect);
+        Assert.InRange(actual: eased.CameraAspect, high: 0.75f, low: 0.5f);
+        Assert.Equal(actual: (eased.PlacedWidth / eased.PlacedHeight), expected: eased.CameraAspect);
+        Assert.Equal(actual: frames[^1].Width, expected: 0.25f);
+        Assert.Equal(actual: frames[^1].CameraAspect, expected: 0.5f);
         // Every eased frame between: the pass maps its output onto the rect the camera projects for.
         Assert.True(condition: (frames.Select(selector: static frame => frame.Width).Distinct().Count() > 3));
         Assert.All(collection: frames, action: static frame => {
@@ -143,6 +145,64 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
             Assert.Equal(actual: frame.PlacedHeight, expected: (frame.Height * 500f));
             Assert.Equal(actual: (frame.PlacedWidth / frame.PlacedHeight), expected: frame.CameraAspect);
         });
+    }
+    [Fact]
+    public void ASteadySplitLayoutAllocatesItsFirstViewAtItsPlacedHalf() {
+        // The shipped world's seat layouts, over a world with a joined seat; its parity layout names a camera this world
+        // does not author.
+        var layouts = JsonNode.Parse(json: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/puck.world.json")))!
+            ["views"]!["layouts"]!.AsArray()
+            .Where(predicate: static layout => layout!["slots"]!.AsArray().All(predicate: static slot => (slot!["camera"]?.GetValue<string>() is null)))
+            .Select(selector: static layout => new WorldViewLayout(
+                Name: layout!["name"]!.GetValue<string>(),
+                SeatCount: (layout["seatCount"]?.GetValue<int>() ?? 0),
+                Slots: [.. layout["slots"]!.AsArray().Select(selector: static slot => new WorldViewSlot(
+                    Height: (slot!["height"]?.GetValue<float>() ?? 1f), Width: (slot["width"]?.GetValue<float>() ?? 1f),
+                    X: (slot["x"]?.GetValue<float>() ?? 0f), Y: (slot["y"]?.GetValue<float>() ?? 0f)))],
+                TransitionRenderScale: (layout["transitionRenderScale"]?.GetValue<float>() ?? 1f),
+                TransitionSeconds: (layout["transitionSeconds"]?.GetValue<float>() ?? 0f)))
+            .ToArray();
+        using var host = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: m_directory,
+            world: "tests/Puck.World.Canaries/editor-grid/fixture.world.json",
+            edit: definition => definition with { ViewsRaw = definition.Views with { Layouts = layouts } }).Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var graphs = host.Services.GetRequiredService<WorldViewGraphHost>();
+        var composition = host.Services.GetRequiredService<WorldCompositionState>();
+        using var instances = FakeGraphInstances.Attach(
+            host: graphs,
+            create: static name => new ShaderPipelineRenderNode(
+                deviceContext: new RefusingGpuDevice(), height: 4, hostsOnDirectX: false,
+                name: name, pipelines: new GpuPassPipelineCache(), width: 4));
+        var history = ((RenderGraphHistory?)null);
+        var schedule = ((RenderGraphSchedule?)null);
+
+        Assert.Contains(collection: layouts, filter: static layout => (layout.Name == "split"));
+        presenter.ResizeDisplay(height: 1080, width: 1920);
+        presenter.ViewRendered = static _ => true;
+        composition.ActiveLayout = "split";
+        for (var index = 0; (index < 4); index++) {
+            var context = new FrameContext(
+                AccumulatorTicks: 0, DeltaTicks: 5040, ElapsedTicks: (((ulong)index) * 5040),
+                FrameDeltaTicks: 5040, Host: null!, StepTicks: 5040, TargetHeight: 1080, TargetWidth: 1920);
+
+            presenter.PrepareGraph(context: in context);
+            var frame = presenter.CaptureFrame(deltaSeconds: 0.1f, height: 1080, interpolationAlpha: 1f, width: 1920);
+
+            Assert.Equal(expected: 0.5f, actual: frame.Views[0].Region.Width);
+            schedule = new RenderGraphSchedule(set: instances.Instances);
+            history ??= RenderGraphHistory.Empty(set: instances.Instances);
+            RenderGraphScheduler.Schedule(
+                frame: new RenderGraphFrame(DisplayHeight: 1080, DisplayHertz: 60, DisplayWidth: 1920,
+                    Footprints: graphs.Footprints, Index: index, Roots: [new RenderGraphRoot(Height: 1, Instance: "main", Width: 1)], Tick: index),
+                history: history, schedule: schedule, set: instances.Instances);
+            history = schedule.Next;
+        }
+        var row = schedule!.Instances[instances.Instances.IndexOf(name: WorldRootGraph.ProducerOf(view: 0))];
+
+        // The first view is shown at half a 1920x1080 display, so it allocates 960x1080, not the whole display.
+        Assert.Equal(expected: (960, 1080), actual: (row.Width, row.Height));
     }
     [Fact]
     public void AResidencyReusingAFrozenCaptureStillPlacesEveryPreparedFrame() {
@@ -225,6 +285,7 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
         (int Width, int Height)? extent = null;
         ShaderPipelinePlan? installed = null;
         var creations = 0;
+        var rebuilds = 0;
         var regions = new HashSet<NormalizedRect>();
 
         for (var index = 0; (index < 20); index++) {
@@ -258,9 +319,23 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
 
                 if (index == 0) { continue; }
                 extent ??= (row.Width, row.Height);
-                Assert.Equal(expected: extent.Value, actual: (row.Width, row.Height));
-                node.Resize(width: ((uint)row.Width), height: ((uint)row.Height));
-                if (index == 1) {
+                // Through the ease the node keeps the wide layout's 0.75 of the display, crossing every quantization
+                // step of the eased rect; it shrinks once, to the narrow 0.25, on the frame the transition settles.
+                var settled = (view.Region.Width == 0.25f);
+
+                Assert.Equal(expected: (settled ? (64, 128) : (192, 128)), actual: (row.Width, row.Height));
+                if ((row.Width, row.Height) != extent.Value) {
+                    rebuilds++;
+                    extent = (row.Width, row.Height);
+                    node.Resize(width: ((uint)row.Width), height: ((uint)row.Height));
+                    TestLiveness.Until(step: () => {
+                        _ = node.ProduceFrame(context: default);
+                        return (node.Extent == (((uint)row.Width), ((uint)row.Height)));
+                    });
+                    installed = node.Plan;
+                    creations = gpu.Created.Count;
+                } else if (index == 1) {
+                    node.Resize(width: ((uint)row.Width), height: ((uint)row.Height));
                     // Run the real node on a device-free fill graph. Its allocation extent comes from the same
                     // schedule the runtime uses; camera dressing and SDF grid dipping have their own package laws.
                     node.Swap(pipeline: Fill());
@@ -278,6 +353,7 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
             }
         }
         Assert.True(condition: (regions.Count > 3));
+        Assert.Equal(actual: rebuilds, expected: (checkPlacement ? 0 : 1));
     }
     private static CompiledShaderPipeline Fill() {
         var plan = new ShaderPipelineCompiler().Compile(definition: new RenderGraphDefinition(

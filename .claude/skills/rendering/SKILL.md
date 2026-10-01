@@ -1510,12 +1510,15 @@ The capture advances each pane's clock and feeds its camera, pointer, time and
 bound parameters before publishing its mapping. A pane the active layout does
 not show draws nothing in its place pass and is not scheduled. A pane slot adds
 no SDF view. `WorldViewGraphHost.PlaceViews` and `Place` add footprints at the
-largest width and height each occupant uses across authored layouts, including
-the built-in seat ladder where no catch-all layout covers it
-(`WorldViewOutputRegions`). Placement uses the current eased rect with
-`world.upscale-sharpness`; the allocation envelope stays fixed through easing
-and at its endpoints, so quantization and hysteresis rebuild no node
-(`WorldCameraPlacementLawTests.AnEasedRectCrossesQuantizationStepsWithoutChangingTheNodesExtent`).
+envelope the presenter hands them: the largest width and height each occupant
+reaches over the layout transition in flight (`WorldViewOutputRegions` over
+`WorldViewComposer.StartSlots` and `EndSlots`), which is exactly its rect once
+the layout settles. Placement uses the current eased rect with
+`world.upscale-sharpness`; the envelope holds through easing, so quantization
+and hysteresis rebuild nothing and a transition rebuilds a node once, as it
+starts or settles
+(`WorldCameraPlacementLawTests.AnEasedRectCrossesQuantizationStepsWithoutRebuildingItsNodeUntilTheTransitionSettles`,
+`ASteadySplitLayoutAllocatesItsFirstViewAtItsPlacedHalf`).
 The view package reconstructs a reduced render grid to that native output
 before `place` composes it, and `place` resamples it once more unless the
 scheduled extent equals the rect's pixels. The presenter sets each view's
