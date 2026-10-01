@@ -142,8 +142,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         /// <summary>The root source being watched, or null when watching is disabled.</summary>
         public string? WatchPath { get; private set; }
 
-        internal void CancelPending() =>
-            Compilation.Cancel();
         internal bool PollWatch(long debounceTicks, long pollTicks) => m_watch.Poll(now: Stopwatch.GetTimestamp(), debounceTicks: debounceTicks, pollTicks: pollTicks);
         internal void RefreshDependencies() {
             if (WatchPath is not { } root) { return; }
@@ -253,6 +251,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     public const int WatchPollMilliseconds = 50;
 
     private readonly Dictionary<string, Entry> m_entries = new(comparer: StringComparer.Ordinal);
+    private readonly List<CanceledBuild<CompileOutcome>> m_canceledCompilations = [];
     private readonly List<RenderGraphFootprint> m_footprints = [];
     private readonly Dictionary<string, RenderGraphPlacement> m_placements = new(comparer: StringComparer.Ordinal);
 
@@ -797,17 +796,46 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         ArgumentException.ThrowIfNullOrWhiteSpace(documentDirectory);
         DocumentDirectory = Path.GetFullPath(path: documentDirectory);
     }
-    /// <summary>Cancels pending compilations; the runtime retains ownership of the GPU instances.</summary>
+    /// <summary>Cancels compilations and waits for them and earlier superseded compilations to stop, so nothing this
+    /// host started writes under the compiler's cache after disposal. The runtime owns the GPU instances.</summary>
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
         foreach (var entry in m_entries.Values) {
-            entry.CancelPending();
+            CancelPending(entry: entry);
+        }
+        foreach (var compilation in m_canceledCompilations) {
+            compilation.Wait();
+        }
+        m_canceledCompilations.Clear();
+    }
+
+    // Supersession and row removal never wait on the frame thread. Keep their canceled builds until they finish, or
+    // join them at disposal before the owner releases the compiler's directory.
+    private void CancelPending(Entry entry) {
+        CollectCanceledCompilations();
+        var compilation = entry.Compilation.Detach();
+
+        if (compilation.IsCompleted) {
+            compilation.Wait();
+        } else {
+            m_canceledCompilations.Add(item: compilation);
         }
     }
+    private void CollectCanceledCompilations() {
+        for (var index = (m_canceledCompilations.Count - 1); (index >= 0); index--) {
+            var compilation = m_canceledCompilations[index];
+
+            if (!compilation.IsCompleted) { continue; }
+            compilation.Wait();
+            m_canceledCompilations.RemoveAt(index: index);
+        }
+    }
+
     /// <summary>Installs complete candidates and polls dependency watches before this host frame renders.</summary>
     public void PumpWatches() {
         if (m_disposed) { return; }
+        CollectCanceledCompilations();
         var debounce = ((Stopwatch.Frequency * WatchDebounceMilliseconds) / 1000);
         var poll = ((Stopwatch.Frequency * WatchPollMilliseconds) / 1000);
 
@@ -914,7 +942,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         var entry = m_entries[name];
         var superseded = entry.IsCompiling;
 
-        entry.CancelPending();
+        CancelPending(entry: entry);
         if (superseded) {
             Report?.Invoke(
                 name,
@@ -1251,7 +1279,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     objB: node
                 )
             ) {
-                entry?.CancelPending();
+                if (entry is not null) { CancelPending(entry: entry); }
                 entry = new Entry { Name = row.Name, Node = node, Owner = this };
                 m_entries[row.Name] = entry;
             }
@@ -1275,7 +1303,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         foreach (var name in m_entries.Keys.ToArray()) {
             if (desiredNames.Contains(item: name)) { continue; }
-            m_entries[name].CancelPending();
+            CancelPending(entry: m_entries[name]);
             m_entries.Remove(key: name);
         }
     }

@@ -205,6 +205,8 @@ public sealed class CreationBakeLawTests {
         using (var schedule = new WorldBakeSchedule(quality: SdfBakeQuality.Preview, store: new WorldBakeStore(directory: store))) {
             schedule.Pump(definition: definition);
             Assert.True(condition: schedule.IsBusy);
+            // A schedule disposed before its bake began has nothing in flight to stop, so wait until the bake runs.
+            Assert.True(condition: SpinWait.SpinUntil(condition: () => schedule.IsBaking, timeout: TestLiveness.Bound));
         }
 
         var disposed = Entries(directory: store);

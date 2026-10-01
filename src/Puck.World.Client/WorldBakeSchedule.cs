@@ -54,6 +54,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     private readonly HashSet<ContentPin> m_drawn = [];
 
     private long m_revision;
+    private volatile bool m_baking;
     // Published together at the end of a pump, so readiness never combines states from different definitions.
     private volatile Progress m_progress;
     private bool m_ships;
@@ -110,6 +111,9 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
     public SdfBakeQuality Quality { get; }
     /// <summary>Gets whether any bake is queued or baking.</summary>
     public bool IsBusy => ((m_queue.Count > 0) || m_build.IsPending);
+    /// <summary>Gets whether a background bake is evaluating a field and its outcome has not been taken: false while a bake is
+    /// only queued, not yet scheduled onto the thread pool, or satisfied by the cache. Safe to read from any thread.</summary>
+    public bool IsBaking => m_baking;
     /// <summary>Gets whether the definition the schedule last pumped has every bake settled: baked, held or refused,
     /// none queued or baking. False before the first pump. Written at the end of each pump and safe to read from any
     /// thread.</summary>
@@ -166,7 +170,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
 
             m_queue.RemoveAt(index: 0);
             m_inFlight = batch;
-            m_build.Start(build: token => Resolve(batch: batch, store: store, token: token));
+            m_build.Start(build: token => Resolve(batch: batch, onBaking: () => m_baking = true, store: store, token: token));
         }
 
         m_progress = Progress.Reconciled | (m_ships ? Progress.Ships : Progress.None) | (IsBusy ? Progress.None : Progress.Settled);
@@ -281,7 +285,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
             uvs: uvs
         );
     }
-    private static List<Outcome> Resolve(WorldBakeRequest[] batch, WorldBakeStore store, CancellationToken token) {
+    private static List<Outcome> Resolve(WorldBakeRequest[] batch, Action onBaking, WorldBakeStore store, CancellationToken token) {
         var outcomes = new List<Outcome>(capacity: batch.Length);
 
         foreach (var request in batch) {
@@ -296,6 +300,8 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
                 continue;
             }
 
+            onBaking();
+
             var bytes = WorldBakeStore.Bake(cancellationToken: token, request: request, work: out var work);
 
             _ = store.Keep(key: key, outcome: bytes);
@@ -309,6 +315,7 @@ public sealed class WorldBakeSchedule : IWorkCounterSource, IDisposable {
             return;
         }
 
+        m_baking = false;
         m_revision++;
 
         foreach (var outcome in (outcomes ?? [])) {
