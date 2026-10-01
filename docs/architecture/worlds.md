@@ -721,11 +721,33 @@ world, or the window one level up, mapped through its own door. So two portals f
 end at the depth, each level looking through its own glass. A session screen at the depth shows its
 session's `fallback` colour, black when the session authors none, through the `color` producer. That
 is the one rule for every face past the depth: a flat colour the author chose costs nothing to show
-and reads as the end of the recursion. A world shown through a screen shows only what any viewer may
-be shown on its behalf: its sessions, and producers whose content is a pure function of their
-settings (a test pattern, a QR code, a colour). A machine, a probe, a camera view, text, and a
-producer of the local device's content (a camera, a desktop capture) show nothing there, so being
-shown through a portal never opens the local user's camera or desktop.
+and reads as the end of the recursion.
+
+Every other screen of a world shown through a screen, or of a world a seat is presented in, shows
+what it would show in the boot world, from that world's own sources, never the boot world's:
+
+- A producer whose content is a pure function of its settings (a test pattern, a QR code, a colour)
+  shows the one shared instance of that content.
+- A machine shows its own world's machine. A machine source instance names the world instance whose
+  host runs it, so two worlds' cabinets of one name are two images. That world's server prepares and
+  steps its machines on its own ticks, whether or not any seat stands in it.
+- A camera view shows a view of that world through its own camera row, posed by its own mirror (a
+  placement anchor, or an active body's interpolated pose; any other anchor reads the world origin).
+  Each level films its world's cameras under its own name (`session$24$camera$<camera>`,
+  `routed$<digest>$camera$<camera>`) into the residency that level's world renders through, after
+  that residency's own views. A camera view reads its world's other camera views at their previous
+  frame, so cameras filming each other's screens never wait on each other within a frame.
+- Text draws through that world's own font catalog, resolved beside that world's own document.
+- A probe shows nothing: only the boot world runs a probe host, so a probe of another world opens
+  with a fault naming that world.
+- A producer of the local device's content (a camera, a desktop capture) shows nothing, so being
+  shown through a portal never opens the local user's camera or desktop.
+
+A world delivered from another authority carries no document directory and runs its machines there,
+so its text and its machines show nothing here, and `world.nesting` says why. Its session screens
+show nothing too: the authority holds a screen's session only for the worlds this process runs, and
+no message carries a remote world's screen session to the presenting process. A remote world's
+camera views and producers show.
 
 The authority opens the sessions a world's screens show while that world is fewer screens deep than
 the nesting depth. The boot world and every world a human stands in are at depth zero, and a world a
@@ -734,8 +756,9 @@ therefore follows the documents and the sessions already open, never what a fram
 presentation renders a level only while something sees it: each view that reads a session tests the
 glass it shows on against the camera it last rendered with (`WorldPortalVisibility`), and a glass
 behind that camera or outside its frustum schedules nothing beneath it. `world.nesting` echoes every
-level: its depth, its destination, the residency it renders through, and what each of its world's
-screens shows.
+level: its depth, its destination, the residency it renders through, what each of its world's
+screens shows (a session or camera view, a source instance with the fault that leaves it dark,
+`text`, or `none`), and why that world's text does not draw when its fonts do not resolve.
 
 A portal's face can show its destination as a window (`projection: window`): the face's portal facet
 maps a counterpart, and the destination renders each frame through an off-axis camera fitted, from

@@ -38,7 +38,8 @@ public sealed class WorldNestedScreensLawTests {
             definition: () => worlds[root],
             depth: 0,
             head: "routed$root",
-            shares: static _ => true
+            shares: static _ => true,
+            world: root
         );
         var levels = new Dictionary<string, WorldNestedScreens<Level>>(comparer: StringComparer.Ordinal) {
             [screens.Head] = screens,
@@ -192,11 +193,13 @@ public sealed class WorldNestedScreensLawTests {
             expectedStartString: "source$color$"
         );
     }
-    // THE LAW: only what a world shown through a screen may show is shown. A session, a producer whose content is a
-    // function of its settings and an empty screen keep their sources; a producer of the local device's content (a
-    // camera), a machine, a probe and a camera view show nothing.
+    // THE LAW: a world shown through a screen shows its own sources and nothing of the local device. A producer whose
+    // content is a function of its settings shows its shared instance; a machine and a probe show a source instance of
+    // that world's own host, which another world's equal row never shares; a camera view shows a view of that world
+    // through its own camera, named under the level; a producer of the local device's content (a camera) shows nothing.
+    // The red leg is the boot world's machine row, whose instance is another.
     [Fact]
-    public void AWorldShownThroughAScreenOpensNothingOfTheLocalDevice() {
+    public void AWorldShownThroughAScreenShowsItsOwnSourcesAndNothingOfTheLocalDevice() {
         WorldScreenSource[] sources = [
             WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.TestPatternId, settings: new WorldTestPatternSettings(Height: 4, Width: 4)),
             WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CameraId, settings: new WorldCameraSettings()),
@@ -205,13 +208,15 @@ public sealed class WorldNestedScreensLawTests {
             new WorldScreenSource.View(CameraName: "billboard"),
         ];
         var world = (Fixtures.BuildDocument() with {
+            CamerasRaw = [Camera(name: "billboard")],
             ScreensRaw = [.. sources.Select(selector: static (source, index) => (Screen(source: source) with { Index = index }))],
         });
         var screens = new WorldNestedScreens<Level>(
             definition: () => world,
             depth: 1,
             head: "session$0",
-            shares: static id => (id == WorldImageProducerSettings.TestPatternId)
+            shares: static id => (id == WorldImageProducerSettings.TestPatternId),
+            world: "garden"
         );
 
         _ = screens.Reconcile(
@@ -223,11 +228,56 @@ public sealed class WorldNestedScreensLawTests {
             actualString: screens.InstanceOf(screen: 0),
             expectedStartString: "source$testPattern$"
         );
-
-        for (var index = 1; (index < sources.Length); index++) {
-            Assert.Null(@object: screens.InstanceOf(screen: index));
-        }
+        Assert.Null(@object: screens.InstanceOf(screen: 1));
+        Assert.StartsWith(
+            actualString: screens.InstanceOf(screen: 2),
+            expectedStartString: "source$machine$"
+        );
+        Assert.NotEqual(
+            actual: screens.InstanceOf(screen: 2),
+            expected: WorldViewNames.Source(
+                producer: WorldImageProducerSettings.MachineId,
+                settings: RenderGraphSettingsOf(source: new WorldScreenSource.Machine(Instance: "cabinet", Output: "video"))
+            )
+        );
+        Assert.StartsWith(
+            actualString: screens.InstanceOf(screen: 3),
+            expectedStartString: "source$probe$"
+        );
+        Assert.Equal(
+            actual: screens.InstanceOf(screen: 4),
+            expected: "session$0$camera$billboard"
+        );
+        Assert.Equal(
+            actual: screens.Sources.Where(predicate: static source => (source.SourceProducer is WorldImageProducerSettings.MachineId or WorldImageProducerSettings.ProbeId)).Select(selector: WorldSourceInstances.WorldOf),
+            expected: ["garden", "garden"]
+        );
+        // The camera view is filmed under the level, and a camera view reads it, and every camera view, at its previous
+        // frame, never within one.
+        Assert.Equal(
+            actual: screens.Cameras.Select(selector: static camera => (camera.Name, camera.Camera.Name)),
+            expected: [("session$0$camera$billboard", "billboard")]
+        );
+        Assert.Contains(collection: screens.Reads, expected: "session$0$camera$billboard");
+        Assert.DoesNotContain(collection: screens.FilmReads, expected: "session$0$camera$billboard");
+        Assert.Equal(actual: screens.CameraReads, expected: ["session$0$camera$billboard"]);
     }
+
+    private static WorldCamera Camera(string name) => new(
+        Anchor: null,
+        Name: name,
+        RenderHeight: 72U,
+        RenderWidth: 96U,
+        Rig: new WorldCameraProgram(
+            Name: "fixed",
+            Operations: [new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 0.9f))],
+            Version: WorldCameraProgram.CurrentVersion
+        )
+    );
+    // The settings the boot world's own row of a source reads its source instance through.
+    private static IReadOnlyDictionary<string, System.Text.Json.JsonElement>? RenderGraphSettingsOf(WorldScreenSource source) =>
+        WorldSourceInstances.Of(shown: [source], world: WorldDefinitionLoader.BootInstanceName).Instances[0].Settings;
+
     // THE LAW: a portal face is seen by a camera before its glass, and unseen from behind the glass or with every corner
     // of the glass past one side of the camera's frustum.
     [Fact]
@@ -268,7 +318,8 @@ public sealed class WorldNestedScreensLawTests {
                     definition: () => destination,
                     depth: (screens.Depth + 1),
                     head: name,
-                    shares: static _ => true
+                    shares: static _ => true,
+                    world: source.Destination
                 )
             )
             : null);
