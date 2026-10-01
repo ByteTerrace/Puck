@@ -4993,13 +4993,17 @@ desktop capture on an HDR display, converts through P12. SDR stays the default
 and the fallback. Everything but the HDR source landed with P14-10, and the HDR
 source has landed too:
 
-- A desktop capture reads the display it captures once, at open: the output
+- A desktop capture selects its format and encoding at open: the output
   driving its monitor reports HDR10 (`IDXGIOutput6::GetDesc1`) or not, and
   `Win32GraphicsCaptureFeed.CaptureOutputOf` turns that into the frames'
   `DisplayOutput`, B8G8R8A8 sRGB for an SDR display and half-float scRGB for an
   HDR one in either color space (`INativeImageCaptureFeed.Output`). An SDR
   capture is unchanged: its frames, its Direct3D 12 GPU route and its
   `source-rgba` copy are what they were.
+  The feed checks its display during publication and consumption at a bounded
+  cadence. An HDR toggle, a move to a display that differs in it, or failed
+  discovery ends it; the consumer reopens it with fresh metadata. Unknown display
+  discovery refuses an open instead of guessing SDR.
 - An HDR capture hands its CPU frames over as `R16G16B16A16Float` CPU pixels,
   downscaled in linear light, and converts on its CPU tier, never the GPU
   route, whose shared targets are B8G8R8A8. The binder names the encoding

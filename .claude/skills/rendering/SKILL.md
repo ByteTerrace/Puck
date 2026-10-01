@@ -442,6 +442,10 @@ These are one-line cautions; the owning pages hold the derivations.
   an HDR sample shows at its own luminance. A desktop capture of an HDR display
   hands over half-float scRGB (`INativeImageCaptureFeed.Output`), which
   converts on its CPU tier, never the B8G8R8A8 GPU route.
+  An HDR toggle, a move to a display that differs in it, or unavailable display
+  discovery ends the native feed; its consumer reopens it with fresh metadata.
+  Unknown discovery refuses the open instead of guessing SDR. Presented CPU float surfaces pass through
+  `SurfaceEncoder` before capture sinks receive their RGBA8 pixels.
 - **Builder exception safety.** A throwing `Instance`/`DynamicInstance` callback
   leaves the builder with an open instance; discard it.
 - **Captures.** Create the `FrameCaptureRequest`, arm it with

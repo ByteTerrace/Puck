@@ -65,15 +65,17 @@ internal static unsafe class Win32D3D11 {
         device = createdDevice;
     }
     // The color space a monitor shows: Hdr10 when the adapter output driving it reports
-    // DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 (IDXGIOutput6::GetDesc1), which is how Windows reports HDR turned on, and
-    // Srgb otherwise, for a monitor no output names and for a system DXGI cannot describe.
+    // DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 (IDXGIOutput6::GetDesc1), which is how Windows reports HDR turned on,
+    // ScRgb for DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709, and Srgb for DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709, an SDR
+    // output; null for any other color space, a monitor no output names, and a system DXGI cannot describe, so discovery
+    // never guesses SDR.
     [SupportedOSPlatform("windows10.0.10240")]
-    public static DisplayColorSpace ColorSpaceOfMonitor(nint monitorHandle) {
+    public static DisplayColorSpace? ColorSpaceOfMonitor(nint monitorHandle) {
         if (PInvoke.CreateDXGIFactory1(
             ppFactory: out var factoryPointer,
             riid: IDXGIFactory1.IID_Guid
         ).Failed) {
-            return DisplayColorSpace.Srgb;
+            return null;
         }
 
         var factory = ((IDXGIFactory1*)factoryPointer);
@@ -86,7 +88,7 @@ internal static unsafe class Win32D3D11 {
                     Adapter: adapterIndex,
                     ppAdapter: &adapter
                 ).Failed) {
-                    return DisplayColorSpace.Srgb;
+                    return null;
                 }
 
                 try {
@@ -114,9 +116,12 @@ internal static unsafe class Win32D3D11 {
                                 var description = ((IDXGIOutput6*)output6)->GetDesc1();
 
                                 if (((nint)description.Monitor.Value) == monitorHandle) {
-                                    return ((DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 == description.ColorSpace)
-                                        ? DisplayColorSpace.Hdr10
-                                        : DisplayColorSpace.Srgb);
+                                    return description.ColorSpace switch {
+                                        DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 => DisplayColorSpace.Hdr10,
+                                        DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709 => DisplayColorSpace.ScRgb,
+                                        DXGI_COLOR_SPACE_TYPE.DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709 => DisplayColorSpace.Srgb,
+                                        _ => null,
+                                    };
                                 }
                             } finally {
                                 _ = ((IUnknown*)output6)->Release();
@@ -130,7 +135,7 @@ internal static unsafe class Win32D3D11 {
                 }
             }
         } catch (COMException) {
-            return DisplayColorSpace.Srgb;
+            return null;
         } finally {
             _ = ((IUnknown*)factory)->Release();
         }
