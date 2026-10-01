@@ -3,7 +3,7 @@ using Puck.Abstractions.Presentation;
 
 namespace Puck.Abstractions.Gpu;
 
-/// <summary>The one group the display encode binds (<c>Assets/Runtime/display-encode.frag.hlsl</c> in
+/// <summary>The one group the display encode binds (<c>Assets/Shaders/Runtime/display-encode.frag.hlsl</c> in
 /// <c>Puck.Shaders</c>): the working image as a sampled image, its sampler and the encode block, in the pass group. A
 /// register number equals its binding and the group's ordinal is its register space, so the shader declares the image at
 /// <c>register(t0, space3)</c>, the sampler at <c>register(s1, space3)</c> and the block at <c>register(b2, space3)</c>

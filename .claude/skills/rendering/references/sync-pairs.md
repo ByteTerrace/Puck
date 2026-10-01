@@ -183,7 +183,7 @@ or counted-load consumers must not interpret it as a measured zero.
 
 ## The display encode
 
-| C# (`Puck.Abstractions.Gpu`) | HLSL (`src/Puck.Shaders/Assets/Runtime/display-encode.frag.hlsl`) | Contract |
+| C# (`Puck.Abstractions.Gpu`) | HLSL (`src/Puck.Shaders/Assets/Shaders/Runtime/display-encode.frag.hlsl`) | Contract |
 |---|---|---|
 | `DisplayEncodeLayout` (`Group`, `SourceImageBinding`, `SamplerBinding`, `BlockBinding`) | `sourceTexture` (t0), `sourceSampler` (s1), `encode` (b2), all in space 3 | The pass group, each register equal to its binding. |
 | `DisplayEncodeLayout.WriteBlock`, `BlockBytes` = 16 | `struct DisplayEncode` | Four little-endian words: the `DisplayColorSpace` value; the white scale (`DisplayOutput.WhiteScale`), a float; the dither step, a float, one code of the target's format (`GpuPixelFormats.ColorCodeMaximum`) or zero on a float target; and one when the target encodes sRGB on write (`GpuPixelFormats.EncodesSrgb`). |

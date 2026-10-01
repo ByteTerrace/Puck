@@ -1187,7 +1187,7 @@ The engine's working images are float (`RenderGraphPackageCatalog.WorkingFormat`
 that places the views and runs the post passes, and the overlay's output in
 `main$overlay`. A working value is the shading's display-referred value, one at
 SDR white, with headroom above it. Nothing quantizes it until the display encode
-(`Assets/Runtime/display-encode.frag.hlsl`, drawn over the fullscreen triangle of
+(`Assets/Shaders/Runtime/display-encode.frag.hlsl`, drawn over the fullscreen triangle of
 `display.vert.hlsl`), which samples a working image 1:1 by fragment coordinate
 and writes it in the color space its target shows:
 
