@@ -54,16 +54,24 @@ internal static class DocsCitationsCommand {
         options: RegexOptions.Compiled,
         pattern: @"^(world|player|screen|editor|identity|chat|replay|storage|capture|audio|view|speaker|channel|wire)\."
     );
-    // A verb-shaped token: lowercase head, at least one dotted segment. Trailing argument text inside the
-    // same span is ignored — `world.row.set views.seatRig` cites `world.row.set`.
-    private static readonly Regex MarkdownToken = new(
+
+    // A dotted name, the one spelling every token this verb reads or sweeps shares: a lowercase head and at least one
+    // dotted segment, whose characters include the hyphens a lever carries and the underscores of a refusal code's
+    // segments (`world.mutation.activation_mismatch`), so a cited code and the literal that carries it read whole.
+    private const string DottedName = @"[a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9_-]*)+";
+
+    // A verb-shaped token in a document's code span. Trailing argument text inside the same span is ignored —
+    // `world.row.set views.seatRig` cites `world.row.set`.
+    internal static readonly Regex MarkdownToken = new(
         options: RegexOptions.Compiled,
-        pattern: @"`([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)[^`]*`"
+        pattern: $@"`({DottedName})[^`]*`"
     );
-    private static readonly Regex XmlDocToken = new(
+    // A verb-shaped token in an XML documentation code span.
+    internal static readonly Regex XmlDocToken = new(
         options: RegexOptions.Compiled,
-        pattern: @"<c>([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)[^<]*</c>"
+        pattern: $@"<c>({DottedName})[^<]*</c>"
     );
+
     // A verb registration's own name argument — the lower bound the staleness gate rests on.
     //
     // ANCHORED TO LINE START, which is the whole discriminator: a command registration spells `name:` on its
@@ -74,15 +82,17 @@ internal static class DocsCitationsCommand {
     // instrument it exists to replace.
     private static readonly Regex Registration = new(
         options: RegexOptions.Compiled,
-        pattern: @"^\s*name:\s*""([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)"""
+        pattern: $@"^\s*name:\s*""({DottedName})"""
     );
+
     // Any verb-shaped string literal in source: a refusal door, a HUD binding token, a session lever, a
     // document member path. Not a console verb, but a name the code genuinely carries — a document citing
     // one is describing a real mechanism, not a dead verb.
-    private static readonly Regex SourceLiteral = new(
+    internal static readonly Regex SourceLiteral = new(
         options: RegexOptions.Compiled,
-        pattern: @"""([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)"""
+        pattern: $@"""({DottedName})"""
     );
+
     // A `help` listing line, built by CommandRegistry.BuildHelpText as `{name} - {description}` — the name is
     // group 1. The listing is one console record, so every line after its first carries the record's
     // continuation indent (ConsoleRecord).
