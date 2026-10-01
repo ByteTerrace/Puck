@@ -478,7 +478,12 @@ public sealed class SdfEnvironment {
             index: 0
         );
     }
-    /// <summary>Copies every lane from a lane span.</summary>
+    /// <summary>Copies every lane from a lane span, holding each light's dynamic slot to the rule
+    /// <see cref="SetLight"/> holds it to.</summary>
+    /// <param name="lanes">The lanes, <see cref="LaneCount"/> of them.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="lanes"/> is not <see cref="LaneCount"/> long, or a
+    /// point or occluder light's slot lane holds neither <see cref="SdfProgram.NoDynamicTransformSlot"/> nor a slot in
+    /// [0, <see cref="SdfProgram.MaxDynamicTransformSlot"/>]; nothing is copied.</exception>
     public void CopyFrom(ReadOnlySpan<float> lanes) {
         if (lanes.Length != LaneCount) {
             throw new ArgumentOutOfRangeException(
@@ -487,8 +492,36 @@ public sealed class SdfEnvironment {
             );
         }
 
+        for (var light = 0; (light < MaxLights); light++) {
+            var row = (LightsRow + (light * RowsPerLight));
+            var kind = ((SdfLightKind)((byte)lanes[(((row + 1) * 4) + 3)]));
+            var slot = lanes[(((row + 2) * 4) + 2)];
+
+            if (!IsLightSlot(
+                kind: kind,
+                slot: slot
+            )) {
+                throw new ArgumentOutOfRangeException(
+                    message: $"light {light}'s dynamic slot lane holds {slot}; {LightSlotRule}",
+                    paramName: nameof(lanes)
+                );
+            }
+        }
+
         lanes.CopyTo(destination: m_lanes);
     }
+
+    // What a point or occluder light's dynamic slot may be, wherever it is written.
+    private static string LightSlotRule => $"a point or occluder light's dynamic slot must be {SdfProgram.NoDynamicTransformSlot} or in [0, {SdfProgram.MaxDynamicTransformSlot}].";
+
+    // The one rule a light's dynamic slot holds to, whichever door writes it (SetLight, CopyFrom): a point or occluder
+    // light's slot is the static sentinel or a whole slot in the table; every other kind's lane is not read as a slot.
+    private static bool IsLightSlot(SdfLightKind kind, float slot) => (
+        (kind is not (SdfLightKind.Point or SdfLightKind.Occluder)) ||
+        (slot == SdfProgram.NoDynamicTransformSlot) ||
+        ((slot >= 0f) && (slot <= SdfProgram.MaxDynamicTransformSlot) && (slot == MathF.Floor(x: slot)))
+    );
+
     /// <summary>Creates the environment an unauthored world renders: the pinned sun with shadows and the pinned
     /// hemisphere ambient, no sky.</summary>
     public static SdfEnvironment Default() {
@@ -605,13 +638,12 @@ public sealed class SdfEnvironment {
         ) {
             throw new ArgumentOutOfRangeException(paramName: nameof(index));
         }
-        if (
-            (light.Kind is SdfLightKind.Point or SdfLightKind.Occluder) &&
-            (light.DynamicSlot != SdfProgram.NoDynamicTransformSlot) &&
-            ((light.DynamicSlot < 0) || (light.DynamicSlot > SdfProgram.MaxDynamicTransformSlot))
-        ) {
+        if (!IsLightSlot(
+            kind: light.Kind,
+            slot: light.DynamicSlot
+        )) {
             throw new ArgumentOutOfRangeException(
-                message: $"A point or occluder light's dynamic slot must be {SdfProgram.NoDynamicTransformSlot} or in [0, {SdfProgram.MaxDynamicTransformSlot}].",
+                message: $"light {index}'s dynamic slot is {light.DynamicSlot}; {LightSlotRule}",
                 paramName: nameof(light)
             );
         }
