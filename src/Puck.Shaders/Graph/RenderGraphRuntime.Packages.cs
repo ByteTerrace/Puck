@@ -209,8 +209,14 @@ public sealed partial class RenderGraphRuntime {
     // renders, so an Unread row alone cannot distinguish parking from cadence. Follow the frame's visible reads even
     // through consumers that stand, then count only instances both unread and absent from that closure.
     private void CountUnread(in RenderGraphFrame frame, RenderGraphSchedule schedule) {
+        // Walked by index: the frame's lists are interfaces, whose enumerators a steady frame must not allocate.
+        var roots = frame.Roots;
+        var footprints = frame.Footprints;
+
         Array.Clear(array: m_visible);
-        foreach (var root in frame.Roots) {
+        for (var position = 0; (position < roots.Count); position++) {
+            var root = roots[position];
+
             if ((root.Width > 0) && (root.Height > 0)) {
                 m_visible[m_set.IndexOf(name: root.Instance)] = true;
             }
@@ -220,7 +226,9 @@ public sealed partial class RenderGraphRuntime {
 
         while (changed) {
             changed = false;
-            foreach (var footprint in frame.Footprints) {
+            for (var position = 0; (position < footprints.Count); position++) {
+                var footprint = footprints[position];
+
                 if ((footprint.Width <= 0) || (footprint.Height <= 0)) {
                     continue;
                 }
@@ -236,7 +244,11 @@ public sealed partial class RenderGraphRuntime {
                 if (!m_visible[consumer]) {
                     continue;
                 }
-                foreach (var read in m_set.Reads[consumer]) {
+                var reads = m_set.Reads[consumer];
+
+                for (var position = 0; (position < reads.Count); position++) {
+                    var read = reads[position];
+
                     if ((read.Kind == ShaderPipelineResourceKind.Buffer) && !m_visible[read.Producer]) {
                         m_visible[read.Producer] = true;
                         changed = true;
