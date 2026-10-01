@@ -31,7 +31,64 @@ public sealed class ShaderBuildTargetsLawTests {
           ]]></Code></Task>
         </UsingTask>
         """;
+    // A stand-in for DXC whose output names the process that wrote it, so two builds of one source publish different
+    // bytes.
+    private const string ProcessDxc = """
+        <UsingTask TaskName="Exec" Override="true" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+          <ParameterGroup>
+            <Command Required="true" />
+            <ConsoleToMSBuild ParameterType="System.Boolean" />
+            <IgnoreExitCode ParameterType="System.Boolean" />
+            <StandardErrorImportance />
+            <StandardOutputImportance />
+            <ExitCode ParameterType="System.Int32" Output="true" />
+          </ParameterGroup>
+          <Task><Code Type="Fragment" Language="cs"><![CDATA[
+            ExitCode = 0;
+            if (Command.Contains("--version")) { return true; }
+            File.WriteAllText(Command.Split('"')[3], "compiled by process " + System.Diagnostics.Process.GetCurrentProcess().Id);
+            return true;
+          ]]></Code></Task>
+        </UsingTask>
+        """;
 
+    [Fact]
+    public async Task TwoInterleavedPublishersLeaveABytecodeAndSidecarOfOneGeneration() {
+        using var fixture = new Fixture();
+        var directory = fixture.PathOf(path: "Assets/Shaders");
+
+        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "source");
+        // A source newer than every output keeps the incremental gate open, so each build compiles and publishes.
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: new DateTime(day: 1, hour: 0, kind: DateTimeKind.Utc, minute: 0, month: 1, second: 0, year: 2099), path: fixture.PathOf(path: "Assets/Shaders/a.comp.hlsl"));
+        fixture.Write(path: "Assets/Shaders/a.comp.spv", text: "earlier bytecode");
+        fixture.Write(path: "Assets/Shaders/a.comp.spv.hash", text: "earlier sidecar");
+        fixture.ShaderProject(body: """
+            <ItemGroup><ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" /></ItemGroup>
+            <Target Name="ResolveProjectReferences" />
+            """, dxc: ProcessDxc);
+
+        // Publisher A stalls holding its new sidecar: first the old sidecar is held open so A cannot replace or remove
+        // it, then A's own temporary sidecar is held so A cannot move it in.
+        var heldSidecar = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash"), share: FileShare.Read);
+        var first = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(target: "Build"));
+        var stalledSidecar = WaitFor(find: () => Directory.EnumerateFiles(path: directory, searchPattern: "a.comp.spv.hash.*.tmp").SingleOrDefault());
+        using var heldTemporary = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: stalledSidecar, share: FileShare.Read);
+
+        heldSidecar.Dispose();
+
+        // Publisher B compiles meanwhile. Once its compiler output exists it either publishes its whole pair at once or
+        // waits for A to finish; either way A is then let go.
+        var second = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(target: "Build"));
+
+        _ = WaitFor(find: () => Directory.EnumerateFiles(path: directory, searchPattern: "a.comp.spv.*.tmp").FirstOrDefault(predicate: static path => !path.Contains(comparisonType: StringComparison.Ordinal, value: ".hash.")));
+        _ = await Task.WhenAny(task1: second, task2: Task.Delay(cancellationToken: TestContext.Current.CancellationToken, delay: TimeSpan.FromSeconds(value: 3)));
+        heldTemporary.Dispose();
+        fixture.RequireSuccess(run: await first);
+        fixture.RequireSuccess(run: await second);
+
+        // The pair on disk is one generation's: the freshness check holds the bytecode to its sidecar.
+        fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
+    }
     [Fact]
     public void AFailedLaterCompileRemovesEveryTemporaryFromThatInvocation() {
         using var fixture = new Fixture();
@@ -85,7 +142,7 @@ public sealed class ShaderBuildTargetsLawTests {
               <Cached Include="Assets/Shaders/a.comp.spv" SourcePath="$(MSBuildProjectDirectory)/Assets/Shaders/a.comp.hlsl" />
             </ItemGroup>
             <Target Name="Publish">
-              <PuckWriteShaderHashSidecars BytecodeFiles="@(Cached)" Token="missing-output" />
+              <PuckWriteShaderHashSidecars BytecodeFiles="@(Cached)" LockFile="$(_PuckShaderPublishLock)" Token="missing-output" />
             </Target>
             """);
 
@@ -129,6 +186,18 @@ public sealed class ShaderBuildTargetsLawTests {
         Assert.Equal(expected: settled, actual: File.GetLastWriteTimeUtc(path: fixture.PathOf(path: "Assets/Probes/probe.first.dxbc")));
     }
 
+    private static string WaitFor(Func<string?> find) {
+        var deadline = (DateTime.UtcNow + TimeSpan.FromMinutes(value: 1));
+
+        while (true) {
+            if (find() is { } found) {
+                return found;
+            }
+            Assert.True(condition: (DateTime.UtcNow < deadline), userMessage: "The publisher never reached the awaited point.");
+            Thread.Sleep(millisecondsTimeout: 20);
+        }
+    }
+
     private sealed class Fixture : IDisposable {
         public string Root { get; } = CliScratchDirectories.CreateProject(prefix: "puck-shader-targets-");
 
@@ -139,12 +208,12 @@ public sealed class ShaderBuildTargetsLawTests {
             _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: fullPath)!);
             File.WriteAllText(contents: text, path: fullPath);
         }
-        public void ShaderProject(string body, string buildDependencies = "ResolveProjectReferences") {
+        public void ShaderProject(string body, string buildDependencies = "ResolveProjectReferences", string dxc = FakeDxc) {
             var project = XElement.Parse(text: $"<Project>{body}</Project>");
 
             project.AddFirst(content: XElement.Parse(text: "<PropertyGroup><PuckComputeShaderDxilEnabled>false</PuckComputeShaderDxilEnabled></PropertyGroup>"));
             project.Add(content: new XElement(name: "Import", content: new XAttribute(name: "Project", value: RepositoryPaths.Resolve(relativePath: "build/Shaders.targets"))));
-            project.Add(content: XElement.Parse(text: FakeDxc));
+            project.Add(content: XElement.Parse(text: dxc));
             project.Add(content: new XElement(name: "Target", content: [new XAttribute(name: "Name", value: "Build"), new XAttribute(name: "DependsOnTargets", value: buildDependencies)]));
             Write(path: "fixture.proj", text: project.ToString());
         }

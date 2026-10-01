@@ -91,12 +91,16 @@ or sidecars cause the build to regenerate them. Keep HLSL sources in Git.
 A pack or publish that skips the build (`--no-build`, as CI packs over a
 finished build) still collects the bytecode the build left, Direct3D 11 probe
 kernels included, and refuses a declared kernel whose bytecode is missing.
-DXC writes each file under a name only its build uses, and the build moves it
-and then its sidecar into place whole, retrying while another process holds
-the file. Failed compilation removes that invocation's temporary bytecode.
-Each file is replaced atomically; bytecode and sidecar publication is not a
-transaction. Concurrent builds producing different bytes can leave a mismatched
-pair, which the freshness gate refuses.
+DXC writes each file under a name only its build uses, and failed compilation
+removes that invocation's temporary bytecode. A bytecode file and its sidecar
+are published as one transaction under the project's publication lock
+(`obj/shader-publish.lock`), which the freshness gate, the orphan sweep and a
+pack's collection take too: the old sidecar is removed, the bytecode moved into
+place whole, and the new sidecar moved in last. The sidecar is the pair's
+commit record, so builds sharing a checkout never leave one generation's
+bytecode beside another's sidecar, and a publication cut short leaves no
+sidecar, which the next build recompiles. A file another process holds is
+retried.
 
 Deleting a source leaves its bytecode behind in any checkout that built it. The
 build removes that bytecode and its sidecar and prints one line naming each

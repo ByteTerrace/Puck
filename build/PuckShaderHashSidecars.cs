@@ -12,11 +12,13 @@ using Microsoft.Build.Utilities;
 /// Publishes each shader bytecode file compiled this pass and writes a "&lt;bytecode-file&gt;.hash" sidecar beside it, recording
 /// a source-side hash (the source <c>.hlsl</c> concatenated with every <c>ShaderInclude</c> item, in item
 /// order — a real streamed byte concatenation) and a bytecode-side hash of the compiled file itself.
-/// <para>DXC writes each file to a temporary name carrying the run's <see cref="Token"/>, and this task moves it into
-/// place whole, then replaces the sidecar whole, so no reader in this or another build ever sees half a file. The two
-/// replacements are separate operations: concurrent publishers producing different bytes can leave a mismatched pair.
-/// A replace refused while another process holds the file (a
-/// concurrent reader, an antivirus scan of a file just written) is retried (<see cref="PuckShaderHashing.Retry"/>).</para>
+/// <para>A bytecode file and its sidecar are published as one transaction, under the project's publication lock
+/// (<see cref="LockFile"/>, <see cref="PuckShaderHashing.Lock"/>), which every reader of a pair takes too: the old sidecar
+/// is removed, the bytecode DXC wrote under the run's <see cref="Token"/> is moved into place whole, and the new sidecar
+/// is moved in last. The sidecar is the pair's commit record: one exists only beside the bytecode it describes, so two
+/// builds of one checkout can never leave one generation's bytecode beside another's sidecar, and a publication cut
+/// short leaves no sidecar, which the next build's incremental gate recompiles. A file another process holds (a reader
+/// outside the build, an antivirus scan of a file just written) is retried (<see cref="PuckShaderHashing.Retry"/>).</para>
 /// </summary>
 /// <remarks>
 /// Runs once per build over the whole item list at once, in real C# compiled by <c>RoslynCodeTaskFactory</c>
@@ -33,8 +35,18 @@ public sealed class PuckWriteShaderHashSidecars : Task {
     /// <summary>The token of this run's temporary bytecode names: DXC wrote each file as
     /// "&lt;bytecode-file&gt;.&lt;token&gt;.tmp".</summary>
     public string Token { get; set; } = "";
+    /// <summary>The project's shader publication lock, which every task that writes or reads a bytecode and sidecar pair
+    /// holds while it does.</summary>
+    [Required]
+    public string LockFile { get; set; } = "";
 
     public override bool Execute() {
+        using (PuckShaderHashing.Lock(lockFile: LockFile, log: Log)) {
+            return Publish();
+        }
+    }
+
+    private bool Publish() {
         foreach (var bytecode in BytecodeFiles) {
             var bytecodePath = bytecode.GetMetadata(metadataName: "FullPath");
             var sourcePath = bytecode.GetMetadata(metadataName: "SourcePath");
@@ -56,6 +68,15 @@ public sealed class PuckWriteShaderHashSidecars : Task {
 
             try {
                 File.WriteAllText(contents: $"source:{sourceHash}\nbytecode:{bytecodeHash}\n", path: temporaryPath);
+                PuckShaderHashing.Retry(
+                    log: Log,
+                    operation: () => {
+                        File.Delete(path: sidecarPath);
+
+                        return true;
+                    },
+                    path: sidecarPath
+                );
                 PuckShaderHashing.Publish(destinationPath: bytecodePath, log: Log, temporaryPath: compiledPath);
                 PuckShaderHashing.Publish(destinationPath: sidecarPath, log: Log, temporaryPath: temporaryPath);
             } finally {
@@ -84,8 +105,18 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
     public ITaskItem[] BytecodeFiles { get; set; } = Array.Empty<ITaskItem>();
     /// <summary>The shared <c>ShaderInclude</c> items every source may depend on, in item order.</summary>
     public ITaskItem[] Includes { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>The project's shader publication lock (<see cref="PuckWriteShaderHashSidecars.LockFile"/>), held while
+    /// the pairs are read, so no publication is seen half done.</summary>
+    [Required]
+    public string LockFile { get; set; } = "";
 
     public override bool Execute() {
+        using (PuckShaderHashing.Lock(lockFile: LockFile, log: Log)) {
+            return Validate();
+        }
+    }
+
+    private bool Validate() {
         foreach (var bytecode in BytecodeFiles) {
             var bytecodePath = bytecode.GetMetadata(metadataName: "FullPath");
             var sourcePath = bytecode.GetMetadata(metadataName: "SourcePath");
@@ -143,8 +174,18 @@ public sealed class PuckRemoveOrphanedShaderBytecode : Task {
     /// <summary>The bytecode files this task removed, so the caller can drop them from its item list.</summary>
     [Output]
     public ITaskItem[] Removed { get; private set; } = Array.Empty<ITaskItem>();
+    /// <summary>The project's shader publication lock (<see cref="PuckWriteShaderHashSidecars.LockFile"/>), held while
+    /// pairs are read and removed.</summary>
+    [Required]
+    public string LockFile { get; set; } = "";
 
     public override bool Execute() {
+        using (PuckShaderHashing.Lock(lockFile: LockFile, log: Log)) {
+            return Sweep();
+        }
+    }
+
+    private bool Sweep() {
         var removed = new List<ITaskItem>();
 
         foreach (var bytecode in BytecodeFiles) {
@@ -206,6 +247,31 @@ public sealed class PuckRemoveOrphanedShaderBytecode : Task {
 internal static class PuckShaderHashing {
     private const int Attempts = 20;
 
+    /// <summary>Takes a project's shader publication lock: the file opened with no sharing, which the operating system
+    /// releases with the handle however the holder ends, so a crashed build leaves no lock behind. Another holder is
+    /// waited for, up to five minutes.</summary>
+    public static IDisposable Lock(string lockFile, TaskLoggingHelper log) {
+        var directory = Path.GetDirectoryName(path: lockFile);
+
+        if (!string.IsNullOrEmpty(value: directory)) {
+            Directory.CreateDirectory(path: directory);
+        }
+
+        var deadline = (DateTime.UtcNow + TimeSpan.FromMinutes(value: 5));
+        var waited = false;
+
+        while (true) {
+            try {
+                return new FileStream(access: FileAccess.ReadWrite, mode: FileMode.OpenOrCreate, path: lockFile, share: FileShare.None);
+            } catch (IOException) when ((DateTime.UtcNow < deadline)) {
+                if (!waited) {
+                    log.LogMessage(importance: MessageImportance.Normal, message: $"Waiting for another build's shader publication to finish ('{lockFile}').");
+                    waited = true;
+                }
+                Thread.Sleep(millisecondsTimeout: 50);
+            }
+        }
+    }
     /// <summary>Runs a file operation, retrying it while another process holds the file: a sharing violation or a refused
     /// replace (<see cref="IOException"/>, <see cref="UnauthorizedAccessException"/>) waits a little longer each time, up
     /// to about ten seconds in all, and is rethrown after the last attempt.</summary>

@@ -25,6 +25,7 @@
             <BytecodeFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
             <Includes ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
             <Token ParameterType="System.String" />
+            <LockFile ParameterType="System.String" Required="true" />
         </ParameterGroup>
         <Task>
             <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckShaderHashSidecars.cs" Type="Class" />
@@ -38,6 +39,7 @@
         <ParameterGroup>
             <BytecodeFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
             <Includes ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <LockFile ParameterType="System.String" Required="true" />
         </ParameterGroup>
         <Task>
             <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckShaderHashSidecars.cs" Type="Class" />
@@ -53,6 +55,7 @@
             <BytecodeFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
             <Sidecars ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
             <Removed ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+            <LockFile ParameterType="System.String" Required="true" />
         </ParameterGroup>
         <Task>
             <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckShaderHashSidecars.cs" Type="Class" />
@@ -91,6 +94,10 @@
     <Import Project="$(MSBuildThisFileDirectory)ShaderRecipe.targets" />
 
     <PropertyGroup>
+        <!-- A project's shader publication lock: every task that writes or reads a bytecode and sidecar pair holds it,
+             so builds sharing a checkout publish and read whole pairs. It lives in the project's intermediate root, which
+             every configuration shares, as the bytecode beside the sources does. -->
+        <_PuckShaderPublishLock>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'shader-publish.lock'))</_PuckShaderPublishLock>
         <DxcCommand Condition="'$(DxcCommand)' == ''">dxc</DxcCommand>
         <PuckShaderDxilEnabled Condition="'$(PuckShaderDxilEnabled)' == ''">true</PuckShaderDxilEnabled>
         <PuckComputeShaderDxilEnabled Condition="'$(PuckComputeShaderDxilEnabled)' == ''">true</PuckComputeShaderDxilEnabled>
@@ -104,7 +111,7 @@
         <ItemGroup>
             <_PuckShaderSidecar Include="Assets\Shaders\**\*.spv.hash;Assets\Shaders\**\*.dxil.hash" />
         </ItemGroup>
-        <PuckRemoveOrphanedShaderBytecode Condition="'@(ShaderBytecode)' != '' or '@(_PuckShaderSidecar)' != ''" BytecodeFiles="@(ShaderBytecode)" Sidecars="@(_PuckShaderSidecar)">
+        <PuckRemoveOrphanedShaderBytecode Condition="'@(ShaderBytecode)' != '' or '@(_PuckShaderSidecar)' != ''" BytecodeFiles="@(ShaderBytecode)" LockFile="$(_PuckShaderPublishLock)" Sidecars="@(_PuckShaderSidecar)">
             <Output ItemName="_PuckRemovedShaderBytecode" TaskParameter="Removed" />
         </PuckRemoveOrphanedShaderBytecode>
         <ItemGroup>
@@ -205,7 +212,7 @@
                 <SourcePath>%(ComputeShaderSource.FullPath)</SourcePath>
             </_PuckCompiledBytecode>
         </ItemGroup>
-        <PuckWriteShaderHashSidecars Condition="'$(DxcProbeExitCode)' == '0'" BytecodeFiles="@(_PuckCompiledBytecode)" Includes="@(ShaderInclude)" Token="$(_PuckShaderToken)" />
+        <PuckWriteShaderHashSidecars Condition="'$(DxcProbeExitCode)' == '0'" BytecodeFiles="@(_PuckCompiledBytecode)" Includes="@(ShaderInclude)" LockFile="$(_PuckShaderPublishLock)" Token="$(_PuckShaderToken)" />
         <Delete Files="@(_PuckTemporaryBytecode)" />
         <OnError ExecuteTargets="CleanShaderTemporaries" />
     </Target>
@@ -267,6 +274,6 @@
                 <SourcePath>%(ShaderBytecode.RootDir)%(ShaderBytecode.Directory)%(ShaderBytecode.Filename).hlsl</SourcePath>
             </_PuckValidateBytecode>
         </ItemGroup>
-        <PuckValidateShaderBytecodeFresh BytecodeFiles="@(_PuckValidateBytecode)" Includes="@(ShaderInclude)" />
+        <PuckValidateShaderBytecodeFresh BytecodeFiles="@(_PuckValidateBytecode)" Includes="@(ShaderInclude)" LockFile="$(_PuckShaderPublishLock)" />
     </Target>
 </Project>
