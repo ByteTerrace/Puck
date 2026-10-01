@@ -1,0 +1,5 @@
+# The engine ready first, however long a cold driver cache takes; the leg's own timeout bounds it.
+world.wait ready 600
+# Past every armed capture: the reference camera view, the converged view and the spatial first sample.
+world.wait 100
+world.counters gpu

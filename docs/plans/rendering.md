@@ -4828,7 +4828,41 @@ counted rows recorded in the same change.
      keeps that output size through reader scale, split layouts and display
      resizing. Its camera uses the authored aspect on its first capture.
      Unspecified extents keep the scheduler's quantization and hysteresis.
-5. **P15-5, the temporal resolve.** Reconstruction on.
+5. **P15-5, the temporal resolve.** Landed. Reconstruction on.
+   - Landed: a temporal view runs the temporal fragment, whose resolve reads
+     the history color and surface the previous frame wrote at the output
+     extent and writes this frame's. It weights the 3x3 render samples around
+     each output pixel, reprojects history through `sdfReprojection`, rejects it
+     where the identity differs or the ray distance differs by more than 5%,
+     clips it to the neighbourhood's YCoCg box and caps its weight at eight
+     samples; `reactivity`, written by `sky` and `views` (a screen is fully
+     reactive, an emissive surface by its emissive share), lowers that weight.
+     An epoch's first frame, and any pixel whose history is rejected, is the
+     spatial resolve exactly. `IsUnchanged` holds a temporal view unchanged only
+     one period after its last change. `place` sharpens a source at its rect's
+     extent by `world.upscale-sharpness` when the view reconstructs.
+     `world.temporal` and the render section's `temporal` member turn it on for
+     the world's own views; `quality.puck` turns it off at `low` and on at
+     `medium` and `high`; camera and session views never ask for it. A view
+     following a crossing into another residency requests that residency's
+     resolve pipeline, so `portal-walk` crosses with reconstruction on. The
+     canaries hold `temporal-convergence` within 1.5 codes of the supersampled
+     reference over its subject, `temporal-ghosting` within 2 codes of the
+     still frame over the vacated strip, `temporal-disocclusion` within 4 codes
+     of the spatial path over the revealed pixels, and `temporal-reset`'s first
+     frame after a cut to the spatial path exactly; the parity world's
+     `converge` station holds on both backends under its vocabulary contract.
+     The resolve binds the World set as well as the frame and pass sets, one
+     more descriptor-set bind a resolve dispatch, and writes its pass set once a
+     frame slot. `portal-walk` crosses with reconstruction on and holds its
+     crossing frame to a relaunch's spatial crossing frame exactly, while a
+     frame with gathered history differs from the spatial one; no world can
+     author a crossing that keeps history, so the epoch reset on a crossing is
+     held by law (P15-2). The runtime counts the frames each instance's
+     schedule leaves it unread and absent from displayed outputs, including
+     held consumer outputs, and hands the count to the package's cadence
+     question and recordings, and the count is part of the epoch, so a parked
+     view shown again resets while a spatial view's still output stands.
    - Delivers: the history color and history surface as the fragment's history
      versions at output extent; reprojection through `sdfReprojection`, rejected
      by identity and depth; neighbourhood rectification; the `reactivity` image

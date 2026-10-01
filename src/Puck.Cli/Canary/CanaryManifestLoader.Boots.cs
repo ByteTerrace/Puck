@@ -4,7 +4,8 @@ namespace Puck.Cli.Canary;
 
 internal static partial class CanaryManifestLoader {
     // A relaunch names the document by its file name inside the leg's run directory, which the first boot writes
-    // (world.save {run}/<name>), so the manifest can name it before any run directory exists.
+    // (world.save {run}/<name>), so the manifest can name it before any run directory exists. A relaunch that names
+    // none boots the leg's own world again.
     private static CanaryRelaunch ReadRelaunch(JsonElement element, string context, string repositoryRoot, string canaryDirectory) {
         var row = CliStrictJson.RequireObject(
             context: context,
@@ -22,17 +23,20 @@ internal static partial class CanaryManifestLoader {
             "world"
         );
 
-        var world = CliStrictJson.ReadRequiredString(
-            context: context,
-            element: row,
-            member: "world",
-            refusal: Refusal
-        );
+        var world = (row.TryGetProperty(propertyName: "world", value: out _)
+            ? CliStrictJson.ReadRequiredString(
+                context: context,
+                element: row,
+                member: "world",
+                refusal: Refusal
+            )
+            : null);
 
         if (
-            (world.IndexOfAny(anyOf: ['/', '\\']) >= 0) ||
+            (world is not null) &&
+            ((world.IndexOfAny(anyOf: ['/', '\\']) >= 0) ||
             (world is "." or "..") ||
-            string.IsNullOrWhiteSpace(value: world)
+            string.IsNullOrWhiteSpace(value: world))
         ) {
             throw new CanaryManifestRefusal(message: $"{context} world '{world}' must be a bare file name the first boot writes into the leg's run directory.");
         }

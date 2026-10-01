@@ -38,6 +38,7 @@ public sealed class WorldRenderSettings {
     private ShadowMarchMode m_shadowMarch;
     private ShadowMaskMode m_shadowMask;
     private float m_shadowReach;
+    private bool m_temporal;
     private float m_upscaleSharpness;
 
     /// <summary>Initializes a new instance of the <see cref="WorldRenderSettings"/> class from the world definition's
@@ -56,6 +57,7 @@ public sealed class WorldRenderSettings {
         AmbientOcclusion = defaults.AmbientOcclusion;
         RenderScale = WorldRenderScaleTiers.Scale(tier: defaults.RenderScale);
         UpscaleSharpness = defaults.UpscaleSharpness;
+        Temporal = defaults.Temporal;
         FarBound = true;
         CadenceGate = true;
 
@@ -126,7 +128,13 @@ public sealed class WorldRenderSettings {
     /// <see cref="Puck.SdfVm.SdfViewQuality.DisableSoftShadows"/> and <see cref="Puck.SdfVm.SdfViewQuality.ShadowDistanceScale"/>
     /// lanes, so no rebuild.</summary>
     public float ShadowReach { get => m_shadowReach; set { m_shadowReach = value; m_revision++; } }
-    /// <summary>The continuous reduced-resolution reconstruction blend: 0 is bilinear, 1 is clamped Catmull-Rom, and
-    /// intermediate values blend between them. Native render scale ignores it.</summary>
+    /// <summary>Whether the world's own views reconstruct over time (<c>world.temporal</c>): each jitters its samples
+    /// and resolves them over its history into its output, at native or reduced render scale, through each view's
+    /// <see cref="Puck.SdfVm.SdfViewQuality.Temporal"/> lane. A change rebuilds each view's graph beside the installed
+    /// one. Camera and session views never ask for it.</summary>
+    public bool Temporal { get => m_temporal; set { m_temporal = value; m_revision++; } }
+    /// <summary>The continuous reconstruction sharpness: the spatial resolve's blend from bilinear (0) to clamped
+    /// Catmull-Rom (1), and the strength of the contrast-adaptive sharpen <c>place</c> applies to a temporally resolved
+    /// view at its rect's own extent. A native view that does not reconstruct ignores it.</summary>
     public float UpscaleSharpness { get => m_upscaleSharpness; set { m_upscaleSharpness = value; m_revision++; } }
 }

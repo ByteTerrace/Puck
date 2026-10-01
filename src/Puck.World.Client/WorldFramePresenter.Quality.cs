@@ -31,5 +31,6 @@ public sealed partial class WorldFramePresenter {
             AmbientOcclusionMode.Fast => true,
             _ => (m_client.ActivePeerCount >= 16),
         }),
+        Temporal = m_settings.Temporal,
     };
 }

@@ -70,10 +70,12 @@ public static class WorldApplicationDefaults {
 /// <param name="Shadows">The soft-shadow tier the preset selects.</param>
 /// <param name="AmbientOcclusion">Whether the preset enables ambient occlusion.</param>
 /// <param name="RenderScale">The render-scale tier the preset selects.</param>
+/// <param name="Temporal">Whether the preset reconstructs the world's views over time (<c>world.temporal</c>).</param>
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
     bool AmbientOcclusion,
-    WorldRenderScaleTier RenderScale
+    WorldRenderScaleTier RenderScale,
+    bool Temporal = false
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
@@ -82,7 +84,10 @@ public readonly record struct WorldQualityPreset(
 /// <param name="ShadowCrowdRadius">The boot soft-shadow crowd radius (world units).</param>
 /// <param name="AmbientOcclusion">Whether ambient occlusion boots on.</param>
 /// <param name="RenderScale">The boot render-scale tier.</param>
-/// <param name="UpscaleSharpness">The boot reduced-resolution reconstruction blend (0 bilinear .. 1 Catmull-Rom).</param>
+/// <param name="UpscaleSharpness">The boot reconstruction sharpness: the spatial resolve's blend (0 bilinear .. 1
+/// Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect's own extent.</param>
+/// <param name="Temporal">Whether the world's own views boot reconstructing over time (<c>world.temporal</c>): each
+/// jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.</param>
 /// <param name="LowRaw">The <c>world.quality low</c> preset.</param>
 /// <param name="MediumRaw">The <c>world.quality medium</c> preset.</param>
 /// <param name="HighRaw">The <c>world.quality high</c> preset.</param>
@@ -113,6 +118,7 @@ public sealed record WorldRenderDefaults(
     bool AmbientOcclusion = false,
     WorldRenderScaleTier RenderScale = WorldRenderScaleTier.Native,
     float UpscaleSharpness = 0f,
+    bool Temporal = false,
     [property: JsonPropertyName("low"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? LowRaw = null,
     [property: JsonPropertyName("medium"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? MediumRaw = null,
     [property: JsonPropertyName("high"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? HighRaw = null,
