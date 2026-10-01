@@ -1641,7 +1641,7 @@ static placements (`RenderGraphHitPath.Surface`,
 Portals nest. A destination's own screens draw wherever it renders: the session
 emitter draws its rows and seated faces (`WorldPrototypeFacets.Seated`), and the
 binder keeps one `WorldNestedScreens` per presented world, a routed world at
-depth 0 (`routed$<authority>`) and each session's destination one level deeper,
+depth 0 (`routed$<digest>`, a digest of its authority, `WorldViewNames.Routed`) and each session's destination one level deeper,
 whose session screens open session feeds of their own while the world is
 shallower than the nesting depth, named `WorldViewNames.Nested`
 (`session$<screen>$<screen>…`). A screen at the depth shows its session's
@@ -1652,7 +1652,7 @@ deterministic. Views of one residency render one world at different levels, so
 routed world's level, each window view its feed's (`RoutedScreenSources`), and
 the residency's bound flag holds while any view of its frame reads the screen.
 A window fits to the eye of the view one level up and starts its rays past the
-counterpart's own glass (`WorldPrototypeFacets.GlassBack`). A session's
+counterpart's own glass (`WorldPrototypeFacets.GlassSpan`). A session's
 footprint holds only while its consumer's last camera sees its glass
 (`WorldPortalVisibility`, `IWorldViewScenes.PortalGlass`), so a face out of view
 schedules nothing beneath it. `world.nesting` echoes every level. The GPU

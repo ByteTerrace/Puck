@@ -83,18 +83,19 @@ public static class WorldPrototypeFacets {
             derivedFaceScreens: definition.Authoring.DerivedFaceScreens
         ).Faces.Where(predicate: static face => (face.Source is not WorldScreenSource.None))];
     }
-    /// <summary>Returns how far in front of a face's frame, along its normal, the back of the glass its face screen draws
-    /// lies (negative when it lies behind): a window looking through the face as its counterpart starts its rays past it
-    /// (<see cref="WorldWindowFrustumFit.TryFitFromEye"/>).</summary>
+    /// <summary>Returns where the glass a face's screen draws lies along the face's normal, measured from its frame's
+    /// origin: its back and its front, the front proud of the face. A window looking through the face as its counterpart,
+    /// from either side, starts its rays past it (<see cref="WorldWindowFrustumFit.TryFitFromEye"/>).</summary>
     /// <param name="frame">The face's frame.</param>
-    /// <returns>The distance, in world units.</returns>
-    public static float GlassBack(WorldFaceFrame frame) {
+    /// <returns>The glass's back and front, in world units along the frame's normal.</returns>
+    public static (float Back, float Front) GlassSpan(WorldFaceFrame frame) {
         var halfDepth = ((float)((double)frame.HalfDepth));
+        var front = (halfDepth + FaceProudEpsilon);
 
-        return ((halfDepth + FaceProudEpsilon) - (2f * MathF.Max(
+        return ((front - (2f * MathF.Max(
             x: (halfDepth * FaceInteriorFraction),
             y: FaceMinimumHalfDepth
-        )));
+        ))), front);
     }
 
     private static WorldScreen PlaceholderScreen(int index) => new(

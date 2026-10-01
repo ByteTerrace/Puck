@@ -410,9 +410,9 @@ Free Cam do not alter the logical movement basis.
   headless included.
 - `world.nesting` — lists every level of nested worlds the presentation shows:
   `depth <n>` (the boot world's `views.nestingDepth`), each world a seat is
-  presented in (`routed$<authority> depth 0`), then each session view by name
+  presented in (`routed$<digest> depth 0 world <authority>`, the digest 16 hex characters of the identity's SHA-256), then each session view by name
   (`session$<screen>`, one `$<screen>` more a level beneath it, or
-  `routed$<authority>$<screen>…` beneath a routed world) with its depth, its
+  `routed$<digest>$<screen>…` beneath a routed world) with its depth, its
   destination, `via endpoint:<authority>` (the residency every seat and fully
   disclosed window presenting that world shares) or `via own`, and
   `screens <index>:<instance>…`: what each of its world's screens shows, a

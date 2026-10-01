@@ -349,7 +349,8 @@ internal sealed partial class WorldScreenBinder {
     );
 
     /// <summary>Describes every level the presentation nests, one segment each: the nesting depth, then each world seats
-    /// are presented in (<c>routed$&lt;authority&gt; depth 0</c>) and each session view, at every depth, by name — its
+    /// are presented in (<c>routed$&lt;digest&gt; depth 0 world &lt;authority&gt;</c>) and each session view, at every
+    /// depth, by name — its
     /// depth, destination, the residency it renders through (<c>endpoint:&lt;authority&gt;</c>, shared with every seat
     /// and window presenting that world, or <c>own</c>), and what each of its world's screens shows: a session view one
     /// level deeper, a shared source instance, a fallback colour's source past the depth, or <c>none</c>.</summary>
@@ -367,7 +368,7 @@ internal sealed partial class WorldScreenBinder {
         foreach (var screens in m_routedScreens.Values) {
             _ = builder.Append(
                 provider: System.Globalization.CultureInfo.InvariantCulture,
-                handler: $" | {screens.Head} depth 0"
+                handler: $" | {screens.Head} depth 0 world {m_nestedOwners[screens].Instance}"
             );
             AppendScreens(
                 builder: builder,

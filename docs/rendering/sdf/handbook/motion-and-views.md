@@ -215,7 +215,7 @@ another world as a view instance (`WorldViewInstances`).
   portal inside it shows its own destination, recursively, to the
   presentation's nesting depth (`views.nestingDepth`, 3 by default). Each level
   is a view instance of its own (`session$<screen>$<screen>…`, or
-  `routed$<authority>$<screen>…` beneath a world a seat is presented in), fitted
+  `routed$<digest>$<screen>…`, the digest naming the authority beneath a world a seat is presented in), fitted
   to the eye of the view one level up, so two portals facing each other end at
   the depth; a face at the depth shows its session's `fallback` colour. One
   world seen at several levels shares its endpoint's residency while its

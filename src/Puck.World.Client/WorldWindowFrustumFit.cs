@@ -213,7 +213,7 @@ public static class WorldWindowFrustumFit {
     }
     /// <summary>Fits a window screen's camera against an eye: the local face the screen shows on and its counterpart in
     /// the destination (<see cref="TryResolveApertures"/>), the glass its row draws (<see cref="Glass"/>), and the
-    /// eye. The camera's rays start past the glass the counterpart face draws (<see cref="WorldPrototypeFacets.GlassBack"/>),
+    /// eye. The camera's rays start past the glass the counterpart face draws (<see cref="WorldPrototypeFacets.GlassSpan"/>),
     /// so the window never shows the destination's own glass it looks through, which shows a window of its own when the
     /// counterpart is a return portal.</summary>
     /// <param name="eye">The eye, in the local world's space.</param>
@@ -252,9 +252,10 @@ public static class WorldWindowFrustumFit {
             return false;
         }
 
-        // The mapped glass lies this far in front of the counterpart's frame along its normal, which the camera looks
-        // against, and the counterpart's own glass ends this far in front of it.
-        var front = Vector3.Dot(
+        // The camera's rays start on the mapped glass, this far in front of the counterpart's frame along its normal, and
+        // run along the normal or against it; the counterpart's own glass spans [back, front] along the same normal.
+        // Whichever side the camera looks through from, its rays start past that glass.
+        var start = Vector3.Dot(
             vector1: (WorldWindowProjectionMath.MapPoint(
                 destination: counterpart,
                 point: glass.Origin,
@@ -262,16 +263,27 @@ public static class WorldWindowFrustumFit {
             ) - counterpart.Origin),
             vector2: counterpart.Normal
         );
-        var behind = (WorldPrototypeFacets.GlassBack(frame: counterpartFrame) - GlassClearance);
 
-        if (front > behind) {
-            camera = (camera with { Near = (camera.Near + (front - behind)) });
+        var (back, front) = WorldPrototypeFacets.GlassSpan(frame: counterpartFrame);
+        var along = Vector3.Dot(
+            vector1: camera.Forward,
+            vector2: counterpart.Normal
+        );
+        var past = ((along < 0f)
+            ? ((start - (back - GlassClearance)) / -along)
+            : (((front + GlassClearance) - start) / MathF.Max(
+                x: along,
+                y: float.Epsilon
+            )));
+
+        if (past > 0f) {
+            camera = (camera with { Near = (camera.Near + past) });
         }
 
         return true;
     }
 
-    /// <summary>How far past the back of the counterpart's glass a window's rays start, in world units.</summary>
+    /// <summary>How far past the counterpart's own glass a window's rays start, in world units.</summary>
     public const float GlassClearance = 0.01f;
 
     /// <summary>Maps the viewer's eye and the glass through the border pair's isometry and fits an off-axis frustum

@@ -1,0 +1,318 @@
+{
+  "id": "portal-nested",
+  "title": "A portal seen through a portal renders recursively to the nesting depth, each level through its own glass, and a pick through it lands two levels deep",
+  "binding": "The positive leg boots an offscreen 256x144 room whose door's glass shows a window session onto the middle world, the portal-window canary's door and seat. The middle world (middle.world.json) stands the door's counterpart arch, a door of its own three units behind it whose glass shows a window session onto the inner world, with magenta as its fallback colour, and a blue backdrop. The inner world (inner.world.json) stands its arch before a green emissive wall. Nothing in the room or the middle world is green. world.screens lists the room's glass as screen 24 showing session:middle, and world.nesting names its window session$24, one level deep, whose world's screen 24 shows session$24$24, two levels deep, onto the inner world; each renders through its destination's endpoint residency (via endpoint:6~global6~middle and endpoint:6~global5~inner), the one every seat and fully disclosed window presenting that world shares. The capture shows the room's door, inside its glass the middle world's blue backdrop around its door, and inside that door's glass the inner world's wall: the centre of the frame is green on every pixel and nowhere magenta, so the second level renders through the first, from the eye of the window one level up. With the room's view moved into a centred three-quarter slot, a display point at its centre walks through the room's view onto the door's glass, through the window's camera into the middle world onto its door's glass (session$24$24's pixel 74,61), and through that window's camera into the inner world, where it lands on the wall's near face at 0.04,1.45,-1.9: three steps, ending on the world of the level two deep. The discriminating leg boots the same room with views.nestingDepth 1 (shallow.world.json): world.nesting names no level two deep, the middle world's screen shows its fallback colour's source instance instead, the centre of the frame is magenta and nowhere green, and the same pick ends on the fallback colour's producer pixel at the middle world's glass, one level deep.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "middle.world.json",
+    "inner.world.json"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/portal-nested/fixture.world.json",
+    "script": "portal.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screens",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.nesting",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.panes",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "the-glass-shows-a-window-onto-the-middle-world",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "24 session:middle bound fixed input:Presentation mapping instance:session$24 surface origin 0,1.5,0.1 right 1,0,0 up 0,1,0 half 0.96x0.8 source 144x120 crop 0,0 144x120 layout Identity fit Stretch destination Presentation",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-middle-worlds-glass-shows-a-window-two-levels-deep",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "session$24 depth 1 destination middle via endpoint:6~global6~middle",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-middle-worlds-screen-shows-the-second-level",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "screens 24:session$24$24",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-second-level-shows-the-inner-world",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "session$24$24 depth 2 destination inner via endpoint:6~global5~inner",
+        "present": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-inner-world-shows-two-levels-deep",
+        "capture": "front.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.46,
+          0.44,
+          0.53,
+          0.53
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0.45,
+          0,
+          1
+        ],
+        "maximum": [
+          0.25,
+          1,
+          0.4,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "no-fallback-shows-inside",
+        "capture": "front.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.46,
+          0.44,
+          0.53,
+          0.53
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.5,
+          0,
+          0.5,
+          1
+        ],
+        "maximum": [
+          1,
+          0.3,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "line",
+        "name": "a-pick-lands-two-levels-deep",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "at 128.375,71.625 pick=instance:world pixel 96,53 walk=World steps=3 in session$24$24 last instance:session$24$24 pixel 74,61 surface 0.04,1.45,-1.9",
+        "present": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/portal-nested/shallow.world.json",
+    "script": "portal.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screens",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.nesting",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.panes",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "the-second-level-is-not-rendered",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "session$24$24",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "the-middle-worlds-screen-shows-its-fallback",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "screens 24:source$color$586f4bc3335aa2c5",
+        "present": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "past-the-depth-the-face-shows-its-fallback",
+        "capture": "front.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.46,
+          0.44,
+          0.53,
+          0.53
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.5,
+          0,
+          0.5,
+          1
+        ],
+        "maximum": [
+          1,
+          0.3,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-inner-world-does-not-show",
+        "capture": "front.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.46,
+          0.44,
+          0.53,
+          0.53
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0.45,
+          0,
+          1
+        ],
+        "maximum": [
+          0.25,
+          1,
+          0.4,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "line",
+        "name": "the-pick-ends-on-the-fallback-one-level-deep",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "at 128.375,71.625 pick=instance:world pixel 96,53 walk=Producer steps=3 in session$24 last producer:source$color$586f4bc3335aa2c5 pixel 74,61",
+        "present": true
+      }
+    ]
+  }
+}

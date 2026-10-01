@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Puck.Abstractions.Sources;
 
@@ -13,7 +15,7 @@ namespace Puck.World.Client;
 /// recoverable: a session view is <c>session$&lt;screen&gt;</c>, two
 /// parts, and a session seen through it adds the screen of the world it shows that it stands on
 /// (<see cref="Nested"/>, <c>session$&lt;screen&gt;$&lt;screen&gt;…</c>), one part a level; the sessions a world seats
-/// are presented in shows are <c>routed$&lt;authority&gt;$&lt;screen&gt;…</c> (<see cref="Routed"/>); a seat view is
+/// are presented in shows are <c>routed$&lt;digest&gt;$&lt;screen&gt;…</c> (<see cref="Routed"/>); a seat view is
 /// <c>&lt;camera&gt;$seat$&lt;seat&gt;</c>, three parts, the camera first because it is the
 /// name the view belongs to and the seat last because it is the qualifier that varies.</summary>
 public static class WorldViewNames {
@@ -46,17 +48,26 @@ public static class WorldViewNames {
         name: view,
         part: screen.ToString(provider: CultureInfo.InvariantCulture)
     );
-    /// <summary>Returns the head the sessions of a world seats are presented in are named under: the authority's identity
-    /// under <see cref="RoutedHead"/>, so a screen of that world shows <c>routed$&lt;authority&gt;$&lt;screen&gt;</c>
-    /// (<see cref="Nested"/>).</summary>
-    /// <param name="authority">The identity of the authority the world runs on, free of
-    /// <see cref="GeneratedName.Joiner"/>.</param>
-    /// <returns><c>routed$&lt;authority&gt;</c>.</returns>
-    /// <exception cref="ArgumentException"><paramref name="authority"/> is empty or carries the joiner.</exception>
-    public static string Routed(string authority) => GeneratedName.Join(
-        RoutedHead,
-        authority
-    );
+    /// <summary>Returns the head the sessions of a world seats are presented in are named under: the digest of the
+    /// identity of the authority the world runs on under <see cref="RoutedHead"/>, so a screen of that world shows
+    /// <c>routed$&lt;digest&gt;$&lt;screen&gt;</c> (<see cref="Nested"/>). An identity is any text, a remote one included,
+    /// so the name carries 16 hex characters of its SHA-256 rather than the identity itself, the same for one identity
+    /// on every run.</summary>
+    /// <param name="authority">The identity of the authority the world runs on.</param>
+    /// <returns><c>routed$&lt;digest&gt;</c>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="authority"/> is <see langword="null"/>.</exception>
+    public static string Routed(string authority) {
+        ArgumentNullException.ThrowIfNull(argument: authority);
+
+        return GeneratedName.Join(
+            RoutedHead,
+            Convert.ToHexStringLower(
+                inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: authority)),
+                length: 8,
+                offset: 0
+            )
+        );
+    }
     /// <summary>Returns the name of the source instance a producer, machine or probe source is read through, named by its
     /// content: its producer and the digest of its settings' canonical form (<see cref="ImageSourceSettings.Digest"/>).
     /// Every screen showing equal sources reads the one instance of that name, a screen added, removed or reordered
