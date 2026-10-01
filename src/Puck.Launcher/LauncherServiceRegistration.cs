@@ -270,6 +270,7 @@ public static class LauncherServiceRegistration {
     /// own stdin reader instead — the command pump and terminal baton are still wired identically either way.</param>
     public static IServiceCollection AddLauncherHeadlessTerminal(this IServiceCollection services, bool readStandardInput = true) {
         AddLauncherTerminalShared(services: services);
+        services.AddSingleton(implementationInstance: HostPacing.WallClock);
         services.AddHostedService<HeadlessTickHostedService>();
 
         if (readStandardInput) {
@@ -289,6 +290,7 @@ public static class LauncherServiceRegistration {
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddLauncherOffscreenTerminal(this IServiceCollection services) {
         AddLauncherTerminalShared(services: services);
+        services.AddSingleton(implementationInstance: HostPacing.OneTickPerFrame);
         services.AddHostedService<OffscreenTickHostedService>();
         AddStandardInputReader(services: services);
 
@@ -308,6 +310,7 @@ public static class LauncherServiceRegistration {
         // production and presentation. Register one idle controller for every windowed host so composition roots need
         // only arm it with their chosen ICaptureSink (PNG sequence, recording session, verifier, and so on).
         services.TryAddSingleton<FrameCaptureController>();
+        services.AddSingleton(implementationInstance: HostPacing.WallClock);
         services.AddHostedService<LauncherWindowHostedService>();
         AddStandardInputReader(services: services);
 

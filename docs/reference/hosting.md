@@ -207,7 +207,11 @@ again, steps none, and narrates the hold once on standard error
 root renders it. A cold pipeline build, a graph rebuilding at a new extent and
 an input that produced nothing for the frame each hold the tick, so no frame
 shows an older image for a newer tick. A refused frame releases the tick, since
-nothing the host does can render it; the root names the refusal. A device loss
+nothing the host does can render it; the root names the refusal. A refusal is
+something only a change to what a build was made from retries: a node's
+refused graph, or a package's refusal of its instance, such as an SDF
+residency whose tables' build was refused. Each is reported as `Refused`, never
+as a wait the host would hold forever. A device loss
 holds the tick whose frame it lost. A script that waits N ticks has N rendered
 frames behind it, and each frame reprojects from the frame of the tick before
 it. A tick's first composition carries one step of `DeltaTicks` and
@@ -238,9 +242,12 @@ too, or stands unchanged on purpose (a refresh divisor, an unchanged view, a
 paused pane). `RenderGraphRuntimeLawTests` holds a cold build and a producer
 that keeps its older output to it.
 
-The offscreen boot authority also limits a fast-forwarding replay fork to one
-authority tick per host step. Windowed and headless authorities keep replay
-bursts. The tape retains its cursor between steps, so the offscreen limit
+Each launcher host registers its pacing (`HostPacing`): `OneTickPerFrame`
+for the offscreen host, `WallClock` for the windowed and headless hosts.
+Whatever steps on a host's behalf reads it, so a fast-forwarding replay fork
+advances one authority tick per host step under `OneTickPerFrame` and its
+whole burst under `WallClock`. A non-boot world instance steps on its own
+accumulator at its own rate, so it keeps its bursts. The tape retains its cursor between steps, so the offscreen limit
 changes pacing without dropping recorded input.
 
 ## Render lifecycle and publication

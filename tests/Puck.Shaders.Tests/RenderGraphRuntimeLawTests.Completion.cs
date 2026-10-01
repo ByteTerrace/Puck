@@ -128,4 +128,87 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
         }
     }
+
+    // A package whose build never finishes, as an SDF view's does while its residency's tables are refused, and which
+    // states a refusal for its instances when told to.
+    private sealed class RefusingPackage : IRenderGraphPackageFactory {
+        public RefusingPackage() => Registry.Register(
+            factory: this,
+            package: Camera
+        );
+
+        public string? Refusal { get; set; }
+        public RenderGraphPackageRecorders Registry { get; } = new(regionCopy: new GpuRegionCopyPass(pipelines: new GpuPassPipelineCache(), kernel: new byte[] { UploadModelGpu.RegionCopyBytecode }));
+
+        public async ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
+            await Task.Delay(
+                cancellationToken: cancellationToken,
+                delay: Timeout.InfiniteTimeSpan
+            );
+
+            return null;
+        }
+        public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) =>
+            throw new InvalidOperationException(message: "The refusing package never builds.");
+        public string? RefusalOf(string instance) => Refusal;
+    }
+
+    /// <summary>A package that refuses its instance (an SDF residency whose tables' build was refused) makes the frame
+    /// <see cref="FrameCompletion.Refused"/>, naming the refusal, so the offscreen host steps on. The red leg: the same
+    /// package stating no refusal leaves the frame not yet renderable, a wait the host would hold forever.</summary>
+    [Fact]
+    public void APackageRefusalIsARefusedFrameNeverAWait() {
+        var gpu = new FakePipelineGpu();
+        var package = new RefusingPackage();
+
+        Assert.True(condition: RenderGraphRuntime.TryCreate(
+            deviceContext: gpu,
+            graphs: [Graph(pipeline: CameraGraph()), Graph(ScreensGraph(false, "screen"), ("screen", "camera"))],
+            hostsOnDirectX: false,
+            packages: package.Registry,
+            pipelines: new GpuPassPipelineCache(),
+            refusal: out var created,
+            root: "main",
+            runtime: out var refusing,
+            set: Set(
+                Instance(name: "camera"),
+                Instance(
+                    name: "main",
+                    reads: new RenderGraphRead(Producer: "camera")
+                )
+            )
+        ), userMessage: created?.Message);
+
+        using (refusing) {
+            var frames = new Frames(
+                footprints: [new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "camera", Width: 1.0)],
+                roots: [new RenderGraphRoot(Height: 1.0, Instance: "main", Width: 1.0)],
+                runtime: refusing
+            );
+
+            // The root installs, and renders over a stand-in for the camera, whose build never finishes: a wait.
+            const string Waiting = "the instance 'camera' has no installed graph yet: its pipelines are building";
+
+            TestLiveness.Until(
+                reason: () => (refusing.CompletionReason ?? "rendered"),
+                step: () => {
+                    _ = frames.Next();
+
+                    return (refusing.CompletionReason == Waiting);
+                }
+            );
+            frames.Next(count: 3);
+            Assert.Equal(
+                actual: (refusing.Completion, refusing.CompletionReason),
+                expected: (FrameCompletion.NotYetRenderable, Waiting)
+            );
+
+            package.Refusal = "the engine's build was refused and is retried when its inputs change: [GPU_CREATION_FAULT] the law refused it";
+            _ = frames.Next();
+            Assert.Equal(
+                actual: (refusing.Completion, refusing.CompletionReason),
+                expected: (FrameCompletion.Refused, $"the instance 'camera' cannot render: {package.Refusal}")
+            );
+        }
+    }
 }

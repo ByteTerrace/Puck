@@ -486,9 +486,14 @@ These are one-line cautions; the owning pages hold the derivations.
   `RenderGraphRuntime.Completion`: rendered only when the root rendered the
   frame and every instance it reads within the frame did too (a previous-frame
   read, a refresh divisor, an unchanged view or a paused node stands on
-  purpose), `Refused` when a node's refused build stops it. A new way for an
-  instance to skip its render states which it is (`RenderGraphRuntime.Completion.cs`,
-  `RenderGraphRuntimeLawTests.Completion`).
+  purpose), `Refused` when a node's refused build or a package's refusal of the
+  instance (`IRenderGraphPackageFactory.RefusalOf`; `SdfWorldPasses` reports its
+  residency's refused tables, `SdfWorldResidency.Refusal`) stops it. A refusal
+  is never a wait: an offscreen host would hold its tick forever. A new kind of
+  refusal states itself through `RefusalOf`, and `MarkUnproduced` in
+  `RenderGraphRuntime.Completion.cs` is the one place it becomes `Refused`
+  (`RenderGraphRuntimeLawTests.Completion`,
+  `SdfWorldResidencyBuildRefusalLawTests.ARefusedTableBuildIsTheResidencysRefusalAndAWaitIsNot`).
 - **Buffer hazards are planned, never barriered by hand.** An SDF view's scratch
   is `SdfWorldPackage.Fragment`'s resources, and the render-graph planner plans
   every barrier between its passes; see

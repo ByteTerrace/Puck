@@ -36,11 +36,19 @@ public sealed partial class RenderGraphRuntime {
         m_staleRefused[index] = refused;
     }
     // A scheduled graph instance whose node produced nothing this frame. A paused node presents its last image on purpose.
+    // This is the one place a refusal becomes Refused: a package's refusal of the instance (IRenderGraphPackageFactory.
+    // RefusalOf, such as an SDF residency's refused tables) or the node's own refused build; anything else is a wait.
     private void MarkUnproduced(int index, ShaderPipelineRenderNode node) {
         var name = m_set.Instances[index].Name;
 
         if (node.Paused) {
             MarkCurrent(index: index);
+        } else if (PackageRefusalOf(index: index) is { } refusal) {
+            MarkStale(
+                index: index,
+                reason: $"the instance '{name}' cannot render: {refusal}",
+                refused: true
+            );
         } else if (
             (node.LastSwapError is { } error) &&
             !node.IsBuildingCandidate &&
@@ -62,6 +70,30 @@ public sealed partial class RenderGraphRuntime {
                 reason: $"the instance '{name}' kept an earlier frame's image while its graph rebuilds"
             );
         }
+    }
+    // The first refusal a package of the instance's graph states for it, or null when none refuses.
+    private string? PackageRefusalOf(int index) {
+        if (m_graphs[index] is not { } graph) {
+            return null;
+        }
+
+        var name = m_set.Instances[index].Name;
+        var passes = graph.Pipeline.Plan.Passes;
+
+        for (var position = 0; (position < passes.Count); position++) {
+            if (
+                (passes[position].Package is { } step) &&
+                m_packages.TryGetFactory(
+                    factory: out var factory,
+                    package: step.Package
+                ) &&
+                (factory.RefusalOf(instance: name) is { } refusal)
+            ) {
+                return refusal;
+            }
+        }
+
+        return null;
     }
     // A graph instance that rendered: stale when an input it reads within the frame is, when it bound a stand-in, or when
     // the output it bound is older than the frame the schedule has it read.

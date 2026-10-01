@@ -44,7 +44,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         }
         public void SettleOwedFrames() => scheduler.Drain();
         public void Step(in FixedStepContext context, in CommandSnapshot commands) => _ = WorldServerStepShell.Step(
-            allowReplayBurst: false,
+            pacing: HostPacing.OneTickPerFrame,
             context: in context,
             publishTick: _ => scheduler.PublishTick(tick: (server.NextInputTick - 1UL)),
             server: server,

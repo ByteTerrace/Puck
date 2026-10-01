@@ -165,4 +165,34 @@ public sealed class OffscreenBoundaryLawTests {
         Assert.Equal(expected: StepTicks, actual: interval.Sample());
         Assert.Equal(expected: ((3UL * EngineTicks.PerSecond) + StepTicks), actual: input.NowTicks);
     }
+    /// <summary>Each launcher host registers its own pacing, the one property a replay drive stepping on its behalf
+    /// reads: the offscreen host one tick per produced frame, the windowed and headless hosts the wall clock.</summary>
+    [InlineData("offscreen", true)]
+    [InlineData("headless", false)]
+    [InlineData("windowed", false)]
+    [Theory]
+    public void EachHostRegistersItsPacing(string shape, bool oneTickPerFrame) {
+        var services = new ServiceCollection();
+
+        switch (shape) {
+            case "offscreen":
+                services.AddLauncherOffscreenTerminal();
+                break;
+            case "headless":
+                services.AddLauncherHeadlessTerminal();
+                break;
+            case "windowed":
+                services.AddLauncherTerminal();
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(paramName: nameof(shape));
+        }
+
+        var pacing = Assert.Single(collection: services, predicate: static descriptor => (descriptor.ServiceType == typeof(HostPacing)));
+
+        Assert.Equal(
+            actual: ((HostPacing)pacing.ImplementationInstance!).StepsOneTickPerFrame,
+            expected: oneTickPerFrame
+        );
+    }
 }

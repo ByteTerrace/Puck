@@ -206,6 +206,14 @@ public interface IRenderGraphPackageFactory {
     /// <param name="context">The host's frame context of the frame being scheduled.</param>
     /// <returns><see langword="true"/> when the instance's latest render stands for this frame.</returns>
     bool IsUnchanged(string instance, in FrameContext context) => false;
+    /// <summary>Returns why the package cannot build or record an instance's passes until something they are built from
+    /// changes, naming the refusal, or <see langword="null"/> while it can or is still building. A refusal is permanent
+    /// until its inputs move, so the runtime reports a frame such an instance cannot render as
+    /// <see cref="Puck.Hosting.FrameCompletion.Refused"/> (<see cref="RenderGraphRuntime.Completion"/>), and an offscreen
+    /// host steps on rather than waiting for it; a wait reports <see langword="null"/>.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The refusal, or <see langword="null"/>.</returns>
+    string? RefusalOf(string instance) => null;
     /// <summary>Releases whatever the factory holds on the device after the device was lost, without waiting for any
     /// submission. The runtime calls it once its nodes have released theirs.</summary>
     void OnDeviceLost() { }

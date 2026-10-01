@@ -207,6 +207,13 @@ public sealed partial class SdfWorldResidency : IDisposable {
         : ((m_frame is null)
             ? $"residency '{Name}' has captured no frame"
             : m_pipelines.Describe()));
+    /// <summary>Gets why the residency cannot build its tables until something they are built from changes (the device,
+    /// the kernels, its options or a reload), naming the refused build, or <see langword="null"/> while it is ready or its
+    /// build is still in progress. A refusal is never waited out: <see cref="SdfWorldPasses"/> reports it as its
+    /// instances' refusal (<see cref="SdfWorldPasses.RefusalOf"/>).</summary>
+    public string? Refusal => ((!IsReady && (m_pipelines.Refusal is { } refusal))
+        ? $"residency '{Name}': {m_pipelines.Describe()}"
+        : null);
     /// <summary>Gets the GPU work the residency's uploads recorded (<see cref="SdfWorldTables.Work"/>); submission
     /// identities keep increasing across a device-loss rebuild.</summary>
     public IGpuWorkSource Work => m_work;

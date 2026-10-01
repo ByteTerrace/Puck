@@ -318,7 +318,7 @@ public sealed partial class PortalInputLawTests {
             );
 
             m_steps = WorldServerStepShell.Step(
-                allowReplayBurst: true,
+                pacing: HostPacing.WallClock,
                 context: in context,
                 publishTick: static _ => { },
                 server: Boot.Server,
