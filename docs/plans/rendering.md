@@ -5000,10 +5000,13 @@ source has landed too:
   HDR one in either color space (`INativeImageCaptureFeed.Output`). An SDR
   capture is unchanged: its frames, its Direct3D 12 GPU route and its
   `source-rgba` copy are what they were.
-  The feed checks its display during publication and consumption at a bounded
-  cadence. An HDR toggle, a move to a display that differs in it, or failed
-  discovery ends it; the consumer reopens it with fresh metadata. Unknown display
-  discovery refuses an open instead of guessing SDR.
+  The feed's frame callback checks its display at a bounded cadence, off the
+  render thread. It holds one DXGI factory and the output it found, re-reading
+  that output's description while the factory is current; a stale factory, which
+  is how DXGI reports a display change, is replaced and the output found again.
+  An HDR toggle, a move to a display that differs in it, or failed discovery ends
+  the feed at the next frame that arrives; the consumer reopens it with fresh
+  metadata. Unknown display discovery refuses an open instead of guessing SDR.
 - An HDR capture hands its CPU frames over as `R16G16B16A16Float` CPU pixels,
   downscaled in linear light, and converts on its CPU tier, never the GPU
   route, whose shared targets are B8G8R8A8. The binder names the encoding
@@ -6260,7 +6263,8 @@ blockers. Each is still required before the programme is done.
   upscaling and dynamic resolution on, render scale responding to its signal.
 - **Hardware: P16's HDR-display checks.** On an HDR display the swapchain
   reports an HDR color space, a test ramp exceeds SDR white, an HDR desktop
-  capture displays without clipping, and the HUD renders at paper white.
+  capture displays without clipping, toggling HDR during a desktop capture ends
+  and reopens the feed in the new encoding, and the HUD renders at paper white.
 - **Review: cross-backend agreement.** A change's own GPU checks run on the
   backends at hand as it lands; whether Vulkan and Direct3D 12 agree across
   those checks is judged in one final review pass.

@@ -34,7 +34,8 @@ namespace Puck.Platform.Windows;
 /// <see cref="CaptureOutputOf"/>): an SDR display is captured in B8G8R8A8 sRGB, and an HDR display in half-float scRGB,
 /// which keeps its luminance above SDR white where an 8-bit capture would clip it. An HDR capture rides the CPU path
 /// alone, since the shared targets are B8G8R8A8. An HDR toggle, a move to a display that differs in it, or failed display
-/// discovery ends the feed; its consumer reopens it with the current display contract.
+/// discovery ends the feed at the next frame that arrives, the frame callback reading the display through a held DXGI
+/// factory (<see cref="Win32DisplayColorSpaceProbe"/>); its consumer reopens it with the current display contract.
 /// </para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.19041")]
@@ -151,6 +152,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     private readonly Lock m_publicationGate = new();
 
     private readonly Win32CaptureDisplay m_display;
+    private readonly Win32DisplayColorSpaceProbe m_displayProbe;
     private readonly long m_refreshPeriodTicks;
     private readonly TypedEventHandler<GraphicsCaptureItem, object> m_targetClosedHandler;
     private readonly nint m_targetHandle;
@@ -173,6 +175,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     private long m_gpuRevision;
     private bool m_hasFrame;
     private volatile bool m_isEnded;
+    private long m_lastDisplayCheckTicks;
     private long m_lastLivenessCheckTicks;
     private long m_nextCaptureTicks;
     private long m_publishedRevision;
@@ -188,9 +191,8 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             // unbounded compositor delay. Consumers poll this property, so also retire a window feed once its owner
             // window is gone. The HWND alone is unreliable — Win32 recycles handles — so the fallback also matches the
             // owning process/thread. A monitor target has no owner window; disconnect surfaces through
-            // GraphicsCaptureItem.Closed, which latches m_isEnded. The same rate-limited check ends either target once its
-            // display's capture would take another format or encoding (an HDR toggle, or a move to a display that differs
-            // in it), and publication and consumption share its gate so they never race the discovery state.
+            // GraphicsCaptureItem.Closed, which latches m_isEnded. The display's color space is not read here: consumers
+            // poll this on the render thread, so the frame callback checks it (IsDisplayCurrent).
             if (m_isEnded) {
                 return true;
             }
@@ -204,7 +206,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
 
                 if ((now - m_lastLivenessCheckTicks) >= LivenessCheckIntervalMilliseconds) {
                     m_lastLivenessCheckTicks = now;
-                    if (!IsTargetAlive() || !m_display.IsCurrent(colorSpace: Win32D3D11.ColorSpaceOfMonitor(monitorHandle: MonitorHandle()))) {
+                    if (!IsTargetAlive()) {
                         EndAndScheduleDispose();
                     }
                 }
@@ -354,7 +356,14 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             );
             Window = new Win32PassthroughWindow(windowHandle: targetHandle);
         }
-        m_display = new Win32CaptureDisplay(colorSpace: Win32D3D11.ColorSpaceOfMonitor(monitorHandle: MonitorHandle()));
+        m_displayProbe = Win32DisplayColorSpaceProbe.Dxgi();
+        try {
+            m_display = new Win32CaptureDisplay(colorSpace: m_displayProbe.ColorSpaceOf(monitorHandle: MonitorHandle()));
+        } catch {
+            m_displayProbe.Dispose();
+            throw;
+        }
+        m_lastDisplayCheckTicks = Environment.TickCount64;
         var outputByteLength = checked(((width * height) * ((int)GpuPixelFormats.UnitBytes(format: Output.Format))));
 
         m_consumerPixels = GC.AllocateUninitializedArray<byte>(length: outputByteLength);
@@ -551,6 +560,10 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         if (IsEnded) {
             return;
         }
+        if (!IsDisplayCurrent()) {
+            EndAndScheduleDispose();
+            return;
+        }
 
         var resize = false;
         var contentSize = default(SizeInt32);
@@ -669,6 +682,21 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         );
         _ = Interlocked.Increment(location: ref m_gpuRevision);
     }
+    // Whether the display the target shows on still takes the capture's opening format and encoding (an HDR toggle, or a
+    // move to a display that differs in it, ends the feed). It runs on the frame callback, under m_callbackGate, so the
+    // render thread never pays for DXGI, at most once per liveness interval; the probe re-reads the held output's
+    // description while its factory is current and only a display change makes it enumerate again. Only an arriving
+    // frame could carry the new encoding, so a capture whose content stays still keeps its last frame until one does.
+    private bool IsDisplayCurrent() {
+        var now = Environment.TickCount64;
+
+        if ((now - m_lastDisplayCheckTicks) < LivenessCheckIntervalMilliseconds) {
+            return true;
+        }
+
+        m_lastDisplayCheckTicks = now;
+        return m_display.IsCurrent(colorSpace: m_displayProbe.ColorSpaceOf(monitorHandle: MonitorHandle()));
+    }
     private bool ShouldRunCpuReadback(int divisor) {
         if (divisor <= 0) {
             return false;
@@ -771,6 +799,8 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
 
         m_device?.Dispose();
         m_device = null;
+        // Read only on the frame callback, which has drained, and in the constructor.
+        m_displayProbe.Dispose();
     }
     private static void ReleaseTargetSet(GpuTargetSet? targets) {
         if (targets is null) {
