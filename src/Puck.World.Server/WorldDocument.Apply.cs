@@ -1947,6 +1947,13 @@ public sealed partial class WorldDocument {
 
                 sink.DeliverSnapshot(snapshot: in redacted);
             }
+
+            if ((sink as IWorldDetachableSink)?.DetachReason is { } reason) {
+                if (Host.Output.HasNarrationSink) {
+                    Host.Output.Narrate(channel: "world.output", text: $"[world.output: {sink.GetType().Name} detached during its own attach primer: {reason}]");
+                }
+                lease.Dispose();
+            }
         } catch (Exception exception) {
             if (Host.Output.HasNarrationSink) {
                 Host.Output.Narrate(channel: "world.output", text: $"[world.output: {sink.GetType().Name} threw during its own attach primer — detached] {exception}");

@@ -270,7 +270,7 @@ public sealed partial class WorldTick {
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
         // submission buffered since the last step — enqueued.
         Host.MutationBudget.BeginTick();
-        Host.EndFaultedSessions();
+        Host.EndObserverEndedSessions();
         Host.Extensions.Drain();
         Host.Addons?.TickAddons(tick: (context.Tick + 1UL));
         _ = DrainPendingOps(tick: context.Tick);
@@ -797,8 +797,8 @@ public sealed partial class WorldTick {
         lock (Host.AuthorityGate) {
             if (Host.AuthorityRetiring) { return false; }
             Host.MutationBudget.BeginTick();
-            // A paused or stopped world still ends a session whose observer faulted.
-            Host.EndFaultedSessions();
+            // A paused or stopped world still ends a session whose observer faulted or detached itself.
+            Host.EndObserverEndedSessions();
             Host.Extensions.Drain();
             return DrainPendingOps(tick: m_lastCompletedTick);
         }

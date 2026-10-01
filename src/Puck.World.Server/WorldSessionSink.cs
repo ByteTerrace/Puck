@@ -8,11 +8,18 @@ namespace Puck.World.Server;
 /// while the session holds <c>observe all</c>, and each snapshot redacted under the world's live observer disclosure.
 /// A withheld span ends with the current disclosed definition before the next delivery, so the observer never renders
 /// a definition it missed an update to. The answers, compositions and levers this world's hub fans out belong to its
-/// own clients and never reach a session. An observer that throws ends its observation; the hub detaches it.</summary>
-internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservation observation, IClientSink inner) : IClientSink {
+/// own clients and never reach a session. An observer that throws, or that ends its own subscription as an
+/// <see cref="IWorldDetachableSink"/>, ends its observation; the hub detaches it.</summary>
+internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservation observation, IClientSink inner) : IWorldDetachableSink {
+    private readonly IWorldDetachableSink? m_detachable = (inner as IWorldDetachableSink);
+
     private bool m_withheld;
+
     private EntitySnapshot[] m_redacted = [];
 
+    /// <summary>Gets the reason the observer ended its own subscription with, or <see langword="null"/> while it still
+    /// takes deliveries; the session ends with it.</summary>
+    public string? DetachReason { get; private set; }
     /// <summary>Gets what the observer threw, once it has.</summary>
     public Exception? Fault { get; private set; }
 
@@ -47,13 +54,29 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         return false;
     }
+    // Ends the observation once its observer takes no more deliveries, by a fault or by its own detach reason: from
+    // this moment the session acts no more, and the next step ends it.
+    private void EndObservation() {
+        observation.MarkEnded();
+        server.GrantTable.MarkObserverEnded(session: observation.Session);
+        server.NoteObserverEnded(session: observation.Session);
+    }
     // Records a delivery fault before it reaches the hub's detach handler. Delivery uses direct calls so a steady
     // snapshot or value-only update does not allocate a capturing delegate.
     private void EndAfterFault(Exception exception) {
         Fault = exception;
-        observation.MarkEnded();
-        server.GrantTable.MarkSessionFaulted(session: observation.Session);
-        server.NoteFaultedSession(session: observation.Session);
+        EndObservation();
+    }
+    // Adopts the reason an observer ended its own subscription with during the delivery just made, so the hub detaches
+    // this sink after the same delivery.
+    private void FollowObserverDetach() {
+        if (
+            (DetachReason is null) &&
+            (m_detachable?.DetachReason is { } reason)
+        ) {
+            DetachReason = reason;
+            EndObservation();
+        }
     }
     // Ends a withheld span: the observer takes the current disclosed definition before anything newer.
     private void Resume() {
@@ -138,6 +161,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                 definition: Disclose(definition: definition)!,
                 version: version
             );
+            FollowObserverDetach();
         } catch (Exception exception) {
             EndAfterFault(exception: exception);
 
@@ -163,6 +187,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         try {
             Resume();
             inner.DeliverSnapshot(snapshot: in redacted);
+            FollowObserverDetach();
         } catch (Exception exception) {
             EndAfterFault(exception: exception);
 
@@ -187,6 +212,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                     definition: Disclose(definition: definition)!,
                     version: version
                 );
+                FollowObserverDetach();
 
                 return;
             }
@@ -196,6 +222,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                 stamp: in stamp,
                 version: version
             );
+            FollowObserverDetach();
         } catch (Exception exception) {
             EndAfterFault(exception: exception);
 

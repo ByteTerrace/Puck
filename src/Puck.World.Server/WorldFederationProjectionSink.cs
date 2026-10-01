@@ -8,7 +8,7 @@ namespace Puck.World.Server;
 /// <summary>Samples borrowed authority snapshots at the live disclosure cadence, redacts only frames that are due,
 /// and copies them into a bounded wire queue; no socket writes run on the authority tick.</summary>
 public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, string authority, Func<int> revision,
-    Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, Principal? recipient = null) : IClientSink {
+    Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, Principal? recipient = null) : IWorldDetachableSink {
     /// <summary>The maximum encoded records one projection subscriber retains while its wire consumer is behind.</summary>
     public const int PendingDeliveryLimit = 8;
     /// <summary>The named reason for detaching an observer whose wire queue fills.</summary>
@@ -24,7 +24,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
 
     /// <summary>The number of encoded records currently retained for this subscriber.</summary>
     public int PendingDeliveries => m_frames.Reader.Count;
-    /// <summary>The reason this subscription ended.</summary>
+    /// <inheritdoc/>
     public string? DetachReason { get; private set; }
 
     private bool Current() {
@@ -33,7 +33,8 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         DetachReason = InvalidatedDetachReason;
         m_invalidated = true;
         m_frames.Writer.TryComplete();
-        throw new IOException(message: InvalidatedDetachReason);
+
+        return false;
     }
     private async Task PumpAsync(Stream output, CancellationToken ct) {
         await foreach (var item in m_frames.Reader.ReadAllAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false)) {
@@ -64,10 +65,9 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             // latest snapshot. Detach so the peer reopens with a fresh primer instead of accepting an ambiguous gap.
             DetachReason = BackpressureDetachReason;
             m_invalidated = true;
+            // Completing the channel successfully keeps the queued records ahead of the terminal reason; the hub
+            // detaches on the reason after this delivery, whether or not the wire consumer ever drains again.
             m_frames.Writer.TryComplete();
-            // The hub detaches a faulting sink immediately, even if its wire consumer never resumes draining.
-            // Keep channel completion successful so the queued revisions still precede the terminal reason.
-            throw new IOException(message: BackpressureDetachReason);
         }
     }
 

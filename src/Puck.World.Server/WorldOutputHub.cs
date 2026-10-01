@@ -54,14 +54,17 @@ public readonly record struct WorldSinkDisclosure(WorldObserverDisclosure Policy
 /// <para><b>Exception isolation.</b> A typed subscriber that throws out of any <c>Deliver*</c> call is caught,
 /// narrated on stderr by its concrete type, and detached — never retried, and never allowed to unwind into the tick
 /// loop and take every other subscriber (and the tick itself) down with it. A broken observer stays broken; it does
-/// not get a second chance to corrupt delivery to the healthy ones.</para></remarks>
+/// not get a second chance to corrupt delivery to the healthy ones. A sink whose ending is part of its contract (a full
+/// queue, a retired route) implements <see cref="IWorldDetachableSink"/> instead of throwing: it is detached after the
+/// delivery that set its reason, with that reason narrated as a detach rather than a fault.</para></remarks>
 public sealed partial class WorldOutputHub {
-    // One typed-lane slot. Active starts true and is flipped exactly once, either by the lease's own Dispose or by a
-    // fault caught during delivery — both routes are equivalent from the subscriber's point of view (detached,
-    // compacted out, never delivered to again). Kept as a class (not a struct) because the lease Subscribe returns IS
+    // One typed-lane slot. Active starts true and is flipped exactly once, by the lease's own Dispose, by a fault caught
+    // during delivery, or by the sink's own detach reason; every route is equivalent from the subscriber's point of
+    // view (detached, compacted out, never delivered to again). Kept as a class (not a struct) because the lease Subscribe returns IS
     // this object; Dispose closes over it directly rather than needing a separate handle/index to invalidate.
     private sealed class Subscription(WorldOutputHub hub, IClientSink sink, WorldSinkDisclosure disclosure) : IDisposable {
         public readonly IClientSink Sink = sink;
+        public readonly IWorldDetachableSink? Detachable = (sink as IWorldDetachableSink);
         public WorldSinkDisclosure Disclosure = disclosure;
         // Per-sink redaction scratch, grown once to the widest snapshot this sink ever saw. Never shared with the
         // server's own borrowed backing array, which the redacted delivery must not write into.
@@ -124,6 +127,25 @@ public sealed partial class WorldOutputHub {
             m_activeCount--;
         }
     }
+    // Detaches a sink that ended its own subscription during the delivery just made, narrating its named reason as an
+    // ordinary detach, never as a fault.
+    private bool EndedBySink(Subscription subscription) {
+        if (subscription.Detachable?.DetachReason is not { } reason) {
+            return false;
+        }
+
+        if (HasNarrationSink) {
+            Narrate(
+                channel: "world.output",
+                text: $"[world.output: {subscription.Sink.GetType().Name} detached: {reason}]"
+            );
+        }
+
+        subscription.Active = false;
+        m_activeCount--;
+
+        return true;
+    }
     private static WorldSnapshot Redact(Subscription subscription, in WorldSnapshot snapshot) =>
         Redact(
             disclosure: in subscription.DisclosureRef,
@@ -158,7 +180,10 @@ public sealed partial class WorldOutputHub {
                     continue;
                 }
 
-                if (subscription.Active) {
+                if (
+                    subscription.Active &&
+                    !EndedBySink(subscription: subscription)
+                ) {
                     m_typed[writeIndex++] = subscription;
                 }
             }
@@ -246,7 +271,10 @@ public sealed partial class WorldOutputHub {
                     continue;
                 }
 
-                if (subscription.Active) {
+                if (
+                    subscription.Active &&
+                    !EndedBySink(subscription: subscription)
+                ) {
                     m_typed[writeIndex++] = subscription;
                 }
             }
@@ -293,7 +321,10 @@ public sealed partial class WorldOutputHub {
                     continue;
                 }
 
-                if (subscription.Active) {
+                if (
+                    subscription.Active &&
+                    !EndedBySink(subscription: subscription)
+                ) {
                     m_typed[writeIndex++] = subscription;
                 }
             }

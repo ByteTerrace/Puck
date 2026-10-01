@@ -89,7 +89,7 @@ boot that finds no compiled world derives everything and runs the same world.
 
 **The file.** A compiled world is a [chunk container](../reference/assets.md#chunk-containers)
 with the magic `PWLD` and format version 1, named `<name>.puckb` after its
-document (`moth.puck` and `moth.world.json` both map to `moth.puckb`). Its header
+document (`moth.puck` maps to `moth.puckb`, and `puck.world.json` to `puck.puckb`). Its header
 holds, in order, four keys, and a boot whose own four keys differ ignores the
 whole file:
 

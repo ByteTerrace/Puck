@@ -30,6 +30,34 @@ public sealed class WorldProjectionBackpressureLawTests {
         Assert.Equal(expected: WorldFederationProjectionSink.InvalidatedDetachReason, actual: sink.DetachReason);
     }
     [Fact]
+    public void ABackpressureDetachIsNarratedAsADetachNotAFault() {
+        var sink = new WorldFederationProjectionSink(
+            authority: "authority/one",
+            disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)),
+            revision: static () => 1,
+            tier: WorldDisclosureTier.Replica
+        );
+        var hub = new WorldOutputHub();
+        var narration = new RecordingNarrationSink();
+
+        using var narrated = hub.AttachNarrationSink(sink: narration);
+        using var lease = hub.Subscribe(sink: sink);
+
+        for (var tick = 1UL; (tick <= ((ulong)(WorldFederationProjectionSink.PendingDeliveryLimit + 1))); tick++) {
+            var snapshot = new WorldSnapshot(Authority: "authority/one", Entries: ReadOnlyMemory<EntitySnapshot>.Empty, Revision: 1, StepTicks: 1UL, Tick: tick);
+
+            hub.DeliverSnapshot(snapshot: in snapshot);
+        }
+
+        Assert.False(condition: hub.HasTypedSubscribers);
+        var line = Assert.Single(collection: narration.Narrations).Text;
+
+        Assert.Contains(actualString: line, expectedSubstring: WorldFederationProjectionSink.BackpressureDetachReason);
+        Assert.DoesNotContain(actualString: line, expectedSubstring: "threw");
+        Assert.DoesNotContain(actualString: line, expectedSubstring: "Exception");
+        Assert.DoesNotContain(actualString: line, expectedSubstring: " at ");
+    }
+    [Fact]
     public async Task AStalledProjectionKeepsOnlyItsBoundedPrimerAndDetachesBeforeLaterEpochs() {
         var disclosure = new WorldSinkDisclosure(
             ObserverBodyIndex: -1,
