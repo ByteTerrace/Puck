@@ -181,8 +181,8 @@ internal static partial class Subjects {
         );
         var factor = Oracles.EncloseExpNegative(rateRaw: (dynamics.DecayRateRaw * seconds));
 
-        // Per unit of n: half a ULP for Exp2Q32's closing narrowing, plus the relative error of the once-rounded Q32
-        // exponent (ln 2·2⁻³³) and of the mantissa (2⁻⁴⁴) on a factor at most one — under 2⁻¹⁷ ULP together.
+        // Per unit of n: half a ULP for Exp2Q56's closing narrowing, plus the relative error of the once-rounded Q56
+        // exponent (ln 2·2⁻⁵⁷) and of the mantissa (2⁻⁴⁴) on a factor at most one — under 2⁻¹⁷ ULP together.
         return Oracles.WithinEnvelope(
             enclosure: new(
                 High: (factor.High * seconds),
