@@ -122,7 +122,7 @@ public sealed record ResourceReference(
     /// <summary>Converts the convenient document spelling <c>"name"</c> to a current-frame reference.</summary>
     public static implicit operator ResourceReference(string name) => new(Name: name);
 }
-/// <summary>One resource version declared by a <see cref="RenderGraphDefinition"/>. Each version has exactly one
+/// <summary>One resource version declared by a <c>RenderGraphDefinition</c>. Each version has exactly one
 /// writer. A version that names <see cref="From"/> forwards that predecessor: its writer continues the predecessor's
 /// storage and contents, so the predecessor is consumed and every pass that samples it runs before the overwrite.</summary>
 /// <param name="Name">The unique version name.</param>
@@ -464,7 +464,7 @@ public sealed record ShaderPipelineGeometry(
 /// <param name="EntryPoint">The entry point compiled by the shader compiler: a compute pass's kernel, or a graphics
 /// pass's fragment stage.</param>
 /// <param name="Kind">Compute, fullscreen graphics, or indexed geometry. A shader pass names no package work, which a
-/// graph declares as a <see cref="RenderGraphPackagePass"/>.</param>
+/// graph declares as a <c>RenderGraphPackagePass</c>.</param>
 /// <param name="Inputs">The versions the pass reads, each a port of its interface. Set <see cref="ResourceReference.PreviousFrame"/> explicitly for feedback.</param>
 /// <param name="Outputs">The versions the pass writes. A graphics pass writes one color image and, for a geometry pass,
 /// at most one depth version.</param>
@@ -526,7 +526,7 @@ public sealed record ShaderPipelinePass(
 /// versions it by what it reads and writes, and plans each port's barrier and layout from the stage and access the port
 /// declares (<see cref="RenderGraphPortAccess"/>) exactly as it plans a shader pass's, so the package records no barrier
 /// of its own. Its planned pass carries <see cref="ShaderPipelinePassKind.Package"/> and a
-/// <see cref="ShaderPipelinePackageStep"/> in place of a declaration. The package records its own work and binds its
+/// <c>ShaderPipelinePackageStep</c> in place of a declaration. The package records its own work and binds its
 /// own descriptors.</summary>
 /// <param name="Name">The unique pass name.</param>
 /// <param name="Package">The package id.</param>
@@ -562,8 +562,9 @@ public sealed record ShaderPipelinePackagePass(
     string? Part = null,
     bool CountsKernelWork = false
 ) {
-    // Whether each port access is declared once per reference, reads on the inputs and writes on the outputs.
-    internal bool HasValidAccesses => (
+    /// <summary>Gets whether each port access is declared once per reference, reads on the inputs and writes on the
+    /// outputs.</summary>
+    public bool HasValidAccesses => (
         (Members is not null) &&
         (InputAccesses is not null) &&
         (OutputAccesses is not null) &&
@@ -573,12 +574,18 @@ public sealed record ShaderPipelinePackagePass(
         OutputAccesses.All(predicate: static access => (access is RenderGraphPortAccess.ComputeWrite or RenderGraphPortAccess.ColorAttachmentWrite))
     );
 
-    // How the pass reaches the version at an input or output position.
-    internal RenderGraphPortAccess InputAccess(int index) => InputAccesses[index];
-    internal RenderGraphPortAccess OutputAccess(int index) => OutputAccesses[index];
-    // The compute-shaped pass the planner orders it as; nothing compiles its empty entry point, and its accesses come
-    // from its ports, never from this shape's kind.
-    internal ShaderPipelinePass Shape() => new(
+    /// <summary>Returns how the pass reaches the version at an input position.</summary>
+    /// <param name="index">The input's position.</param>
+    /// <returns>The access.</returns>
+    public RenderGraphPortAccess InputAccess(int index) => InputAccesses[index];
+    /// <summary>Returns how the pass reaches the version at an output position.</summary>
+    /// <param name="index">The output's position.</param>
+    /// <returns>The access.</returns>
+    public RenderGraphPortAccess OutputAccess(int index) => OutputAccesses[index];
+    /// <summary>Returns the compute-shaped pass the planner orders it as; nothing compiles its empty entry point, and its
+    /// accesses come from its ports, never from this shape's kind.</summary>
+    /// <returns>The pass shape.</returns>
+    public ShaderPipelinePass Shape() => new(
         Config: Config,
         Dispatch: Dispatch,
         EntryPoint: string.Empty,

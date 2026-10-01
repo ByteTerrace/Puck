@@ -109,13 +109,17 @@
          rewritten only on an actual recompile — never unconditionally every build, which would make
          ValidateShaderBytecodeFresh below compare freshly-regenerated truth against itself and never catch
          anything. Its source hash covers that .hlsl plus every @(ShaderInclude), in item order — a conservative
-         over-approximation (touching any .hlsli invalidates every sidecar, even a kernel that doesn't include it). -->
+         over-approximation (touching any .hlsli invalidates every sidecar, even a kernel that doesn't include it).
+
+         Kernels compile after ResolveProjectReferences, so every project a consumer references is built first. A kernel
+         may include a declaration generated from C# (sdf-isa.hlsli, a *.interface.hlsli): an in-repo kernel project
+         references Puck.Shaders.Generator, whose build writes those from the model before this target runs. -->
     <ItemGroup>
         <_PuckExpectedBytecode Condition="'$(PuckShaderSpirvEnabled)' == 'true'" Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')" />
         <_PuckExpectedBytecode Condition="'$(PuckShaderDxilEnabled)' == 'true'" Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" />
         <_PuckExpectedBytecode Condition="'$(PuckComputeShaderDxilEnabled)' == 'true'" Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" />
     </ItemGroup>
-    <Target Name="CompileShaders" BeforeTargets="PrepareForBuild"
+    <Target Name="CompileShaders" AfterTargets="ResolveProjectReferences"
             Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath);$(MSBuildThisFileDirectory)ShaderRecipe.props"
             Outputs="@(_PuckExpectedBytecode);@(_PuckExpectedBytecode -> '%(Identity).hash')">
         <!-- Guards the DXC version probe and its <Error> below: a buildTransitive consumer with no shaders and no

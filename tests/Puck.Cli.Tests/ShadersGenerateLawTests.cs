@@ -23,7 +23,7 @@ public sealed class ShadersGenerateLawTests {
     // fingerprint and the build's shader recipe: owned whatever the tree holds.
     private static readonly (string Path, string Text)[] EngineKernels = [
         .. SdfWorldInterfaces.Includes.Select(selector: static include => (include.Path, ShaderInterfaceHlsl.Generate(shaderInterface: include.Interface))),
-        (SdfIsaHlsl.FingerprintSourcePath, SdfIsaHlsl.GenerateFingerprintSource(fingerprint: SdfIsaHlsl.Fingerprint)),
+        (SdfIsaHlsl.FingerprintSourcePath, SdfIsaHlsl.GenerateFingerprintSource(fingerprint: SdfIsaFingerprint.Value)),
         (ShaderCompiler.BuildRecipePath, ShaderCompiler.GenerateBuildRecipe()),
     ];
 
@@ -169,7 +169,7 @@ public sealed class ShadersGenerateLawTests {
         Assert.Empty(collection: problems);
         Assert.Equal(
             actual: includes.Select(selector: static include => include.Path),
-            expected: [IsaPath, SdfIsaHlsl.FingerprintSourcePath, ShaderCompiler.BuildRecipePath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-bricks.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-mesh.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-resolve.interface.hlsli", WorldPath, FilmGrainPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path)]
+            expected: [IsaPath, SdfIsaHlsl.FingerprintSourcePath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-bricks.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-mesh.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-resolve.interface.hlsli", WorldPath, FilmGrainPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path), ShaderCompiler.BuildRecipePath]
         );
     }
 }

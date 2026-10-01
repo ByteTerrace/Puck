@@ -11,6 +11,10 @@
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\Puck.Shaders.Model\Puck.Shaders.Model.csproj" />
+        <!-- Build-only: its build writes the declarations these kernels include that the C# model owns, before they
+             compile (build/Shaders.targets compiles kernels after ResolveProjectReferences). -->
+        <ProjectReference Include="..\Puck.Shaders.Generator\Puck.Shaders.Generator.csproj" PrivateAssets="all" Private="false" ReferenceOutputAssembly="false" />
     </ItemGroup>
     <ItemGroup>
         <None Include="$(MSBuildThisFileDirectory)..\..\build\PuckShaderHashSidecars.cs" Pack="true" PackagePath="buildTransitive\PuckShaderHashSidecars.cs" Visible="false" />

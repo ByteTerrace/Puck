@@ -858,7 +858,7 @@ that name, so a pass reads its block as `passGroup` either way while its
 bytecode reflects the stamp. `ShaderInterfaceLayout.Mismatch` holds a module
 to a stamped layout's stamp before anything else: a module whose pass block
 carries another name, or that reads no pass block, is refused. The SDF kernels'
-interfaces carry the instruction set's stamp (`SdfIsaHlsl.Stamp`), which is
+interfaces carry the instruction set's stamp (`SdfWorldInterfaces.Stamp`), which is
 how a kernel reload refuses kernels compiled against another instruction set.
 
 The spike interfaces three passes: film grain, a pixelate compute pass, and a
@@ -1017,6 +1017,38 @@ package declares the push with `RenderGraphPackage.PushesIndex`, which
 `ShaderPipelineParameterLayout.ForPackage`, the planner and
 `puck shaders generate` carry into the package's interface.
 
+## Generated declarations
+
+A kernel compiled at build never declares what the C# model owns. The model
+generates it: `sdf-isa.hlsli`, the SDF instruction set's enums, lane accessors
+and packed-layout constants (`SdfIsaHlsl`); the instruction set's fingerprint,
+recorded for the host in `src/Puck.SdfVm/SdfIsaFingerprint.cs`; and every
+generated interface include (`<name>.interface.hlsli`), an engine package's
+found by its file name and the SDF kernels' (`SdfKernelInterfaces`) at fixed
+paths. `ShaderDeclarations` (in `Puck.SdfVm.Model`) is the one list of them.
+
+The model lives in two assemblies that compile no shader:
+`Puck.Shaders.Model` (pass interfaces, the frame block, the config binder, the
+pipeline document's records and the engine package catalog) and
+`Puck.SdfVm.Model` (the instruction set's declaration, the visibility record's
+shared words, the SDF kernels' interfaces and `ShaderDeclarations`). Each
+project whose kernels include a generated declaration (`Puck.Shaders`,
+`Puck.SdfVm`, `Puck.Overlays`) references `Puck.Shaders.Generator` as a
+build-only project reference, and `build/Shaders.targets` compiles kernels after
+`ResolveProjectReferences`. The generator's build therefore runs before any of
+those kernels compile: it writes each declaration whose text differs from the
+model's, under the checkout's `src` tree, and touches nothing else, so a model
+change that moves no declaration recompiles no kernel. It runs again only when
+an assembly it runs has changed. A kernel reading a declaration the model has
+only just gained builds in one pass, with no header seeded by hand.
+
+`puck shaders generate` writes the same list, and the build's shader recipe
+(`build/ShaderRecipe.props`), which a build reads when it is evaluated and so
+only the verb writes; `--check` holds every file to the model, and CI runs it
+on a fresh checkout. Generated files are checked in: a hot reload compiles the
+tree's kernels against them, and the build only brings them level with the
+model it built.
+
 ## API
 
 ```csharp
@@ -1049,6 +1081,11 @@ pass's whole config, which its pass block carries from the next frame the node
 renders; the World's parameter bindings write one scalar-`float` field of one
 `views.post` pass, named by its row, through it (`WorldPostPasses`), over the
 pass's own config, so the row's other fields keep their values.
+
+The model types (the pass interface and its layout and include, the frame block,
+the config binder, the pipeline document's records and the package catalog)
+ship in `Puck.Shaders.Model`, which `Puck.Shaders` references; the namespace of
+both is `Puck.Shaders`.
 
 | Type | Role |
 |------|------|
@@ -2456,8 +2493,9 @@ without the recording's source reader refuses it.
 
 ## The NuGet package
 
-`ByteTerrace.Puck.Shaders` depends on `Puck.Abstractions`, `Puck.Assets`, and
-`Puck.Hosting` (`IRenderRoot`, `FrameContext`, `EngineTicks`). It carries no
+`ByteTerrace.Puck.Shaders` depends on `Puck.Abstractions`, `Puck.Assets`,
+`Puck.Hosting` (`IRenderRoot`, `FrameContext`, `EngineTicks`), and
+`ByteTerrace.Puck.Shaders.Model`, the model its declarations are generated from. It carries no
 GPU, windowing, or shader-compiler dependency of its own; `DxilInterfaceReader`
 loads the `dxcompiler.dll` of an installed DXC at run time. The package also
 ships `build/Shaders.targets` under

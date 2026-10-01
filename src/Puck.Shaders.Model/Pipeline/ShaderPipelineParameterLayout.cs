@@ -171,7 +171,7 @@ public sealed class ShaderPipelineParameterLayout {
     }
     /// <summary>Returns where a value of the pass block lies: the byte offset, in a block <see cref="SizeBytes"/> long, the
     /// generated declarations read the member from. A package's recorder writes the values it declares there each
-    /// frame (<see cref="RenderGraphPackageRecording.PassBlock"/>).</summary>
+    /// frame (<c>RenderGraphPackageRecording.PassBlock</c>).</summary>
     /// <param name="member">The member's name.</param>
     /// <returns>The offset.</returns>
     /// <exception cref="ArgumentException">The pass block holds no member of that name.</exception>
@@ -394,7 +394,7 @@ public sealed class ShaderPipelineParameterLayout {
     /// <param name="values">The host's frame values, the presented engine tick among them.</param>
     /// <param name="frame">The frames the node submitted before this one; only the low 32 bits are written.</param>
     /// <param name="tickRate">The rate, in ticks a second, the tick is written at: the plan's
-    /// <see cref="ShaderPipelinePlan.TickRate"/>, or <see cref="ShaderFrameInterface.EngineTickRate"/>.</param>
+    /// <c>ShaderPipelinePlan.TickRate</c>, or <see cref="ShaderFrameInterface.EngineTickRate"/>.</param>
     /// <exception cref="ArgumentException"><paramref name="block"/> is shorter than
     /// <see cref="FrameBlockSizeBytes"/>, or <paramref name="tickRate"/> does not divide the engine rate exactly.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tickRate"/> is zero.</exception>

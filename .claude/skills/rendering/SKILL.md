@@ -31,7 +31,7 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf` — `isa/sdf-isa.hlsli` the generated instruction-set declarations (`puck shaders generate`), the `field/` modules the interpreter (`mapCore` in `sdf-map.hlsli`, `mapGradCore` in `sdf-map-grad.hlsli`), the `frame/` modules the frame's data and its row decoders (environment, lights, levers), the `march/`/`surface/`/`shade/`/`debug/` modules the view logic, `field/sdf-vm.hlsli` and `passes/sdf-world.hlsli` the two aggregators, one `*.comp.hlsl` wrapper per dispatch under `passes/` | [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md), [lighting and shading](../../../docs/rendering/sdf/handbook/lighting-and-shading.md), [shading, AO and shadows](../../../docs/rendering/sdf/reference/shading-ao-shadows.md) |
 | Cameras and views | `src/Puck.SdfVm/Views` (`SdfCameraProgram`, rigs, `ViewTransition`); `WorldViewInstances` (`src/Puck.World.Client/Sources`); `WorldScreenBinder.CameraViews.cs`/`.Session.cs`/`.Views.cs` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`, `WorldRigCatalog`, `WorldCameraRigCompiler`, `WorldViewGraphHost`, `WorldRootGraph`); `src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs` | `puck-world` skill for document meaning; [authoring README](../../../src/Puck.World.Authoring/README.md) |
-| Shader manifests, pipelines, builds | `src/Puck.Shaders`, `build/Shaders.targets` | [Shader manifests and pipelines](../../../docs/reference/shaders.md) |
+| Shader manifests, pipelines, builds | `src/Puck.Shaders`; the model its declarations are generated from, `src/Puck.Shaders.Model` and `src/Puck.SdfVm.Model` (`ShaderDeclarations`, `SdfKernelInterfaces`), which compile no shader; `src/Puck.Shaders.Generator`, the build-only reference whose build writes them before any kernel compiles; `build/Shaders.targets` | [Shader manifests and pipelines](../../../docs/reference/shaders.md) |
 | Image sources and producers | `src/Puck.Abstractions/Sources` (contract, upload layout, conversion reference, verdict); `src/Puck.Shaders/Assets/Shaders/Sources` (conversion kernels); `WorldImageProducerVocabulary`/`WorldImageProducerSettings` (`src/Puck.World.Schema`); `WorldImageProducers`, `WorldCaptureGate` (`src/Puck.World.Client/Sources`); `WorldCaptureFills`, `WorldScreenBinder.Producers.cs` (`src/Puck.World`) | [the World guide's image producers](../../../src/Puck.World/README.md#image-producers), [rendering plan P12](../../../docs/plans/rendering.md#p12--image-sources) |
 | Backends | `src/Puck.Vulkan`, `src/Puck.DirectX` | [contributing: GPU support](../../../docs/development/contributing.md#gpu-support-and-shader-builds), [Vulkan](../../../docs/rendering/vulkan.md), [Direct3D 12](../../../docs/rendering/directx.md) |
 
@@ -55,8 +55,13 @@ over `RotatePlane`). A new instruction touches every partner in one change:
    `MaxSmoothBlendRadius` (compose halo), `MaxScopedFieldReach` (a scoped field
    op's outward growth), or `HasUnmaskableInfluence` (no finite bound can
    contain it). Every soft-blend family needs its own halo derivation.
-3. **Kernel declarations** — run `puck shaders generate` to rewrite
-   `sdf-isa.hlsli` from the C# model; the new member appears as its enum's
+3. **Kernel declarations** — `sdf-isa.hlsli` is generated from the C# model
+   (`SdfIsaHlsl` in `Puck.SdfVm.Model`, which compiles no shader): building
+   `Puck.SdfVm` runs its build-only reference `Puck.Shaders.Generator` first,
+   which writes every declaration in `ShaderDeclarations` whose text moved, so a
+   new member and the kernel reading it build in one pass, and
+   `puck shaders generate` writes the same files by hand. Never seed a header.
+   The new member appears as its enum's
    prefix plus its name in upper snake case (`SdfOp.CellDisplace` is
    `SDF_OP_CELL_DISPLACE`). Never hand-write a `#define` for an ISA value: a new
    ISA-owned constant, lane or enum the kernels read joins `SdfIsaHlsl.Generate`,
@@ -66,7 +71,8 @@ over `RotatePlane`). A new instruction touches every partner in one change:
    an input (a new lane enum a call per member, a new side table a call that
    packs it); `SdfEncodingProbeLawTests` refuses a member no call carries, and
    the probe's description is what the fingerprint hashes. Regenerating also
-   rewrites `SdfIsaFingerprint.cs`, the fingerprint the host reads.
+   rewrites `SdfIsaFingerprint.cs`, the fingerprint the host reads, before
+   `Puck.SdfVm` compiles.
 4. **Every GPU call site** — `mapCore` in `sdf-map.hlsli` and its hit-only twin `mapGradCore` in
    `sdf-map-grad.hlsli`, including the rigid-leaf fast paths in each, and the compiled
    part walk in `sdf-parts.hlsli`. A blend needs `blendShape` and
@@ -589,7 +595,7 @@ These are one-line cautions; the owning pages hold the derivations.
   beside `dxc`) and holds it to the host's interface
   (`SdfKernelSet.InterfaceMismatch`, `ShaderInterfaceLayout.Mismatch`): the
   kernels' interfaces carry the instruction set's stamp in their pass block's
-  variable name (`SdfIsaHlsl.Stamp`, `ShaderInterface.Stamp`), so a kernel
+  variable name (`SdfWorldInterfaces.Stamp`, `ShaderInterface.Stamp`), so a kernel
   compiled against another instruction set, or binding anything the host does not
   place where it places it, refuses the reload and the residency keeps its
   kernels. Boot reflects nothing, since the deployed tree is the host's own build,
