@@ -117,10 +117,13 @@ public static class WorldKeyResolver {
             track: track
         );
 
-        return (segment.From, segment.To, Ease(
-            ease: track.Keys[segment.From].Ease,
-            t: segment.Fraction
-        ));
+        var ease = track.Keys[segment.From].Ease;
+
+        // Segment selects the key already reached. A Step holds that key even when a fraction just before the next
+        // key rounds to one (especially through the wrap); only selecting the next segment changes its value.
+        return (segment.From, segment.To, ((ease == WorldEase.Step)
+            ? 0d
+            : Ease(ease: ease, t: segment.Fraction)));
     }
     /// <summary>Returns the segment a phase falls in, as <see cref="Locate{T}(WorldKeyTrack{T}, double, double)"/>
     /// selects it, with its even fraction before the earlier key's ease shapes it. Every comparison stays in phase

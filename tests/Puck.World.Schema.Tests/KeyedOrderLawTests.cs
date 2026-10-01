@@ -82,6 +82,40 @@ public sealed class KeyedOrderLawTests {
         );
     }
     [Fact]
+    public void Ordered_steps_hold_until_the_key_even_when_the_wrap_fraction_rounds_to_one() {
+        var lower = Keyed((0d, 0.4f, WorldEase.Step), (6d, 0.1f, WorldEase.Step), (18d, 0.4f, WorldEase.Step));
+        var upper = Keyed((6d, 0.2f, WorldEase.Step), (18d, 0.5f, WorldEase.Step));
+
+        Assert.Equal(expected: string.Empty, actual: Validate(definition: Definition(sky: Gradient(lower, upper))));
+
+        var before = Math.BitDecrement(x: 0.25d);
+
+        // The upper's wrap fraction rounds to one before the key, while the lower's does not. Both still hold.
+        Assert.Equal(expected: 1d, actual: WorldKeyResolver.Segment(phase: before, span: 24d, track: upper.Keys!).Fraction);
+        Assert.Equal(expected: 0.4f, actual: WorldKeyResolver.Scalar(phase: before, span: 24d, track: lower.Keys!));
+        Assert.Equal(expected: 0.5f, actual: WorldKeyResolver.Scalar(phase: before, span: 24d, track: upper.Keys!));
+
+        foreach (var phase in new[] { before, 0.25d, Math.BitIncrement(x: 0.25d), Math.BitDecrement(x: 1d), 0d }) {
+            Assert.True(condition: (WorldKeyResolver.Scalar(phase: phase, span: 24d, track: lower.Keys!) < WorldKeyResolver.Scalar(phase: phase, span: 24d, track: upper.Keys!)));
+        }
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void An_empty_ordered_track_is_refused_by_name_without_resolving_it(bool emptyUpper) {
+        var lower = (emptyUpper ? Keyed((0d, 0.1f, WorldEase.Linear)) : Keyed());
+        var upper = (emptyUpper ? Keyed() : Keyed((0d, 0.9f, WorldEase.Linear)));
+
+        Assert.Contains(
+            actualString: Validate(definition: Definition(sky: Gradient(lower, upper))),
+            expectedSubstring: $"render.sky.layers[0].stops[{(emptyUpper ? 1 : 0)}].elevation must carry at least one key."
+        );
+        Assert.Contains(
+            actualString: Validate(definition: Definition(lighting: Ink(high: upper, low: lower))),
+            expectedSubstring: $"render.lighting.curvature.{(emptyUpper ? "inkHigh" : "inkLow")} must carry at least one key."
+        );
+    }
+    [Fact]
     public void A_mixed_ease_document_that_never_crosses_is_admitted() {
         var sky = Gradient(
             Keyed((0d, -0.5f, WorldEase.Smooth), (8d, -0.2f, WorldEase.Linear), (16d, -0.4f, WorldEase.Step)),
@@ -108,6 +142,25 @@ public sealed class KeyedOrderLawTests {
             Keyed((0d, 0f, WorldEase.Smooth), (12d, 0.3f, WorldEase.Smooth)),
             Keyed((0d, 0.2f, WorldEase.Smooth), (12d, 0.9f, WorldEase.Smooth))
         ))));
+    }
+    [Fact]
+    public void Moving_values_that_touch_after_float_rounding_are_refused() {
+        var lower = Keyed((0d, 0f, WorldEase.Linear), (12d, 0.9f, WorldEase.Step));
+        var upper = Keyed((0d, float.Epsilon, WorldEase.Linear), (12d, MathF.BitIncrement(x: 0.9f), WorldEase.Step));
+
+        // Their real affine difference stays positive, but both resolved floats are 0.63 at this interior phase.
+        Assert.Equal(
+            expected: WorldKeyResolver.Scalar(phase: 0.35d, span: 24d, track: lower.Keys!),
+            actual: WorldKeyResolver.Scalar(phase: 0.35d, span: 24d, track: upper.Keys!)
+        );
+        Assert.Contains(
+            actualString: Validate(definition: Definition(sky: Gradient(lower, upper))),
+            expectedSubstring: "render.sky.layers[0].stops[1].elevation must exceed render.sky.layers[0].stops[0].elevation wherever they resolve; between 0 and 12 on clock 'day'"
+        );
+        Assert.Contains(
+            actualString: Validate(definition: Definition(lighting: Ink(high: upper, low: lower))),
+            expectedSubstring: "render.lighting.curvature.inkHigh must exceed render.lighting.curvature.inkLow wherever they resolve; between 0 and 12 on clock 'day'"
+        );
     }
     [Fact]
     public void A_smoothstep_against_a_linear_value_is_bounded_by_its_range() {

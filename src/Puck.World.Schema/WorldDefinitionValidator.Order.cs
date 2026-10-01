@@ -23,9 +23,9 @@ public static partial class WorldDefinitionValidator {
     // exactly and are compared. Between two consecutive times, no value has a key, so each moves monotonically (see
     // OrderPiece). Where the difference of two neighbours is itself monotone (either holds, both are affine in time, or
     // both ease by smoothstep over the same window), it lies between its two ends, so the pair is refused when the
-    // lower can reach the upper at the interval's end. Otherwise the lower's largest end must stay below the upper's
-    // smallest. Both rules are sound: neither admits a pair that touches or crosses; the second may refuse a pair that
-    // never does.
+    // lower can reach the upper at the interval's end. Two moving pieces also keep room for rounding their scalars to
+    // float. Otherwise the lower's largest end must stay below the upper's smallest. Both rules are sound: neither
+    // admits a pair that touches or crosses; the second may refuse a pair that never does.
     private static void JudgeAscending(WorldDefinition definition, IReadOnlyList<(BindableScalar Value, string Path)> values, string path, List<string> errors, string note = "") {
         var judged = true;
 
@@ -98,6 +98,11 @@ public static partial class WorldDefinitionValidator {
         foreach (var (value, _) in values) {
             if (value.Keys is not { } keys) {
                 continue;
+            }
+
+            if (keys.Count == 0) {
+                // An empty track is refused by ValidateKeyTimes, before it can reach the resolver here.
+                return;
             }
 
             for (var index = 0; (index < keys.Count); index++) {
@@ -179,8 +184,10 @@ public static partial class WorldDefinitionValidator {
                 var monotone = (
                     (lower.Shape == OrderPieceShape.Held) ||
                     (upper.Shape == OrderPieceShape.Held) ||
-                    ((lower.Shape == OrderPieceShape.Affine) && (upper.Shape == OrderPieceShape.Affine)) ||
-                    ((lower.Shape == OrderPieceShape.Smooth) && (upper.Shape == OrderPieceShape.Smooth) && (lower.WindowFrom == upper.WindowFrom) && (lower.WindowTo == upper.WindowTo))
+                    (SeparatedAfterRounding(lower: lower, upper: upper) && (
+                        ((lower.Shape == OrderPieceShape.Affine) && (upper.Shape == OrderPieceShape.Affine)) ||
+                        ((lower.Shape == OrderPieceShape.Smooth) && (upper.Shape == OrderPieceShape.Smooth) && (lower.WindowFrom == upper.WindowFrom) && (lower.WindowTo == upper.WindowTo))
+                    ))
                 );
 
                 var (reach, fall) = (monotone
@@ -200,6 +207,20 @@ public static partial class WorldDefinitionValidator {
         }
 
         return null;
+    }
+    // A difference of two moving pieces is monotone before rounding their scalars to float. Strictly separated
+    // rounded ends alone do not promise strictly separated rounded interiors: two nearby values can round to the
+    // same float. Reserve two of the largest float spacings in either range, for rounding the ends and the interior;
+    // near pairs fall back to the conservative range judgment. Twice the inward spacing bounds the outward spacing
+    // even at a power of two, and stays finite at float.MaxValue.
+    private static bool SeparatedAfterRounding(OrderPiece lower, OrderPiece upper) {
+        var magnitude = Math.Max(
+            val1: Math.Max(val1: Math.Abs(value: lower.Start), val2: Math.Abs(value: lower.End)),
+            val2: Math.Max(val1: Math.Abs(value: upper.Start), val2: Math.Abs(value: upper.End))
+        );
+        var margin = (4d * (magnitude - ((double)MathF.BitDecrement(x: magnitude))));
+
+        return (((((double)upper.Start) - lower.Start) > margin) && ((((double)upper.End) - lower.End) > margin));
     }
     // A scalar's piece over the open interval from one key time, of a phase length, to the next.
     private static OrderPiece PieceOf(BindableScalar value, double span, double from, double to, double length) {
