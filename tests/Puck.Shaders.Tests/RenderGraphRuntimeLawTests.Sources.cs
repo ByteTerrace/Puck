@@ -537,6 +537,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
             actual: runtime.UnservedCaptureReasonOf(instance: "pattern"),
             expected: "the instance 'pattern' has produced no output: the test producer refused its settings"
         );
+        TestLiveness.Until(step: () => {
+            Produce(index: runtime.Latest!.Frame + 1, runtime: runtime, tick: 1);
+
+            return (runtime.Node(instance: 1).FrameCounter > 0UL);
+        });
+        Assert.Equal(expected: FrameCompletion.Refused, actual: runtime.Completion);
+        Assert.Contains(expectedSubstring: upload.Refusal!, actualString: runtime.CompletionReason);
     }
 
     // An upload of a SourceExtent-square image that counts what it writes.

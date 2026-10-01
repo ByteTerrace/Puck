@@ -211,7 +211,12 @@ nothing the host does can render it; the root names the refusal. A refusal is
 something only a change to what a build was made from retries: a node's
 refused graph, or a package's refusal of its instance, such as an SDF
 residency whose tables' build was refused. Each is reported as `Refused`, never
-as a wait the host would hold forever. A device loss
+as a wait the host would hold forever. An instance with no installed graph,
+or an uploaded source whose opening or descriptor has no conversion graph,
+also refuses the frame until its inputs change. Completion follows the
+scheduled same-frame reads, including buffers, external producers and package
+screen reads; an unshown input and a previous-frame read do not hold a tick.
+A refusal takes precedence over an input still building. A device loss
 holds the tick whose frame it lost. A script that waits N ticks has N rendered
 frames behind it, and each frame reprojects from the frame of the tick before
 it. A tick's first composition carries one step of `DeltaTicks` and

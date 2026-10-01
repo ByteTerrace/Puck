@@ -1100,6 +1100,14 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_latest = schedule;
         m_unproduced = 0;
 
+        // A source with no conversion graph is never scheduled. Its opening or descriptor fault still refuses any
+        // same-frame consumer that shows it, rather than certifying a stand-in as a completed frame.
+        for (var index = 0; (index < m_sources.Length); index++) {
+            if (m_sources[index] is { Graph: null }) {
+                MarkUnproduced(index: index, node: m_nodes[index]!);
+            }
+        }
+
         var renders = schedule.Renders;
         var holdingConvergence = ((m_convergence is { IsActive: true } convergence) &&
             (convergence.Samples >= convergence.Request.Converge) &&
@@ -1161,7 +1169,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                         previous: prior
                     );
                 } else {
-                    MarkCurrent(index: index);
+                    MarkRendered(index: index, schedule: schedule);
                 }
 
                 continue;
@@ -1180,9 +1188,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 )
             ) {
                 m_unproduced++;
-                MarkStale(
+                MarkUnproduced(
                     index: index,
-                    reason: $"the source '{m_set.Instances[index].Name}' wrote no image for tick {frame.Tick}"
+                    node: node,
+                    waiting: $"the source '{m_set.Instances[index].Name}' wrote no image for tick {frame.Tick}"
                 );
                 schedule.Next.Withdraw(
                     index: index,
@@ -1196,10 +1205,12 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 schedule: schedule
             )) {
                 m_unproduced++;
-                MarkStale(
-                    index: index,
-                    reason: $"the instance '{m_set.Instances[index].Name}' reads a buffer with no completed output"
-                );
+                if (!MarkReadStale(index: index, schedule: schedule)) {
+                    MarkStale(
+                        index: index,
+                        reason: $"the instance '{m_set.Instances[index].Name}' reads a buffer with no completed output"
+                    );
+                }
 
                 continue;
             }

@@ -132,12 +132,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
     // A package whose build never finishes, as an SDF view's does while its residency's tables are refused, and which
     // states a refusal for its instances when told to.
     private sealed class RefusingPackage : IRenderGraphPackageFactory {
-        public RefusingPackage() => Registry.Register(
+        public RefusingPackage(string package = Camera) => Registry.Register(
             factory: this,
-            package: Camera
+            package: package
         );
 
         public string? Refusal { get; set; }
+        public string? RefusedInstance { get; init; }
         public RenderGraphPackageRecorders Registry { get; } = new(regionCopy: new GpuRegionCopyPass(pipelines: new GpuPassPipelineCache(), kernel: new byte[] { UploadModelGpu.RegionCopyBytecode }));
 
         public async ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
@@ -150,7 +151,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         }
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) =>
             throw new InvalidOperationException(message: "The refusing package never builds.");
-        public string? RefusalOf(string instance) => Refusal;
+        public string? RefusalOf(string instance) => (((RefusedInstance is null) || (RefusedInstance == instance)) ? Refusal : null);
     }
 
     /// <summary>A package that refuses its instance (an SDF residency whose tables' build was refused) makes the frame

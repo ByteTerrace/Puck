@@ -37,13 +37,14 @@ public sealed partial class RenderGraphRuntime {
     }
     // A scheduled graph instance whose node produced nothing this frame. A paused node presents its last image on purpose.
     // This is the one place a refusal becomes Refused: a package's refusal of the instance (IRenderGraphPackageFactory.
-    // RefusalOf, such as an SDF residency's refused tables) or the node's own refused build; anything else is a wait.
-    private void MarkUnproduced(int index, ShaderPipelineRenderNode node) {
+    // RefusalOf, such as an SDF residency's refused tables), the node's refused build or a missing graph; otherwise
+    // the instance is waiting. Source writes also pass through here, since binding their region advances the build.
+    private void MarkUnproduced(int index, ShaderPipelineRenderNode node, string? waiting = null) {
         var name = m_set.Instances[index].Name;
 
         if (node.Paused) {
             MarkCurrent(index: index);
-        } else if (PackageRefusalOf(index: index) is { } refusal) {
+        } else if ((PackageRefusalOf(index: index) ?? m_sources[index]?.Upload.Fault) is { } refusal) {
             MarkStale(
                 index: index,
                 reason: $"the instance '{name}' cannot render: {refusal}",
@@ -59,15 +60,21 @@ public sealed partial class RenderGraphRuntime {
                 reason: $"the instance '{name}' cannot render: {error.Message}",
                 refused: true
             );
+        } else if (m_graphs[index] is null) {
+            MarkStale(
+                index: index,
+                reason: $"the instance '{name}' cannot render: {(m_sources[index]?.Fault ?? "no graph is installed")}",
+                refused: true
+            );
         } else if (!node.IsReady) {
             MarkStale(
                 index: index,
-                reason: $"the instance '{name}' has no installed graph yet: its pipelines are building"
+                reason: (waiting ?? $"the instance '{name}' has no installed graph yet: its pipelines are building")
             );
         } else {
             MarkStale(
                 index: index,
-                reason: $"the instance '{name}' kept an earlier frame's image while its graph rebuilds"
+                reason: (waiting ?? $"the instance '{name}' kept an earlier frame's image while its graph rebuilds")
             );
         }
     }
@@ -98,57 +105,61 @@ public sealed partial class RenderGraphRuntime {
     // A graph instance that rendered: stale when an input it reads within the frame is, when it bound a stand-in, or when
     // the output it bound is older than the frame the schedule has it read.
     private void MarkRendered(int index, RenderGraphSchedule schedule) {
+        if (!MarkReadStale(index: index, schedule: schedule)) {
+            MarkCurrent(index: index);
+        }
+    }
+    // Only reads the schedule shows can affect completion. External producers and screen-sampling packages read
+    // edges without graph input bindings; an unshown bound image has no bearing on the displayed frame.
+    private bool MarkReadStale(int index, RenderGraphSchedule schedule) {
         var name = m_set.Instances[index].Name;
+        string? waiting = null;
 
-        foreach (var binding in m_inputs[index]) {
-            if (binding.PreviousFrame) {
+        foreach (var read in schedule.Reads) {
+            if ((read.Consumer != name) || read.PreviousFrame) {
                 continue;
             }
-            if (m_stale[binding.Producer] is { } reason) {
-                MarkStale(
-                    index: index,
-                    reason: reason,
-                    refused: m_staleRefused[binding.Producer]
-                );
+            var producer = m_set.IndexOf(name: read.Producer);
 
-                return;
-            }
-            if (m_producers[binding.Producer] is not null) {
+            if ((m_producers[index] is null) &&
+                !BindsProducer(index: index, producer: producer) &&
+                !SamplesReads(graph: m_graphs[index])) {
                 continue;
             }
+            if (m_stale[producer] is { } reason) {
+                if (m_staleRefused[producer]) {
+                    MarkStale(index: index, reason: reason, refused: true);
 
-            var frame = FrameOf(
-                consumer: name,
-                producer: binding.ProducerName,
-                schedule: schedule
-            );
+                    return true;
+                }
+                waiting ??= reason;
 
+                continue;
+            }
+            if (m_standInReads[index] == read.Producer) {
+                waiting ??= $"the instance '{name}' rendered over a stand-in for '{read.Producer}', which has no output for the frame";
+
+                continue;
+            }
             if (
-                (frame >= 0) &&
+                (m_producers[producer] is null) &&
+                (read.Frame >= 0) &&
                 (OutputAt(
-                    frame: frame,
-                    producer: binding.Producer
-                ).Frame < frame)
+                    frame: read.Frame,
+                    producer: producer
+                ).Frame < read.Frame)
             ) {
-                MarkStale(
-                    index: index,
-                    reason: $"the instance '{name}' read an earlier frame's image of '{binding.ProducerName}'"
-                );
-
-                return;
+                waiting ??= $"the instance '{name}' read an earlier frame's image of '{read.Producer}'";
             }
         }
 
-        if (m_standInReads[index] is { } producer) {
-            MarkStale(
-                index: index,
-                reason: $"the instance '{name}' rendered over a stand-in for '{producer}', which has no output for the frame"
-            );
-
-            return;
+        if (waiting is null) {
+            return false;
         }
 
-        MarkCurrent(index: index);
+        MarkStale(index: index, reason: waiting);
+
+        return true;
     }
     // Decides the frame's completion from the root's standing.
     private void Complete() {
