@@ -62,6 +62,17 @@ public static class WorldKeyedValues {
 
         return walk.Found;
     }
+    /// <summary>Returns whether a model type is a bindable that can carry keys on a clock.</summary>
+    /// <param name="type">The type; a nullable value type answers for its underlying type.</param>
+    /// <returns><see langword="true"/> for <see cref="BindableColor"/>, <see cref="BindableScalar"/>,
+    /// <see cref="BindableAngle"/>, <see cref="BindableDirection"/>, <see cref="BindableVector2"/> and
+    /// <see cref="BindableVector3"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
+    public static bool IsKeyable(Type type) {
+        ArgumentNullException.ThrowIfNull(argument: type);
+
+        return Surfaces.Contains(value: Underlying(type: type));
+    }
     /// <summary>Returns the keys a bindable carries, or <see langword="null"/> for a literal, a binding or a value
     /// that is no bindable.</summary>
     /// <param name="value">The value.</param>

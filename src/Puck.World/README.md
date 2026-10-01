@@ -2009,8 +2009,9 @@ authors (the lights, the sky, the theme, markers, camera programs,
 `views.graphs` parameters) may instead be keyed on a clock:
 `{ "clock": "day", "keys": [ { "at": 0, "value": 0.2 }, { "at": 43200,
 "value": 1, "ease": "Smooth" } ] }`, written in `.puck` as a block,
-`intensity { clock: "day"  keys [ { at: 0h, value: 0.2 } { at: 12h, value: 1,
-ease: Smooth } ] }`. A key's `at` is a time on its clock's span, ascending, in
+`intensity { clock: day  keys [ { at: 0h, value: 0.2 } { at: 12h, value: 1,
+ease: Smooth } ] }`; a clock is a declared name, written bare wherever a key or
+a section names it, and a quoted one is refused naming the bare spelling. A key's `at` is a time on its clock's span, ascending, in
 `[0, span)`; the last key wraps into the first. Between two keys the value
 blends by its type—a colour in linear light, an angle along the shorter arc
 across a whole turn, a direction along the great circle, a scalar or vector

@@ -282,12 +282,10 @@ public static class WorldKeyTrackJson {
 
                     break;
                 case "ease":
-                    ease = (reader.GetString() switch {
-                        nameof(WorldEase.Linear) => WorldEase.Linear,
-                        nameof(WorldEase.Smooth) => WorldEase.Smooth,
-                        nameof(WorldEase.Step) => WorldEase.Step,
-                        var other => throw new JsonException(message: $"A keyed {kind}'s key ease '{other}' is not Linear, Smooth or Step."),
-                    });
+                    // An ease reads in any case, as every enumeration of the document does, and never as a number.
+                    ease = ((Enum.TryParse(ignoreCase: true, result: out WorldEase parsed, value: reader.GetString()) && Enum.IsDefined(value: parsed) && !int.TryParse(s: reader.GetString(), result: out _))
+                        ? parsed
+                        : throw new JsonException(message: $"A keyed {kind}'s key ease '{reader.GetString()}' is not Linear, Smooth or Step."));
 
                     break;
                 default:

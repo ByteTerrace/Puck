@@ -1504,7 +1504,7 @@ render {
       fog(name: "haze", density: 0.004)
       sunDisc(name: "sun", light: 0, radius: 0.018, intensity: 1.5)
     ]
-    clock: "skyMode"
+    clock: skyMode
     keys [
       {
         at: 0

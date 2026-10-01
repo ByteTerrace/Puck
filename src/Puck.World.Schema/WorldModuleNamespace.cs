@@ -827,17 +827,19 @@ public static class WorldModuleNamespace {
         }
     }
 
-    // Where a declared name lives: a placement and a prototype each keep their own namespace, and every other kind
-    // shares the document's, so a module's placement 'gate' never renames a host row 'gate' the module reads.
+    // Where a declared name lives: a placement, a prototype and a clock each keep their own namespace, and every other
+    // kind shares the document's, so a module's placement 'gate' never renames a host row 'gate' the module reads.
     private enum NameSpace : byte {
         Document,
         Placement,
         Prototype,
+        Clock,
     }
 
     private static NameSpace SpaceOf(WorldNameKind kind) => kind switch {
         WorldNameKind.Placement => NameSpace.Placement,
         WorldNameKind.Prototype => NameSpace.Prototype,
+        WorldNameKind.Clock => NameSpace.Clock,
         _ => NameSpace.Document,
     };
 

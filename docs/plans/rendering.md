@@ -5636,8 +5636,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
 3. **P18-3, keys on clocks, for every presentation value.**
    - Landed: the keys substrate. Every colour, scalar, angle, direction and
      vector a document binds may be keyed on a `timeline` clock
-     (`{ clock, keys [ { at, value, ease } ] }`, a block in `.puck`, with `at`
-     a time that takes `s`, `min` and `h`); the light and sky fields became
+     (`{ clock, keys [ { at, value, ease } ] }`, a block in `.puck` whose clock
+     is a declared name written bare, with `at` a time that takes `s`, `min`
+     and `h`); the light and sky fields became
      `BindableScalar`, `BindableAngle`, `BindableDirection`,
      `BindableVector2` (cloud drift and shear) and `BindableVector3` (point and
      occluder positions). `render.lighting` and `render.sky` key whole through

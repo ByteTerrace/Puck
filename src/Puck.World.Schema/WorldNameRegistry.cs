@@ -47,6 +47,8 @@ public enum WorldNameKind : byte {
     Placement,
     /// <summary>A <c>prototypes</c> row: its own namespace, apart from every state-side name.</summary>
     Prototype,
+    /// <summary>A <c>timeline</c> clock: its own namespace, so a state clock may share its row's name.</summary>
+    Clock,
     /// <summary>Any declaration the document makes, whatever its namespace: an entry of a module's export lists.</summary>
     Any,
 }
@@ -77,11 +79,6 @@ public enum WorldNameRole : byte {
 /// to an imported module (<see cref="WorldModuleExports"/>); meaningless for a <see cref="WorldNameRole.Declares"/>
 /// member.</param>
 public sealed record WorldNameField(Type Owner, string Member, WorldNameKind Kind, WorldNameRole Role, WorldExportFacet Facet = WorldExportFacet.Read);
-/// <summary>One name-shaped member of the document model that carries no module-scoped name, with the reason.</summary>
-/// <param name="Owner">The type declaring the member.</param>
-/// <param name="Member">The member's C# name.</param>
-/// <param name="Reason">Why the member is outside every <see cref="WorldNameKind"/>.</param>
-public sealed record WorldNameExclusion(Type Owner, string Member, string Reason);
 /// <summary>
 /// The name registry: every document member that carries a state, zone, rule, table, pattern, topology, generator,
 /// field, dynamics, placement or prototype name, keyed by the C# member so the JSON paths it reaches are derived from
@@ -1284,7 +1281,7 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Names,
             WorldExportFacet.Binding
         ),
-        new(typeof(WorldClock), nameof(WorldClock.State), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldClock), nameof(WorldClock.State), WorldNameKind.State, WorldNameRole.Names), new(typeof(WorldClock), nameof(WorldClock.Name), WorldNameKind.Clock, WorldNameRole.Declares), new(typeof(WorldRenderSky), nameof(WorldRenderSky.Clock), WorldNameKind.Clock, WorldNameRole.Names), new(typeof(WorldRenderLighting), nameof(WorldRenderLighting.Clock), WorldNameKind.Clock, WorldNameRole.Names),
         new(
             typeof(WorldLookMotion),
             nameof(WorldLookMotion.Lanes),
@@ -1674,7 +1671,7 @@ public static partial class WorldNameRegistry {
             nameof(WorldCamera.Name),
             "a camera name"
         ),
-        new(typeof(WorldClock), nameof(WorldClock.Name), "a presentation clock name"), .. SectionKeyNames,
+        .. SectionKeyNames,
         new(
             typeof(WorldIdentitySeed),
             nameof(WorldIdentitySeed.Name),

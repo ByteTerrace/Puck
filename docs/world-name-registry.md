@@ -37,6 +37,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.curvature.inkLow` | State | Binding | Binding | `WorldRenderCurvature.InkLow` |
 | `render.lighting.curvature.inkHigh` | State | Binding | Binding | `WorldRenderCurvature.InkHigh` |
 | `render.lighting.curvature.inkColor` | State | Binding | Binding | `WorldRenderCurvature.InkColor` |
+| `render.lighting.clock` | Clock | Names | Read | `WorldRenderLighting.Clock` |
 | `render.lighting.keys[].lights{*}[directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
 | `render.lighting.keys[].lights{*}[directional].weight` | State | Binding | Binding | `WorldRenderLight.Directional.Weight` |
 | `render.lighting.keys[].lights{*}[directional].angularRadius` | State | Binding | Binding | `WorldRenderLight.Directional.AngularRadius` |
@@ -74,6 +75,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][clouds].color` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Color` |
 | `render.sky.layers[][clouds].spin` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Spin` |
 | `render.sky.layers[][clouds].curl` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Curl` |
+| `render.sky.clock` | Clock | Names | Read | `WorldRenderSky.Clock` |
 | `render.sky.keys[].layers{*}[gradient].stops[].elevation` | State | Binding | Binding | `WorldRenderSkyStop.Elevation` |
 | `render.sky.keys[].layers{*}[gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
 | `render.sky.keys[].layers{*}[fog].density` | State | Binding | Binding | `WorldRenderSkyLayer.Fog.Density` |
@@ -2561,6 +2563,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `sets[].set[any].items[]…` | | | | re-enters `CellSetExpression` |
 | `sets[].set[both].items[]…` | | | | re-enters `CellSetExpression` |
 | `sets[].set[not].item…` | | | | re-enters `CellSetExpression` |
+| `timeline.clocks[].name` | Clock | Declares |  | `WorldClock.Name` |
 | `timeline.clocks[].state` | State | Names | Read | `WorldClock.State` |
 | `exports.reads` | Any | Names | Read | `WorldExports.Reads` |
 | `exports.actions` | Any | Names | Action | `WorldExports.Actions` |
@@ -3000,4 +3003,3 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `machines[].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `ruleGroups[].trigger[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `sets[].set[family].name` | `CellSetExpression.Family.Name` | a family name is local to the document that declares the range |
-| `timeline.clocks[].name` | `WorldClock.Name` | a presentation clock name |

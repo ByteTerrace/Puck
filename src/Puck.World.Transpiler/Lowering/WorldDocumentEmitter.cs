@@ -845,10 +845,21 @@ public static partial class WorldDocumentEmitter {
         }
 
         var keyed = new JsonObject();
+        // The keyed value's own position, which says its clock is a name; the keys' position says a key's ease is a
+        // closed word.
+        var holder = DocumentLowering.MemberContext(scope: scope);
+        var keysHolder = scope.Vocabulary.MemberContext(context: holder, memberName: "keys");
 
         foreach (var property in properties) {
             if ((property.Name != "keys") || (property.Value is not ArrayExpressionNode keys)) {
-                keyed[property.Name] = DocumentLowering.LowerValue(expr: property.Value, fieldKey: property.Name, scope: scope);
+                keyed[property.Name] = DocumentLowering.LowerMember(
+                    fieldKey: property.Name,
+                    holder: holder,
+                    holderName: null,
+                    memberName: property.Name,
+                    scope: scope,
+                    value: property.Value
+                );
 
                 continue;
             }
@@ -865,11 +876,18 @@ public static partial class WorldDocumentEmitter {
                 var loweredKey = new JsonObject();
 
                 foreach (var member in key.Properties) {
-                    loweredKey[member.Name] = DocumentLowering.LowerValue(
-                        expr: member.Value,
-                        fieldKey: ((member.Name == "value")
-                            ? fieldKey
-                            : member.Name),
+                    loweredKey[member.Name] = DocumentLowering.At(
+                        context: keysHolder,
+                        lower: () => DocumentLowering.LowerMember(
+                            fieldKey: ((member.Name == "value")
+                                ? fieldKey
+                                : member.Name),
+                            holder: keysHolder,
+                            holderName: null,
+                            memberName: member.Name,
+                            scope: scope,
+                            value: member.Value
+                        ),
                         scope: scope
                     );
                 }

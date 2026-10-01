@@ -183,12 +183,29 @@ public static class WorldCallArguments {
     private sealed record MemberMetadata(Type Type, WorldArgumentForm Form, FrozenSet<string>? Choices);
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, FrozenDictionary<string, MemberMetadata>> Members = new();
+    // The position a keyed value's keys fill (WorldKeyTrackJson's key object).
+    private static readonly Type KeyPosition = typeof(WorldKey<>);
 
     private static MemberMetadata? FindMember(Type owner, string member) => Members.GetOrAdd(
         key: WorldNameRegistry.Unwrap(type: owner),
         valueFactory: static type => BuildMembers(owner: type)
     ).GetValueOrDefault(key: member);
     private static FrozenDictionary<string, MemberMetadata> BuildMembers(Type owner) {
+        // A value keyed on a clock names its clock, a timeline name written bare, and its keys' position says a key's
+        // ease is one word of WorldEase; a converter-backed bindable carries no members the serializer describes.
+        if (WorldKeyedValues.IsKeyable(type: owner)) {
+            return new Dictionary<string, MemberMetadata>(comparer: StringComparer.Ordinal) {
+                ["clock"] = new MemberMetadata(Choices: null, Form: WorldArgumentForm.Name, Type: typeof(string)),
+                ["keys"] = new MemberMetadata(Choices: null, Form: WorldArgumentForm.Unclassified, Type: KeyPosition),
+            }.ToFrozenDictionary(comparer: StringComparer.Ordinal);
+        }
+
+        if (owner == KeyPosition) {
+            return new Dictionary<string, MemberMetadata>(comparer: StringComparer.Ordinal) {
+                ["ease"] = new MemberMetadata(Choices: Enum.GetNames<WorldEase>().ToFrozenSet(comparer: StringComparer.OrdinalIgnoreCase), Form: WorldArgumentForm.Choice, Type: typeof(WorldEase)),
+            }.ToFrozenDictionary(comparer: StringComparer.Ordinal);
+        }
+
         if (WorldModelShape.Of(type: owner) is not { Described: true } shape) {
             return FrozenDictionary<string, MemberMetadata>.Empty;
         }

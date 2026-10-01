@@ -5,6 +5,11 @@ using System.Text.Json.Serialization.Metadata;
 
 namespace Puck.World;
 
+/// <summary>One name-shaped member of the document model that carries no module-scoped name, with the reason.</summary>
+/// <param name="Owner">The type declaring the member.</param>
+/// <param name="Member">The member's C# name.</param>
+/// <param name="Reason">Why the member is outside every <see cref="WorldNameKind"/>.</param>
+public sealed record WorldNameExclusion(Type Owner, string Member, string Reason);
 /// <summary>One JSON path a registered member reaches in a <c>puck.world.definition.v1</c> document.</summary>
 /// <param name="Path">The path from the root: <c>rules[].effects[setState].state</c>, where <c>[]</c> is a list
 /// element and <c>[name]</c> a <c>$type</c> arm.</param>
