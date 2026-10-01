@@ -3071,7 +3071,13 @@ carries the projection's `observations` into the hydrated document as plain
 rows as state. A disclosed vector row names its space, and the projection's
 `spaces` carries the declaration of every space a disclosed vector row names (a
 model, a revision, and a dimension count) and no other, so the row hydrates as a
-vector row of that space.
+vector row of that space. The projection's `timeline` carries the tick clocks and,
+for each state clock a carried value keys on, an anchored clock holding a
+`WorldClockAnchor` in place of the row; `WorldClockAnchorLedger` and
+`WorldProjectionFeed` keep one recipient's anchors and deltas, and
+`WorldProjectionHold` is the receiving half. The
+[worlds manual](../../docs/architecture/worlds.md#observation-and-display) states
+the anchor rule.
 
 `WorldCounterpartAttestation` is a neighbour's statement of its seam edges plus
 the five `WorldOverlapTerms` the overlap derivation reads from its side.

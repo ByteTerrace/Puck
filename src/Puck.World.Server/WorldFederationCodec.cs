@@ -84,6 +84,9 @@ public enum WorldFederationResponse : byte {
     Authenticated = 11,
     /// <summary>The observed owner or disclosure policy changed; reopen through the original credential.</summary>
     ProjectionInvalidated = 12,
+    /// <summary>A presentation-tier recipient's projection delta: the members that changed, its state clocks' anchors
+    /// among them, merged over the projection it holds.</summary>
+    ProjectionDelta = 13,
 }
 /// <summary>The stable names a federation authority refuses under. A refusal frame's text always opens with one of
 /// these, so a peer and a read-back can both count refusals by name rather than by sentence.</summary>
@@ -143,10 +146,14 @@ public static partial class WorldFederationCodec {
     /// both dialects off the first eight bytes. A dialer opens every federation connection by writing it through
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames.</summary>
-    public const ulong WireKey = 0x354445464B435550UL; // "PUCKFED5", mutation payloads carry their expected activation.
+    public const ulong WireKey = 0x364445464B435550UL; // "PUCKFED6", a presentation-tier projection travels as member deltas.
     /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
     /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
     public const int DocumentHeaderBytes = 25;
+    /// <summary>The bytes a projection delta leaf carries before its delta: a document leaf's header
+    /// (<see cref="DocumentHeaderBytes"/>), then the authoritative tick and engine tick the delta stands at, each an
+    /// 8-byte little-endian count.</summary>
+    public const int ProjectionDeltaHeaderBytes = (DocumentHeaderBytes + 16);
 
     private static bool Finish(ref WireReader reader, out WireFailure failure) => reader.TryFinish(failure: out failure);
     private static WorldTransferCommitMember ReadCommitMember(ref WireReader reader, WorldPlayerDefaults defaults, int ordinal) {
@@ -539,15 +546,12 @@ public static partial class WorldFederationCodec {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tier"/> is
     /// <see cref="WorldDisclosureTier.Frames"/>, which carries no document at all.</exception>
     /// <param name="recipient">The authenticated recipient, or null for public observation.</param>
-    public static byte[] EncodeDocument(WorldDefinition definition, WorldDocumentVersion version, WorldDisclosureTier tier, string authority, int revision, Principal? recipient = null) {
+    /// <param name="time">The authoritative tick the composition stands at, which a projection's state clocks are
+    /// anchored at.</param>
+    public static byte[] EncodeDocument(WorldDefinition definition, WorldDocumentVersion version, WorldDisclosureTier tier, string authority, int revision, in ArenaTime time, Principal? recipient = null) {
         // The document being encoded is whatever the caller holds — a traveller's destination world as often as
         // this authority's own — so its store is loaded here through the one import door rather than borrowed from
         // a server that may not own it.
-        var time = ArenaTime.At(
-            engineTick: 0UL,
-            tick: 0UL
-        );
-
         if (!StateArena.TryCreate(
             arena: out var arena,
             catalog: definition.StateCatalog,
@@ -609,6 +613,121 @@ public static partial class WorldFederationCodec {
         payload.CopyTo(destination: bytes.AsSpan(start: DocumentHeaderBytes));
 
         return bytes;
+    }
+    /// <summary>Frames a presentation-tier recipient's projection delta: a document leaf's header naming the version the
+    /// delta brings the recipient to, the authoritative tick and engine tick it stands at, then the delta
+    /// (<see cref="ProjectionDeltaHeaderBytes"/>).</summary>
+    /// <param name="delta">The serialized delta.</param>
+    /// <param name="version">The version of the document the delta's projection was composed from.</param>
+    /// <param name="tick">The authoritative simulation tick.</param>
+    /// <param name="engineTick">The engine tick that simulation tick stands at.</param>
+    /// <returns>The encoded leaf.</returns>
+    public static byte[] EncodeProjectionDelta(ReadOnlySpan<byte> delta, WorldDocumentVersion version, ulong tick, ulong engineTick) {
+        var header = DocumentLeaf(
+            payload: [],
+            tier: WorldDisclosureTier.Presentation,
+            version: version
+        );
+        var bytes = new byte[(delta.Length + ProjectionDeltaHeaderBytes)];
+
+        header.CopyTo(array: bytes, index: 0);
+        BinaryPrimitives.WriteUInt64LittleEndian(
+            destination: bytes.AsSpan(start: DocumentHeaderBytes),
+            value: tick
+        );
+        BinaryPrimitives.WriteUInt64LittleEndian(
+            destination: bytes.AsSpan(start: (DocumentHeaderBytes + 8)),
+            value: engineTick
+        );
+        delta.CopyTo(destination: bytes.AsSpan(start: ProjectionDeltaHeaderBytes));
+
+        return bytes;
+    }
+    /// <summary>Decodes a projection delta leaf and merges its delta over the projection the recipient holds.</summary>
+    /// <param name="body">The leaf bytes.</param>
+    /// <param name="hold">The recipient's hold.</param>
+    /// <param name="definition">The definition hydrated from the merged projection on success.</param>
+    /// <param name="version">The version the leaf names.</param>
+    /// <param name="stamp">The tick and engine tick the delta stands at; every row moved unless the delta changes the
+    /// timeline alone, since a projection's rows are not the authority's.</param>
+    /// <param name="valuesOnly">Whether the delta changes values alone, so the recipient takes it as a state
+    /// delivery.</param>
+    /// <param name="failure">The named refusal on failure.</param>
+    /// <returns><see langword="true"/> when the leaf decoded and merged; the hold is unchanged otherwise.</returns>
+    public static bool TryDecodeProjectionDelta(ReadOnlySpan<byte> body, WorldProjectionHold hold, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? definition, out WorldDocumentVersion version, out WorldStateStamp stamp, out bool valuesOnly, out WireFailure failure) {
+        ArgumentNullException.ThrowIfNull(argument: hold);
+
+        definition = null;
+        version = default;
+        stamp = default;
+        valuesOnly = false;
+
+        if (body.Length < ProjectionDeltaHeaderBytes) {
+            failure = new WireFailure(
+                Detail: "a projection delta leaf carries no header",
+                Refusal: WireRefusal.PayloadTruncated
+            );
+
+            return false;
+        }
+
+        if (((WorldDisclosureTier)body[0]) != WorldDisclosureTier.Presentation) {
+            failure = new WireFailure(
+                Detail: $"a projection delta names tier {body[0]}; only a presentation-tier projection travels as deltas",
+                Refusal: WireRefusal.PayloadMalformed
+            );
+
+            return false;
+        }
+
+        version = new WorldDocumentVersion(
+            Activation: new Guid(
+                b: body.Slice(
+                    length: 16,
+                    start: 1
+                ),
+                bigEndian: false
+            ),
+            Sequence: BinaryPrimitives.ReadInt64LittleEndian(source: body[17..])
+        );
+
+        if (!version.IsDelivered) {
+            failure = new WireFailure(
+                Detail: $"projection delta version {version.Activation}/{version.Sequence} is no delivery",
+                Refusal: WireRefusal.PayloadMalformed
+            );
+            version = default;
+
+            return false;
+        }
+
+        var tick = BinaryPrimitives.ReadUInt64LittleEndian(source: body[DocumentHeaderBytes..]);
+        var engineTick = BinaryPrimitives.ReadUInt64LittleEndian(source: body[(DocumentHeaderBytes + 8)..]);
+
+        if (!hold.TryApply(
+            definition: out definition,
+            reason: out var reason,
+            timelineOnly: out var timelineOnly,
+            utf8Json: body[ProjectionDeltaHeaderBytes..],
+            valuesOnly: out valuesOnly
+        )) {
+            failure = new WireFailure(
+                Detail: reason,
+                Refusal: WireRefusal.PayloadMalformed
+            );
+
+            return false;
+        }
+
+        stamp = new WorldStateStamp(
+            EngineTick: engineTick,
+            Everything: !timelineOnly,
+            MovedRows: default,
+            Tick: tick
+        );
+        failure = default;
+
+        return true;
     }
     /// <summary>Encodes a transferred body's per-tick intent with its lease credential.</summary>
     /// <param name="sourceAuthority">The authenticated source namespace.</param>
@@ -705,7 +824,8 @@ public static partial class WorldFederationCodec {
     /// <param name="revision">The document revision this composition names.</param>
     /// <returns>The encoded leaf.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reply"/> is <see langword="null"/>.</exception>
-    public static byte[] EncodeReservationReply(WorldTransferReservationReply reply, WorldDisclosureTier tier, string authority, int revision) {
+    /// <param name="time">The authoritative tick the disclosed document's composition stands at.</param>
+    public static byte[] EncodeReservationReply(WorldTransferReservationReply reply, WorldDisclosureTier tier, string authority, int revision, in ArenaTime time) {
         ArgumentNullException.ThrowIfNull(argument: reply);
 
         var writer = new WireWriter(capacity: 4096);
@@ -725,6 +845,7 @@ public static partial class WorldFederationCodec {
                 definition: definition,
                 revision: revision,
                 tier: tier,
+                time: in time,
                 version: default
             )
             : []));
@@ -740,7 +861,8 @@ public static partial class WorldFederationCodec {
     /// <param name="authority">The composing authority's addressable namespace.</param>
     /// <param name="revision">The document revision this composition names.</param>
     /// <returns>The encoded leaf.</returns>
-    public static byte[] EncodeRoute(in WorldAuthorityRouteDescription route, WorldDisclosureTier tier, string authority, int revision) {
+    /// <param name="time">The authoritative tick the disclosed document's composition stands at.</param>
+    public static byte[] EncodeRoute(in WorldAuthorityRouteDescription route, WorldDisclosureTier tier, string authority, int revision, in ArenaTime time) {
         var writer = new WireWriter(capacity: 4096);
 
         writer.WriteString(value: route.Endpoint);
@@ -762,6 +884,7 @@ public static partial class WorldFederationCodec {
             tier: tier,
             authority: authority,
             revision: revision,
+            time: in time,
             recipient: Principal.Peer(
                 generation: route.Entity.Generation,
                 index: route.Entity.Index
@@ -889,6 +1012,7 @@ public static partial class WorldFederationCodec {
         WorldFederationResponse.Snapshot => ((4 * 1024) * 1024),
         WorldFederationResponse.Completion => (1024 * 1024),
         WorldFederationResponse.Definition => WireLimits.MaxDocumentBytes,
+        WorldFederationResponse.ProjectionDelta => (WireLimits.MaxDocumentBytes + ProjectionDeltaHeaderBytes),
         WorldFederationResponse.Reservation => MaxFrameBytes,
         WorldFederationResponse.Route => MaxFrameBytes,
         _ => 0,
@@ -1037,8 +1161,10 @@ public static partial class WorldFederationCodec {
     /// <param name="version">The version the leaf declared for its document.</param>
     /// <param name="tier">The tier the leaf declared.</param>
     /// <param name="failure">The named refusal on failure.</param>
+    /// <param name="hold">The recipient's hold a projection is held in, so a later projection delta merges over it,
+    /// or <see langword="null"/> for a document no delta follows.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
-    public static bool TryDecodeDocument(ReadOnlySpan<byte> body, out WorldDefinition? definition, out WorldDocumentVersion version, out WorldDisclosureTier tier, out WireFailure failure) {
+    public static bool TryDecodeDocument(ReadOnlySpan<byte> body, out WorldDefinition? definition, out WorldDocumentVersion version, out WorldDisclosureTier tier, out WireFailure failure, WorldProjectionHold? hold = null) {
         definition = null;
         version = default;
         tier = WorldDisclosureTier.Frames;
@@ -1113,6 +1239,25 @@ public static partial class WorldFederationCodec {
             );
 
             return false;
+        }
+
+        if (hold is not null) {
+            if (!hold.TryHold(
+                definition: out definition,
+                reason: out var holdReason,
+                utf8Json: payload
+            )) {
+                failure = new WireFailure(
+                    Detail: holdReason,
+                    Refusal: WireRefusal.PayloadMalformed
+                );
+
+                return false;
+            }
+
+            failure = default;
+
+            return true;
         }
 
         if (

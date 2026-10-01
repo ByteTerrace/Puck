@@ -60,7 +60,7 @@ public sealed partial class WorldRemoteAuthority {
                     if (!frame.Ok) { throw new IOException(message: $"traveler projection relay failed: {frame.Failure}"); }
                     var kind = ((WorldFederationResponse)frame.Kind);
 
-                    if (kind is not (WorldFederationResponse.Route or WorldFederationResponse.Definition or WorldFederationResponse.Snapshot
+                    if (kind is not (WorldFederationResponse.Route or WorldFederationResponse.Definition or WorldFederationResponse.ProjectionDelta or WorldFederationResponse.Snapshot
                         or WorldFederationResponse.ProjectionInvalidated or WorldFederationResponse.Refusal)) {
                         throw new IOException(message: $"unexpected traveler projection response {kind}");
                     }

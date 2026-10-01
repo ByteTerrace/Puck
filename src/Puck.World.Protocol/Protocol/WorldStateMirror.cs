@@ -554,6 +554,16 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
         )
         : -1
     );
+    /// <summary>Returns whether a clock's phase holds still between deliveries: an anchored clock whose anchor carries
+    /// no rate, or none, moves only when a delivery hands the mirror a new anchor, which arrives in a new definition. A
+    /// consumer that caches a keyed value on it re-resolves on that definition, not on every presented tick.</summary>
+    /// <param name="name">The clock's name.</param>
+    /// <returns><see langword="true"/> for an anchored clock that holds still; <see langword="false"/> for any other
+    /// clock or a name the installed document does not declare.</returns>
+    public bool ClockHoldsStill(string name) => (m_view.Manifest.TryClock(
+        clock: out var clock,
+        name: name
+    ) && clock.IsAnchored && (clock.Anchor is not { Rate: not 0L }));
     /// <summary>Resolves a bindable scalar: its literal, its registered binding's presented number, or its keys at
     /// their clock's presented phase.</summary>
     /// <param name="scalar">The authored scalar.</param>
@@ -744,7 +754,7 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
             return ((m_view.Manifest.TryClock(
                 clock: out var clock,
                 name: keys.Clock
-            ) && !clock.IsStateClock)
+            ) && clock.IsTickClock)
                 ? WorldKeyResolver.Integrate(
                     clock: clock,
                     modulus: modulus,
@@ -775,7 +785,7 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
             if (!m_view.Manifest.TryClock(
                 clock: out var clock,
                 name: keys.Clock
-            ) || clock.IsStateClock) {
+            ) || !clock.IsTickClock) {
                 return Vector2.Zero;
             }
 

@@ -2032,8 +2032,9 @@ rates the tick integrates in closed form, so a key changing one never jumps
 the layer; a rate keys only on a tick clock and binds no state row. Keys are
 presentation: a clock reads the tick or a state row and nothing keyed feeds
 the simulation. A presentation-tier projection carries the tick clocks, which
-the recipient evaluates at the tick it presents, and no state clock, so a
-projection whose values key on a state clock refuses to hydrate by name. `world.timeline` echoes each clock's source, its period and
+the recipient evaluates at the tick it presents, and each state clock a value
+keys on as an anchor of its phase, re-sent only at the ticks the recipient's
+prediction misses the authority's phase. `world.timeline` echoes each clock's source, its period and
 start in engine ticks, its phase and reading at the authority's tick, and how
 many keyed values the presentation has resolved, which rises only while a
 clock a key reads moves.

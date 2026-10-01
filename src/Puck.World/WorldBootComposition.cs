@@ -128,6 +128,9 @@ public static class WorldBootComposition {
         // The boot's own work counts, which every boot shape does before the first tick; a counters report reads
         // every registered work source.
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldBootWork.Process);
+        // What keeping presentation-tier recipients current costs: projections, deltas, their bytes and the anchor rows
+        // held per recipient.
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldProjectionWork.Process);
 
         // The owned-world catalog (files under the state root; the storage.* verbs sync it to the per-user cloud
         // container): loaded once at startup, malformed documents refused by name — the roster and the settings verbs

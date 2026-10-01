@@ -663,6 +663,31 @@ first. A destination that admits no viewer binds the screen dark and says why, a
 that ends the session, as a rebuild does, is asked to admit the screen again. A destination a
 session screen shows therefore authors an admission row that grants `observe all` with a budget.
 
+Below the replica tier, each recipient, a session screen or a federation observer, is fed by its own
+`WorldProjectionFeed`. Its first delivery is the whole projection; after that it is sent only the
+members of its projection that changed, as a delta (`WorldDocumentBasis.Diff`, the document delta a
+basis uses) that `WorldProjectionHold` merges over the projection the recipient holds, and nothing when
+nothing changed. A delta of values alone (the timeline, the observations, the provenance) reaches the
+recipient as a state delivery rather than a new definition; on the federation wire it travels as a
+`ProjectionDelta` frame.
+
+A projection carries a timeline's tick clocks as authored, and each state clock a carried value keys on
+as an anchored clock: an anchor of its phase (`WorldClockAnchor`: the engine tick, the phase as a `u64`
+share of a turn, which for a Fixed row is its fractional bits exactly, and the phase one authoritative
+tick adds), never the row it reads. The recipient predicts the phase from the anchor at the tick it
+presents, through the same `WorldClockAnchor.Predict` the authority uses, and `WorldClockAnchorLedger`
+sends a new anchor at exactly the authoritative ticks that prediction misses the authority's own phase.
+An anchor carries a rate only over a span the authority proves affine: a Fixed slot whose one trait is
+an advance adding whole raw units every tick, which the next tick confirms. Every other movement, a rate
+change, a quantized advance, a cycle's staircase, an eased row or a seek, carries rate zero and
+re-anchors wherever the phase moves, so a sky held still or moving along a proved span sends nothing.
+A state clock is a reading of its row's slot, so a recipient that may not read that cell refuses the
+composition before any derived value is emitted. A late view hydrates the exact current phase; while a
+clock's row holds no number, an early view keeps predicting its last anchor and a late view seeds from
+the phase the world loaded with, or zero clamped into the row's closed envelope. The last anchor per
+recipient per clock is a counted row under the `world.projection` work source, released when the
+recipient leaves or loses disclosure.
+
 A portal window renders its destination from its own disclosed mirror unless its session is delivered
 everything the destination holds: a live session admitted at `Replica`, holding `observe all`,
 in a world whose observer disclosure redacts no body (`WorldSessionObservation.DisclosesEverything`).

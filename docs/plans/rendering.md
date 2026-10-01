@@ -1158,7 +1158,7 @@ P13b-2 has landed: the simulation destination runs end to end. A seat folds the
 optional `PlayerIntent.SourceRay`, which `WorldWireCodec` carries behind one
 flag byte on every intent path, so an absent ray costs one byte; the tape's
 `ShapeToken` is 4, the checkpoint's `SupportedVersion` 14 and the handshake's
-`WorldProtocol.WireProtocolKey` `PUCKWRL4` and the federation's `WorldFederationCodec.WireKey` `PUCKFED5`, each strict. The server keeps each
+`WorldProtocol.WireProtocolKey` `PUCKWRL4` and the federation's `WorldFederationCodec.WireKey` `PUCKFED6`, each strict. The server keeps each
 body's tick ray and maps it in the tick through `WorldScreenMappings.Normalized`,
 the row's mapping against a one-by-one source, for the rule operand
 `$pointer:<seat>:<screenIndex>:x|y|on`; `body.channels` echoes the ray and its
@@ -3813,7 +3813,7 @@ Each commit is marked with what it waits on.
    - The format moved with it, strictly and with no reader for the old shape:
      the tape's `ShapeToken` is 4, the checkpoint's `SupportedVersion` 14,
      `WorldProtocol.WireProtocolKey` `PUCKWRL4`, and the federation's
-     `WorldFederationCodec.WireKey` `PUCKFED5`. No tape is checked in.
+     `WorldFederationCodec.WireKey` `PUCKFED6`. No tape is checked in.
    - `PlayerCommandModule` registers `source.pointer.origin` and
      `source.pointer.direction` as Axis3D seat verbs, the seat keeps them for
      the tick, and `SeatController.HeldIntent` folds them into the intent. A
@@ -5678,7 +5678,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      is refused (`JudgeAscending`) where its values may meet between keys as
      well as at them; an ordered value binds no state row. A presentation-tier
      projection carries the timeline's tick clocks, which a recipient
-     evaluates at the tick it presents.
+     evaluates at the tick it presents, and each state clock a value keys on as
+     an anchored clock (below).
    - Delivers: the keyed form of every bindable value (`keys(clock: …)`), the
      angle and direction bindables, section keys whose values are partial
      records addressed by name, blends by field type with per-key ease, the
@@ -5702,35 +5703,42 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `WindIntegralLawTests` hold a keyed cloud rate's offset continuous across a
      key (red leg: `rate × time` at each key's rate jumps); `sky-cycle` holds the
      courtyard's toggle.
-   - Remote presentation decision: use the existing tier-governed
+   - Landed: remote presentation. A presentation-tier recipient is fed by its
+     own `WorldProjectionFeed` through the tier-governed
      `WorldProjectionDocument`, with no side metadata or held-value history.
-     Tick-only clock closures evaluate locally. For a disclosed state clock,
-     send an anchor whenever the client's prediction at an authoritative tick
-     differs from the authority's phase. The anchor carries its tick, phase
-     and the current rate for a proven affine span, or rate zero otherwise.
-     Rate changes, quantized advances, staircases, nonlinear rows and seeks
-     all follow this one rule. Other resolved presentation values travel as
-     per-recipient deltas only when changed. Every used dependency must pass
-     the existing disclosure boundary; a hidden source refuses before any
-     derived value is emitted. A late view seeds invalid fields from the
-     load-validated authored initial value (or clamps a closed range), so
-     early and late views may hold different values while invalid.
-   - Projection proof is a separate unimplemented slice after the keys
-     substrate. Until it lands, a projection carries no state clock, and a
-     projection whose values key on one (the courtyard's and the parity
-     world's `skyMode`) refuses to hydrate by name
-     (`WorldProjection.TryToDefinition`), so a presentation-tier recipient of
-     such a world receives a refusal rather than every keyed value at its
-     fallback. The slice replaces that refusal with the anchors below. Authority and recipient must call the same prediction function
-     from a shared package, bit-exact on the u64 phase. A mixed affine,
-     staircase, quantized, nonlinear and seek trace must match the host phase
-     at every tick and produce zero spurious anchors. A steady state sends
-     nothing; a late join hydrates the exact current phase; a hidden
-     dependency sends no derived value. Count the last anchor per recipient
-     per clock as a memory row, and release it when that recipient leaves or
-     loses disclosure. Before merge, count bytes per recipient per second for
-     a steady sky, a busy sky and a nonlinear clock that re-anchors every
-     tick, plus full late-join hydration. Each law needs an actual red leg.
+     Tick-only clock closures evaluate locally. A disclosed state clock
+     crosses as an anchored clock (`WorldClock.Anchor`, refused in an authored
+     document) carrying a `WorldClockAnchor`: its engine tick, its phase as a
+     `u64` share of a turn (a Fixed row's fractional bits, exactly), and the
+     phase one authoritative tick adds over a span `WorldClockAnchors.Read`
+     proves affine (a Fixed slot whose one trait is an advance summing whole
+     raw units every tick, which the next tick confirms), or rate zero
+     otherwise. Authority and recipient call the one prediction in
+     `Puck.World.Schema` (`WorldClockAnchor.Predict`, exact on the `u64` phase
+     at every authoritative tick), and `WorldClockAnchorLedger` sends an anchor
+     exactly when the recipient's prediction at an authoritative tick misses
+     the authority's phase: rate changes, quantized advances, staircases,
+     eased rows and seeks all follow that one rule, checked at every
+     authoritative tick, sampled or not. Other resolved values travel as
+     per-recipient deltas of the projection members that changed
+     (`WorldDocumentBasis.Diff`, merged by `WorldProjectionHold` on the far
+     side), and only when one changed; a delta of values alone reaches the
+     recipient as a state delivery. Every state clock a value keys on must
+     pass the disclosure boundary for its row's slot, or the composition
+     refuses before any derived value is emitted. A late view hydrates the
+     exact current phase; a clock whose row holds no number seeds a late view
+     from the phase the world loaded with (`WorldServer.ClockSeeds`), or zero
+     clamped into the row's closed envelope, while an early view keeps its
+     last anchor, so the two may differ while the clock reads none. The last
+     anchor per recipient per clock is a counted row (`world.projection`
+     anchor rows retained and released), released when the recipient leaves
+     or loses disclosure. `ProjectionAnchorLawTests` hold a mixed affine,
+     quantized, staircase, eased and seek trace to the host phase at every
+     tick with no spurious anchor, a steady sky to zero bytes, a late join to
+     the exact phase, a hidden clock to a refusal, the anchor rows to their
+     release, and the courtyard's and the parity world's skies to the
+     authority's for a presentation-tier recipient; the federation wire
+     carries a delta as its own `ProjectionDelta` frame.
    - Counted-cost gate: the environment re-resolves only when a clock a key
      reads moves or a bound slot moves, counted as resolutions in
      `world.timeline`.

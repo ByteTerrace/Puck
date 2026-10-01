@@ -68,9 +68,8 @@ internal static class WorldTravelerProjection {
             );
 
             sink = new(
+                server,
                 request.Ceiling,
-                server.AuthorityIdentity,
-                () => server.Population.Revision,
                 () => disclosure,
                 Current,
                 principal
@@ -104,7 +103,12 @@ internal static class WorldTravelerProjection {
             ct: ct,
             output: output
         ).ConfigureAwait(continueOnCapturedContext: false);
-        } finally { server.ExecuteAuthorityOperation(operation: lease.Dispose); }
+        } finally {
+            server.ExecuteAuthorityOperation(operation: () => {
+                lease.Dispose();
+                sink.Release();
+            });
+        }
         return null;
     }
 }

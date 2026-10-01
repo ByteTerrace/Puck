@@ -55,6 +55,8 @@ namespace Puck.World;
 // one strictness policy, one enum regime, one Vector3 spelling for both document families.
 [JsonSerializable(typeof(WorldProjectionDocument))]
 [JsonSerializable(typeof(WorldProjectedKit))]
+// A projection's timeline travels alone in the delta that re-anchors its state clocks.
+[JsonSerializable(typeof(WorldTimelineSection))]
 // The row shapes the runtime mutation verbs parse as ONE inline-JSON argument — the same wire shape as the document
 // section, so an editor/agent speaks one grammar. Every one is reachable from WorldDefinition already; these entries
 // only expose the typed WorldJsonContext.Default.<Type> accessors the verbs deserialize through.
@@ -476,6 +478,8 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<WorldStateFieldTrait> WorldStateFieldTrait => Get<WorldStateFieldTrait>();
     /// <summary>Gets the type info for <see cref="WorldStateRow"/>.</summary>
     public JsonTypeInfo<WorldStateRow> WorldStateRow => Get<WorldStateRow>();
+    /// <summary>Gets the type info for <see cref="WorldTimelineSection"/>.</summary>
+    public JsonTypeInfo<WorldTimelineSection> WorldTimelineSection => Get<WorldTimelineSection>();
     /// <summary>Gets the type info for <see cref="WorldTune"/>.</summary>
     public JsonTypeInfo<WorldTune> WorldTune => Get<WorldTune>();
     /// <summary>Gets the type info for <see cref="WorldViewGraph"/>.</summary>

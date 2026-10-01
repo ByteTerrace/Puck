@@ -103,9 +103,10 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="Spaces">The vector spaces the disclosed vector rows among <paramref name="Observations"/> name, and no
 /// other: a space declares only a model, a revision, and a dimension count, and a vector row loads only against its
 /// own.</param>
-/// <param name="Timeline">The world's tick clocks, which a recipient evaluates from the tick it presents, and no state
-/// clock: a state clock reads a state row, and a projection sends no anchor of its phase, so a projection whose values
-/// key on one does not hydrate (<see cref="WorldProjection.TryToDefinition"/>).</param>
+/// <param name="Timeline">The world's clocks as a recipient evaluates them from the tick it presents: each tick clock as
+/// authored, and each state clock a carried value keys on as an anchored clock holding the anchor of its phase the
+/// recipient was last sent (<see cref="WorldClockAnchorLedger"/>), never the row it reads. A state clock no carried
+/// value keys on does not cross.</param>
 public sealed record WorldProjectionDocument(
     WorldProjectionProvenance Provenance,
     WorldMotionDefaults Motion,
@@ -229,11 +230,29 @@ public static class WorldProjection {
     /// <param name="unrestricted">Whether to compose as a reader every restriction admits — the most any recipient could
     /// be handed, which a measurement sizing for every possible recipient reads — instead of as
     /// <paramref name="recipient"/>.</param>
-    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, StateArena arena, in ArenaTime time, Principal? recipient = null, bool unrestricted = false) {
+    /// <param name="anchors">The anchors the recipient holds, which the composed timeline carries while their
+    /// predictions hold and replaces where they miss, or <see langword="null"/> for a one-off composition that no
+    /// recipient keeps anchors from, which carries each state clock's anchor at <paramref name="time"/>.</param>
+    /// <exception cref="InvalidOperationException">A carried value keys on a state clock whose row the recipient may not
+    /// read: the composition refuses before any derived value is emitted.</exception>
+    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, StateArena arena, in ArenaTime time, Principal? recipient = null, bool unrestricted = false, WorldClockAnchorLedger? anchors = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (tier != WorldDisclosureTier.Presentation) {
             return null;
+        }
+
+        // Every state clock a carried value keys on is a dependency of a derived value: it must pass the disclosure
+        // boundary before anything is composed, or nothing is.
+        var keyed = KeyedClocks(definition: definition);
+
+        if (!unrestricted) {
+            RefuseHiddenClocks(
+                arena: arena,
+                definition: definition,
+                keyed: keyed,
+                recipient: recipient
+            );
         }
 
         // Placements cross as the recipient's disclosure deals them: a dealt placement reads the cells it was dealt
@@ -300,7 +319,12 @@ public static class WorldProjection {
                     Description: metadata.Description
                 )
             : null),
-            Timeline: TickClocksOf(timeline: definition.Timeline)
+            Timeline: CarriedClocks(
+                anchors: anchors,
+                definition: definition,
+                keyed: keyed,
+                time: in time
+            )
         );
 
         WorldStateDisclosure.ValidateBindings(
@@ -331,41 +355,124 @@ public static class WorldProjection {
         );
     }
 
-    // The timeline a projection carries: its tick clocks, which are functions of the tick alone; null when it declares
-    // none.
-    private static WorldTimelineSection? TickClocksOf(WorldTimelineSection timeline) {
-        var clocks = (timeline.Clocks ?? [])
-            .Where(predicate: static clock => ((clock is not null) && !clock.IsStateClock))
-            .ToArray();
-
-        return ((clocks.Length == 0)
-            ? null
-            : new WorldTimelineSection(Clocks: clocks));
-    }
-    // A value keyed on a clock the hydrated timeline does not declare would resolve to its fallback, so the projection
-    // refuses to hydrate instead; the clock it names is a state clock, the one kind a projection does not carry.
-    private static string? UncarriedClock(WorldDefinition definition) {
-        static bool Carries(WorldDefinition definition, string clock) => WorldKeyResolver.TryClock(
-            clock: out _,
-            name: clock,
-            timeline: definition.Timeline
-        );
+    // Every clock a value of the document keys on, by the path that first names it: a keyed section's own clock and
+    // each keyed value's.
+    private static Dictionary<string, string> KeyedClocks(WorldDefinition definition) {
+        var keyed = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
         foreach (var (path, clock) in new[] { ("render.lighting", definition.Render.Lighting?.Clock), ("render.sky", definition.Render.Sky?.Clock) }) {
-            if ((clock is not null) && !Carries(clock: clock, definition: definition)) {
-                return UncarriedClockRefusal(clock: clock, path: path);
+            if (clock is not null) {
+                _ = keyed.TryAdd(key: clock, value: path);
             }
         }
 
-        foreach (var keyed in WorldKeyedValues.Of(definition: definition)) {
-            if (!Carries(clock: keyed.Track.Clock, definition: definition)) {
-                return UncarriedClockRefusal(clock: keyed.Track.Clock, path: keyed.Path);
+        foreach (var value in WorldKeyedValues.Of(definition: definition)) {
+            _ = keyed.TryAdd(key: value.Track.Clock, value: value.Path);
+        }
+
+        return keyed;
+    }
+    // A state clock reads its row's slot, so a keyed value on it is a reading of that cell: a recipient that may not
+    // read the cell is sent no value derived from it.
+    private static void RefuseHiddenClocks(WorldDefinition definition, StateArena arena, Dictionary<string, string> keyed, Principal? recipient) {
+        foreach (var clock in (definition.Timeline.Clocks ?? [])) {
+            if (
+                (clock?.State is not { } rowName) ||
+                !keyed.TryGetValue(key: clock.Name, value: out var path) ||
+                (definition.State.FirstOrDefault(predicate: row => string.Equals(
+                    a: row.Name.Value,
+                    b: rowName,
+                    comparisonType: StringComparison.Ordinal
+                )) is not { } row)
+            ) {
+                continue;
+            }
+
+            if (!WorldStateDisclosure.CanRead(
+                arena: arena,
+                definition: definition,
+                key: WorldStateRow.SlotKey,
+                recipient: recipient,
+                row: row
+            )) {
+                throw new InvalidOperationException(message: $"{path} keys on clock '{clock.Name}', which reads state row '{rowName}' this recipient may not read; a hidden source sends no derived value.");
+            }
+        }
+    }
+    // The timeline a projection carries: each tick clock as authored, each state clock a value keys on as the anchored
+    // clock the recipient's ledger carries for it, or, for a one-off composition no recipient holds anchors from, the
+    // anchor of its phase now; and nothing else; null when that is no clock.
+    private static WorldTimelineSection? CarriedClocks(WorldDefinition definition, Dictionary<string, string> keyed, WorldClockAnchorLedger? anchors, in ArenaTime time) {
+        var clocks = new List<WorldClock>();
+
+        foreach (var clock in (definition.Timeline.Clocks ?? [])) {
+            if (clock is null) {
+                continue;
+            }
+
+            if (clock.IsTickClock) {
+                clocks.Add(item: clock);
+            } else if (clock.IsStateClock && keyed.ContainsKey(key: clock.Name)) {
+                clocks.Add(item: ((anchors is not null)
+                    ? anchors.Carry(
+                        clock: clock,
+                        definition: definition,
+                        engineTick: time.EngineTick,
+                        tick: time.Tick
+                    )
+                    : new WorldClock(
+                        Anchor: WorldClockAnchors.Read(
+                            clock: clock,
+                            definition: definition,
+                            engineTick: time.EngineTick,
+                            tick: time.Tick
+                        ),
+                        Name: clock.Name,
+                        SpanSeconds: clock.SpanSeconds
+                    )));
+            }
+        }
+
+        return ((clocks.Count == 0)
+            ? null
+            : new WorldTimelineSection(Clocks: clocks));
+    }
+
+    /// <summary>Returns why a hydrated definition's clocks do not stand, or <see langword="null"/> when they do: a value
+    /// keyed on a clock the timeline does not declare would resolve to its fallback, a state clock would read a row no
+    /// projection carries, and an anchor that names a rate without the ticks it is per predicts nothing.</summary>
+    /// <param name="definition">The hydrated definition.</param>
+    /// <returns>The named refusal, or <see langword="null"/>.</returns>
+    public static string? Uncarried(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        foreach (var clock in (definition.Timeline.Clocks ?? [])) {
+            if (clock is null) {
+                continue;
+            }
+
+            if (clock.IsStateClock) {
+                return $"projection carries clock '{clock.Name}' over state row '{clock.State}'; a projection carries a state clock as an anchor of its phase, never its row.";
+            }
+
+            if (clock.Anchor is { IsWellFormed: false }) {
+                return $"projection anchors clock '{clock.Name}' with rate {clock.Anchor.Rate} over {clock.Anchor.Step} engine ticks; a rate names the ticks it is per, and only a rate does.";
+            }
+        }
+
+        foreach (var (clock, path) in KeyedClocks(definition: definition)) {
+            if (!WorldKeyResolver.TryClock(
+                clock: out _,
+                name: clock,
+                timeline: definition.Timeline
+            )) {
+                return $"projection keys {path} on clock '{clock}', which it does not carry.";
             }
         }
 
         return null;
     }
-    private static string UncarriedClockRefusal(string path, string clock) => $"projection keys {path} on clock '{clock}', which it does not carry: a state clock does not cross to a presentation-tier recipient, which receives no anchor of its phase.";
+
     // The declared spaces a disclosed vector row names, in declaration order; null when no vector row was disclosed.
     private static StateSpace[]? SpacesOf(IReadOnlyList<WorldObservedRow>? observations, IReadOnlyList<StateSpace>? spaces) {
         if (
@@ -473,7 +580,7 @@ public static class WorldProjection {
     /// <param name="reason">The named refusal, or empty on success.</param>
     /// <returns><see langword="true"/> when the projection hydrated and every document value resolved.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="projection"/> is <see langword="null"/>.</exception>
-    public static bool TryToDefinition(WorldProjectionDocument projection, out WorldDefinition? definition, out string reason) {
+    public static bool TryToDefinition(WorldProjectionDocument projection, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? definition, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: projection);
 
         definition = null;
@@ -576,7 +683,7 @@ public static class WorldProjection {
             DocumentId = projection.Provenance.DocumentId,
         };
 
-        if (UncarriedClock(definition: hydrated) is { } uncarried) {
+        if (Uncarried(definition: hydrated) is { } uncarried) {
             reason = uncarried;
 
             return false;

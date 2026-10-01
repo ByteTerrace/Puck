@@ -7,10 +7,10 @@ namespace Puck.World.Client;
 /// <summary>
 /// Resolves the document's authored <c>theme</c> section (<see cref="WorldDefinition.Theme"/>) against live state
 /// into the mechanism-side <see cref="OverlayThemeValues"/> Puck.Overlays reads — the theme's counterpart to
-/// <see cref="WorldEnvironmentResolve"/>: recomputed only when the definition revision moves, a
+/// <see cref="WorldEnvironmentResolve"/>: recomputed only when the definition revision or its timeline moves, a
 /// <see cref="WorldStateMirror"/> slot one of its own <c>state.&lt;row&gt;</c> tokens or state clocks reads changes, or
-/// the presented tick moves while one of its tokens is keyed on a tick clock; never for a slot some other consumer
-/// binds. A keyed token resolves through the mirror as every keyed value does.
+/// the presented tick moves while one of its tokens is keyed on a tick clock or a moving anchor; never for a slot some
+/// other consumer binds. A keyed token resolves through the mirror as every keyed value does.
 /// <see cref="WorldThemeCapacity.ScrimMinAlpha"/> clamps every resolved scrim alpha here, unconditionally — a no-op
 /// for an already-validated literal, the actual floor enforcement for a state binding the validator could not check
 /// at boot.
@@ -23,6 +23,7 @@ public sealed class WorldThemeResolve {
     private PresentedTick m_resolvedTick;
     private int m_resolutions;
     private int m_revision = -1;
+    private WorldTimelineSection? m_timeline;
 
     // The mirror reads one resolve makes, noting every slot a bound token reads so the next frame can ask whether any
     // of them moved.
@@ -58,7 +59,8 @@ public sealed class WorldThemeResolve {
             );
         }
 
-        // A keyed token re-resolves when its clock moves: a state clock's slot, or the presented tick.
+        // A keyed token re-resolves when its clock moves: a state clock's slot, the presented tick a tick clock or a
+        // moving anchor moves with, and for an anchor held still only the definition.
         private void NoteKeys(IWorldKeyTrack? keys) {
             if (keys is null) {
                 return;
@@ -68,7 +70,7 @@ public sealed class WorldThemeResolve {
 
             if (slot >= 0) {
                 NoteSlot(slot: slot);
-            } else {
+            } else if (!Mirror.ClockHoldsStill(name: keys.Clock)) {
                 ReadsTick = true;
             }
         }
@@ -492,6 +494,11 @@ public sealed class WorldThemeResolve {
 
         if (
             (revision != m_revision) ||
+            // A delivery that re-anchors a clock replaces the timeline without moving the revision.
+            !ReferenceEquals(
+            objA: definition.TimelineRaw,
+            objB: m_timeline
+        ) ||
             !ReferenceEquals(
             objA: m_reads?.Mirror,
             objB: mirror
@@ -510,6 +517,7 @@ public sealed class WorldThemeResolve {
             m_reads!.Bound.Clear();
             m_reads.ReadsTick = false;
             m_revision = revision;
+            m_timeline = definition.TimelineRaw;
             m_resolved = ResolveCore(
                 definition: definition,
                 mirror: m_reads

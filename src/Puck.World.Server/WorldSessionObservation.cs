@@ -53,7 +53,11 @@ public sealed class WorldSessionObservation : IDisposable {
     );
 
     internal void Attach(WorldSessionSink sink) => m_sink = sink;
-    internal void MarkEnded() => m_ended = true;
+    // An ended observation is delivered nothing further, so its sink's feed lets go of what it held for it.
+    internal void MarkEnded() {
+        m_ended = true;
+        m_sink?.Release();
+    }
 
     /// <summary>Discloses a candidate definition as it would reach this observation's renderer, for a consumer that
     /// measures a world document for that renderer on the observed world's side (a render envelope sizing the

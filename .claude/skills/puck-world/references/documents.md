@@ -82,10 +82,26 @@ because it discloses no `state` section, `Compose` answers every
 authority's own state and sends the literal (`WorldStateDocumentValues.TryFlatten`,
 on a rehydrated copy so the live document keeps the authored reference canonical
 write-back preserves), and `TryToDefinition` refuses BY NAME a peer that still
-names a cell no observed row carries.
+names a cell no observed row carries. Its `timeline` carries the tick clocks and,
+for each state clock a carried value keys on, an anchored clock holding a
+`WorldClockAnchor` instead of the row; `Compose` takes the recipient's
+`WorldClockAnchorLedger` and refuses a clock whose row's slot the recipient may
+not read, and `TryToDefinition` refuses a carried row, a malformed anchor, or a
+keyed clock the timeline does not carry.
 
-On the wire a document leaf is `[tier byte][document bytes]`
-(`WorldFederationCodec.EncodeDocument`/`TryDecodeDocument`), so a receiver names
+A presentation-tier recipient is fed by one `WorldProjectionFeed` (the session
+sink and the federation projection sink each hold one): a whole projection first,
+then member deltas (`WorldDocumentBasis.Diff`) only when a member changed, and a
+timeline delta at the authoritative ticks a held anchor's prediction misses.
+`WorldProjectionHold` is the receiving half. The feed counts under
+`WorldProjectionWork` (`world.projection`), whose anchor rows retained and
+released are the per-recipient anchor memory.
+
+On the wire a document leaf is `[tier byte][version][document bytes]`
+(`WorldFederationCodec.EncodeDocument`/`TryDecodeDocument`), and a
+presentation-tier delta a `ProjectionDelta` leaf that adds the authoritative tick
+and engine tick before the delta (`EncodeProjectionDelta`/
+`TryDecodeProjectionDelta`), so a receiver names
 what it was handed rather than sniffing it — the observation lane narrates it
 once per tier change on stderr. A traveler's reservation carries a
 `WorldIdentityProjection` (id, name, colour, move/turn rate), never its owned

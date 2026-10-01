@@ -2156,7 +2156,8 @@ public sealed partial class FederationTransferLawTests {
             authority: "world/corner-sw",
             revision: 0,
             route: in expected,
-            tier: WorldDisclosureTier.Replica
+            tier: WorldDisclosureTier.Replica,
+            time: ArenaTime.At(engineTick: 0UL, tick: 0UL)
         );
 
         Assert.True(
@@ -2175,10 +2176,7 @@ public sealed partial class FederationTransferLawTests {
             expected: expected.Entity,
             actual: actual.Entity
         );
-        Assert.Equal(
-            expected: expected.Tick,
-            actual: actual.Tick
-        );
+        Assert.Equal(actual: actual.Tick, expected: expected.Tick);
         Assert.Equal(actual: actual.Version, expected: expected.Version);
         Assert.Equal(
             expected: expected.Position,
