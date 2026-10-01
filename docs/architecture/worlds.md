@@ -843,7 +843,8 @@ the journal suffix. A failed mutation journal append blocks the activation's lat
 no crossing depends on a document edit its successor cannot recover. A root compare-and-swap the
 store cannot reconcile is uncertain, and it blocks the activation the same way. A blocked row cannot
 write the final checkpoint a deactivation needs. A new activation replaces it only after its silo
-restarts, and until then a source beside it keeps its doubt. A desktop process installs no log, so
+restarts, and until then a source beside it keeps its doubt; routing that doubt through the
+authority directory instead is [open work](../plans/open-items.md#cross-plan-maintenance). A desktop process installs no log, so
 its crossings live only as long as the process.
 
 Resolution and transfer are ordered authority events, not untaped host side effects. Generation ids

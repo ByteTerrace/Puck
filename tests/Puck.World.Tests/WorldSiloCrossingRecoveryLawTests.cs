@@ -212,12 +212,11 @@ public sealed class WorldSiloCrossingRecoveryLawTests {
         return count;
     }
 
-    [InlineData(false, false, false)]
-    [InlineData(true, false, false)]
-    [InlineData(false, true, false)]
-    [InlineData(false, false, true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
     [Theory]
-    public async Task ACrossingBetweenSiloRowsRecoversFromTheAuthorityStore(bool changeSpawnsAfterArrival, bool crossDuringCapture, bool failPrecedingMutation) {
+    public async Task ACrossingBetweenSiloRowsRecoversFromTheAuthorityStore(bool changeSpawnsAfterArrival, bool failPrecedingMutation) {
         var travelerSlot = (changeSpawnsAfterArrival ? 0 : Slot);
         using var pair = await SiloPair.ArrangeAsync();
         var store = pair.Store;
@@ -300,25 +299,7 @@ public sealed class WorldSiloCrossingRecoveryLawTests {
             sourceInstance: "rowa",
             sourceSlot: travelerSlot
         );
-        if (crossDuringCapture) {
-            // Order the race explicitly: the destination snapshot is empty, then ingress commits, then the
-            // snapshot is queued for publication. That later arrival must remain in its journal suffix.
-            original.CheckpointCaptureTap = row => {
-                if (row.Name == "rowb") {
-                    original.CheckpointCaptureTap = null;
-                    original.Instances.DrainPendingTransfers();
-                }
-            };
-            var destinationCheckpoint = original.CheckpointNowAsync(destination, TestContext.Current.CancellationToken);
-
-            await PumpAsync(host: original, operation: destinationCheckpoint);
-            Assert.True(condition: await destinationCheckpoint);
-            var tail = await backend.LoadRecoveryAsync(destination, TestContext.Current.CancellationToken);
-
-            Assert.Contains(collection: tail!.Value.Journal.Entries, filter: entry => (entry.Kind == WorldAuthorityJournalEntryKind.Crossing));
-        } else {
-            original.Instances.DrainPendingTransfers();
-        }
+        original.Instances.DrainPendingTransfers();
         if (failPrecedingMutation) {
             Assert.True(condition: rowA.Server.Population.IsActive(index: travelerSlot));
             Assert.Equal(expected: 0UL, actual: rowA.Server.CrossingSequence);

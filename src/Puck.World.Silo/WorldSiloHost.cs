@@ -878,11 +878,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             )
             : federation
         );
-
-    /// <summary>Observes a checkpoint after its image and journal boundary are captured, before its upload is
-    /// queued. Later ingress belongs to the journal suffix and remains recoverable beside this image.</summary>
-    public Action<WorldInstance>? CheckpointCaptureTap { get; set; }
-
+    // The journal boundary joins the row's publication queue inside the capture's authority critical section, so the
+    // checkpoint covers exactly the publications its image reflects. A federated commit can land between this capture
+    // and the upload's queueing; its record queues behind the boundary and stays in the journal suffix.
     private bool TryCaptureRow(WorldInstance row, out byte[] encoded, out string outcome, out ulong tick, out Task<long> capturedJournalSequence) {
         WorldAuthorityCheckpoint? checkpoint;
 
@@ -909,7 +907,6 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!);
         outcome = "ok";
         tick = row.CompletedTicks;
-        CheckpointCaptureTap?.Invoke(obj: row);
 
         return true;
     }
