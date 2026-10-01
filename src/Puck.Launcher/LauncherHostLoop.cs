@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Puck.Abstractions.Pacing;
 using Puck.Hosting;
 
@@ -44,9 +43,13 @@ internal static class LauncherHostLoop {
         val1: 1L,
         val2: ((frequency * SpinThresholdMicroseconds) / 1_000_000L)
     );
-    public static void WaitUntil(long deadlineTimestamp, long frequency, long spinThreshold, IPrecisionWaiter? precisionWaiter) {
+    // Waits until the host clock reads the deadline: the precision waiter (or a coarse sleep) for the bulk, a short spin
+    // for the tail. Every read is of `time`, the host loop's own clock, so the wait and the deadline share one clock.
+    public static void WaitUntil(TimeProvider time, long deadlineTimestamp, long spinThreshold, IPrecisionWaiter? precisionWaiter) {
+        var frequency = time.TimestampFrequency;
+
         while (true) {
-            var remaining = (deadlineTimestamp - Stopwatch.GetTimestamp());
+            var remaining = (deadlineTimestamp - time.GetTimestamp());
 
             if (remaining <= 0L) {
                 break;

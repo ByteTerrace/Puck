@@ -1010,8 +1010,8 @@ public static class WorldBootComposition {
             services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
         } else if (hostSettings.Offscreen) {
             // A real GPU device and the composed-frame render pipeline, with NO window and NO swap chain. The server
-            // steps exactly like the headless shape (HeadlessWorldSimulation); OffscreenTickHostedService additionally
-            // produces one composed frame per iteration.
+            // steps exactly like the headless shape (HeadlessWorldSimulation); OffscreenTickHostedService steps it one
+            // tick per produced frame.
             services.AddLauncherOffscreenTerminal();
             if (OperatingSystem.IsWindows()) {
                 services.AddWindowsPrecisionWaiter();

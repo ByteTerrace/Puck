@@ -15,6 +15,12 @@ A world follows this path:
 5. **Presentation** consumes snapshots, submits input, and controls display
    timing without becoming a second authority.
 
+The host loop decides when a tick runs. A windowed or headless host keeps the
+wall clock and catches up after a slow frame; an offscreen host, whose frames
+are its only output, steps one tick per produced frame, so its time is its
+tick count. [Host pacing](../reference/hosting.md#host-pacing) states the rule
+for each host.
+
 The [worlds and federation manual](worlds.md) defines the relationships between
 worlds, authority, sessions, destinations, and transfer. It also explains why
 the document, validation, simulation, snapshot, and presentation layers stay

@@ -19,9 +19,10 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>The <c>captures</c> schedule driven the way the offscreen host drives it, without a GPU: the real
-/// <see cref="FixedStepPump"/> stepping a real <see cref="WorldServer"/> through <see cref="WorldServerStepShell"/>,
-/// the scheduler published after every step as <c>WorldHostStep</c> publishes it, and one composed frame after every
+/// <summary>The <c>captures</c> schedule driven the way a host that catches up drives it, without a GPU: the real
+/// <see cref="FixedStepPump"/> taking every step a stalled iteration owes (<see cref="FixedStepPump.Advance"/>),
+/// stepping a real <see cref="WorldServer"/> through <see cref="WorldServerStepShell"/>, the scheduler published after
+/// every step as <c>WorldHostStep</c> publishes it, and one composed frame after every
 /// pump call. The frame is a fake render chain whose PNG records the tick and capture-scope state hash of the server
 /// at the moment it was composed, so a manifest entry can be checked against what its frame really showed, and whose
 /// region tick is the server's last completed tick when it composes, as the presenter's is the state it refreshed its
@@ -250,7 +251,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
             Ticks: [tick]
         );
 
-        // The offscreen host loop: one pump call owing every step of a stalled iteration, then one composed frame,
+        // A catching-up host loop: one pump call owing every step of a stalled iteration, then one composed frame,
         // repeated until the owed time is spent; then the run-end drain.
         public void BurstThenDrain() {
             var owed = (BurstSteps * m_stepTicks);

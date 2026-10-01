@@ -278,10 +278,11 @@ public static class LauncherServiceRegistration {
         return services;
     }
     /// <summary>The offscreen twin of <see cref="AddLauncherTerminal"/>: the SAME command pump and terminal baton, but
-    /// <see cref="OffscreenTickHostedService"/> paces the fixed step AND produces one composed frame per iteration —
-    /// no <see cref="Puck.Abstractions.Presentation.ISurfacePresenter"/>, no platform windowing registered here. The
-    /// composition root supplies the GPU backend, the <see cref="IRenderRoot"/>, and an
-    /// <see cref="OffscreenRenderOptions"/> registration; it calls this INSTEAD OF <see cref="AddLauncherTerminal"/>
+    /// <see cref="OffscreenTickHostedService"/> steps one fixed step per iteration AND produces the composed frame that
+    /// step owes — no <see cref="Puck.Abstractions.Presentation.ISurfacePresenter"/>, no platform windowing registered
+    /// here. The composition root supplies the GPU backend, the <see cref="IRenderRoot"/>, and an
+    /// <see cref="OffscreenRenderOptions"/> registration, and may register the <see cref="TimeProvider"/> the host reads
+    /// its wall clock through; it calls this INSTEAD OF <see cref="AddLauncherTerminal"/>
     /// or <see cref="AddLauncherHeadlessTerminal"/> (never more than one) when its boot shape composes a GPU device
     /// with no window.</summary>
     /// <param name="services">The service collection.</param>

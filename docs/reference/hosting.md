@@ -156,7 +156,7 @@ Hosting uses several clocks because they answer different questions:
 
 | Type | Question answered | Rule |
 |---|---|---|
-| `TickClock` | How much wall time elapsed since the previous host sample? | Converts `Stopwatch` time to engine ticks and carries conversion remainder |
+| `TickClock` | How much wall time elapsed since the previous host sample? | Converts a `TimeProvider`'s timestamps to engine ticks and carries the conversion remainder |
 | `InputClock` | When did an input arrive? | Process-wide monotonic capture clock shared by input backends |
 | `OsTimeCorrelator` | Where does a native 32-bit millisecond event stamp belong on the input timeline? | Handles wraparound and clamps the result to the observed engine-time window |
 | `FrameContext` | What fixed-step instant is being presented? | Integer ticks are authoritative; seconds and interpolation are derived at the presentation seam |
@@ -164,7 +164,9 @@ Hosting uses several clocks because they answer different questions:
 `IFixedStepSimulation.RatePerSecond` must divide `EngineTicks.PerSecond`
 exactly. For each completed step, the launcher constructs a
 `FixedStepContext`, builds and applies one `CommandSnapshot`, and then calls
-`Step`. A render frame may contain zero, one, or several fixed steps.
+`Step`. A windowed frame may contain zero, one, or several fixed steps; an
+offscreen frame contains exactly one, or none when it composes an owed frame
+again.
 
 The fields most often confused in `FrameContext` have distinct meanings:
 
@@ -172,10 +174,43 @@ The fields most often confused in `FrameContext` have distinct meanings:
 |---|---|
 | `ElapsedTicks` | Simulation time after all completed steps |
 | `DeltaTicks` | Whole fixed-step advancement performed for this rendered frame |
-| `FrameDeltaTicks` | Clamped wall interval for presentation and diagnostics only |
+| `FrameDeltaTicks` | The interval the frame's presentation spans, for presentation and diagnostics only: the clamped wall interval on the windowed host, the simulation time the frame advanced offscreen |
 | `AccumulatorTicks` | Unconsumed engine ticks, always less than one normal step |
 | `StepTicks` | Fixed update period |
 | `RenderTicks` | Interpolated presentation instant: elapsed plus accumulator |
+
+## Host pacing
+
+`Puck.Launcher` has three host loops, and each drives the one
+`FixedStepPump`. They differ only in what decides when a step runs:
+
+| Host | Time | Rule |
+|---|---|---|
+| Windowed | The wall clock, paced to the display | Each frame hands `FixedStepPump.Advance` the wall interval it sampled, and the pump runs every whole step that interval covers. After a slow frame it catches up, composing one frame for several ticks, because a player's simulation keeps real time. |
+| Headless (`host.presentation: none`) | The wall clock, on a waitable-timer grid | The same `Advance` rule. A headless authority serving remote clients keeps real time, because its peers send input and expect snapshots in real time; it renders nothing, so no frame needs a tick of its own. `--unpaced` takes one step an iteration through `TryStep` and waits for nothing. |
+| Offscreen (`host.presentation: offscreen`) | Its tick count | Each iteration calls `FixedStepPump.TryStep`, which runs at most one step whatever the interval was, then composes the frame that step owes. Every tick composes and renders exactly one frame, so the tick each frame shows is a function of the script, never of how long a frame took. |
+
+Offscreen, a slow frame (the first render, a rebuild, a hitch) delays the next
+tick rather than bursting several ticks into one iteration. A script that waits
+N ticks has N rendered frames behind it, and each frame reprojects from the
+frame of the tick before it. A frame's `DeltaTicks` and `FrameDeltaTicks` are
+one step, its `AccumulatorTicks` is zero, and a frame composed again while a
+capture still owes it advances nothing. The wall clock only keeps the loop from
+running faster than the simulation's rate: the loop waits for its next period,
+and an iteration already a period late starts the next one at once with no
+steps owed. The interval an iteration measured decides no step. Whatever it
+exceeds its one step by rebases the input pin, so input captured during a slow
+frame is due in the next step, and while the host holds its clock for a capture
+the interval is the host time the hold spends. An offscreen client of a remote
+authority steps its own ticks the same way while the authority keeps its own
+wall clock, so a client script reads what the authority did, never a tick count
+of it.
+
+The offscreen host reads its clock through a `TimeProvider`, the system clock
+unless the container registers one. `OffscreenTickPacingLawTests` runs the real
+loop over a manual clock whose frames cost seconds and holds every frame to one
+tick, and a capture to the tick its frame composed; each law replays the same
+frame costs through `Advance` as its red leg.
 
 ## Render lifecycle and publication
 

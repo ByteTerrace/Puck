@@ -476,10 +476,12 @@ These are one-line cautions; the owning pages hold the derivations.
   declares unchanged keeps the tick of the render that stands). A
   `FrameCaptureRequest` carries no tick of its own: a node that names none
   records none. `puck parity`'s tick verdict holds it to the armed tick. The
-  offscreen host composes at most one frame per step
-  (`OffscreenTickHostedService.ComposesFrame`),
-  the owed frame again only while a capture waits for it, and each frame's
-  interval spans every iteration since the one before (`OffscreenFrameInterval`).
+  offscreen host's time is its tick count: it steps one tick per produced frame
+  (`FixedStepPump.TryStep`) and composes a frame for every step
+  (`OffscreenTickHostedService.ComposesFrame`), the owed frame again, advancing
+  nothing, only while a capture waits for it, and each frame's interval is the
+  simulation time it advanced, so a slow frame never bursts ticks and a capture's
+  frame reprojects from the tick before (`OffscreenTickPacingLawTests`).
 - **Buffer hazards are planned, never barriered by hand.** An SDF view's scratch
   is `SdfWorldPackage.Fragment`'s resources, and the render-graph planner plans
   every barrier between its passes; see
@@ -570,8 +572,9 @@ These are one-line cautions; the owning pages hold the derivations.
   (`RenderGraphRuntime.FirstFramesCompleted`, over
   `ShaderPipelineRenderNode.HasCompletedSubmission`), and then once the root
   has produced one more frame (`WorldReadinessLatch`): the frame that
-  completes the conditions is the slowest, and the fixed-step host catches up
-  the ticks it cost in one iteration. So a GPU readback a script asks for
+  completes the conditions is the slowest, and the windowed host catches up
+  the ticks it cost in one iteration (the offscreen host steps one tick a
+  frame and owes none). So a GPU readback a script asks for
   after it (a pick, a counted pass) waits on no cold device's first frames,
   and a few ticks after it are a few frames. That is the one readiness fact:
   the console

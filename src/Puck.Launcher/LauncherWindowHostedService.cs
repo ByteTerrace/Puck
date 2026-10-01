@@ -220,7 +220,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
 
                 window.Show();
 
-                var clock = TickClock.Start();
+                var clock = TickClock.Start(time: TimeProvider.System);
                 // The shared fixed-step accumulator (Puck.Launcher.FixedStepPump) — null when no simulation is
                 // registered (a composition root that drives no fixed-step sim at all), mirroring the ORIGINAL
                 // m_simulation/m_inputRouter pairing check the constructor already enforces.
@@ -674,9 +674,9 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                         } else {
                             LauncherHostLoop.WaitUntil(
                                 deadlineTimestamp: nextRenderDeadline,
-                                frequency: frequency,
                                 precisionWaiter: precisionWaiter,
-                                spinThreshold: spinThreshold
+                                spinThreshold: spinThreshold,
+                                time: TimeProvider.System
                             );
                         }
                     }

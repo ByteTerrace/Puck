@@ -383,6 +383,19 @@ rows in P10, which owns the tier a pipeline names. Building tier variants into
 the package format first was rejected, because nothing would select them and no
 check could tell a correct variant from a wrong one.
 
+**The offscreen host's time is its tick count.** Its frames are its only
+output, so it steps one tick per produced frame and composes a frame for every
+tick, never several ticks in one iteration after a slow frame. A wall-clock
+catch-up would make the tick a frame shows depend on how long the frame before
+it took: a script that waited a few ticks could read a GPU result before it
+landed, and a capture's frame could reproject across several ticks. Stepping
+per frame makes the tick a frame shows a function of the script alone. The
+wall clock only keeps
+the host from outrunning the world's rate. The windowed host keeps catching up,
+because a player's simulation keeps real time, and so does a headless
+authority, whose remote peers do; a headless host renders nothing, so no frame
+needs a tick of its own.
+
 **Bound rows are priced, and a capture reports the tick it shows.**
 `FixedStepPump.Advance` can run several steps in one call, so a frame composed
 after one tick may show a later one. For the simulation tick a scheduled capture

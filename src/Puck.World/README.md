@@ -337,10 +337,15 @@ it and never builds a swap chain against it—see
 `WorldOffscreenGpuActivation`'s remarks for the exact obstacle. Camera and
 session screens render as in the windowed shape, through the views
 `WorldScreenBinder.ConfigureViews` sets up. `WorldBootComposition.AddWorldOffscreenPresentation` and
-`Puck.Launcher.OffscreenTickHostedService` (which produces one composed frame
-per host-loop iteration, paced by the fixed-step pump rather than vsync) are
-the seams; the server steps exactly like `host.presentation: none`
-(`HeadlessWorldSimulation`).
+`Puck.Launcher.OffscreenTickHostedService` are the seams; the server steps
+exactly like `host.presentation: none` (`HeadlessWorldSimulation`). The
+offscreen host's time is its tick count, never the wall clock: it steps one
+tick per produced frame and composes a frame for every tick, so a slow frame
+delays the next tick instead of letting the simulation catch up several ticks
+in one iteration. A script that waits N ticks has N rendered frames behind it,
+and a capture's frame reprojects from the frame of the tick before. The wall
+clock only keeps the host from running faster than the world's rate
+([host pacing](../../docs/reference/hosting.md#host-pacing)).
 
 An offscreen display has no window whose size could change, so
 `world.resize <width> <height>` (`WorldOffscreenCommandModule`, registered only
@@ -807,7 +812,7 @@ Facts a script needs:
   a completed view, the GPU has completed a frame of every instance that has
   rendered and the root has produced one more frame, so a pick or counted pass
   read after it waits on no cold device and a few ticks after it are a few
-  frames, and the bake schedule has reconciled and, while the
+  frames (offscreen, every tick is a frame of its own), and the bake schedule has reconciled and, while the
   presentation draws its bakes, settled, or
   the deadline passes, and reports which on standard error. A script that
   reads rendered work (`world.counters gpu`) waits on it, since a cold driver

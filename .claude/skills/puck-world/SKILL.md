@@ -386,8 +386,10 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `entry` member); a composition with neither is refused by name. `host.presentation` has three values: windowed,
   `none` (`HeadlessWorldSimulation` — full authority, no GPU), and
   `offscreen` (full authority + GPU composition to images, no window —
-  what `puck parity` boots; its pump steps no tick past an armed capture
-  until the capture is served or refused). Tick-scheduled `captures`, the `schedule`
+  what `puck parity` boots; its time is its tick count, one tick per produced
+  frame however long a frame takes, so a wait of N ticks has N rendered frames
+  behind it, and its pump steps no tick past an armed capture until the
+  capture is served or refused). Tick-scheduled `captures`, the `schedule`
   section (armed only by `--schedule-dir`), verdict rows, and `.puck` `test`
   lowering are in [references/schedules-and-tests.md](references/schedules-and-tests.md).
 - `--state-dir <dir>` redirects the on-disk state root (profile catalog,
@@ -412,7 +414,10 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `world.wait <ticks>` holds only its issuing session, clocked by completed
   host-work ticks; the console drains before every step, so the line after a
   wait releasing at R runs before tick R+1, and a piped script's lines up to
-  its first wait run before tick 1. End a script with `quit` to stop the run when the
+  its first wait run before tick 1. Offscreen every one of those ticks
+  composed its own frame; a windowed host may compose one frame for several
+  ticks it catches up, so a windowed script that reads rendered work waits on
+  `world.wait ready` or `world.wait captures`, never a tick count. End a script with `quit` to stop the run when the
   script ends (see [references/console.md](references/console.md)).
 - **Encoding, the two traps**: a pwsh spawned from Git Bash reads captured
   output under an OEM codepage and mangles the engine's em-dashes

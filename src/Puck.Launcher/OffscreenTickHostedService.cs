@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Puck.Abstractions.Gpu;
@@ -10,18 +9,21 @@ namespace Puck.Launcher;
 
 /// <summary>
 /// The offscreen boot shape's outermost host loop — a real GPU device and the composed-frame render pipeline with NO
-/// window and NO swapchain. Paces the SAME <see cref="FixedStepPump"/> <see cref="HeadlessTickHostedService"/> drives
-/// (wall clock converts to engine ticks exactly, never enters simulation state), and — because there is no present
-/// cadence to ride — composes a frame right after the fixed-step pump advances, and only when it stepped
-/// (<see cref="ComposesFrame"/>): frame pacing rides the fixed-step pump's own cadence instead of vsync, and the host
-/// renders at most one frame per step, so a frame never presents a tick twice for a presentation clock to tell apart.
-/// The console pump and every registered <see cref="ISnapshotInputCapture"/> contribution run every iteration exactly
-/// like the other two host loops.
-/// <para>Its frames are its only output, so its pump holds its clock for them
-/// (<see cref="IFixedStepSimulation.HoldsClock"/>): while a frame a step owes has not been served, for whatever reason
-/// the render chain cannot serve it yet, the loop keeps producing frames and draining the console but steps no further
-/// tick. Those frames are the one exception to one frame per step: the owed frame is composed again until one serves
-/// it. The two other host loops never hold.</para>
+/// window and NO swapchain. Its frames are its only output, so its time is its tick count, never the wall clock: each
+/// iteration runs at most one step of the SAME <see cref="FixedStepPump"/> the other hosts drive
+/// (<see cref="FixedStepPump.TryStep"/>) and composes the frame that step owes (<see cref="ComposesFrame"/>), so every
+/// tick composes and renders exactly one frame, whatever a frame cost. A slow frame (the first render, a rebuild, a
+/// hitch) delays the next tick rather than bursting several ticks into one iteration, so a script that waits N ticks
+/// has N frames rendered behind it, and a frame reprojects from the frame of the tick before. The wall clock only
+/// keeps the loop from running faster than the simulation's rate; it decides no step, and each frame's presentation
+/// interval is the simulation time it advanced. The console pump and every registered
+/// <see cref="ISnapshotInputCapture"/> contribution run every iteration exactly like the other two host loops.
+/// <para>Its pump holds its clock for its frames (<see cref="IFixedStepSimulation.HoldsClock"/>): while a frame a step
+/// owes has not been served, for whatever reason the render chain cannot serve it yet, the loop keeps producing frames
+/// and draining the console but steps no further tick. Those frames are the one exception to one frame per step: the
+/// owed frame is composed again, advancing no simulation time, until one serves it.</para>
+/// <para>The host reads its wall clock through a <see cref="TimeProvider"/>: <see cref="TimeProvider.System"/> unless
+/// the container registers one, which is how a law runs the real loop over frames it makes slow.</para>
 /// <para>A device loss follows the windowed host's policy (<see cref="DeviceLossRecovery"/>), rebuilding through the
 /// <see cref="IDeviceRebuild"/> the offscreen GPU activation registers; a loss it cannot recover from faults the
 /// run.</para>
@@ -45,6 +47,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
     private readonly ISnapshotInputCapture[] m_snapshotInputCaptures;
     private readonly TerminalControl m_terminal;
     private readonly TextCommandSource m_textSource;
+    private readonly TimeProvider m_time;
 
     public OffscreenTickHostedService(
         IHostApplicationLifetime applicationLifetime,
@@ -64,10 +67,12 @@ public sealed class OffscreenTickHostedService : BackgroundService {
         TerminalControl terminal,
         StandardInputBacklog inputBacklog,
         IEnumerable<IDeviceRebuild> deviceRebuilds,
-        IEnumerable<GpuCreationFaults> faults
+        IEnumerable<GpuCreationFaults> faults,
+        IEnumerable<TimeProvider> clocks
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
         ArgumentNullException.ThrowIfNull(bufferedOutput);
+        ArgumentNullException.ThrowIfNull(clocks);
         ArgumentNullException.ThrowIfNull(deviceRebuilds);
         ArgumentNullException.ThrowIfNull(faults);
         ArgumentNullException.ThrowIfNull(inputClock);
@@ -118,6 +123,11 @@ public sealed class OffscreenTickHostedService : BackgroundService {
         );
         m_terminal = terminal;
         m_inputBacklog = inputBacklog;
+        m_time = (LauncherHostLoop.SingleOrDefault(
+            items: clocks,
+            name: nameof(TimeProvider),
+            hostDescription: "offscreen host"
+        ) ?? TimeProvider.System);
 
         if ((m_simulation is null) != (m_inputRouter is null)) {
             throw new InvalidOperationException(message: "A fixed-step simulation and its InputRouter must be registered together. Use AddFixedStepSimulation<TSimulation>().");
@@ -126,17 +136,17 @@ public sealed class OffscreenTickHostedService : BackgroundService {
         m_registry.RouteSimulationTo(sink: m_inputRouter?.ConsoleTextSink);
     }
 
-    /// <summary>Returns whether the offscreen host composes a frame after a pump call: one that stepped the simulation, or
-    /// one that stepped nothing while a step still owes a frame (<see cref="IFixedStepSimulation.AwaitsFrame"/>, a capture
-    /// armed at its tick not yet served), so the host renders at most one frame per step and never steps past an owed
-    /// frame. A host with no simulation composes a frame every call.</summary>
+    /// <summary>Returns whether the offscreen host composes a frame after an iteration: one that stepped the simulation,
+    /// or one that stepped nothing while a step still owes a frame (<see cref="IFixedStepSimulation.AwaitsFrame"/>, a
+    /// capture armed at its tick not yet served), so every tick composes one frame and the host never steps past an owed
+    /// frame. A host with no simulation composes a frame every iteration.</summary>
     /// <param name="hasSimulation">Whether the host steps a simulation.</param>
-    /// <param name="stepsAdvanced">The steps the pump call ran.</param>
-    /// <param name="awaitsFrame">Whether the simulation owes a frame after the call.</param>
+    /// <param name="stepped">Whether the iteration ran its step.</param>
+    /// <param name="awaitsFrame">Whether the simulation owes a frame after the iteration.</param>
     /// <returns><see langword="true"/> when the host composes a frame.</returns>
-    public static bool ComposesFrame(bool hasSimulation, int stepsAdvanced, bool awaitsFrame) => (
+    public static bool ComposesFrame(bool hasSimulation, bool stepped, bool awaitsFrame) => (
         !hasSimulation ||
-        (stepsAdvanced > 0) ||
+        stepped ||
         awaitsFrame
     );
 
@@ -148,7 +158,8 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                 m_logger.LogInformation(message: "Offscreen boot: a real GPU device and the composed-frame render pipeline — no window, no swapchain.");
             }
 
-            var clock = TickClock.Start();
+            var time = m_time;
+            var clock = TickClock.Start(time: time);
             var pump = FixedStepPump.CreateHosted(
                 holdsClock: true,
                 inputBacklog: m_inputBacklog,
@@ -160,8 +171,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                 terminal: m_terminal,
                 textSource: m_textSource
             );
-            var frequency = Stopwatch.Frequency;
-            var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
+            var frequency = time.TimestampFrequency;
 
             var deviceLoss = new DeviceLossRecovery(
                 logger: m_logger,
@@ -170,9 +180,8 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                 writeLine: m_bufferedOutput.WriteErrorLine
             );
             var spinThreshold = LauncherHostLoop.SpinThreshold(frequency: frequency);
-            var frameInterval = new OffscreenFrameInterval();
             var hostFrame = 0UL;
-            var nextDeadline = Stopwatch.GetTimestamp();
+            var nextDeadline = time.GetTimestamp();
             var exitAfterTimestamp = ((m_options.ExitAfter is { } exitAfter)
                 ? (nextDeadline + ((long)(exitAfter.TotalSeconds * frequency)))
                 : (long?)null
@@ -184,7 +193,7 @@ public sealed class OffscreenTickHostedService : BackgroundService {
 
                 if (
                     (exitAfterTimestamp is { } deadline) &&
-                    (Stopwatch.GetTimestamp() >= deadline)
+                    (time.GetTimestamp() >= deadline)
                 ) {
                     m_terminal.RequestExit();
                 }
@@ -199,42 +208,43 @@ public sealed class OffscreenTickHostedService : BackgroundService {
 
                 hostFrame++;
 
-                var deltaTicks = clock.Sample();
+                var intervalTicks = clock.Sample();
                 var ratePerSecond = LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation);
                 var stepTicks = EngineTicks.PerRate(ratePerSecond: ratePerSecond);
                 var period = (frequency / ((long)ratePerSecond));
 
-                var stepsAdvanced = (pump?.Advance(
-                    deltaTicks: deltaTicks,
-                    maxFrameTicks: maxFrameTicks,
+                // One step at most, whatever the iteration's interval was: the interval only rebases the input pin and
+                // is the host time a hold withholds.
+                var stepped = (pump?.TryStep(
+                    intervalTicks: intervalTicks,
                     stepTicks: stepTicks
-                ) ?? 0);
+                ) ?? false);
 
                 m_bufferedOutput.Flush();
 
                 // No presenter, no swapchain: produce the composed frame directly off the render root, once for the
-                // steps just run, or again for a frame a step still owes. A capture armed by world.screenshot is served
+                // step just run, or again for a frame a step still owes. A capture armed by world.screenshot is served
                 // from inside this call, so the returned surface needs no further handling — it is simply not presented
                 // anywhere.
-                var composes = ComposesFrame(
+                if (ComposesFrame(
                     awaitsFrame: (m_simulation?.AwaitsFrame ?? false),
                     hasSimulation: (pump is not null),
-                    stepsAdvanced: stepsAdvanced
-                );
-                var frameDeltaTicks = frameInterval.Take(
-                    composes: composes,
-                    deltaTicks: deltaTicks,
-                    maxFrameTicks: maxFrameTicks
-                );
-
-                if (composes) {
+                    stepped: stepped
+                )) {
+                    // The frame spans the simulation time its step advanced: one step, or none for an owed frame composed
+                    // again. A host with no simulation spans one step of its own rate a frame.
+                    var deltaTicks = (stepped
+                        ? stepTicks
+                        : 0UL);
                     // Read once, so a resize between frames reaches the whole frame and never half of it.
                     var (targetWidth, targetHeight) = m_renderOptions.Extent;
                     var frameContext = new FrameContext(
-                        AccumulatorTicks: (pump?.AccumulatorTicks ?? 0UL),
-                        DeltaTicks: (((ulong)stepsAdvanced) * stepTicks),
+                        AccumulatorTicks: 0UL,
+                        DeltaTicks: deltaTicks,
                         ElapsedTicks: (pump?.ElapsedTicks ?? 0UL),
-                        FrameDeltaTicks: frameDeltaTicks,
+                        FrameDeltaTicks: ((pump is null)
+                            ? stepTicks
+                            : deltaTicks),
                         Host: m_rootHostContext,
                         StepTicks: stepTicks,
                         TargetHeight: targetHeight,
@@ -264,18 +274,20 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                     m_bufferedOutput.Flush();
                 }
 
+                // The wall clock only keeps the loop from outrunning the simulation's rate. A late iteration owes no
+                // steps: past a whole period late, the grid re-origins at now.
                 nextDeadline += period;
 
-                var nowTimestamp = Stopwatch.GetTimestamp();
+                var nowTimestamp = time.GetTimestamp();
 
                 if ((nowTimestamp - nextDeadline) > period) {
                     nextDeadline = nowTimestamp;
                 } else {
                     LauncherHostLoop.WaitUntil(
                         deadlineTimestamp: nextDeadline,
-                        frequency: frequency,
                         precisionWaiter: m_precisionWaiter,
-                        spinThreshold: spinThreshold
+                        spinThreshold: spinThreshold,
+                        time: time
                     );
                 }
             }
