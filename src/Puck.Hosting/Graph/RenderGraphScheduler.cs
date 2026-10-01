@@ -27,7 +27,7 @@ namespace Puck.Hosting;
 /// presented frames at the display's rate. Cadence is counted in ticks and frames, never the wall clock. A source whose
 /// producer declares no extent this frame does not render.</description></item>
 /// <item><description>An instance the frame names to render again (<see cref="RenderGraphFrame.Rerender"/>, a capture
-/// frame's tainted instances) is due whatever its refresh and renders whatever the budget, whenever it is
+/// frame's tainted instances, or one whose output stood for an image its producer no longer keeps) is due whatever its refresh and renders whatever the budget, whenever it is
 /// shown.</description></item>
 /// <item><description>An instance the frame declares unchanged (<see cref="RenderGraphFrame.Unchanged"/>) is not due by
 /// its refresh: its latest output stands until it is named to render again, or it is demanded at another extent than

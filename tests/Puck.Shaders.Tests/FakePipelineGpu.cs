@@ -31,6 +31,10 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
     private long m_nextHandle = 0x1000;
 
+    /// <summary>Gets every recorded command that named an object the fake had already released (an image barrier, a
+    /// clear, a copy, a descriptor write of an image view, a readback or a framebuffer attachment), each as its use and
+    /// the object.</summary>
+    public List<string> UsesAfterRelease { get; } = [];
     /// <summary>Gets every object created so far, in creation order.</summary>
     public List<Created> CreatedObjects { get; } = [];
     /// <summary>Gets each direct dispatch's group counts, in recording order, while <see cref="Recording"/> is on.</summary>
@@ -209,6 +213,37 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             GraphicsCommands.Add(item: (command, buffer, offsetBytes, sizeBytes, count));
         }
     }
+    private void RecordImageBarrier(nint imageHandle, ShaderPipelineBarrier barrier) {
+        NoteUse(handle: imageHandle, use: "barrier");
+        RecordBarrier(barrier: barrier, handle: imageHandle);
+    }
+    // The object a handle names, an image's view naming its image, or null for a handle the fake did not create.
+    private Created? CreatedOf(nint handle) {
+        lock (m_gate) {
+            if (m_byHandle.TryGetValue(key: handle, value: out var created)) {
+                return created;
+            }
+
+            return ((m_byHandle.TryGetValue(key: (handle - 1), value: out var image) && image.Kind.EndsWith(comparisonType: StringComparison.Ordinal, value: " image"))
+                ? image
+                : null);
+        }
+    }
+    // Records a command that names an object the fake has already released.
+    private void NoteUse(nint handle, string use) {
+        if (CreatedOf(handle: handle) is { DisposeCount: > 0 } released) {
+            lock (m_gate) {
+                UsesAfterRelease.Add(item: $"{use} of {released}");
+            }
+        }
+    }
+
+    /// <summary>Returns whether a handle, an image's or its view's, names an object the fake created and has released:
+    /// a surface handed to the display that names one is presented after release.</summary>
+    /// <param name="handle">The handle.</param>
+    /// <returns><see langword="true"/> when the object is released.</returns>
+    public bool IsReleased(nint handle) => (CreatedOf(handle: handle) is { DisposeCount: > 0 });
+
     private void RecordBarrier(ShaderPipelineBarrier barrier, nint handle) {
         if (Recording) {
             Barriers.Add(item: (barrier, handle));
@@ -234,9 +269,15 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     }
     public void BeginDebugGroup(nint commandBufferHandle, string label) { }
     public void BeginRenderPass(nint commandBufferHandle, IGpuFramebuffer framebuffer, GpuPixelRect? area = null) {
-        if (Recording) {
-            var fake = ((FakeFramebuffer)framebuffer);
+        var fake = ((FakeFramebuffer)framebuffer);
 
+        foreach (var color in fake.Colors) {
+            NoteUse(handle: color, use: "color attachment");
+        }
+        if (fake.Depth != 0) {
+            NoteUse(handle: fake.Depth, use: "depth attachment");
+        }
+        if (Recording) {
             RenderPasses.Add(item: (fake.RenderPass.Description, fake.Colors, fake.Depth));
         }
     }
@@ -253,8 +294,15 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             Record(text: $"clear buffer {bufferHandle}");
         }
     }
-    public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => ClearedImages.Add(item: imageHandle);
-    public void CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) => CopiedImages.Add(item: (sourceImageHandle, destinationImageHandle));
+    public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) {
+        NoteUse(handle: imageHandle, use: "clear");
+        ClearedImages.Add(item: imageHandle);
+    }
+    public void CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) {
+        NoteUse(handle: sourceImageHandle, use: "copy from");
+        NoteUse(handle: destinationImageHandle, use: "copy to");
+        CopiedImages.Add(item: (sourceImageHandle, destinationImageHandle));
+    }
     public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0, ulong destinationOffsetBytes = 0) {
         if (Recording) {
             Record(text: $"copy buffer {sourceBufferHandle} to {destinationBufferHandle}");
@@ -532,7 +580,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     }
     public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
     public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Buffer, NewLayout: GpuImageLayout.Undefined, OldLayout: GpuImageLayout.Undefined, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: bufferHandle);
-    public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Image, NewLayout: newLayout, OldLayout: oldLayout, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: imageHandle);
+    public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordImageBarrier(imageHandle: imageHandle, barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Image, NewLayout: newLayout, OldLayout: oldLayout, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask));
     public void WaitIdle() {
         WaitIdleCount++;
         if (LoseNextIdleWait) {
@@ -590,12 +638,14 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         }
     }
     public void WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
+        NoteUse(handle: imageViewHandle, use: "sampled descriptor");
         if (Recording) {
             DescriptorWrites.Add(item: (descriptorSetHandle, binding, imageViewHandle));
         }
     }
     public void WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) { }
     public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
+        NoteUse(handle: imageViewHandle, use: "storage descriptor");
         if (Recording) {
             DescriptorWrites.Add(item: (descriptorSetHandle, binding, imageViewHandle));
         }
@@ -720,6 +770,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
             var bytes = ((((ulong)width) * height) * bytesPerPixel);
 
+            gpu.NoteUse(handle: sourceImageHandle, use: "readback");
             gpu.Readbacks.Add(item: (sourceImageHandle, sourceLayout));
 
             if (StagingBytes != bytes) {

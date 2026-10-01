@@ -35,6 +35,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     // The layout the published image is in between submissions: the output layout, or an external input's own when a
     // package that drew nothing publishes it in its output's place.
     private GpuImageLayout m_publishedLayout;
+    // The external image whose bound image the latest presentation publishes in the output's place, or null when it
+    // publishes an image of the node's own.
+    private string? m_publishedBinding;
 
     private readonly FrameSlot[] m_slots;
 
@@ -193,6 +196,11 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// an external input's own layout while a package pass that drew nothing
     /// (<see cref="RenderGraphPackageOutcome.DrewNothing"/>) publishes that input in its output's place.</summary>
     public GpuImageLayout PublishedLayout => m_publishedLayout;
+    /// <summary>Gets the name of the external image the latest presentation published in its output's place, because a
+    /// package pass that drew nothing (<see cref="RenderGraphPackageOutcome.DrewNothing"/>) stands for it, or
+    /// <see langword="null"/> when the node published an image of its own. The published image is then whatever the host
+    /// bound to that name for the frame, and lives only as long as its owner keeps it.</summary>
+    public string? PublishedBinding => m_publishedBinding;
     /// <summary>Gets resource allocation and extent information for the active graph.</summary>
     public IReadOnlyList<ShaderPipelineResourceStatus> ResourceStatus => m_resources.Select(selector: StatusOf).ToArray();
     /// <summary>Gets or sets whether a step is pending.</summary>

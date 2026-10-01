@@ -231,6 +231,7 @@ public sealed partial class RenderGraphRuntime {
             Frame: frame,
             Image: surface,
             Layout: node.PublishedLayout,
+            StandsFor: Standing.Own,
             Tainted: false
         );
     }

@@ -248,15 +248,33 @@ public sealed partial class RenderGraphRuntime {
         var current = new Output[count];
         var previous = new Output[count];
         var producerTainted = new bool[count];
+        // Each old instance's index in the new set, or -1 when it retires.
+        var renumbered = new int[m_set.Instances.Count];
 
+        Array.Fill(
+            array: renumbered,
+            value: -1
+        );
+
+        for (var index = 0; (index < count); index++) {
+            if (kept[index] >= 0) {
+                renumbered[kept[index]] = index;
+            }
+        }
         for (var index = 0; (index < count); index++) {
             var old = kept[index];
 
             current[index] = ((old >= 0)
-                ? m_current[old]
+                ? Renumbered(
+                    output: in m_current[old],
+                    renumbered: renumbered
+                )
                 : Output.None);
             previous[index] = ((old >= 0)
-                ? m_previous[old]
+                ? Renumbered(
+                    output: in m_previous[old],
+                    renumbered: renumbered
+                )
                 : Output.None);
             producerTainted[index] = (
                 (old >= 0) &&

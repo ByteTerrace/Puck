@@ -217,7 +217,8 @@ public sealed partial class RenderGraphRuntime {
     /// holds an image it published until two of its own submissions after a newer one.</summary>
     /// <param name="instance">The instance's name.</param>
     /// <param name="image">The image, when this returns <see langword="true"/>.</param>
-    /// <returns><see langword="true"/> when the instance renders a graph and has completed an image.</returns>
+    /// <returns><see langword="true"/> when the instance renders a graph and has completed an image: its own, or another
+    /// instance's it stands for that its owner still keeps.</returns>
     /// <exception cref="ObjectDisposedException">The runtime is disposed.</exception>
     public bool TryLatestImage(string instance, out Surface image) {
         ObjectDisposedException.ThrowIf(
@@ -231,14 +232,21 @@ public sealed partial class RenderGraphRuntime {
 
         if (
             (index < 0) ||
-            (m_nodes[index] is null) ||
-            (m_current[index].Frame < 0) ||
-            !m_current[index].Image.IsSameDeviceImage
+            (m_nodes[index] is null)
         ) {
             return false;
         }
 
-        image = m_current[index].Image;
+        var latest = LatestOf(index: index);
+
+        if (
+            (latest.Frame < 0) ||
+            !latest.Image.IsSameDeviceImage
+        ) {
+            return false;
+        }
+
+        image = latest.Image;
 
         return true;
     }

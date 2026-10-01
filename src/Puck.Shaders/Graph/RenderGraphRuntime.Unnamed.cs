@@ -10,20 +10,29 @@ namespace Puck.Shaders;
 //
 // The released instance keeps its node, its installed pipeline and the regions its host bound, and rebuilds at the extent
 // it is demanded at the next frame something names and shows it, with fresh history. Until it has rendered again its
-// readers bind a stand-in, as they do before an instance first renders.
+// readers bind a stand-in, as they do before an instance first renders. An output of another instance that stands for its
+// output (a package that drew nothing) resolves to nothing with it, and that instance renders again over the stand-in in
+// the same frame (RenderGraphRuntime.Standing.cs).
 public sealed partial class RenderGraphRuntime {
     // Releases the graph of every graph instance the schedule leaves unnamed that still holds one, once the device has
     // finished every submission that may read it: the instance's own and its consumers'. A source keeps its conversion
     // graph, sized by its descriptor rather than by demand, and an instance a capture waits on keeps its graph for the
-    // capture.
+    // capture, as does the instance whose image the captured one's latest output stands for, which the capture reads.
     private void ReleaseUnnamed(RenderGraphSchedule schedule) {
         var drained = false;
         var captured = CapturedInstance();
+
+        m_released.Clear();
+
+        var capturedOwner = ((captured >= 0)
+            ? m_current[captured].StandsFor.Producer
+            : -1);
 
         for (var index = 0; (index < m_nodes.Length); index++) {
             if (
                 (schedule.Instances[index].Status != RenderGraphInstanceStatus.Unnamed) ||
                 (index == captured) ||
+                (index == capturedOwner) ||
                 (m_sources[index] is not null) ||
                 (m_nodes[index] is not { HoldsGraphObjects: true, PendingCapturePath: null } node)
             ) {
@@ -41,6 +50,7 @@ public sealed partial class RenderGraphRuntime {
             m_previous[index] = Output.None;
             m_producerTainted[index] = false;
             schedule.Next.Forget(index: index);
+            m_released.Add(item: index);
             var factories = m_packages.Factories;
 
             for (var factory = 0; (factory < factories.Count); factory++) {

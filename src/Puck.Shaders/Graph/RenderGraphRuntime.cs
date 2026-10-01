@@ -920,24 +920,15 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         return -1L;
     }
-    // The newest completed output of a producer that is no newer than the frame asked for.
-    private Output OutputAt(int producer, long frame) {
-        var current = m_current[producer];
-
-        if (
-            (current.Frame >= 0) &&
-            (current.Frame <= frame)
-        ) {
-            return current;
-        }
-
-        var previous = m_previous[producer];
-
-        return (((previous.Frame >= 0) && (previous.Frame <= frame))
-            ? previous
-            : Output.None
-        );
-    }
+    // The newest completed output of a producer that is no newer than the frame asked for, resolved through what it
+    // stands for (RenderGraphRuntime.Standing.cs), or none.
+    private Output OutputAt(int producer, long frame) => Resolve(
+        frame: frame,
+        output: RecordedAt(
+            frame: frame,
+            producer: producer
+        )
+    );
     private void Release() {
         Array.Fill(
             array: m_current,
@@ -971,7 +962,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         }
         if (
             !m_nodes[index]!.IsReady ||
-            (m_current[index].Frame < 0)
+            (LatestOf(index: index).Frame < 0)
         ) {
             return $"the instance '{name}' has produced no output";
         }
@@ -1098,6 +1089,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_latest = schedule;
         m_unproduced = 0;
         ReleaseUnnamed(schedule: schedule);
+        RescheduleAfterRelease(
+            frame: scheduled with { Costs = this },
+            prior: prior,
+            schedule: schedule
+        );
 
         var renders = schedule.Renders;
         var holdingConvergence = ((m_convergence is { IsActive: true } convergence) &&
@@ -1209,12 +1205,15 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             // A capture moves to its instance's node only once that node renders a graph over completed inputs, so the
             // frame it produces is the one the capture reads; until then it stays armed here, where
             // UnservedCaptureReasonOf explains it.
+            // A node whose published image is no longer what its output resolves to serves the capture only once it has
+            // rendered again.
             if (
                 (index == m_captureInstance) &&
                 CanServeConvergence &&
                 node.IsReady &&
                 (m_standInReads[index] is null) &&
-                (m_taintedReads[index] is null)
+                (m_taintedReads[index] is null) &&
+                PublishesLatest(index: index)
             ) {
                 m_capture.Forward(target: node);
             }
@@ -1252,12 +1251,20 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 m_convergence!.Count();
             }
 
+            var standsFor = StandingOf(
+                index: index,
+                node: node,
+                schedule: schedule,
+                surface: in surface
+            );
+
             m_previous[index] = m_current[index];
             m_current[index] = new Output(
                 Buffer: node.LatestOutputBuffer(),
                 Frame: frame.Index,
                 Image: surface,
                 Layout: node.PublishedLayout,
+                StandsFor: standsFor,
                 Tainted: (m_taintedReads[index] is not null)
             );
         }
@@ -1271,11 +1278,12 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         return RootImage();
     }
-    // The root's latest completed image: a graph root's output, or an external root's latest output, whose acquisition is
-    // released at once, since the surface is valid only until the next frame, the first time the producer can replace it.
+    // The root's latest completed image: a graph root's output, resolved through what it stands for, or an external
+    // root's latest output, whose acquisition is released at once, since the surface is valid only
+    // until the next frame, the first time the producer can replace it.
     private Surface RootImage() {
         if (m_producers[m_root] is not { } producer) {
-            return m_current[m_root].Image;
+            return LatestOf(index: m_root).Image;
         }
         if (!producer.TryAcquireOutput(output: out var output)) {
             return default;
@@ -1402,13 +1410,15 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     // output's previous frame.
     private readonly record struct Binding(string Version, int Producer, string ProducerName, ShaderPipelineResourceKind Kind, GpuPixelFormat Format, bool PreviousFrame);
     // One completed output of an instance: the frame it belongs to, its published image and the layout it is in, its
-    // buffer when it is one, and whether it was rendered from a tainted input.
-    private readonly record struct Output(long Frame, Surface Image, GpuImageLayout Layout, IGpuBuffer? Buffer, bool Tainted) {
+    // buffer when it is one, whether it was rendered from a tainted input, and what the image stands for when it is not
+    // the instance's own (RenderGraphRuntime.Standing.cs).
+    private readonly record struct Output(long Frame, Surface Image, GpuImageLayout Layout, IGpuBuffer? Buffer, bool Tainted, Standing StandsFor) {
         public static Output None => new(
             Buffer: null,
             Frame: -1,
             Image: default,
             Layout: GpuImageLayout.Undefined,
+            StandsFor: Standing.Own,
             Tainted: false
         );
     }

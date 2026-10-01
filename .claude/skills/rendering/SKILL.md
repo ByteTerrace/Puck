@@ -1352,7 +1352,17 @@ output layout, the one its consumer's descriptor is written with, and hands a
 host's image back in the host's own. The output may be read only by later
 package passes, which `ShaderPipelineRenderNode.StandingOf` hands the input it
 stands for, so a chain of stand-ins resolves to its first input
-(`RenderGraphRuntimeLawTests.Chain`); any other reader refuses the stand-in. An
+(`RenderGraphRuntimeLawTests.Chain`); any other reader refuses the stand-in.
+Across instances the runtime never keeps such an image as the instance's own: an
+output standing for a producer's (`PublishedBinding`) resolves on every read to
+that producer's newest output (`RenderGraphRuntime.Standing.cs`), so it follows
+the producer at the producer's cadence and never names an image the producer
+released, replaced or retired; one that resolves to nothing is rerendered when
+shown, and a frame releasing its producer is scheduled again so it does that
+frame (`RenderGraphRuntimeLawTests.Standing`, whose fake device records every
+command naming a released image in `FakePipelineGpu.UsesAfterRelease`). A new
+reader of an instance output reads it through `OutputAt` or `LatestOf`, never
+`m_current` directly. An
 external producer's output declares the layout its own submissions leave the
 image in (`RenderGraphExternalOutput.Layout`); a declared layout the producer
 does not leave it in shows only as Vulkan validation errors, since the

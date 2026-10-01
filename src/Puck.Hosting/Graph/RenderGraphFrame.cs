@@ -45,7 +45,9 @@ public readonly record struct RenderGraphSourceState(string Instance, ImageSourc
 /// <see langword="null"/> for none. A source with no entry is not rendered.</param>
 /// <param name="Rerender">The instances the frame renders again whatever their refresh and the pass-pixel budget,
 /// whenever it demands them, or <see langword="null"/> for none: a capture frame's tainted instances, whose latest output
-/// read external content the capture gate did not fill, so no capture reads an image a slower instance rendered from it.
+/// read external content the capture gate did not fill, so no capture reads an image a slower instance rendered from it,
+/// and an instance whose latest output stood for an image its producer no longer keeps, so it renders over the
+/// producer's stand-in rather than showing nothing.
 /// A source is never named, since it renders at its producer's cadence and its consumers resolve its image as they
 /// bind it.</param>
 /// <param name="Unchanged">The instances whose host declares that nothing they render from has changed since their
