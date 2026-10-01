@@ -4727,7 +4727,8 @@ counted rows recorded in the same change.
      pixels. Parity passes with reconstruction off. RTX 4070 ordinary counter
      reads keep dispatches, binds, barriers, steps, texels, uploads and
      allocations unchanged; compiled kernel bytes rise by 140 on DirectX and
-     1456 on Vulkan. The floor-machine recording remains owner-assisted.
+     1456 on Vulkan. The default workload's ceilings are recorded on the RTX 2060 at
+     the floor tier.
 3. **P15-3, motion.** Landed. Every visible pixel's previous position is derived
    from the record.
    - Delivers: the previous view in the pass block (the instance's last render's
@@ -5579,7 +5580,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `sky-cycle` canaries, and isolated still, drift, twinkle and cycle counters
      workloads. Both backends pass with debug layers and agree on the counted
      baseline. The still workload can skip a node entirely; an absent sample
-     is not a measured zero. The RTX 2060 floor recording remains owner-assisted.
+     is not a measured zero. Each workload's ceilings are recorded on the RTX 2060
+     at the floor tier, beside it as `sky-<workload>.ceilings.json`.
    - Delivers: the parity world gains a sky station authoring every current
      feature (gradient, fog, sun disc, stars with twinkle, clouds with drift,
      shear and spin, a cycle), captured at several ticks across the cycle; the
