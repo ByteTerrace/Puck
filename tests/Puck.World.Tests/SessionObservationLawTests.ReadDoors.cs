@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -117,5 +118,31 @@ public sealed partial class SessionObservationLawTests {
         Assert.False(condition: fixture.Server.IsLiveSession(principal: observation.Session));
         Assert.True(condition: fixture.Server.AnswerSubmittedQuery(principal: observation.Session, query: new WorldQuery.StateObservations()).Refused);
         Assert.Throws<InvalidOperationException>(testCode: () => WorldStateReadView.Of(reader: observation.Session, server: fixture.Server));
+    }
+    [Fact]
+    public void AnObserverThatEndsOnItsResumeDefinitionIsHandedNoSnapshotAfterIt() {
+        using var fixture = Fixtures.FreshServer(definition: Document(tier: WorldDisclosureTier.Replica));
+        // The primer is the first definition; the definition a resumed observation takes first is the second.
+        var sink = new EndingSink(endAfterDefinitions: 2, endAfterSnapshots: int.MaxValue);
+        var observation = fixture.Server.TryObserveAsSession(refusal: out var refusal, sink: sink, sourceAuthority: Viewer);
+
+        Assert.NotNull(@object: observation);
+        Assert.Empty(collection: refusal);
+        using var release = observation;
+        var view = Assert.Single(
+            collection: fixture.Server.GrantRows(principal: observation.Session),
+            predicate: static row => ((row.Capability == WorldCapability.Observe) && (row.Subject == GrantSubject.All))
+        );
+
+        fixture.Server.Revoke(actor: Principal.Console, grant: view);
+        fixture.Step();
+        fixture.Step();
+        fixture.Server.Grant(actor: Principal.Console, grant: view);
+        fixture.Step();
+        fixture.Step();
+
+        Assert.Equal(expected: 2, actual: sink.Definitions);
+        Assert.Equal(expected: 0, actual: sink.DeliveriesAfterEnd);
+        Assert.True(condition: observation.Ended);
     }
 }

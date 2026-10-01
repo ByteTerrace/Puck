@@ -45,7 +45,12 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         ).IsFull
     );
 
+    // Nothing reaches an observer once it has ended its own subscription.
     private bool Discloses() {
+        if (DetachReason is not null) {
+            return false;
+        }
+
         if (CanObserve) {
             return true;
         }
@@ -89,6 +94,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             definition: Disclose(definition: server.Definition)!,
             version: server.DocumentVersion
         );
+        FollowObserverDetach();
     }
 
     /// <summary>Discloses a definition as this session's tier shows it — see
@@ -186,6 +192,11 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         try {
             Resume();
+
+            if (DetachReason is not null) {
+                return;
+            }
+
             inner.DeliverSnapshot(snapshot: in redacted);
             FollowObserverDetach();
         } catch (Exception exception) {

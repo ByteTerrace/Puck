@@ -58,6 +58,43 @@ public sealed class WorldProjectionBackpressureLawTests {
         Assert.DoesNotContain(actualString: line, expectedSubstring: " at ");
     }
     [Fact]
+    public void ANarrationSinkThatDisposesAnEndingLeaseLeavesTheHealthySubscriberDelivered() {
+        var hub = new WorldOutputHub();
+        var ending = new EndingSink(endAfterDefinitions: int.MaxValue, endAfterSnapshots: 1);
+        var healthy = new EndingSink(endAfterDefinitions: int.MaxValue, endAfterSnapshots: int.MaxValue);
+        IDisposable? endingLease = null;
+
+        // The operator's narration reaction to the detach line releases the same lease the hub is detaching.
+        using var narrated = hub.AttachNarrationSink(sink: new DisposingNarrationSink(dispose: () => endingLease!.Dispose()));
+
+        endingLease = hub.Subscribe(sink: ending);
+        using var healthyLease = hub.Subscribe(sink: healthy);
+
+        for (var tick = 1UL; (tick <= 2UL); tick++) {
+            var snapshot = new WorldSnapshot(Authority: "authority/one", Entries: ReadOnlyMemory<EntitySnapshot>.Empty, Revision: 1, StepTicks: 1UL, Tick: tick);
+
+            hub.DeliverSnapshot(snapshot: in snapshot);
+            Assert.True(condition: hub.HasTypedSubscribers);
+        }
+
+        Assert.Equal(expected: 2, actual: healthy.Snapshots);
+        Assert.Equal(expected: 1, actual: ending.Snapshots);
+    }
+    [Fact]
+    public void ASinkThatEndsOnItsAttachDefinitionIsHandedNoPrimerSnapshot() {
+        using var fixture = Fixtures.FreshServer();
+        var sink = new EndingSink(endAfterDefinitions: 1, endAfterSnapshots: int.MaxValue);
+
+        using var lease = fixture.Server.AttachSink(sink: sink);
+
+        fixture.Step();
+        fixture.Step();
+
+        Assert.Equal(expected: 1, actual: sink.Definitions);
+        Assert.Equal(expected: 0, actual: sink.Snapshots);
+        Assert.Equal(expected: 0, actual: sink.DeliveriesAfterEnd);
+    }
+    [Fact]
     public async Task AStalledProjectionKeepsOnlyItsBoundedPrimerAndDetachesBeforeLaterEpochs() {
         var disclosure = new WorldSinkDisclosure(
             ObserverBodyIndex: -1,
@@ -157,4 +194,47 @@ public sealed class WorldProjectionBackpressureLawTests {
             return 0;
         }
     }
+}
+
+/// <summary>A detachable sink test double that counts what it is handed and ends its own subscription after a given
+/// number of definitions or snapshots, counting every delivery that still reaches it afterwards.</summary>
+internal sealed class EndingSink(int endAfterDefinitions, int endAfterSnapshots) : IWorldDetachableSink {
+    public const string Reason = "test.ended";
+
+    public int Definitions { get; private set; }
+    public int DeliveriesAfterEnd { get; private set; }
+    public string? DetachReason { get; private set; }
+    public int Snapshots { get; private set; }
+
+    private void Note() {
+        if (DetachReason is not null) {
+            DeliveriesAfterEnd++;
+        }
+    }
+
+    public void DeliverAnswer(in QueryAnswer answer) {
+    }
+    public void DeliverComposition(WorldComposition composition) {
+    }
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
+        Note();
+
+        if (++Definitions == endAfterDefinitions) {
+            DetachReason = Reason;
+        }
+    }
+    public void DeliverSessionLever(WorldSessionLever lever) {
+    }
+    public void DeliverSnapshot(in WorldSnapshot snapshot) {
+        Note();
+
+        if (++Snapshots == endAfterSnapshots) {
+            DetachReason = Reason;
+        }
+    }
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) => Note();
+}
+/// <summary>A narration sink test double that runs an action on every line it is handed.</summary>
+internal sealed class DisposingNarrationSink(Action dispose) : IWorldNarrationSink {
+    public void Narrate(in WorldNarration narration) => dispose();
 }

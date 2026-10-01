@@ -110,22 +110,25 @@ public sealed partial class WorldOutputHub {
             );
         }
     }
-    // Narrates a faulting sink loudly (naming its concrete type, never swallowed silently) and detaches it — a
-    // broken observer never gets retried on a later tick. Shared by every Deliver* method's catch block. The Active
-    // guard is load-bearing, not defensive style: a sink that disposes its OWN lease and then throws has already
-    // decremented m_activeCount once through Dispose, and a second decrement here would drift the count low enough
-    // that HasTypedSubscribers reads false while healthy subscribers remain — silently starving them of every
-    // subsequent snapshot the server then skips building.
-    private void Detach(Subscription subscription, string callSite, Exception exception) {
-        Narrate(
-            channel: "world.output",
-            text: $"[world.output: {subscription.Sink.GetType().Name} threw in {callSite} — detached] {exception}"
-        );
-
+    // Takes a subscription out of every later delivery, exactly once whichever route reaches it first: a sink that
+    // disposes its own lease (from inside its delivery, or from a narration sink called while it is being detached)
+    // has already decremented m_activeCount, and a second decrement would drift the count low enough that
+    // HasTypedSubscribers reads false while healthy subscribers remain, starving them of every snapshot the server
+    // then skips building. Every detach runs this before it narrates.
+    private void Deactivate(Subscription subscription) {
         if (subscription.Active) {
             subscription.Active = false;
             m_activeCount--;
         }
+    }
+    // Detaches a faulting sink and narrates it loudly (naming its concrete type, never swallowed silently) — a broken
+    // observer never gets retried on a later tick. Shared by every Deliver* method's catch block.
+    private void Detach(Subscription subscription, string callSite, Exception exception) {
+        Deactivate(subscription: subscription);
+        Narrate(
+            channel: "world.output",
+            text: $"[world.output: {subscription.Sink.GetType().Name} threw in {callSite} — detached] {exception}"
+        );
     }
     // Detaches a sink that ended its own subscription during the delivery just made, narrating its named reason as an
     // ordinary detach, never as a fault.
@@ -134,15 +137,14 @@ public sealed partial class WorldOutputHub {
             return false;
         }
 
+        Deactivate(subscription: subscription);
+
         if (HasNarrationSink) {
             Narrate(
                 channel: "world.output",
                 text: $"[world.output: {subscription.Sink.GetType().Name} detached: {reason}]"
             );
         }
-
-        subscription.Active = false;
-        m_activeCount--;
 
         return true;
     }
