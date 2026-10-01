@@ -179,7 +179,12 @@ internal sealed partial class WorldScreenBinder {
     // authority's (WorldInstanceHost), which ends it when the screen is re-pointed or removed; the destination instance
     // leaves the render graph once no slot holds the feed.
     private void ReleaseSession(SessionFeed feed, int index, string reason) {
-        feed.Nested?.Close(sessions: NestedSessionsOf());
+        if (feed.Nested is { } screens) {
+            _ = m_nestedOwners.Remove(key: screens);
+            screens.Close(sessions: NestedSessionsOf());
+            feed.Nested = null;
+        }
+
         feed.Dispose();
         m_feedsMoved = true;
 

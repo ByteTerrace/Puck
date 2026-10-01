@@ -278,10 +278,9 @@ public sealed class WorldNestedScreensLawTests {
     private static IReadOnlyDictionary<string, System.Text.Json.JsonElement>? RenderGraphSettingsOf(WorldScreenSource source) =>
         WorldSourceInstances.Of(shown: [source], world: WorldDefinitionLoader.BootInstanceName).Instances[0].Settings;
 
-    // THE LAW: a portal face is seen by a camera before its glass, and unseen from behind the glass or with every corner
-    // of the glass past one side of the camera's frustum.
+    // THE LAW: a sampled slab can be seen from either side; only a slab wholly outside the frustum is culled.
     [Fact]
-    public void AFaceIsSeenOnlyFromBeforeItsGlassAndWithinTheFrustum() {
+    public void AFaceIsSeenFromEitherSideWithinTheFrustum() {
         var glass = Screen(source: new WorldScreenSource.None());
 
         CameraSnapshot Looking(Vector3 from, Vector3 at) => CameraSnapshot.LookAt(
@@ -298,8 +297,64 @@ public sealed class WorldNestedScreensLawTests {
         Assert.False(condition: WorldPortalVisibility.Sees(camera: Looking(from: new Vector3(x: 0f, y: 1f, z: 5f), at: new Vector3(x: 0f, y: 1f, z: 10f)), glass: glass));
         // Looking well to the side, every corner is past the frustum's left side.
         Assert.False(condition: WorldPortalVisibility.Sees(camera: Looking(from: new Vector3(x: 0f, y: 1f, z: 5f), at: new Vector3(x: 20f, y: 1f, z: 5f)), glass: glass));
-        // Behind the glass, looking at it, its back is all a camera can see.
-        Assert.False(condition: WorldPortalVisibility.Sees(camera: Looking(from: new Vector3(x: 0f, y: 1f, z: -5f), at: new Vector3(x: 0f, y: 1f, z: 0f)), glass: glass));
+        // The shader samples the back and sides with the same screen material as the front.
+        Assert.True(condition: WorldPortalVisibility.Sees(camera: Looking(from: new Vector3(x: 0f, y: 1f, z: -5f), at: new Vector3(x: 0f, y: 1f, z: 0f)), glass: glass));
+        Assert.True(condition: WorldPortalVisibility.Sees(camera: Looking(from: new Vector3(x: 2f, y: 1f, z: -0.1f), at: new Vector3(x: 0f, y: 1f, z: -0.1f)), glass: glass));
+        Assert.True(condition: WorldPortalVisibility.Sees(camera: (Looking(from: new Vector3(x: 0f, y: 1f, z: -0.1f), at: new Vector3(x: 0f, y: 1f, z: -1f)) with { Near = 0.05f }), glass: glass));
+    }
+    // THE LAW: the slab spans from the face at its origin to its back plane one full depth behind, and a camera whose
+    // near plane clips either plane away still sees the slab through the other. Testing only one plane's four corners
+    // would cull a slab that is in view.
+    [Fact]
+    public void ASlabIsSeenThroughEitherPlaneOfItsCornersAlone() {
+        var glass = Screen(source: new WorldScreenSource.None());
+
+        CameraSnapshot Looking(float z, float towardZ) => (CameraSnapshot.LookAt(
+            fieldOfViewRadians: 1f,
+            position: new Vector3(x: 0f, y: 1f, z: z),
+            target: new Vector3(x: 0f, y: 1f, z: towardZ),
+            viewportHeight: 64,
+            viewportWidth: 64
+        ) with { Near = 0.2f });
+
+        // Behind the slab, looking at it: the back plane (z = -0.2) lies inside the near plane; only the face corners
+        // (z = 0) lie beyond it.
+        Assert.True(condition: WorldPortalVisibility.Sees(camera: Looking(towardZ: 1f, z: -0.3f), glass: glass));
+        // In front of the face, looking at it: the face corners lie inside the near plane; only the back corners lie
+        // beyond it.
+        Assert.True(condition: WorldPortalVisibility.Sees(camera: Looking(towardZ: -1f, z: 0.1f), glass: glass));
+    }
+    // THE LAW: an authority can keep a session while its screen changes projection, camera or resolution. Its view
+    // must reopen with those settings even when the session provider still holds the same destination.
+    [Fact]
+    public void EditingASessionsRenderingReplacesItsViewWithoutChangingItsDestination() {
+        var world = World(name: "a", next: "b");
+        var sessions = new Sessions(worlds: new Dictionary<string, WorldDefinition> {
+            ["b"] = World(name: "b", next: "a"),
+        });
+        var screens = new WorldNestedScreens<Level>(
+            definition: () => world,
+            depth: 1,
+            head: "session$3",
+            shares: static _ => true,
+            world: "a"
+        );
+
+        Assert.True(condition: screens.Reconcile(nestingDepth: 3, sessions: sessions));
+        var before = Assert.Single(collection: screens.Views);
+        var source = ((WorldScreenSource.Session)world.Screens[0].Source);
+
+        world = world with {
+            ScreensRaw = [Screen(source: source with {
+                CameraName = "other",
+                Resolution = new WorldScreenResolution(Height: 96, Width: 128),
+            })],
+        };
+
+        Assert.True(condition: screens.Reconcile(nestingDepth: 3, sessions: sessions));
+        Assert.NotSame(expected: before, actual: Assert.Single(collection: screens.Views));
+        Assert.Equal(expected: 1, actual: sessions.Closed);
+        Assert.False(condition: screens.Reconcile(nestingDepth: 3, sessions: sessions));
     }
 
     // One session view: the destination's screens one level deeper.

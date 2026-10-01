@@ -751,7 +751,8 @@ camera views and producers show.
 
 The authority opens the sessions a world's screens show while that world is fewer screens deep than
 the nesting depth. The boot world and every world a human stands in are at depth zero, and a world a
-session observes is one deeper than the shallowest screen showing it. What a world observes
+live session observes is one deeper than the shallowest screen showing it. An ended observation
+holds no descendant sessions open, and its retained document grants no live view of those descendants. What a world observes
 therefore follows the documents and the sessions already open, never what a frame draws. The
 presentation renders a level only while something sees it: each view that reads a session tests the
 glass it shows on against the camera it last rendered with (`WorldPortalVisibility`), and a glass
@@ -769,8 +770,8 @@ one per screen, since a screen shows one image: the first joined seat's view, ch
 person, which is the camera a click through that view is cast from, so the texel the glass shows at
 a point and a click at that point look along one line into the destination. With no seat resolving
 a view, the eye is the camera the frame's first view renders with: a fixed camera's, or the
-no-local-seats spectator's. A window's rays start past the counterpart's own glass, so a window never
-shows the destination's face it looks through, which shows a window of its own when the counterpart is
+no-local-seats spectator's. When the counterpart seats a screen, a window's rays start past its glass,
+so a window never shows the destination's face it looks through, which shows a window of its own when the counterpart is
 a return portal. A pick through the glass continues through the camera the window rendered into the
 destination, through the destination's own screens to the nesting depth, each world tested against
 its own screens, and ends on the last world it enters: on the surface the pick's ray meets among that

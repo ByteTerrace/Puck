@@ -141,7 +141,7 @@ public sealed partial class WorldInstanceHost {
 
             foreach (var (_, session) in owned.Rows) {
                 if (
-                    (session.Observation is not null) &&
+                    (session.Observation is { Ended: false }) &&
                     (session.InstanceName is { } observed) &&
                     m_screenDepths.TryAdd(
                         key: observed,
