@@ -1,3 +1,5 @@
+using Puck.Hosting;
+
 namespace Puck.World;
 
 /// <summary>The soft-shadow candidate-mask policy. <see cref="Auto"/> keeps exact gathers for small sessions and uses
@@ -117,9 +119,9 @@ public sealed class WorldRenderSettings {
     /// moves and the ceiling bounds, or zero for the controller's own choice.</summary>
     public float DynamicResolutionForced { get => m_dynamicResolutionForced; set { m_dynamicResolutionForced = value; m_revision++; } }
     /// <summary>Gets the render-scale ceiling each of the world's own views is allocated at: <see cref="RenderScale"/>,
-    /// except that a native scale is lowered to the three-quarter tier while <see cref="DynamicResolution"/> is on, since
-    /// a view at a native ceiling reconstructs nothing and so has no grid to move.</summary>
-    public float RenderCeiling => ((m_dynamicResolution && (m_renderScale >= 1f))
+    /// except that a scale quantized to native is lowered to the three-quarter tier while
+    /// <see cref="DynamicResolution"/> is on, since a view at a native ceiling reconstructs nothing and has no grid to move.</summary>
+    public float RenderCeiling => ((m_dynamicResolution && (RenderGraphExtent.Quantize(fraction: m_renderScale) >= 1d))
         ? WorldRenderScaleTiers.Scale(tier: WorldRenderScaleTier.ThreeQuarter)
         : m_renderScale);
     /// <summary>The engine-wide internal render-scale fraction, applied to every player view's

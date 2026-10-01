@@ -161,6 +161,36 @@ public sealed partial class SdfWorldPassesLawTests {
         }
     }
 
+    [Fact]
+    public void AGridMoveSettlesForOnePeriodWithoutDiscardingHistoryOrRebuilding() {
+        using var rig = new TemporalRig(views: 1, cadence: true, temporal: true, renderScale: 0.75f);
+
+        for (var frame = 0U; (frame <= SdfTemporalHistory.Period); frame++) {
+            rig.Produce();
+        }
+        Assert.True(condition: rig.Stood());
+        var revision = rig.World.WorkRevision;
+
+        foreach (var grid in new[] { 0.5f, 0.625f }) {
+            var preceding = rig.HistoryFrames();
+
+            rig.RenderGrid = grid;
+            for (var sample = 0U; (sample < SdfTemporalHistory.Period); sample++) {
+                rig.Produce();
+                Assert.False(condition: rig.Stood(), userMessage: $"grid {grid}, sample {sample}");
+                Assert.Equal(expected: (preceding + sample + 1u), actual: rig.HistoryFrames());
+                Assert.True(condition: rig.PreviousValid());
+                Assert.Equal(expected: revision, actual: rig.World.WorkRevision);
+            }
+            rig.Produce();
+            Assert.True(condition: rig.Stood());
+            // A different requested fraction in the same quantized grid needs no new samples.
+            rig.RenderGrid = (grid - 0.001f);
+            rig.Produce();
+            Assert.True(condition: rig.Stood());
+        }
+    }
+
     // One sdf.world instance, "world", over a fixed frame on the upload model, optionally reading a feed that hands out a
     // tainted image until it fills. Construction produces until the view has rendered its installed graph.
     private sealed class TemporalRig : IDisposable {
@@ -168,16 +198,18 @@ public sealed partial class SdfWorldPassesLawTests {
         private readonly FrameContext m_context;
         private readonly TaintingFeed? m_feed;
 
+        private SdfFrame m_sourceFrame;
         private long m_index;
         private ulong m_rendered;
 
-        public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false, bool temporal = false) {
+        public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false, bool temporal = false, float renderScale = 1f) {
             var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
             var frame = Frame() with { EnableCadenceGate = cadence };
 
-            frame = frame with { Views = [frame.Views[0] with { Quality = new SdfViewQuality { Temporal = temporal } }] };
+            frame = frame with { Views = [frame.Views[0] with { Quality = new SdfViewQuality { Temporal = temporal }, RenderScale = renderScale }] };
 
             frame = frame with { Views = [.. Enumerable.Repeat(element: frame.Views[0], count: views)] };
+            m_sourceFrame = frame;
             Selected = Residency(name: "first");
             Second = (secondResidency ? Residency(name: "second") : null);
             Passes = new SdfWorldPasses(resolve: _ => new SdfWorldView(Residency: Selected, View: ViewIndex));
@@ -211,12 +243,15 @@ public sealed partial class SdfWorldPassesLawTests {
             Produce();
 
             SdfWorldResidency Residency(string name) => new(
-                brickPoolVoxelCapacity: 0, frameSource: new FixedFrameSource(frame: frame),
+                brickPoolVoxelCapacity: 0, frameSource: new CapturingFrameSource(capture: () => m_sourceFrame),
                 height: Extent, kernels: SdfTestPipelines.Kernels(), name: name, pipelines: pipelines, width: Extent);
         }
 
         public bool Filling {
             set => m_feed!.Filling = value;
+        }
+        public float RenderGrid {
+            set => m_sourceFrame = m_sourceFrame with { Views = [m_sourceFrame.Views[0] with { ResolvedRenderScale = value }] };
         }
         public SdfWorldPasses Passes { get; }
         public RenderGraphRuntime Runtime { get; }
