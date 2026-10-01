@@ -437,7 +437,8 @@ bool sdfMarchSeedCandidate(SdfPixel p, out float candidate) {
 // Where primary starts the pixel's march: at its candidate when one evaluation of the field the march reads, at the
 // midpoint of the segment from the tile's start to the candidate, proves the segment and the band the march accepts a
 // hit within empty (sdfMarchSeedClears: the Lipschitz-clamped distance there exceeds half the segment); otherwise at the
-// tile's start. The field is already divided by the program's Lipschitz bound and its fold-safe step bound applies, so
+// tile's start. The field is already divided by the program's Lipschitz bound; its fold-safe step bound and the
+// world-space gap to a wallpaper LOD transition both limit the proof, so
 // no surface nearer than the candidate can be skipped, including one that moved in front since the preceding frame. The
 // evaluation counts as a march step whether or not it admits the seed.
 float sdfSeededMarchStart(SdfPixel p) {
@@ -450,7 +451,8 @@ float sdfSeededMarchStart(SdfPixel p) {
 
     sdfEvalCount += 1.0;
     sdfWorkSteps += 1u;
-    return (sdfMarchSeedClears(seed, min(ball.distance, sdfMapStepBound)) ? seed.candidate : p.marchStart);
+    float clearance = min(min(ball.distance, sdfMapStepBound), sdfMapSeedBound);
+    return (sdfMarchSeedClears(seed, clearance) ? seed.candidate : p.marchStart);
 }
 // The primary stage: marches the pixel's camera ray against the field, bounded by the nearest of the far distance, the
 // tile's far bound and the mesh the mesh pass drew there, and stores the record's V, C and L rows for every active pixel,

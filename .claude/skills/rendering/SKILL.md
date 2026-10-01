@@ -1937,9 +1937,11 @@ the camera's motion, where one ball test proves the skipped segment empty
 frame's history surface; every other fragment binds the dummy there, and the
 `marchSeed`, `temporal`, `historyFrames` and debug-mode gates keep it unread. The
 ball test reads the same tile-masked field the march does, with parts included,
-`min(distance, sdfMapStepBound)`: that field is already divided by the program's
-step scale, so never scale it again or read `abs` of it, and never seed past a
-fold without the step bound. The evaluation adds to `sdfWorkSteps` and
+`min(min(distance, sdfMapStepBound), sdfMapSeedBound)`: that field is already
+multiplied by the program's step scale, so never scale it again or read `abs` of
+it. The seed bound is the world-space gap to a wallpaper LOD transition; a finite
+branch Lipschitz factor cannot prove an empty ball across that discontinuity.
+Never seed past a fold without the step bound. The evaluation adds to `sdfWorkSteps` and
 `sdfEvalCount`. A change to the candidate, the ball test or the accepted band
 reruns `SdfMarchSeedLawTests` (whose red legs must still fail), the `march-seed`
 canary on both backends with `--debug-layers`, and `puck counters compare` over

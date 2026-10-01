@@ -4906,7 +4906,8 @@ counted rows recorded in the same change.
      A history texel naming no surface gives none. Primary backs the candidate
      off by two acceptance bands and starts there only when one evaluation of the
      tile-masked field at the midpoint of the segment from the tile's start to
-     the candidate, limited by the fold-safe step bound, exceeds half the segment
+     the candidate, limited by the fold-safe step bound and the world-space gap
+     to a wallpaper LOD transition, exceeds half the segment
      plus the band the march accepts a hit within (`sdfPrepareMarchSeed` and
      `sdfMarchSeedClears`, `march/sdf-march-seed.hlsli`); otherwise it starts at
      the tile's start, as before. The field `map` returns is already divided by

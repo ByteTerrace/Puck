@@ -171,8 +171,8 @@ float sdfStepScale() {
     return ((stepScale > 0.0) ? stepScale : 1.0);
 }
 // Whether the packed step scale is the reciprocal of a finite Lipschitz bound, in (0, 1], as SdfProgram packs for every
-// program it builds (its analysis refuses one whose bound overflows). Only such a program's field is known to be
-// conservative enough for a ball test to prove a segment empty, so a stream without one never seeds a march
+// program it builds (its analysis refuses one whose bound overflows). A stream without one never seeds a march.
+// This bounds continuous branches only: the seed also respects the field's fold and wallpaper LOD boundary gaps
 // (march/sdf-primary.hlsli).
 bool sdfProgramHasFiniteBound() {
     float stepScale = asfloat(SDF_SEGMENT_STEP_SCALE(sdfWords[sdfSegmentDirectoryOffset()]));

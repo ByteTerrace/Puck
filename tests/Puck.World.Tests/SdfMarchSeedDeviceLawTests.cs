@@ -24,7 +24,7 @@ public sealed class SdfMarchSeedDeviceLawTests {
     private static readonly Vector3 Interval = new(x: Candidate, y: Midpoint, z: Radius);
 
     private sealed record SeedCase(string Name, Vector4 Input, bool Prepared, bool Admitted, Vector3 Expected,
-        SdfProgram? Program = null, float FoldBound = float.PositiveInfinity);
+        SdfProgram? Program = null, float FoldBound = float.PositiveInfinity, Vector2? FieldProbe = null);
 
     private static SeedCase[] Cases() {
         var cases = new List<SeedCase> {
@@ -109,7 +109,7 @@ public sealed class SdfMarchSeedDeviceLawTests {
     }
 
     private static void Verify(GpuDeviceServices services, string extension) {
-        var cases = Cases();
+        var cases = Cases().Concat(second: WallpaperCases()).ToArray();
         var results = Run(cases: cases, extension: extension, services: services);
         var failures = new List<string>();
 
@@ -119,6 +119,13 @@ public sealed class SdfMarchSeedDeviceLawTests {
             var flags = ((item.Prepared ? 1 : 0) + (item.Admitted ? 2 : 0));
 
             if (actual.W != flags) { failures.Add(item: $"{item.Name}: flags {actual.W}, expected {flags}; clearance {results[(index + cases.Length)].X}"); }
+            if (item.FieldProbe is { } probe) {
+                var field = results[(index + cases.Length)].Y;
+
+                if (!float.IsFinite(f: field) || (MathF.Abs(x: (field - probe.Y)) > 0.000001f)) {
+                    failures.Add(item: $"{item.Name}: field at {probe.X} is {field}, expected {probe.Y}");
+                }
+            }
             for (var component = 0; (component < 3); component++) {
                 var expected = item.Expected[component];
                 var tolerance = MathF.Max(x: 0.000001f, y: (MathF.Abs(x: expected) * 0.000001f));
@@ -149,7 +156,8 @@ public sealed class SdfMarchSeedDeviceLawTests {
 
         for (var index = 0; (index < cases.Length); index++) {
             rows[(index * 2)] = cases[index].Input;
-            rows[((index * 2) + 1)] = new(((cases[index].Program is null) ? 0 : 1), cases[index].FoldBound, 0, 0);
+            rows[((index * 2) + 1)] = new(((cases[index].Program is null) ? 0 : 1), cases[index].FoldBound,
+                (cases[index].FieldProbe?.X ?? 0), (cases[index].FieldProbe.HasValue ? 1 : 0));
         }
         using var inputs = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: rows.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
         var buffers = new List<IGpuStorageBuffer>();
@@ -207,6 +215,28 @@ public sealed class SdfMarchSeedDeviceLawTests {
         return ((((double)rounded) < value) ? (rounded + FixedQ4816.Epsilon) : rounded);
     }
     private static FixedPosition Point(double x) => FixedPosition.FromLocal(local: new FixedVector3(X: FixedQ4816.FromDouble(value: x), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero));
+    // Wallpaper has no fixed evaluator. These cases have an analytic oracle: the PM mirror creates a sphere at
+    // x = 3 before the LOD switch, but the half-turn puts the upright copy at x = -3 after it. With LOD at 4,
+    // the midpoint 4.875 sees the plane's clearance 3.125 > Radius, yet the segment crosses the sphere at 2.75.
+    // Its distance to the switch, 0.875, must refuse the seed. LOD at 1 puts the entire interval beyond the switch;
+    // the nearest surface is then the plane at 8 and seeding must remain available (the positive control).
+    private static SeedCase[] WallpaperCases() {
+        SdfProgram Program(float lod) {
+            var builder = new SdfProgramBuilder();
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+            _ = builder.Rotate(rotation: new Quaternion(w: 0, x: 0, y: 1, z: 0))
+                .WallpaperFold(group: SdfWallpaperGroup.Pm, cell: new Vector2(value: 32), limit: Vector2.Zero, lodDistance: lod)
+                .Translate(offset: new Vector3(x: 3, y: 0, z: 0)).Sphere(radius: 0.25f, material: material)
+                .ResetPoint().Plane(normal: -Vector3.UnitX, offset: 8, material: material);
+            return builder.Build();
+        }
+
+        return [
+            new("wallpaper LOD crossing", new(w: 0, x: 2, y: 8, z: (1f / 64)), true, false, Interval, Program(lod: 4), FieldProbe: new(x: 3, y: -0.25f)),
+            new("wallpaper LOD outside the ball", new(w: 0, x: 2, y: 8, z: (1f / 64)), true, true, Interval, Program(lod: 1), FieldProbe: new(x: 3, y: 5)),
+        ];
+    }
     private static SdfProgram Plane(float offset, bool chamfer = false) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));

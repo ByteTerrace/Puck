@@ -4,7 +4,7 @@
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/march/sdf-march-constants.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/march/sdf-march-seed.hlsli"
 
-// Two rows per case: start/projected distance/footprint/direct clearance, then field mode/fold bound/unused/unused.
+// Two rows per case: start/projected distance/footprint/direct clearance, then field mode/fold bound/probe x/probe enabled.
 [[vk::binding(60, 3)]] StructuredBuffer<float4> seedCases : register(t60, space3);
 [[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> seedResults : register(u61, space3);
 struct SeedProbeIndex { [[vk::offset(0)]] uint index; };
@@ -23,7 +23,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         if (mode.x > 0.0) {
             sdfProgramLayout = sdfLoadProgramLayout();
             SdfHit hit = map(float3(seed.midpoint, 0.0, 0.0));
-            clearance = min(hit.distance, sdfMapStepBound);
+            clearance = min(min(hit.distance, sdfMapStepBound), sdfMapSeedBound);
             // An explicit tighter bound tests the caller's fold-safe contract without inventing another field.
             clearance = min(clearance, mode.y);
         }
@@ -31,5 +31,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     }
     seedResults[uint2(index, 0u)] = float4(seed.candidate, seed.midpoint, seed.radius,
         (prepared ? 1.0 : 0.0) + (admitted ? 2.0 : 0.0));
-    seedResults[uint2(index, 1u)] = float4(clearance, 0.0, 0.0, 0.0);
+    float probe = 0.0;
+    if (mode.w > 0.0) {
+        probe = map(float3(mode.z, 0.0, 0.0)).distance;
+    }
+    seedResults[uint2(index, 1u)] = float4(clearance, probe, 0.0, 0.0);
 }
