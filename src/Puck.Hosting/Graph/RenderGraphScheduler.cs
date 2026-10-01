@@ -55,6 +55,7 @@ public static class RenderGraphScheduler {
             Height = new int[count];
             IsRoot = new bool[count];
             PositionOf = new int[count];
+            Reached = new bool[count];
             Price = new long[count];
             Passes = new int[count];
             ScaleHeight = new double[count];
@@ -87,6 +88,9 @@ public static class RenderGraphScheduler {
         public int[] Passes { get; }
         public int[] PositionOf { get; }
         public long[] Price { get; }
+        // Whether something the display shows reaches the instance through what it shows, whether or not those
+        // consumers render this frame.
+        public bool[] Reached { get; }
         public double[] ScaleHeight { get; }
         public double[] ScaleWidth { get; }
         public List<Shown>[] Shows { get; }
@@ -107,6 +111,7 @@ public static class RenderGraphScheduler {
             Array.Clear(array: Height);
             Array.Clear(array: IsRoot);
             Array.Clear(array: Price);
+            Array.Clear(array: Reached);
             Array.Clear(array: ScaleHeight);
             Array.Clear(array: ScaleWidth);
             Array.Clear(array: Width);
@@ -793,6 +798,36 @@ public static class RenderGraphScheduler {
             admitted[index] = read;
         }
 
+        // An instance a decided consumer shows or reads stays waiting while that consumer does not render this frame, and so
+        // does everything it shows in turn: only an instance nothing the display shows reaches is unread.
+        var reached = work.Reached;
+        var grew = true;
+
+        Array.Copy(
+            destinationArray: reached,
+            length: count,
+            sourceArray: decided
+        );
+
+        while (grew) {
+            grew = false;
+
+            for (var position = (count - 1); (position >= 0); position--) {
+                var index = set.Order[position];
+
+                if (!reached[index]) {
+                    continue;
+                }
+
+                foreach (var entry in shown[index]) {
+                    if (!reached[entry.Producer]) {
+                        reached[entry.Producer] = true;
+                        grew = true;
+                    }
+                }
+            }
+        }
+
         var rows = schedule.InstanceRows;
         var renders = schedule.RenderRows;
         var reads = schedule.ReadRows;
@@ -819,7 +854,9 @@ public static class RenderGraphScheduler {
                         ? (RefusesRate(frame: frame, index: index, sourceState: sourceState)
                             ? RenderGraphInstanceStatus.Refused
                             : RenderGraphInstanceStatus.Waiting)
-                        : RenderGraphInstanceStatus.Unread)))
+                        : (reached[index]
+                            ? RenderGraphInstanceStatus.Waiting
+                            : RenderGraphInstanceStatus.Unread))))
             ;
 
             following.Latest[index] = (admitted[index]

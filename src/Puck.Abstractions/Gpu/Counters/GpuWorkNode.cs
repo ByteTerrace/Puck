@@ -3,8 +3,11 @@ using Puck.Abstractions.Counting;
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>One render node a GPU work readout reports: the name it prints the node under, the node's completed work,
-/// and, when the node counts the objects it creates, those lifetime counts.</summary>
+/// when the node counts the objects it creates, those lifetime counts, and, when it knows them, the bytes of the GPU
+/// resources it owns now.</summary>
 /// <param name="Name">The name the readout prints the node under (<c>world</c>, <c>overlay</c>, <c>view:&lt;name&gt;</c>).</param>
 /// <param name="Work">The node's completed-work source.</param>
 /// <param name="Lifetime">The node's object-lifetime counters, or <see langword="null"/> when it counts none.</param>
-public readonly record struct GpuWorkNode(string Name, IGpuWorkSource Work, IWorkCounterSource? Lifetime);
+/// <param name="OwnedBytes">The bytes of every GPU resource the node owns now, or <see langword="null"/> when it does not
+/// report them.</param>
+public readonly record struct GpuWorkNode(string Name, IGpuWorkSource Work, IWorkCounterSource? Lifetime, ulong? OwnedBytes = null);

@@ -105,7 +105,8 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// <inheritdoc/>
     /// <remarks>The world's residency's uploads read as <c>sdf:world</c>, each render-graph instance that renders a graph
     /// by its instance name (an SDF view's passes, <c>sdf.world$sky</c> through <c>sdf.world$views</c>; the root's, its
-    /// place and post passes and the overlay), and each registered view's residency as <c>sdf:&lt;name&gt;</c>.</remarks>
+    /// place and post passes and the overlay), and each registered view's residency as <c>sdf:&lt;name&gt;</c>. A render-graph
+    /// instance's node also reports the bytes it owns (<see cref="ShaderPipelineRenderNode.OwnedBytes"/>).</remarks>
     public void CopyNodes(List<GpuWorkNode> nodes) {
         ArgumentNullException.ThrowIfNull(nodes);
 
@@ -128,6 +129,7 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
                 nodes.Add(item: new GpuWorkNode(
                     Lifetime: instance,
                     Name: runtime.Instances.Instances[index].Name,
+                    OwnedBytes: instance.OwnedBytes,
                     Work: instance
                 ));
             }

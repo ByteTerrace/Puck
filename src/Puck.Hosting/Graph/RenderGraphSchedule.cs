@@ -4,8 +4,9 @@ namespace Puck.Hosting;
 
 /// <summary>What the scheduler decided for one instance in one frame.</summary>
 public enum RenderGraphInstanceStatus : byte {
-    /// <summary>Neither the display nor any instance rendering this frame shows or reads it, so it does not
-    /// render.</summary>
+    /// <summary>Nothing the display shows reaches it: it is no root, and no instance the display reaches shows or reads
+    /// it, whether or not that instance renders this frame. It does not render, and a render-graph runtime releases its
+    /// graph until something shows it again.</summary>
     Unread = 1,
     /// <summary>Something shows or reads it, but it does not render this frame: its refresh or a source's cadence is not
     /// due, a source's producer declares no extent, or no consumer that shows or reads it renders. Its consumers read its
@@ -122,6 +123,16 @@ public sealed class RenderGraphHistory {
 
         Latest[index] = previous.Latest[index];
         Ticks[index] = previous.Ticks[index];
+    }
+    /// <summary>Forgets an instance whose targets were released, such as one nothing reads any more: it reads as never
+    /// rendered and never allocated, so it is due, at the extent its consumers demand, the next frame something shows it,
+    /// and its consumers bind no output of it until then.</summary>
+    /// <param name="index">The instance's index in its set.</param>
+    public void Forget(int index) {
+        Latest[index] = -1L;
+        Ticks[index] = 0L;
+        Width[index] = 0d;
+        Height[index] = 0d;
     }
     /// <summary>Returns the extent an instance's targets are allocated at, as quantized fractions of the display.</summary>
     /// <param name="index">The instance's index in its set.</param>
