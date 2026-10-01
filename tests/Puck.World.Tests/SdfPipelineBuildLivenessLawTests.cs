@@ -250,7 +250,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         first.Dispose();
         Assert.Equal(
             actual: (cache.Pipelines.SharedPipelines, last.Describe()),
-            expected: (11, "building (0 of 11 pipelines created)")
+            expected: (11, "building (0 of 11 pipelines created; waiting on sdf-beam, sdf-instance-cull, sdf-cull-args, sdf-world-primary, sdf-world-surface, sdf-world-ambient, sdf-world-shadow, sdf-world-views, sdf-world-views-core, sdf-world-views-folds, sdf-sky)")
         );
 
         var release = new Thread(start: last.Dispose);
