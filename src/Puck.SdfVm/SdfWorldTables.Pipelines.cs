@@ -44,15 +44,21 @@ public sealed partial class SdfWorldTables {
     internal Exception? ViewsRefusal(SdfKernel kernel) => m_pipelines.RefusalOf(kernel: kernel);
 
     // The first built views kernel that renders a program selecting the variant: the variant's own, then each fuller one.
-    // A refused kernel is not built, so a fuller one that is renders the program.
+    // A refused kernel is not built, so a fuller one that is renders the program. Every views slot is polled, even
+    // one this program cannot use: a device loss in its background build must reach recovery while another is refused.
     private SdfKernel? BuiltViews(SdfViewsKernelVariant variant) {
-        foreach (var kernel in ViewsKernelsOf(variant: variant)) {
-            if (m_pipelines.IsBuilt(kernel: kernel)) {
-                return kernel;
+        SdfKernel? built = null;
+        var candidates = ViewsKernelsOf(variant: variant);
+
+        foreach (var kernel in ViewsForCore) {
+            var ready = m_pipelines.IsBuilt(kernel: kernel);
+
+            if (ready && (built is null) && (Array.IndexOf(array: candidates, value: kernel) >= 0)) {
+                built = kernel;
             }
         }
 
-        return null;
+        return built;
     }
     private static SdfKernel ViewsKernelOf(SdfViewsKernelVariant variant) => ViewsKernelsOf(variant: variant)[0];
     // The views kernels that render a program selecting the variant, narrowest first.

@@ -474,6 +474,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
                 return (Lease.Poll() is not null);
             } catch (Exception failure) when ((failure is not DeviceLostException)) {
                 Volatile.Write(location: ref m_refusal, value: failure);
+                Console.Error.WriteLine(value: $"[{Description.Name}] kernel build refused, retried on a kernel reload or a device loss: {failure.Message}");
 
                 return false;
             }

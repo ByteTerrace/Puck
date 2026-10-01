@@ -576,8 +576,10 @@ These are one-line cautions; the owning pages hold the derivations.
   holds its last packed frame and names the kernel. A views kernel whose
   creation fails is refused per slot (`SdfWorldPipelines.IsBuilt`, `RefusalOf`),
   never thrown and never polled again, since a poll after a failure starts a
-  fresh build: the hold names the failure, a fuller built variant still renders
-  a narrower program, and only a kernel reload (`PrepareReload` leases a refused
+  fresh build: the hold names the failure, the error stream reports each slot's
+  refusal once, and every views slot is polled even when the program does not
+  select it, so a device loss in its build reaches recovery. A fuller built
+  variant still renders a narrower program, and only a kernel reload (`PrepareReload` leases a refused
   slot again even with unchanged bytecode) or a device loss builds it again
   (`SdfWorldResidencyViewsRefusalLawTests`).
   The last release of a lease cancels an in-flight build inside the cache's gate

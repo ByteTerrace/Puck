@@ -294,8 +294,12 @@ that kernel is built. The pending frame survives a film gate that captures
 nothing, and `WaitReadyAsync` waits for the hold to release. A newer capture
 replaces the pending frame. A views kernel whose creation fails, other than by a
 device loss, is refused rather than thrown: the residency holds its frame the
-same way, and `NotReadyReason` names the kernel and its failure. A program whose
-own variant was refused renders with a fuller variant that is built. No frame
+same way, and `NotReadyReason` names the kernel and its failure. The error stream
+reports each slot's refusal once, naming the kernel, the failure, and its recovery.
+Every views slot is polled after the tables are built, including variants the
+program does not select, so a device loss in any of their builds reaches recovery.
+A program whose own variant was refused renders with a fuller variant that is
+built. No frame
 builds a refused kernel again; a kernel reload (`world.shaders.reload`) builds
 it again from the bytecode it was refused with, or from the tree's, and a device
 loss rebuilds every pipeline. The World is ready once the world's residency is and the
