@@ -297,8 +297,9 @@ instance with its own node, so it compiles and builds its pipelines without
 waiting for the SDF set. A residency keeps its lease until a device loss or
 its last release. The pass-pipeline cache creates up to
 `GpuPassPipelineCache.BuildConcurrency` pipelines at once on the thread pool,
-however many entries are building, and each entry checks its cancel before it
-creates, never during a creation. Releasing a set cancels every build no other
+however many entries are building; an entry waiting for its turn, and a view's
+pass build waiting for its residency's tables, holds no thread. Each entry checks
+its cancel before it creates, never during a creation. Releasing a set cancels every build no other
 holder leases before it waits for any, then waits for only the pipelines
 already in the driver: nothing may be created on a device that is being torn
 down, and a shutdown never waits out a whole cold build. A set whose creations

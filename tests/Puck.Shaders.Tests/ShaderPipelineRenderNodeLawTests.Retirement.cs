@@ -1,5 +1,6 @@
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -15,7 +16,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         Assert.True(
             condition: disposal.Wait(
                 cancellationToken: TestContext.Current.CancellationToken,
-                timeout: TimeSpan.FromSeconds(value: 30)
+                timeout: TestLiveness.Bound
             ),
             userMessage: "Disposing the node waited on something that never finished."
         );
@@ -75,12 +76,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             }
         }
 
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => !node.IsBuildingPreview,
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The preview never finished building."
+        TestLiveness.Until(
+            reason: () => "The preview never finished building.",
+            step: () => !node.IsBuildingPreview
         );
 
         // The next frame installs the preview and publishes the selection, and that is the frame the capture reads.
@@ -133,16 +131,13 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
 
         // Once the encode is built, a frame serves the capture; the fake's readback is unsupported, so it fails there,
         // after the encode drew.
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    _ = Produce(node: node);
+        TestLiveness.Until(
+            reason: () => "The capture was never served.",
+            step: () => {
+                _ = Produce(node: node);
 
-                    return request.Completion.IsCompleted;
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The capture was never served."
+                return request.Completion.IsCompleted;
+            }
         );
         Assert.IsType<NotSupportedException>(@object: Outcome(request: request).Error);
     }
@@ -172,16 +167,13 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         gpu.ReadbackSupported = true;
         gpu.Recording = true;
         node.RequestCapture(request: request);
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    _ = Produce(node: node);
+        TestLiveness.Until(
+            reason: () => "The capture was never served.",
+            step: () => {
+                _ = Produce(node: node);
 
-                    return request.Completion.IsCompleted;
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The capture was never served."
+                return request.Completion.IsCompleted;
+            }
         );
 
         Assert.Null(@object: Outcome(request: request).Error);

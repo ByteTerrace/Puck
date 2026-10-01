@@ -241,8 +241,8 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
             compiler: new ShaderCompiler(cacheDirectory: Path.Combine(path1: Path.GetTempPath(), path2: "puck-test-shader-cache")),
             tree: root
         ));
-        SdfTestPipelines.ProduceUntil(
-            frame: () => {
+        TestLiveness.Until(
+            step: () => {
                 _ = node.Produce(context: in copy);
 
                 return (node.ShaderReloadStatus.State != "pending");

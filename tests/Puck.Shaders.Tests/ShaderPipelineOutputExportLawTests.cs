@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -44,7 +45,7 @@ public sealed class ShaderPipelineOutputExportLawTests {
             width: 640
         );
 
-        Assert.True(condition: Install(node: node), userMessage: node.LastSwapError?.Message);
+        Install(node: node);
         Assert.Equal(expected: (ExportWidth, ExportHeight), actual: node.Extent);
 
         var image = Assert.Single(collection: export.Created);
@@ -106,7 +107,7 @@ public sealed class ShaderPipelineOutputExportLawTests {
 
         node.Export = export;
         gpu.Recording = true;
-        Assert.True(condition: Install(node: node), userMessage: node.LastSwapError?.Message);
+        Install(node: node);
 
         var image = export.Created[0].ImageHandle;
 
@@ -176,8 +177,9 @@ public sealed class ShaderPipelineOutputExportLawTests {
         return node;
     }
     // Produces frames until the node has installed its graph and rendered once.
-    private static bool Install(ShaderPipelineRenderNode node) => SpinWait.SpinUntil(
-        condition: () => {
+    private static void Install(ShaderPipelineRenderNode node) => TestLiveness.Until(
+        reason: () => node.LastSwapError?.Message,
+        step: () => {
             if (node.FrameCounter >= 1) {
                 return true;
             }
@@ -185,15 +187,14 @@ public sealed class ShaderPipelineOutputExportLawTests {
             _ = node.ProduceFrame(context: default);
 
             return false;
-        },
-        timeout: TimeSpan.FromSeconds(value: 30)
+        }
     );
 
     // A package that notes the image its output is written into.
     private sealed class Painter : IRenderGraphPackageFactory {
         public List<nint> Written { get; } = [];
 
-        public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => null;
+        public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => ValueTask.FromResult<IDisposable?>(result: null);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder(owner: this);
 
         private sealed class Recorder(Painter owner) : IRenderGraphPackageRecorder {

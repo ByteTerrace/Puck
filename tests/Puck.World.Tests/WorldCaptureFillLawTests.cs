@@ -19,9 +19,6 @@ namespace Puck.World.Tests;
 /// armed on a windowed gate or an offscreen gate fills every frame, so a capture of such a world builds no pipeline.
 /// </summary>
 public sealed class WorldCaptureFillLawTests {
-    // How long a conversion's pipeline build on the thread pool may take before a law gives up on it.
-    private static readonly TimeSpan BuildTimeout = TimeSpan.FromSeconds(value: 30);
-
     private static WorldScreenSource.Producer Desktop() => WorldImageProducerSettings.SourceOf(
         id: WorldImageProducerSettings.CaptureId,
         settings: new WorldCaptureSettings(
@@ -58,21 +55,18 @@ public sealed class WorldCaptureFillLawTests {
         var frames = 0;
 
         // No capture is armed, so the screen shows the desktop's own image while its fill converts.
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    Assert.True(condition: scene.Frame());
-                    Assert.Equal(
-                        actual: scene.Read(producer: producer),
-                        expected: FakeFeed.DesktopHandle
-                    );
-                    frames++;
+        TestLiveness.Until(
+            reason: () => "The fill never converted while the screen showed an external source and no capture was armed.",
+            step: () => {
+                Assert.True(condition: scene.Frame());
+                Assert.Equal(
+                    actual: scene.Read(producer: producer),
+                    expected: FakeFeed.DesktopHandle
+                );
+                frames++;
 
-                    return FillConverted(fills: scene.Fills);
-                },
-                timeout: BuildTimeout
-            ),
-            userMessage: "The fill never converted while the screen showed an external source and no capture was armed."
+                return FillConverted(fills: scene.Fills);
+            }
         );
         Assert.Equal(expected: frames, actual: feed.Acquisitions);
 
@@ -140,23 +134,20 @@ public sealed class WorldCaptureFillLawTests {
         scene.Armed = true;
         Assert.True(condition: scene.Frame());
         Assert.True(
-            condition: scene.PipelineEntered.Wait(timeout: BuildTimeout, cancellationToken: TestContext.Current.CancellationToken),
+            condition: scene.PipelineEntered.Wait(timeout: TestLiveness.Bound, cancellationToken: TestContext.Current.CancellationToken),
             userMessage: "The arming frame started no fill conversion."
         );
         Assert.False(condition: FillConverted(fills: scene.Fills));
 
         // Once the build finishes, a later frame converts it.
         scene.ReleasePipelines();
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    Assert.True(condition: scene.Frame());
+        TestLiveness.Until(
+            reason: () => "The fill never converted after its build was released.",
+            step: () => {
+                Assert.True(condition: scene.Frame());
 
-                    return FillConverted(fills: scene.Fills);
-                },
-                timeout: BuildTimeout
-            ),
-            userMessage: "The fill never converted after its build was released."
+                return FillConverted(fills: scene.Fills);
+            }
         );
     }
 

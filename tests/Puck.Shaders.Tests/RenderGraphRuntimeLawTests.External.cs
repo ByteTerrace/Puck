@@ -2,6 +2,7 @@ using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -588,16 +589,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
             // The view renders over the stand-in while the world holds, so a capture of it waits and names why.
             world.Holding = true;
-            Assert.True(
-                condition: SpinWait.SpinUntil(
-                    condition: () => {
-                        _ = frames.Next();
+            TestLiveness.Until(
+                reason: () => "The view never installed its graph.",
+                step: () => {
+                    _ = frames.Next();
 
-                        return main.IsReady;
-                    },
-                    timeout: TimeSpan.FromSeconds(value: 30)
-                ),
-                userMessage: "The view never installed its graph."
+                    return main.IsReady;
+                }
             );
             _ = frames.Next();
 
