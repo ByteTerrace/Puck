@@ -37,7 +37,9 @@
         TaskName="PuckValidateShaderBytecodeFresh"
     >
         <ParameterGroup>
-            <BytecodeFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <ProjectDirectory ParameterType="System.String" Required="true" />
+            <ExpectedBytecode ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <BytecodeFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
             <Includes ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
             <LockFile ParameterType="System.String" Required="true" />
         </ParameterGroup>
@@ -94,10 +96,8 @@
     <Import Project="$(MSBuildThisFileDirectory)ShaderRecipe.targets" />
 
     <PropertyGroup>
-        <!-- A project's shader publication lock: every task that writes or reads a bytecode and sidecar pair holds it,
-             so builds sharing a checkout publish and read whole pairs. It lives in the project's intermediate root, which
-             every configuration shares, as the bytecode beside the sources does. -->
-        <_PuckShaderPublishLock>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'shader-publish.lock'))</_PuckShaderPublishLock>
+        <!-- The lock belongs to the source-tree bytecode, which all configurations and intermediate-output paths share. -->
+        <_PuckShaderPublishLock>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'obj', 'shader-publish.lock'))</_PuckShaderPublishLock>
         <DxcCommand Condition="'$(DxcCommand)' == ''">dxc</DxcCommand>
         <PuckShaderDxilEnabled Condition="'$(PuckShaderDxilEnabled)' == ''">true</PuckShaderDxilEnabled>
         <PuckComputeShaderDxilEnabled Condition="'$(PuckComputeShaderDxilEnabled)' == ''">true</PuckComputeShaderDxilEnabled>
@@ -128,7 +128,7 @@
 
          PuckWriteShaderHashSidecars runs INSIDE this same incremental gate, after every Exec, so a sidecar is
          rewritten only on an actual recompile — never unconditionally every build, which would make
-         ValidateShaderBytecodeFresh below compare freshly-regenerated truth against itself and never catch
+         the freshness check in CollectShaderBytecode below compare freshly-regenerated truth against itself and never catch
          anything. Its source hash covers that .hlsl plus every @(ShaderInclude), in item order — a conservative
          over-approximation (touching any .hlsli invalidates every sidecar, even a kernel that doesn't include it).
 
@@ -236,8 +236,13 @@
             DependsOnTargets="ValidateShaderBytecodeSources">
         <ItemGroup>
             <ShaderBytecode Remove="@(ShaderBytecode)" />
-            <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
-            <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
+        </ItemGroup>
+        <!-- Enumeration, required-output checks and pair validation share one lock. A first publication cannot land
+             between an empty glob and an existence check and leave a successful pack with an omitted kernel. -->
+        <PuckValidateShaderBytecodeFresh ExpectedBytecode="@(_PuckExpectedBytecode)" Includes="@(ShaderInclude)" LockFile="$(_PuckShaderPublishLock)" ProjectDirectory="$(MSBuildProjectDirectory)">
+            <Output ItemName="ShaderBytecode" TaskParameter="BytecodeFiles" />
+        </PuckValidateShaderBytecodeFresh>
+        <ItemGroup>
             <Content Include="@(ShaderBytecode)" CopyToOutputDirectory="PreserveNewest" />
         </ItemGroup>
     </Target>
@@ -261,19 +266,4 @@
         </ItemGroup>
     </Target>
 
-    <!-- Bytecode and sidecars are ignored local build outputs. Check both hashes
-         after collection to catch stale caches that timestamp checks miss.
-         Missing bytecode or sidecars trigger compilation through Outputs above. -->
-    <Target Name="ValidateShaderBytecodeFresh" AfterTargets="CollectShaderBytecode">
-        <!-- A pack or publish with no build collects and validates too, and must not ship a project without a kernel it
-             declares. -->
-        <Error Condition="'%(_PuckExpectedBytecode.Identity)' != '' and !Exists('%(_PuckExpectedBytecode.Identity)')"
-               Text="Shader bytecode '%(_PuckExpectedBytecode.Identity)' is missing. Build normally before packing or publishing with --no-build." />
-        <ItemGroup>
-            <_PuckValidateBytecode Include="@(ShaderBytecode)">
-                <SourcePath>%(ShaderBytecode.RootDir)%(ShaderBytecode.Directory)%(ShaderBytecode.Filename).hlsl</SourcePath>
-            </_PuckValidateBytecode>
-        </ItemGroup>
-        <PuckValidateShaderBytecodeFresh BytecodeFiles="@(_PuckValidateBytecode)" Includes="@(ShaderInclude)" LockFile="$(_PuckShaderPublishLock)" />
-    </Target>
 </Project>

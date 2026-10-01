@@ -619,8 +619,9 @@ and never to seed a header by hand
 ([generated declarations](shaders.md#generated-declarations)). Because a build
 writes every declaration the model changed, `--check` in a git work tree also
 fails on a file that matches the model only in the working tree while its
-staged copy differs: the commit, not the build, is what it judges. CI's
-artifacts and formatting jobs run it with their candidate CLI before building.
+staged copy differs or is missing: the index must carry each generated file.
+CI's artifacts and formatting jobs install their candidate CLI by building and
+packing the checkout, then run the check before the solution build.
 
 `interface` prints the [frame-block](shaders.md#frame-values-extent-and-ports) declarations
 each pass of a graph document or one-off shader reads, or, with

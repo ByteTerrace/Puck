@@ -54,6 +54,10 @@ public sealed class ShaderBuildTargetsLawTests {
 
     [Fact]
     public async Task TwoInterleavedPublishersLeaveABytecodeAndSidecarOfOneGeneration() {
+        if (!OperatingSystem.IsWindows()) {
+            Assert.Skip(reason: "Stalling a rename by denying delete sharing requires Windows mandatory file sharing.");
+        }
+
         using var fixture = new Fixture();
         var directory = fixture.PathOf(path: "Assets/Shaders");
 
@@ -88,6 +92,87 @@ public sealed class ShaderBuildTargetsLawTests {
 
         // The pair on disk is one generation's: the freshness check holds the bytecode to its sidecar.
         fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
+    }
+    [Fact]
+    public async Task PublishersWithDifferentIntermediateDirectoriesShareTheSourceTreesLock() {
+        using var fixture = new Fixture();
+
+        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "source");
+        fixture.Write(path: "obj/shader-publish.lock", text: string.Empty);
+        fixture.ShaderProject(body: """
+            <ItemGroup><ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" /></ItemGroup>
+            <Target Name="ResolveProjectReferences" />
+            """, dxc: ProcessDxc);
+
+        using var heldLock = new FileStream(access: FileAccess.ReadWrite, mode: FileMode.Open, path: fixture.PathOf(path: "obj/shader-publish.lock"), share: FileShare.None);
+        var first = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(properties: ["BaseIntermediateOutputPath=obj/first/"], target: "Build"));
+        var second = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(properties: ["BaseIntermediateOutputPath=obj/second/"], target: "Build"));
+
+        try {
+            // Both compilers finish while publication is held, including on Linux. Moving managed intermediates does
+            // not create a second lock for the same source-tree outputs, and the lock is never held during compilation.
+            _ = WaitFor(find: () => (((first.IsCompleted || second.IsCompleted) || (Directory.EnumerateFiles(path: fixture.PathOf(path: "Assets/Shaders"), searchPattern: "a.comp.spv.*.tmp").Count() == 2)) ? "publishers reached publication" : null));
+            Assert.False(condition: File.Exists(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv")));
+            Assert.False(condition: File.Exists(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash")));
+        } finally {
+            heldLock.Dispose();
+            fixture.RequireSuccess(run: await first);
+            fixture.RequireSuccess(run: await second);
+        }
+
+        fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
+        Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.tmp", searchOption: SearchOption.AllDirectories));
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public async Task ANoBuildPackWaitsForTheFirstPublicationBeforeCollectingAndRequiresItsCommitRecord(bool commitSidecar) {
+        using var fixture = new Fixture();
+
+        fixture.Write(path: "Assets/Shaders/a.comp.hlsl", text: "source");
+        fixture.Write(path: "obj/shader-publish.lock", text: string.Empty);
+        fixture.ShaderProject(body: """
+            <ItemGroup><ComputeShaderSource Include="Assets/Shaders/*.comp.hlsl" /></ItemGroup>
+            <Target Name="CollectionStarted" BeforeTargets="CollectShaderBytecode">
+              <WriteLinesToFile File="collecting.txt" Lines="collecting" Overwrite="true" />
+            </Target>
+            <Target Name="_GetPackageFiles">
+              <WriteLinesToFile File="packed.txt" Lines="@(Content->'%(Identity)')" Overwrite="true" />
+            </Target>
+            """);
+
+        using var heldLock = new FileStream(access: FileAccess.ReadWrite, mode: FileMode.Open, path: fixture.PathOf(path: "obj/shader-publish.lock"), share: FileShare.None);
+        var pack = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(properties: ["NoBuild=true"], target: "_GetPackageFiles"));
+
+        try {
+            _ = WaitFor(find: () => (File.Exists(path: fixture.PathOf(path: "collecting.txt")) ? "collecting" : null));
+            _ = await Task.WhenAny(task1: pack, task2: Task.Delay(cancellationToken: TestContext.Current.CancellationToken, delay: TimeSpan.FromSeconds(value: 1)));
+            Assert.False(condition: pack.IsCompleted, userMessage: "Collection inspected missing outputs without waiting for the publisher's lock.");
+
+            // This process owns the publication lock. It materializes the first bytecode, then either commits its
+            // sidecar or simulates a publisher cut short before writing the commit record.
+            fixture.Write(path: "Assets/Shaders/a.comp.spv", text: "bytecode");
+            if (commitSidecar) {
+                var sourceHash = Convert.ToHexStringLower(bytes: System.Security.Cryptography.SHA256.HashData(source: System.Text.Encoding.UTF8.GetBytes(s: "source")));
+                var bytecodeHash = Convert.ToHexStringLower(bytes: System.Security.Cryptography.SHA256.HashData(source: System.Text.Encoding.UTF8.GetBytes(s: "bytecode")));
+
+                fixture.Write(path: "Assets/Shaders/a.comp.spv.hash", text: $"source:{sourceHash}\nbytecode:{bytecodeHash}\n");
+            }
+        } finally {
+            heldLock.Dispose();
+            _ = await pack;
+        }
+
+        var result = await pack;
+
+        if (commitSidecar) {
+            fixture.RequireSuccess(run: result);
+            Assert.Equal(expected: ["Assets/Shaders/a.comp.spv"], actual: File.ReadAllLines(path: fixture.PathOf(path: "packed.txt")));
+        } else {
+            Assert.NotEqual(expected: 0, actual: result.ExitCode);
+            Assert.Contains(expectedSubstring: "has no '.hash' sidecar", actualString: result.Stdout);
+            Assert.False(condition: File.Exists(path: fixture.PathOf(path: "packed.txt")));
+        }
     }
     [Fact]
     public void AFailedLaterCompileRemovesEveryTemporaryFromThatInvocation() {

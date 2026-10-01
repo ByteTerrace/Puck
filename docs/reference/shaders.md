@@ -95,7 +95,9 @@ DXC writes each file under a name only its build uses, and failed compilation
 removes that invocation's temporary bytecode. A bytecode file and its sidecar
 are published as one transaction under the project's publication lock
 (`obj/shader-publish.lock`), which the freshness gate, the orphan sweep and a
-pack's collection take too: the old sidecar is removed, the bytecode moved into
+pack's enumeration, required-output checks and validation take too. The lock
+stays at that path when intermediate-output directories change, since the
+bytecode stays beside its sources. The old sidecar is removed, the bytecode moved into
 place whole, and the new sidecar moved in last. The sidecar is the pair's
 commit record, so builds sharing a checkout never leave one generation's
 bytecode beside another's sidecar, and a publication cut short leaves no
@@ -1067,9 +1069,10 @@ or any one kernel project's build runs once.
 (`build/ShaderRecipe.targets`), which a build reads when it is evaluated and so
 only the verb writes; `--check` holds every file to the model. A build may
 already have brought the working tree level with the model, so in a git work
-tree the check also refuses a file whose staged copy differs: CI's artifacts
-and formatting jobs run it with their candidate CLI before building, and the
-ledgers job on a fresh checkout. No CI step after a build can therefore carry a
+tree the check also refuses a file whose staged copy differs or is missing.
+CI's artifacts and formatting jobs build and pack their candidate CLI, then
+run the check before the solution build. The ledgers job runs the same check
+on a fresh checkout. No CI step after a build can therefore carry a
 regenerated file the change forgot. Generated files are checked in: a hot reload compiles the
 tree's kernels against them, and the build only brings them level with the
 model it built.

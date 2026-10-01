@@ -90,8 +90,9 @@ public sealed class PuckWriteShaderHashSidecars : Task {
     }
 }
 /// <summary>
-/// Independently recomputes both hashes <see cref="PuckWriteShaderHashSidecars"/> writes from whatever is on
-/// disk right now and compares them against each cached <c>.hash</c> sidecar — catching a cached
+/// Collects the project's shader bytecode and independently recomputes both hashes
+/// <see cref="PuckWriteShaderHashSidecars"/> writes, under the same publication lock as the collection and
+/// expected-output check, and compares them against each cached <c>.hash</c> sidecar — catching a cached
 /// bytecode file that is stale relative to its source (an edited <c>.hlsl</c>/<c>.hlsli</c> whose recompiled
 /// bytecode and sidecar were not refreshed) or relative to its own sidecar (bytecode bytes changed without a
 /// recompile). Deliberately independent of <see cref="PuckWriteShaderHashSidecars"/>'s own run this pass: on a
@@ -100,9 +101,14 @@ public sealed class PuckWriteShaderHashSidecars : Task {
 /// timestamp check saw no textual change), this task is what actually reads the cached sidecar.
 /// </summary>
 public sealed class PuckValidateShaderBytecodeFresh : Task {
-    /// <summary>Every cached bytecode file (.spv/.dxil); each item's <c>SourcePath</c> metadata names its
-    /// matching <c>.hlsl</c> (already confirmed to exist by <c>ValidateShaderBytecodeSources</c>).</summary>
-    public ITaskItem[] BytecodeFiles { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>The project whose Assets/Shaders directory holds the bytecode to collect.</summary>
+    [Required]
+    public string ProjectDirectory { get; set; } = "";
+    /// <summary>Every bytecode output the project's declared shader stages require.</summary>
+    public ITaskItem[] ExpectedBytecode { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>Every validated bytecode file (.spv/.dxil), relative to the project, for its content list.</summary>
+    [Output]
+    public ITaskItem[] BytecodeFiles { get; private set; } = Array.Empty<ITaskItem>();
     /// <summary>The shared <c>ShaderInclude</c> items every source may depend on, in item order.</summary>
     public ITaskItem[] Includes { get; set; } = Array.Empty<ITaskItem>();
     /// <summary>The project's shader publication lock (<see cref="PuckWriteShaderHashSidecars.LockFile"/>), held while
@@ -117,7 +123,28 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
     }
 
     private bool Validate() {
-        foreach (var bytecode in BytecodeFiles) {
+        foreach (var expected in ExpectedBytecode) {
+            if (!File.Exists(path: expected.GetMetadata(metadataName: "FullPath"))) {
+                Log.LogError(message: $"Shader bytecode '{expected.ItemSpec}' is missing. Build normally before packing or publishing with --no-build.");
+            }
+        }
+
+        var collected = new List<ITaskItem>();
+        var projectRoot = (Path.GetFullPath(path: ProjectDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar);
+        var directory = Path.Combine(path1: projectRoot, path2: "Assets/Shaders");
+
+        if (Directory.Exists(path: directory)) {
+            foreach (var extension in new[] { "*.spv", "*.dxil" }) {
+                foreach (var path in Directory.EnumerateFiles(path: directory, searchPattern: extension, searchOption: SearchOption.AllDirectories)) {
+                    var item = new TaskItem(itemSpec: path);
+
+                    item.SetMetadata(metadataName: "SourcePath", metadataValue: Path.ChangeExtension(path: path, extension: ".hlsl"));
+                    collected.Add(item: item);
+                }
+            }
+        }
+
+        foreach (var bytecode in collected) {
             var bytecodePath = bytecode.GetMetadata(metadataName: "FullPath");
             var sourcePath = bytecode.GetMetadata(metadataName: "SourcePath");
 
@@ -153,7 +180,18 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
             }
         }
 
-        return !Log.HasLoggedErrors;
+        if (Log.HasLoggedErrors) {
+            return false;
+        }
+
+        foreach (var bytecode in collected) {
+            bytecode.ItemSpec = bytecode.ItemSpec.Substring(startIndex: projectRoot.Length).Replace(oldChar: '\\', newChar: '/');
+        }
+        collected.Sort(comparison: (left, right) => string.Compare(strA: left.ItemSpec, strB: right.ItemSpec, comparisonType: StringComparison.Ordinal));
+
+        BytecodeFiles = collected.ToArray();
+
+        return true;
     }
 }
 /// <summary>
