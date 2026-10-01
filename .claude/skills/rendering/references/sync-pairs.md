@@ -18,7 +18,9 @@ offset. An enum member's
 HLSL name is its C# name in upper snake case after the enum's prefix
 (`SdfOp.ResetPoint` is `SDF_OP_RESET_POINT`); a constant's HLSL name is listed
 in `SdfIsaHlsl.Generate`. Never edit the file: change the C# and run
-`puck shaders generate`, then rebuild the kernels. `puck shaders generate
+`puck shaders generate`, then rebuild the kernels; when a kernel already reads
+a declaration the header does not hold yet, build the CLI with
+`-p:PuckCompileShaders=false` first. `puck shaders generate
 --check` fails CI naming the file when it disagrees with the model. A new
 ISA-owned constant or enum the kernels read joins `SdfIsaHlsl.Generate` rather
 than a hand `#define`.

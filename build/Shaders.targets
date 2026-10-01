@@ -76,7 +76,20 @@
          runtime shader compiler runs too: one recipe. -->
     <Import Project="$(MSBuildThisFileDirectory)ShaderRecipe.props" />
 
+    <!-- $(PuckCompileShaders) (default true): false builds a project's C# without its kernels. The kernels include
+         headers the C# model generates (`puck shaders generate`: sdf-isa.hlsli, the interface headers, this file's
+         recipe), so a kernel that reads a declaration the model has only just gained cannot compile until the header is
+         regenerated, and the generator is that same C#. Building the CLI with this false builds the generator without
+         its kernels; generate, then build as usual:
+
+             dotnet build src/Puck.Cli -c Release -p:PuckCompileShaders=false
+             dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll shaders generate
+             dotnet build src/Puck.Cli -c Release
+
+         A build with it false compiles, collects and validates no kernel bytecode, so its output carries none of the
+         bytecode CollectShaderBytecode ships: it is for running the generator, never the engine. -->
     <PropertyGroup>
+        <PuckCompileShaders Condition="'$(PuckCompileShaders)' == ''">true</PuckCompileShaders>
         <DxcCommand Condition="'$(DxcCommand)' == ''">dxc</DxcCommand>
         <PuckShaderDxilEnabled Condition="'$(PuckShaderDxilEnabled)' == ''">true</PuckShaderDxilEnabled>
         <PuckComputeShaderDxilEnabled Condition="'$(PuckComputeShaderDxilEnabled)' == ''">true</PuckComputeShaderDxilEnabled>
@@ -86,7 +99,7 @@
     <!-- Bytecode with no same-stem .hlsl: the build removes what it wrote (its sidecar records the file's bytes),
          naming each removal on one line, and refuses anything else, which it leaves in place. Sidecars are found by
          the Assets\Shaders convention CollectShaderBytecode ships from. -->
-    <Target Name="ValidateShaderBytecodeSources" BeforeTargets="PrepareForBuild">
+    <Target Name="ValidateShaderBytecodeSources" BeforeTargets="PrepareForBuild" Condition="'$(PuckCompileShaders)' == 'true'">
         <ItemGroup>
             <_PuckShaderSidecar Include="Assets\Shaders\**\*.spv.hash;Assets\Shaders\**\*.dxil.hash" />
         </ItemGroup>
@@ -115,7 +128,7 @@
         <_PuckExpectedBytecode Condition="'$(PuckShaderDxilEnabled)' == 'true'" Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" />
         <_PuckExpectedBytecode Condition="'$(PuckComputeShaderDxilEnabled)' == 'true'" Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')" />
     </ItemGroup>
-    <Target Name="CompileShaders" BeforeTargets="PrepareForBuild"
+    <Target Name="CompileShaders" BeforeTargets="PrepareForBuild" Condition="'$(PuckCompileShaders)' == 'true'"
             Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath);$(MSBuildThisFileDirectory)ShaderRecipe.props"
             Outputs="@(_PuckExpectedBytecode);@(_PuckExpectedBytecode -> '%(Identity).hash')">
         <!-- Guards the DXC version probe and its <Error> below: a buildTransitive consumer with no shaders and no
@@ -184,7 +197,7 @@
          consuming project keeps only its own evaluation-time @(ShaderBytecode) glob (needed by
          ValidateShaderBytecodeSources, which runs before CompileShaders can populate anything), not a second
          static Content declaration. -->
-    <Target Name="CollectShaderBytecode" AfterTargets="CompileShaders" BeforeTargets="AssignTargetPaths">
+    <Target Name="CollectShaderBytecode" AfterTargets="CompileShaders" BeforeTargets="AssignTargetPaths" Condition="'$(PuckCompileShaders)' == 'true'">
         <ItemGroup>
             <ShaderBytecode Remove="@(ShaderBytecode)" />
             <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
@@ -198,7 +211,7 @@
          cs_5_0 DXBC here, beside the source as <stem>.<entry>.dxbc, and ship as content: a world run creates a kernel
          from its bytecode and compiles nothing. Direct3D 11 exists only on Windows, so a build elsewhere writes no kernel
          bytecode. -->
-    <Target Name="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths">
+    <Target Name="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths" Condition="'$(PuckCompileShaders)' == 'true'">
         <PuckCompileDirect3D11Kernels Condition="'@(Direct3D11KernelSource)' != '' and $([MSBuild]::IsOSPlatform('Windows'))" Sources="@(Direct3D11KernelSource)">
             <Output ItemName="_PuckDirect3D11KernelBytecode" TaskParameter="Bytecode" />
         </PuckCompileDirect3D11Kernels>
@@ -210,7 +223,7 @@
     <!-- Bytecode and sidecars are ignored local build outputs. Check both hashes
          after collection to catch stale caches that timestamp checks miss.
          Missing bytecode or sidecars trigger compilation through Outputs above. -->
-    <Target Name="ValidateShaderBytecodeFresh" AfterTargets="CollectShaderBytecode">
+    <Target Name="ValidateShaderBytecodeFresh" AfterTargets="CollectShaderBytecode" Condition="'$(PuckCompileShaders)' == 'true'">
         <ItemGroup>
             <_PuckValidateBytecode Include="@(ShaderBytecode)">
                 <SourcePath>%(ShaderBytecode.RootDir)%(ShaderBytecode.Directory)%(ShaderBytecode.Filename).hlsl</SourcePath>

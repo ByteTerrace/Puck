@@ -607,6 +607,23 @@ or named twice, fail by name. `--check` writes nothing, regenerates each include
 memory and exits 1 naming each file that differs from the model and its first
 differing line; CI runs it beside `puck schema --check`.
 
+The generator is C# in the projects whose kernels read what it writes
+(`Puck.SdfVm`, `Puck.Shaders`), and an ordinary build compiles those kernels
+before their C#. A kernel that reads a declaration the model has only just
+gained therefore cannot compile until the header holds it. Build the CLI with
+the kernels left out (`PuckCompileShaders`, declared in `build/Shaders.targets`),
+generate, then build as usual:
+
+```sh
+dotnet build src/Puck.Cli -c Release -p:PuckCompileShaders=false
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll shaders generate
+dotnet build src/Puck.Cli -c Release
+```
+
+A build with the kernels left out compiles, collects and validates no kernel
+bytecode, so it runs the generator, never the engine. Never seed a generated
+header by hand.
+
 `interface` prints the [frame-block](shaders.md#frame-values-extent-and-ports) declarations
 each pass of a graph document or one-off shader reads, or, with
 `--package <id>` (such as `sdf.film-grain`), those an engine package declares,
