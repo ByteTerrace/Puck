@@ -39,7 +39,8 @@ public interface IWorldNestedSessions<TChild> where TChild : class {
 /// camera (<see cref="Cameras"/>, named under this level by <see cref="WorldViewNames.NestedCamera"/>); and text its
 /// own lines, which the world's own session emitter draws through its own fonts
 /// (<see cref="WorldSessionSceneEmitter.ScreenDecals"/>). A producer of the local device's content, such as a camera or a
-/// desktop capture, is never opened for a world shown through a screen, and shows nothing.</para>
+/// desktop capture, is never opened for a world shown through a screen, and shows nothing. A machine the delivered
+/// definition does not declare opens no source instance, even when a disclosed screen names it.</para>
 /// <para><see cref="Reconcile"/> runs once per produced frame and allocates only when the world's definition, the
 /// nesting depth or the sessions its screens show change; the reads and source instances it publishes keep their
 /// identity until then.</para>
@@ -127,13 +128,19 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
     /// view of the presented world reads at its previous frame.</summary>
     public IReadOnlyList<string> CameraReads { get; private set; } = [];
 
-    /// <summary>Gets the screen rows as they were last reconciled: the world's screens, then its derived faces.</summary>
+    /// <summary>Gets the screen rows as they were last reconciled: the world's screens, then its derived faces, with
+    /// undisclosed machines and local-device producers showing nothing.</summary>
     public IReadOnlyList<WorldScreen> Rows => m_rows;
     /// <summary>Gets the source instances the screens show.</summary>
     public IReadOnlyList<RenderGraphInstance> Sources => Mappings.Sources.Instances;
 
-    // What a screen shows: its own source, but a producer of the local device's content, which shows nothing.
-    private WorldScreen Shown(WorldScreen row) => (((row.Source is WorldScreenSource.Producer producer) && !m_shares(arg: producer.Id))
+    // What a screen shows: its disclosed source, except local-device content and a machine the delivery never declares.
+    private WorldScreen Shown(WorldScreen row) => ((((row.Source is WorldScreenSource.Producer producer) && !m_shares(arg: producer.Id)) ||
+        ((row.Source is WorldScreenSource.Machine machine) && !(m_reconciled?.Machines.Any(predicate: declaration => string.Equals(
+            a: declaration.Name,
+            b: machine.Instance,
+            comparisonType: StringComparison.Ordinal
+        )) ?? false)))
         ? (row with { Source = new WorldScreenSource.None() })
         : row);
     // The view name a camera of the presented world renders under at this level.
@@ -227,8 +234,8 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
             m_rows = ((definition is null)
                 ? []
                 : [
-                    .. definition.Screens,
-                    .. WorldPrototypeFacets.Seated(definition: definition),
+                    .. definition.Screens.Select(selector: Shown),
+                    .. WorldPrototypeFacets.Seated(definition: definition).Select(selector: Shown),
                 ]);
         }
 
@@ -317,7 +324,7 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
             m_views.AddRange(collection: m_viewScreens.Select(selector: screen => m_children[screen]));
         }
 
-        var shown = m_rows.Select(selector: Shown).ToArray();
+        var shown = m_rows;
         var cameras = (definition?.Cameras ?? []);
 
         Mappings.Reconcile(

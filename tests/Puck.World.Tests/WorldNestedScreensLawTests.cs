@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Assets.Documents;
 using Puck.World.Client;
+using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -209,6 +210,7 @@ public sealed class WorldNestedScreensLawTests {
         ];
         var world = (Fixtures.BuildDocument() with {
             CamerasRaw = [Camera(name: "billboard")],
+            MachinesRaw = [Machine()],
             ScreensRaw = [.. sources.Select(selector: static (source, index) => (Screen(source: source) with { Index = index }))],
         });
         var screens = new WorldNestedScreens<Level>(
@@ -261,6 +263,67 @@ public sealed class WorldNestedScreensLawTests {
         Assert.Contains(collection: screens.Reads, expected: "session$0$camera$billboard");
         Assert.DoesNotContain(collection: screens.FilmReads, expected: "session$0$camera$billboard");
         Assert.Equal(actual: screens.CameraReads, expected: ["session$0$camera$billboard"]);
+    }
+
+    private static WorldMachine Machine() => new(
+        Configuration: System.Text.Json.JsonSerializer.SerializeToElement(value: new { schema = "puck.gaming-brick.configuration.v1" }),
+        Engine: "gaming-brick",
+        Name: "cabinet"
+    );
+
+    // THE LAW: a session cannot read an undisclosed machine merely because its screen row names that machine.
+    // A presentation projection keeps the screen but withholds the machine table; the replica control opens its own
+    // reader. Re-delivery into the same level revokes that reader and its reads, then restores it with the declaration.
+    [Fact]
+    public void AScreenCannotOpenAReaderForAMachineItsSessionDoesNotDisclose() {
+        var replica = (Fixtures.BuildDocument() with {
+            MachinesRaw = [Machine()],
+            ScreensRaw = [Screen(source: new WorldScreenSource.Machine(Instance: "cabinet", Output: "video"))],
+        });
+        var projection = Fixtures.Project(
+            authority: "garden",
+            definition: replica,
+            revision: 1,
+            tier: WorldDisclosureTier.Presentation
+        );
+
+        Assert.True(condition: WorldProjection.TryToDefinition(
+            definition: out var presentation,
+            projection: projection!,
+            reason: out var reason
+        ), userMessage: reason);
+        var disclosed = Assert.IsType<WorldDefinition>(@object: presentation);
+
+        Assert.Empty(collection: disclosed.Machines);
+        Assert.IsType<WorldScreenSource.Machine>(@object: disclosed.Screens[0].Source);
+
+        var delivered = replica;
+        var screens = new WorldNestedScreens<Level>(
+            definition: () => delivered,
+            depth: 1,
+            head: "session$0",
+            shares: static _ => true,
+            world: "garden"
+        );
+        var sessions = new Sessions(worlds: new Dictionary<string, WorldDefinition>());
+
+        _ = screens.Reconcile(nestingDepth: 3, sessions: sessions);
+        var reader = Assert.Single(collection: screens.Sources).Name;
+
+        Assert.Equal(expected: reader, actual: screens.InstanceOf(screen: 3));
+        delivered = disclosed;
+        _ = screens.Reconcile(nestingDepth: 3, sessions: sessions);
+
+        Assert.IsType<WorldScreenSource.None>(@object: screens.RowOf(screen: 3)!.Source);
+        Assert.Null(@object: screens.InstanceOf(screen: 3));
+        Assert.Empty(collection: screens.Sources);
+        Assert.Empty(collection: screens.Reads);
+        Assert.Empty(collection: screens.FilmReads);
+
+        delivered = replica;
+        _ = screens.Reconcile(nestingDepth: 3, sessions: sessions);
+
+        Assert.Equal(expected: reader, actual: Assert.Single(collection: screens.Sources).Name);
     }
 
     private static WorldCamera Camera(string name) => new(

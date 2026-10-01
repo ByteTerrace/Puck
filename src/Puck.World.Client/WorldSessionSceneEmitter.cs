@@ -183,7 +183,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         get {
             FollowText();
 
-            return m_text.GlyphAtlas;
+            return ((TextFault is null) ? m_text.GlyphAtlas : null);
         }
     }
     /// <inheritdoc/>
@@ -199,7 +199,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private PackedFontAtlasCatalog? TextCatalog() {
         FollowText();
 
-        return m_text.Catalog;
+        return ((TextFault is null) ? m_text.Catalog : null);
     }
     // The text a screen of the destination shows, or null.
     private WorldScreenSource.Text? TextAt(int screen) {

@@ -428,7 +428,8 @@ Free Cam do not alter the logical movement basis.
   `fallback` colour (`#RRGGBB`, black unauthored). Every other screen of a
   world shown through a screen, or of a world a seat is presented in, shows
   that world's own source: its machines from its own host (stepped on its own
-  ticks), its cameras as views of it filmed under the level, its text through
+  ticks, and read only while the delivery declares them), its cameras as views
+  of it filmed under the level, its text through
   its own fonts, and producers whose content is a function of their settings
   (`testPattern`, `qr`, `color`) through the shared instance. A probe shows
   nothing (only the boot world runs a probe host), nor does a local-device

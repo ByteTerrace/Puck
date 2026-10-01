@@ -730,7 +730,9 @@ what it would show in the boot world, from that world's own sources, never the b
   shows the one shared instance of that content.
 - A machine shows its own world's machine. A machine source instance names the world instance whose
   host runs it, so two worlds' cabinets of one name are two images. That world's server prepares and
-  steps its machines on its own ticks, whether or not any seat stands in it.
+  steps its machines on its own ticks, whether or not any seat stands in it. A session whose delivery
+  withholds the machine declaration opens no reader for it, even when a disclosed screen names it;
+  that screen shows nothing and casts no machine light.
 - A camera view shows a view of that world through its own camera row, posed by its own mirror (a
   placement anchor, or an active body's interpolated pose; any other anchor reads the world origin).
   Each level films its world's cameras under its own name (`session$24$camera$<camera>`,
@@ -738,6 +740,8 @@ what it would show in the boot world, from that world's own sources, never the b
   that residency's own views. A camera view reads its world's other camera views at their previous
   frame, so cameras filming each other's screens never wait on each other within a frame.
 - Text draws through that world's own font catalog, resolved beside that world's own document.
+  An unresolved delivery clears the drawn text and atlas, including a catalog that previously drew,
+  and reports its text fault until a valid delivery arrives.
 - A probe shows nothing: only the boot world runs a probe host, so a probe of another world opens
   with a fault naming that world.
 - A producer of the local device's content (a camera, a desktop capture) shows nothing, so being

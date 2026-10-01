@@ -134,6 +134,7 @@ public static class WorldStaging {
         var origins = new WorldDocumentOrigins();
 
         if (!PuckDocumentComposer.TryComposeWorldDocument(
+            catalog: catalog,
             origins: origins,
             chainBytes: out _,
             composed: out var composed,

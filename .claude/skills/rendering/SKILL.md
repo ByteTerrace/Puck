@@ -1666,7 +1666,9 @@ one mechanism the boot world's screens use (`WorldScreenMappingSet`, one per
 world, named by its world instance): a machine or a probe source instance carries
 a `world` setting (`WorldSourceInstances.WorldOf`), so the binder's
 `MachineSource` reads that world's host (`WorldScreenBinder.MachinesOf`, null for
-a world another authority runs) and `ProbeSource` opens a fault for any world but
+a world another authority runs). A session's level opens no machine source, reads
+no framebuffer extent and casts no machine light while its delivered definition
+withholds that machine's declaration. `ProbeSource` opens a fault for any world but
 the boot world, which alone runs a probe host; a camera view is a view of that
 world filmed under the level (`WorldViewNames.NestedCamera`,
 `WorldNestedScreens.Cameras`) into the residency the level renders through, after
