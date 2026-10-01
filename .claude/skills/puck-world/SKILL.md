@@ -430,7 +430,8 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
 - `world.screenshot <path.png>` REQUESTS the next composed frame including
   the overlay — the cheap pixel assertion. It arms; it does not capture:
   the stdout echo says `pending`, the file is announced on STDERR
-  (`[capture] main -> …` from the default render graph's root, or
+  (`[capture] main$overlay -> …` from a windowed World's overlay root,
+  `[capture] main -> …` from the offscreen default graph's root, or
   `[capture] world -> …` when the world is the root), so **fence a
   frame (`world.wait`) before reading it**, and a second shot armed before
   the first composes is refused by name.

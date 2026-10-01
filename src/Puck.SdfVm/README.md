@@ -81,12 +81,13 @@ fills every pixel of the view's output with the authored sky, before any tile is
 frame whose levers turn them off. The region copies are the
 residency's one upload a frame (`SdfWorldResidency.Submit`); every pass after
 it runs once per view as a pass of the view's `sdf.world` instance, into that
-instance's own output image at its render extent. The package declares those
-passes as a fragment (`Puck.Shaders.SdfWorldPackage.Fragment`) that the graph
-compiler splices, so the render graph's planner decides every barrier between
-them and the recorder (`SdfWorldPassRecorder`) records none. The render graph's
-`place` pass, not this engine, places each output in its seat rect and
-reconstructs a reduced render scale. The residency counts its upload as three
+instance's render grid. Native views use `SdfWorldPackage.NativeFragment` and
+write the output directly. Views whose render-scale ceiling is below native use
+`SdfWorldPackage.Fragment`: its final `sdf-resolve.comp` reconstructs full-output
+color from the render-grid color, which is one transient allocation. The graph
+planner decides every barrier. `place` then places the output in its seat rect,
+copying the texels exactly when the output's scheduled extent equals the rect's
+pixels and resampling them otherwise. The residency counts its upload as three
 passes, `fillers`, `bricks` and `upload` (`SdfWorldTables.PassLabels`), in a
 ledger it owns, so counts survive a rebuild of its tables, and each view's node
 counts the view's passes as `sdf.world$sky` through `sdf.world$views`, their
@@ -109,10 +110,30 @@ beam's tile planes read-only, so a buffer a pass only reads is never held in a
 read-write state. These four dispatches share indirect bounds and live view
 dimensions. Primary, surface and ambient retain the full ISA.
 Material `Soften` changes the later lighting normal; AO uses the geometric normal.
-The buffer reserves `width × height × 60` bytes at the view's extent, and the
+The buffer reserves `renderWidth × renderHeight × 64` bytes at the view's render ceiling, and the
 view's instance allocates it again beside its installed graph when that extent
 changes. It is transient: one allocation shared by every frame slot, whose
 first use in a frame the planner orders after the frame before.
+The render ceiling (`SdfViewSnapshot.RenderScale`) alone chooses the fragment and
+allocates scratch once; a smaller current grid (`ResolvedRenderScale`, such as a
+layout transition's dip) changes dispatches and the packed visibility stride
+without replacing storage or rebuilding. The full-output color is priced beside
+the ceiling targets in the node's memory account. The scheduler prices each pass
+at its current grid. Views at a native ceiling retain their ten passes, allocate
+no resolve resources and ignore the current grid. The shared reconstruction module
+serves both `place` and resolve; `SdfResolveDeviceLawTests` executes the shipped
+resolve kernel against the resample canary's analytic values.
+The existing resample canary exercises the shared filter through `place`; the
+reduced-resolution world canary exercises production package allocation and
+recording. These three paths cover the shared filter, the compiled resolve, and
+the complete world graph without a test-only package.
+Resolve bytecode loads and counts with the immutable `SdfKernelSet`, so a native
+run adds only those bytecode bytes. Its pipeline joins the residency's existing
+reloadable slots on the first reduced view, preserving native pass, resource and
+pipeline counts. Like every deployed kernel it builds without reflection, so it
+needs no shader toolchain; a reload reflects it and holds it to the host's
+interface through the same kernel-set transaction as the other SDF kernels.
+
 The `primary`, `surface`, `ambient` and `views` labels expose their separate costs;
 compare the full frame, including buffer traffic and dispatch overhead.
 The iteration count describes the selected march; the evaluation count sums
@@ -211,6 +232,28 @@ that a world document's `views.post` rows name. Each package is declared in
 `sdf-film-grain.frag.hlsl`, is the one post-process package. This project
 carries no per-pass C#.
 
+The upload also keeps GPU-only history for motion: a 48-byte rigid row per
+dynamic slot and a compact 64-byte object-to-world matrix per mesh draw.
+Before overwriting the current tables, it copies the rows changed in the
+preceding consumed frame. The initial upload seeds history; after motion stops,
+one last copy settles its changed rows, and later still frames copy nothing.
+These copies add device-local bytes and counted buffer copies, with no second
+host upload. Mesh matrices live separately so the host-written mesh region's
+CPU shadow stays exact.
+
+Previous-transform transfers contribute their range lengths to `gpu.copies.buffer-bytes`
+in the existing upload pass. A dynamic row contributes 48 bytes and a mesh matrix
+64 bytes; the first still frame settles the preceding change, and later still
+frames contribute zero. Host-visible upload bytes remain unchanged.
+
+Each view instance retains the camera and sample grid of its last completed
+render. A cut, view change, or gap invalidates that correspondence.
+`frame/sdf-reprojection.hlsli` combines it with the visibility record's winning
+slot or mesh triangle to recover the previous pixel and ray distance.
+`world.debug-view motion` shows previous-minus-current motion: red and green
+are 0.5 plus the displacement in pixels divided by 32, blue marks valid history,
+and invalid history is black.
+
 ## Pipelines build off the frame thread
 
 Creating a compute pipeline is where the driver translates a kernel to native
@@ -244,7 +287,11 @@ its `NotReadyReason`, such as "the engine's pipeline set is building (5 of
 A residency is `IsReady` once its set is installed and its tables hold its
 first captured frame; the World is ready once the world's residency is and the
 render graph's root has rendered over a completed view, which is the fact
-`world.wait ready` waits on. A
+`world.wait ready` waits on. A host that produces frames on its own thread and
+has nothing to present until the builds finish blocks between frames on
+`WaitPipelineBuilds`, which waits out the set's builds and a kernel reload's
+without taking or starting anything, so the next frame builds, refuses or
+installs as it would had frames been produced meanwhile. A
 `views.graphs` pane is not part of any residency: it is its own render-graph
 instance with its own node, so it compiles and builds its pipelines without
 waiting for the SDF set. A residency keeps its lease until a device loss or
@@ -453,6 +500,33 @@ and waits, then await capture completion off the pump. Cancellation of that
 await leaves the capture accepted; keep its unique path reserved until it
 finishes. GPU readback and PNG writing remain synchronous render work, and
 completion does not promise an exact simulation tick or durable disk storage.
+
+## Presentation picking
+
+The presentation picker is `SdfWorldPasses.PickerOf`: `Request` samples normalized
+view coordinates once, and `Demand` keeps a hover current with at most one copy
+in flight: a moved coordinate waits for it and records when it completes, and an
+answer for an earlier coordinate is published with its own pixel. Ordinary hover
+copies the selected visibility pixel's V, C and L.x words (32 bytes), including
+its step and primary-query counts and the winning transform slot. An inspector
+request copies 48 bytes through the packed geometric normal and captures that
+frame's camera, jitter and cut revision, so point reconstruction never uses a
+later camera. Either copy carries the frame's dispatch box after the record, and
+a pixel outside it answers nothing (`SdfVisibility.IsCurrent`, the rule the hit
+passes read as `SDF_VISIBILITY_CURRENT`). The transform slot resolves against the
+transform table of the frame the record was rendered from
+(`SdfPickResult.Transform`).
+Composed pick maps route identity and material names to the same captured emitter,
+rebasing mesh draw ordinals into that emitter's table. An emitter with no material
+names still reports an unavailable name.
+
+The graph owns transfer and host-read barriers. The frame's immutable `ISdfPickMap`
+travels with the request. SDF identity names a program instance ordinal plus one,
+mesh identity a draw ordinal; the winning shape's exact transform slot stays in
+L.x, separate from its instance's conservative bound slot. The remaining L words
+are reserved, and anonymous lanes read the existing transform row. The record
+remains 64 bytes. Nothing in this picker enters simulation input or grants edit
+authority.
 
 ## Documentation
 

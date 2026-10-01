@@ -1,0 +1,318 @@
+{
+  "id": "editor-inspector",
+  "title": "The shared inspector text names a GPU surface and toggles the existing editor overlay",
+  "binding": "A fixed camera looks at a single box. The presentation-only pointer stays at its front face. Enabling the inspector demands the shared asynchronous visibility pixel with the captured normal and material address, and changes the composed root image. Disabling returns to the same pixels. The discriminating leg keeps the inspector off, so neither its panel nor its surface readback exists. Both legs query the live placement cost and top list; these counts come from the rendered program. The normal assertion is geometric, and the panel proof reads actual composed pixels.",
+  "bootShape": "windowed",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/editor-inspector/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pointer",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.inspect",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.inspect",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cost",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cost",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.inspect",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pointer",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "framesAgree",
+        "name": "panel-toggle-changes-composed-pixels",
+        "before": "before.png",
+        "after": "panel.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "off-restores-composed-pixels",
+        "before": "before.png",
+        "after": "after.png",
+        "agree": true
+      },
+      {
+        "type": "line",
+        "name": "surface-has-captured-material",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "material=cube.palette[0] index=",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "surface-has-exact-normal",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "normal=0,0,1 distance=",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "live-cost-names-one-instance",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "inspected: prototype=cube shapes=1 owned-words=",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "cost-reports-scope-and-count",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "instances=1 scope-clamps=0",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "pointer-override-clears",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.view.pointer: override cleared]",
+        "present": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/editor-inspector/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pointer",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.inspect",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.inspect",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cost",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cost",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.inspect",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pointer",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "framesAgree",
+        "name": "panel-toggle-changes-composed-pixels",
+        "before": "before.png",
+        "after": "panel.png",
+        "agree": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "off-restores-composed-pixels",
+        "before": "before.png",
+        "after": "after.png",
+        "agree": true
+      },
+      {
+        "type": "line",
+        "name": "surface-has-captured-material",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "material=cube.palette[0] index=",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "surface-has-exact-normal",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "normal=0,0,1 distance=",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "live-cost-names-one-instance",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "inspected: prototype=cube shapes=1 owned-words=",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "cost-reports-scope-and-count",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "instances=1 scope-clamps=0",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "pointer-override-clears",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.view.pointer: override cleared]",
+        "present": true
+      }
+    ]
+  }
+}

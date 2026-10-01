@@ -214,6 +214,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             Bindings = m_bindings,
             BufferFactory = new DirectXGpuBufferFactory(deviceContext: this),
             Naming = new DirectXGpuObjectNaming(deviceContext: this),
+            TimestampFactory = new DirectXGpuTimestampFactory(deviceContext: this),
             CommandPoolFactory = new DirectXGpuCommandPoolFactory(deviceContext: this),
             ImageFactory = new DirectXGpuImageFactory(deviceContext: this),
             PipelineFactory = new DirectXGpuPipelineFactory(deviceContext: this),

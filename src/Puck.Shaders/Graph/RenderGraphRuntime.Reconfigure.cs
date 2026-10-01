@@ -287,8 +287,11 @@ public sealed partial class RenderGraphRuntime {
         var oldProducers = m_producers;
         var oldSources = m_sources;
         var captured = m_set.Instances[m_captureInstance].Name;
+        var captureStillArmed = (m_capture.PendingPath is not null);
 
-        m_captureInstance = set.IndexOf(name: captured);
+        m_captureInstance = ((captureStillArmed && m_captureFollowsRoot) ? rootIndex : set.IndexOf(name: captured));
+
+        if (!captureStillArmed) { RemapForwardedConvergence(set: set); }
 
         if (m_captureInstance < 0) {
             m_capture.Refuse(error: new InvalidOperationException(message: $"The render graph no longer has an instance '{captured}'."));
@@ -310,11 +313,22 @@ public sealed partial class RenderGraphRuntime {
             new RenderGraphSchedule(set: set),
             new RenderGraphSchedule(set: set),
         ];
+        ForgetReplacedFragments(kept: kept, set: set);
         m_set = set;
         m_standInReads = new string?[count];
         m_taintedReads = new string?[count];
         m_unproduced = 0;
         refusal = null;
+
+        // The pending request follows this composition's indices and dependency closure. A changed composition
+        // starts its converging sample sequence again; a request already forwarded belongs to the frame that served it.
+        if ((m_capture.PendingPath is not null) && (m_convergence?.Request is { } pendingCapture)) {
+            if ((pendingCapture.Converge > 0) && !CanConverge(index: m_captureInstance)) {
+                m_capture.Refuse(error: new InvalidOperationException(message: "A convergence capture requires a rendered graph instance."));
+            } else {
+                BeginConvergence(captured: m_captureInstance, request: pendingCapture);
+            }
+        }
 
         Retire(
             nodes: oldNodes,

@@ -8,11 +8,13 @@ namespace Puck.SdfVm;
 /// (<see cref="ShaderInterfaceHlsl"/>, checked in beside the kernels and owned by <c>puck shaders generate</c>), and
 /// the engine creates each pipeline from its interface's layout and binds by member name, so no binding number or
 /// register is written by hand on either side.
-/// <para>Both pass interfaces are the <c>sdf.world</c> and <c>sdf.bricks</c> packages' (<see cref="RenderGraphPackageCatalog"/>),
+/// <para>The native pass interfaces are the <c>sdf.world</c> and <c>sdf.bricks</c> packages' (<see cref="RenderGraphPackageCatalog"/>),
 /// laid out as <see cref="ShaderPipelineParameterLayout.ForPackage"/> lays every package's: the standard frame group
 /// (<see cref="ShaderFrameInterface.FrameGroupMembers"/>), written once a frame, then a pass block holding the extent and
 /// every value in ordinal name order, so a graph document whose config names the same values reads the same block.</para>
-/// <para><see cref="World"/> serves every per-view dispatch: sky, mask, beam, cull-args, primary, surface, ambient,
+/// <para><see cref="ResolveParameters"/> serves the optional output reconstruction pass with its own resource bindings
+/// and the same frame values. Its common values copy by declared member offsets; the native pass block stays unchanged.</para>
+/// <para><see cref="World"/> serves the native per-view dispatches: sky, mask, beam, cull-args, primary, surface, ambient,
 /// shadow and the three views variants. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>): its
 /// World group is the residency's tables (<see cref="SdfWorldPackage.Tables"/>), one set per upload ring slot that every
 /// pass of every view binds, and its pass group one set per frame slot and pass, whose block holds the view's render
@@ -48,6 +50,10 @@ public static class SdfWorldInterfaces {
         config: null,
         package: RenderGraphPackageCatalog.SdfWorld,
         members: SdfWorldPackage.Members
+    ).Stamped(stamp: SdfIsaHlsl.Stamp);
+    /// <summary>The reconstruction pass's interface, with the same frame values as the traversal passes.</summary>
+    public static ShaderPipelineParameterLayout ResolveParameters { get; } = ShaderPipelineParameterLayout.ForPackage(
+        config: null, package: "sdf-resolve", members: SdfWorldPackage.ResolveMembers
     ).Stamped(stamp: SdfIsaHlsl.Stamp);
 
     /// <summary>Gets the interface every per-view SDF dispatch reads.</summary>
@@ -107,6 +113,7 @@ public static class SdfWorldInterfaces {
         (IncludePath(shaderInterface: World), World.Stamped(stamp: stamp)),
         (IncludePath(shaderInterface: BrickBake), BrickBake.Stamped(stamp: stamp)),
         (IncludePath(shaderInterface: Mesh), Mesh),
+        (IncludePath(shaderInterface: ResolveParameters.Interface), ResolveParameters.Interface.Stamped(stamp: stamp)),
     ];
 
     private static string IncludePath(ShaderInterface shaderInterface) =>

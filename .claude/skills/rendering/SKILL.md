@@ -555,9 +555,17 @@ These are one-line cautions; the owning pages hold the derivations.
   already in the driver, and disposes the entry. A residency is ready
   (`SdfWorldResidency.IsReady`) once its set is ready and its tables are
   built from its first captured frame, and the world is ready
-  (`WorldRenderProbe.IsReady`) once the world's residency is and the render
-  graph's root has rendered over a completed world output. That is the one
-  readiness fact: the console
+  (`WorldRenderProbe.IsReady`) once the world's residency is, the render
+  graph's root has rendered over a completed world output, and every instance
+  whose node has submitted has a frame completed on the GPU
+  (`RenderGraphRuntime.FirstFramesCompleted`, over
+  `ShaderPipelineRenderNode.HasCompletedSubmission`), and then once the root
+  has produced one more frame (`WorldReadinessLatch`): the frame that
+  completes the conditions is the slowest, and the fixed-step host catches up
+  the ticks it cost in one iteration. So a GPU readback a script asks for
+  after it (a pick, a counted pass) waits on no cold device's first frames,
+  and a few ticks after it are a few frames. That is the one readiness fact:
+  the console
   waits on it with `world.wait ready <seconds>`, and whatever reads counted
   world passes (`puck counters`, the `world-counters` canary, `puck qualify`)
   waits on it, never on a tick count. The pass-pipeline cache counts the
@@ -575,10 +583,15 @@ These are one-line cautions; the owning pages hold the derivations.
   variable name (`SdfIsaHlsl.Stamp`, `ShaderInterface.Stamp`), so a kernel
   compiled against another instruction set, or binding anything the host does not
   place where it places it, refuses the reload and the residency keeps its
-  kernels. Boot reflects nothing: the deployed tree is the host's own build. A new SDF pipeline is a row in
-  `SdfWorldTables.PipelineLayouts.Specs`, never a create call in the tables. A harness that drives a residency polls
-  `SdfWorldResidency.IsReady`
-  (`SdfTestPipelines.ProduceFirstFrame` in `tests/Shared`, whose `Kernels` is the one fake kernel set);
+  kernels. Boot reflects nothing, since the deployed tree is the host's own build,
+  and neither does a reduced view's first resolve build (`SdfWorldPipelines.BuildResolve`),
+  which takes no reflector and needs no shader toolchain; its kernel is the set's
+  own, deployed or reflected by the reload that installed it. A new SDF pipeline is a row in
+  `SdfWorldTables.PipelineLayouts.Specs`, never a create call in the tables. A harness that drives a residency produces frames
+  and blocks between them on `SdfWorldResidency.WaitPipelineBuilds`, never spinning
+  (`SdfTestPipelines.ProduceUntil` and `ProduceFirstFrame` in `tests/Shared`, whose
+  `Liveness` is the one bound a harness gives thread-pool work and whose `Kernels`
+  is the one fake kernel set);
   `SdfPipelineBuildLivenessLawTests` holds the factory and proves the pump
   still drains the console, and that a device loss or the last release waits
   for exactly the `BuildConcurrency` creations in the driver, counted through
@@ -592,7 +605,8 @@ These are one-line cautions; the owning pages hold the derivations.
   once) and taken by a later one, never the advance that started it, however
   fast it finished, so the frame an install lands in never depends on the
   pool's timing; it allocates the candidate's resources on the frame thread when
-  the build is taken, and presents the installed graph meanwhile; its install drains
+  the build is taken, and presents the installed graph meanwhile (a node
+  `ShownAtItsExtent` presents its last image while a resize is outstanding); its install drains
   nothing, and the replaced graph retires once the node's latest submission has
   completed (at once when it has), except the images behind the two most
   recently published surfaces, which `ShaderPipelineRenderNode.Retirement.cs`
@@ -742,6 +756,24 @@ These are one-line cautions; the owning pages hold the derivations.
   static. A new emitter that writes a slot without reporting it renders stale.
   `WorldSceneMovedTransformsLawTests` pins a still frame at zero packed rows and
   a frame moving k bodies at k leaf ranges.
+- **Motion reads the preceding consumed tables and rendered camera.**
+  `SdfWorldTables.Motion.cs` copies prior changed rigid rows and compact mesh
+  matrices on the GPU before their current regions are overwritten. One copy
+  settles the last moving frame, then still frames copy nothing. A row with no
+  previous pose of its own is seeded from the current one after the copies:
+  every dynamic row on the first upload, a program upload and a frame owing
+  every row; a range an emitter commits with `reseat`
+  (`SdfMovedTransforms.Commit`, from `WorldTransformOwners.Reseats`: a first
+  pack, a pack after a vacancy, a discontinuity); a mesh draw whose
+  `SdfMeshDraw.Identity` at its index changed. A new emitter of transforms or
+  draws states owner changes through those two, never by index. Keep host upload
+  bytes unchanged. `SdfWorldTables.PoseRevision` moves only on an upload that
+  changes a pose, and `PreviousPoseRevision` names the poses the previous tables
+  advanced from; `SdfTemporalHistory` continues an instance's history only
+  while they are the poses its preceding render held, and retains its preceding
+  completed camera even when temporal sampling is off; resets invalidate it.
+  `frame/sdf-reprojection.hlsli` is the one visibility reprojection
+  implementation, shared by motion diagnostics and reconstruction.
 - **Device identity is recorded, never branched on.** Each backend fills
   `IGpuDeviceContext.Identity` (`GpuDeviceIdentity`) when it creates the device
   — Vulkan from `vkGetPhysicalDeviceProperties2` with
@@ -1028,6 +1060,10 @@ For a repeatable before-and-after reading, `puck counters` boots
 `puck.counters.report.v1` report, and exits 1 naming the kind, pass and node of
 any deterministic count the backends disagree on;
 `puck counters compare <before> <after>` holds two reports to each other.
+Use `--world` and `--script` for another authored workload. The sky-still,
+sky-drift, sky-twinkle and sky-cycle fixtures use `tests/Puck.Counters/sky.script.txt`
+to isolate each sky change with cadence enabled. Report workload and script
+identity must match the ceilings; absent cadence samples are not measured zeros.
 `puck counters --check` holds every render node's deterministic and
 per-backend-deterministic submission counts, pass by pass and outside every
 pass, to `tests/Puck.Counters/counters.ceilings.json`
@@ -1370,13 +1406,17 @@ The main view runs through the runtime. `WorldRootGraph`
 (the first view's `sdf.world` instance) and `world$2..world$K` for K =
 `WorldRootGraph.ViewsOf` (the most non-instance slots of any `views.layouts`
 row or `PlayerRoster.MaxSlots`; each view is an instance of its own), then
-the root `main`, which reads `world` and every pane and runs, when K > 1 or a
+the scene `main`, which reads `world` and every pane and runs, when K > 1 or a
 tonemap is on, one `place` pass per view (`main$view$<n>`, n from 1; view 1's
 reads `world` through a second version beside `main$world`), then one `place`
 package pass per `views.graphs` instance a layout slot names (the pass named
 after the instance), then one pass per `views.post` row in order (named by the
-row, running its package, each reading the frame the pass before it wrote), then
-`overlay` in a windowed World. The tonemap is each view's place pass: when
+row, running its package, each reading the frame the pass before it wrote). That
+is the scene (`WorldRootGraph.Scene`). A windowed World draws the overlay in an
+instance of its own, `main$overlay` (`WorldRootGraph.OverlayInstance`, one
+`overlay` pass), appended over whatever the display would otherwise show
+(`AppendOverlay`, last in `WorldViewGraphHost.TryCompose`), which is then the
+root; nothing composed between the scene and the overlay covers the HUD. The tonemap is each view's place pass: when
 `render.tonemap` is `Filmic` and no debug view is on
 (`WorldViewGraphHost.ShowsDebugView`), every view pass sets the `place` config's
 `tonemap` (`RenderGraphPackageCatalog.PlaceTonemap`), which puts the view it
@@ -1385,9 +1425,9 @@ framing, written beside the view untonemapped, so it reaches the display exact;
 a pane is display-referred (a pane shader applies its own tonemap, as the moth
 studio's does), so the root never tonemaps a pane; and the HUD is never
 tonemapped. A tonemapped lone whole-display view is shown, never stood in for,
-so its pass runs. `main` is the root whenever anything is drawn over the world,
+so its pass runs. `main` is the scene whenever anything is drawn over the world,
 panes and the tonemap included, and always when K > 1; otherwise `world` is
-the root. With `views.root` set the runtime
+the scene. Without an overlay the scene is the root. With `views.root` set the runtime
 runs the rows alone, and the document may author no `views.post`. A config that
 does not bind is refused when the document validates, naming the row
 (`views.post[<i>].config`), live edits included; the boot's pre-flight
@@ -1445,14 +1485,20 @@ layout change places panes one frame later, and a layout transition's
 render-scale dip does not reach panes. A pane slot adds no SDF view. Each SDF
 view of the last composed frame is placed through
 `WorldViewGraphHost.PlaceViews`, which `PrepareGraph` calls, and `PlaceView`
-(footprint: rect at render scale; placement: rect with
-`world.upscale-sharpness`), so `place` does the render-scale reconstruction.
+(footprint: native rect; placement: rect with `world.upscale-sharpness`).
+The view package reconstructs a reduced render grid to that native output
+before `place` composes it, and `place` resamples it once more unless the
+scheduled extent equals the rect's pixels. The presenter sets each view's
+`RenderScale` to the render-scale ceiling and a layout transition's dip into
+`ResolvedRenderScale`, the grid inside it, which allocates and rebuilds nothing;
+a view at a native ceiling does not dip (`WorldLayoutTransitionScaleLawTests`,
+`SdfWorldPassesLawTests.ADipInsideTheCeilingRendersEveryFrameWithoutABuildOrAnAllocation`).
 The first view's footprint is always added, since it is the base, and before
 the world's first frame the first view is placed hidden over the whole display
 so the world is still scheduled. A view is shown only once its instance has
 completed an image (`WorldFramePresenter.ViewRendered`,
 `RenderGraphRuntime.TryLatestImage`),
-and a lone full-display view at native scale is not shown, so `main` stands for
+and a lone full-display view without tonemap is not shown, so `main` stands for
 `world` and parity holds (`WorldViewPlacementLawTests`). Views, like panes, are
 placed one frame after a layout change. The first view's place pass carries
 the `place` config's `letterbox`, so pixels no view or pane covers show the
@@ -1461,6 +1507,26 @@ display pays nothing for it. While the first view is not shown, its pass still
 letterboxes the whole output when `RenderGraphPlacement.Uncovered` says part of
 the display lies outside every shown rect (`WorldViewGraphHost.PlaceViews`
 counts it covered only when one shown view or pane covers it whole).
+
+Editor comparisons wrap the scene through `WorldComparisonGraph`: one
+ordinary static `source-rgba` upload per active hold and ordered `place` passes
+compose the result, and the overlay's instance draws over it, so a comparison
+never covers the console, cursor, toasts or inspector. `WorldCompareCapture`
+captures the scene's existing instance target (`ComparisonLiveRoot`), never the
+wrapper or the overlay, and crops by the seat viewports recorded for the frame
+the capture names (`FrameCaptureResult.Frame`, the serving node's frame counter
+as that frame's render left it), retained for `WorldCompareCapture.RetainedFrames`
+frames; a frame that does not render is recorded again under the same ordinal,
+so a paused capture uses the last rendered layout. Preserve that boundary when
+changing capture or graph composition. `WorldFrameComparison` owns cropped CPU pixels while the mode is off;
+off removes the wrapper and upload instances. Mode and wipe edits write the
+existing pass parameters; bound axis input must neither capture nor rebuild.
+The comparison branches in `place.comp.hlsl` and ordinary reconstruction use
+`Assets/Shaders/Shared/reconstruction.hlsli`. A live seat crop carries its
+nonzero source origin and clamps each tap within its own crop. Keep the
+zero-origin reconstruction laws and the `editor-compare` canary on both
+backends when changing that helper. The command and pixel-difference contract
+belongs to `src/Puck.World/README.md` under The world as data.
 
 Camera views and sessions are instances too (`WorldViewInstances`,
 `src/Puck.World.Client/Sources`): each camera a screen, a HUD frame or a probe
@@ -1478,7 +1544,17 @@ registration's camera into the frame after them
 presenter's own views (`WorldScreenBinder.HostView`), so a stale seat index
 never renders a camera. The root supplies the display extent through
 `WorldFramePresenter.ResizeDisplay`; own cameras and viewports use it even
-when a probe export widens the shared residency's requested extent.
+when a probe export widens the shared residency's requested extent. A camera
+projects in normalized image coordinates, so its aspect is its rect's, never its
+grid's: a render-scale grid, a transition's dip or a view output still at its old
+extent while a resize builds only resamples, and `place` stretches it back. The
+root alone is shown at its own extent, so the runtime marks it
+`ShaderPipelineRenderNode.ShownAtItsExtent`: while its requested extent builds or
+stays refused it presents its last image, and on every node a capture reads only
+an image rendered at the extent last requested of it (`UnservedCaptureReasonOf`
+names the extent it waits for). Never tie a camera's aspect to a node's
+installed extent; that distorts every placed view during a resize or a layout
+transition.
 A session screen renders an `SdfWorldResidency` of its
 own, one view and no brick pool, from the destination's own frame source on its
 own clock, released in `ReconcileViewResidencies` once the session is gone. A
@@ -1515,8 +1591,10 @@ mapping per shown view and pane, in drawing order, named by the instance's
 `RenderGraphInstance.Handle` at the extent the runtime's latest schedule
 renders it at (`IRenderGraphInstances.Latest`), into `Panes` and the host's
 `SourcePanePicker`. A steady frame publishes the mappings it published before
-and allocates nothing (`WorldViewPaneMappingLawTests`); a view the root stands
-for is no pane. The pane pointer reads its instance's published mapping
+and allocates nothing (`WorldViewPaneMappingLawTests`); a lone whole-display
+view, whether the root stands for it or tonemaps it, is no pane and is never
+hovered or outlined, but its whole-display mapping is `DisplayView`, which the
+walk starts from where no pane holds the point. The pane pointer reads its instance's published mapping
 (`TryGetPane`), so it maps the pane as the display last showed it. A hit on a
 rendered source continues through `RenderGraphHitWalk` (`src/Puck.Hosting/Graph`)
 up to `RenderGraphInstanceSet.NestingDepth`; `WorldViewGraphHost.Walk` runs it
@@ -1782,6 +1860,26 @@ Then look at it: `dotnet run --project src/Puck.World -c Release --
 `puck_exec` and `puck_capture_frame` against the live process. A claim about
 how something renders is unverified until a capture has been inspected on both
 backends.
+
+## Converging captures
+
+A scheduled capture may author `converge: N` (1 through 256). The graph runtime
+renders its dependencies through one frozen presentation snapshot, delays the
+readback until sample N, and releases the snapshot on completion or refusal.
+The presentation interval is zero. `SdfTemporalHistory` owns each instance's
+eight-sample Halton sequence and epoch resets; the shared viewport lens applies
+the same render-pixel offset to the march and mesh projection. While a capture
+converges the index is the runtime's count (`RenderGraphConvergence.Samples`,
+handed to each contributing package by `BeginConvergence`), never the
+instance's own renders: a frame the runtime does not count renders the same
+sample again. Ordinary rendering keeps jitter zero until reconstruction is
+enabled, and cadence enforces it: `SdfWorldPasses.IsUnchanged` lets a view stand
+only while `SdfTemporalHistory.Stands` finds a render now would feed the same
+temporal inputs (jitter always; previous view and poses where the pass reads
+motion). A new temporal input a pass reads joins `Stands` in the same change.
+`SdfTemporalHistoryLawTests`, `SdfWorldPassesLawTests.Temporal` and the
+runtime's convergence laws hold these. Run the `temporal-jitter` and
+`temporal-motion` canaries on both backends after changing this contract.
 
 ## Route adjacent work
 

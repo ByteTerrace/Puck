@@ -22,7 +22,10 @@ public static class DebugViewModes {
         "overshoot",
         "evals",
         "visibility",
+        "motion",
     ];
+    /// <summary>The <c>motion</c> view's mode value, which reads the previous view and transform tables.</summary>
+    public static readonly int Motion = Array.IndexOf(array: Names, value: "motion");
 
     /// <summary>Gets the number of debug view modes.</summary>
     public static int Count => Names.Length;

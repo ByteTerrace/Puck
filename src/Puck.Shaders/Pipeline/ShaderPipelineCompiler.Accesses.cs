@@ -10,7 +10,7 @@ namespace Puck.Shaders;
 // frame follows the instance's last previous-role use, or its last current-role use when nothing reads it as the
 // previous frame, and the first previous-role use follows the last current-role use. The planner walks those sequences
 // once, at compile time, and gives every access its exact prior state and barrier; the render node records exactly
-// those and keeps no layout state of its own. A transient storage has one instance every slot shares, and the same
+// those and keeps no layout state of its own. A transient or retained storage has one instance every slot shares, and the same
 // steady state holds for it one frame apart: its first use of a frame follows the previous frame's last, and the barrier
 // planned between them orders the two frames on the queue.
 public sealed partial class ShaderPipelineCompiler {
@@ -325,7 +325,7 @@ public sealed partial class ShaderPipelineCompiler {
             comparer: StringComparer.Ordinal
         ).Select(selector: resource => {
             var successor = successors.GetValueOrDefault(key: resource.Name);
-            var retained = (resource.History || outputs.Contains(item: resource.Name));
+            var retained = (resource.History || roots[storageOf[resource.Name]].Retained || outputs.Contains(item: resource.Name));
 
             return new ShaderPipelinePlannedResource(
                 ConsumedAtPassIndex: (((successor is not null) && writers.TryGetValue(

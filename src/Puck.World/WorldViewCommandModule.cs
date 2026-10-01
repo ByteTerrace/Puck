@@ -36,7 +36,7 @@ namespace Puck.World;
 /// <c>world.view.state</c> function headless; <see cref="WorldCursorFeed"/> is presentation-only, so it is optional
 /// (default <see langword="null"/>) and <c>world.view.pointer</c> refuses by name when it is absent, as
 /// <c>world.view.panes</c> does without the GPU presentation's <see cref="WorldViewGraphHost"/>.</para></remarks>
-internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null, WorldViewGraphHost? graphs = null) : ICommandModule {
+internal sealed partial class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null, WorldViewGraphHost? graphs = null) : ICommandModule {
     // The plan-wide clear-to-absent tokens for a live override: 'auto' (and '-') clear it back to the composer's own
     // selection; any other token is the forced name.
     private static string? ClearOrName(string token) =>
@@ -338,13 +338,15 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.pointer",
-            description: "Echoes the drawn cursor's last composed frame: world.view.pointer — the seat the pointer rides (1-based; the keyboard's seat, the one WorldPointerSink resolves the mouse onto), the cursor position in CLIENT pixels (position=), the same position mapped into the fixed FRAME extent the overlay draws in (frame= — the two diverge when the OS window is resized; WorldCursorFeed.Decide owns the mapping) and normalized within the seat's viewport (local=), the viewport rect, the visibility verdict (visible | no-position | no-view | outside-viewport | orbit-drag — WorldCursorFeed's one visibility rule), the held pointer buttons (buttons=, L/R/M in that order or '-' — the live store state, so an injected press is assertable before anything acts on it), the live hover target (hover=none, or the hovered HUD panel's label, else the hovered display pane's, pane '<instance>'), and the seat's SYSTEM-RELEASE generation (syscount= — WorldPointer.SystemReleaseCount: how many times the store has force-cleared this seat's held buttons without a genuine release event; an edge-deriving consumer compares this against the value it captured at press time to tell a synthetic release from a real one). A query (always echoes) — the pipe-assertable pointer read, the world.view.camera sibling: live per-seat presentation state nothing else can echo.",
-            handler: (context, args) => ((CommandResult.RequireNoArguments(
-                args: args,
-                verb: "world.view.pointer"
-            ) is { } refusal)
-            ? refusal
-            : DescribePointer()),
+            description: "Echoes the drawn cursor's last composed frame: world.view.pointer [<client-x> <client-y>|clear] — optional finite coordinates inside the client extent override only the presentation cursor (host Console only); clear restores the real pointer feed. With no arguments it echoes the seat the pointer rides (1-based; the keyboard's seat, the one WorldPointerSink resolves the mouse onto), the cursor position in CLIENT pixels (position=), the same position mapped into the fixed FRAME extent the overlay draws in (frame= — the two diverge when the OS window is resized; WorldCursorFeed.Decide owns the mapping) and normalized within the seat's viewport (local=), the viewport rect, the visibility verdict (visible | no-position | no-view | outside-viewport | orbit-drag — WorldCursorFeed's one visibility rule), the held pointer buttons (buttons=, L/R/M in that order or '-' — the live store state, so an injected press is assertable before anything acts on it), the live hover target (hover=none, the hovered HUD panel, a demanded GPU placement/body identity, or the display pane), and the seat's SYSTEM-RELEASE generation (syscount= — WorldPointer.SystemReleaseCount: how many times the store has force-cleared this seat's held buttons without a genuine release event; an edge-deriving consumer compares this against the value it captured at press time to tell a synthetic release from a real one). A query (always echoes) — the pipe-assertable pointer read, the world.view.camera sibling: live per-seat presentation state nothing else can echo.",
+            handler: (context, args) => Pointer(args: args, context: context),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.view.pick",
+            description: "Requests or reads a presentation-only GPU pixel pick: world.view.pick <instance> [<x> <y>] — normalized coordinates in [0,1) request one visibility pixel; omitting them echoes pending or the completed geometry kind, source ordinal, material, host placement or body, and the winning shape's transform slot. The asynchronous readback belongs to the captured frame's identity table and never sends simulation input.",
+            handler: (context, args) => Pick(args: args),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(

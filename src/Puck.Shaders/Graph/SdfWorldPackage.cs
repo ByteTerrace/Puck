@@ -15,7 +15,7 @@ namespace Puck.Shaders;
 /// one allocation shared by every frame slot, and scales with the counts its host resolves: the view's extent, one
 /// viewport, its tiles at <see cref="TileSize"/>, and the program's instances and instance-mask words.</para>
 /// </summary>
-public static class SdfWorldPackage {
+public static partial class SdfWorldPackage {
     /// <summary>The pass-group value holding the render extent in pixels: the per-view visibility record stride.</summary>
     public const string ImageExtent = "imageExtent";
     /// <summary>The pass-group value holding the tiles per viewport, columns then rows: the cull buffer's per-viewport
@@ -48,6 +48,10 @@ public static class SdfWorldPackage {
     /// <summary>The pass-group value holding the off-axis frustum's tangent-space center offset, zero for a symmetric
     /// camera (<c>float2</c>).</summary>
     public const string FrustumOffset = "frustumOffset";
+    /// <summary>The ray offset in render pixels, with positive Y down (<c>float2</c>).</summary>
+    public const string Jitter = "jitter";
+    /// <summary>The number of preceding rendered samples in the current history epoch (<c>uint</c>).</summary>
+    public const string HistoryFrames = "historyFrames";
     /// <summary>The pass-group value holding the forward distance of the view camera's own near plane, in world units,
     /// zero for a camera whose image begins at its eye (<c>float</c>).</summary>
     public const string NearDistance = "nearDistance";
@@ -133,6 +137,13 @@ public static class SdfWorldPackage {
     public const string ProgramWords = "sdfWords";
     /// <summary>The dynamic-transform table, three float4 rows per slot.</summary>
     public const string DynamicTransforms = "sdfDynamicTransforms";
+    /// <summary>The preceding consumed frame's rigid transforms, copied entirely on the device.</summary>
+    public const string PreviousDynamicTransforms = "sdfPreviousDynamicTransforms";
+    /// <summary>The preceding consumed frame's mesh matrices, four float4 rows per draw.</summary>
+    public const string PreviousMeshTransforms = "sdfPreviousMeshTransforms";
+    /// <summary>The preceding rendered camera: position and validity, right and tangent, up and aspect, forward,
+    /// extent, and near distance with jittered frustum offset.</summary>
+    public const string PreviousView = "previousView";
     /// <summary>The frame-local instance grid.</summary>
     public const string FrameInstanceGrid = "sdfFrameInstanceGrid";
     /// <summary>The per-tile instance masks, read by the beam and the hit passes.</summary>
@@ -257,6 +268,9 @@ public static class SdfWorldPackage {
         Value(name: TanHalfFieldOfView, type: ShaderValueType.Float),
         Value(name: AspectRatio, type: ShaderValueType.Float),
         Value(name: FrustumOffset, type: ShaderValueType.Float2),
+        Value(name: Jitter, type: ShaderValueType.Float2),
+        Value(name: HistoryFrames, type: ShaderValueType.Uint),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: 6, name: PreviousView, type: ShaderValueType.Float4),
         Value(name: NearDistance, type: ShaderValueType.Float),
         Value(name: FarDistance, type: ShaderValueType.Float),
         Value(name: DebugMode, type: ShaderValueType.Uint),
@@ -299,6 +313,8 @@ public static class SdfWorldPackage {
     public static IReadOnlyList<ShaderInterfaceMember> Tables { get; } = [
         Table(element: ShaderValueType.Uint4, name: ProgramWords),
         Table(element: ShaderValueType.Float4, name: DynamicTransforms),
+        Table(element: ShaderValueType.Float4, name: PreviousDynamicTransforms),
+        Table(element: ShaderValueType.Float4, name: PreviousMeshTransforms),
         Table(element: ShaderValueType.Uint, name: FrameInstanceGrid),
         Table(element: ShaderValueType.Float4, name: ScreenSurfaces),
         Table(element: ShaderValueType.Float4, name: ScreenMappings),
@@ -358,7 +374,7 @@ public static class SdfWorldPackage {
     /// one output the view's color. Every pass counts its kernels' march steps and texels written into the work counters
     /// (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>): the mesh pass each fragment it writes to its
     /// target.</summary>
-    public static RenderGraphPackageFragment Fragment { get; } = new(
+    public static RenderGraphPackageFragment NativeFragment { get; } = new(
         InputVersions: [],
         OutputVersions: [Color],
         Passes: [

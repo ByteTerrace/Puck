@@ -14,7 +14,7 @@ namespace Puck.SdfVm.Tests;
 public sealed class SdfFrameBlockLawTests {
     // The values the writer leaves as their zero default on every frame: the extent, which the node writes, and the view
     // base, since each instance renders its one view at row zero.
-    private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase];
+    private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase, SdfWorldPackage.PreviousView];
     // A camera basis none of whose components is zero.
     private static readonly Quaternion Basis = Quaternion.CreateFromYawPitchRoll(pitch: 0.4f, roll: 0.5f, yaw: 0.3f);
     // A grid none of whose components is zero.
@@ -120,6 +120,7 @@ public sealed class SdfFrameBlockLawTests {
             width: 300u
         );
 
+        SdfFrameBlock.WriteTemporal(block: block, jitter: new Vector2(x: 0.25f, y: -0.125f), historyFrames: 3);
         var parameters = SdfWorldInterfaces.WorldParameters;
 
         // The row names the pass, so the view's writer leaves it to the recorder.

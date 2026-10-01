@@ -19,7 +19,7 @@ public sealed class SdfKernelSetLawTests {
     private static readonly string[] Stems = [
         "sdf-world-ambient", "sdf-beam", "sdf-brick-bake", "sdf-cull-args",
         "sdf-instance-cull", "sdf-world-primary", "sdf-world-shadow", "sdf-sky", "sdf-world-surface", "sdf-world-views",
-        "sdf-world-views-core", "sdf-world-views-folds",
+        "sdf-world-views-core", "sdf-world-views-folds", "sdf-resolve",
     ];
 
     private static WorkCounterSet Work() =>
@@ -143,7 +143,7 @@ public sealed class SdfKernelSetLawTests {
     // Both interfaces the kernels read carry this host's instruction set in their pass blocks' variable names.
     [Fact]
     public void TheKernelInterfacesCarryTheHostsInstructionSetStamp() {
-        foreach (var layout in ((ReadOnlySpan<ShaderInterfaceLayout>)[SdfWorldInterfaces.WorldLayout, SdfWorldInterfaces.BrickBakeLayout])) {
+        foreach (var layout in ((ReadOnlySpan<ShaderInterfaceLayout>)[SdfWorldInterfaces.WorldLayout, SdfWorldInterfaces.BrickBakeLayout, SdfWorldInterfaces.ResolveParameters.Layout])) {
             Assert.Equal(expected: SdfIsaHlsl.Stamp, actual: layout.Interface.Stamp);
             Assert.Equal(
                 expected: ("passGroup" + SdfIsaHlsl.Stamp),

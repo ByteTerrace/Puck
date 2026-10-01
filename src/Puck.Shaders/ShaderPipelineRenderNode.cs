@@ -50,6 +50,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     // which a capture served from that image records, however many paused frames republish it; null while nothing
     // rendered is published.
     private ulong? m_publishedStateTick;
+    // The frame counter as the render that published the current image left it, which a capture of it records.
+    private ulong? m_publishedFrame;
     private Exception? m_lastSwapError;
     // Whether a device loss destroyed the published image. Nothing is published then, but no initialization frame is
     // owed: a paused node presents nothing, and refuses a capture, until its next step, resume or reset renders.
@@ -339,7 +341,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     // Whether history built for the installed graph's frame extent carries into a candidate planned at another unchanged:
     // same declaration shape, and, for an image, the same resolved extent, each resolved against the frame extent it was
     // built for.
-    private static bool CompatibleHistory(ShaderPipelineResource old, ShaderPipelineResource current, (uint Width, uint Height) previousExtent, (uint Width, uint Height) extent) {
+    private static bool CompatibleHistory(ShaderPipelineResource old, ShaderPipelineResource current, ShaderPipelineStorageCounts previousCounts, ShaderPipelineStorageCounts counts) {
         if (
             (old.Kind != current.Kind) ||
             !string.Equals(
@@ -351,12 +353,16 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             (
                 (current.Kind == ShaderPipelineResourceKind.Image) &&
                 ((old.Dimensions?.Resolve(
-                    frameHeight: previousExtent.Height,
-                    frameWidth: previousExtent.Width
-                ) ?? previousExtent) != (current.Dimensions?.Resolve(
-                    frameHeight: extent.Height,
-                    frameWidth: extent.Width
-                ) ?? extent))
+                    frameHeight: previousCounts.Height,
+                    frameWidth: previousCounts.Width,
+                    renderWidth: previousCounts.RenderWidth,
+                    renderHeight: previousCounts.RenderHeight
+                ) ?? (previousCounts.Width, previousCounts.Height)) != (current.Dimensions?.Resolve(
+                    frameHeight: counts.Height,
+                    frameWidth: counts.Width,
+                    renderWidth: counts.RenderWidth,
+                    renderHeight: counts.RenderHeight
+                ) ?? (counts.Width, counts.Height)))
             ) ||
             (old.SizeBytes != current.SizeBytes) ||
             (old.Initialization != current.Initialization)
@@ -410,7 +416,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     CreateExportImage(
                         extent: (declaration.Dimensions?.Resolve(
                             frameHeight: m_height,
-                            frameWidth: m_width
+                            frameWidth: m_width,
+                            renderWidth: counts.RenderWidth,
+                            renderHeight: counts.RenderHeight
                         ) ?? (m_width, m_height)),
                         resource: resource
                     );
@@ -431,7 +439,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     resource.Images = new IGpuImage[resource.Count];
                     var extent = (declaration.Dimensions?.Resolve(
                         frameHeight: m_height,
-                        frameWidth: m_width
+                        frameWidth: m_width,
+                        renderWidth: counts.RenderWidth,
+                        renderHeight: counts.RenderHeight
                     ) ?? (m_width, m_height));
                     var usage = UsageOf(
                         plan: plan,
@@ -837,6 +847,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var previousRegionCopies = m_regionCopies;
         var previousPortShares = m_portShares;
         var previousRowRegions = m_rowRegions;
+        var previousCadenceResources = m_cadenceResources;
+        var previousCadenceVersions = m_cadenceVersions;
         var hadFences = m_slots.Any(predicate: static slot => (slot.Fence is not null));
         var carried = CarriedHistoryOf(
             extent: (key.Width, key.Height),
@@ -874,6 +886,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 previous: previousPasses
             );
             SeedPassRegions();
+            ConfigureCadence();
             // What an install counts belongs to no submission, whether it installs, fails partway or rebuilds after a
             // device loss.
             m_work.Discard();
@@ -884,6 +897,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             m_installedCounts = key.Counts;
             m_installedCounter = CounterOf(plan: key.Pipeline!.Plan);
             m_installedCountRevision = key.CountRevision;
+            m_installedRenderExtent = RenderExtentOf(plan: key.Pipeline.Plan);
+            m_installedRenderRevision = key.RenderRevision;
             if (key.Candidate) {
                 m_pending = null;
                 m_resizePending = false;
@@ -919,6 +934,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             m_regionCopies = previousRegionCopies;
             m_portShares = previousPortShares;
             m_rowRegions = previousRowRegions;
+            m_cadenceResources = previousCadenceResources;
+            m_cadenceVersions = previousCadenceVersions;
             if (!hadFences) {
                 foreach (var slot in m_slots) { slot.Fence?.Dispose(); slot.Fence = null; slot.Commands?.Dispose(); slot.Commands = null; }
             }
@@ -947,7 +964,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         if (resourceName is null) {
             return false;
         }
-        return (plan.FindResource(name: resourceName) is { Declaration.Kind: ShaderPipelineResourceKind.Image, IsConsumed: false });
+        return ((plan.FindResource(name: resourceName) is { Declaration.Kind: ShaderPipelineResourceKind.Image, IsConsumed: false } version) &&
+            (plan.Storages[version.Storage].Declaration is { Retained: false, Transient: false }));
     }
     // Whether a selected output publishes through the preview: an external image, which the node does not own, is
     // encoded into an RGBA8 image it does. Every other image output publishes itself, a float one included.
@@ -1274,6 +1292,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             WaitAll();
             m_device.WaitIdle();
         }
+        ReleaseTiming();
+        ReleaseCadenceRecovery();
         DisposeGraph(
             passes: m_passes,
             resources: m_resources
@@ -1286,6 +1306,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         // The published images were the released graph's or held from one, so nothing stays published.
         m_lastSurface = default;
         m_publishedStateTick = null;
+        m_publishedFrame = null;
         m_previousSurface = default;
         m_preview?.Dispose();
         m_preview = null;
@@ -1441,7 +1462,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     }
     private void WaitAll() {
         foreach (var slot in m_slots) {
-            slot.Fence?.Wait();
+            if (slot.Fence is { } fence) {
+                fence.Wait();
+                NoteWaited(fence: fence);
+            }
             slot.Leases.RetireAll();
         }
     }
@@ -1513,6 +1537,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     public Surface ProduceFrame(in FrameContext context) {
         try {
             return Produce(context: in context);
+        } catch {
+            AbortCadenceFrame();
+            throw;
         } finally {
             ReleaseUnheldLeases();
         }
@@ -1524,6 +1551,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         }
         // Publishes the newest finished submission's counts, paused or not, so a held frame still completes them.
         m_work.Poll();
+        PollTimings();
         // A node with nothing published (never rendered, or reset) owes an initialization frame. That frame is its own
         // obligation: a step requested before it renders stays pending and advances one submission beyond it. A device
         // loss unpublishes the image without owing one.
@@ -1590,6 +1618,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             CaptureIfPending();
             return m_lastSurface;
         }
+        // A node shown at its own extent presents no frame rendered at an extent it was not asked for.
+        if (ShownAtItsExtent && RendersAnotherExtent) {
+            return m_lastSurface;
+        }
         if (stepping) {
             m_steps--;
         }
@@ -1632,12 +1664,15 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     private Surface RenderFrame(in FrameContext context, IGpuExportableImage? exported, out ulong exportValue, out bool exportWritten) {
         exportValue = 0UL;
         exportWritten = false;
+        UpdateRenderExtents();
 
         var selectedResource = m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput)];
         var slotIndex = ((int)(m_frame % m_inFlight));
         var slot = m_slots[slotIndex];
 
         slot.Fence!.Wait();
+        NoteWaited(fence: slot.Fence);
+        PrepareTiming(slot: slotIndex);
         slot.Leases.RetireAll();
         BindRegionBuffers(slot: slotIndex);
         HoldLeases();
@@ -1645,6 +1680,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var command = BeginFrameCommands(slot: slotIndex);
 
         commands.Clear();
+        BeginCadenceFrame(slot: slotIndex);
         RecordPasses(
             command: command,
             context: context,
@@ -1681,6 +1717,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             commands: commands,
             fence: slot.Fence!
         );
+        CommitCadenceFrame();
+        SubmitPackageReadbacks(fence: slot.Fence!, slot: slotIndex);
+        SubmitTiming(fence: slot.Fence!, slot: slotIndex);
         if (exported is not null) {
             exportValue = exported.CompleteWrite();
             exportWritten = true;
@@ -1688,9 +1727,11 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_frameLeases.MoveTo(destination: slot.Leases);
         Publish(surface: Output(slot: slotIndex));
         m_publishedStateTick = Frame.StateTick;
+        m_publishedAtRequestedExtent = !RendersAnotherExtent;
         m_outputRefreshRequested = false;
         m_installedUnrendered = false;
         m_frame++;
+        m_publishedFrame = m_frame;
         CaptureIfPending();
         return m_lastSurface;
     }
@@ -1723,12 +1764,14 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_outputRefreshRequested = false;
         Publish(surface: default);
         m_publishedStateTick = null;
+        m_publishedFrame = null;
         SeedPassRegions();
         ResetWork();
     }
     /// <summary>Requests a new frame extent. The pipeline is rebuilt at the new extent as a candidate beside the
     /// installed graph, exactly like a reload: its pipelines build on the thread pool while the installed graph keeps
-    /// producing at its current extent, and it installs at the first frame boundary after. History whose resolved
+    /// producing at its current extent, unless the node is <see cref="ShownAtItsExtent"/>, and it installs at the first
+    /// frame boundary after. No capture reads a frame rendered meanwhile. History whose resolved
     /// extent is unchanged carries over with its contents, history whose extent changes starts again from its declared
     /// initialization, and the old graph retires like any replaced graph. A resize replaces the graph and is not a step:
     /// a paused instance builds and installs it too, renders nothing, and keeps publishing its last image until its next
@@ -1784,7 +1827,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// <param name="name">The name of a live image version: a public output or an intermediate one.</param>
     /// <exception cref="ObjectDisposedException">The node is disposed.</exception>
     /// <exception cref="ArgumentException"><paramref name="name"/> names no live image version, or names a version its
-    /// successor overwrites within the frame, whose contents are discarded before publication.</exception>
+    /// successor overwrites within the frame, or names transient or retained intermediate storage shared by every
+    /// frame slot, whose contents cannot be leased as a public output.</exception>
     /// <exception cref="InvalidOperationException">No pipeline is installed or queued, or the preview for the selection
     /// could not be allocated or would take the node's owned bytes past <see cref="BudgetBytes"/>; the previous selection
     /// stays published.</exception>
@@ -1803,6 +1847,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 message: $"Output {name} is not a declared image resource.",
                 paramName: nameof(name)
             );
+        }
+        if ((pipeline.Plan.Storages[version.Storage].Declaration is { } storage) && (storage.Retained || storage.Transient)) {
+            throw new ArgumentException(message: $"Output '{name}' uses {(storage.Retained ? "retained" : "transient")} intermediate storage shared by every frame slot, so it cannot be published.", paramName: nameof(name));
         }
         if (version.IsConsumed) {
             throw new ArgumentException(
@@ -1923,6 +1970,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         )) {
             return false;
         }
+        if (!pass.Parameters.Bytes.Span.SequenceEqual(other: values.Bytes.Span) && (pass.Cadence is { } cadence)) { cadence.Signature = null; }
         pass.Parameters = values;
         return true;
     }

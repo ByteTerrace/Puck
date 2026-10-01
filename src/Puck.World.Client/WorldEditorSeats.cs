@@ -45,6 +45,11 @@ public sealed class WorldEditorSeats {
     /// <summary>Gets a revision that moves whenever any seat's editor state moves.</summary>
     public long Revision { get; private set; }
 
+    /// <summary>Reads whether the seat shows its presentation inspector.</summary>
+    public bool InspectorEnabled(int slot) => At(slot: slot).Inspector;
+    /// <summary>Enables or hides a seat's presentation inspector without changing the document.</summary>
+    public void SetInspector(int slot, bool enabled) { At(slot: slot).Inspector = enabled; Moved(); }
+
     private Seat At(int slot) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: slot);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(other: m_seats.Length, value: slot);
@@ -208,6 +213,24 @@ public sealed class WorldEditorSeats {
         At(slot: slot).Enter(world: world).Current = placement;
         Moved();
     }
+    /// <summary>Retains each seat's selection and snap reference only while the rebuilt world still declares that id.</summary>
+    /// <param name="world">The rebuilt world's instance name.</param>
+    /// <param name="placements">The rebuilt world's placement rows.</param>
+    /// <remarks>Grid, snap, camera and build-mode state are not reset by a document reload.</remarks>
+    public void Reconcile(string world, IReadOnlyList<WorldPlacement> placements) {
+        ArgumentNullException.ThrowIfNull(placements);
+        foreach (var seat in m_seats) {
+            if (!seat.InWorld(world: world)) { continue; }
+            if ((seat.Current is { } current) && !placements.Any(predicate: row => (row.Id == current))) {
+                seat.Current = null;
+                Moved();
+            }
+            if ((seat.Reference is { } reference) && !placements.Any(predicate: row => (row.Id == reference))) {
+                seat.Reference = null;
+                Moved();
+            }
+        }
+    }
     /// <summary>Records the height a seat's following working plane rests at in a world.</summary>
     /// <param name="slot">The seat, zero-based.</param>
     /// <param name="world">The world's instance name, as the seat's authority route names it.</param>
@@ -247,6 +270,8 @@ public sealed class WorldEditorSeats {
     }
 
     private sealed class Seat {
+        public bool Inspector;
+
         public float? AngleStepDegrees { get; set; }
         public string? Current { get; set; }
         public float? FollowedHeight { get; set; }

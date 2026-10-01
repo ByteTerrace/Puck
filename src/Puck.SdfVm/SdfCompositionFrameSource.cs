@@ -65,7 +65,7 @@ public interface ISdfFrameDresser {
 /// rather than impossible. This is why the contract hands over components and not a single number — a per-emitter
 /// aggregate would just relocate the same cancellation one level down, where the host cannot see it.
 /// </para></summary>
-public sealed class SdfCompositionFrameSource : ISdfFrameSource {
+public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     /// <summary>Gets the generic "far below anything" fallback park position — a host that needs a matching literal
     /// outside a live <see cref="SdfEmitContext"/> (a construction-time capacity probe, say) reads this rather than
     /// carrying its own copy.</summary>
@@ -440,7 +440,7 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
         PackTransforms(everything: rebuilt);
         ComposeMeshDraws();
 
-        return m_dresser.Dress(
+        var dressed = m_dresser.Dress(
             deltaSeconds: deltaSeconds,
             height: height,
             interpolationAlpha: interpolationAlpha,
@@ -451,5 +451,8 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
             transforms: m_transforms,
             width: width
         );
+
+        dressed.PickMap = ComposePickMap();
+        return dressed;
     }
 }

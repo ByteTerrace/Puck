@@ -20,6 +20,10 @@ allocation in steady-state frames, building every candidate's modules and
 pipelines off the frame thread while the installed graph keeps presenting, and
 retiring the old graph only once the queue has finished with it, without a
 device drain.
+The timing cases in `ShaderPipelineRenderNodeLawTests` demand two queries per recorded
+pass, fence completed readback, reject old enable epochs, and release query ownership
+on loss. The disabled path creates and records none. The laws assert the query
+mechanism; measured milliseconds never determine correctness.
 `RenderGraphRuntimeLawTests` run `RenderGraphRuntime` on the same fake, with
 cameras as package graphs whose fake recorders count their records: demand
 (a camera on two screens renders once a frame, an off-view one never), extent,
@@ -29,8 +33,20 @@ steady frames. The fake records descriptor writes while `Recording` is on.
 `ShaderPipelineVersionLawTests` cover forwarding: readers ordered before an
 overwrite, each refusal by name, one storage per chain, and a node that records
 exactly the barriers the plan gives each access.
+`RenderGraphCadenceLawTests` use the same fake to preserve retained contents
+across flight slots, invalidate dependent versions after actual upstream writes,
+keep disjoint forwarded fields reusable, and distinguish standing from inactive
+passes. They cover lifecycle and config changes, failed-recording recovery,
+conservative unversioned inputs, singleton output-selection refusals, and the
+existing planner's last-access barriers. Recovery distinguishes unsubmitted
+initialization and staged copies from already submitted writes. Its checkpoint
+storage is counted; steady standing allocates no objects.
 `ShaderInterfaceLawTests` pin the pass interface's layout, document and
-generated include. `ShaderInterfaceSpikeTests` build the variant passes under
+generated include. `ShaderInterfaceStructureLawTests` derive record fields from
+native C# layouts, verify generated padding and two-element echo sentinels,
+reject a stale same-stride field reorder, and compile the record on both
+backends to check its reflected stride and identity.
+`ShaderInterfaceSpikeTests` build the variant passes under
 `Assets/Interfaces/` with DXC. They hold the SPIR-V and DXIL readers to the
 interface's layout and require byte-identical output from two builds.
 `-showLiveOutput` prints each build's content pins for comparison with another

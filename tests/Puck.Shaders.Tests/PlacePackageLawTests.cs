@@ -315,6 +315,30 @@ public sealed class PlacePackageLawTests {
             expected: 0L
         );
     }
+    [Fact]
+    public void HostPlacementKeepsComparisonConfigAndLiveParameterEdits() {
+        var gpu = new FakePipelineGpu();
+        using var node = Node(gpu: gpu,
+            placements: new Placements(shown: new RenderGraphPlacement(Shown: true, Left: 0.25f, Top: 0.25f, Width: 0.5f, Height: 0.5f, Sharpness: 0)),
+            config: JsonDocument.Parse(json: """{ "compareMode": 2, "wipe": 0.75 }""").RootElement.Clone());
+
+        ProduceUntilPublished(node: node);
+        void Check(uint mode, float wipe) {
+            gpu.Recording = true;
+            _ = node.ProduceFrame(context: default);
+            gpu.Recording = false;
+            var block = gpu.ConstantBlock(
+                set: gpu.BoundSets.Last(predicate: set => (set.Group == ((uint)ShaderInterfaceGroup.Pass))).Set,
+                sizeBytes: ((int)Layout.SizeBytes));
+
+            Assert.Equal(expected: mode, actual: BinaryPrimitives.ReadUInt32LittleEndian(source: block.AsSpan(start: ((int)Layout.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceCompareMode)))));
+            Assert.Equal(expected: wipe, actual: BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: ((int)Layout.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceWipe)))));
+        }
+        Check(mode: 2, wipe: 0.75f);
+        Assert.True(condition: node.TryWriteParameter(field: RenderGraphPackageCatalog.PlaceCompareMode, passName: Pass, value: 3u));
+        Assert.True(condition: node.TryWriteParameter(field: RenderGraphPackageCatalog.PlaceWipe, passName: Pass, value: 0.25f));
+        Check(mode: 3, wipe: 0.25f);
+    }
 
     // A host that shows every pass's source at one placement, and records which passes asked.
     private sealed class Placements(RenderGraphPlacement shown) : IRenderGraphPlacements {

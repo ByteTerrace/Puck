@@ -84,6 +84,7 @@ public sealed class SdfWorldTablesCreationFaultLawTests {
 
     // One quad at the origin, drawn once.
     private static readonly SdfMeshDraw[] MeshDraws = [new(
+        Identity: "quad",
         Material: 0,
         Mesh: new SdfMesh(
             indices: new uint[] { 0, 1, 2, 0, 2, 3 },

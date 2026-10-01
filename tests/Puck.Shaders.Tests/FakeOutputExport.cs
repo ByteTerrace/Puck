@@ -69,7 +69,14 @@ internal sealed class FakeOutputExport(FakePipelineGpu gpu, uint width, uint hei
         /// <inheritdoc/>
         public void BeginWrite() => Begun++;
         /// <inheritdoc/>
-        public ulong CompleteWrite() => ((ulong)++Writes);
+        public ulong CompleteWrite() {
+            if (RefuseCompletion) { throw new InvalidOperationException(message: "Injected post-submit failure."); }
+            return ((ulong)++Writes);
+        }
+
+        /// <summary>Gets or sets whether completion fails after the node's submission succeeded.</summary>
+        public bool RefuseCompletion { get; set; }
+
         /// <inheritdoc/>
         public void Dispose() => inner.Dispose();
     }

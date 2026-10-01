@@ -46,6 +46,7 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
         nameof(VulkanDeviceCommands.DestroyPipeline),
         nameof(VulkanDeviceCommands.DestroyPipelineCache),
         nameof(VulkanDeviceCommands.DestroyPipelineLayout),
+        nameof(VulkanTimestampCommands.DestroyQueryPool),
         nameof(VulkanDeviceCommands.DestroyRenderPass),
         nameof(VulkanDeviceCommands.DestroySampler),
         nameof(VulkanDeviceCommands.DestroySemaphore),
@@ -146,6 +147,13 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
                 descriptorSetLayoutHandle: handles[1],
                 device: device,
                 pipelineLayoutHandle: handles[0]
+            )
+        ),
+        ["timestamp pool"] = new(
+            EntryPoints: [nameof(VulkanTimestampCommands.DestroyQueryPool)],
+            Release: (device, handles) => device.Destroy(
+                destroy: device.Timestamps.DestroyQueryPool,
+                handle: handles[0]
             )
         ),
         ["render pass"] = new(

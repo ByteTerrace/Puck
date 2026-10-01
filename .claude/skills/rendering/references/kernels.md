@@ -64,10 +64,11 @@ buffer-layout changes need a rebuild.
 ## The frame
 
 An SDF view is an `sdf.world` instance of the render graph: the graph compiler
-splices the package's fragment (`SdfWorldPackage.Fragment`) into the one-pass
-graph the runtime makes for the instance, and `world.counters gpu` lists its
-ten passes under the instance's name as `sdf.world$sky` through
-`sdf.world$views`. The frame's first pass to record submits its residency's one
+splices its selected package fragment into the one-pass graph the runtime makes
+for the instance. `NativeFragment` has ten passes, `sdf.world$sky` through
+`sdf.world$views`; `Fragment`, which a view below a native ceiling runs, adds
+`sdf.world$resolve`.
+`world.counters gpu` lists them under the instance's name. The frame's first pass to record submits its residency's one
 upload ahead of the instance's submission (`SdfWorldResidency.Submit`), counted
 under the residency as `sdf:<name>` with three passes (`SdfWorldTables.PassLabels`):
 `fillers`, the fillers' first transitions and clears on the first upload;
@@ -101,11 +102,22 @@ of its passes. The upload and the view's passes, in order:
 | `shadow` | `sdf-world-shadow.comp` | The key light's soft shadow into the record's K row, with its own candidate mask; skips a frame whose soft shadows are off or that has no shadow light (`Skips`). |
 | `views` | `sdf-world-views*.comp` | Materials, lighting through the one light interface, volumes, diagnostics, written into the view's output image. |
 
-Each view's passes render into its instance's own output, the fragment's
-`color` version, at the extent the scheduler gives the instance, one viewport
-row a view. No kernel assembles views or upsamples: the render graph's `place`
-pass puts each output into its seat rect and reconstructs a reduced render
-scale.
+The ceiling (`SdfViewSnapshot.RenderCeiling`) alone selects the fragment
+(`SdfWorldPasses.FragmentOf`) and is the whole render-extent revision, so a
+fragment change is always a rebuild the node holds its last image through, never
+a frame of one graph at another's grid. A view at a native ceiling uses
+`SdfWorldPackage.NativeFragment`, ten passes writing `color` directly, and
+ignores the current grid (`SdfViewSnapshot.RenderGrid`). A view below it uses
+`Fragment`: traversal writes `currentColor` (one transient allocation, started by
+the sky) at the active render grid, then `sdf-resolve.comp` writes `color` at the
+output grid, reading its render grid from the recording
+(`RenderGraphPackageRecording.RenderWidth`), the node's one resolution of it.
+Scratch is allocated at the render ceiling; current-grid changes, a layout
+transition's dip among them, replace no resources and rebuild nothing. `place`
+places the full-output image in its rect, resampling it again unless the
+scheduled extent equals the rect's pixels. No output-sized surface is written
+until a reader needs one. The shared `Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli`
+module supplies both kernels' filter and has no SDF-layer dependency.
 
 Primary, surface, ambient, shadow, and views share `sdf-world-views.comp.hlsl`'s
 entry point through `SDF_PRIMARY_PASS`, `SDF_SURFACE_PASS`, `SDF_AMBIENT_PASS`,
@@ -129,15 +141,15 @@ passes not to read the target. A view the cadence gate declares unchanged record
 its passes, and its latest output stands; `world.cadence off` disables the gate
 for measurement.
 
-The visibility record is 64 bytes per pixel of the view's extent
+The visibility record is 64 bytes per pixel of the view's render ceiling
 (`SdfWorldPackage.VisibilityRecordByteLength`), the fragment's counted
-`visibility` buffer, allocated as the extent times one viewport and forwarded
+`visibility` buffer, allocated as the render extent times one viewport and forwarded
 through primary's, surface's, ambient's and shadow's versions;
 `world.budget` prints the allocated bytes. `sdf-visibility.hlsli` owns its
 sixteen words in six rows: V (t, identity, material, march flags), exact; C
 (terminal radius, threshold, then the seam blend weight as a 15-bit fraction
-packed with its other material plus one); L (the four lanes, as authored
-floats, or a mesh hit's triangle); N (a 16-bit octahedral geometric normal and the gradient magnitude);
+packed with its other material plus one); L (the exact winning dynamic frame slot
+in its first word, -1 for static, or a mesh hit's triangle; other words reserved); N (a 16-bit octahedral geometric normal and the gradient magnitude);
 and S (curvature and raw AO as halves, then the surface flags packed with the
 saturated surface, AO and shadow query count); and K (the key light's
 soft-shadow visibility, current only on a frame the shadow pass runs). The packing moves presentation pixels by at
@@ -149,6 +161,14 @@ module and `VisibilityRecordByteLength`. A record is current only inside the fra
 dispatch box, where primary writes every active pixel, misses included: a
 reader of another pixel's record asks `worldVisibilityCurrent` first and
 treats a pixel outside the box as sky, since the beam proved its tile empty.
+The rule is `SdfVisibility.IsCurrent`, generated into `sdf-isa.hlsli` as
+`SDF_VISIBILITY_CURRENT` with the box's unit `SDF_VISIBILITY_BOX_EDGE` (the hit
+passes' workgroup edge), and a pick applies it on the host to the box its copy
+reads back; change the table there, never the macro. The identity's fields are
+`SDF_VISIBILITY_KIND_*`, `SDF_VISIBILITY_KIND_SHIFT` and
+`SDF_VISIBILITY_SOURCE_MASK`, and a static winner's transform slot is
+`SDF_TRANSFORM_SLOT_NONE`; `SdfVisibilityLawTests` refuses a kernel that spells
+any of them by hand.
 `world.debug-view visibility` (mode 11) colors each pixel by its record's kind.
 Material `Soften` changes the later
 lighting normal, while AO uses the geometric normal. Before accepting a record or

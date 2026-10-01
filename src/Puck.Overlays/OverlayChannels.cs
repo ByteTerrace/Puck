@@ -1,7 +1,7 @@
 namespace Puck.Overlays;
 
 /// <summary>
-/// The overlay's seven declared writer channels. The value is the priority for the four first-party writers (0 draws
+/// The overlay's eight declared writer channels. The value is the priority for the four first-party writers (0 draws
 /// first/bottom, 3 draws last/top), pinned to the order <see cref="OverlayFrameComposer"/> emits them in when they run
 /// — draw order stops being an implicit contract nobody states and becomes the lease table's first column.
 /// <see cref="Hud"/> is the odd one out: it is not part of that fixed loop at all — <see cref="OverlayFrameComposer"/>'s
@@ -34,6 +34,8 @@ public enum OverlayChannel {
     /// <summary>The per-seat radial action menu (<see cref="WheelWriter"/>) — drawn immediately under the cursor,
     /// outside the replace-band suppression; see this enum's remarks.</summary>
     Wheel = 6,
+    /// <summary>The per-seat editor inspector, above authored panels and below the wheel and cursor.</summary>
+    Editor = 7,
 }
 /// <summary>One channel's hard reservation across the four frame resources. A channel may write up to these counts
 /// and not one record more: it clips at its own boundary, attributed to itself, and can never consume another
@@ -168,14 +170,14 @@ public sealed class OverlayChannelLeases {
     // (the CursorWriter discipline), so a clamp change moves the reservation with it.
 
     /// <summary>The number of declared channels.</summary>
-    public const int Count = 7;
+    public const int Count = 8;
 
     // Indexed by (int)OverlayChannel — the enum's declared values are the array index.
     private readonly OverlayChannelReservation[] m_reservations;
 
     /// <summary>Initializes a new instance of the <see cref="OverlayChannelLeases"/> class: derives every channel's
     /// reservation from <paramref name="capacity"/> and the writers' declared caps, sums them, and refuses a table
-    /// that over-subscribes any of <see cref="OverlayFrameBuilder"/>'s four backstops.</summary>
+    /// that over-subscribes a fixed <see cref="OverlayFrameBuilder"/> backstop; text backing is derived from their sum.</summary>
     /// <param name="capacity">The host's declared counts.</param>
     /// <exception cref="ArgumentOutOfRangeException">A count in <paramref name="capacity"/> is negative, or the
     /// channels' summed reservation exceeds a backstop — the message names the resource, the summed reservation,
@@ -253,6 +255,7 @@ public sealed class OverlayChannelLeases {
             (hudPanels, ((hudWorldElements + hudSeatElements) * HudElementCost), hudPanels, ((hudWorldElements + hudSeatElements) * HudTextWordCost)),
             (seats, ((((UInt128)CursorElementsPerSeat) * seats) + CursorPaneElements), 0, (((UInt128)CursorTextWordsPerSeat) * seats)),
             (seats, (wheelElementsPerSeat * seats), 0, (wheelTextWordsPerSeat * seats)),
+            (seats, ((InspectorWriter.MaxLines + 1) * seats), 0, ((InspectorWriter.MaxLines * InspectorWriter.MaxLineChars) * seats)),
         ];
 
         UInt128 totalClips = 0;
@@ -287,17 +290,13 @@ public sealed class OverlayChannelLeases {
             backstop: OverlayFrameBuilder.MaxPanels,
             backstopName: nameof(OverlayFrameBuilder.MaxPanels)
         );
-        RequireWithinBackstop(
-            resource: "glyph-code words",
-            total: totalTextWords,
-            backstop: OverlayFrameBuilder.TextWordCapacity,
-            backstopName: nameof(OverlayFrameBuilder.TextWordCapacity)
-        );
+
 
         TotalClips = ((int)totalClips);
         TotalElements = ((int)totalElements);
         TotalPanels = ((int)totalPanels);
-        TotalTextWords = ((int)totalTextWords);
+        TotalTextWords = checked((int)totalTextWords);
+        TextWordCapacity = checked((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: checked((uint)TotalTextWords)));
         m_reservations = new OverlayChannelReservation[Count];
 
         for (var index = 0; (index < wideReservations.Length); index++) {
@@ -324,6 +323,9 @@ public sealed class OverlayChannelLeases {
     public int TotalPanels { get; }
     /// <summary>Gets the glyph-code words every reservation claims together.</summary>
     public int TotalTextWords { get; }
+    /// <summary>Gets the shared text backing capacity: every writer's declared reservation summed, rounded up to
+    /// the next power of two once at composition. It never grows on demand.</summary>
+    public int TextWordCapacity { get; }
 
     private static void RequireNonNegative(int count, string name) {
         if (count < 0) {
@@ -368,6 +370,7 @@ public sealed class OverlayChannelLeases {
         OverlayChannel.Hud => "hud",
         OverlayChannel.Cursor => "cursor",
         OverlayChannel.Wheel => "wheel",
+        OverlayChannel.Editor => "editor",
         _ => throw new ArgumentOutOfRangeException(
         paramName: nameof(channel),
         actualValue: channel,

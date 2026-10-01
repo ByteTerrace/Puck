@@ -213,11 +213,14 @@ public sealed partial class ShaderPipelineRenderNode {
         );
         var version = (plan.FindResource(name: selected) ?? throw new InvalidDataException(message: $"The shader pipeline publishes no output named '{selected}'."));
         var spec = plan.Storages[version.Storage].Declaration;
+        var counts = CountsAt(extent: extent, plan: plan);
 
         return (NeedsPreview(spec: spec)
             ? (spec.Dimensions?.Resolve(
                 frameHeight: extent.Height,
-                frameWidth: extent.Width
+                frameWidth: extent.Width,
+                renderWidth: counts.RenderWidth,
+                renderHeight: counts.RenderHeight
             ) ?? extent)
             : null
         );
@@ -355,6 +358,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 plan: pipeline.Plan
             ),
             CountRevision: (CounterOf(plan: pipeline.Plan)?.Revision ?? 0L),
+            RenderRevision: (RenderExtentOf(plan: pipeline.Plan)?.Revision ?? 0L),
             Export: m_export,
             Rows: m_rows,
             Width: extent.Width
@@ -364,7 +368,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // resize or a rebinding) rather than the installed pipeline rebuilt after a device loss, the preview it needs,
     // the rows its arrays read, which BindRows replaces whole whenever they change, and the counts its counted buffers
     // are allocated by, with the counter revision they were resolved at.
-    private readonly record struct BuildKey(CompiledShaderPipeline? Pipeline, uint Width, uint Height, bool Candidate, (uint Width, uint Height)? Preview, RowBindings Rows, ShaderPipelineStorageCounts Counts, long CountRevision, IShaderPipelineOutputExport? Export) {
+    private readonly record struct BuildKey(CompiledShaderPipeline? Pipeline, uint Width, uint Height, bool Candidate, (uint Width, uint Height)? Preview, RowBindings Rows, ShaderPipelineStorageCounts Counts, long CountRevision, long RenderRevision, IShaderPipelineOutputExport? Export) {
         public bool Matches(BuildKey other) =>
             (
                 ReferenceEquals(
@@ -381,6 +385,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 ) &&
                 (Counts == other.Counts) &&
                 (CountRevision == other.CountRevision) &&
+                (RenderRevision == other.RenderRevision) &&
                 ReferenceEquals(
                     objA: Export,
                     objB: other.Export
@@ -541,10 +546,7 @@ public sealed partial class ShaderPipelineRenderNode {
             if (planned.Declaration is not { } declaration) {
                 var step = planned.Package!;
 
-                Extent = planned.ResolveExtent(
-                    frameHeight: request.Key.Height,
-                    frameWidth: request.Key.Width
-                );
+                Extent = PassExtent(pass: planned, counts: request.Key.Counts);
                 PackageFactory = request.Packages.FactoryFor(
                     instance: request.Instance,
                     package: step.Package,
@@ -576,10 +578,7 @@ public sealed partial class ShaderPipelineRenderNode {
             );
             GpuPassPipelineKey key;
 
-            Extent = planned.ResolveExtent(
-                frameHeight: request.Key.Height,
-                frameWidth: request.Key.Width
-            );
+            Extent = PassExtent(pass: planned, counts: request.Key.Counts);
             if (declaration.Kind == ShaderPipelineDocumentPassKind.Compute) {
                 if (
                     !primary.TryGetValue(

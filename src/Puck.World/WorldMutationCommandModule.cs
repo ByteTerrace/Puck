@@ -6,6 +6,7 @@ using Puck.Audio.Mixing;
 using Puck.World.Protocol;
 using Puck.World.Machines;
 using Puck.World.Server;
+using Puck.World.Transpiler;
 using static Puck.World.WorldCommandDefinition;
 
 namespace Puck.World;
@@ -29,7 +30,7 @@ namespace Puck.World;
 /// one — and that identity is not a formality: <see cref="WorldServer"/>'s per-section <see cref="WorldCapability.Mutate"/>
 /// grant check applies to EVERY submitted mutation regardless of which module produced it, so revoking a
 /// principal's grant over a section refuses that principal's writes here exactly like any other's.</para></remarks>
-internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldEditorSeats editorSeats, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog, WorldScheduleRoot scheduleRoot) : ICommandModule {
+internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldEditorSeats editorSeats, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog, WorldScheduleRoot scheduleRoot, WorldSourceWatch sourceWatch) : ICommandModule {
     // Buffer a mutation over the link and return a quiet ack — the server prints the loud accept/reject line when the
     // buffered edit applies at the tick boundary, and the barrier guarantees a following world.status sees the result.
     // world.load's own trailing-token grammar: <path> [force], where `force` is recognized only as the LAST token.
@@ -287,6 +288,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 }
 
                 var path = definitionSource.SourcePath;
+                using var sourceReads = sourceWatch.RecordReads(path: path);
 
                 // See world.load's own remarks: reuses server.Neighbours, the one live-session resolver.
                 if (!WorldDefinitionLoader.TryLoadFileForAdmission(
@@ -299,7 +301,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     path: path,
                     reason: out var reason
                 )) {
-                    return CommandResult.Error(output: $"[world.reload: {reason}]");
+                    return sourceWatch.Refuse(diagnostic: reason);
                 }
 
                 var loaded = admission!.Definition;
@@ -309,7 +311,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     origin: path,
                     reason: out reason
                 )) {
-                    return CommandResult.Error(output: $"[world.reload: text assets refused: {reason}]");
+                    return sourceWatch.Refuse(diagnostic: $"text assets refused: {reason}");
                 }
 
                 return link.SubmitRebuild(
@@ -360,7 +362,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.save",
-            description: "Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): world.save [path]. The snapshot is the AUTHORED document: the live definition (mutations included), with a moved session lever folded into the section it belongs to when the document authors that section (render levers into render, the master volume into audio, the present target into host, the peer-source default into bodies, magazine selectors into screens) and the host's named machine declarations into machines; a section the document omits stays omitted, and an untouched section is written as authored. No argument writes back to the loaded world file. A .puck target — including a .puck loaded world with no argument — is refused by name, since the canonical JSON would overwrite its source; name a JSON path instead. A target file naming a basis stays a delta: the write is the proved minimal difference over its composed basis chain, and the echo names the preserved basis (or why the save degraded to flat).",
+            description: "Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): world.save [path]. The snapshot is the AUTHORED document: the live definition (mutations included), with a moved session lever folded into the section it belongs to when the document authors that section (render levers into render, the master volume into audio, the present target into host, the peer-source default into bodies, magazine selectors into screens) and the host's named machine declarations into machines; a section the document omits stays omitted, and an untouched section is written as authored. No argument writes back to the loaded world file. A .puck target is saved through the source printer: changed authored nodes are rewritten, unrelated text is retained, and the recompiled snapshot is proved before writing. A template, compile-time for or module-generated row refuses by name; a generated duplicate requires an authored id. A refused edit can be saved to a JSON target declaring the source as its basis. A target file naming a basis stays a delta: the write is the proved minimal difference over its composed basis chain, and the echo names the preserved basis (or why the save degraded to flat).",
             handler: (context, args) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
                     definition: server.Definition,
@@ -373,15 +375,6 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     ? args.Tail(start: 0)
                     : definitionSource.SourcePath
                 );
-
-                // A save writes canonical JSON, and a .puck file is source whose lets, templates, and comments the
-                // document does not carry — writing over one destroys them.
-                if (target.EndsWith(
-                    comparisonType: StringComparison.OrdinalIgnoreCase,
-                    value: ".puck"
-                )) {
-                    return CommandResult.Error(output: $"[world.save: {target} is .puck source — a save writes canonical JSON and would overwrite it; name a JSON target: world.save <path>.world.json; nothing written]");
-                }
 
                 // The same EVERY-section hold world.load and world.undo pass, and for the same two reasons rather than
                 // for symmetry's sake: the file this writes IS a loadable world document carrying every section, so
@@ -411,6 +404,21 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         server: server,
                         tick: (server.NextInputTick - 1UL)
                     );
+
+                    if (target.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck")) {
+                        if (!WorldSourceSave.TrySave(
+                            definition: snapshot,
+                            path: target,
+                            bytesWritten: out var sourceBytes,
+                            reason: out var sourceReason,
+                            catalogFingerprint: WorldBootComposition.MachineCatalogFingerprint(machineCatalog: machineCatalog),
+                            catalog: machineCatalog
+                        )) {
+                            return CommandResult.Error(output: $"[world.save: {sourceReason}; nothing written]");
+                        }
+                        server.Compact();
+                        return new CommandResult(Output: $"[world.save: {target} ({sourceBytes} bytes, source preserved)]");
+                    }
                     var bytes = WorldDefinitionSerialization.SavePreservingBasis(
                         basisPath: out var basisPath,
                         definition: snapshot,

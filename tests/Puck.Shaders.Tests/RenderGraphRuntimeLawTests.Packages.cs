@@ -28,7 +28,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             PackageView,
             new RenderGraphRuntimeGraph[1]
         );
-        var parts = SdfWorldPackage.Fragment.Passes.Select(selector: static pass => pass.Name).ToArray();
+        var parts = SdfWorldPackage.NativeFragment.Passes.Select(selector: static pass => pass.Name).ToArray();
         var index = 0L;
 
         Assert.True(
@@ -160,7 +160,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     private static RenderGraphInstance PackageInstance() => new(
         ExternalPackage: RenderGraphPackageCatalog.SdfWorld,
         Name: PackageView,
-        Passes: SdfWorldPackage.Fragment.Passes.Count,
+        Passes: SdfWorldPackage.NativeFragment.Passes.Count,
         Reads: [],
         Refresh: RenderGraphRefresh.EveryFrame
     );
@@ -189,10 +189,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         public ManualResetEventSlim? BuildGate { get; set; }
         public int Builds => Volatile.Read(location: ref m_builds);
+        public List<RenderGraphConvergence> Convergence { get; } = [];
         public int Lost { get; private set; }
         public List<string> Parts { get; } = [];
         public long Revision { get; set; }
+        public bool SamplesReads { get; set; }
         public bool Unchanged { get; set; }
+        // The sample index each render of the fragment's last part took from the latest convergence, while it converges.
+        public List<int> Served { get; } = [];
 
         public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
             BuildGate?.Wait(cancellationToken: cancellationToken);
@@ -216,11 +220,15 @@ public sealed partial class RenderGraphRuntimeLawTests {
         );
         public bool IsUnchanged(string instance, in FrameContext context) => Unchanged;
         public void OnDeviceLost() => Lost++;
+        public void BeginConvergence(string instance, RenderGraphConvergence convergence) => Convergence.Add(item: convergence);
 
         private sealed class Recorder(ViewPackage owner, string part) : IRenderGraphPackageRecorder {
             public void Dispose() { }
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
                 owner.Parts.Add(item: part);
+                if ((part == SdfWorldPackage.NativeFragment.Passes[^1].Name) && (owner.Convergence.LastOrDefault() is { IsActive: true } convergence)) {
+                    owner.Served.Add(item: convergence.Samples);
+                }
 
                 return RenderGraphPackageOutcome.Drew;
             }

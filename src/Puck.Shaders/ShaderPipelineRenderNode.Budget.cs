@@ -106,7 +106,9 @@ public sealed partial class ShaderPipelineRenderNode {
         var frame = (counts.Width, counts.Height);
         var extent = (declaration.Dimensions?.Resolve(
             frameHeight: frame.Height,
-            frameWidth: frame.Width
+            frameWidth: frame.Width,
+            renderWidth: counts.RenderWidth,
+            renderHeight: counts.RenderHeight
         ) ?? frame);
 
         return (extent.Width, extent.Height, (declaration.IsExternal
@@ -296,6 +298,8 @@ public sealed partial class ShaderPipelineRenderNode {
             return carried;
         }
 
+        var counts = CountsAt(extent: extent, plan: plan);
+
         foreach (var storage in plan.Storages) {
             if (!storage.History) {
                 continue;
@@ -311,9 +315,9 @@ public sealed partial class ShaderPipelineRenderNode {
                     !old.History ||
                     !CompatibleHistory(
                         current: storage.Declaration,
-                        extent: extent,
+                        counts: counts,
                         old: old.Spec,
-                        previousExtent: (m_width, m_height)
+                        previousCounts: m_installedCounts
                     )
                 ) {
                     continue;

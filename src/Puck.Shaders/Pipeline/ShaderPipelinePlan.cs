@@ -39,7 +39,7 @@ public sealed record ShaderPipelinePlannedResource(
     public bool IsConsumed => (ConsumedAtPassIndex >= 0);
 }
 /// <summary>One physical storage of a plan: the chain of versions forwarding into each other, allocated once per frame
-/// slot and never aliased with another storage.</summary>
+/// slot, or once for a transient or retained intermediate, and never aliased with another storage.</summary>
 /// <param name="Index">The storage's index in <see cref="ShaderPipelinePlan.Storages"/>.</param>
 /// <param name="Declaration">The declaration of the chain's first version, which fixes the storage's kind, format, extent,
 /// sample count, size and initialization.</param>

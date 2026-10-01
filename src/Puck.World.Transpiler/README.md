@@ -54,6 +54,18 @@ beside the source, or into the directory named by `--output`. `WorldDocumentEmit
 same stages in the same order rather than each assembling its own. The cartridge vocabulary is this one's peer and
 lowers through `CartridgeDocumentEmitter`, which no world code reaches.
 
+`WorldStaging` composes generated test worlds and composition worlds beside their
+source before relocating their file references to the staging directory. A font
+whose relative path would become absolute across drives is copied into that
+directory's content-addressed asset store. Its declared hash stays unchanged,
+so staging preserves the runtime hash check. Same-drive references stay relative,
+and fonts with an authored absolute path remain invalid. The staging directory
+owns the copied bytes along with its sibling world documents.
+The composer's optional `WorldDocumentOrigins` follows the winning source field
+through basis/import merges, aliases and tombstones, so staging checks the
+effective font's original spelling; an overridden or dropped font contributes
+neither an asset read nor a new refusal.
+
 A door that needs only a source's documents compiles through
 [`Composition/WorldCompileCache`](Composition/WorldCompileCache.cs) instead: the game's boot loader, the basis
 composer every basis and import reads through (and so `world.reload`), and `puck test`'s compile of the source its
@@ -947,6 +959,16 @@ the root's own lowered document before reading the map (`WorldDocumentBasis.Trac
 by the key its merge used): a finding about the root's k-th row lands on that row whatever the basis contributes
 (`BasisCompositionLawTests`). A finding about a row only a `basis` or runtime import supplied traces to no node of
 the root and reports without a span.
+
+`WorldSourceEdits` also uses these spans when a live edit is saved. It prints
+only changed authored values through `WorldDecompiler`, retains neighboring
+expressions and comments, and recompiles the result. Nested values keep their
+final array positions when repeated properties append rows. Structural edits
+fall back to the enclosing authored node, retaining text outside its span. `WorldSourceSave` computes the changed
+document values against the source's composed snapshot and verifies the final
+composition before an atomic write. Generated rows refuse at their owning
+construct. The [World guide](../Puck.World/README.md#the-world-as-data) describes
+the save workflow.
 
 `Lsp/PuckLanguageServer.cs` offers completion for the gate/effect/rule keywords (`if`/`else` included), `table`/
 `slot`/`pile`/`grid`/`row` and their `bounds`/`advance`/`capacity`/`behavior`/`dimensions`/`wrap`/`cellSize`/

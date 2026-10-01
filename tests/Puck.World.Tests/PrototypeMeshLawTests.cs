@@ -254,6 +254,22 @@ public sealed class PrototypeMeshLawTests {
         Assert.Equal(expected: (entryZero.Material + 1), actual: draw.Material);
         Assert.Empty(collection: Draws(definition: With(mesh: null)));
     }
+    /// <summary>A static draw's identity is its placement's, not its build's: a rebuild after an edit to the placement
+    /// keeps it, so the edit reads as motion, while another placement's draw at the same index is another draw.</summary>
+    [Fact]
+    public void AStaticDrawKeepsItsIdentityAcrossARebuildOfItsPlacement() {
+        var definition = With(mesh: Quad());
+        var moved = (definition with {
+            PlacementRowsRaw = [definition.Placements.Single() with { YawDegrees = 45f }],
+        });
+        var renamed = (definition with {
+            PlacementRowsRaw = [definition.Placements.Single() with { Id = "another-slab" }],
+        });
+        var draw = Assert.Single(collection: Draws(definition: definition));
+
+        Assert.Equal(expected: draw.Identity, actual: Assert.Single(collection: Draws(definition: moved)).Identity);
+        Assert.NotEqual(expected: draw.Identity, actual: Assert.Single(collection: Draws(definition: renamed)).Identity);
+    }
 
     // The real scene emitter over one client, composed and dressed as a presenter composes it, reporting each frame's
     // composed mesh draws.

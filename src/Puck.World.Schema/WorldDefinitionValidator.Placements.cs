@@ -2302,27 +2302,8 @@ public static partial class WorldDefinitionValidator {
 
             if (string.IsNullOrWhiteSpace(value: font.Source)) {
                 errors.Add(item: $"{path}.source is required.");
-            } else {
-                var portableSource = font.Source.Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                );
-                var segments = portableSource.Split(
-                    options: StringSplitOptions.None,
-                    separator: '/'
-                );
-
-                if (
-                    font.Source.Contains(value: '\\') ||
-                    portableSource.StartsWith(
-                    comparisonType: StringComparison.Ordinal,
-                    value: "/"
-                ) ||
-                    portableSource.Contains(value: ':') ||
-                    segments.Any(predicate: static segment => (segment is "" or "."))
-                ) {
-                    errors.Add(item: $"{path}.source '{font.Source}' must be a portable relative path, resolved beside the document (forward slashes, no empty or dot segments).");
-                }
+            } else if (!WorldDocumentPaths.IsPortableRelativeFilePath(path: font.Source)) {
+                errors.Add(item: $"{path}.source '{font.Source}' must be a portable relative path, resolved beside the document (forward slashes, no empty or dot segments).");
             }
 
             if (!IsValidAddonHash(hash: font.Hash)) {

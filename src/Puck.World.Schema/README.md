@@ -744,7 +744,14 @@ the composed tree to the one strict parse → migrate → validate gate, so a li
 document never carries either and every wire egress is self-contained. A
 derived document's content pin folds every touched file's raw bytes
 (`ComputeChainContentHash`), so a template or import edit moves every dependent
-pin. `world.save` preserves the derivation of the file it overwrites
+pin. Callers that need the effective scalar's authored file, JSON pointer and
+original value supply `WorldDocumentOrigins` to composition. The existing merge
+carries that sidecar through retained fields and file-path relocation; overwritten
+or tombstoned fields contribute no effective origin. This opt-in path bypasses
+unannotated composed images, while ordinary loads keep the existing cache. No
+provenance is serialized into the world document.
+
+`world.save` preserves the derivation of the file it overwrites
 (`SavePreservingBasis`): the delta is taken against the canonical form of the
 basis-plus-imports stack, so a row the save left alone stays out of it, and it
 is proved before anything lands by composing the bytes to be written through

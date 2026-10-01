@@ -21,7 +21,7 @@ void sdfShadowStage(SdfPixel p) {
         visibility = sdfLoadVisibility(record);
         traveled = visibility.t;
         hit = sdfVisibilityHit(visibility);
-        mesh = (sdfVisibilityKind(visibility.identity) == SdfVisibilityKindMesh);
+        mesh = (sdfVisibilityKind(visibility.identity) == SDF_VISIBILITY_KIND_MESH);
     }
 
     bool finalMode = worldFinalShadingMode(p.viewMode);

@@ -60,6 +60,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
     // resolves every frame through RankedAnchorSource for the registration's seat; the bare kinds keep their
     // configure-time sources.
     private void ConfigureCameraView(CameraRegistration registration, WorldCamera camera, int seat) {
+        registration.CutRevision++;
         if (
             (camera.Anchors is not null) ||
             WorldSeatAnchors.IsSeatRelative(anchor: camera.Anchor)
@@ -612,6 +613,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
                 ),
                 Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
             ) {
+                CutRevision = registration.CutRevision,
                 Quality = quality,
             });
 
@@ -714,6 +716,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
     private sealed class CameraRegistration {
         public Func<int>? AnchorIdSource { get; set; }
         public ISdfAnchorSource? AnchorSource { get; set; }
+        public long CutRevision { get; set; }
         public IShaderPipelineOutputExport? Export { get; set; }
         public ISdfCameraRig? Rig { get; set; }
         public required WorldCamera Row { get; set; }

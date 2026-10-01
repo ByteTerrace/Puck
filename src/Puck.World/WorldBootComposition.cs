@@ -498,6 +498,8 @@ public static class WorldBootComposition {
         // world.grid/world.snap move a seat's editor state; world.place/.nudge/.turn edit placements through the
         // same section upsert and window guard world.row.set uses.
         services.AddSingleton<ICommandModule, WorldEditorCommandModule>();
+        services.AddSingleton<WorldGpuTiming>();
+        services.AddSingleton<ICommandModule, WorldInspectionCommandModule>();
         // The contact/solidity verb surface — world.collision.probe/.status and the world.contacts read. Authoring
         // the field or a kit's collider goes through world.row.set collision/world.row.set kits.
         services.AddSingleton<ICommandModule, WorldCollisionCommandModule>();
@@ -652,6 +654,22 @@ public static class WorldBootComposition {
         ));
         services.AddSingleton<ICommandObserver>(implementationFactory: static sp => sp.GetRequiredService<WorldScheduleRunner>());
         services.AddSingleton<ICommandModule, WorldScheduleCommandModule>();
+        services.AddSingleton(implementationFactory: static sp => {
+            var source = sp.GetRequiredService<WorldDefinitionSource>();
+            var catalog = sp.GetRequiredService<WorldMachineCatalog>();
+
+            return new WorldSourceWatch(
+                sourcePath: () => source.SourcePath,
+                catalogFingerprint: MachineCatalogFingerprint(machineCatalog: catalog),
+                catalog: catalog);
+        });
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldWatchCommandModule(
+            watch: sp.GetRequiredService<WorldSourceWatch>(),
+            source: () => sp.GetRequiredService<TextCommandSource>(),
+            router: sp.GetRequiredService<Func<InputRouter>>()));
+        services.AddSingleton<WorldFrameComparison>();
+        services.AddSingleton<WorldCompareCapture>();
+        services.AddSingleton<ICommandModule, WorldCompareCommandModule>();
         // Launcher owns the one TextCommandSource and its stdout/stderr + operator-tape result fan-out. World
         // contributes only this wait gate; AddLauncherTerminalShared composes every contributed gate into that
         // source, so adding world.wait cannot sever the launcher's administrative mirror or deferred observers.
@@ -1362,7 +1380,10 @@ public static class WorldBootComposition {
         // here reaches a CommandSnapshot or the simulation.
         services.AddSingleton<WorldSeatViewports>();
         services.AddSingleton<CursorStore>();
+        services.AddSingleton<WorldInspector>();
+        services.AddSingleton<IInspectorSource>(implementationFactory: static sp => sp.GetRequiredService<WorldInspector>());
         services.AddSingleton(implementationFactory: static sp => new WorldCursorFeed(
+            bindings: sp.GetRequiredService<WorldSeatBindings>(),
             pointer: sp.GetRequiredService<WorldPointer>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
             client: sp.GetRequiredService<WorldClient>(),
@@ -1372,7 +1393,7 @@ public static class WorldBootComposition {
             store: sp.GetRequiredService<CursorStore>(),
             facts: sp.GetRequiredService<WorldOverlayFacts>(),
             panes: sp.GetRequiredService<WorldViewGraphHost>()
-        ));
+        ) { EditorSeats = sp.GetRequiredService<WorldEditorSeats>() });
         // The one pointer consumer that does ride a CommandSnapshot: the ray a Simulation screen reads, cast each host
         // frame through the pointer seat's published camera and sustained on that seat's lane ahead of the frame's
         // snapshots, so the seat verbs quantize it into the seat's intent on every tick.
@@ -1595,6 +1616,7 @@ public static class WorldBootComposition {
                             // records after the world has produced), so it runs after the two feeds above only by
                             // convention.
                             sp.GetRequiredService<WorldCursorFeed>().Tick();
+                            sp.GetRequiredService<WorldInspector>().Tick();
                             // The radial menu orders against the cursor feed the same way: its hub anchor and hover
                             // derive from the status the feed just published.
                             sp.GetRequiredService<WorldWheelFeed>().Tick();
@@ -1612,7 +1634,8 @@ public static class WorldBootComposition {
                         Hud: sp.GetRequiredService<HudStore>(),
                         HudBindings: sp.GetRequiredService<IHudBindingResolver>(),
                         Cursor: sp.GetRequiredService<CursorStore>(),
-                        Wheel: sp.GetRequiredService<WheelStore>()
+                        Wheel: sp.GetRequiredService<WheelStore>(),
+                        Inspector: sp.GetRequiredService<IInspectorSource>()
                     ),
                     theme: themeResolve.Resolve(
                         definition: sp.GetRequiredService<WorldDefinition>(),

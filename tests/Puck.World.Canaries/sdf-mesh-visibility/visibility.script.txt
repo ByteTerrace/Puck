@@ -13,7 +13,7 @@ world.wait 30
 world.screenshot {run}/split.png
 world.wait captures 30
 view.override layout auto
-# A reduced render scale: the view renders at a fraction of its rect and the place pass reconstructs it.
+# A reduced render scale: the view traverses at a fraction of its rect and its resolve pass reconstructs the native output.
 world.render-scale half
 world.wait 30
 world.screenshot {run}/scaled.png
@@ -44,4 +44,13 @@ world.wait captures 30
 world.resize 1920 1080
 world.wait 30
 world.screenshot {run}/full.png
+world.wait captures 30
+# Resizes to another aspect, each captured on the tick it lands: the cameras are composed for the new extent at once, and
+# until the root installs it the display shows its last image and the capture waits, so each capture is taken at its new
+# extent and projected for it rather than stretched from the old one.
+world.resize 144 144
+world.screenshot {run}/square.png
+world.wait captures 30
+world.resize 256 144
+world.screenshot {run}/wide.png
 world.wait captures 30

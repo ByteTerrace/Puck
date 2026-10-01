@@ -27,7 +27,7 @@ namespace Puck.World;
 /// presentation services optionally (<see cref="IServiceProvider.GetService"/>, never <c>GetRequiredService</c>) and
 /// no-op when absent.
 /// </summary>
-internal static class WorldPostBuildWiring {
+public static class WorldPostBuildWiring {
     /// <summary>Installs the affordance vocabulary, re-validates the boot document's binding vocabulary now that the
     /// vocabulary is real (see the remarks below), attaches the session-lever sink, wires the server's echo/cue taps,
     /// and registers the shutdown drain that reports an armed capture no frame ever served. Safe to call exactly
@@ -231,8 +231,25 @@ internal static class WorldPostBuildWiring {
         }
 
         var consoleSessions = services.GetRequiredService<TerminalConsoleSessions>();
+
+        services.GetRequiredService<WorldSourceWatch>().Report = (message, refused) => {
+            toasts?.Publish(isError: refused, message: message);
+            consoleSessions.RecordAdministrativeEcho(message: message, refused: refused);
+        };
+        var consoleOutput = services.GetRequiredService<BufferedConsoleOutput>();
+
+        services.GetRequiredService<WorldCompareCapture>().Report = result => {
+            // Only late settlements reach this callback; synchronous refusals are counted by Submit itself.
+            if (result.IsError) { consoleRegistry.NoteDeferredRejection(); }
+            toasts?.Publish(isError: result.IsError, message: result.Output);
+            consoleSessions.RecordAdministrativeEcho(message: result.Output, refused: result.IsError);
+            if (string.IsNullOrEmpty(value: result.Output)) { return; }
+            if (result.IsError) { consoleOutput.WriteErrorLine(value: result.Output); } else { consoleOutput.WriteLine(value: result.Output); }
+        };
         var audioDirector = services.GetRequiredService<WorldAudioDirector>();
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();
+        var sourceWatch = services.GetRequiredService<WorldSourceWatch>();
+        var editorSeats = services.GetRequiredService<WorldEditorSeats>();
         var deferredVerbAnswers = WorldDeferredVerbAnswers.Attach(
             echoes: services.GetRequiredService<WorldDeferredVerbEchoes>(),
             registry: consoleRegistry
@@ -264,6 +281,9 @@ internal static class WorldPostBuildWiring {
                 echo: in echo,
                 row: WorldInstanceHost.BootInstanceName
             );
+            if (echo.Kind == WorldEditEchoKind.Rebuild) {
+                sourceWatch.NoteResult(result: (echo.Rejected ? CommandResult.Error(output: echo.Message) : CommandResult.None));
+            }
 
             // world.load/world.reload move what the console considers "the current origin" — but only once the
             // SERVER's own echo confirms the rebuild actually applied (this tap fires from the tick boundary, after
@@ -276,6 +296,7 @@ internal static class WorldPostBuildWiring {
                 (echo.RebuildOrigin is { } origin)
             ) {
                 definitionSource.SourcePath = origin;
+                editorSeats.Reconcile(world: WorldInstanceHost.BootInstanceName, placements: server.Definition.Placements);
                 // The rendering host resolves views.graphs sources against this same moved directory from here
                 // on — presentation-only, so a headless boot has no runtime to rebase.
                 graphHost?.Rebase(documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: origin));
@@ -327,7 +348,6 @@ internal static class WorldPostBuildWiring {
         var renderSettings = services.GetRequiredService<WorldRenderSettings>();
         var pacing = services.GetRequiredService<PresentPacingControl>();
         var bindingBarVisibility = services.GetRequiredService<WorldBindingBarVisibility>();
-        var editorSeats = services.GetRequiredService<WorldEditorSeats>();
 
         // The authored gameplay-cue lane: emitCue publishes a deterministic token from simulation. Audio consumes
         // that token through the same document-authored cue table as built-in events; an optional body association

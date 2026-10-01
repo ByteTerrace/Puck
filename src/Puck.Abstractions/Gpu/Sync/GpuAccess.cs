@@ -29,4 +29,7 @@ public enum GpuAccess : uint {
     /// <summary>The host reads the resource through its mapping (Vulkan <c>HOST_READ</c>). Pair with
     /// <see cref="GpuStage.Host"/>.</summary>
     HostRead = 0x200,
+    /// <summary>A buffer copy writes its destination range (Vulkan transfer write; Direct3D 12 copy destination).
+    /// Pair with <see cref="GpuStage.Transfer"/>. A storage-buffer clear uses <see cref="TransferWrite"/> instead.</summary>
+    CopyWrite = 0x400,
 }

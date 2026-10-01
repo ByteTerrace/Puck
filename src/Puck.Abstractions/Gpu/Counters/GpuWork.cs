@@ -16,6 +16,7 @@ namespace Puck.Abstractions.Gpu;
 /// </summary>
 public static class GpuWork {
     internal const int BufferBarriersColumn = 7;
+    internal const int BufferCopyBytesColumn = 17;
     internal const int BuffersCreatedIndex = 3;
     internal const int ClearsColumn = 13;
     internal const int CommandBuffersColumn = 4;
@@ -30,7 +31,7 @@ public static class GpuWork {
     internal const int ImageBarriersColumn = 5;
     internal const int ImagesCreatedIndex = 2;
     internal const int IndirectDispatchesColumn = 1;
-    internal const int LifetimeKindCount = 6;
+    internal const int LifetimeKindCount = 7;
     internal const int MarchStepsColumn = 15;
     internal const int MemoryBarriersColumn = 6;
     internal const int PipelineBindsColumn = 8;
@@ -38,8 +39,9 @@ public static class GpuWork {
     internal const int PushConstantBytesColumn = 10;
     internal const int RenderPassesColumn = 3;
     internal const int ShaderModulesCreatedIndex = 1;
-    internal const int SubmissionColumnCount = 17;
+    internal const int SubmissionColumnCount = 18;
     internal const int TexelsWrittenColumn = 16;
+    internal const int TimestampPoolsCreatedIndex = 6;
 
     /// <summary>Gets the kind counting compute dispatches whose group counts the CPU supplies.</summary>
     public static WorkKind Dispatches { get; } = new(name: "gpu.dispatches", unit: "count", workClass: WorkClass.Deterministic);
@@ -69,8 +71,11 @@ public static class GpuWork {
     public static WorkKind HostVisibleUploadBytes { get; } = new(name: "gpu.uploads.host-visible", unit: "bytes", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting whole-resource clears of storage images and buffers.</summary>
     public static WorkKind Clears { get; } = new(name: "gpu.clears", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting whole-image and whole-buffer copies.</summary>
+    /// <summary>Gets the kind counting whole-image copies and buffer-range copies.</summary>
     public static WorkKind Copies { get; } = new(name: "gpu.copies", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the bytes each buffer-range copy transfers, including readback and
+    /// device-local history copies. Image copies have no buffer-byte count; host writes have their own kind.</summary>
+    public static WorkKind BufferCopyBytes { get; } = new(name: "gpu.copies.buffer-bytes", unit: "bytes", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the field evaluations a pass's kernels make: each sample of a march (the beam's,
     /// primary's, the ambient occlusion's and the soft shadow's) and each query (a normal's taps). The kernels count it on
     /// the GPU, so it is per-backend-deterministic: the marches run in floats, and an indirect pass runs only the tiles
@@ -103,6 +108,8 @@ public static class GpuWork {
     public static WorkKind DescriptorPoolsCreated { get; } = new(name: "gpu.created.descriptor-pools", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting descriptor sets allocated.</summary>
     public static WorkKind DescriptorSetsCreated { get; } = new(name: "gpu.created.descriptor-sets", unit: "count", workClass: WorkClass.PerBackendDeterministic);
+    /// <summary>Gets the kind counting timestamp query pools created on demand.</summary>
+    public static WorkKind TimestampPoolsCreated { get; } = new(name: "gpu.created.timestamp-pools", unit: "count", workClass: WorkClass.PerBackendDeterministic);
 
     /// <summary>Gets the kinds a pass's kernels count on the GPU, in the order a counter row holds them
     /// (<see cref="GpuKernelCounters"/>): <see cref="MarchSteps"/>, then <see cref="TexelsWritten"/>.</summary>
@@ -132,6 +139,7 @@ public static class GpuWork {
             kinds[BuffersCreatedIndex] = BuffersCreated;
             kinds[DescriptorPoolsCreatedIndex] = DescriptorPoolsCreated;
             kinds[DescriptorSetsCreatedIndex] = DescriptorSetsCreated;
+            kinds[TimestampPoolsCreatedIndex] = TimestampPoolsCreated;
 
             return kinds;
         }
@@ -155,6 +163,7 @@ public static class GpuWork {
             kinds[CopiesColumn] = Copies;
             kinds[MarchStepsColumn] = MarchSteps;
             kinds[TexelsWrittenColumn] = TexelsWritten;
+            kinds[BufferCopyBytesColumn] = BufferCopyBytes;
 
             return kinds;
         }

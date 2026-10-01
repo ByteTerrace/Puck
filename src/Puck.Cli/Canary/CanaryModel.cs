@@ -77,7 +77,10 @@ internal sealed record CanaryLeg(
     CanaryPackage? Package = null,
     // Whether the World boots with every directory holding the shader compiler removed from its search path, so any
     // compile it attempts finds no tool. The runner's own package build still sees the compiler.
-    bool HideShaderCompiler = false
+    bool HideShaderCompiler = false,
+    // Opts this single-process leg into the world document's existing command schedule. Its exports remain under
+    // the run directory, beside capture evidence; absent leaves ordinary boots unchanged.
+    bool RunSchedule = false
 );
 // A relocated shader package whose source tree is gone: once per run the runner copies the files of the directory
 // holding SourcePath into a scratch directory, packages SourcePath with this CLI's own `shaders package`, and deletes

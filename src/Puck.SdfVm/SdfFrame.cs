@@ -11,11 +11,37 @@ namespace Puck.SdfVm;
 /// <param name="Region">The view's normalized display region, which sizes its output when no host asks for an
 /// extent (the render graph's scheduled extent).</param>
 public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedRect Region) {
-    /// <summary>The view's render scale in (0, 1]: the fraction of its region's extent its output renders at when no
-    /// host asks for an extent (the render graph's scheduled extent); a host placing the output reconstructs
-    /// it into the region. 1 (the default) renders native. Presentation-only: hosts drop it during camera transitions
-    /// and for mostly-hidden views.</summary>
+    /// <summary>The camera's cut revision, moved when its framing is reseeded or a layout slot changes its source.</summary>
+    public long CutRevision { get; init; }
+
+    /// <summary>The render-scale ceiling in (0, 1], quantized by <see cref="RenderGraphExtent"/> into
+    /// <see cref="RenderCeiling"/>. Scratch is allocated at that fraction of the view's output extent; its published
+    /// output keeps its full extent. Zero or less reads as native.</summary>
     public float RenderScale { get; init; } = 1f;
+
+    /// <summary>This frame's render scale inside the ceiling, quantized by <see cref="RenderGraphExtent"/> and bounded by
+    /// <see cref="RenderCeiling"/> into <see cref="RenderGrid"/>. Zero uses the ceiling. It moves the render grid and
+    /// nothing else: no allocation, fragment or graph follows it, so it can change every frame (a layout transition's
+    /// dip). A view whose ceiling is native reconstructs nothing, so it renders its output grid and ignores this.</summary>
+    public float ResolvedRenderScale { get; init; }
+    /// <summary>The spatial reconstruction sharpness, from zero for bilinear to one for clamped Catmull-Rom.</summary>
+    public float UpscaleSharpness { get; init; }
+    /// <summary>Gets the allocation ceiling as a fraction of the output on each axis: <see cref="RenderScale"/>
+    /// quantized, one for a scale of zero or less. It alone chooses whether the view reconstructs
+    /// (<see cref="Reconstructs"/>) and sizes its scratch.</summary>
+    public double RenderCeiling => RenderGraphExtent.Quantize(fraction: ((RenderScale > 0f) ? RenderScale : 1f));
+    /// <summary>Gets whether the view renders a grid below its output and reconstructs it: exactly when
+    /// <see cref="RenderCeiling"/> is below one.</summary>
+    public bool Reconstructs => (RenderCeiling < 1d);
+    /// <summary>Gets this frame's render grid as a fraction of the output on each axis: one for a view that does not
+    /// reconstruct, otherwise <see cref="ResolvedRenderScale"/> quantized and bounded by <see cref="RenderCeiling"/>, or
+    /// the ceiling when that is zero or less.</summary>
+    public double RenderGrid => (!Reconstructs
+        ? 1d
+        : ((ResolvedRenderScale > 0f)
+            ? Math.Min(val1: RenderGraphExtent.Quantize(fraction: ResolvedRenderScale), val2: RenderCeiling)
+            : RenderCeiling));
+
     /// <summary>The editor grid the view draws, which its pass block carries (<see cref="SdfFrameBlock"/>); a view that
     /// draws none carries <see cref="GridOverlayState.Hidden"/>.</summary>
     public GridOverlayState Grid { get; init; } = GridOverlayState.Hidden;
@@ -85,6 +111,10 @@ public sealed record SdfFrame(
     IReadOnlyList<SdfViewSnapshot> Views,
     float Time
 ) {
+    /// <summary>Gets the immutable host identity table for the composed frame. Composition fills it before publishing
+    /// the frame; it is CPU-only presentation data and is never uploaded to the frame block.</summary>
+    public ISdfPickMap? PickMap { get; internal set; }
+
     /// <summary>Per-frame transforms for the scene's moving entities, indexed by dynamic-transform slot. Must supply
     /// at least the program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/> entries (the render frame
     /// throws otherwise — a dynamic slot silently rendering at identity is a bug, not a default); empty is therefore

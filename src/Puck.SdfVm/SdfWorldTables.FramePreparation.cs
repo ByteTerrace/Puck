@@ -35,6 +35,7 @@ public sealed partial class SdfWorldTables {
                 )
                 : !moved.TryCollect(
                     into: m_owedTransforms,
+                    reseated: m_reseatedTransforms,
                     since: m_movedTransformsSerial
                 ))
         );
@@ -50,6 +51,9 @@ public sealed partial class SdfWorldTables {
         Span<float> floats = stackalloc float[DynamicTransformWordCount];
 
         if (everything) {
+            // Which owners changed is unknown when every row is owed, so every previous row is seeded.
+            m_seedDynamicHistory = true;
+
             if (count == 0) {
                 floats.Clear();
                 floats[7] = 1f; // identity quaternion
@@ -105,11 +109,11 @@ public sealed partial class SdfWorldTables {
         return packed;
     }
     // Writes one packed slot into the dynamic-transform region, which owes the words of it that changed.
-    private void WriteDynamicTransform(ReadOnlySpan<float> floats, int slot) =>
-        _ = m_dynamicTransformRegion.Write(
-            bytes: MemoryMarshal.AsBytes(span: floats),
-            offset: (slot * DynamicTransformByteLength)
-        );
+    private void WriteDynamicTransform(ReadOnlySpan<float> floats, int slot) {
+        if (m_dynamicTransformRegion.Write(bytes: MemoryMarshal.AsBytes(span: floats), offset: (slot * DynamicTransformByteLength))) {
+            m_changedTransforms.Add(length: 1, start: slot);
+        }
+    }
     // position.w encodes per-instance soft-shadow participation: 0 = casts, 1 = shadow-suppressed (skipped by the
     // soft-shadow march only), read by field/sdf-layout.hlsli's sdfShadowParticipationActive skip. The lanes row is what an op
     // evaluating under this slot (SDF_OP_LANE_ERODE, shade-volumes.hlsli's selected intensity lane) reads through

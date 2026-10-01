@@ -33,6 +33,11 @@ capability authentication.
   host bridges keystrokes in (`ConsoleInputSink` in `Puck.Launcher`).
 - *Presentation observability:* frame capture, latest-value publication, and
   emitted light remain outside the simulation trajectory.
+- *Source-watch debounce:* `DependencyWatch` polls comparable dependency facts
+  at a bounded interval and requests work after a quiet period. Refreshing the
+  dependency set preserves pending edits, including a dependency changed while
+  compilation was running. The caller supplies presentation timestamps; a
+  source watch never changes simulation state directly.
 
 ## The host boundary
 
@@ -236,7 +241,11 @@ boundary, and until then it presents what it already has. A newer request
 cancels the pending build with `Cancel`, and the discarded result is released
 when the build finishes. Before the device goes away, `CancelAndWait` blocks
 until the build's current unit of work returns, so nothing is created on a
-device being torn down. The SDF pipeline set's build and live shader-pipeline
+device being torn down. An owner with nothing to present until the build
+finishes, such as an offscreen host producing its first frame, blocks on
+`WaitFinished` between frames instead of producing empty ones: it takes
+nothing, so the next `TryTake` sees the result or the failure as a polling
+owner would. The SDF pipeline set's build and live shader-pipeline
 compilations both use it.
 
 A node that samples an image another producer keeps writing, such as a camera
@@ -326,7 +335,8 @@ ray into an instance's world and meets the nearest surface placement. When that
 placement shows another instance's output, the walk casts a new ray through the
 producer's camera from the hit's point on the image, and repeats in the
 producer's world. `WalkDisplay` starts from the topmost pane under a display
-point. A walk continues at most the limit it is given, which is normally
+point, or, where no pane holds it, from the view the display itself shows when
+that view is no pane (a lone view covering the whole display). A walk continues at most the limit it is given, which is normally
 `RenderGraphInstanceSet.NestingDepth`, the longest chain of same-frame reads.
 It ends on a producer's pixels, on an instance's world, off a source, at the
 limit, on an image the showing instance does not read, or at an instance with

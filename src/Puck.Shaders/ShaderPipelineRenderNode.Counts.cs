@@ -49,18 +49,24 @@ public sealed partial class ShaderPipelineRenderNode {
         return null;
     }
     // The counts a plan built now at an extent is allocated by.
-    private ShaderPipelineStorageCounts CountsAt(ShaderPipelinePlan plan, (uint Width, uint Height) extent) => (CounterOf(plan: plan)?.CountsAt(
-        height: extent.Height,
-        width: extent.Width
-    ) ?? new ShaderPipelineStorageCounts(
-        Height: extent.Height,
-        Width: extent.Width
-    ));
+    private ShaderPipelineStorageCounts CountsAt(ShaderPipelinePlan plan, (uint Width, uint Height) extent) {
+        var render = (RenderExtentOf(plan: plan)?.CeilingAt(height: extent.Height, width: extent.Width) ?? extent);
+
+        ValidateRenderExtent(ceiling: extent, render: render);
+        var counts = (CounterOf(plan: plan)?.CountsAt(height: render.Height, width: render.Width) ?? new ShaderPipelineStorageCounts(Height: extent.Height, Width: extent.Width));
+
+        return counts with {
+            Width = extent.Width,
+            Height = extent.Height,
+            RenderWidth = ((render.Width == extent.Width) ? 0u : render.Width),
+            RenderHeight = ((render.Height == extent.Height) ? 0u : render.Height),
+        };
+    }
 
     // A changed counter can mean larger scratch or a replaced residency. Its old recorders cannot render current data.
     private bool CountsChanged => (
-        (m_installedCounter is { } counter) &&
-        (counter.Revision != m_installedCountRevision)
+        ((m_installedCounter is { } counter) && (counter.Revision != m_installedCountRevision)) ||
+        ((m_installedRenderExtent is { } extent) && (extent.Revision != m_installedRenderRevision))
     );
 
     // Marks the installed graph for a rebuild when its counter has moved since it was allocated.
@@ -69,16 +75,18 @@ public sealed partial class ShaderPipelineRenderNode {
             m_ready &&
             (m_pipeline is not null) &&
             CountsChanged &&
-            (m_installedCounter!.Revision != m_requestedCountRevision)
+            (((m_installedCounter?.Revision ?? 0L) != m_requestedCountRevision) ||
+             ((m_installedRenderExtent?.Revision ?? 0L) != m_requestedRenderRevision))
         ) {
-            m_requestedCountRevision = m_installedCounter.Revision;
+            m_requestedCountRevision = (m_installedCounter?.Revision ?? 0L);
+            m_requestedRenderRevision = (m_installedRenderExtent?.Revision ?? 0L);
             ForgetRefusal();
             m_recountPending = true;
         }
     }
-    // The instances a storage is allocated as: one for a transient storage, which every frame slot shares, and one per
-    // frame slot for every other.
-    private static int InstancesOf(ShaderPipelinePlannedStorage storage, uint inFlight) => (storage.Declaration.Transient
+    // A transient or retained intermediate has one queue-ordered allocation shared by every frame slot. Other owned
+    // storages have one allocation per frame slot.
+    private static int InstancesOf(ShaderPipelinePlannedStorage storage, uint inFlight) => ((storage.Declaration.Transient || storage.Declaration.Retained)
         ? 1
         : ((int)inFlight));
     // The instance a slot's index reaches in a storage: its own, or the one instance of a storage that has one.

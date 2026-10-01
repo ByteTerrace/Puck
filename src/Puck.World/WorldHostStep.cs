@@ -13,7 +13,7 @@ namespace Puck.World;
 /// shell's post-step, then finish the seat intents. The host-work clock a <c>world.wait</c> counts in lives here. Also
 /// the <see cref="IWorldSimulationClock"/> a frame producer reads, in every shape.
 /// </summary>
-internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldScheduleRunner scheduleRunner, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter) : IWorldSimulationClock {
+internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldScheduleRunner scheduleRunner, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, WorldSourceWatch sourceWatch) : IWorldSimulationClock {
     private readonly WorldCaptureScheduler m_captureScheduler = captureScheduler;
     private readonly WorldServer m_server = server;
     private readonly WorldReplayTape m_replayTape = replayTape;
@@ -104,6 +104,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     /// seat intents finish — the windowed shell syncs seat bindings and publishes seat context here; a headless
     /// shell passes <see langword="null"/>.</param>
     public void Step(in FixedStepContext context, Action? afterInstances) {
+        sourceWatch.Poll();
         // A seat claim can be published off this thread (a federated observer reporting an onward handoff) or by a
         // console verb in the drain just run. Its subscribers change seat state and bind state mirrors, so the edge is
         // delivered here, on the pump thread, at each point of the step after which a claim can have moved: before

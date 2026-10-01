@@ -5,6 +5,7 @@
 #ifndef DEBUG_SDF_DEBUG_VIEWS_HLSLI
 #define DEBUG_SDF_DEBUG_VIEWS_HLSLI
 #ifdef SDF_VIEWS_PASS
+#include "../frame/sdf-reprojection.hlsli"
 
 float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
     float3 viewColor = color;
@@ -179,17 +180,26 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
             viewColor = lerp(coldBand, float3(0.95, 0.16, 0.10), saturate((evalRamp - 0.5) * 2.0));
             break;
         }
+        case 12: { // MOTION: red/green encode previous minus current pixel position at 1/32 per pixel;
+                   // blue is one for valid reprojection. A still surface is (0.5, 0.5, 1), invalid history is black.
+            float2 previousPixel;
+            float previousT;
+            bool valid = sdfReprojection(worldVisibilityRecord(p.pixel, p.viewIndex),
+                p.rayOrigin + p.rayDirection * s.t, previousPixel, previousT);
+            viewColor = (valid ? float3(saturate(0.5 + ((previousPixel - (float2(p.pixel) + 0.5)) / 32.0)), 1.0) : 0.0);
+            break;
+        }
         case 11: { // VISIBILITY — the kind of the pixel's current visibility record: background dark blue, SDF green,
                    // mesh orange.
-            uint kind = SdfVisibilityKindBackground;
+            uint kind = SDF_VISIBILITY_KIND_BACKGROUND;
 
             if (worldVisibilityCurrent(p.pixel)) {
                 kind = sdfVisibilityKind(sdfLoadVisibility(worldVisibilityRecord(p.pixel, p.viewIndex)).identity);
             }
 
-            viewColor = ((kind == SdfVisibilityKindSdf)
+            viewColor = ((kind == SDF_VISIBILITY_KIND_SDF)
                 ? float3(0.15, 0.90, 0.25)
-                : ((kind == SdfVisibilityKindMesh) ? float3(0.95, 0.55, 0.10) : float3(0.02, 0.05, 0.28)));
+                : ((kind == SDF_VISIBILITY_KIND_MESH) ? float3(0.95, 0.55, 0.10) : float3(0.02, 0.05, 0.28)));
             break;
         }
     }

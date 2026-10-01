@@ -57,7 +57,7 @@ float blendShape(float current, float candidate, uint blendOp, float smoothRadiu
 // The scalar interpreter and the host-compiled rigid-leaf path meet here. Keeping the material winner, smooth seam
 // channel, and distance compose in one helper prevents the fast path from becoming a subtly different VM. DXC sees
 // trackMaterial as a literal at every public entry point and erases this whole material half for secondary rays.
-void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int material, float4 lanes, int frameSlot, float smooth, bool trackMaterial) {
+void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int material, float4 lanes, int instanceIndex, int frameSlot, float smooth, bool trackMaterial) {
     if (trackMaterial) {
         bool candidateWins;
 
@@ -103,6 +103,7 @@ void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int m
         if (candidateWins) {
             result.material = material;
             result.lanes = lanes;
+            result.instanceIndex = instanceIndex;
             result.frameSlot = frameSlot;
         }
     }

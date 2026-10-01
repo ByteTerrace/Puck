@@ -102,10 +102,10 @@ world.screenshot <abs-path.png>
 `world.row.set`/`world.row` mutate the in-memory document and work
 regardless of source format. `world.reload` re-reads the document's on-disk
 origin and recompiles a `.puck` source (basis chain included), so editing the
-`.puck` file and reloading needs no restart. A bare `world.save` against a
-`.puck`-sourced world is refused by name and writes nothing, since canonical
-JSON would overwrite the source. To keep a live row edit, `world.save
-<explicit-path>.world.json` and hand-port the change into the `.puck` source.
+`.puck` file and reloading needs no restart. `world.save` writes authored row
+edits back through the source printer, retaining unrelated text. Generated
+rows refuse by name: edit their template or loop, or save a JSON target whose
+`basis` names the source. Rename a live duplicate before saving it to source.
 
 `world.screenshot` only **arms** a capture. Fence it with `world.wait` and
 confirm the `[capture] … -> <path>` line on **stderr** before reading the file.

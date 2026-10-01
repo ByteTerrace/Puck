@@ -207,10 +207,10 @@ public sealed class SdfWorldPipelinesLawTests {
             cancellationToken: TestContext.Current.CancellationToken
         );
 
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => (cache.SharedPipelines == 0),
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+        SdfTestPipelines.ProduceUntil(
+            frame: () => (cache.SharedPipelines == 0),
+            reason: () => $"{cache.SharedPipelines} pipelines are still leased"
+        );
         driver.Open();
         await disposal;
         Assert.Equal(
@@ -235,7 +235,10 @@ public sealed class SdfWorldPipelinesLawTests {
                     return;
                 }
 
-                _ = bothInDriver.SignalAndWait(timeout: TimeSpan.FromSeconds(value: 30));
+                Assert.True(
+                    condition: bothInDriver.SignalAndWait(timeout: SdfTestPipelines.Liveness),
+                    userMessage: $"{description.Name} waited out the liveness bound for the other failing creation to reach the driver."
+                );
 
                 throw new InvalidOperationException(message: $"injected failure creating {description.Name}");
             },
@@ -317,12 +320,12 @@ public sealed class SdfWorldPipelinesLawTests {
             m_permits.Wait();
             _ = Interlocked.Decrement(location: ref m_inDriver);
         }
-        // Takes the name of the next creation to enter; the bound is liveness, and decides nothing.
+        // Takes the name of the next creation to enter.
         public string Next() {
             Assert.True(condition: m_entered.TryTake(
                 cancellationToken: TestContext.Current.CancellationToken,
                 item: out var name,
-                millisecondsTimeout: 30_000
+                millisecondsTimeout: ((int)SdfTestPipelines.Liveness.TotalMilliseconds)
             ));
 
             return name!;

@@ -11,15 +11,16 @@ namespace Puck.Abstractions.Cameras;
 /// distance <c>d</c>, so it is 1 on the near plane, falls toward 0 with distance, and never reaches 0. A nearer surface
 /// always has the greater depth. Depth lies in [0, 1] on both backends.</para>
 /// <para>Normalized device coordinates put +Y up. A view's UV origin is its top-left corner, and a pixel's sample is its
-/// center (<see cref="NdcOf"/>), which is the ray the SDF march takes through that pixel. No jitter is applied
-/// (<see cref="Jitter"/>).</para>
+/// center (<see cref="NdcOf"/>), which is the ray the SDF march takes through that pixel. The projection shifts its ray by
+/// <see cref="Jitter"/>, in normalized device coordinates.</para>
 /// <para><see cref="RayParameter"/> reconstructs, from a depth, the ray parameter the SDF march records: the
 /// Euclidean distance from the camera along the normalized ray through the sample.</para>
 /// <para>The previous frame's matrices ride beside the current ones for motion. A view with no previous frame, or one
 /// whose history is invalid, carries its own matrices as the previous ones, so it reports no motion.</para>
 /// </remarks>
 public readonly record struct ViewProjection {
-    private ViewProjection(Vector3 position, float near, Vector2 frustumOffset, Matrix4x4 worldToView, Matrix4x4 viewToClip, Matrix4x4 clipToWorld) {
+    private ViewProjection(Vector3 position, float near, Vector2 frustumOffset, Vector2 jitter, Matrix4x4 worldToView, Matrix4x4 viewToClip, Matrix4x4 clipToWorld) {
+        Jitter = jitter;
         Position = position;
         Near = near;
         FrustumOffset = frustumOffset;
@@ -31,9 +32,8 @@ public readonly record struct ViewProjection {
         PreviousWorldToClip = WorldToClip;
     }
 
-    /// <summary>Gets the sub-pixel sample offset the projection applies, in normalized device coordinates: zero,
-    /// because every sample is a pixel center.</summary>
-    public static Vector2 Jitter => Vector2.Zero;
+    /// <summary>Gets the sample offset in normalized device coordinates, added to the pixel-center ray.</summary>
+    public Vector2 Jitter { get; }
     /// <summary>Gets the inverse of <see cref="WorldToClip"/>, formed analytically rather than by a general
     /// inversion.</summary>
     public Matrix4x4 ClipToWorld { get; }
@@ -58,8 +58,9 @@ public readonly record struct ViewProjection {
     /// <summary>Creates the matrices of <paramref name="camera"/> with its previous frame equal to itself.</summary>
     /// <param name="camera">The camera basis, field of view, and aspect ratio.</param>
     /// <param name="near">The near-plane distance; positive and finite.</param>
+    /// <param name="jitter">The ray offset in normalized device coordinates; zero samples the pixel center.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="near"/> is not positive and finite.</exception>
-    public static ViewProjection Create(CameraSnapshot camera, float near) {
+    public static ViewProjection Create(CameraSnapshot camera, float near, Vector2 jitter = default) {
         if (
             !float.IsFinite(f: near) ||
             (near <= 0f)
@@ -104,8 +105,8 @@ public readonly record struct ViewProjection {
             ),
             m44: 1f
         );
-        // clip = (sx (x - ox w), sy (y - oy w), near, w) with w = -z, the forward distance, so a point on the ray
-        // w (ndc / s + offset, -1) lands back on ndc.
+        // clip = (sx (x - ox w) - jitter.x w, sy (y - oy w) - jitter.y w, near, w), with w = -z.
+        // A point on the ray w ((ndc + jitter) / s + offset, -1) therefore lands back on the pixel-center ndc.
         var viewToClip = new Matrix4x4(
             m11: scaleX,
             m12: 0f,
@@ -115,8 +116,8 @@ public readonly record struct ViewProjection {
             m22: scaleY,
             m23: 0f,
             m24: 0f,
-            m31: (scaleX * frustumOffset.X),
-            m32: (scaleY * frustumOffset.Y),
+            m31: ((scaleX * frustumOffset.X) + jitter.X),
+            m32: ((scaleY * frustumOffset.Y) + jitter.Y),
             m33: 0f,
             m34: -1f,
             m41: 0f,
@@ -137,8 +138,8 @@ public readonly record struct ViewProjection {
             m32: 0f,
             m33: 0f,
             m34: (1f / near),
-            m41: frustumOffset.X,
-            m42: frustumOffset.Y,
+            m41: (frustumOffset.X + (jitter.X / scaleX)),
+            m42: (frustumOffset.Y + (jitter.Y / scaleY)),
             m43: -1f,
             m44: 0f
         );
@@ -164,6 +165,7 @@ public readonly record struct ViewProjection {
         return new ViewProjection(
             clipToWorld: (clipToView * viewToWorld),
             frustumOffset: frustumOffset,
+            jitter: jitter,
             near: near,
             position: position,
             viewToClip: viewToClip,
@@ -191,8 +193,8 @@ public readonly record struct ViewProjection {
     /// <returns>The distance along the normalized ray through the sample.</returns>
     public float RayParameter(Vector2 ndc, float depth) {
         var direction = new Vector3(
-            x: ((ndc.X / ViewToClip.M11) + FrustumOffset.X),
-            y: ((ndc.Y / ViewToClip.M22) + FrustumOffset.Y),
+            x: (((ndc.X + Jitter.X) / ViewToClip.M11) + FrustumOffset.X),
+            y: (((ndc.Y + Jitter.Y) / ViewToClip.M22) + FrustumOffset.Y),
             z: 1f
         );
 

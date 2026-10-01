@@ -16,7 +16,7 @@ public sealed class OverlayFrameComposer {
     // is not in the table: it is the banded pipeline's under/base/over sequence plus the unbanded player-scope seat-panel
     // pass (see Compose), opened as its own channel scope up to four times a frame. OverlayChannel.Cursor (5) and
     // OverlayChannel.Wheel (6) are excluded too: they are the frame's last two channel scopes, drawn over everything and
-    // outside the replace-band suppression.
+    // outside the replace-band suppression. Editor (7) runs just before them, after the authored HUD.
     private const int FirstPartyChannelCount = 4;
 
     /// <summary>The bytes <see cref="WritePassValues"/> writes: three float4 values.</summary>
@@ -42,6 +42,7 @@ public sealed class OverlayFrameComposer {
     private readonly OverlayThemeStore m_theme;
     private readonly ToastWriter? m_toastWriter;
     private readonly WheelWriter? m_wheelWriter;
+    private readonly InspectorWriter? m_inspectorWriter;
 
     // Per-channel reservation-overflow episode latches: set when a channel starts losing records at its own
     // reservation, cleared the frame it renders clean again, so each episode narrates exactly once.
@@ -127,6 +128,7 @@ public sealed class OverlayFrameComposer {
             : null
         );
         m_sources = sources;
+        m_inspectorWriter = ((sources.Inspector is { } inspector) ? new InspectorWriter(source: inspector, theme: m_theme) : null);
         m_toastWriter = ((sources.Toast is { } toast)
             ? new ToastWriter(
                 source: toast,
@@ -264,7 +266,7 @@ public sealed class OverlayFrameComposer {
             written: written
         )}. A deliberate, pinned truncation the writer authored; silent until this channel renders clean and refuses again.");
     }
-    // The channel asked the builder for more than OverlayChannelLeases reserved it and the excess clipped: a capacity
+    // The channel asked the builder for more than OverlayChannelLeases reserved it and the excess was refused: a capacity
     // failure, attributed, never touching another channel.
     private void NarrateReservationOverflow(OverlayChannel channel, int index, in OverlayChannelUsage dropped, in OverlayChannelReservation reservation, in OverlayChannelUsage written) {
         if (dropped.IsEmpty) {
@@ -279,7 +281,7 @@ public sealed class OverlayFrameComposer {
 
         m_overflowEpisodeOpen[index] = true;
 
-        Console.Error.WriteLine(value: $"[unified-overlay] channel \"{OverlayChannelLeases.NameOf(channel: channel)}\" exceeded its own reservation and clipped: {Describe(
+        Console.Error.WriteLine(value: $"[unified-overlay] channel \"{OverlayChannelLeases.NameOf(channel: channel)}\" exceeded its own reservation and refused whole records: {Describe(
             counts: dropped,
             reservation: reservation,
             verb: "dropped",
@@ -290,7 +292,7 @@ public sealed class OverlayFrameComposer {
     /// <summary>Packs one frame: freshens the pull-model feeds, starts the builder and the frame-slot table, runs every
     /// writer in draw order and narrates any overflow. The banded order, bottom to top, is the HUD's under band, then the
     /// base (the four first-party writers in <see cref="OverlayChannel"/> order, unless a live authored panel declares
-    /// the replace band, whose panels take the base instead), the HUD's over band, the player-scope seat panels, the
+    /// the replace band, whose panels take the base instead), the HUD's over band, the player-scope seat panels, the inspector, the
     /// radial action menu and the drawn cursor, the last two outside the replace-band suppression.</summary>
     /// <param name="renderTicks">The frame's continuous content clock.</param>
     /// <returns><see langword="true"/> when the frame has anything to draw.</returns>
@@ -334,6 +336,12 @@ public sealed class OverlayFrameComposer {
         if (m_hudWriter is { } hudSeats) {
             m_builder.BeginChannel(channel: OverlayChannel.Hud);
             hudSeats.EmitSeatPanels(builder: m_builder);
+            m_builder.EndChannel();
+        }
+
+        if (m_inspectorWriter is { } inspectorWriter) {
+            m_builder.BeginChannel(channel: OverlayChannel.Editor);
+            inspectorWriter.Emit(builder: m_builder);
             m_builder.EndChannel();
         }
 

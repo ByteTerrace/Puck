@@ -5,29 +5,31 @@ using System.Text;
 namespace Puck.Shaders;
 
 /// <summary>
-/// The echo pass of an interface: a compute pass that reads every word of every block member through the generated
+/// The echo pass of an interface: a compute pass that reads every word of every block member and two elements of each native record buffer through the generated
 /// declarations and compares it with the sentinel <see cref="WriteSentinels"/> writes at that word, so a generator or
 /// packing mistake shows on a real driver. It reads each group's block in set order, such as a document pass's frame
 /// group block and then its pass block. Pixel <c>i</c> of its one-row output image is green when every word of the
-/// <c>i</c>th member (padding excluded) reads back exactly, and red otherwise.
+/// <c>i</c>th member (padding excluded) reads back exactly, and red otherwise. Native record buffers use
+/// <see cref="WriteRecordSentinels"/> and contribute one pixel per field in each of two consecutive elements.
 /// <para>The echo writes through its own output port named <see cref="OutputName"/>, which its interface
 /// declares.</para>
 /// <para>The source is a pure function of the interface: the same interface generates the same bytes, with LF line
 /// endings, on every host.</para>
 /// </summary>
-public static class ShaderInterfaceEcho {
+public static partial class ShaderInterfaceEcho {
     /// <summary>The name of the storage image the echo pass writes its verdicts to.</summary>
     public const string OutputName = "echo";
 
-    /// <summary>Returns the number of pixels the echo pass's output row holds: one per block member of every group,
-    /// padding excluded.</summary>
+    /// <summary>Returns the number of pixels the echo pass's output row holds: one per block member of every group
+    /// and one per native record field in each of two elements, padding excluded.</summary>
     /// <param name="shaderInterface">The interface.</param>
     /// <returns>The width, in pixels.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="shaderInterface"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The interface holds no block, or its echo has nowhere to write
+    /// <exception cref="ArgumentException">The interface holds no block or native record, or its echo has nowhere to write
     /// (<see cref="Generate"/>).</exception>
     public static uint Width(ShaderInterface shaderInterface) =>
-        ((uint)BlockGroups(shaderInterface: shaderInterface).Sum(selector: static group => Members(group: group).Count()));
+        ((uint)BlockGroups(shaderInterface: shaderInterface).Sum(selector: static group => (Members(group: group).Count() +
+            group.Resources.Sum(selector: static resource => (RecordElements * (resource.Member.Structure?.Members.Count ?? 0))))));
     /// <summary>Returns the sentinel an echo expects at one word of a group's block: a distinct normal float's bits for
     /// every word of every group, so no word reads as a denormal or a NaN a driver might flush or canonicalize, and a
     /// block read in another group's place reads wrong.</summary>
@@ -94,7 +96,7 @@ public static class ShaderInterfaceEcho {
     /// <param name="shaderInterface">The interface.</param>
     /// <returns>The HLSL text.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="shaderInterface"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The interface holds no block, or declares no storage image named
+    /// <exception cref="ArgumentException">The interface holds no block or native record, or declares no storage image named
     /// <see cref="OutputName"/>.</exception>
     public static string Generate(ShaderInterface shaderInterface) {
         var groups = BlockGroups(shaderInterface: shaderInterface);
@@ -105,7 +107,9 @@ public static class ShaderInterfaceEcho {
             text: text
         );
         Line(
-            line: $"// Pixel i of '{OutputName}' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.",
+            line: (shaderInterface.Members.Any(predicate: static member => (member.Structure is not null))
+                ? $"// Pixel i of '{OutputName}' is green when every word of the ith block or native-record field, in set order, reads back as the sentinel the host wrote there."
+                : $"// Pixel i of '{OutputName}' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there."),
             text: text
         );
         Line(
@@ -154,6 +158,7 @@ public static class ShaderInterfaceEcho {
                 );
                 pixel++;
             }
+            AppendRecordChecks(group: group, pixel: ref pixel, text: text);
         }
 
         Line(
@@ -180,11 +185,12 @@ public static class ShaderInterfaceEcho {
         ArgumentNullException.ThrowIfNull(argument: shaderInterface);
 
         var layout = shaderInterface.Layout();
-        var groups = layout.Groups.Where(predicate: static group => (group.BlockMembers.Count != 0)).ToArray();
+        var groups = layout.Groups.Where(predicate: static group => ((group.BlockMembers.Count != 0) ||
+            group.Resources.Any(predicate: static resource => (resource.Member.Structure is not null)))).ToArray();
 
         if (groups.Length == 0) {
             throw new ArgumentException(
-                message: $"Shader interface '{shaderInterface.Name}' holds no block for an echo pass to read.",
+                message: $"Shader interface '{shaderInterface.Name}' holds no block or structured record for an echo pass to read.",
                 paramName: nameof(shaderInterface)
             );
         }

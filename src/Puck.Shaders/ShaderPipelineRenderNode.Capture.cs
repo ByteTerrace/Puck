@@ -4,12 +4,19 @@ namespace Puck.Shaders;
 
 // The capture of the published output: a surface format read back as it is, any other image through the display encode.
 public sealed partial class ShaderPipelineRenderNode {
+    /// <summary>Polls a pending capture against the last published image without rendering another sample.</summary>
+    public void PollCapture() => CaptureIfPending();
+
     // A capture armed after a selection reads that selection: while its preview builds, the published image is still the
-    // previous selection's, so the capture waits for the frame that publishes the new one. A published image no surface
+    // previous selection's, so the capture waits for the frame that publishes the new one. It likewise waits past an image
+    // rendered at an extent the node was not asked for (ShownAtItsExtent). A published image no surface
     // carries (a float working image) is captured through the display encode's SDR, which waits while its pipeline
     // builds and moves the image out of the layout it was published in to sample it, and back.
     private void CaptureIfPending() {
-        if (m_previewRequest is not null) {
+        if (
+            (m_previewRequest is not null) ||
+            !m_publishedAtRequestedExtent
+        ) {
             return;
         }
         if (
@@ -28,6 +35,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
         m_capture.Serve(
             failureLabel: "[capture] failed",
+            frame: m_publishedFrame,
             tick: m_publishedStateTick,
             writer: (m_captureWriter ??= path => {
                 m_capturePng.ThrowIfUnavailable(path: path);

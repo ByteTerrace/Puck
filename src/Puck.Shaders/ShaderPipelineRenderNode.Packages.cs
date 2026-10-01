@@ -351,6 +351,10 @@ public sealed partial class ShaderPipelineRenderNode {
                 : null),
             CommandBuffer: handle,
             Context: context,
+            FrameWidth: m_width,
+            FrameHeight: m_height,
+            RenderWidth: m_renderWidth,
+            RenderHeight: m_renderHeight,
             Height: pass.Height,
             Inputs: inputs,
             Leases: m_frameLeases,
@@ -368,6 +372,8 @@ public sealed partial class ShaderPipelineRenderNode {
                 )
                 : null)
         ));
+
+        RecordPackageReadback(command: handle, pass: pass, recorder: recorder, slot: slot);
 
         // The recorder wrote its declared values beside the extent and config; the slot takes whichever words changed.
         _ = region.Write(

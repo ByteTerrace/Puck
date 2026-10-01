@@ -13,7 +13,7 @@ namespace Puck.SdfVm;
 // into its pass block; and the screens, whose host images are rewritten every frame. The mesh part draws the frame's
 // mesh draws into its target through the mesh pipeline, with a set of its own per frame slot binding its pass block. A
 // recorder records no barrier: the planner's are the instance's, and the node's orders the work counters.
-internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
+internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     private const uint WorkgroupEdge = 8;
 
     // The world interface's scratch buffer members, each bound to the dummy unless a port binds it.
@@ -60,6 +60,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
 
     private bool m_disposed;
 
+    private readonly SdfWorldPickReadback? m_pick;
+
     public SdfWorldPassRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
         m_context = context;
         m_owner = owner;
@@ -89,6 +91,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
                 groupLayoutHandles: tables.Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles,
                 groups: groups
             );
+
+            if (string.Equals(a: m_part, b: SdfWorldPackage.Parts.Views, comparisonType: StringComparison.Ordinal)) {
+                m_pick = new SdfWorldPickReadback(picker: owner.PickerOf(instance: context.Instance), context: context);
+            }
 
             return;
         }
@@ -167,6 +173,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         }
 
         m_disposed = true;
+        m_pick?.Dispose();
 
         foreach (var framebuffer in m_framebuffers) {
             framebuffer.Dispose();
@@ -235,8 +242,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
         var height = recording.Height;
 
         residency.RequestExtent(
-            height: height,
-            width: width
+            height: recording.FrameHeight,
+            width: recording.FrameWidth
         );
         SdfFrameBlock.Write(
             block: recording.PassBlock,
@@ -246,6 +253,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             view: view,
             width: width
         );
+
+        var temporal = m_owner.TemporalOf(
+            instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, renderWidth: width, renderHeight: height
+        );
+
+        SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames);
+        SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
 
         SdfFrameBlock.WriteWorkCounterRow(
             block: recording.PassBlock,
@@ -269,13 +283,36 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder {
             b: SdfWorldPackage.Parts.Views,
             comparisonType: StringComparison.Ordinal
         )) {
-            residency.MarkRendered(view: view);
-            m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
+            m_pick!.Prepare(slot: recording.Slot, width: width, height: height, frame: frame,
+                visibility: recording.Inputs[InputIndexOf(member: SdfWorldPackage.VisibilityRecords)].Version,
+                box: recording.Inputs[InputIndexOf(member: SdfWorldPackage.CullBounds)].Version,
+                sample: new SdfReprojectionView(Camera: frame.Views[view].Camera, Jitter: temporal.Jitter, Width: width, Height: height),
+                cut: frame.Views[view].CutRevision);
+            if (ReferenceEquals(objA: m_owner.FragmentOf(instance: m_context.Instance), objB: SdfWorldPackage.NativeFragment)) {
+                residency.MarkRendered(view: view);
+                m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
+            }
         }
 
         return RenderGraphPackageOutcome.Drew;
     }
+    public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) {
+        if (m_pick is not null) {
+            return m_pick.Take(index: index, readback: out readback, slot: slot);
+        }
+        readback = default;
+        return false;
+    }
+    public void Submitted(int slot, IGpuSubmissionFence fence) => m_pick?.Submitted(fence: fence, slot: slot);
 
+    private int InputIndexOf(string member) {
+        for (var index = 0; (index < m_fragmentPass.Inputs.Count); index++) {
+            if (ReadMemberOf(version: m_fragmentPass.Inputs[index].Name) == member) {
+                return index;
+            }
+        }
+        throw new InvalidOperationException(message: $"Pass '{m_context.Pass}' has no input read through '{member}'.");
+    }
     // Takes the view the instance resolved this frame when it is another than the one the pass records: the package
     // decided the pass can record it as built (SdfWorldPasses.CanFollow). A counter change holds recording until matching
     // passes install. The hold and the retain move with the view; the ports and screens rebind for the

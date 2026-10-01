@@ -166,7 +166,8 @@ public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPack
 /// <param name="CountsKernelWork">Whether its kernels count their own work into the node's counter buffers
 /// (<see cref="GpuKernelCounters"/>): the node then clears and copies them around its frame's passes, and hands the pass
 /// its row (<see cref="RenderGraphPackageRecording.WorkCounters"/>).</param>
-public sealed record RenderGraphFragmentPass(string Name, IReadOnlyList<ResourceReference> Inputs, IReadOnlyList<RenderGraphPortAccess> InputAccesses, IReadOnlyList<ResourceReference> Outputs, IReadOnlyList<RenderGraphPortAccess> OutputAccesses, ShaderPipelineDispatch? Dispatch = null, bool CountsKernelWork = false);
+/// <param name="Members">A part's interface members, or null for its package's common members.</param>
+public sealed record RenderGraphFragmentPass(string Name, IReadOnlyList<ResourceReference> Inputs, IReadOnlyList<RenderGraphPortAccess> InputAccesses, IReadOnlyList<ResourceReference> Outputs, IReadOnlyList<RenderGraphPortAccess> OutputAccesses, ShaderPipelineDispatch? Dispatch = null, bool CountsKernelWork = false, IReadOnlyList<ShaderInterfaceMember>? Members = null);
 /// <summary>The passes a package runs as. The graph compiler splices them into a graph in place of each pass naming the
 /// package: each fragment pass becomes a package pass named <c>&lt;pass&gt;$&lt;fragment pass&gt;</c>, each fragment
 /// resource a version named <c>&lt;pass&gt;$&lt;resource&gt;</c>, a name standing for an input port the version the pass
@@ -200,7 +201,7 @@ public sealed class RenderGraphPackageCatalog {
     /// headroom above it, which the display encode quantizes for the display or a capture (<see cref="SurfaceEncoder"/>).</summary>
     public const GpuPixelFormat WorkingFormat = GpuPixelFormat.R16G16B16A16Float;
     /// <summary>The id of the SDF world view: primary traversal, surfaces, ambient occlusion and lighting of one view,
-    /// from the instance's camera, run as the fragment <see cref="SdfWorldPackage.Fragment"/> declares. The screens it
+    /// from the instance's camera, run as the fragment <see cref="SdfWorldPackage.NativeFragment"/> declares. The screens it
     /// shows are the instance's reads, not ports.</summary>
     public const string SdfWorld = "sdf.world";
     /// <summary>The id of the world's SDF brick pool: brick uploads and carve bakes into one pool the world's views
@@ -220,8 +221,14 @@ public sealed class RenderGraphPackageCatalog {
     /// <c>Assets/Shaders/Graph/place.comp.hlsl</c>, compiled at build; its config is the rect (<see cref="PlaceRect"/>),
     /// the sharpness (<see cref="PlaceSharpness"/>), whether the destination outside the rect is the letterbox color
     /// rather than the base (<see cref="PlaceLetterbox"/>) and whether the reconstructed source is tonemapped
-    /// (<see cref="PlaceTonemap"/>).</summary>
+    /// (<see cref="PlaceTonemap"/>). <see cref="PlaceCompareMode"/> selects a held/current comparison instead of normal
+    /// placement, with <see cref="PlaceWipe"/> controlling its divider.</summary>
     public const string Place = "place";
+    /// <summary>The <see cref="Place"/> comparison mode: 0 places normally, 1 wipes, 2 splits and 3 shows absolute
+    /// RGB difference. In comparison modes the source is the held rect and the base is the current whole image.</summary>
+    public const string PlaceCompareMode = "compareMode";
+    /// <summary>The <see cref="Place"/> wipe position across its rect, from 0 to 1; initially 0.5.</summary>
+    public const string PlaceWipe = "wipe";
     /// <summary>The <see cref="Place"/> config field that, at 1, fills the destination outside the rect with the
     /// letterbox color the kernel states rather than the base; 0, the default, keeps the base there.</summary>
     public const string PlaceLetterbox = "letterbox";
@@ -361,8 +368,15 @@ public sealed class RenderGraphPackageCatalog {
         .. ShaderWorkCounters.Members,
     ];
     /// <summary>Gets the config schema of <see cref="Place"/>: the letterbox switch, off by default, the rect, whole by
-    /// default, the sharpness, 0 by default, and the tonemap switch, off by default.</summary>
+    /// default, the sharpness, 0 by default, the tonemap switch, off by default, and optional comparison mode and wipe.</summary>
     public static IReadOnlyDictionary<string, ShaderConfigField> PlaceConfig { get; } = new ReadOnlyDictionary<string, ShaderConfigField>(dictionary: new Dictionary<string, ShaderConfigField>(comparer: StringComparer.Ordinal) {
+        [PlaceCompareMode] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
+            Description: "0 places normally; 1 wipes, 2 splits, and 3 shows absolute RGB difference between the held source and the base image's current rect.",
+            Max: 3,
+            Min: 0,
+            Type: ShaderValueType.Uint
+        ),
         [PlaceLetterbox] = new ShaderConfigField(
             Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
             Description: "1 fills the destination outside the rect with the letterbox color rather than the base.",
@@ -390,6 +404,13 @@ public sealed class RenderGraphPackageCatalog {
             Max: 1,
             Min: 0,
             Type: ShaderValueType.Uint
+        ),
+        [PlaceWipe] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "0.5").RootElement.Clone(),
+            Description: "The held image covers this fraction of the rect in wipe mode; the current image covers the rest.",
+            Max: 1,
+            Min: 0,
+            Type: ShaderValueType.Float
         ),
     });
     /// <summary>Gets what <see cref="Place"/>'s kernel reads from its pass group beside the extent and config: its base
@@ -498,7 +519,7 @@ public sealed class RenderGraphPackageCatalog {
 
     private static IEnumerable<RenderGraphPackage> EnginePackages() => [
         new RenderGraphPackage(
-            Fragment: SdfWorldPackage.Fragment,
+            Fragment: SdfWorldPackage.NativeFragment,
             Id: SdfWorld,
             Inputs: [],
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],

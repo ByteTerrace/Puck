@@ -409,7 +409,7 @@ public sealed class WorldCaptureScheduler {
             path1: m_directory,
             path2: frameName
         );
-        var request = new FrameCaptureRequest(path: path);
+        var request = new FrameCaptureRequest(path: path, converge: row.Converge);
 
         try {
             target.RequestCapture(request: request);

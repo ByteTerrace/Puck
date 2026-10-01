@@ -18,8 +18,8 @@ struct ViewportData {
     // it into the view's rect. zw are zero.
     float4 extent;
     // x = the view's near distance (read through worldNearDistance below). yz = the off-axis (asymmetric) frustum's
-    // tangent-space center offset (SdfAsymmetricFrustum) — (0,0) for an ordinary symmetric camera, consumed by
-    // march/sdf-cone.hlsli's cameraRayDirection. w = the frame's FAR DISTANCE (read through worldFarDistance below).
+    // tangent-space center offset (SdfAsymmetricFrustum), including this sample's ray jitter, consumed by
+    // march/sdf-cone.hlsli's cameraRayDirection. An unjittered symmetric camera has (0,0). w = FAR DISTANCE.
     float4 lens;
 };
 ViewportData worldView() {
@@ -29,7 +29,9 @@ ViewportData worldView() {
     data.up = float4(passGroup.viewUp, passGroup.aspectRatio);
     data.forward = float4(passGroup.viewForward, (float)passGroup.debugMode);
     data.extent = float4((float2)passGroup.imageExtent, 0.0, 0.0);
-    data.lens = float4(passGroup.nearDistance, passGroup.frustumOffset, passGroup.farDistance);
+    float2 jitterNdc = ((passGroup.jitter / (float2)passGroup.imageExtent) * float2(2.0, -2.0));
+    float2 jitterLens = (jitterNdc * float2(passGroup.aspectRatio, 1.0) * passGroup.tanHalfFieldOfView);
+    data.lens = float4(passGroup.nearDistance, (passGroup.frustumOffset + jitterLens), passGroup.farDistance);
     return data;
 }
 

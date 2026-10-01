@@ -319,12 +319,23 @@ offers:
 
 | Package | Ports | Renders |
 |---|---|---|
-| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a fragment (`SdfWorldPackage.Fragment`): sky, mask, beam, cull arguments, mesh, then primary, surface, ambient, shadow and views dispatched indirectly from the cull arguments, over transient counted scratch. Those five are stages over the per-pixel visibility record: primary alone reads the mesh target and writes the record, surface, ambient and shadow add to it, and views shades it, every light answering through one interface and the stage adding each light's summed rim and specular totals once. The ambient and shadow passes skip a frame whose levers turn ambient occlusion or soft shadows off. The screens it shows are the instance's reads, not ports. |
+| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a native fragment (`SdfWorldPackage.NativeFragment`): sky, mask, beam, cull arguments, mesh, then primary, surface, ambient, shadow and views dispatched indirectly from the cull arguments, over transient counted scratch. Those five are stages over the per-pixel visibility record: primary alone reads the mesh target and writes the record, surface, ambient and shadow add to it, and views shades it, every light answering through one interface and the stage adding each light's summed rim and specular totals once. The ambient and shadow passes skip a frame whose levers turn ambient occlusion or soft shadows off. The screens it shows are the instance's reads, not ports. |
 | `sdf.bricks` | no input, one buffer output written by compute | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
 | `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
 | `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes the letterbox color outside the rect instead of the base, 0 by default), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source), `sharpness` and `tonemap` (1 puts the reconstructed source through the filmic curve inside the rect, never the base or the letterbox color, 0 by default); a host that places panes per frame (`IRenderGraphPlacements`) overrides the rect and sharpness, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
 | `sdf.film-grain` | one fragment-sampled image input, one color-attachment image output | Film grain over the input: the engine's [post-process package](#post-process-packages), a per-pixel integer-hashed offset keyed on the engine tick. Its stages, `fullscreen.vert` and `sdf-film-grain.frag` in `Assets/Shaders/Sdf/passes`, compile at build, and `PostProcessPackage` records it. |
 | `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` | one raw buffer input read by compute, one image output written by compute | An uploaded source's region (`ImageSourceUploadLayout`) converted by the shipped kernel of that name in `src/Puck.Shaders/Assets/Shaders/Sources` into RGBA8, or half-float linear light for `source-transfer`. `SourceConversionPackage` records them; the runtime runs one in the graph it makes for each uploaded source instance, its region bound as a host buffer port (`ShaderPipelineRenderNode.BindRegion`). |
+
+The `place` package also displays held/current comparisons. Its `compareMode`
+config is 0 for ordinary placement, 1 for a wipe, 2 for a split, or 3 for the
+absolute RGB difference. The source contains the held rect; the base contains
+the whole live image. Both sides use the same reconstruction filter, clamped
+to their own crop. `wipe` places the divider from 0 to 1 across the rect and
+defaults to 0.5. Comparison modes ignore sharpness and tonemapping because the
+held image already contains display colors. The host can update the mode and
+divider as pass parameters without rebuilding the graph. See
+[World's editing commands](../../src/Puck.World/README.md#the-world-as-data)
+for the editor commands that hold and compare a frame.
 
 A package may run as a fragment (`RenderGraphPackageFragment`): passes and
 versions of its own, which the graph compiler splices into the graph in place
@@ -483,6 +494,25 @@ override from which the next access records only the barrier the planned
 states call for. A pass skips only on frames no later pass reads the contents
 of its outputs on; the SDF mesh pass skips every frame that draws no mesh.
 
+A recorder can instead return a non-null `IRenderGraphPackageRecorder.Signature`
+for its prepared package inputs. The node leaves the pass standing only when
+that signature, its extent, its graph inputs' last writes and its retained
+outputs all remain valid. Its later consumers then read the last retained
+result. Null forces execution. The signature covers borrowed regions, view
+state and unbound inputs; their existing preparation keeps its own counting
+and queue ordering. Graph-bound external, history or rotating inputs force
+execution because this path has no persistent content identity for them.
+The node also invalidates a standing result when its config bytes change.
+
+Standing records neither pass work nor pass barriers. It uses the same planned
+state override as skipping, so the next actual access starts from the last
+actual access. First install, reset, replacement, resize and device loss require
+new writes. Before recording a retained graph, the node checkpoints its existing
+resource tracker and content identities. A failure before submission restores
+that state and rearms the failed slot's staged region copies. Previously
+submitted contents remain valid; an exception after a successful submission
+cannot roll back that submission.
+
 A recording that draws nothing returns `RenderGraphPackageOutcome.DrewNothing`,
 and each output then stands for the input at its position: the instance
 publishes that input's image with no copy, in its own layout
@@ -596,14 +626,16 @@ any other:
 - `world$2` onward: one instance per further split-screen view of the same
   residency, when the world's layouts or player roster can compose more than
   one view.
-- `main`: the root graph reading `world`'s output over the whole display and
+- `main`: the scene graph reading `world`'s output over the whole display and
   every pane's output. With more than one view, or with a tonemap, it first
   runs one `place` pass per view. Then it runs one `place` package pass per
   `views.graphs` instance any layout slot names, each pass named after its
   instance, then one pass per `views.post` row in document order, named by the
   row and running its [post-process package](#post-process-packages), each
-  reading the frame the pass before it wrote, then the `overlay` pass in a
-  windowed World that loaded its glyph atlas.
+  reading the frame the pass before it wrote. Its output is the scene.
+- `main$overlay`: in a windowed World that loaded its glyph atlas, one
+  `overlay` pass drawing the console, HUD, toasts and cursor over the scene, or
+  over an editor comparison composed on the scene, and the display's root.
 
 When `render.tonemap` is `Filmic`, each view's `place` pass sets the `place`
 config's `tonemap`, which puts the view it reconstructs, and nothing else,
@@ -614,11 +646,13 @@ A pane is display-referred, a pane shader's own tonemap included, so the root
 never tonemaps it, and the HUD composes over the finished frame at SDR white,
 which the display encode shows at the paper-white level.
 
-`main` is the root whenever anything is drawn over the world, panes and the
-tonemap included, and whenever the world has more than one view. When none
-holds, as in an offscreen World with no panes, no `views.post` rows and no
-tonemap, `world` is the root and the display shows the world's first view
-directly. The host composes the root again whenever the document's panes, views,
+`main` holds the scene whenever anything is drawn over the world, panes and
+the tonemap included, and whenever the world has more than one view; otherwise
+`world` does. The display shows the scene or an active editor comparison, with
+`main$overlay` as its root when the overlay is drawn over that image.
+When nothing is drawn, as in an offscreen World with no panes, no `views.post`
+rows and no tonemap, `world` is the root and the display shows the world's first
+view directly. The host composes the root again whenever the document's panes, views,
 `views.post` rows or `render.tonemap` move, and runs no tonemap while a debug
 view (`world.debug-view`) is on, so a debug view shows its own colors. A world that sets `views.root` authors its whole render graph,
 the `sdf.world` package row included, and the runtime runs its rows alone; such
@@ -632,8 +666,9 @@ the root, or names `world` to capture the SDF world before its tonemap, panes,
 post passes and overlay: its working image through the SDR display encode,
 untonemapped. `world.counters gpu` counts every graph instance under its
 instance name: `world` is the first view's node, whose passes are
-`sdf.world$sky` through `sdf.world$views`, `main` the root's node, whose passes
-are the place, post and overlay passes, and each pane its own node. It counts
+`sdf.world$sky` through `sdf.world$views`, `main` the scene's node, whose
+passes are the place and post passes, `main$overlay` the overlay's, and each
+pane its own node. It counts
 each residency's upload beside them: the world's as `sdf:world`, and each
 session or routed scene's as `sdf:<name>`. Camera instances share the world's
 upload and tables; their passes and scratch count under their instance names.
@@ -683,12 +718,17 @@ Split-screen seats are placed the same way. The SDF engine renders each view
 of a layout into its own output image, and each view is a producer of its own:
 `world` for the first, then `world$2`, `world$3` and so on, up to the most
 views any layout or the player roster can compose. When a world has more than
-one, `main` is the root and runs one `place` pass per view ahead of the pane
-passes. `PrepareGraph` places each view at its rect and adds a footprint of
-that rect at the view's render scale, so the scheduler renders the view at the
-reduced extent and `place` reconstructs it with the same sharpness. A view is
-shown only once the engine has rendered it, and a single view covering the
-whole display at native scale with no tonemap is not placed, so `main` passes
+one, `main` composes the scene and runs one `place` pass per view ahead of the
+pane passes. `PrepareGraph` places each view at its rect and adds that rect's native
+footprint. The view's own package allocates traversal targets at its quantized
+render ceiling and records the current render grid inside those targets; a
+layout transition's dip moves only that grid, so it rebuilds and allocates
+nothing. A view whose ceiling is below native appends `resolve`, reconstructing
+color at the output extent before placement; `place` copies that output when
+the scheduled extent equals the rect's pixels and otherwise resamples it again.
+A view at a native ceiling renders its output grid directly and does not dip. A view is shown only once the
+engine has rendered it, and a single view covering the whole display with no
+tonemap is not placed, so `main` passes
 `world` through unchanged; with a tonemap it is placed like any other, since its
 place pass applies the tonemap. A layout change places its views one frame later, like its panes.
 The first view's place pass sets the `place` config's `letterbox`, so outside
@@ -909,10 +949,33 @@ DXIL's structured stride for one is its 12 bytes, while SPIR-V's buffer layout
 may pad it to 16, so the two backends would disagree on where each element
 starts.
 
+An engine-owned record uses `ShaderInterfaceStructure.From<T>()` and the
+buffer member's `structure` argument. The unmanaged C# record's public fields
+define its names, types, offsets and stride. Fields are `float`, `int`, `uint`
+or floating-point vectors. Each field must meet the shared 4-, 8- or 16-byte
+alignment, and the record's size must include its trailing alignment. This
+allows a `Vector3` followed by a scalar in one 16-byte row. The generator emits
+the struct and any explicit gaps; it does not maintain a second field list.
+Nested records and arrays within records are not admitted.
+
+The reflected buffer name carries the record layout's content identity. A
+same-sized field reorder therefore refuses stale bytecode even though its
+stride has not changed. HLSL reads the buffer through its ordinary member name;
+the generated include supplies the alias.
+Record fields may not share a name with a generated resource or stamped-block
+alias; admission names the colliding field before the shader preprocessor can
+rename its access.
+
+The shared interface echo reads two consecutive native records, checking both
+field offsets and the element stride. `WriteRecordSentinels` prepares those
+records and zeroes padding. Its distinct normal-float sentinels support records
+up to 8192 bytes and bindings below 256; a larger echo refuses by resource name
+instead of reusing sentinel identities.
+
 Each buffer binding carries the element stride its bytecode reflects
 (`ShaderInterfaceBinding.ElementStride`; every other binding carries 0). A
 structured buffer's stride is its element's size on both backends: 4, 8 or 16
-bytes. A raw buffer's stride is what each backend reports for a byte-address
+bytes for a primitive, or the native record's declared size. A raw buffer's stride is what each backend reports for a byte-address
 buffer: SPIR-V declares one as a runtime array of `uint` whose `ArrayStride` is
 4 (`ShaderInterfaceLayout.SpirvRawBufferStride`), and DXIL's reflection reports
 a `NumSamples` of 0 (`ShaderInterfaceLayout.DxilRawBufferStride`), the zero
@@ -1082,10 +1145,10 @@ its slot's `GpuRegion.Buffer`; it records no copy and no barrier.
 ## The display encode
 
 The engine's working images are float (`RenderGraphPackageCatalog.WorkingFormat`,
-`R16G16B16A16Float`): every SDF view's color, and every version of a world's root
-graph that the views are placed into and the post passes and the overlay draw
-over. A working value is the shading's display-referred value, one at SDR white,
-with headroom above it. Nothing quantizes it until the display encode
+`R16G16B16A16Float`): every SDF view's color, every version of the scene graph
+that places the views and runs the post passes, and the overlay's output in
+`main$overlay`. A working value is the shading's display-referred value, one at
+SDR white, with headroom above it. Nothing quantizes it until the display encode
 (`Assets/Runtime/display-encode.frag.hlsl`, drawn over the fullscreen triangle of
 `display.vert.hlsl`), which samples a working image 1:1 by fragment coordinate
 and writes it in the color space its target shows:
@@ -1342,7 +1405,8 @@ more pieces of vocabulary:
 - A buffer's `strideBytes` makes it a structured buffer of elements that size.
 - A buffer's `count` sizes it in place of `sizeBytes`, as a sum of terms. Each
   term is `elements` per unit of the product of the bases in `per`, counts the
-  host resolves: `Extent` pixels, program `Instances`, `ProgramWords`,
+  host resolves: output `Extent` pixels, `RenderExtent` pixels (the allocation
+  ceiling for a package with separate grids), program `Instances`, `ProgramWords`,
   `Viewports`, `Tiles` of one viewport, `DynamicTransforms`, and the
   `InstanceMaskWords` of one tile and `InstanceGridWords` the host derives from
   its instances, and the `BrickPoolVoxels` of the world's SDF brick pool. The
@@ -1358,7 +1422,15 @@ more pieces of vocabulary:
   (`IRenderGraphPackageFactory.CounterOf`, an `IShaderPipelineStorageCounter`)
   at the extent it builds the graph for, and rebuilds the installed graph
   beside it, as a resize does, when the counter's revision moves. A graph whose
-  packages state no counter resolves the extent alone.
+  packages state no counter resolves the extent alone. A package can separately
+  supply `IShaderPipelineRenderExtent`: its ceiling sizes render resources and
+  its current grid sets pass dimensions without reallocating. `Relative` image
+  dimensions use the output grid; `Render` dimensions use this render grid,
+  falling back to output when no provider exists. Current pass costs use those
+  same dimensions, so a reduced SDF view prices ten render-grid passes plus one
+  full-output resolve. An authored camera or session `OutputExtent` stays exact
+  through display resizing and consumer scale changes; footprints decide demand,
+  while the authored pixels decide the image size.
 - A resource's `transient` makes its storage frame-transient: one allocation
   every frame slot shares, instead of one per slot. Each frame writes it from
   discarded contents before anything reads it, and nothing reads it across
@@ -1368,6 +1440,20 @@ more pieces of vocabulary:
   transient storage that is history, published, host- or zero-initialized,
   read as the previous frame, or first reached by anything but its first
   version's write is refused (`SHADERPIPE_TRANSIENT`).
+- A resource's `retained` keeps one queue-ordered intermediate allocation across
+  frames. Only the chain root declares it. It cannot also be transient,
+  external, history or a public output (`SHADERPIPE_RETAINED`); a composite
+  still writes the current public output. The allocation count is one even
+  when several submission slots are in flight. Output selection also refuses
+  retained and transient intermediates by name, and a reload drops an old
+  selection that becomes such storage; ordinary per-slot intermediates remain
+  selectable.
+- A forwarding version can declare `preservesPredecessor` only when its package
+  writer uses retained storage and preserves every predecessor-owned field.
+  Its writes must replace its own fields idempotently. Ordinary forwarding
+  invalidates predecessor contents; preserving forwarding keeps their logical
+  identities valid. Either write invalidates later derived versions, so an
+  unchanged downstream signature cannot hide an upstream change.
 
 A shader pass declaring a `Groups` or `Indirect` dispatch is refused
 (`SHADERPIPE_DISPATCH_PACKAGE`), and so is a shader pass binding a buffer with
@@ -1486,6 +1572,18 @@ History whose extent changes starts again from its declared initialization: the
 first frame at the new extent reads it as the previous frame's. If the rebuilt graph cannot be
 allocated, the installed graph keeps running at its old extent.
 
+What a frame projects, such as a camera's aspect, is composed for the extent the
+host requests, so a frame the installed graph renders at its old extent projects
+for an extent it is not shown at. An instance whose reader places it into a rect
+still renders meanwhile, because the reader stretches its image into the rect the
+projection was composed for. The render graph's root is shown at its own extent
+as the display (`ShaderPipelineRenderNode.ShownAtItsExtent`), so it renders
+nothing while its requested extent builds or stays refused and presents its last
+image instead. Either way a capture reads only an image rendered at the extent
+last requested of its instance, so a capture armed during a resize lands on the
+first frame at the new extent, and `UnservedCaptureReasonOf` names the extent
+it waits for.
+
 A refused candidate, a reload or a resize, is not retried on a clock or per
 frame: it is tried again when the host asks for something different, when the
 operator's GPU faults change (`GpuCreationFaults.Revision`: `gpu.faults` arming
@@ -1555,11 +1653,18 @@ inputs occupy none of it.
 `ShaderPipelineRenderNode` counts the GPU work each pass records, not the time
 it takes. The node wraps every GPU service it holds once, so each dispatch,
 draw, barrier, bind, descriptor write, push-constant byte and clear it records
-is counted where it is made, into the pass being recorded. The zero clears that
+is counted where it is made, into the pass being recorded. `gpu.copies` counts image
+and buffer-range copies; `gpu.copies.buffer-bytes` counts the bytes of every
+buffer range, including picking, counter readback and device-local history.
+Image copies do not contribute buffer bytes, and these device transfers do
+not contribute host-visible upload bytes. The zero clears that
 start the first frame after an install or a reset count in the first pass. The
 preview and the output transitions count outside every pass. A package pass
 that skips a frame (`IRenderGraphPackageRecorder.Skips`) records nothing and
-counts as skipped, never as a pass that ran and did no work. A graph a package
+counts as skipped, never as a pass that ran and did no work. A pass reusing its
+retained result counts as `standing`, distinct from an inactive `skipped` pass.
+Neither state has per-pass counts: a standing primary pass is not a measured
+zero march load. Both contribute no work to the submission's totals. A graph a package
 pass of which counts its shaders' own work (`RenderGraphFragmentPass.CountsKernelWork`,
 or `RenderGraphPackage.CountsKernelWork` for a package whose members declare
 the work counters: every pass of `sdf.world`, `place`, `overlay`, the source
@@ -1702,6 +1807,29 @@ entries of the same cache, one a kernel variant (`SdfWorldPipelines`). At most
 a cold driver cache translating many pipelines keeps a processor for the thread
 that pumps frames. The mechanism is `Puck.Hosting.GpuBuildCache<TKey, T>`.
 
+### Observational pass timing
+
+`ShaderPipelineRenderNode.TimingEnabled` is off by default. When enabled, each
+recorded work-ledger pass gets two timestamp queries from the optional
+`GpuDeviceServices.TimestampFactory`. Pools are named, fault-wrapped, and counted
+as `gpu.created.timestamp-pools`; unsupported queues return no pool. Vulkan uses
+its queue's timestamp-valid width and device period, while Direct3D 12 uses the
+direct queue frequency and the normal device-removal translation boundary.
+Readback waits for the submission fence and rejects earlier graph/enable epochs.
+The readout keeps at most 32 completed pairs per pass. Disabling withdraws it at
+once, then releases pools as their fences complete; device loss releases them.
+These durations are observational and never choose quality or establish parity.
+
+`pipeline.inspect` includes timestamp readback and CPU sample payload bytes.
+Both inspection and the live budget include `cadence-cpu-bytes`: installed
+content identities, dependency arrays and the existing resource tracker's
+failure-recovery checkpoints. Graphs without retained storage allocate none;
+retained graphs allocate these arrays at installation and reuse them each frame.
+Its region-memory rows separately count installed host-written regions by GPU
+memory kind, CPU shadows, and writer/row/upload scratch. Empty overlay output
+still owns those buffers. Logical payload counts exclude backend padding and
+managed object headers.
+
 ### Memory budget
 
 A pipeline instance holds a bounded amount of device memory. Before a
@@ -1709,8 +1837,9 @@ replacement allocates anything (a reload, a row edit or a resize), the node
 counts two numbers from the plan it would install:
 
 - **Steady-state bytes**: what the graph owns once it runs. That is one
-  instance per frame slot of every image and buffer the node owns, retained
-  history, the images a graphics pass draws into and depth attachments included,
+  instance per frame slot of ordinary and history images and buffers, and one
+  queue-ordered instance of each transient or retained intermediate. This includes
+  the images a graphics pass draws into and depth attachments,
   each geometry pass's vertex and index buffer, the fullscreen triangle's vertex
   buffer for each pass that reads the
   `Position` input, and the preview an external selected output needs.

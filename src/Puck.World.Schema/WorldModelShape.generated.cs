@@ -2590,6 +2590,7 @@ public static partial class WorldModelShape {
                 M("palette", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldCapturePaletteEntry>), typeof(global::Puck.World.WorldCaptureRow), "Palette", Read | Write),
                 M("instance", typeof(global::System.String), typeof(global::Puck.World.WorldCaptureRow), "Instance", Read | Write),
                 M("screen", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldCaptureRow), "Screen", Read | Write),
+                M("converge", typeof(global::System.Int32), typeof(global::Puck.World.WorldCaptureRow), "Converge", Read | Write),
             ],
             []),
         T(typeof(global::Puck.World.WorldCapturesSection), true, JsonTypeInfoKind.Object, null,

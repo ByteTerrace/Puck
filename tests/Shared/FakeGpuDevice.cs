@@ -35,7 +35,8 @@ internal sealed class FakeGpuDevice :
     IGpuBufferFactory,
     IGpuImageFactory,
     IGpuRenderPassFactory,
-    IGpuSurfaceTransferFactory {
+    IGpuSurfaceTransferFactory,
+    IGpuTimestampFactory {
     private readonly bool m_countCalls;
     private readonly bool m_holdFences;
     private readonly GpuObjectNaming m_naming;
@@ -76,6 +77,7 @@ internal sealed class FakeGpuDevice :
             RenderPassFactory = this,
             ShaderModuleFactory = this,
             SurfaceTransferFactory = this,
+            TimestampFactory = this,
         };
     }
 
@@ -83,6 +85,12 @@ internal sealed class FakeGpuDevice :
     private int m_distinctImages;
 
     public long AdapterLuid => 0L;
+    public Action<ulong, ulong>? OnBufferCopy { get; set; }
+    public Action<int>? OnReadback { get; set; }
+
+    public delegate void ReadbackWriter(Span<byte> destination);
+
+    public ReadbackWriter? WriteReadback { get; set; }
     /// <summary>Gets or sets whether each image created from now on carries an image and view handle of its own rather than
     /// the fake's one fixed pair, so a law can tell images apart by handle.</summary>
     public bool DistinctImages { get; set; }
@@ -231,7 +239,10 @@ internal sealed class FakeGpuDevice :
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => Hit(key: "IGpuRecorder.ClearStorageImage");
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) => Hit(key: "IGpuRecorder.ClearStorageBuffer");
     void IGpuRecorder.CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) => Hit(key: "IGpuRecorder.CopyImage");
-    void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes) => Hit(key: "IGpuRecorder.CopyBuffer");
+    void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes, ulong destinationOffsetBytes) {
+        OnBufferCopy?.Invoke(arg1: sourceOffsetBytes, arg2: sizeBytes);
+        Hit(key: "IGpuRecorder.CopyBuffer");
+    }
     void IGpuRecorder.TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
         ImageTransitions?.Add(item: (imageHandle, oldLayout, newLayout));
         Hit(key: "IGpuRecorder.TransitionImageLayout");
@@ -619,6 +630,24 @@ internal sealed class FakeGpuDevice :
 
         return false;
     }
+    IGpuTimestampPool IGpuTimestampFactory.Create(uint count, in GpuObjectName name) {
+        Hit(key: "IGpuTimestampFactory.Create");
+        var created = Track(kind: "timestamp pool");
+
+        m_naming.Name(kind: GpuObjectKind.TimestampPool, handle: (created?.Handle ?? 19), name: in name);
+        return new TimestampPool(created: created, gpu: this);
+    }
+
+    private sealed class TimestampPool(FakeGpuDevice gpu, Creation? created) : IGpuTimestampPool {
+        public double NanosecondsPerTick => 2;
+        public uint ValidBits => 32;
+
+        public void Reset(nint command, uint first, uint count) => gpu.Hit(key: "IGpuTimestampPool.Reset");
+        public void Write(nint command, uint index) => gpu.Hit(key: "IGpuTimestampPool.Write");
+        public void Resolve(nint command, uint first, uint count, nint destination, ulong offset) => gpu.Hit(key: "IGpuTimestampPool.Resolve");
+        public void Dispose() { gpu.Hit(key: "IGpuTimestampPool.Dispose"); created?.Release(); }
+    }
+
     IGpuSurfaceReadback IGpuSurfaceTransferFactory.CreateReadback() => new Readback();
     IGpuSurfaceUpload IGpuSurfaceTransferFactory.CreateUpload() => new SurfaceUpload();
 
@@ -734,8 +763,10 @@ internal sealed class FakeGpuDevice :
         public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => gpu.Hit(key: "IGpuStorageBuffer.Write");
         public void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged => gpu.Hit(key: "IGpuStorageBuffer.Write(offset)");
         public void Read(Span<byte> destination) {
+            gpu.OnReadback?.Invoke(obj: destination.Length);
             gpu.Hit(key: "IGpuReadbackBuffer.Read");
             destination.Clear();
+            gpu.WriteReadback?.Invoke(destination: destination);
         }
     }
     // Every upload lands on one fixed view handle.

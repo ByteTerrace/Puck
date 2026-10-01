@@ -58,6 +58,9 @@ public static class SdfFrameBlock {
     private static readonly int GridWorldFrame = Offset(member: SdfWorldPackage.GridWorldFrame);
     private static readonly int GridWorldOrigin = Offset(member: SdfWorldPackage.GridWorldOrigin);
     private static readonly int GridWorldPitch = Offset(member: SdfWorldPackage.GridWorldPitch);
+    private static readonly int PreviousView = Offset(member: SdfWorldPackage.PreviousView);
+    private static readonly int Jitter = Offset(member: SdfWorldPackage.Jitter);
+    private static readonly int HistoryFrames = Offset(member: SdfWorldPackage.HistoryFrames);
     private static readonly int ImageExtent = Offset(member: SdfWorldPackage.ImageExtent);
     private static readonly int InstanceMaskWordCount = Offset(member: SdfWorldPackage.InstanceMaskWordCount);
     private static readonly int MeshDraws = Offset(member: SdfWorldPackage.MeshDraws);
@@ -83,6 +86,37 @@ public static class SdfFrameBlock {
     /// <summary>Gets the bytes of the pass block, a multiple of 16.</summary>
     public static int SizeBytes => ((int)Layout.SizeBytes);
 
+    /// <summary>Writes the instance's temporal sample after the frame values, keeping cadence signatures independent of jitter.</summary>
+    /// <param name="block">The pass block.</param>
+    /// <param name="jitter">The ray offset in render pixels.</param>
+    /// <param name="historyFrames">The number of preceding samples in the current epoch.</param>
+    public static void WriteTemporal(Span<byte> block, Vector2 jitter, uint historyFrames) {
+        WriteSingle(block: block, offset: Jitter, value: jitter.X);
+        WriteSingle(block: block, offset: (Jitter + sizeof(float)), value: jitter.Y);
+        WriteUInt32(block: block, offset: HistoryFrames, value: historyFrames);
+    }
+    /// <summary>Writes the preceding render's camera and jittered lens for visibility reprojection.</summary>
+    /// <param name="block">The pass block.</param>
+    /// <param name="view">The preceding view and sample grid.</param>
+    /// <param name="valid">Whether the preceding render belongs to this epoch.</param>
+    public static void WritePreviousView(Span<byte> block, SdfReprojectionView view, bool valid) {
+        var rows = MemoryMarshal.Cast<byte, float>(span: block.Slice(length: (24 * sizeof(float)), start: PreviousView));
+
+        rows.Clear();
+        if (!valid) {
+            return;
+        }
+        var camera = view.Camera;
+
+        rows[0] = camera.Position.X; rows[1] = camera.Position.Y; rows[2] = camera.Position.Z; rows[3] = 1f;
+        rows[4] = camera.Right.X; rows[5] = camera.Right.Y; rows[6] = camera.Right.Z; rows[7] = camera.TanHalfFieldOfView;
+        rows[8] = camera.Up.X; rows[9] = camera.Up.Y; rows[10] = camera.Up.Z; rows[11] = camera.AspectRatio;
+        rows[12] = camera.Forward.X; rows[13] = camera.Forward.Y; rows[14] = camera.Forward.Z;
+        rows[16] = view.Width; rows[17] = view.Height;
+        rows[20] = camera.Near;
+        rows[21] = (camera.FrustumOffset.X + ((((2f * view.Jitter.X) / view.Width) * camera.AspectRatio) * camera.TanHalfFieldOfView));
+        rows[22] = (camera.FrustumOffset.Y - (((2f * view.Jitter.Y) / view.Height) * camera.TanHalfFieldOfView));
+    }
     /// <summary>Writes the pass's row of the work counters into its pass block (<see cref="ShaderWorkCounters.Row"/>),
     /// which <see cref="Write"/> leaves alone: the row names the pass, never what the view renders from, so a view's
     /// signature (<see cref="SdfWorldTables.ViewSignature"/>) never reads it.</summary>
@@ -115,6 +149,9 @@ public static class SdfFrameBlock {
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     public static void Write(Span<byte> block, in SdfPassValues tables, SdfFrame frame, int view, uint width, uint height) {
         ArgumentNullException.ThrowIfNull(argument: frame);
+
+        WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0);
+        WritePreviousView(block: block, valid: false, view: default);
 
         var snapshot = frame.Views[view];
         var camera = snapshot.Camera;

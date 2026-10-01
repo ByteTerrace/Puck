@@ -15,7 +15,7 @@ moving transforms, the screens, lights, volumes and mesh draws — live in one
 **residency** (`SdfWorldResidency`) per frame source, and the frame first
 submits one **upload** that brings those tables up to date. Then every view of
 the scene is an instance of the render graph's `sdf.world` package, and its node
-records the package's ten passes into its own submission, reading the tables
+records the package's ten native passes into its own submission, reading the tables
 the upload wrote. Upload and sky filling precede culling; camera traversal,
 surface evaluation, AO, the key light's shadow and lighting have separate dispatches. The passes finish
 that view's own output image:
@@ -25,14 +25,16 @@ that view's own output image:
 ```
 
 The render graph plans the view's passes like any other graph: the package
-declares them as a fragment (`SdfWorldPackage.Fragment`) that the graph
+declares them as a fragment (`SdfWorldPackage.NativeFragment`) that the graph
 compiler splices into the view's graph, and the planner decides every barrier
 between them. `world.counters gpu` reports the upload under the residency
 (`sdf:world` for the world's) and each view's passes under its instance, as
 `sdf.world$sky` through `sdf.world$views`. Here is what the culling and
 rendering passes do; [the engine README](../../../../src/Puck.SdfVm/README.md)
 describes the visibility records the four per-pixel passes share: one per pixel
-of each view, sixty bytes.
+of each view's render grid, 64 bytes. A view whose render-scale ceiling is below
+native appends the full-output `resolve` pass described under
+[render scale](#render-scale-tiers-trade-resolution-for-frame-time).
 
 **mask** (`sdf-instance-cull.comp.hlsl`) computes, for every 16×16 screen tile, the
 set of instances that could possibly matter to that tile—a bitmask, one bit per
@@ -87,9 +89,8 @@ render at different cost. Compare all five passes when measuring per-pixel field
 work between kernels can reduce register pressure but adds buffer traffic.
 
 No pass assembles views. Each view's output is its instance's own image, sized
-to the view's render extent, and the render graph's `place` pass puts it in its
-seat rect on the root image, upsampling it where the view rendered below
-native. In split screen each view is an instance of its own (`world`,
+to its output extent. Reduced views reconstruct their current color in `resolve`
+before the render graph's `place` pass puts that output in its seat rect. In split screen each view is an instance of its own (`world`,
 `world$2`, and so on) over the one residency, so the graph schedules and places
 the seats the same way it places panes.
 
@@ -152,22 +153,49 @@ per-pixel `views` costs.
 
 When the shading epilogue is the cost and you need the frame to fit a tighter
 budget, the lever is to render a view at *reduced* resolution and upsample it
-afterwards. Each view carries a `RenderScale`. The host sets the view's
-footprint in the render graph to its rect at that scale, the graph quantizes
-the footprint to an extent, and the view's instance renders its output image at
-exactly that extent. Every per-view pass (sky, mask, beam, primary, surface,
-ambient, shadow, views) reads the same extent from the view's row, so the whole
-pipeline agrees on the smaller render target. The graph's `place` pass
-reconstructs the result at native resolution with a four-tap bilinear filter,
-blended toward clamped Catmull-Rom by the upscale sharpness.
+afterwards. Each view carries a `RenderScale` ceiling inside its output extent.
+The graph keeps the view's footprint at its native rect size, and an authored
+camera or session resolution stays exact even when its reader shrinks. The
+camera aspect uses that authored width and height from the first frame.
 
-The important property is that **native is byte-exact by construction**:
-`place` copies exactly when the output's extent equals its rect, and a single
-view covering the whole display at native scale is not placed at all, so a view
-at full scale is bit-identical to a pipeline with no render-scale machinery. You
-pay nothing until you dial it down. Reduced tiers expose a policy ladder that
-trades a soft upsample for a large `views` saving—the right knob when a
-heavy revealed scene needs to reach a frame-rate target that native can't hit.
+The ceiling alone decides which passes a view runs and what it allocates.
+Traversal and shading use the current render grid inside the ceiling's
+allocation (`SdfViewSnapshot.ResolvedRenderScale`, bounded by the ceiling). A
+smaller current grid changes dispatch dimensions and the visibility stride and
+nothing else: no target is reallocated and no graph is rebuilt, so the grid can
+move every frame. A layout transition's dip moves only this grid. The shaded
+color at the render grid is one transient allocation that every frame slot
+shares. The final `resolve` pass writes full-output color with the same
+bilinear and clamped Catmull-Rom filter as `place`; coverage remains the
+color's alpha. Nothing is written beside the color: a per-pixel surface (ray
+distance and identity) at the output extent waits for its first reader.
+
+The view's output has the extent the render graph schedules for it, which is its
+rect's native extent quantized to the scheduler's steps. `place` copies that
+output where it equals the rect's pixel extent, as it does for a whole-display
+view or one half of an even display. Otherwise `place` resamples it into the rect, so a reduced
+view in such a rect is filtered twice: once by `resolve` and again by `place`. A
+lone whole-display view can stand directly, including at a reduced internal
+render scale.
+
+A view's camera maps the image in normalized coordinates, so the aspect it
+projects is the aspect of the rect it was composed for, never of the grid it is
+traversed on. A reduced grid, a transition's dip or an output still at its
+previous extent while a resize builds changes only how densely the view samples
+that rect, and `place` stretches the output back into it. The one image shown at
+its own extent is the root's, which the host presents as the display: a display
+resize composes the cameras for the new extent at once, so until the root's graph
+installs that extent the root presents its last image and a capture waits for
+the first frame at it
+([loading and installing](../../../reference/shaders.md#loading-and-installing)).
+
+A view whose ceiling is native keeps the original ten-pass fragment and writes
+its output directly. It allocates no resolve resources and ignores the current
+grid, so a layout transition does not dip it. A changed ceiling rebuilds the
+view's graph beside the installed one, which presents its last image until the
+replacement installs. A reduced view adds one output-sized dispatch; its memory
+account includes the output beside the render ceiling, and its scheduling price
+sums the passes' current grids.
 Render scale is *presentation only*: it never touches simulation state, and which
 tier a view uses is a host decision, not baked into the content. In `Puck.World`,
 `world.render-scale` sets it for every player view and `world.upscale-sharpness`
@@ -351,3 +379,51 @@ disassembly or trace the code path instead.
   and [`src/Puck.SdfVm/SdfWorldPassRecorder.cs`](../../../../src/Puck.SdfVm/SdfWorldPassRecorder.cs),
   [`src/Puck.SdfVm/SdfFrameBlock.cs`](../../../../src/Puck.SdfVm/SdfFrameBlock.cs), which writes each
   pass's block, and the pass block in the [rendering skill's sync pairs](../../../../.claude/skills/rendering/references/sync-pairs.md).
+
+## Presentation picking
+
+A rendered view exposes `SdfWorldPicker` through its `SdfWorldPasses`. A request
+uses normalized view coordinates and reads one visibility pixel asynchronously.
+The copy takes the record's V, C and L.x words (32 bytes) and, beside them, the
+frame's 16-byte dispatch box. V supplies kind, source, ray distance and material.
+The source is the SDF program instance ordinal plus one, or the mesh draw
+ordinal. Static instances therefore remain distinguishable even with the same
+material. A queued coordinate captures the program and immutable host identity
+map when its pixel copy records, so a content revision before recording keeps the
+request. A view change cancels it; after recording, a changed program or map
+rejects the answer and the request records again. Pose-only mesh changes keep
+that map.
+
+A pixel outside the frame's dispatch box holds an earlier frame's record, so the
+answer applies the rule the hit passes use, `SdfVisibility.IsCurrent`, to the box
+its own frame wrote, and a pixel outside it answers nothing, as sky. The kernels
+read the same rule through the generated `SDF_VISIBILITY_CURRENT`, and the
+identity's kind and source fields through `SdfVisibility` too.
+
+The 64-byte visibility record keeps the winning shape's exact transform slot in
+L.x, or `SDF_TRANSFORM_SLOT_NONE` (`SdfProgram.NoDynamicTransformSlot`) for
+static geometry. This slot can differ from an articulated instance's bound slot.
+A pick carries it as `SdfPickResult.TransformSlot` and resolves it against the
+transform table of the frame the record was rendered from, the rows that frame's
+upload staged, captured when the copy records, as `SdfPickResult.Transform`.
+Surface shading reads the four anonymous lanes from the existing dynamic
+transform row; static hits read zero. The remaining L words are reserved. A slot
+fits every lane that carries it: `SdfProgram.DynamicTransformSlotBits` is the
+float data lane's exact range, and a program naming a larger slot is refused.
+
+Build mode and locally opened passthrough panes demand hover from the same
+picker. At most one copy is in flight: while it is, a moved pointer's latest
+coordinate waits and records when the copy completes, so a moving pointer gets
+an answer every round trip without forcing a render per frame. An answer for an
+earlier coordinate is published with its own pixel (`SdfPickResult.X` and `Y`),
+and the hover label (`WorldPickLabel`) names a placement only with the pixel it
+was answered at. After an answer, continuing hover samples the next rendered
+frame so geometry moving beneath a stationary pointer stays current. No demand
+records no copy and forces no render. A one-shot request survives a reinstall of
+the view's passes: a copy the retired recorder still held records again through
+the one that replaces it. `world.view.pick <instance>
+[<x> <y>]` exposes the same request/result seam to presentation automation.
+`world.view.pointer <client-x> <client-y>` supplies an in-bounds console-only
+presentation cursor override; `clear` restores the real pointer feed. It does
+not move the OS cursor or send simulation input. The argument-free pointer
+query keeps its existing readout.

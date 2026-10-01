@@ -55,16 +55,16 @@ public sealed partial class SdfWorldTables {
                 meshes: m_meshPlacements
             );
 
+            if (layout.Words > m_meshWords.Length) {
+                m_meshWords = new uint[layout.Words];
+            }
+
+            var words = m_meshWords.AsSpan(
+                length: layout.Words,
+                start: 0
+            );
+
             if (layout.Words > 0) {
-                if (layout.Words > m_meshWords.Length) {
-                    m_meshWords = new uint[layout.Words];
-                }
-
-                var words = m_meshWords.AsSpan(
-                    length: layout.Words,
-                    start: 0
-                );
-
                 SdfMeshRegion.Write(
                     atlas: atlas,
                     destination: words,
@@ -72,6 +72,14 @@ public sealed partial class SdfWorldTables {
                     layout: layout,
                     meshes: m_meshPlacements
                 );
+            }
+
+            StageMeshMotion(
+                draws: draws,
+                words: words
+            );
+
+            if (layout.Words > 0) {
                 EnsureMeshRegionCapacity(bytes: layout.Bytes);
                 _ = m_meshRegion.Write(
                     bytes: MemoryMarshal.AsBytes(span: words),
@@ -113,6 +121,7 @@ public sealed partial class SdfWorldTables {
 
         m_meshRegion.Dispose();
         m_meshRegion = replacement;
+        m_seedMeshHistory = true;
         m_bindingRevision++;
         Volatile.Write(
             location: ref m_meshRegionBytes,

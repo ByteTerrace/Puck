@@ -215,4 +215,16 @@
 #define SDF_LIGHT_POINT       3u
 #define SDF_LIGHT_OCCLUDER    4u
 
+// Puck.SdfVm.SdfVisibilityKind.
+#define SDF_VISIBILITY_KIND_BACKGROUND 0u
+#define SDF_VISIBILITY_KIND_SDF        1u
+#define SDF_VISIBILITY_KIND_MESH       2u
+
+// The visibility record's identity fields, transform-slot lane and currency box (SdfVisibility).
+#define SDF_VISIBILITY_KIND_SHIFT             30u
+#define SDF_VISIBILITY_SOURCE_MASK            0x3FFFFFFFu
+#define SDF_TRANSFORM_SLOT_NONE               -1
+#define SDF_VISIBILITY_BOX_EDGE               8u
+#define SDF_VISIBILITY_CURRENT(pixel, bounds) (((pixel).x >= ((bounds)[0] * SDF_VISIBILITY_BOX_EDGE)) && ((pixel).y >= ((bounds)[1] * SDF_VISIBILITY_BOX_EDGE)) && ((pixel).x < ((bounds)[2] * SDF_VISIBILITY_BOX_EDGE)) && ((pixel).y < ((bounds)[3] * SDF_VISIBILITY_BOX_EDGE)))
+
 #endif // SDF_ISA_HLSLI

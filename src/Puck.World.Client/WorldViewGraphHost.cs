@@ -41,7 +41,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
     /// <summary>One instance's presentation controls, pending compilation, and dependency watch.</summary>
     public sealed partial class Entry {
-        private readonly Dictionary<string, (DateTime Time, long Length)> m_stamps = new(comparer: PuckPaths.Comparer);
+        private readonly DependencyWatch<string, (DateTime Time, long Length)> m_watch = new(read: ReadStamp, comparer: PuckPaths.Comparer);
 
         /// <summary>The currently requested document-relative source.</summary>
         public string Source { get; internal set; } = string.Empty;
@@ -71,9 +71,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         private double m_clockSeconds;
         private double m_presentedSeconds;
-        private long m_changedAt;
-        private long m_lastPolledAt;
-        private long m_retryAt;
 
         internal BackgroundBuild<CompileOutcome> Compilation { get; } = new();
 
@@ -141,58 +138,21 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             }
         }
         /// <summary>The number of dependency changes observed.</summary>
-        public int SourceChangeCount { get; private set; }
+        public int SourceChangeCount => m_watch.ChangeCount;
         /// <summary>The root source being watched, or null when watching is disabled.</summary>
         public string? WatchPath { get; private set; }
 
         internal void CancelPending() =>
             Compilation.Cancel();
-        internal bool PollWatch(long debounceTicks, long pollTicks) {
-            var now = Stopwatch.GetTimestamp();
-
-            if ((now - m_lastPolledAt) >= pollTicks) {
-                m_lastPolledAt = now;
-                // Bound filesystem metadata reads independently of the host's presentation frame rate.
-                // Replacing values is safe while enumerating Dictionary on the supported runtime.
-                foreach (var (path, before) in m_stamps) {
-                    var after = ReadStamp(path: path);
-
-                    if (before == after) { continue; }
-                    m_stamps[path] = after;
-                    SourceChangeCount++;
-                    m_changedAt = now;
-                }
-            }
-            var queuedAt = Math.Max(
-                val1: m_changedAt,
-                val2: m_retryAt
-            );
-
-            if (
-                (queuedAt == 0) ||
-                ((now - queuedAt) < debounceTicks)
-            ) { return false; }
-            m_retryAt = 0;
-            m_changedAt = 0;
-            return true;
-        }
+        internal bool PollWatch(long debounceTicks, long pollTicks) => m_watch.Poll(now: Stopwatch.GetTimestamp(), debounceTicks: debounceTicks, pollTicks: pollTicks);
         internal void RefreshDependencies() {
             if (WatchPath is not { } root) { return; }
             var retained = new HashSet<string>(comparer: PuckPaths.Comparer) { root };
 
             if (LastCompile is { } compiled) { retained.UnionWith(other: compiled.Dependencies); }
-            foreach (var path in retained) {
-                m_stamps.TryAdd(
-                key: path,
-                value: ReadStamp(path: path)
-            );
-            }
-            foreach (var path in m_stamps.Keys.ToArray()) {
-                if (!retained.Contains(item: path)) { m_stamps.Remove(key: path); }
-            }
-            // Preserve existing stamps and debounce state: an edit during compilation must schedule another load.
+            m_watch.Refresh(dependencies: retained);
         }
-        internal void ScheduleRetry() => m_retryAt = Stopwatch.GetTimestamp();
+        internal void ScheduleRetry() => m_watch.Retry(now: Stopwatch.GetTimestamp());
 
         // Re-anchors the time mapping at the frame last presented, holding the time it showed.
         private void Rebase() {
@@ -270,9 +230,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         /// <summary>Stops watching and discards any pending debounce event.</summary>
         public void Unwatch() {
             WatchPath = null;
-            m_stamps.Clear();
-            m_lastPolledAt = 0;
-            m_changedAt = 0;
+            m_watch.Clear();
         }
         /// <summary>Watches the source and the last compilation's dependencies.</summary>
         public void Watch(string path) {
@@ -301,6 +259,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // Whether this frame's lone whole-display view is shown only so its place pass applies the tonemap: the display shows
     // the world itself, as it does when the root stands for the view, so no pane is published for it.
     private bool m_loneTonemapped;
+    // Whether this frame's one view covers the whole display, shown or not: the display then is that view, which a
+    // display walk starts from beneath every pane (WorldViewGraphHost.Panes.cs).
+    private bool m_lone;
     private Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldTonemap, WorldRootGraph>? m_compose;
     private bool m_disposed;
     // The source and view instances the running set was composed with, the footprints its screen-rendering instance shows
@@ -338,17 +299,22 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <param name="sources">The source instances the world's screens read (<see cref="WorldScreenMappingSet.Sources"/>).</param>
     /// <param name="rendered">The views the world renders beside its own (<see cref="WorldScreenMappingSet.Views"/>).</param>
     /// <param name="passes">The passes one render of a row's graph records.</param>
+    /// <param name="comparison">The editor's held frames, whose active comparisons are composed over the scene
+    /// (<see cref="WorldComparisonGraph"/>), or <see langword="null"/> for a host with none.</param>
     /// <param name="set">The instances, when this returns <see langword="true"/>.</param>
-    /// <param name="graphs">Each instance's graph, parallel to <paramref name="set"/>: the synthesized root's, and
-    /// <see langword="null"/> for every source, the world producer and every row.</param>
-    /// <param name="root">The instance the display shows.</param>
+    /// <param name="graphs">Each instance's graph, parallel to <paramref name="set"/>: the synthesized root's, the
+    /// comparison's and the overlay's, and <see langword="null"/> for every source, the world producer and every row.</param>
+    /// <param name="root">The instance the display shows: the overlay's when the synthesized graph draws it, over the
+    /// comparison when one is active, over the scene.</param>
+    /// <param name="scene">The instance holding the world image before any comparison or the overlay, which an editor
+    /// hold or measurement captures.</param>
     /// <param name="reason">Why the instances were refused.</param>
     /// <returns><see langword="true"/> when the instances form a valid set.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="views"/>, <paramref name="sources"/>,
     /// <paramref name="rendered"/> or <paramref name="passes"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="synthesized"/> is <see langword="null"/> and the section names
     /// no root.</exception>
-    public static bool TryCompose(WorldViewDefaults views, WorldRootGraph? synthesized, IReadOnlyList<RenderGraphInstance> sources, WorldViewInstances rendered, Func<WorldViewGraph, int> passes, [NotNullWhen(returnValue: true)] out RenderGraphInstanceSet? set, out IReadOnlyList<RenderGraphRuntimeGraph?> graphs, out string root, out string reason) {
+    public static bool TryCompose(WorldViewDefaults views, WorldRootGraph? synthesized, IReadOnlyList<RenderGraphInstance> sources, WorldViewInstances rendered, Func<WorldViewGraph, int> passes, WorldFrameComparison? comparison, [NotNullWhen(returnValue: true)] out RenderGraphInstanceSet? set, out IReadOnlyList<RenderGraphRuntimeGraph?> graphs, out string root, out string scene, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: views);
         ArgumentNullException.ThrowIfNull(argument: sources);
         ArgumentNullException.ThrowIfNull(argument: rendered);
@@ -404,21 +370,47 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             composed.AddRange(collection: synthesizedGraphs.Take(count: producers));
             composed.AddRange(collection: Enumerable.Repeat<RenderGraphRuntimeGraph?>(count: rows.Count, element: null));
             composed.AddRange(collection: synthesizedGraphs.Skip(count: producers));
-            root = synthesized.Root;
+            root = synthesized.Scene;
         }
 
         graphs = composed;
+        scene = root;
 
         if (!RenderGraphInstanceSet.TryCreate(
             instances: instances,
             refusal: out var refusal,
-            set: out set
+            set: out var composedSet
         )) {
+            set = null;
             reason = refusal.Message;
 
             return false;
         }
 
+        // An editor comparison is composed over the scene, and the overlay over whatever the display shows then, so the
+        // comparison sits under the HUD, the console and the cursor, and a hold captures the scene without them.
+        try {
+            if (comparison is not null) {
+                WorldComparisonGraph.Append(
+                    comparison: comparison,
+                    graphs: ref graphs,
+                    root: ref root,
+                    set: ref composedSet
+                );
+            }
+            synthesized?.AppendOverlay(
+                graphs: ref graphs,
+                root: ref root,
+                set: ref composedSet
+            );
+        } catch (WorldRootGraphRefusedException exception) {
+            set = null;
+            reason = exception.Message;
+
+            return false;
+        }
+
+        set = composedSet;
         reason = string.Empty;
 
         return true;
@@ -510,21 +502,26 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <c>render.tonemap</c>.</param>
     /// <param name="synthesized">The default graph the runtime was built with, or <see langword="null"/> when the booted
     /// document names its own root.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="runtime"/> or <paramref name="compose"/> is
-    /// <see langword="null"/>.</exception>
-    public void Attach(IRenderGraphInstances runtime, Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldTonemap, WorldRootGraph> compose, WorldRootGraph? synthesized) {
+    /// <param name="scene">The instance holding the scene in the set the runtime was built with (<see cref="TryCompose"/>).</param>
+    /// <exception cref="ArgumentNullException"><paramref name="runtime"/>, <paramref name="compose"/> or
+    /// <paramref name="scene"/> is <see langword="null"/>.</exception>
+    public void Attach(IRenderGraphInstances runtime, Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldTonemap, WorldRootGraph> compose, WorldRootGraph? synthesized, string scene) {
         ArgumentNullException.ThrowIfNull(argument: runtime);
         ArgumentNullException.ThrowIfNull(argument: compose);
+        ArgumentNullException.ThrowIfNull(argument: scene);
 
         m_compose = compose;
         m_lastSources = null;
         m_lastRendered = null;
         m_lastViews = null;
         m_runtime = runtime;
-        // The first Reconcile composes the set again and derives the screens' footprints and the views' roots from it.
-        m_screenFootprints = [];
-        m_roots.Clear();
+        m_comparisonLiveRoot = scene;
+        m_lastComparisonRevision = 0;
         m_synthesized = synthesized;
+        // The first Reconcile composes the set again and derives the screens' footprints and the views' roots from it; until
+        // then the display's own reads over the scene hold.
+        m_screenFootprints = DisplayFootprints(scene: scene);
+        m_roots.Clear();
         ResetFootprints();
     }
     /// <summary>Returns the frame values every graph instance presents at a frame before its own pointer, camera and
@@ -639,30 +636,25 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         return true;
     }
     /// <summary>Places a view of the world this frame: the synthesized root reads the view's producer at its rect's
-    /// extent at its render scale, shown or not, so the view renders before the root first shows it, and, when the view
+    /// output extent, shown or not, so the view renders before the root first shows it, and, when the view
     /// is shown, reconstructs its output into the rect at the given sharpness. The first view is also the base the root
     /// draws everything over. A view the synthesized root does not place (one past its <see cref="WorldRootGraph.Views"/>, or any view under a
     /// graph that places none) is ignored.</summary>
     /// <param name="view">The 0-based view.</param>
     /// <param name="region">The view's normalized rect.</param>
-    /// <param name="renderScale">The view's render scale in (0, 1]; any other value renders native.</param>
     /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
     /// <param name="shown">Whether the root draws the view's output into its rect this frame.</param>
     /// <param name="uncovered">Whether part of the display lies outside everything the root shows this frame, so the
     /// first view's place pass, when the view is not shown, writes the letterbox color everywhere rather than standing
     /// for its base (<see cref="RenderGraphPlacement.Uncovered"/>).</param>
     /// <returns><see langword="true"/> when the root places the view this frame.</returns>
-    public bool PlaceView(int view, NormalizedRect region, float renderScale, float sharpness, bool shown, bool uncovered) {
+    public bool PlaceView(int view, NormalizedRect region, float sharpness, bool shown, bool uncovered) {
         if (
             (m_synthesized is not { Plan: not null } synthesized) ||
             (((uint)view) >= ((uint)synthesized.ViewPasses.Count))
         ) {
             return false;
         }
-
-        var scale = (((renderScale > 0f) && (renderScale < 1f))
-            ? renderScale
-            : 1f);
 
         m_placements[synthesized.ViewPasses[view]] = new RenderGraphPlacement(
             Uncovered: uncovered,
@@ -676,16 +668,15 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         m_footprints.Add(item: new RenderGraphFootprint(
             Consumer: WorldViewGraphs.MainInstance,
-            Height: (region.Height * scale),
+            Height: region.Height,
             Producer: synthesized.Producers[view].Name,
-            Width: (region.Width * scale)
+            Width: region.Width
         ));
 
         return true;
     }
-    /// <summary>Places every view a composed frame of the world rendered (<see cref="PlaceView"/>), each in its rect at
-    /// its render scale, and records each view's camera for its producer (<see cref="SetCamera"/>). A view is shown once the world has rendered it, except a lone view covering the whole display at
-    /// native scale with no tonemap, which is never shown, so the root stands for the world itself; a tonemapped lone view
+    /// <summary>Places every view a composed frame of the world rendered (<see cref="PlaceView"/>), each in its output rect, and records each view's camera for its producer (<see cref="SetCamera"/>). A view is shown once the world has rendered it, except a lone view covering the whole display at
+    /// any render scale with no tonemap, which is never shown, so the root stands for the world itself; a tonemapped lone view
     /// is shown, since its place pass applies the tonemap. Before the world has composed a frame
     /// there are no views, but the world must still be scheduled, since it composes inside its own frame, so the first
     /// view is placed, not shown, over the whole display at native scale, which it renders at until its first frame names
@@ -704,10 +695,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         var whole = new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f);
 
         m_loneTonemapped = false;
+        m_lone = false;
         if (views.Count == 0) {
             _ = PlaceView(
                 region: whole,
-                renderScale: 1f,
                 sharpness: sharpness,
                 shown: false,
                 uncovered: !panesCover,
@@ -719,8 +710,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         var lone = (
             (views.Count == 1) &&
-            (views[0].Region == whole) &&
-            !((views[0].RenderScale > 0f) && (views[0].RenderScale < 1f))
+            (views[0].Region == whole)
         );
         // The lone view stands for the world itself, unshown, only when its place pass has nothing to do; a tonemap is
         // applied by the view's place pass, so a tonemapped lone view is shown like any other.
@@ -728,6 +718,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         var covered = (panesCover || standsFor);
 
         m_loneTonemapped = (lone && !standsFor);
+        m_lone = lone;
 
         for (var view = 0; (view < views.Count); view++) {
             covered |= (
@@ -755,7 +746,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             _ = PlaceView(
                 uncovered: !covered,
                 region: snapshot.Region,
-                renderScale: snapshot.RenderScale,
                 sharpness: sharpness,
                 shown: Shows(
                     rendered: rendered,
@@ -774,6 +764,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <remarks>A pane or view of the synthesized root the host did not place this frame is not shown, so its pass
     /// draws nothing.</remarks>
     public bool TryGet(string instance, string pass, out RenderGraphPlacement placement) {
+        if (TryComparisonPlacement(instance: instance, pass: pass, placement: out placement)) { return true; }
         if (
             !string.Equals(
                 a: instance,
@@ -1066,6 +1057,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             (m_runtime is not { } runtime) ||
             (
                 (m_lastTonemap == curve) &&
+                (m_lastComparisonRevision == (Comparison?.Revision ?? 0UL)) &&
                 ReferenceEquals(
                     objA: m_lastViews,
                     objB: views
@@ -1130,7 +1122,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             passes: PassesOf,
             reason: out var reason,
             rendered: rendered,
+            comparison: Comparison,
             root: out var root,
+            scene: out var scene,
             set: out var set,
             sources: (sources?.Instances ?? []),
             synthesized: synthesized,
@@ -1194,12 +1188,15 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_lastRendered = Screens?.Views;
         m_lastViews = views;
         m_lastTonemap = tonemap;
+        m_comparisonLiveRoot = scene;
+        m_lastComparisonRevision = (Comparison?.Revision ?? 0UL);
         m_refusal = null;
+        m_synthesized = synthesized;
         m_screenFootprints = ScreenFootprints(
             rendered: rendered,
             set: set
         );
-        m_synthesized = synthesized;
+        m_screenFootprints.AddRange(collection: DisplayFootprints(scene: scene));
         m_roots.Clear();
 
         foreach (var view in rendered.Views) {
@@ -1357,6 +1354,25 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             SetReportName,
             $"refused: {reason}"
         );
+    }
+    // The reads composed over the scene show at the whole display's extent: an active comparison's of the scene and its
+    // holds, and the overlay's of whatever it draws over.
+    private List<RenderGraphFootprint> DisplayFootprints(string scene) {
+        var footprints = new List<RenderGraphFootprint>();
+        var beneath = scene;
+
+        if (Comparison is { Active: true } comparison) {
+            footprints.AddRange(collection: WorldComparisonGraph.Footprints(
+                comparison: comparison,
+                liveRoot: scene
+            ));
+            beneath = WorldComparisonGraph.Root;
+        }
+        if (m_synthesized is { Overlays: true }) {
+            footprints.Add(item: WorldRootGraph.OverlayFootprint(beneath: beneath));
+        }
+
+        return footprints;
     }
     private void ResetFootprints() {
         m_footprints.Clear();

@@ -22,7 +22,7 @@ public readonly record struct SdfWorldView(SdfWorldResidency Residency, int View
 /// screen, the first taking its lease into the frame's lease list.
 /// </para>
 /// </summary>
-public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
+public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     private readonly Func<string, SdfWorldView?> m_resolve;
 
     // Each instance the runtime asked about: the view it renders, resolved on the frame thread at most once a frame, and
@@ -41,6 +41,7 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     // The context the package's frame was started with, which a residency an instance first resolves this frame is
     // prepared with before the instance decides whether its passes follow it in place.
     private FrameContext m_context;
+    private RenderGraphConvergence? m_convergence;
 
     /// <summary>Initializes a new instance of the <see cref="SdfWorldPasses"/> class.</summary>
     /// <param name="resolve">Returns the view an instance renders, or <see langword="null"/> when the host renders no view
@@ -86,12 +87,13 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
 
         try {
             view.Residency.WaitReady(cancellationToken: cancellationToken);
+            if (context.Part == SdfWorldPackage.Resolve) {
+                view.Residency.Tables!.Pipelines.BuildResolve(cache: context.Pipelines, device: context.Device, cancellationToken: cancellationToken);
+            }
         } catch {
             view.Residency.Release();
-
             throw;
         }
-
         return new Built(view: view);
     }
     /// <inheritdoc/>
@@ -99,11 +101,15 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
         ArgumentNullException.ThrowIfNull(argument: context);
         ArgumentNullException.ThrowIfNull(argument: groups);
 
-        var view = ((built as Built) ?? throw new ArgumentException(message: "An sdf.world pass is created from its own build.", paramName: nameof(built))).Take();
+        var objects = ((built as Built) ?? throw new ArgumentException(message: "An sdf.world pass is created from its own build.", paramName: nameof(built)));
+        var view = objects.Take();
 
         Hold(residency: view.Residency);
 
         try {
+            if (context.Part == SdfWorldPackage.Resolve) {
+                return new SdfResolveRecorder(context: context, groups: groups, owner: this, view: view);
+            }
             return new SdfWorldPassRecorder(
                 context: context,
                 groups: groups,
@@ -119,17 +125,110 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     }
     /// <inheritdoc/>
     public IShaderPipelineStorageCounter? CounterOf(string instance) => Refresh(instance: instance);
+    /// <summary>Gets the presentation-only picker of one view instance. Requests and results belong to the presentation thread.</summary>
+    /// <param name="instance">The view instance name.</param>
+    /// <returns>The shared picker used by hover and editor clients.</returns>
+    public SdfWorldPicker PickerOf(string instance) => Refresh(instance: instance).Picker;
+    /// <summary>Finds the picker of an instance whose SDF package the runtime has requested.</summary>
+    /// <param name="instance">The rendered instance name.</param>
+    /// <returns>The picker, or null when no SDF package is registered for the instance.</returns>
+    public SdfWorldPicker? FindPicker(string instance) => (m_entries.ContainsKey(key: instance)
+        ? Refresh(instance: instance).Picker
+        : null);
     /// <inheritdoc/>
+    /// <remarks>An instance stands only while a render taken now would feed its passes the temporal inputs its latest
+    /// render fed them (<see cref="SdfTemporalHistory.Stands"/>): a sample jittered for a converging capture renders
+    /// once more at the pixel center, and the <c>motion</c> view renders until its previous view and previous poses
+    /// settle.</remarks>
     public bool IsUnchanged(string instance, in FrameContext context) {
         var entry = Refresh(instance: instance);
 
         return (
+            !entry.Picker.Pending &&
             (entry.View is { } view) &&
             view.Residency.IsUnchanged(
                 context: in context,
                 view: view.View
             ) &&
-            (entry.RenderedBindings == entry.Bindings)
+            (entry.RenderedBindings == entry.Bindings) &&
+            (entry.RenderedScale == entry.CurrentScale) &&
+            (entry.RenderedSharpness == entry.CurrentSharpness) &&
+            (view.Residency.Tables is { } tables) &&
+            entry.Temporal.Stands(
+                // Asked before any pass of the frame records, so no upload has advanced the tables this frame: the poses
+                // they hold now are the previous poses of a render taken this frame.
+                epoch: EpochOf(
+                    debug: tables.PassValues.DebugMode,
+                    entry: entry,
+                    height: entry.Temporal.Epoch.Height,
+                    view: view,
+                    width: entry.Temporal.Epoch.Width
+                ),
+                previousPoses: tables.PoseRevision
+            )
+        );
+    }
+    /// <inheritdoc/>
+    public void BeginConvergence(string instance, RenderGraphConvergence convergence) {
+        ArgumentNullException.ThrowIfNull(argument: convergence);
+
+        m_convergence = convergence;
+        var entry = Refresh(instance: instance);
+
+        entry.Convergence = convergence;
+        entry.Temporal.Reset();
+        foreach (var residency in m_residencies.Keys) {
+            residency.BeginConvergence(request: convergence.Request);
+        }
+    }
+
+    // Prepares an instance's history once a frame, after its residency's upload for the frame: the tables then hold this
+    // render's poses as current and the preceding upload's as previous.
+    internal SdfTemporalHistory TemporalOf(string instance, SdfWorldView view, uint width, uint height, int debug, uint renderWidth = 0, uint renderHeight = 0) {
+        var entry = Refresh(instance: instance);
+
+        if (entry.TemporalFrame != m_frame) {
+            entry.TemporalFrame = m_frame;
+            var tables = view.Residency.Tables!;
+
+            entry.Temporal.Prepare(
+                camera: SnapshotOf(view: view).Camera,
+                counted: ((entry.Convergence is { IsActive: true } convergence) ? convergence.Samples : null),
+                currentPoses: tables.PoseRevision,
+                epoch: EpochOf(
+                    debug: debug,
+                    entry: entry,
+                    height: height,
+                    view: view,
+                    width: width
+                ),
+                previousPoses: tables.PreviousPoseRevision,
+                renderHeight: renderHeight,
+                renderWidth: renderWidth
+            );
+        }
+        return entry.Temporal;
+    }
+
+    private static SdfViewSnapshot SnapshotOf(SdfWorldView view) {
+        var views = view.Residency.Frame!.Views;
+
+        return views[Math.Min(
+            val1: view.View,
+            val2: (views.Count - 1)
+        )];
+    }
+    private static SdfTemporalEpoch EpochOf(Entry entry, SdfWorldView view, uint width, uint height, int debug) {
+        var snapshot = SnapshotOf(view: view);
+
+        return new SdfTemporalEpoch(
+            Binding: entry.Bindings,
+            Ceiling: snapshot.RenderScale,
+            Cut: snapshot.CutRevision,
+            Debug: debug,
+            Enabled: (entry.Convergence is { IsActive: true }),
+            Height: height,
+            Width: width
         );
     }
 
@@ -144,6 +243,9 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
             (entry.View == view)
         ) {
             entry.RenderedBindings = entry.Bindings;
+            entry.RenderedScale = entry.CurrentScale;
+            entry.RenderedSharpness = entry.CurrentSharpness;
+            entry.Temporal.Rendered();
         }
     }
 
@@ -178,7 +280,12 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     }
 
     /// <inheritdoc/>
+    /// <remarks>Discards every instance's temporal history: rebuilt tables number their pose revisions afresh.</remarks>
     public void OnDeviceLost() {
+        foreach (var entry in m_entries.Values) {
+            entry.Picker.Clear();
+            entry.Temporal.Reset();
+        }
         foreach (var residency in m_residencies.Keys) {
             residency.OnDeviceLost();
         }
@@ -220,6 +327,9 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
 
     // Starts a residency's frame the first time the package meets it in this frame.
     internal void Begin(SdfWorldResidency residency) {
+        if (m_convergence is { IsActive: true } convergence) {
+            residency.BeginConvergence(request: convergence.Request);
+        }
         if (residency.PackageFrame != m_frame) {
             residency.PackageFrame = m_frame;
             residency.BeginFrame();
@@ -339,6 +449,7 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
         }
 
         entry.View = view;
+        entry.Picker.Follow(view: view);
 
         return entry;
     }
@@ -361,13 +472,20 @@ public sealed class SdfWorldPasses : IRenderGraphPackageFactory {
     }
     // One instance: the view it renders this frame, and the counter its passes' scratch is sized by. The view is written
     // on the frame thread and read by a pass's build on the thread pool.
-    private sealed class Entry : IShaderPipelineStorageCounter {
+    private sealed partial class Entry : IShaderPipelineStorageCounter, IShaderPipelineRenderExtent {
+        public SdfWorldPicker Picker { get; } = new();
+
         private readonly Lock m_gate = new();
 
         private SdfWorldView? m_view;
 
         // The frame the entry was last resolved in.
         public long Frame { get; set; }
+
+        public long TemporalFrame { get; set; } = -1;
+        public SdfTemporalHistory Temporal { get; } = new();
+
+        public RenderGraphConvergence? Convergence { get; set; }
         // The residency last resolved.
         public SdfWorldResidency? Residency { get; set; }
         // The view the instance's passes follow, and how often a change of it could not be followed in place, which

@@ -29,6 +29,14 @@ shaders currently have a Vulkan consumer and are compiled to SPIR-V only.
 See the [project file](Puck.Overlays.csproj) for shader inputs and the shared
 [shader build](../../build/Shaders.targets) for their build contract.
 
+`InspectorWriter` draws the optional per-seat editor panel through the same
+builder and shader. Composition sums every writer's text reservation and rounds
+up to a power of two; the current four-seat world uses 32,768 words. Other record
+backstops remain fixed. Writers still have individual limits, with named
+reservation and own-cap refusals. An off panel writes nothing, but the shared
+GPU region, CPU shadow and builder scratch stay allocated and counted by the
+graph's region-memory rows. See the [editor storage rule](../../docs/plans/editor.md#e5--the-inspector).
+
 ## Documentation
 
 📚 [Rendering](../../docs/rendering/README.md) · 🛠️ [Development](../../docs/development/README.md)

@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/08372d11445def818ea208f0c3ba23103564292f532d98ae44d3ab44eb641203). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/d689a259952b637f56cca60315ae6767e97a646e7593e773f2bc81758f7272d5). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -36,30 +36,30 @@ struct SdfMeshPass {
     [[vk::offset(1008)]] float3 gridWorldOrigin;
     [[vk::offset(1020)]] uint _pad1020;
     [[vk::offset(1024)]] float3 gridWorldPitch;
-    [[vk::offset(1036)]] uint _pad1036;
+    [[vk::offset(1036)]] uint historyFrames;
     [[vk::offset(1040)]] uint2 imageExtent;
     [[vk::offset(1048)]] uint instanceMaskWordCount;
-    [[vk::offset(1052)]] uint meshDraws;
-    [[vk::offset(1056)]] float nearDistance;
-    [[vk::offset(1060)]] uint screenCount;
-    [[vk::offset(1064)]] float shadowDistanceScale;
-    [[vk::offset(1068)]] float sunScale;
-    [[vk::offset(1072)]] float tanHalfFieldOfView;
-    [[vk::offset(1076)]] uint _pad1076;
-    [[vk::offset(1080)]] uint2 tileGrid;
-    [[vk::offset(1088)]] uint viewBase;
-    [[vk::offset(1092)]] uint _pad1092;
-    [[vk::offset(1096)]] uint _pad1096;
-    [[vk::offset(1100)]] uint _pad1100;
-    [[vk::offset(1104)]] float3 viewForward;
-    [[vk::offset(1116)]] uint _pad1116;
-    [[vk::offset(1120)]] float3 viewPosition;
-    [[vk::offset(1132)]] uint _pad1132;
-    [[vk::offset(1136)]] float3 viewRight;
-    [[vk::offset(1148)]] uint _pad1148;
-    [[vk::offset(1152)]] float3 viewUp;
-    [[vk::offset(1164)]] uint viewportCount;
-    [[vk::offset(1168)]] uint workCounterRow;
+    [[vk::offset(1052)]] uint _pad1052;
+    [[vk::offset(1056)]] float2 jitter;
+    [[vk::offset(1064)]] uint meshDraws;
+    [[vk::offset(1068)]] float nearDistance;
+    [[vk::offset(1072)]] float4 previousView[6];
+    [[vk::offset(1168)]] uint screenCount;
+    [[vk::offset(1172)]] float shadowDistanceScale;
+    [[vk::offset(1176)]] float sunScale;
+    [[vk::offset(1180)]] float tanHalfFieldOfView;
+    [[vk::offset(1184)]] uint2 tileGrid;
+    [[vk::offset(1192)]] uint viewBase;
+    [[vk::offset(1196)]] uint _pad1196;
+    [[vk::offset(1200)]] float3 viewForward;
+    [[vk::offset(1212)]] uint _pad1212;
+    [[vk::offset(1216)]] float3 viewPosition;
+    [[vk::offset(1228)]] uint _pad1228;
+    [[vk::offset(1232)]] float3 viewRight;
+    [[vk::offset(1244)]] uint _pad1244;
+    [[vk::offset(1248)]] float3 viewUp;
+    [[vk::offset(1260)]] uint viewportCount;
+    [[vk::offset(1264)]] uint workCounterRow;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfMeshPass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfMeshRegion : register(t1, space3);

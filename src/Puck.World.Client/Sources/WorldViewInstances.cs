@@ -27,7 +27,10 @@ public enum WorldViewDemand : byte {
 /// asks (<see cref="WorldViewInstances.Fit"/>).</param>
 /// <param name="Height">The fraction of the display's height its declared extent covers.</param>
 /// <param name="Refresh">How often it refreshes.</param>
-public readonly record struct WorldView(string Name, bool FilmsWorld, WorldViewDemand Demand, double Width, double Height, RenderGraphRefresh Refresh);
+public readonly record struct WorldView(string Name, bool FilmsWorld, WorldViewDemand Demand, double Width, double Height, RenderGraphRefresh Refresh) {
+    /// <summary>The camera or session's authored pixel dimensions, retained independently of its visible footprint.</summary>
+    public RenderGraphPixelExtent? OutputExtent { get; init; }
+}
 /// <summary>
 /// The view instances a world renders beside its own: each camera a screen, a HUD frame or a probe export shows, and
 /// each session a screen shows, each an external <c>sdf.world</c> instance. Cameras share the world's
@@ -89,8 +92,7 @@ public sealed class WorldViewInstances {
         return false;
     }
     /// <summary>Returns the fraction of each display axis a view of a declared extent asks: the extent over the display's,
-    /// scaled by one factor on both axes when it is larger than the display on either, so a view never renders stretched
-    /// and never past the display's extent.</summary>
+    /// scaled by one factor on both axes when it is larger than the display on either, so the visible footprint stays within the display; the instance retains its authored pixels.</summary>
     /// <param name="width">The declared width, in pixels.</param>
     /// <param name="height">The declared height, in pixels.</param>
     /// <param name="displayWidth">The display's width, in pixels.</param>
@@ -130,7 +132,7 @@ public sealed class WorldViewInstances {
             instances[index] = new RenderGraphInstance(
                 ExternalPackage: RenderGraphPackageCatalog.SdfWorld,
                 Name: view.Name,
-                Passes: SdfWorldPackage.Fragment.Passes.Count,
+                Passes: SdfWorldPackage.NativeFragment.Passes.Count,
                 Reads: (view.FilmsWorld
                     ? [
                         .. sources.Select(selector: static source => new RenderGraphRead(Producer: source.Name)),
@@ -141,7 +143,7 @@ public sealed class WorldViewInstances {
                     ]
                     : []),
                 Refresh: view.Refresh
-            );
+            ) { OutputExtent = view.OutputExtent };
         }
 
         return instances;

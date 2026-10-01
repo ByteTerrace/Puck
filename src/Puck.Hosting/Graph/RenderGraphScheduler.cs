@@ -56,6 +56,7 @@ public static class RenderGraphScheduler {
             IsRoot = new bool[count];
             PositionOf = new int[count];
             Price = new long[count];
+            Passes = new int[count];
             ScaleHeight = new double[count];
             ScaleWidth = new double[count];
             Shows = new List<Shown>[count];
@@ -83,6 +84,7 @@ public static class RenderGraphScheduler {
         public bool[] Unchanged { get; }
         public int[] Height { get; }
         public bool[] IsRoot { get; }
+        public int[] Passes { get; }
         public int[] PositionOf { get; }
         public long[] Price { get; }
         public double[] ScaleHeight { get; }
@@ -607,18 +609,21 @@ public static class RenderGraphScheduler {
 
                 var (allocatedWidth, allocatedHeight) = history.Allocated(index: index);
 
-                scaleWidth[index] = RenderGraphExtent.Quantize(
+                var exact = set.Instances[index].OutputExtent;
+
+                scaleWidth[index] = ((exact is { } fixedWidth) ? (((double)fixedWidth.Width) / frame.DisplayWidth) : RenderGraphExtent.Quantize(
                     allocated: allocatedWidth,
                     fraction: demandWidth[index]
-                );
-                scaleHeight[index] = RenderGraphExtent.Quantize(
+                ));
+                scaleHeight[index] = ((exact is { } fixedHeight) ? (((double)fixedHeight.Height) / frame.DisplayHeight) : RenderGraphExtent.Quantize(
                     allocated: allocatedHeight,
                     fraction: demandHeight[index]
-                );
+                ));
 
                 // An unchanged instance demanded at another extent renders again: a new image holds nothing.
                 if (
                     unchanged[index] &&
+                    (exact is null) &&
                     ((scaleWidth[index] != allocatedWidth) || (scaleHeight[index] != allocatedHeight))
                 ) {
                     due[index] = true;
@@ -652,8 +657,10 @@ public static class RenderGraphScheduler {
         var width = work.Width;
         var height = work.Height;
         var price = work.Price;
+        var passes = work.Passes;
 
         for (var index = 0; (index < count); index++) {
+            passes[index] = set.Instances[index].Passes;
             if (set.Instances[index].IsSource) {
                 if (sourceState[index] >= 0) {
                     var state = frame.Sources![sourceState[index]];
@@ -666,15 +673,22 @@ public static class RenderGraphScheduler {
                 decided[index] &&
                 (set.Instances[index].Output != ShaderPipelineResourceKind.Buffer)
             ) {
-                width[index] = RenderGraphExtent.Pixels(
+                width[index] = (set.Instances[index].OutputExtent?.Width ?? RenderGraphExtent.Pixels(
                     display: frame.DisplayWidth,
                     fraction: scaleWidth[index]
-                );
-                height[index] = RenderGraphExtent.Pixels(
+                ));
+                height[index] = (set.Instances[index].OutputExtent?.Height ?? RenderGraphExtent.Pixels(
                     display: frame.DisplayHeight,
                     fraction: scaleHeight[index]
-                );
+                ));
                 price[index] = checked(((((long)set.Instances[index].Passes) * width[index]) * height[index]));
+                if (frame.Costs?.CostOf(instance: set.Instances[index].Name, width: width[index], height: height[index]) is { } cost) {
+                    if ((cost.Passes < 1) || (cost.Pixels < 0)) {
+                        throw new ArgumentOutOfRangeException(paramName: nameof(frame), message: "A current-grid price must have positive passes and non-negative pixels.");
+                    }
+                    passes[index] = cost.Passes;
+                    price[index] = cost.Pixels;
+                }
             }
         }
 
@@ -837,24 +851,24 @@ public static class RenderGraphScheduler {
                     ? height[index]
                     : ((allocatedHeight == 0)
                         ? 0
-                        : RenderGraphExtent.Pixels(
+                        : (set.Instances[index].OutputExtent?.Height ?? RenderGraphExtent.Pixels(
                             display: frame.DisplayHeight,
                             fraction: allocatedHeight
-                        ))),
+                        )))),
                 Instance: set.Instances[index].Name,
                 IsRoot: isRoot[index],
                 LatestFrame: following.Latest[index],
-                Passes: set.Instances[index].Passes,
+                Passes: passes[index],
                 PassPixels: spentHere,
                 Status: status,
                 Width: ((admitted[index] || set.Instances[index].IsSource)
                     ? width[index]
                     : ((allocatedWidth == 0)
                         ? 0
-                        : RenderGraphExtent.Pixels(
+                        : (set.Instances[index].OutputExtent?.Width ?? RenderGraphExtent.Pixels(
                             display: frame.DisplayWidth,
                             fraction: allocatedWidth
-                        )))
+                        ))))
             );
         }
 

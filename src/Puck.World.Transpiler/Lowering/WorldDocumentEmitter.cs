@@ -385,6 +385,7 @@ public static partial class WorldDocumentEmitter {
                     }
 
                     var childPointer = $"{scope.CurrentPointer}/{propNode.Name}";
+                    var offset = ((target[propNode.Name] is JsonArray existing) ? existing.Count : 0);
 
                     scope.SourceMap?.Register(
                         jsonPointer: childPointer,
@@ -397,7 +398,9 @@ public static partial class WorldDocumentEmitter {
                         holderName: null,
                         memberName: propNode.Name,
                         scope: scope,
-                        value: propNode.Value
+                        value: propNode.Value,
+                        sourcePointer: childPointer,
+                        sourceIndexOffset: offset
                     );
 
                     // An array written element by element maps each element to the text that wrote it, at the index it
@@ -407,11 +410,6 @@ public static partial class WorldDocumentEmitter {
                         (lowered is JsonArray elements) &&
                         (elements.Count == authored.Elements.Count)
                     ) {
-                        var offset = (((target[propNode.Name] is JsonArray existing) && !ReferenceEquals(objA: existing, objB: elements))
-                            ? existing.Count
-                            : 0
-                        );
-
                         for (var index = 0; (index < authored.Elements.Count); ++index) {
                             scope.SourceMap?.Register(
                                 jsonPointer: $"{childPointer}/{(offset + index)}",
@@ -1141,14 +1139,7 @@ public static partial class WorldDocumentEmitter {
                 );
             }
         } else if (stmt is PropertyNode prop) {
-            DocumentLowering.AssignOrExtend(
-                viewsObj,
-                prop.Name,
-                LowerExpression(
-                    prop.Value,
-                    scope
-                )
-            );
+            ProcessStatement(scope: scope, statement: prop, target: viewsObj);
         } else if (
             (stmt is ExpressionStatementNode exprStmt) &&
             (exprStmt.Expression is CallExpressionNode call)

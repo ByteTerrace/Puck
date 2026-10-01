@@ -1,0 +1,18 @@
+world.cadence off
+world.wait ready 60
+world.view.pointer 480 270
+world.wait 10
+world.screenshot {run}/before.png
+world.wait captures 30
+world.inspect off
+world.wait 10
+world.inspect
+world.cost inspected
+world.cost top 1
+world.screenshot {run}/panel.png
+world.wait captures 30
+world.inspect off
+world.wait 10
+world.screenshot {run}/after.png
+world.wait captures 30
+world.view.pointer clear

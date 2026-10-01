@@ -40,11 +40,12 @@ vector field such as a position), `world.reflow.preview`/`status`/`commit`/`canc
 pipelines, and the `forge.*` verbs for cartridges. `world.undo` replays the
 journal minus its tail and is unbindable; there is no redo anywhere except the
 forge draft's one-level swap (`CartridgeDraft.Undo`). There are no gizmos, no
-selection, no pointer picking of placements (`world.place` aims at a surface
-but picks nothing), no copy or paste, and no measurement; `world.nudge` and
+selection, no copy or paste, and no measurement. GPU hover identifies a
+placement but does not select it; `world.place` aims at a surface. `world.nudge` and
 `world.turn` act on a named placement or the one the seat last placed or moved.
-`world.save` refuses a `.puck` target, so a live edit to a `.puck` world can only
-be saved as JSON.
+`world.save` writes authored edits back to a `.puck` target through the source
+printer, preserving unrelated text and proving the recomposed document before
+the atomic write. Generated rows refuse by name and offer a JSON delta.
 
 Several pieces exist with nothing using them:
 
@@ -66,9 +67,11 @@ Several pieces exist with nothing using them:
   constructs, and the planner draws its analytic carves through
   `SdfDebugRenderer.EmitCarve`. The brick pool itself is live: height fields
   upload their bricks into it (`WorldFieldEmitter`).
-- GPU work is counted, never timed. The timestamp interfaces that once existed
-  (`IGpuTimingPool`, `GpuTimingStage`, `GpuTimestampCapabilities` under
-  `Puck.Abstractions/Gpu/Timing`) were deleted and survive only in git history.
+
+GPU work remains counted for correctness and quality decisions. The optional
+`world.gpu-timing` readout records named pass timestamp pairs through
+`IGpuTimestampFactory` on both backends, after submission fences. Timing is off
+by default and remains observational; it never changes a rendering decision.
 
 The building blocks the packages reuse are in place. The overlay draws rects,
 rings, wedges, panels, icons and text (`OverlayFrameBuilder`), and has no line
@@ -87,14 +90,22 @@ deterministic interpreter: non-uniform scale, warp ops, render-only shapes such
 as Path and multi-strand Sweep. One refused instruction leaves the whole field
 null, so in such a world nothing can be picked on the CPU.
 
-The visibility record (`frame/sdf-visibility.hlsli`) names what each pixel sees
-in its identity word: the kind in bits 31..30 (0 background, 1 SDF, 2 mesh) and
-the source in bits 29..0. A packed 0 is background. An SDF hit's source is the
-winning instance's dynamic-transform frame slot plus one, carried through
-`mapCore`'s winner resolution as `frameSlot`, so every static SDF hit packs as
-`0x40000000` (kind SDF, source 0) whichever placement it hit. A mesh hit's source
-is its draw. The GPU can therefore tell a background pixel, a mesh draw and a
-moving instance apart, but it cannot tell two static placements apart.
+The shared GPU picker is supplied by [P13](rendering.md#p13--hit-to-source-mapping-and-input-destinations):
+`SdfWorldPasses.PickerOf` exposes one `SdfWorldPicker` per rendered view. Its
+asynchronous readback copies the requested pixel's visibility V, C and L.x
+words and the frame's dispatch box, only while demanded. `SdfVisibility` states
+the identity's kind (`SdfVisibilityKind`: background, SDF, mesh) and source
+fields for the host and, generated, for the kernels: the source is the SDF
+instance's program ordinal plus one, or the mesh draw ordinal. SDF source zero
+means geometry outside any instance. A pixel outside its frame's dispatch box
+answers nothing. The request captures an immutable host lookup, so a later
+program rebuild or reused draw ordinal cannot name a replacement placement.
+The exact winning shape's transform slot is retained in L.x
+(`SdfPickResult.TransformSlot`, null for static geometry); an articulated
+instance's bound slot can differ. The answer resolves that slot against the
+transform table of the frame the record was rendered from
+(`SdfPickResult.Transform`). Anonymous lanes are loaded from that transform's
+existing row, preserving the 64-byte visibility record.
 
 Free Cam exists as a gameplay mode
 that possesses an authored `camera-seat-<n>` body
@@ -277,43 +288,36 @@ names a placement id they had to look up.
    `OverlayChannelLeases`. A world-space polyline projects through the seat's
    viewport camera, the way `MarkerWriter` projects a point, and clips to the
    viewport.
-2. **An identity for every drawn instance.** The visibility record's SDF
-   source changes from "frame slot plus one" to "the winning instance's program
-   ordinal plus one" (at most `SdfProgramBuilder.MaxInstances`, 65536, inside
-   the 30 source bits), so a static placement's hit packs as `0x40000000 | (ordinal + 1)`
-   rather than the shared `0x40000000`. Source 0 of kind SDF keeps meaning
-   geometry outside any instance, and background stays 0. The winner already
-   travels through `mapCore`'s and `mapGradCore`'s winner resolution as
-   `frameSlot`; the instance ordinal travels the same way, and readers that need
-   the frame slot (`sdfVisibilityFrameSlot`, the surface sample) read it from
-   the instance's row. Whether the ordinal travels beside `frameSlot` or
-   replaces it is settled by the kernels' register use and disassembly, since
-   every `map*` call site is a full copy of the interpreter. The host keeps a
-   table from instance ordinal to placement (a scope-free creation emits one
-   instance per shape, so many ordinals name one placement), rebuilt with the
-   program. A mesh hit's source stays its draw, and the mesh draw table names
-   the placement a baked draw stands for. The `visibility` debug view colors by
-   the new source.
+2. **An identity for every drawn instance.** P13 supplies the shared identity
+   and readback mechanism described above. `WorldPickMapBuilder` maps the
+   emitted SDF ordinal range and static and pooled mesh draws to their
+   placement or stamped body. Multiple shape ordinals may name one placement.
+   This step consumes that mechanism; it does not create another picker.
 3. **Pointer picking, two paths.** The pointer's display point becomes a ray
    through `SourceRay.Through` over `WorldSeatViewports`, as
    `WorldPointerRayCapture` does, but the ray stays in presentation and is never
    sustained into the command plane.
    - *The GPU path* picks everything the builder sees: a one-pixel readback of
-     the visibility record under the pointer, once per frame while build mode
-     is on and the pointer moves, gives the identity, the ray parameter `t`
-     and the material, and the host table turns the identity into a
-     placement. It covers non-solid placements, shapes and ops the CPU
-     evaluator refuses, stamped bodies and baked meshes. The readback is the
+     the visibility record under the pointer, while build mode
+     demands hover, gives the identity, the ray parameter `t`, the material
+     and the winning shape's transform slot with its transform, and the host
+     table turns the identity into a placement. It covers non-solid
+     placements, shapes and ops the CPU evaluator refuses, stamped bodies and
+     baked meshes. The readback is the
      same one the [rendering plan's GPU picking](rendering.md#p13--hit-to-source-mapping-and-input-destinations)
-     needs; whichever lands first owns it, and it is counted in the view's
-     work ledger. Its answer arrives a frame or two late, which a hover label
-     tolerates.
+     supplies through `SdfWorldPicker`, and it is counted in the view's
+     work ledger. At most one copy is in flight: a moving pointer's latest
+     coordinate waits for it and records when it completes, so the pointer
+     gets an answer every round trip, each carrying the pixel it was sampled
+     at. Continuing demand refreshes after an answer even when only the
+     camera or scene moves. An answer arrives a frame or two late, which a
+     hover label tolerates because it names the pixel it answers for.
    - *The CPU path* answers on the frame it is asked, from the client's static
      field: exact hit points and normals for surface snapping and measuring
      (E1, E3) wherever the field exists. It never decides what was picked when
      the GPU path has an answer.
-   In build mode the cursor's hover label names the placement under the
-   pointer.
+   In build mode the cursor's hover label names the placement a pick
+   answered and the pixel it answered at.
 4. **A per-seat selection.** `world.select pointer|<id>…|add <id>|toggle <id>|clear|prototype <name>|box`
    (`box` selects every placement whose bounds fall inside a dragged
    rectangle), with bindable forms for pointer, add, clear and cycle.
@@ -477,7 +481,33 @@ editor command module.
 names the placement and material and equals the verb's echo; a steady frame
 allocates nothing; red leg: the pointer on the sky prints `hit=none`).
 
-**Depends on:** E2.
+**Storage rule:** composition sums every overlay writer's declared text-word
+reservation and rounds the sum up to a power of two. The current four-seat
+composition reserves 26,721 words and allocates 32,768. A writer exceeding its
+own reservation refuses by channel name; it cannot consume another writer's
+share. The inspector reserves 32 lines of 96 characters per seat, and its
+content fits them line by line: a long line wraps onto indented continuation
+lines and elides its end past its own budget, a reload diagnostic leads with
+its file and location relative to the world's document directory, and pass
+times past the last line are counted in one closing line. Only a formatter
+whose fixed lines exceed the reservation by construction is replaced by an
+explicit `editor refused` diagnostic, also charged to the existing overlay
+refusal counters. There is no on-demand reallocation.
+The off state emits no inspector records, but its shared backing storage remains
+allocated. Graph inspection reports the installed regions' device and
+host-visible bytes, CPU shadow payloads, and package/row/upload scratch payloads
+separately. These are logical payload bytes, excluding managed object headers,
+backend alignment, retired graphs and unrelated application state.
+
+The material name is its existing authored address `<prototype>.palette[slot]`,
+shown beside the exact program material index. The asynchronous pixel carries
+that frame's immutable identity map and camera; a later camera or palette never
+changes the answer's world point or material name. Pointer steps and query counts
+come from the same visibility record. A passthrough pane supplies its own rendered
+residency and quality to the inspector, cost report and pass timings. Pass timing
+and FPS appear only while `world.gpu-timing` is enabled.
+
+**Depends on:** E2's shared GPU picking mechanism; selection tools remain E2 work.
 
 ### E6 — Why is this dark or invisible
 
@@ -613,19 +643,50 @@ the pole).
 `Puck.Shaders` (`ShaderPipelineRenderNode`), `Puck.SdfVm` (`SdfWorldTables`).
 
 **Check:** `WorldCostLawTests` (fixture placements' counts equal their emitter's;
-red leg: a scoped creation counted per shape fails); `GpuTimingLawTests` over
+red leg: a scoped creation counted per shape fails); `ShaderPipelineRenderNodeLawTests` over
 the fake device (on: two queries per pass, named and fault-wrapped, released on
 device loss; off: zero queries; red leg: a node that forgets `LeavePass` fails
-the pair count). The laws assert the mechanism and never a time.
+the pair count; a faulted pool or readback refuses timing by name while frames
+keep rendering, and a later frame tries nothing). The laws assert the mechanism
+and never a time.
+
+**Accounting rule:** placement program words are the words owned by its live
+instance rows, instruction headers/data/bounds, segments, rigid leaves, shape
+side tables and part bindings. Shared headers, palettes, grid and part assets
+are printed separately, alongside other instances such as bodies. Placement
+words plus other-instance words plus shared words equal the live `world.budget`
+program total. No prototype is re-emitted to estimate this number. A hidden
+field instance and its live mesh draw remain visible in the report. Bake representation
+is captured at emission with that frame's map; another world's cache cannot change it.
+
+Timestamp pools are allocated only on demand, on the frame thread after the
+slot's fence, like the other resources a node allocates there. A device with
+no timestamps, or a pool or readback the device will not create, refuses
+timing for that node by name (`ShaderPipelineRenderNode.TimingRefusal`, echoed
+by `world.gpu-timing` and the inspector), releases what the failed slot
+created, and leaves the graph rendering; nothing is tried again until timing
+is enabled anew, the operator's GPU faults move, or the device is lost. Each
+recorded pass gets one pair;
+readback waits for its submission fence, rejects a replaced graph or an earlier
+enable epoch, and averages at most 32 completed pairs. Disabling hides readings
+immediately and releases pools after their fences. Device loss releases all
+query/readback ownership. GPU timestamp readback and retained CPU sample payloads
+are reported separately. Times and FPS are observational and never become
+correctness assertions or quality inputs.
 
 **Depends on:** nothing; E5 for the panel; the rendering plan's one-pixel
 readback for step 3.
 
 ### E10 — Live reload and before-and-after
 
-**Problem:** a builder who saves a `.puck` file must still type `world.reload`,
-loses their place when they do, and cannot compare the world before and after a
-change.
+**Status:** the source watch uses the graph watch's shared debounce and the
+existing reload command. It covers compile and document-composition inputs,
+reads contents only for inputs whose file-system stamp moved, keeps the latest
+reload diagnostic for the inspector and toast, and reconciles selection ids
+after a rebuild. A seat can hold its displayed frame and compare it with the
+live view through the ordinary capture and `place` paths, under the overlay. Split,
+wipe, difference, cropped sampling and return to the live view are checked on
+both backends by `editor-compare`.
 
 **Delivers:**
 
@@ -639,27 +700,46 @@ change.
    editor camera and the selection (by id) survive a reload; an id the reload
    removed leaves the selection.
 3. **Before and after.** `world.compare hold` keeps the seat's current frame;
-   `world.compare wipe|split|diff|off` shows it against the live view in a pane
-   the `place` package draws, with a bindable wipe position. The echo includes
-   the changed-pixel count (pixels moving at least 2 LSB, as `CanaryFrameNoise`
-   counts them).
+   `world.compare wipe [position]|split|diff|off` shows it against the live view in a pane
+   the `place` package draws. A bound `Axis1D` value controls the wipe position
+   in `0..1` without capturing or rebuilding the graph. The echo includes
+   the changed-pixel count (pixels moving at least 2 LSB, measured by the shared
+   `RgbaFrameDifference` used by the canaries). Captures use the existing scene
+   instance target before the comparison wrapper and the overlay, so a comparison
+   never holds itself or the console, cursor, toasts and inspector drawn over it.
+   A capture names the frame that rendered it and is cropped by that frame's
+   viewport, whatever the layout became while it was read back, and a paused
+   capture keeps its last rendered viewport. Active comparisons add ordinary static uploads and `place` passes;
+   off removes those resources and retains the CPU hold. A changed crop extent
+   requires a new hold before measuring differences. Completed typed commands
+   report once through the terminal, tape and toast; late refusals enter
+   `wire.errors`. A root screenshot follows the next composed root across a
+   comparison mode change, while a named instance capture keeps its target.
 
 **Touches:** `src/Puck.World` (the watch, the compare verbs, the capture path),
 `Puck.World.Client` (`WorldViewGraphHost`, editor state retention).
 
 **Check:** `WorldWatchLawTests` (touching a compile input submits exactly one
-reload; red leg: touching an unrelated file submits none);
+reload; red leg: touching an unrelated file submits none; an unchanged tree
+reads no content per poll);
 `WorldEditorReloadRetentionLawTests` (selection and camera survive a reload, and
 a removed id drops out). Canary `editor-compare`: hold a frame, move a render
-lever, and the split view's halves differ.
+lever, and the split view's halves differ. `WorldFrameComparisonLawTests`
+checks crop rounding and authored root extents, owned pixels, the shared
+difference threshold, graph revision, refusal atomicity, capture settlement,
+paused metadata, the captured frame's own viewport across a layout change,
+the comparison composed under the overlay's instance with the scene as its
+capture target, and the existing axis binding contract.
 
 **Depends on:** E2 and E8 for what a reload keeps; the compare needs nothing.
 
 ### E11 — Save edits back to source
 
-**Problem:** live edits to a `.puck` world cannot be saved back, because
-`world.save` refuses a `.puck` target, so a builder's session ends in a JSON
-file beside their source or is lost.
+**Status:** source-preserving save is in place for authored rows. The printer
+rewrites changed source spans, retains untouched text and a UTF-8 byte-order
+mark, and proves the recomposed document before writing atomically. Template,
+loop and module-generated rows refuse by name. The generated-name refusal is
+also in place; E3 supplies the live duplicate and rename workflow.
 
 **Delivers:** `world.save` to a `.puck` source writes the rows the session
 changed back into that source through the transpiler's printer, keeping `let`s,
@@ -673,10 +753,11 @@ gives it an authored id, since a `.puck` source cannot spell a generated name.
 **Touches:** `Puck.World.Transpiler` (printer and decompiler),
 `Puck.Transpiler`, the mutation command module (`world.save`).
 
-**Check:** a round-trip law over a sample source: edit a placement live, save,
-compile again, and the lowered document equals the live one while every
-untouched byte is unchanged; red legs: an edit to a loop-generated row is
-refused by name, and so is a duplicate saved before it is renamed.
+**Check:** `SourceSaveLawTests` covers exact unrelated text, basis composition,
+row removal and insertion, byte-order marks, and named refusals for generated
+rows. `WorldSourceSaveIntegrationLawTests` nudges a live placement, saves and
+reloads it, and compares the resulting document while preserving the source's
+unrelated heading and tail. The laws fail when the source rewrite is bypassed.
 
 **Depends on:** E3.
 
@@ -788,12 +869,12 @@ are never saved.
 anything, so `editor` is a built-in mode family beside `layout`, with its
 bindings in a default layer.
 
-**Every drawn instance has its own identity.** Today every static SDF hit packs
-as `0x40000000`, so the GPU cannot tell static placements apart. E2 makes the
-SDF source the winning instance's ordinal plus one and keeps a host table from
-ordinal to placement, which serves picking, the in-render highlight and the
-rendering plan's GPU picking alike. Bounds, pivots, gizmos and measurements are
-drawn with the overlay's line primitive either way.
+**Every drawn instance has its own identity.** P13 supplies the SDF source as
+the winning instance's ordinal plus one and the mesh source as its draw
+ordinal, with an immutable host table resolving each to its placement or
+stamped body. E2 consumes that shared picker for selection and in-render
+highlight. Bounds, pivots, gizmos and measurements will use the overlay's
+line primitive.
 
 **Picking has two paths, and the GPU decides.** The GPU readback sees what the
 builder sees, including non-solid placements and geometry the CPU evaluator

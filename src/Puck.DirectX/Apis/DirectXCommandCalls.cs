@@ -12,7 +12,7 @@ namespace Puck.DirectX.Apis;
 /// signalling a queue and waiting on a fence. A removed device fails each of them with <c>DXGI_ERROR_DEVICE_REMOVED</c>,
 /// <c>_RESET</c> or <c>_HUNG</c>, which is an answer to translate, never an exception from the generated
 /// wrapper.</summary>
-public unsafe interface IDirectXCommandCalls {
+public unsafe partial interface IDirectXCommandCalls {
     /// <summary>Asks <c>ID3D12Device::CreateCommandAllocator</c>.</summary>
     /// <param name="type">The command list type the allocator serves.</param>
     /// <param name="allocator">Receives the allocator on success, owned by the caller.</param>
@@ -85,7 +85,7 @@ public unsafe interface IDirectXCommandCalls {
 /// <param name="device">The device whose objects are called and whose removal reason is read; it stays owned by the
 /// caller.</param>
 [SupportedOSPlatform("windows10.0.10240")]
-public readonly unsafe struct DirectXDeviceCommandCalls(ID3D12Device* device) : IDirectXCommandCalls {
+public readonly unsafe partial struct DirectXDeviceCommandCalls(ID3D12Device* device) : IDirectXCommandCalls {
     // The slots count IUnknown's three methods, ID3D12Object's four and ID3D12DeviceChild's one; a command list adds
     // ID3D12CommandList's GetType before its own methods. The device's own slots follow IUnknown's and ID3D12Object's,
     // in the order DirectXConstants' device slots (CheckFeatureSupport 13, GetDeviceRemovedReason 37) are counted.
@@ -213,7 +213,7 @@ public readonly unsafe struct DirectXDeviceCommandCalls(ID3D12Device* device) : 
 /// <see cref="SignalAndWait"/>, which throws so the host's recovery sees the loss.</para>
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public static unsafe class DirectXCommandCalls {
+public static unsafe partial class DirectXCommandCalls {
     /// <summary>Creates a command allocator and a command list recording into it, the list open for recording. When the
     /// list's creation fails the allocator is released before the failure propagates.</summary>
     /// <typeparam name="TCalls">The calls' answerer.</typeparam>

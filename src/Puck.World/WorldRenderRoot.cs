@@ -61,6 +61,11 @@ internal static class WorldRenderRoot {
         var definition = sp.GetRequiredService<WorldDefinition>();
         var graph = sp.GetRequiredService<WorldRootGraph>();
         var host = sp.GetRequiredService<WorldViewGraphHost>();
+        var comparison = sp.GetRequiredService<WorldFrameComparison>();
+        var compareCapture = sp.GetRequiredService<WorldCompareCapture>();
+
+        host.Comparison = comparison;
+        host.ComparisonViewports = sp.GetRequiredService<WorldSeatViewports>();
         // The composition's pipeline catalog, whose pass-pipeline cache the world's residency and every view's lease their
         // pipelines from; each records through the services of the device context it renders on.
         var pipelines = sp.GetRequiredService<SdfWorldPipelineCatalog>();
@@ -90,11 +95,13 @@ internal static class WorldRenderRoot {
             : null);
 
         if (!WorldViewGraphHost.TryCompose(
+            comparison: comparison,
             graphs: out var graphs,
             passes: static _ => 1,
             reason: out var composeReason,
             rendered: binder.Mappings.Views,
             root: out var rootName,
+            scene: out var scene,
             set: out var set,
             sources: binder.Mappings.Sources.Instances,
             synthesized: synthesized,
@@ -128,8 +135,7 @@ internal static class WorldRenderRoot {
         binder.ViewHost = residency;
         binder.Presenter = frameSource;
         binder.CrossingCapture = sp.GetService<WorldCrossingCapture>();
-        packages.Register(
-            factory: new SdfWorldPasses(
+        host.Pickers = new SdfWorldPasses(
                 host: residency,
                 resolve: instance => (binder.TryResolveView(
                     name: instance,
@@ -145,9 +151,8 @@ internal static class WorldRenderRoot {
                             Residency: residency,
                             View: binder.HostView(view: (WorldViewNames.ViewOf(instance: instance) ?? 0))
                         )))
-            ),
-            package: RenderGraphPackageCatalog.SdfWorld
-        );
+            );
+        packages.Register(factory: host.Pickers, package: RenderGraphPackageCatalog.SdfWorld);
         // The root places each pane where the host's composer shows it this frame.
         packages.Register(
             factory: new PlacePackage(placements: host),
@@ -174,6 +179,15 @@ internal static class WorldRenderRoot {
         // the conversion its descriptor names; any other producer's instance, and a probe source, renders through an
         // external producer that hands out its image through the binder's capture gate.
         SourceConversionPackage.RegisterAll(packages: packages);
+        packages.RegisterSource(package: WorldFrameComparison.SourcePackage, factory: context => {
+            var slot = WorldComparisonGraph.SeatOf(source: context.Instance);
+            var snapshot = ((slot >= 0) ? comparison.Seat(slot: slot) : null);
+
+            if ((snapshot is null) || (context.Settings?["hold"].GetUInt64() != snapshot.Sequence)) {
+                throw new InvalidOperationException(message: $"Comparison source '{context.Instance}' has no matching held frame.");
+            }
+            return WorldFrameComparison.Open(snapshot: snapshot);
+        });
         binder.Producers.RegisterPackages(
             adapt: binder.Adapt,
             packages: packages
@@ -212,6 +226,7 @@ internal static class WorldRenderRoot {
         );
 
         var overlaid = (overlay is not null);
+        var timing = sp.GetRequiredService<WorldGpuTiming>();
 
         // The host composes the root again whenever the document's panes, views, views.post or render.tonemap move, from
         // the post passes and tonemap the document names then, so a live views.post or render.tonemap edit reaches the
@@ -228,8 +243,11 @@ internal static class WorldRenderRoot {
                 views: views
             ),
             runtime: runtime,
+            scene: scene,
             synthesized: synthesized
         );
+        compareCapture.Attach(target: () => runtime.CaptureTarget(instance: host.ComparisonLiveRoot!),
+            completedFrames: () => runtime.NodeOf(instance: host.ComparisonLiveRoot!)?.FrameCounter);
 
         var root = new RenderGraphRuntimeNode(
             footprints: host.Footprints,
@@ -243,10 +261,14 @@ internal static class WorldRenderRoot {
             // The binder's GPU holdings (camera feeds, capture fills, the views' residencies) and the world's residency are
             // created before the device context, so the container would dispose them after it; the root's teardown releases
             // them, after the runtime's passes gave back their holds, while the device is alive.
-            Holdings = [binder, residency],
+            Holdings = [compareCapture, binder, residency],
             Prepare = (in FrameContext context) => {
+                compareCapture.Poll();
                 bakes?.Pump(definition: client.Definition);
                 frameSource.PrepareGraph(context: in context);
+                host.PresentComparison();
+                compareCapture.RecordPreparedFrame();
+                timing.Tick();
             },
             Roots = host.Roots,
         };

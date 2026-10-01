@@ -124,12 +124,53 @@ greater depth. The pass block carries the camera's own near plane
 from that plane but never nearer than `SdfFrameBlock.MinimumNear`
 (`SdfFrameBlock.NearOf`, `SDF_MINIMUM_NEAR` in the kernels): every surface
 march starts where its ray crosses it, and the mesh pass clips there. Normalized device coordinates put +Y
-up, a view's UV origin is its top-left corner, and each sample is a pixel
-center with no jitter. `RayParameter` turns a depth back into the distance
+up and a view's UV origin is its top-left corner. Ordinary rendering samples
+the pixel center. A capture with a positive `converge` count samples a repeating
+eight-position Halton (2, 3) sequence whose first position is the center.
+`ViewProjection.Jitter` carries the offset in normalized device coordinates;
+the SDF pass block carries it in render pixels, with positive Y down.
+The shared viewport lens applies the same offset to mesh projection and SDF
+rays. `RayParameter` turns a depth back into the distance
 the march records, measured along the normalized ray through the sample. The
 previous frame's transforms ride beside the current ones; a view without a
 usable history carries its own matrices as the previous ones and so reports
-no motion. Nothing renders through these matrices yet.
+no motion. A transform that changed owner has no previous pose of its own, so
+its previous pose is seeded from the current one and it reports no motion
+either: a program upload seeds every dynamic slot, an owner that takes a
+vacated range, reuses a body index or jumps reseats its slots
+(`SdfMovedTransforms.Commit`), and a mesh draw is continuous by its
+`SdfMeshDraw.Identity`, not its index, so a reordered draw list is seeded while
+an edited placement keeps its draw's motion. The mesh pass uses the same
+projection convention.
+
+A scheduled capture's `converge: N` holds presentation at the armed tick's
+first composition and captures the Nth rendered sample. Presentation time,
+animation poses, camera followers and frame values remain fixed, and the
+presentation interval is zero. Only the view's sample index advances, and it
+advances by the samples the render graph counts
+(`RenderGraphConvergence.Samples`): a frame on which the captured instance
+reads a tainted or stand-in image is not counted, so the view renders the same
+sample again, and the Nth counted sample, the one captured, is at index N − 1
+however many such frames come first.
+A capture can request up to 256 samples; zero retains ordinary capture behavior.
+The `temporal-jitter` canary checks the center and offset samples repeating
+after eight renders on each backend. Color reconstruction is not enabled yet.
+
+Each instance keeps its own history epoch. A camera cut, resolved-view change
+(including a follow in place), output extent or render ceiling change, debug
+mode change or sampling switch resets the sample count, and so do previous
+transform tables that no longer hold the poses of the instance's preceding
+render, as when another view of the same residency moved a pose between two of
+its renders. Frames the instance stood through break nothing. Resetting changes
+CPU state without clearing or reallocating GPU storage.
+
+Cadence lets a view stand only while a render taken now would feed its passes
+the temporal inputs its standing render was given
+(`SdfTemporalHistory.Stands`): the same jitter and, for the `motion` debug
+view, the same previous view and previous poses. A still view that rendered a
+converging capture's last sample renders once more at the pixel center when
+the capture ends, then stands; the `motion` view renders until its previous
+view and poses settle, then stands on the stationary motion.
 
 ## Views are render-graph instances
 

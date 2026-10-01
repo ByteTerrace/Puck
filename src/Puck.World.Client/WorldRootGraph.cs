@@ -15,17 +15,21 @@ namespace Puck.World.Client;
 /// (<see cref="RenderGraphPackageCatalog.PlaceTonemap"/>), so the scene is tonemapped where it enters the frame and the
 /// letterbox color, written beside it, reaches the display exact; with one view the root then places that view too.
 /// Then the root places each pane over the scene with one <c>place</c> pass per <c>views.graphs</c> instance a layout
-/// slot names, runs each <c>views.post</c> row as a pass of its post-process package, named by the row, in document
-/// order, and runs the <c>overlay</c> package last. A pane is display-referred, its own shader's tonemap included, so no
-/// pane is tonemapped by the root, and the HUD composes over the finished frame and is never tonemapped. With one view
-/// and nothing to draw or tonemap over it, the producer is the root. The graph is a document value planned by
-/// <see cref="RenderGraphCompiler"/>, the one path every graph takes, so a pass config that does not bind is the
-/// compiler's refusal, named by its row.</summary>
+/// slot names, and runs each <c>views.post</c> row as a pass of its post-process package, named by the row, in document
+/// order. That image is the scene (<see cref="Scene"/>): the world as the editor holds and compares it. A presentation
+/// that draws the overlay draws it in an instance of its own over the scene (<see cref="OverlayInstance"/>, appended by
+/// <see cref="AppendOverlay"/>), which is then the display's root, so whatever is composed between them, an editor
+/// comparison among them, sits under the HUD, the console and the cursor. A pane is display-referred, its own shader's
+/// tonemap included, so no pane is tonemapped by the root, and the HUD composes over the finished frame and is never
+/// tonemapped. With one view and nothing to draw or tonemap over it, the producer is the scene. The graphs are document
+/// values planned by <see cref="RenderGraphCompiler"/>, the one path every graph takes, so a pass config that does not
+/// bind is the compiler's refusal, named by its row.</summary>
 public sealed class WorldRootGraph {
     // The versions and passes the root declares for itself are generated names (WorldViewNames.Root), so none can equal a
     // pane's version or place pass, which take the pane's authored name.
     private static readonly string FrameVersion = WorldViewNames.Root("frame");
     private static readonly string OverlayPass = WorldViewNames.Root(RenderGraphPackageCatalog.Overlay);
+    private static readonly string SceneVersion = WorldViewNames.Root("scene");
     private static readonly string WorldVersion = WorldViewNames.Root(WorldViewGraphs.WorldInstance);
     private static readonly JsonElement FirstViewConfig = JsonDocument.Parse(json: $$"""{ "{{RenderGraphPackageCatalog.PlaceLetterbox}}": 1 }""").RootElement.Clone();
     private static readonly JsonElement FirstTonemappedViewConfig = JsonDocument.Parse(json: $$"""{ "{{RenderGraphPackageCatalog.PlaceLetterbox}}": 1, "{{RenderGraphPackageCatalog.PlaceTonemap}}": 1 }""").RootElement.Clone();
@@ -33,8 +37,19 @@ public sealed class WorldRootGraph {
 
     private const string ViewPart = "view";
 
-    private WorldRootGraph(RenderGraphPlan? plan, IReadOnlyList<WorldViewPostPass> post, IReadOnlyList<string> panes, int views, WorldTonemap tonemap) {
+    // The overlay's one pipeline, so each composition hands the runtime the same pipeline and moving what the overlay
+    // draws over (a comparison turned on or off) rebinds its input and builds nothing.
+    private readonly CompiledShaderPipeline? m_overlayPipeline;
+
+    private WorldRootGraph(RenderGraphPlan? plan, RenderGraphPlan? overlay, IReadOnlyList<WorldViewPostPass> post, IReadOnlyList<string> panes, int views, WorldTonemap tonemap) {
         Plan = plan;
+        OverlayPlan = overlay;
+        m_overlayPipeline = ((overlay is null)
+            ? null
+            : new CompiledShaderPipeline(
+                plan: overlay.Pipeline,
+                shaders: new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal)
+            ));
         Panes = panes;
         Post = post;
         Tonemap = tonemap;
@@ -49,7 +64,7 @@ public sealed class WorldRootGraph {
             producers[view] = new RenderGraphInstance(
                 ExternalPackage: RenderGraphPackageCatalog.SdfWorld,
                 Name: ProducerOf(view: view),
-                Passes: SdfWorldPackage.Fragment.Passes.Count,
+                Passes: SdfWorldPackage.NativeFragment.Passes.Count,
                 Reads: [],
                 Refresh: RenderGraphRefresh.EveryFrame
             );
@@ -82,13 +97,18 @@ public sealed class WorldRootGraph {
             )]);
     }
 
+    /// <summary>Gets the instance a presentation that draws the overlay draws it in, over the scene or whatever is
+    /// composed over the scene (<see cref="AppendOverlay"/>): <c>main$overlay</c>.</summary>
+    public static string OverlayInstance { get; } = WorldViewNames.Root(RenderGraphPackageCatalog.Overlay);
+
     /// <summary>Gets the reads the display always shows inside the root: when the root places no view, the root showing
     /// the world over its whole extent, or none when the world is the root. A placed view's footprint and a pane's follow
-    /// their rects, frame by frame.</summary>
+    /// their rects, frame by frame. The overlay's read is <see cref="OverlayFootprint"/>, over whatever it draws on.</summary>
     public IReadOnlyList<RenderGraphFootprint> Footprints { get; }
-    /// <summary>Gets the synthesized instances: the world producers (<see cref="Producers"/>), then the root graph when
-    /// there is one, which reads every producer and every pane. The panes themselves are <c>views.graphs</c> rows, which
-    /// the host adds.</summary>
+    /// <summary>Gets the synthesized instances of the scene: the world producers (<see cref="Producers"/>), then the root
+    /// graph when there is one, which reads every producer and every pane. The panes themselves are <c>views.graphs</c>
+    /// rows, which the host adds, and the overlay's instance is appended over the scene
+    /// (<see cref="AppendOverlay"/>).</summary>
     public IReadOnlyList<RenderGraphInstance> Instances { get; }
     /// <summary>Gets the world producers, one per view, in view order: <see cref="WorldViewGraphs.WorldInstance"/> first.</summary>
     public IReadOnlyList<RenderGraphInstance> Producers { get; }
@@ -101,24 +121,35 @@ public sealed class WorldRootGraph {
     /// <summary>Gets the <c>views.graphs</c> instances the root places, one <c>place</c> pass each, in the order a layout
     /// slot first names them.</summary>
     public IReadOnlyList<string> Panes { get; }
-    /// <summary>Gets the root graph's plan, or <see langword="null"/> when nothing is drawn over the world and the world
-    /// is the root.</summary>
+    /// <summary>Gets the root graph's plan, or <see langword="null"/> when nothing is drawn into the scene over the world
+    /// and the world is the scene.</summary>
     public RenderGraphPlan? Plan { get; }
+    /// <summary>Gets the overlay instance's plan, one <c>overlay</c> pass over the image it is bound to, or
+    /// <see langword="null"/> when the presentation draws no overlay.</summary>
+    public RenderGraphPlan? OverlayPlan { get; }
+    /// <summary>Gets whether the presentation draws the overlay, in <see cref="OverlayInstance"/>.</summary>
+    public bool Overlays => (OverlayPlan is not null);
     /// <summary>Gets the <c>views.post</c> rows the root graph runs, in document order, each a pass named by its row;
     /// empty when the root runs none.</summary>
     public IReadOnlyList<WorldViewPostPass> Post { get; }
     /// <summary>Gets the tonemap the root graph applies: <see cref="WorldTonemap.Filmic"/> tonemaps each view as its place
     /// pass reconstructs it, and nothing else; <see cref="WorldTonemap.None"/> tonemaps nothing.</summary>
     public WorldTonemap Tonemap { get; }
-    /// <summary>Gets the name of the instance the display shows and captures read by default: the root graph whenever
-    /// there is one, which there always is with more than one view.</summary>
-    public string Root => ((Plan is null)
+    /// <summary>Gets the name of the instance holding the scene, the world image before the overlay: the root graph
+    /// whenever there is one, which there always is with more than one view, else the world producer.</summary>
+    public string Scene => ((Plan is null)
         ? WorldViewGraphs.WorldInstance
         : WorldViewGraphs.MainInstance);
+    /// <summary>Gets the name of the instance the display shows and captures read by default when nothing is composed
+    /// between the scene and the overlay: <see cref="OverlayInstance"/> when the presentation draws the overlay, else
+    /// <see cref="Scene"/>.</summary>
+    public string Root => (Overlays
+        ? OverlayInstance
+        : Scene);
 
     /// <summary>Synthesizes and plans a world's default render graph.</summary>
     /// <param name="post">The document's <c>views.post</c> rows, or <see langword="null"/> for none.</param>
-    /// <param name="overlay">Whether the presentation draws the overlay over the world.</param>
+    /// <param name="overlay">Whether the presentation draws the overlay, in an instance of its own over the scene.</param>
     /// <param name="packages">The packages the host offers.</param>
     /// <param name="panes">The <c>views.graphs</c> instances a layout slot names (<see cref="PanesOf"/>), or
     /// <see langword="null"/> for none.</param>
@@ -144,10 +175,14 @@ public sealed class WorldRootGraph {
         var viewCount = (PlacesViews(tonemap: curve, views: views)
             ? views
             : 0);
-        var passCount = (((viewCount + placed.Count) + entries.Count) + (overlay ? 1 : 0));
+        var passCount = ((viewCount + placed.Count) + entries.Count);
+        var overlayPlan = (overlay
+            ? PlanOverlay(packages: packages)
+            : null);
 
         if (passCount == 0) {
             return new WorldRootGraph(
+                overlay: overlayPlan,
                 panes: placed,
                 plan: null,
                 post: entries,
@@ -215,7 +250,7 @@ public sealed class WorldRootGraph {
                     Outputs: [new ResourceReference(Name: output)],
                     Package: RenderGraphPackageCatalog.Place
                 ));
-            } else if ((index - (viewCount + placed.Count)) < entries.Count) {
+            } else {
                 var entryIndex = (index - (viewCount + placed.Count));
                 var entry = entries[entryIndex];
 
@@ -226,13 +261,6 @@ public sealed class WorldRootGraph {
                     Name: entry.Name,
                     Outputs: [new ResourceReference(Name: output)],
                     Package: entry.Package
-                ));
-            } else {
-                passes.Add(item: new RenderGraphPackagePass(
-                    Inputs: [new ResourceReference(Name: input)],
-                    Name: OverlayPass,
-                    Outputs: [new ResourceReference(Name: output)],
-                    Package: RenderGraphPackageCatalog.Overlay
                 ));
             }
         }
@@ -262,6 +290,7 @@ public sealed class WorldRootGraph {
         }
 
         return new WorldRootGraph(
+            overlay: overlayPlan,
             panes: placed,
             plan: plan,
             post: entries,
@@ -269,6 +298,55 @@ public sealed class WorldRootGraph {
             views: views
         );
     }
+    /// <summary>Appends the overlay's instance over the instance the display would otherwise show, which it reads at the
+    /// whole display's extent (<see cref="OverlayFootprint"/>) and draws the overlay over, and makes it the root. A graph
+    /// whose presentation draws no overlay leaves everything as it is.</summary>
+    /// <param name="set">The instance set, replaced with the set carrying the overlay's instance.</param>
+    /// <param name="graphs">The parallel graph list, replaced with the list carrying the overlay's graph.</param>
+    /// <param name="root">The instance the overlay draws over, replaced with <see cref="OverlayInstance"/>.</param>
+    /// <exception cref="WorldRootGraphRefusedException">The set with the overlay's instance fails validation.</exception>
+    public void AppendOverlay(ref RenderGraphInstanceSet set, ref IReadOnlyList<RenderGraphRuntimeGraph?> graphs, ref string root) {
+        if ((OverlayPlan is not { } plan) || (m_overlayPipeline is not { } pipeline)) {
+            return;
+        }
+        if (!RenderGraphInstanceSet.TryCreate(
+            instances: [
+                .. set.Instances,
+                new RenderGraphInstance(
+                    Name: OverlayInstance,
+                    Passes: plan.Pipeline.Passes.Count,
+                    Reads: [new RenderGraphRead(Producer: root)],
+                    Refresh: RenderGraphRefresh.EveryFrame
+                ),
+            ],
+            refusal: out var refusal,
+            set: out var overlaid
+        )) {
+            throw new WorldRootGraphRefusedException(message: $"the overlay: {refusal.Message}");
+        }
+
+        set = overlaid;
+        graphs = [
+            .. graphs,
+            new RenderGraphRuntimeGraph(
+                Inputs: [new RenderGraphRuntimeInput(
+                    Producer: root,
+                    Version: SceneVersion
+                )],
+                Pipeline: pipeline
+            ),
+        ];
+        root = OverlayInstance;
+    }
+    /// <summary>Returns the overlay instance's read of the instance it draws over, at the whole display's extent.</summary>
+    /// <param name="beneath">The instance the overlay draws over.</param>
+    /// <returns>The footprint.</returns>
+    public static RenderGraphFootprint OverlayFootprint(string beneath) => new(
+        Consumer: OverlayInstance,
+        Height: 1.0,
+        Producer: beneath,
+        Width: 1.0
+    );
     /// <summary>Returns the <c>views.graphs</c> instances a world's layouts place: every instance a slot of any layout
     /// names, in the order a slot first names it, so a layout switch places an instance the root already reads.</summary>
     /// <param name="views">The document's <c>views</c> section.</param>
@@ -349,6 +427,43 @@ public sealed class WorldRootGraph {
             ),
         ]);
 
+    // The overlay's own graph: one overlay pass drawing over the image bound to its one input.
+    private static RenderGraphPlan PlanOverlay(RenderGraphPackageCatalog packages) {
+        var definition = new RenderGraphDefinition(
+            Name: OverlayInstance,
+            Outputs: [FrameVersion],
+            Packages: [
+                new RenderGraphPackagePass(
+                    Inputs: [new ResourceReference(Name: SceneVersion)],
+                    Name: OverlayPass,
+                    Outputs: [new ResourceReference(Name: FrameVersion)],
+                    Package: RenderGraphPackageCatalog.Overlay
+                ),
+            ],
+            Resources: [
+                Image(
+                    initialization: ShaderPipelineInitialization.External,
+                    name: SceneVersion
+                ),
+                Image(
+                    initialization: ShaderPipelineInitialization.Undefined,
+                    name: FrameVersion
+                ),
+            ],
+            Schema: RenderGraphSchemas.Graph
+        );
+
+        return (new RenderGraphCompiler(packages: packages).TryCompile(
+            definition: definition,
+            diagnostics: out var diagnostics,
+            plan: out var plan
+        )
+            ? plan
+            : throw new WorldRootGraphRefusedException(message: string.Join(
+                separator: "; ",
+                values: diagnostics.Select(selector: static diagnostic => $"the overlay: {diagnostic.Code}: {diagnostic.Message}")
+            )));
+    }
     // Every version the root declares is a working image; a pane or view it places binds whatever image its instance
     // publishes, which the place pass samples.
     private static ShaderPipelineResource Image(string name, ShaderPipelineInitialization initialization) => new(

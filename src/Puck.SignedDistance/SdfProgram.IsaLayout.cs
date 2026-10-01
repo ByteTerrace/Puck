@@ -112,6 +112,16 @@ public sealed partial class SdfProgram {
     /// <summary>The bits of a ShapeBlend instruction's shape lane below <see cref="ShapeDetailFlag"/> and
     /// <see cref="ShapeNoSecondaryFlag"/>: the <see cref="SdfShapeType"/> id (<c>SDF_SHAPE_TYPE_MASK</c>).</summary>
     public const uint ShapeTypeMask = ~(ShapeDetailFlag | ShapeNoSecondaryFlag);
+    /// <summary>The bits a dynamic-transform slot occupies. A <see cref="SdfOp.TransformDynamic"/> instruction carries
+    /// its slot in a float data lane, which holds every integer below 2^24 exactly, so a wider slot would round there;
+    /// the kernels' transform row index, three times the slot plus two, stays inside 32 bits.</summary>
+    public const int DynamicTransformSlotBits = 24;
+    /// <summary>The largest legal dynamic-transform slot index; a program naming a larger one is refused.</summary>
+    public const int MaxDynamicTransformSlot = ((1 << DynamicTransformSlotBits) - 1);
+    /// <summary>The transform slot of geometry no dynamic transform places: what the winner's slot and a visibility
+    /// record's transform-slot lane hold for a static hit, and a light's, volume's, rigid segment's or part binding's
+    /// slot when nothing moves it (<c>SDF_TRANSFORM_SLOT_NONE</c>).</summary>
+    public const int NoDynamicTransformSlot = -1;
 
     // An instance's flags for the high bits of its segmentEnd lane: shadow-transparent when its compose only removes
     // material (a pure Subtraction-family carve, which the sdf.shadow-proxy gather omits so the shadow ray marches the

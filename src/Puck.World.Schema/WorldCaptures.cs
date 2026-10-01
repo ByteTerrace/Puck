@@ -35,6 +35,10 @@ public sealed record WorldCapturePaletteEntry(int Material, string Color);
 public sealed record WorldCaptureRow(CellName Station, IReadOnlyList<ulong> Ticks, IReadOnlyList<WorldCapturePaletteEntry> Palette,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Instance = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? Screen = null) {
+    /// <summary>The number of frozen presentation frames to compose at the armed tick before capturing; zero captures normally.
+    /// A positive count resets each contributing view's temporal history and advances only its sample index.</summary>
+    public int Converge { get; init; }
+
     /// <summary>The generated name of one capture: the station and the tick joined as a file name
     /// (<see cref="GeneratedName.JoinFile"/>), <c>lattice~860</c>. The capture's frame is this name with <c>.png</c>,
     /// and a parity comparison's evidence directory for it is this name. The tick is decimal digits and the station
@@ -108,6 +112,8 @@ public sealed record WorldCapturesSection(IReadOnlyList<WorldCaptureRow> Rows, s
 /// <summary>The <c>captures</c> section's capacity ceilings — small and fixed, since a capture schedule is authored
 /// topology for a short deterministic proving run, never a live-growing table.</summary>
 public static class WorldCapturesCapacity {
+    /// <summary>The largest admitted number of frozen convergence samples in a capture.</summary>
+    public const int MaxConvergenceFrames = 256;
     /// <summary>The largest admitted palette-entry count per station.</summary>
     public const int MaxPaletteEntriesPerRow = 16;
     /// <summary>The largest admitted station-row count.</summary>

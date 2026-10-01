@@ -182,7 +182,8 @@ pipeline set and every world pass as absent, and because the simulation holds
 while the engine builds, both backends read the state counts at the same tick. The render levers (`WorldRenderLeverCommandModule`) are
 composed by the offscreen shape as well as the windowed one, and the offscreen
 shape alone answers `world.resize <width> <height>`, which resizes its display
-live, so a capture after it lands at the new extent. The pipeline-cache counts
+live; the root shows its last image until it has installed the new extent, so a
+capture armed on the tick of the resize lands at the new extent. The pipeline-cache counts
 in a report are pacing: each leg boots on a fresh state root, so every run
 starts with a cold cache and reports misses only. A `puck canary` GPU selection
 with an offscreen proof instead warms each backend's pipeline cache once, by
@@ -727,10 +728,11 @@ all four live. The notes below record how each landed.
     binds whatever image its producer publishes, since it is only sampled; and a
     package recorder's resolved images carry the layout their planned access
     left them in.
-  - The synthesized default composition of two instances, `world` as the
-    external `sdf.world` producer and the root graph that reads it and runs the
-    `views.post` passes and then `overlay`, landed with the live wiring
-    (commit 6).
+  - The synthesized default composition has `world` as the external
+    `sdf.world` producer and a graph that reads it and runs the `views.post`
+    passes. Offscreen, that scene is the root and no overlay is drawn; a
+    windowed World draws the overlay in its own instance, `main$overlay`,
+    which is the root, so a comparison sits under it.
   - `RenderGraphRuntimeLawTests.External` holds the runtime to it over a fake
     producer on `FakePipelineGpu`: the latest output bound on every render, a
     lease retired only after the sampling slot's fence, a skipped producer frame
@@ -860,10 +862,11 @@ captures come from the graph's root output.
 
 - `WorldRootGraph` synthesizes a world's default graph from its document, a
   graph document value `RenderGraphCompiler` plans like any other: `world`, the
-  `sdf.world` producer, and, when anything is drawn over it, the root `main`,
+  `sdf.world` producer, and, when anything is drawn over it, the scene `main`,
   which reads `world` over the whole display and runs one pass per
-  `views.post` row in document order, then `overlay` in a windowed
-  World that loaded its glyph atlas. Both presentation shapes run the post
+  `views.post` row in document order. A windowed World that loaded its glyph
+  atlas draws the overlay in an instance of its own, `main$overlay`, over that
+  scene, and it is then the root. Both presentation shapes run the post
   passes, so offscreen captures and parity see them. With nothing drawn over it
   (offscreen with no `views.post` rows) `world` is the root, and the runtime
   shows and captures the producer's output directly. A config that does not
@@ -930,9 +933,10 @@ reconfiguration, and 9b, panes as graph instances.
   `views.root`), installs each row's background compile through `TryInstall`,
   and places every pane the last composed layout shows. `WorldRootGraph`
   places one `place` pass per instance any layout slot names, ahead of the
-  post passes, and `main` reads every pane and becomes the root when there is
-  one. A pane's footprint is its slot's width and height of `main`; a pane in no
-  active slot draws nothing and is not scheduled. The composer runs inside the
+  post passes, and `main` reads every pane into the scene. The display root is
+  `main$overlay` when the overlay is drawn over it. A pane's footprint is its
+  slot's width and height of `main`; a pane in no active slot draws nothing and
+  is not scheduled. The composer runs inside the
   world producer's frame, so a layout change places its panes one frame later,
   and a layout transition's render-scale dip no longer reaches a pane.
 - 9b: the SDF engine's child path was deleted: `SdfEngineNode`'s child map,
@@ -977,7 +981,7 @@ view an `sdf.world` instance of its own over the world's one residency.
   `SdfEngineNode.ViewProducer` gave the producers `world$2..world$K`, each
   leasing its own view's output. K is `WorldRootGraph.ViewsOf`: the most
   non-instance slots of any `views.layouts` row or `PlayerRoster.MaxSlots`,
-  uncapped since commit 13. With K above one, the root `main` runs one
+  with no fixed cap. With K above one, the scene `main` runs one
   `place` pass per view ahead of the pane passes, and
   `WorldFramePresenter.PrepareGraph` sets each view's footprint to its rect at
   its render scale, so `place` also does the render-scale reconstruction. A
@@ -1114,8 +1118,8 @@ P11b's last four commits are these, and all four have landed:
     the Launcher laws over fake roots, the teardown law holding a root whose
     one instance draws the overlay to reaching no device service.
 
-P13's CPU half has landed, and so have P13b's live mappings, simulation
-destination, host passthrough and live hit walk, described below. The
+P13's CPU and GPU picking have landed, and so have P13b's live mappings,
+simulation destination, host passthrough and live hit walk, described below. The
 published mapping is `SourceMapping` in `src/Puck.Commands/Sources`: a surface
 or pane placement, an optional warp pass, a UV layout, a letterboxing fit and a
 crop, as data. A warp declares its exact inverse (`SourceWarpInverse.Affine`)
@@ -1207,7 +1211,9 @@ runtime's latest schedule renders it at. It hands them to the host's
 before without allocating. The pipeline pane's pointer maps through its
 instance's published mapping (`TryGetPane`), and `WorldViewGraphHost.Walk` runs
 `RenderGraphHitWalk.WalkDisplay` over the runtime's live instance set, with
-each view's seat camera and each pane's paired camera. `world.view.panes`
+each view's seat camera and each pane's paired camera, starting beneath every
+pane from a lone whole-display view (`WorldViewGraphHost.DisplayView`), which is
+no pane and gets no hover outline. `world.view.panes`
 echoes the published mappings, a pick and a walk; the laws are
 `WorldViewPaneMappingLawTests`, and the `pane-display` canary maps a display
 point to the pane's pixel and moves it with the slot.
@@ -1266,11 +1272,18 @@ each screen's published mapping to `SdfWorldTables.SetScreenMapping`, which
 packs its single-precision draw form (`SourceMapping.Draw`) into the
 `screenMappings` table of the `sdf-world` interface, and the screen shading reads
 the glass's bezel inset, the layout, the letterbox and the crop from it. The
-bezel's one statement is `WorldScreenMappings.Glass`. P13b owes the rest. The
-pointer's pane hover reads the
+bezel's one statement is `WorldScreenMappings.Glass`. The pointer's pane hover reads the
 picker on the CPU (P13b-3, `WorldCursorFeed` through `WorldViewGraphHost.Hover`,
 outlined by the overlay's `CursorWriter` and echoed as `world.view.panes`'
-`hovered=`); P4 is complete, and GPU picking remains. The recorded Windows run, a click reaching
+`hovered=`). `SdfWorldPasses.PickerOf` supplies the shared `SdfWorldPicker`:
+one asynchronous visibility read, with the frame's dispatch box so a pixel the
+frame did not write answers nothing, resolves the winning SDF instance or mesh
+draw through the frame's immutable `WorldPickMapBuilder` map. The
+64-byte visibility record keeps that identity in V and the exact winning
+shape transform slot in L.x; material lanes read the existing transform row.
+The `sdf-picking` and `pane-outline` canaries pass on Vulkan and DirectX with
+debug layers, including clear removing the hovered pane's accent border.
+The recorded Windows run, a click reaching
 a captured editor window at the mapped point and the chord returning input to
 the game, is [deferred to the end](#deferred-to-the-end).
 
@@ -1282,10 +1295,12 @@ root, in both presentation shapes (see P11b commit 6 above):
    residency, `world$2` onward for each further split-screen view, and each
    `views.graphs` row as an instance of its own.
 2. When anything is drawn over the world or the world can compose more than
-   one view, the root `main`: one `place` pass per view, then one per pane a layout
+   one view, the scene `main`: one `place` pass per view, then one per pane a layout
    slot names, then one post-process package pass per `views.post` row in
-   document order, each reading the frame the pass before it wrote, then `overlay`, which draws the console, HUD, toasts and
-   cursor in a windowed World. Otherwise `world` is the root.
+   document order, each reading the frame the pass before it wrote. Otherwise `world` holds the scene.
+   A windowed World then draws the console, HUD, toasts and cursor in the `main$overlay` instance over the
+   scene, or over an editor comparison composed on it, and that instance is the root; offscreen, the scene
+   is the root.
 3. The launcher, which hands the root's float image to a surface compositor that
    writes it into the swapchain through the display encode.
 
@@ -2042,6 +2057,7 @@ and the canaries hold every scene the check names.
    | Small and multiple viewports | the `split` layout's half-size and quarter-size slots: `half-slot-*`, `quarter-slot-*` |
    | Reduced render scale | the `half` tier, reconstructed: `scaled-*` |
    | Full-size resize | `world.resize 1920 1080` grows the offscreen display live, and `full-near-floor-is-mesh`, `full-far-mesh-is-mesh`, `full-block-is-sdf` and `full-sky-beside-the-far-mesh-is-background` hold the frame at the new extent |
+   | Aspect-changing resize | `world.resize 144 144`, then `world.resize 256 144`, each captured on the tick it lands: `square-*` and `wide-*` hold each frame at its new extent and projected for it |
    | Bounded against unbounded traversal | every region: the oracle is the fixed-point raycast to the far distance, never stopped by a mesh |
 
    The `puck search -M 0` sweep for the retired layouts finds no reader outside
@@ -3852,8 +3868,11 @@ Each commit is marked with what it waits on.
    `WorldViewPaneMappingLawTests` (`.Hover`: the picker's pane drives the
    outline, off every pane and an unshown pane hover none, and a steady hovered
    frame allocates nothing in the host, the picker or the writer). The
-   outline is checked on the CPU only; no capture has inspected it on either
-   backend. GPU picking follows P4's visibility record.
+   `pane-outline` canary also checks the drawn outline and its removal on both
+   backends. GPU picking uses P4's visibility record through the shared
+   `SdfWorldPicker`, with immutable placement/body identity captured for the
+   requested frame; `sdf-picking` checks static and mesh hits on both backends.
+   The same readback is the [editor's E2 seam](editor.md#e2--selection-picking-and-highlight).
 4. Host passthrough, landed on Windows except its recorded run.
    - Only the local user opens a passthrough source: `source.passthrough open
      <instance> <windowTitle...>` runs only from the host's own console as typed
@@ -4405,8 +4424,9 @@ place:
   the mesh projection and the march agree on every pixel, `Jitter` is zero, and
   `WithPrevious` carries a previous frame's matrices that nothing reads yet.
 - The visibility record: each pixel's ray parameter, its identity (an SDF hit's
-  dynamic-transform slot plus one, a mesh hit's draw), its material, and its
-  march steps and queries in the V row's flags.
+  instance ordinal plus one, a mesh hit's draw), its material, and its march
+  steps and queries in the V row's flags. The L row retains the winning shape's
+  dynamic-transform slot, which can differ from the instance's bounding slot.
 - Graph history: a version declared `History` is read by a later frame through
   `ResourceReference.PreviousFrame`, carried into a replacement graph when its
   extent is unchanged, and restarted from its declared initialization when it
@@ -4425,11 +4445,13 @@ place:
   `gpu.texels.written`) into the node's kernel counters, and the upload counts
   its fillers, brick writes and region copies under passes of their own
   (`fillers`, `bricks`, `upload`).
-- The offscreen host holds its clock at an armed capture, but each frame it
-  composes still carries its interval (`FrameDeltaTicks`), and
-  `WorldFramePresenter.CaptureFrame` advances presentation time, animation and
-  the camera followers by it. Two frames composed at one tick can differ, by an
-  amount that depends on how fast the backend composes.
+- A converging capture freezes the armed tick's first presentation snapshot:
+  animation, camera followers and pass-block inputs remain fixed while only
+  its jitter index advances. Dependency frames that are not ready do not count,
+  and a view renders the same sample again on them, because its index is the
+  runtime's count (`RenderGraphConvergence.Samples`) rather than its own
+  renders; a late encoder reads the held Nth image without rendering another
+  sample.
 
 **Owns:** jitter, motion vectors, the temporal upscaler, history management,
 dynamic resolution, temporal reuse inside the SDF march, and the counted-cost
@@ -4462,17 +4484,22 @@ resolution, and stay there.
   it, projected with the instance's previous view. A background pixel moves with
   the camera alone. This spends one small computation per resolved pixel instead
   of a full-extent target written and read every frame.
-- **Previous transforms stay on the GPU.** Each residency keeps a device-local
-  previous dynamic-transform table that its own upload maintains: before the
-  frame's owed rows land in the current table, the rows its last two uploads
-  owed are copied from the current table into the previous one. The table then
-  holds the transforms of the residency's last consumed frame, which is the
-  previous frame of the view it renders. No host bytes move, and the
-  residencies' host-visible aperture on the RTX 2060 (see the open item on it)
-  does not grow. A transform table the upload owes whole, after a program
-  rebuild or a park change, copies the current table into the previous one, so
-  a reassigned slot reports no object motion. A mesh draw's record carries its
-  previous object-to-world beside its current one.
+- **Previous transforms stay on the GPU.** Each residency keeps device-local
+  previous dynamic-transform and mesh-matrix tables that its upload maintains.
+  Before changed rows land in the current tables, the rows owed by this upload
+  or the preceding upload are copied into the previous tables. One still
+  upload therefore settles the last movement; later still uploads copy nothing.
+  A row with no previous pose of its own is seeded from the current poses:
+  every dynamic row on the first upload, a program upload and a frame owing
+  every row; a range an emitter reseats because its owner changed (a spawn into
+  a vacated range, a reused body index, a jump); and a mesh draw whose identity
+  (`SdfMeshDraw.Identity`) at its index changed, as in a reordered draw list.
+  Mesh draws are continuous by identity rather than by rebuild, so a rebuild
+  that keeps a placement keeps its draw's motion. No host bytes move, and the residencies' host-visible aperture on the
+  RTX 2060 (see the open item on it) does not grow. The mesh table stores one
+  compact previous matrix per draw, leaving the current draw record unchanged.
+  Cuts, parked views and broken frame correspondence invalidate the affected
+  view's reprojection without resetting shared residency tables.
 - **Jitter.** A Halton (2, 3) sequence with a period of eight, the lead's
   choice over sixteen, which converges finer but keeps a still view rendering
   twice as long. It is in pixels of the render extent, starts at the pixel
@@ -4481,8 +4508,11 @@ resolution, and stay there.
   pass-block value. `ViewProjection.Jitter` becomes the instance's. The index
   is the number of frames the instance's history has accumulated since its last
   reset, modulo the period, never the wall clock and never the tick, so the
-  same history produces the same sequence on every run and backend. Jitter is
-  zero whenever reconstruction is off.
+  same history produces the same sequence on every run and backend. While a
+  capture converges, a frame accumulates only when the runtime counts it for
+  the capture, so the served Nth sample is at index N − 1 however many
+  not-ready frames precede it. Jitter is zero whenever reconstruction is off,
+  and cadence never lets a jittered output stand once its capture ends.
 - **History epochs.** An instance's history resets, at no GPU cost, by setting
   its frames-accumulated value to zero: `resolve` then reads no history and
   writes fresh history from the current frame. A reset is never a clear and
@@ -4497,9 +4527,11 @@ resolution, and stay there.
   - a view that was parked or not shown is shown again;
   - reconstruction is turned on, or a debug view is turned on or off. While a
     debug view is on, the resolve is spatial, as the tonemap is off then;
-  - a residency renders a frame that does not follow its view's previous render:
+  - the residency's previous transform tables no longer hold the poses of the
+    instance's preceding render (`SdfWorldTables.PreviousPoseRevision`):
     camera views share the world's residency and can refresh at different
-    cadences, so this check is per instance.
+    cadences, so this check is per instance. Frames an instance stood through
+    while no pose moved break nothing.
 
   Everything else, including a large camera move, is left to per-pixel
   rejection.
@@ -4525,14 +4557,17 @@ resolution, and stay there.
   reconstruction off writes none. Once P18-5 moves bounded volumes into the
   composite after `resolve`, a volume is never reconstructed and is no longer
   reactive.
-- **`resolve` writes a resolved surface in both modes.** Beside the color it
-  writes, at the output extent, the pixel's ray distance, chosen as the
-  nearest of the render-extent samples it reads and never filtered, so fog
-  never blends two depths, and carries coverage in the color's alpha, filtered
-  and reprojected with the color as premultiplied alpha. The spatial mode
-  writes it too, so a view with reconstruction off still hands P18's
-  `composite` a depth and a coverage at the output extent. Before P18-5 lands
-  the coverage is one everywhere.
+- **`resolve` writes a resolved surface in both modes once it has a reader.**
+  Beside the color it writes, at the output extent, the pixel's ray distance,
+  chosen as the nearest of the render-extent samples it reads and never
+  filtered, so fog never blends two depths, and carries coverage in the color's
+  alpha, filtered and reprojected with the color as premultiplied alpha. The
+  spatial mode writes it too, so a view with reconstruction off still hands
+  P18's `composite` a depth and a coverage at the output extent. The surface is
+  allocated and written from the change that lands its first reader (P18-5's
+  `composite`, or P15-5's history, whichever lands first); until then
+  `resolve` writes the color alone. Before P18-5 lands the coverage is one
+  everywhere.
 - **Sharpening is `place`'s.** With a source at its rect's extent, `place`
   applies a contrast-adaptive sharpen by `world.upscale-sharpness` instead of
   its exact copy, so sharpening adds no pass and no texel written. At sharpness
@@ -4540,6 +4575,13 @@ resolution, and stay there.
 - **A converged view stands.** `IsUnchanged` answers false while an instance's
   history is younger than one jitter period since its last change, so a still
   view renders eight jittered frames and then stands like any unchanged view.
+  The mechanism is the one cadence already applies to every temporal input:
+  `SdfWorldPasses.IsUnchanged` lets an instance stand only while a render taken
+  now would feed its passes the inputs its standing output was rendered with
+  (`SdfTemporalHistory.Stands`). Today that holds the jitter, so a still view
+  renders once at the pixel center after a converging capture ends, and, for
+  the `motion` debug view, the previous view and previous poses, so that view
+  renders until its motion settles.
 - **Parity boots with reconstruction off.** The parity world's render levers
   pin reconstruction, dynamic resolution and march seeding off, so every
   existing station keeps its pixel contract. Reconstruction gets stations of its
@@ -4575,6 +4617,20 @@ resolution, and stay there.
   presenter without the capability), the same controller reads the previous
   frame's counted `gpu.march.steps` against a per-tier step budget instead.
   The counters workload and the parity world pin dynamic resolution off.
+- **Dynamic-resolution policy.** A fresh load sample within 90–110% of its
+  budget leaves the scale unchanged. Outside that band the scale falls by at
+  most 1/16 or rises by at most 1/32 per fresh sample, clamped to the view's
+  floor and ceiling. The existing quality and tier levers configure each
+  view's floor, defaulting to Quarter; there is no second setting spelling.
+  Scale reaches the scheduler's `RenderGraphExtent.Quantize`, with its
+  sixteen steps per octave and 0.875 hysteresis, without another quantizer.
+  Counted fallback budgets derive from the committed RTX 2060 ceiling rows
+  and scale by output pixel area, so recording new floor evidence also updates
+  the controller's budgets. No copied numeric budget constants are maintained.
+  The timing trace and counted fallback hold the same exact response,
+  including both step bounds and floor/ceiling clamps. Extent changes allocate
+  nothing inside the ceiling. Ordinary canaries and parity pin the lever off;
+  P15-8 decides default enablement from its counted comparison.
 - **The counters are always on.** A pass counts its march steps and texels into
   its instance's counter buffer on every frame, whether or not anything reads
   them, so no counted row depends on whether the counters were read.
@@ -4663,8 +4719,17 @@ counted rows recorded in the same change.
      reconstruction off.
    - Counted-cost gate: no dispatch, bind, barrier, march step or texel moves
      with reconstruction off; the pass block grows by the new values' bytes.
-3. **P15-3, motion.** Every visible pixel's previous position, derived from the
-   record.
+   - Status: landed. The new values fit the existing pass-block padding, so its
+     total byte count is unchanged. Projection, epoch, capture-freeze and
+     dependency-readiness laws pass with actual failing mutation legs. The
+     `temporal-jitter` canary passes on both backends with debug layers: period
+     repeats have zero pixel difference, and the shifted sample changes 182
+     pixels. Parity passes with reconstruction off. RTX 4070 ordinary counter
+     reads keep dispatches, binds, barriers, steps, texels, uploads and
+     allocations unchanged; compiled kernel bytes rise by 140 on DirectX and
+     1456 on Vulkan. The floor-machine recording remains owner-assisted.
+3. **P15-3, motion.** Landed. Every visible pixel's previous position is derived
+   from the record.
    - Delivers: the previous view in the pass block (the instance's last render's
      camera, frustum offset and jitter), the residency's previous
      dynamic-transform table maintained by its upload, a mesh draw's previous
@@ -4673,33 +4738,52 @@ counted rows recorded in the same change.
      debug view.
    - Touches: `SdfWorldPackage` (a World-group table for the previous
      transforms), `SdfWorldTables.Regions.cs` and `SdfWorldTables.Upload.cs`,
-     `SdfMovedTransforms`, `SdfMesh` (`SdfMeshDraw`, the draw record's words),
+     `SdfMovedTransforms`, the compact previous mesh-matrix table,
      `DebugViewModes`, `debug/sdf-debug-views.hlsli`, a new
      `frame/sdf-reprojection.hlsli`.
    - Done when: a law holds the previous table's rows to the residency's last
-     consumed frame over `UploadModelGpu`, a still frame copying nothing; a device
+     consumed frame over `UploadModelGpu`, with one still upload settling the
+     last moved rows and later still uploads copying nothing; a device
      law holds `sdfReprojection` to a C# reference over `ViewProjection` for a
      static hit under a panning camera, a moved slot and a moved mesh draw; a
      `temporal-motion` canary reads the `motion` view of `sdf-mesh-motion`'s
      scenes, a body moved across tile boundaries by a row edit and a panned
      camera, at the analytic motion within a stated tolerance.
-   - Counted-cost gate: host upload bytes unchanged; the previous-table copies
-     count as copies with the bytes of the owed rows, zero on a still frame.
+   - Counted-cost gate: transform host upload bytes unchanged; the previous-table copies
+     count as copies with the bytes of the owed rows, zero after the settling
+     upload. `gpu.copies.buffer-bytes` counts successful device-buffer copies
+     alongside their existing copy count. The temporal-motion canary measures
+     motion against its analytic reference and rejects a same-path positive
+     control whose edits occur one tick earlier.
 4. **P15-4, render extent inside the output.** Render scale moves into the
    view's instance, and the spatial resolve replaces `place`'s upsample of a
    view.
+   - Landed: the render-scale ceiling alone selects a view's fragment and is the
+     whole render-extent revision. Views at a native ceiling keep the ten-pass
+     fragment and ignore the active grid. Views below it allocate traversal
+     storage at their render ceiling, shade into one transient render-grid
+     color, and run one output-sized spatial resolve that writes the color
+     alone; coverage remains in color alpha, and the resolved surface waits for
+     its first reader. Changing the active grid inside the ceiling
+     (`ResolvedRenderScale`) neither allocates nor rebuilds, and a layout
+     transition's dip is exactly that change; a view at a native ceiling does
+     not dip. Changing the ceiling uses the normal graph replacement path, which
+     presents the last image until the replacement installs. The resolve
+     pipeline builds from the deployed kernel without reflection, as every
+     deployed kernel does. The scheduler and memory budget price the render and
+     output grids separately. `place` copies a view's output when its scheduled
+     extent equals the rect's pixels and resamples it again otherwise.
    - Delivers: a fragment resource dimension resolved from a render extent the
      package states per instance (as it states counts through `CounterOf`),
      every pass before `resolve` running at that extent, the `resolve` pass in
-     its spatial mode writing the output and the resolved surface (the
-     nearest-sample ray distance, with coverage in the color's alpha), and a
+     its spatial mode writing the output (with coverage in the color's alpha;
+     the resolved surface lands with its first reader), and a
      view's footprint at its rect's
      native extent (`WorldViewGraphHost.PlaceView`). The render extent is a
      ceiling allocation and a per-frame extent inside it; a change of the ceiling
      rebuilds beside the installed graph as a resize does. At native scale with
-     reconstruction off the view must cost what it costs today: this step
-     settles whether the views pass then writes the output directly or the
-     runtime lets an instance's output stand in for its color.
+     reconstruction off, `views` writes the output directly and no resolve GPU
+     resources exist.
    - Touches: `src/Puck.Shaders/Pipeline` (`ShaderPipelineDimensions`),
      `RenderGraphPackages.cs`, `IRenderGraphPackageFactory`,
      `SdfWorldPackage.Fragment`, `SdfWorldPasses`, a new
@@ -4710,22 +4794,24 @@ counted rows recorded in the same change.
      values it holds `place` to; the mesh canaries' `scaled-*` stations hold; a
      parity re-record explains any station that moved; `world.budget` prices the
      output beside the render targets.
-   - Counted-cost gate: the resolve's dispatch and texels at a reduced scale,
-     `place`'s falling to a copy; the output at output extent in
-     device-local bytes; native scale with reconstruction off unchanged in every
-     count.
-   - Open: an exact authored extent for a view instance. A session or camera
-     view that authors a pixel resolution does not render at it: its instance's
-     extent is the scheduler's, which quantizes the display fraction upward to
-     sixteen steps an octave (`RenderGraphExtent.Quantize`), keeps a larger
-     allocation under its hysteresis, multiplies a footprint by its reader's
-     scale (`RenderGraphScheduler`), and rounds pixels up, so a 160x144
-     session renders at 165x152 on a 1920x1080 display and shrinks with the
-     reading view's render scale or split region. Its camera's aspect comes
-     from its residency's capture extent, not the authored ratio. The authored
-     resolution is an artistic choice, so an instance that states one renders
-     exactly that many texels, with the camera's aspect taken from that
-     extent; this step's render extent is where it lands.
+   - Counted-cost gate: at reduced scale the resolve writes the output texels
+     once; a placement with no other work stands in for that output. The
+     counted 1080p low workload moves its 2,073,600-texel dispatch from `place`
+     to `resolve`, with the existing SDF passes unchanged. Resolve adds its
+     output storage, bindings and one pipeline: a reduced view owns what the
+     native graph at its render ceiling owns, with the render-grid color held
+     once rather than once a frame slot, plus one output color a frame slot,
+     41,472,000 bytes at 1920x1080 and half scale over three frame slots
+     (`SdfPassPlanLawTests`). A layout transition allocates and builds nothing.
+     Native allocation
+     and work rows remain unchanged. The accepted exception is one immutable
+     `SdfKernelSet` bytecode load: 16,020 bytes on Vulkan and 11,492 on DirectX.
+     Keeping the kernel in that set preserves its existing atomic reload and
+     interface validation; GPU resources are still created only on demand.
+   - Authored extents are exact. A camera or session that states a pixel size
+     keeps that output size through reader scale, split layouts and display
+     resizing. Its camera uses the authored aspect on its first capture.
+     Unspecified extents keep the scheduler's quantization and hysteresis.
 5. **P15-5, the temporal resolve.** Reconstruction on.
    - Delivers: the history color and history surface as the fragment's history
      versions at output extent; reprojection through `sdfReprojection`, rejected
@@ -4755,7 +4841,13 @@ counted rows recorded in the same change.
    each frame.
    - Delivers: one controller that sets each view's per-frame render extent
      between a floor and the tier's ceiling, never reallocating, and resets no
-     history (the resolve reads the extent each frame); its one load signal,
+     history (the resolve reads the extent each frame). It writes
+     `SdfViewSnapshot.ResolvedRenderScale`, the grid a layout transition's dip
+     already moves, composing with that dip rather than adding a second grid.
+     A view at a native ceiling reconstructs nothing and ignores that grid, so
+     dynamic resolution on a native tier gives its views a ceiling below
+     native for as long as it is on (one rebuild when the lever moves), never a
+     per-frame choice of fragment; its one load signal,
      present timing through an injectable timing source with the counted
      march-step budget where present timing is unavailable; the lever with its
      presets.
@@ -5081,7 +5173,8 @@ Once P15-4 lands, the order is:
 ```
 
 `resolve`, in its spatial mode (reconstruction off) and its temporal mode alike,
-writes the resolved surface at the output extent: `lit` with its coverage, and
+writes the resolved surface at the output extent, from the change that lands
+its first reader: `lit` with its coverage, and
 the ray distance of the nearest render-extent sample it read. `sky` and
 `composite` then run at the output extent and read only that surface, never the
 render-extent record. Before P15-4 they run at the render extent and read the
@@ -5482,6 +5575,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
 
 1. **P18-1, a baseline to measure against.** Today's sky, held still before
    anything moves.
+   - Landed: four sky parity captures, the discriminating `sky-layers` and
+     `sky-cycle` canaries, and isolated still, drift, twinkle and cycle counters
+     workloads. Both backends pass with debug layers and agree on the counted
+     baseline. The still workload can skip a node entirely; an absent sample
+     is not a measured zero. The RTX 2060 floor recording remains owner-assisted.
    - Delivers: the parity world gains a sky station authoring every current
      feature (gradient, fog, sun disc, stars with twinkle, clouds with drift,
      shear and spin, a cycle), captured at several ticks across the cycle; the
@@ -5559,6 +5657,30 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `WindIntegralLawTests` hold a keyed cloud rate's offset continuous across a
      key (red leg: `rate × time` at each key's rate jumps); `sky-cycle` holds the
      courtyard's toggle.
+   - Remote presentation decision: use the existing tier-governed
+     `WorldProjectionDocument`, with no side metadata or held-value history.
+     Tick-only clock closures evaluate locally. For a disclosed state clock,
+     send an anchor whenever the client's prediction at an authoritative tick
+     differs from the authority's phase. The anchor carries its tick, phase
+     and the current rate for a proven affine span, or rate zero otherwise.
+     Rate changes, quantized advances, staircases, nonlinear rows and seeks
+     all follow this one rule. Other resolved presentation values travel as
+     per-recipient deltas only when changed. Every used dependency must pass
+     the existing disclosure boundary; a hidden source refuses before any
+     derived value is emitted. A late view seeds invalid fields from the
+     load-validated authored initial value (or clamps a closed range), so
+     early and late views may hold different values while invalid.
+   - Projection proof is a separate unimplemented slice after the keys
+     substrate. Authority and recipient must call the same prediction function
+     from a shared package, bit-exact on the u64 phase. A mixed affine,
+     staircase, quantized, nonlinear and seek trace must match the host phase
+     at every tick and produce zero spurious anchors. A steady state sends
+     nothing; a late join hydrates the exact current phase; a hidden
+     dependency sends no derived value. Count the last anchor per recipient
+     per clock as a memory row, and release it when that recipient leaves or
+     loses disclosure. Before merge, count bytes per recipient per second for
+     a steady sky, a busy sky and a nonlinear clock that re-anchors every
+     tick, plus full late-join hydration. Each law needs an actual red leg.
    - Counted-cost gate: the environment re-resolves only when a clock a key
      reads moves or a bound slot moves, counted as resolutions in
      `world.timeline`.
@@ -5624,6 +5746,14 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      (1 − h) × P per view (see the expected wins), and every hit reads zero;
      each field run's texels written are a row of their own under `sky`.
 6. **P18-6, a cadence per pass.**
+   - Landed foundation: the graph can retain private intermediate resources
+     and leave a pass standing while its signature, extent, inputs and outputs
+     remain valid. Standing has its own counted state and no pass work. The
+     existing resource tracker preserves the last actual access and restores
+     its state when a frame fails before successful submission. Installed cadence
+     metadata is counted in the graph's CPU memory rows. The SDF change
+     classes, sky/composite scheduling and temporal-history integration below
+     remain to be connected and verified.
    - Delivers: the pass-group signatures, retained fragment resources, the
      planner's barriers for a standing pass, the rule that a pass stands only
      when its group signature and its inputs do, and the four change classes
@@ -5892,7 +6022,8 @@ fraction in live tiles, at least h.
   land before or after P15-2 to P15-7: before P15-4, `sky` and `composite` run at
   the render extent after `views` and read the record; from P15-4 they follow
   `resolve` at the output extent and read only the resolved surface, the depth
-  and coverage P15-4's `resolve` writes in both modes, and the sky's field
+  and coverage `resolve` writes in both modes once its first reader lands (the
+  P18 step that lands `composite` adds it to `resolve`), and the sky's field
   extent follows the output extent scaled by the sky tier. P15's reactivity is
   its own image, which `resolve` consumes, and P18's coverage is `lit`'s alpha,
   which `resolve` carries through; P15's text states both. P15-5's convergence
@@ -5998,8 +6129,8 @@ P11b-13. P13b's live mappings
 (step 1), simulation destination (step 2, with the light gun that authored
 cartridges read through `$light`), host passthrough (step 4), the GPU drawing
 from the mapping (step 5) and live hit walk (step 6) have landed, with step 3's
-CPU half, and GPU picking, which P4's completed visibility record allows,
-remains.
+shared GPU picking and both-backend hovered-pane outline captures. Only
+step 4's recorded Windows click and focus return remain owner-assisted.
 P14 follows P4, P7b, P8, P11b and P12b, because the engine's composition and
 screens need somewhere to go before it moves. Its capability matrix (P14-1),
 module split (P14-2), generated instruction-set declarations (P14-3), the

@@ -23,6 +23,37 @@ The reference-game design lives in [the game guide](../../docs/game/README.md);
 nothing there is evidence that a capability is built. What each `Puck.*`
 project is for is [`docs/project-map.md`](../../docs/project-map.md).
 
+## Presentation inspection
+
+`world.inspect on|off` toggles the acting seat's editor panel; bare
+`world.inspect` prints the same formatted snapshot. It includes the completed
+GPU hit and captured palette address, point, normal, pixel cost, selection,
+camera, ticks, render levers, counted work, capacity and reload refusal.
+Point and normal read `unavailable` until an inspector surface sample completes;
+an ordinary hover still reports its measured identity, distance and pixel cost.
+A passthrough pane follows its own rendered residency, scale and shading quality;
+its placement costs and pass timings use that same view.
+`world.cost <placement>` reads live placement ownership; bare `world.cost`
+uses the completed pointer hit, and `world.cost top [n]` lists the largest rows.
+Shared program overhead is reported separately and reconciles to `world.budget`.
+These are presentation queries and never submit simulation input.
+
+Every inspector line fits the panel's 96 columns: a long line wraps onto
+indented continuation lines and ends in `...` past its own budget, and pass
+times past the panel's 32nd line are counted in a closing `... n more lines`.
+A reload refusal shows its file and location first, relative to the world's
+document directory.
+
+`world.gpu-timing on|off` enables optional observational per-pass timestamps;
+bare reads completed means over at most 32 pairs. The inspector's FPS and timing
+rows follow that toggle. Timing starts off and creates no timestamp objects or
+commands until requested. A device without timestamps, or a timestamp pool or
+readback the device will not create, refuses timing for that render-graph
+instance by name (`<instance>: refused <reason>`); the graph keeps rendering and
+nothing is tried again until timing is turned on anew. An offscreen host
+supports explicit placement costs and timing; the panel and pointer feed belong
+to the windowed presentation.
+
 ## Operator access
 
 For AI pairing, `world.control start|stop|status` manages an authenticated
@@ -317,9 +348,13 @@ in this shape) resizes it live, each side 1 to 16384 pixels: the host's
 `OffscreenRenderOptions` asks the next frame for the new extent, the render
 root (`RenderGraphRuntimeNode.Resize`) schedules every instance against it, and
 every camera and session view fits its declared extent to it
-(`WorldScreenBinder.ResizeDisplay`), so a capture after it lands at the new
-extent. It refuses until the renderer is ready, and with no argument it echoes
-the current extent. A windowed display keeps its document extent, which
+(`WorldScreenBinder.ResizeDisplay`). The cameras are composed for the new
+extent from the next frame on, while the root's graph rebuilds at it beside the
+installed one, so until that graph installs the display shows its last image
+and a capture waits: a screenshot armed on the tick of the resize lands at the
+new extent, never as a frame projected for one extent and shown at another. It
+refuses until the renderer is ready, and with no argument it echoes the current
+extent. A windowed display keeps its document extent, which
 presentation scales to the window.
 
 Because its frames are its only output, the offscreen host holds its clock
@@ -343,6 +378,14 @@ withheld) and `world.captures.ticks-while-armed` (ticks stepped while a
 capture waited, which stays 0 offscreen). A capture still waiting when the run
 ends is refused as `unserved` before the render chain is disposed. The windowed
 host paces to its display and never holds.
+
+A capture row can set `converge` to 1–256 to render that many temporal samples
+at its armed tick before writing the last one; zero, the default, captures the
+next frame. Convergence freezes the first composition's presentation values,
+including animation and camera followers, and advances only the ray-sampling
+sequence. See [motion and views](../../docs/rendering/sdf/handbook/motion-and-views.md)
+for the sampling and reset contract. Convergence captures a render-graph
+instance, not a screen source.
 
 ## Seat controls and camera authoring
 
@@ -760,7 +803,10 @@ Facts a script needs:
   the rendering engine instead of a tick count: it holds the session until
   the world's SDF residency has built its tables (its pipeline set installed
   and its first frame captured), the render graph's root has rendered over
-  a completed view and the bake schedule has reconciled and, while the
+  a completed view, the GPU has completed a frame of every instance that has
+  rendered and the root has produced one more frame, so a pick or counted pass
+  read after it waits on no cold device and a few ticks after it are a few
+  frames, and the bake schedule has reconciled and, while the
   presentation draws its bakes, settled, or
   the deadline passes, and reports which on standard error. A script that
   reads rendered work (`world.counters gpu`) waits on it, since a cold driver
@@ -981,6 +1027,51 @@ basis-and-imports composition graph in merge order, each import with the alias
 it composed under (see
 [`Puck.World.Schema`](../Puck.World.Schema/README.md)'s document-composition
 section).
+
+For a `.puck` origin, `world.save` prints changed authored nodes into the source
+and retains the surrounding text, including constants, comments and templates.
+It recompiles and composes the result before replacing the file. A template,
+compile-time `for` or module-generated row refuses by name; edit its generator
+or save a JSON target whose `basis` names the source. A live duplicate must
+receive an authored id before it can be saved as source.
+An explicit new `.puck` target is printed from the snapshot. A refused save
+leaves the file and undo journal intact.
+
+`world.watch on` watches the loaded source's compile and composition inputs,
+including imported documents, missing imports and source-directory listings.
+After 150 ms without another change it submits ordinary `world.reload` under
+the local console or seat principal that enabled it. Each poll reads every
+input's file-system stamp (existence, length and last write) and re-reads only
+the contents of an input whose stamp moved, or whose last write is within two
+seconds of the poll, so an unchanged tree costs one stat per input. A refusal retains the
+running world and reports its source diagnostic in the editor and terminal.
+`world.watch off` stops future requests; an already submitted reload can finish.
+After `world.load` changes the origin, the watch adopts the new dependencies
+and requests one reload, covering edits made while that load was being accepted.
+Grid and snap overrides and build mode survive reload. The current placement
+and snap reference survive by id; a removed id is cleared.
+
+`world.compare hold` keeps the acting seat's displayed pixels for a before-and-after
+comparison. `world.compare wipe [position]`, `split` and `diff` show that hold
+beside the current view. Wipe shows the held image left of a position in `0..1`
+and the current image to its right; split fits each whole image into half of
+the seat; diff shows their absolute RGB difference. An `Axis1D` binding to
+`world.compare` controls the wipe position without taking another capture.
+`world.compare off` releases the comparison's graph resources and retains its
+CPU image for reuse.
+A following `world.screenshot` captures the next composed display, including
+when switching comparison on or off changes its render graph root.
+
+A windowed display draws the overlay over the comparison, so the console,
+cursor, toasts and inspector stay live and on top. A hold and a measurement
+capture the scene beneath both, so the overlay never enters a held or measured
+frame, and each is cropped by the seat viewport of the frame it captured.
+A typed comparison captures the live view and reports the number of pixels
+whose RGB differs by at least two byte codes, using the same measurement as
+the canaries. The text session waits for that capture before its next command.
+A different seat extent requires a new hold before counting differences.
+Bare `world.compare` reports the latest result. Holds and controls belong to
+the session and do not enter the world document or its simulation state.
 
 The root `state` section is the one authoring inventory for every ownership
 mode: `world` rows are document cells, `body` rows are ephemeral per-body
@@ -1796,7 +1887,10 @@ does not author is refused by name. The shipped worlds share one table,
 `Assets/worlds/quality.puck`: the standard world imports it, and a world on
 another basis imports it by name, so every presenting world answers each tier
 without moving its own boot levers (`ShippedWorldQualityLawTests`). Render scale applies
-to both seat views and named cameras, multiplied by any layout-transition scale.
+to both seat views and named cameras as each view's ceiling. A layout
+transition's `transitionRenderScale` multiplies only the grid rendered inside
+that ceiling, which allocates and rebuilds nothing, so it has no effect at the
+native tier, where a view reconstructs nothing.
 Named tiers are
 facades over continuous values. Do not assume a lower render scale is
 monotonic for a large instance field—read both `world.counters gpu` and
@@ -1852,8 +1946,8 @@ it can bind: `descriptor-sets` or `root-signature-words`,
 `binding-tier`, `root-signature`, `shader-model`, `heap.views`,
 `heap.samplers` and `heap.samplers-static`; it is recorded the same way. Then come each render node
 (`world` for the SDF engine, then every render-graph instance by its instance
-name, such as the root `main` and each `views.graphs` pane, then
-`view:<name>` for each offscreen view) with its newest
+name, such as the scene `main`, the windowed root `main$overlay` and each
+`views.graphs` pane, then `view:<name>` for each offscreen view) with its newest
 completed submission's per-pass counts and its created objects, or
 `work unavailable` until a submission completes. A filter selects whole dotted
 segments (`world.counters gpu`, `world.counters state`); a filter that selects
@@ -1956,11 +2050,12 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 capture of a following composed frame. A tick wait lets rendering progress;
 confirm the capture completion before reading the file. Its stdout echo says `pending <path>`
 precisely because no file exists yet; the resolved path arrives on **stderr**
-when the frame lands, named by whichever node served it: `[capture] main ->
-<path>` from the node of the render graph's root, which draws the
-`views.post` passes and the overlay over the world, or `[capture] world ->
-<path>` from the world's own instance when the world is the root because
-nothing is drawn over it. The root reads the frame the display shows; an
+when the frame lands, named by whichever node served it: in a windowed World,
+`[capture] main$overlay -> <path>` from the instance that draws the overlay over
+the scene; offscreen, `[capture] main -> <path>` from the node of the render
+graph's root, which draws the `views.post` passes over the world, or
+`[capture] world -> <path>` from the world's own instance when the world is
+the root because nothing is drawn over it. The root reads the frame the display shows; an
 overlay that draws nothing this frame publishes the world's image in its place,
 and the capture reads that. Arming a second capture while one is still
 pending is REFUSED by name—the earlier path would never be written—and a

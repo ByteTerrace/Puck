@@ -24,7 +24,7 @@ namespace Puck.SdfVm.Tests;
 /// mapping reaches the device as its draw form and an unchanged one owes nothing; and an engine rebuilt after a device
 /// loss owes every table again and reads back exact.
 /// </summary>
-public sealed class SdfWorldTablesUploadLawTests {
+public sealed partial class SdfWorldTablesUploadLawTests {
     // The packed width of a dynamic transform (isa/sdf-world.interface.hlsli sdfDynamicTransforms).
     private const int DynamicTransformBytes = 48;
     private const uint Extent = 64;
@@ -274,7 +274,7 @@ public sealed class SdfWorldTablesUploadLawTests {
         );
         Assert.Equal(
             expected: Packed(transforms: transforms),
-            actual: gpu.DeviceLocal(sizeBytes: ((ulong)(Slots * DynamicTransformBytes)))
+            actual: gpu.DeviceLocal(part: "dynamic-transforms", sizeBytes: ((ulong)(Slots * DynamicTransformBytes)))
         );
     }
     [Fact]
@@ -503,7 +503,7 @@ public sealed class SdfWorldTablesUploadLawTests {
         var cloud = new SdfVolume(
             Axis: 2f,
             Coverage: 0.4f,
-            DynamicSlot: -1,
+            DynamicSlot: SdfProgram.NoDynamicTransformSlot,
             Extinction: 2f,
             HalfExtent: new Vector3(x: 3f, y: 1f, z: 2f),
             Intensity: 1f,
@@ -640,9 +640,9 @@ public sealed class SdfWorldTablesUploadLawTests {
         );
         var moved = Matrix4x4.CreateTranslation(xPosition: 1f, yPosition: 2f, zPosition: 3f);
         SdfMeshDraw[] draws = [
-            new(Material: 4, Mesh: quad, ObjectToWorld: moved),
-            new(Material: 5, Mesh: triangle, ObjectToWorld: Matrix4x4.CreateScale(scale: 2f)),
-            new(Material: 6, Mesh: quad, ObjectToWorld: Matrix4x4.Identity),
+            new(Identity: "moved", Material: 4, Mesh: quad, ObjectToWorld: moved),
+            new(Identity: "triangle", Material: 5, Mesh: triangle, ObjectToWorld: Matrix4x4.CreateScale(scale: 2f)),
+            new(Identity: "quad", Material: 6, Mesh: quad, ObjectToWorld: Matrix4x4.Identity),
         ];
         var layout = new SdfMeshRegionLayout(
             DrawCount: 3,
@@ -824,8 +824,9 @@ public sealed class SdfWorldTablesUploadLawTests {
             indices: new uint[] { 0, 1, 2, 0, 2, 3 },
             positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
         );
-        SdfMeshDraw[] one = [new(Material: 1, Mesh: quad, ObjectToWorld: Matrix4x4.Identity)];
+        SdfMeshDraw[] one = [new(Identity: 0, Material: 1, Mesh: quad, ObjectToWorld: Matrix4x4.Identity)];
         var many = Enumerable.Range(count: 8, start: 0).Select(selector: index => new SdfMeshDraw(
+            Identity: index,
             Material: index,
             Mesh: quad,
             ObjectToWorld: Matrix4x4.CreateTranslation(xPosition: index, yPosition: 0f, zPosition: 0f)
@@ -924,6 +925,7 @@ public sealed class SdfWorldTablesUploadLawTests {
     private sealed class Rig : IDisposable {
         private readonly SdfMovedTransforms m_moved = new();
         private readonly List<int> m_pendingMoves = [];
+        private readonly List<(int Slot, DynamicTransform Previous)> m_pendingReseats = [];
 
         private readonly int m_brickPoolVoxelCapacity;
         private readonly SdfProgram m_program;
@@ -952,7 +954,7 @@ public sealed class SdfWorldTablesUploadLawTests {
         // The device-local dynamic-transform table holds exactly the frame's packed transforms.
         public void AssertDeviceTransforms() => Assert.Equal(
             expected: Packed(transforms: m_transforms),
-            actual: Gpu.DeviceLocal(sizeBytes: ((ulong)(m_transforms.Length * DynamicTransformBytes)))
+            actual: Gpu.DeviceLocal(sizeBytes: ((ulong)(m_transforms.Length * DynamicTransformBytes)), part: "dynamic-transforms")
         );
         public void Dispose() {
             Engine.Dispose();
@@ -969,6 +971,15 @@ public sealed class SdfWorldTablesUploadLawTests {
             };
             m_pendingMoves.Add(item: slot);
         }
+        // Moves one slot as a new owner taking it would: its repack is committed as a reseat.
+        public void Reseat(int slot) {
+            m_pendingReseats.Add(item: (slot, m_transforms[slot]));
+            m_transforms[slot] = m_transforms[slot] with {
+                Position = (m_transforms[slot].Position + new Vector3(x: 0f, y: 0f, z: 1f)),
+            };
+        }
+        // Uploads the program again into the same tables, as a rebuilt scene does.
+        public void UploadProgram() => Engine.UploadProgram(program: m_program);
         // Drops the engine and builds another on the same device, as an owner does after a device loss.
         public void Rebuild() {
             Engine.Dispose();
@@ -996,6 +1007,17 @@ public sealed class SdfWorldTablesUploadLawTests {
             }
 
             m_pendingMoves.Clear();
+
+            foreach (var (slot, previous) in m_pendingReseats) {
+                _ = m_moved.Commit(
+                    previous: [previous],
+                    reseat: true,
+                    slots: m_transforms,
+                    start: slot
+                );
+            }
+
+            m_pendingReseats.Clear();
             Engine.Pack(frame: Frame(
                 program: m_program,
                 time: time,

@@ -19,13 +19,11 @@ internal sealed record CanaryEvaluation(IReadOnlyList<CanaryAssertionResult> Res
 /// body relocation covering 0.06% of the frame measures ~0.03 LSB mean — inside the envelope, though every changed
 /// pixel moved by up to 209 LSB.</para>
 /// <para>Measured against the real World: the ±1-LSB shading yields 0 pixels at or above
-/// <see cref="MinChangedDelta"/>; the weakest true body relocation in the travel canaries yields 551.</para>
+/// <see cref="RgbaFrameDifference.MinChangedDelta"/>; the weakest true body relocation in the travel canaries yields 551.</para>
 /// </remarks>
 internal static class CanaryFrameNoise {
     /// <summary>The largest changed-pixel count two captures may carry and still count as the same frame.</summary>
     public const long MaxChangedPixels = 64;
-    /// <summary>The per-pixel channel delta, in LSB, at or above which a pixel counts as changed.</summary>
-    public const int MinChangedDelta = 2;
 }
 internal static partial class CanaryAssertions {
     /// <summary>The token a manifest writes where the runner's per-leg companion-authority endpoint belongs.</summary>
@@ -119,14 +117,14 @@ internal static partial class CanaryAssertions {
             );
         }
 
-        var (changedPixels, maxDelta) = MeasureChange(
-            after: after,
-            before: before
+        var (changedPixels, maxDelta) = RgbaFrameDifference.Measure(
+            after: after.RgbaPixels,
+            before: before.RgbaPixels
         );
         var agree = (changedPixels <= CanaryFrameNoise.MaxChangedPixels);
 
         return new CanaryAssertionResult(
-            Detail: $"{assertion.Name}: {changedPixels} pixel(s) changed by >= {CanaryFrameNoise.MinChangedDelta} LSB (max {maxDelta}), budget {CanaryFrameNoise.MaxChangedPixels} — the frames {(agree
+            Detail: $"{assertion.Name}: {changedPixels} pixel(s) changed by >= {RgbaFrameDifference.MinChangedDelta} LSB (max {maxDelta}), budget {CanaryFrameNoise.MaxChangedPixels} — the frames {(agree
             ? "agree"
             : "diverge")}",
             Passed: (agree == assertion.Agree)
@@ -449,36 +447,6 @@ internal static partial class CanaryAssertions {
             ? transcript.Stdout
             : transcript.Stderr
         );
-    // Counts the pixels a reader would call changed: max |dR|,|dG|,|dB| at or above the noise delta. Alpha is ignored
-    // — a composed screenshot is opaque and the channel carries no scene content.
-    private static (long ChangedPixels, int MaxDelta) MeasureChange(PngImage before, PngImage after) {
-        var beforePixels = before.RgbaPixels;
-        var afterPixels = after.RgbaPixels;
-        var changedPixels = 0L;
-        var maxDelta = 0;
-
-        for (var index = 0; (index < beforePixels.Length); index += 4) {
-            var deltaR = Math.Abs(value: (beforePixels[(index + 0)] - afterPixels[(index + 0)]));
-            var deltaG = Math.Abs(value: (beforePixels[(index + 1)] - afterPixels[(index + 1)]));
-            var deltaB = Math.Abs(value: (beforePixels[(index + 2)] - afterPixels[(index + 2)]));
-            var pixelDelta = Math.Max(
-                val1: deltaR,
-                val2: Math.Max(
-                    val1: deltaG,
-                    val2: deltaB
-                )
-            );
-
-            if (pixelDelta >= CanaryFrameNoise.MinChangedDelta) {
-                changedPixels++;
-            }
-            if (pixelDelta > maxDelta) {
-                maxDelta = pixelDelta;
-            }
-        }
-
-        return (changedPixels, maxDelta);
-    }
     private static string OperatorName(CanaryRelationOperator relationOperator) => relationOperator switch {
         CanaryRelationOperator.Equal => "==",
         CanaryRelationOperator.NotEqual => "!=",

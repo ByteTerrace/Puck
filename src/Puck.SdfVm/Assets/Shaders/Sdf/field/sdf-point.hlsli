@@ -6,6 +6,7 @@ struct SdfHit {
     float distance;
     int material;
     float4 lanes;
+    int instanceIndex;
     int frameSlot;
 };
 
@@ -14,20 +15,12 @@ SdfHit sdfIsaErrorHit() {
     result.distance = 0.0;
     result.material = SDF_ISA_ERROR_MATERIAL;
     result.lanes = float4(0.0, 0.0, 0.0, 0.0);
-    result.frameSlot = -1;
+    result.instanceIndex = -1;
+    result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
     return result;
 }
 
-float3 rotatePointByInverseQuaternion(float3 p, float4 q) {
-    float3 u = -q.xyz;
-    return (p + (2.0 * cross(u, ((q.w * p) + cross(u, p)))));
-}
-// Forward rotation R(q) p (the inverse's conjugate). The rigid-leaf dual maps a shape-LOCAL gradient to world by the
-// leaf's forward rotation, mirroring the inverse rotation the rigid point walk applies (worldGrad = R(q) localGrad).
-float3 rotatePointByQuaternion(float3 p, float4 q) {
-    float3 u = q.xyz;
-    return (p + (2.0 * cross(u, ((q.w * p) + cross(u, p)))));
-}
+#include "sdf-quaternion.hlsli"
 
 // The symmetry-LOD origin (the marching camera's world position), set by each kernel's entry point before it
 // marches. A wallpaper fold whose data1.z threshold is exceeded by distance(worldPosition, sdfLodOrigin) keeps its

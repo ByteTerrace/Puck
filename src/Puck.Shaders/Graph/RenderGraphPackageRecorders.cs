@@ -51,7 +51,11 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// <see langword="null"/> for a pass whose fragment does not count (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>).
 /// A recording binds the buffer read-write at every dispatch and tells its kernels the row; it records no barrier for
 /// it, since every pass only adds to it atomically.</param>
-public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null, GpuKernelCounterRow? WorkCounters = null) {
+/// <param name="FrameWidth">The instance output width; zero uses the pass width for standalone recordings.</param>
+/// <param name="FrameHeight">The instance output height; zero uses the pass height for standalone recordings.</param>
+/// <param name="RenderWidth">The width of the instance's render grid this frame; zero uses the output width.</param>
+/// <param name="RenderHeight">The height of the instance's render grid this frame; zero uses the output height.</param>
+public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null, GpuKernelCounterRow? WorkCounters = null, uint FrameWidth = 0, uint FrameHeight = 0, uint RenderWidth = 0, uint RenderHeight = 0) {
     /// <summary>Gets the command buffer to record into.</summary>
     public nint CommandBuffer { get; } = CommandBuffer;
     /// <summary>Gets the instance's counting recorder.</summary>
@@ -62,6 +66,16 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     public uint Width { get; } = Width;
     /// <summary>Gets the pass's extent height, in pixels.</summary>
     public uint Height { get; } = Height;
+    /// <summary>Gets the instance output width, independently of this pass's render grid.</summary>
+    public uint FrameWidth { get; } = ((FrameWidth == 0) ? Width : FrameWidth);
+    /// <summary>Gets the instance output height, independently of this pass's render grid.</summary>
+    public uint FrameHeight { get; } = ((FrameHeight == 0) ? Height : FrameHeight);
+    /// <summary>Gets the width of the render grid every render-sized pass of the instance records at this frame: the
+    /// node's one resolution of it, which a pass of another extent reads rather than resolving the grid again.</summary>
+    public uint RenderWidth { get; } = ((RenderWidth != 0) ? RenderWidth : ((FrameWidth == 0) ? Width : FrameWidth));
+    /// <summary>Gets the height of the render grid every render-sized pass of the instance records at this
+    /// frame.</summary>
+    public uint RenderHeight { get; } = ((RenderHeight != 0) ? RenderHeight : ((FrameHeight == 0) ? Height : FrameHeight));
     /// <summary>Gets the versions bound to the input ports.</summary>
     public ReadOnlySpan<RenderGraphPackageResource> Inputs { get; } = Inputs;
     /// <summary>Gets the versions bound to the output ports.</summary>
@@ -114,6 +128,16 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// <param name="context">The frame being recorded.</param>
     /// <returns><see langword="true"/> when the pass records nothing this frame.</returns>
     bool Skips(in FrameContext context) => false;
+    /// <summary>Returns the identity of every package-owned input determining this pass's output, or null to execute.
+    /// The node asks after <see cref="Skips"/> and before recording. The recorder may use its existing preparation of
+    /// borrowed dependencies here, preserving that preparation's counting and queue ordering; it records no access to
+    /// this pass's graph-bound versions. Include borrowed regions, view state, config, unbound reads and every other input not
+    /// represented by graph versions; return null when an input has no reliable identity or the pass is forced.
+    /// Equal signatures permit standing only while every graph input's last write and the retained output contents
+    /// also remain valid. A standing pass records neither work nor barriers; its consumers read its retained result.</summary>
+    /// <param name="context">The frame being recorded.</param>
+    /// <returns>The output's package-input identity, or null to force execution.</returns>
+    ulong? Signature(in FrameContext context) => null;
 }
 /// <summary>Makes the recorders of one package id. A candidate graph's package passes build with its shader passes:
 /// <see cref="Build"/> creates a pass's shader modules, pipelines and render passes on the thread pool before the graph
@@ -161,6 +185,17 @@ public interface IRenderGraphPackageFactory {
     /// <param name="instance">The instance's name.</param>
     /// <returns>The counter, or <see langword="null"/>.</returns>
     IShaderPipelineStorageCounter? CounterOf(string instance) => null;
+    /// <summary>Returns the instance's render extent inside its output, or null when both extents are the same.
+    /// Render-relative resources allocate at its ceiling; unsized package passes and render-relative passes record at
+    /// its current grid. A ceiling revision rebuilds beside the installed graph.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The render-extent provider, or null.</returns>
+    IShaderPipelineRenderExtent? RenderExtentOf(string instance) => null;
+    /// <summary>Selects an implicit package instance's fragment, or null for the catalog's fragment. Returning another
+    /// immutable fragment rebuilds its graph beside the installed one; unchanged frames return the same object.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The selected fragment, or null.</returns>
+    RenderGraphPackageFragment? FragmentOf(string instance) => null;
     /// <summary>Returns whether nothing an instance's passes of the package render from has changed since the instance's
     /// latest completed render, so that render stands for the frame. The runtime asks on the frame thread before it
     /// schedules each frame, for every instance whose graph binds no input and runs only package passes, and declares an
@@ -177,11 +212,23 @@ public interface IRenderGraphPackageFactory {
     /// whether an instance is unchanged and before any instance renders.</summary>
     /// <param name="context">The host's frame context of the frame being produced.</param>
     void BeginFrame(in FrameContext context) { }
+    /// <summary>Starts a frozen convergence epoch for a captured instance or one of its dependencies. A package that
+    /// samples on the capture's behalf takes each render's sample index from the convergence's counted samples
+    /// (<see cref="RenderGraphConvergence.Samples"/>), so a frame the runtime does not count renders the same sample
+    /// again.</summary>
+    /// <param name="instance">The instance whose output contributes to the capture.</param>
+    /// <param name="convergence">The capture as the runtime counts it; its request's completion ends the frozen
+    /// interval.</param>
+    void BeginConvergence(string instance, RenderGraphConvergence convergence) { }
 }
 /// <summary>A host-written region a package pass's recorder writes (<see cref="IRenderGraphPackageFactory.Regions"/>).</summary>
 /// <param name="Name">The region's part name, which names its buffers after the instance and the pass.</param>
 /// <param name="ByteCount">The region's size, in bytes; positive and a whole number of uints.</param>
-public readonly record struct RenderGraphPackageRegion(string Name, int ByteCount);
+public readonly record struct RenderGraphPackageRegion(string Name, int ByteCount) {
+    /// <summary>Gets the package writer's retained CPU scratch payload for this region, in bytes. The node separately
+    /// counts the region's own CPU shadow and upload header; this value must not include either.</summary>
+    public ulong CpuScratchBytes { get; init; }
+}
 /// <summary>What a recorder is built and created for: one package pass of one instance's graph, on one device.</summary>
 /// <param name="Instance">The instance's name.</param>
 /// <param name="Pass">The pass's name in the instance's graph.</param>

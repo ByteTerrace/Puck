@@ -116,6 +116,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private string?[] m_taintedReads;
     // The instance the capture armed on the runtime reads.
     private int m_captureInstance;
+    private bool m_captureFollowsRoot;
     private bool m_disposed;
     private RenderGraphHistory m_history;
     private RenderGraphSchedule? m_latest;
@@ -193,7 +194,31 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <see cref="UnservedCaptureReasonOf"/>), or <see langword="null"/> once the root has a completed output rendered
     /// from completed inputs.</summary>
     public string? UnservedCaptureReason => ReasonOf(index: m_root);
+    /// <summary>Gets whether every instance whose node has submitted a frame has one completed on the GPU
+    /// (<see cref="ShaderPipelineRenderNode.HasCompletedSubmission"/>), so a reader of GPU results waits on no instance's
+    /// first frame. An instance that has not rendered and an external producer, which submits through its own device
+    /// work, never hold it. Reading it allocates nothing.</summary>
+    public bool FirstFramesCompleted => (FirstInFlight() < 0);
+    /// <summary>Gets why <see cref="FirstFramesCompleted"/> is <see langword="false"/>, naming the first instance, in set
+    /// order, whose first submission is still in flight, or <see langword="null"/> when it is
+    /// <see langword="true"/>.</summary>
+    public string? InFlightReason => ((FirstInFlight() is var index and >= 0)
+        ? $"the instance '{m_set.Instances[index].Name}' has no GPU-completed frame: its first submission is still in flight"
+        : null);
 
+    // The first instance whose node has submitted and has no submission completed on the GPU, or -1.
+    private int FirstInFlight() {
+        for (var index = 0; (index < m_nodes.Length); index++) {
+            if (
+                (m_nodes[index] is { LatestSubmission: not null } node) &&
+                !node.HasCompletedSubmission
+            ) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
     private static RenderGraphRuntimeRefusal Refuse(RenderGraphRuntimeRefusalCode code, string message, params string[] names) => new(
         Code: code,
         Message: message,
@@ -951,6 +976,13 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             return $"the instance '{name}' has produced no output";
         }
 
+        var (width, height) = m_nodes[index]!.Extent;
+        var (requestedWidth, requestedHeight) = m_nodes[index]!.RequestedExtent;
+
+        if ((width != requestedWidth) || (height != requestedHeight)) {
+            return $"the instance '{name}' renders at {width}x{height} while {requestedWidth}x{requestedHeight} is requested";
+        }
+
         if (m_standInReads[index] is { } producerName) {
             return $"the instance '{name}' has rendered only over a stand-in for '{producerName}', which has produced no output";
         }
@@ -961,16 +993,21 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
     }
     // Arms a capture of one instance on the runtime's one slot.
-    private void Arm(int index, FrameCaptureRequest request) {
+    private void Arm(int index, FrameCaptureRequest request, bool followsRoot = false) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
+        if ((request.Converge > 0) && !CanConverge(index: index)) {
+            throw new InvalidOperationException(message: "A convergence capture requires a rendered graph instance.");
+        }
         m_capture.Arm(
             pendingPath: PendingCapturePath,
             request: request
         );
         m_captureInstance = index;
+        m_captureFollowsRoot = followsRoot;
+        BeginConvergence(captured: index, request: request);
     }
 
     /// <inheritdoc/>
@@ -1029,7 +1066,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// history.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A root or footprint fraction, or the budget, is out of
     /// range.</exception>
-    public Surface ProduceFrame(in RenderGraphFrame frame, in FrameContext context) {
+    public Surface ProduceFrame(in RenderGraphFrame frame, in FrameContext context) =>
+        ProduceFrameCore(frame: in frame, context: ConvergenceContext(context: in context));
+
+    private Surface ProduceFrameCore(in RenderGraphFrame frame, in FrameContext context) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -1048,7 +1088,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
 
         RenderGraphScheduler.Schedule(
-            frame: scheduled,
+            frame: scheduled with { Costs = this },
             history: prior,
             schedule: schedule,
             set: m_set
@@ -1059,10 +1099,24 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_unproduced = 0;
 
         var renders = schedule.Renders;
+        var holdingConvergence = ((m_convergence is { IsActive: true } convergence) &&
+            (convergence.Samples >= convergence.Request.Converge) &&
+            (m_nodes[m_captureInstance]?.PendingCapturePath == convergence.Request.Path));
 
         for (var position = 0; (position < renders.Count); position++) {
             var index = renders[position];
             var row = schedule.Instances[index];
+
+            // The display encoder may still be building after the last requested sample. Keep the contributing
+            // images alive until readback completes; another render would silently capture a later jitter sample.
+            if (holdingConvergence && m_convergenceInstances.Contains(item: index)) {
+                if (index == m_captureInstance) {
+                    m_nodes[index]?.PollCapture();
+                }
+                m_unproduced++;
+                schedule.Next.Withdraw(index: index, previous: prior);
+                continue;
+            }
 
             // An external producer submits through its own ring, at the scheduled extent, before its consumers render. A
             // capture of it moves to it first, and it serves the capture from the next frame it produces. A render it
@@ -1156,6 +1210,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             // UnservedCaptureReasonOf explains it.
             if (
                 (index == m_captureInstance) &&
+                CanServeConvergence &&
                 node.IsReady &&
                 (m_standInReads[index] is null) &&
                 (m_taintedReads[index] is null)
@@ -1165,6 +1220,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
             var submitted = node.FrameCounter;
             Surface surface;
+
+            // The root is shown as the display, at its own extent; every other instance is resampled by what reads it.
+            node.ShownAtItsExtent = (index == m_root);
 
             try {
                 surface = node.ProduceFrame(context: in context);
@@ -1187,6 +1245,12 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 continue;
             }
 
+            // A sample rendered at an extent the node was not asked for is one its capture never reads.
+            if ((index == m_captureInstance) && IsConverging(index: index) &&
+                (m_standInReads[index] is null) && (m_taintedReads[index] is null) && (node.Extent == node.RequestedExtent)) {
+                m_convergence!.Count();
+            }
+
             m_previous[index] = m_current[index];
             m_current[index] = new Output(
                 Buffer: node.LatestOutputBuffer(),
@@ -1206,7 +1270,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         return RootImage();
     }
-
     // The root's latest completed image: a graph root's output, or an external root's latest output, whose acquisition is
     // released at once, since the surface is valid only until the next frame, the first time the producer can replace it.
     private Surface RootImage() {
@@ -1224,13 +1287,16 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     }
 
     /// <inheritdoc/>
-    /// <remarks>The capture reads the root instance, as one armed through its <see cref="CaptureTarget"/> does.</remarks>
+    /// <remarks>The capture follows the next composed root across a reconfiguration. A named
+    /// <see cref="CaptureTarget"/> continues to capture its named instance instead.</remarks>
     public void RequestCapture(FrameCaptureRequest request) => Arm(
+        followsRoot: true,
         index: m_root,
         request: request
     );
     /// <summary>Returns the capture target of one instance. A capture armed on it is served by the first frame after it
-    /// is armed on which a graph instance renders an installed graph with every image input bound to a completed output,
+    /// is armed on which a graph instance renders an installed graph, at the extent last requested of it, with every image
+    /// input bound to a completed output,
     /// or on which an external instance produces. The runtime holds one capture at a time across its instances. A
     /// requester that stops waiting withdraws it with <see cref="FrameCaptureRequest.TryFail"/>, and the runtime then
     /// drops it.</summary>
@@ -1258,7 +1324,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         return target;
     }
     /// <summary>Returns why a capture of one instance would not be served by the frame the runtime produces now, phrased
-    /// as the refusal of a capture that waited on it reads: the instance has no completed output, or its latest render
+    /// as the refusal of a capture that waited on it reads: the instance has no completed output, its installed graph
+    /// renders at an extent other than the one last requested of it (a resize building, or refused), or its latest render
     /// bound a stand-in for a producer that has none. It builds a string, so a caller polls it only to report.</summary>
     /// <param name="instance">The instance's name.</param>
     /// <returns>The reason, or <see langword="null"/> when a capture of it would be served.</returns>
@@ -1301,6 +1368,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <param name="instance">The instance's index in <see cref="Instances"/>.</param>
     /// <returns>The bytes, or <see langword="null"/> for an instance that renders through an external producer.</returns>
     public ulong? RegionBytes(int instance) => m_nodes[instance]?.RegionBytes;
+    /// <summary>Returns the installed graph regions' actual GPU memory and retained CPU payload storage.</summary>
+    /// <param name="instance">The instance's index in <see cref="Instances"/>.</param>
+    /// <returns>The region account, or null for an external producer.</returns>
+    public RenderGraphRegionMemory? RegionMemory(int instance) => m_nodes[instance]?.RegionMemory;
 
     // One instance's capture target: a capture armed on it arms the runtime's one slot for the instance of its name, and is
     // refused once a reconfiguration has removed that instance.

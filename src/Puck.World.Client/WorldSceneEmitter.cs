@@ -101,6 +101,11 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // MeshDraws: the static draws each static rebuild replaces, then the pool's.
     private readonly WorldSceneMeshDraws m_meshDraws;
 
+    private readonly WorldPickMapBuilder m_picks = new();
+
+    /// <inheritdoc/>
+    public ISdfPickMap? PickMap => m_picks.Snapshot(pool: m_animator.PickMeshTargets);
+
     // Per-frame scratch reused to keep packing allocation-free: movement-driven gait state per avatar.
     private readonly float[] m_avatarGaitPhases = new float[WorldBodiesLimits.CapacityCeiling];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldBodiesLimits.CapacityCeiling];
@@ -147,6 +152,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // follow `probeWorstCase` (worst case for both the construction probe AND the apply-time measure).
     private void Compose(SdfProgramBuilder builder, IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldScreen> derivedFaces, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, bool probeWorstCase, bool placementProbe, float maxPlacementScale, int slotBase) {
         var client = m_client;
+
+        if (!probeWorstCase && !placementProbe) {
+            m_picks.Clear();
+        }
         // The per-avatar body + accent materials, allocated up front so the catalog emitter is a straight builder chain.
         // A local seat's colors come from its seated profile (a pending seat renders a desaturated candidate); a stand-in's
         // from its snapshot palette. A color change bumps the revision and rebuilds; a settings-only edit does not.
@@ -232,7 +241,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 meshDraws: meshDraws,
                 colors: m_bakedColors,
                 palettes: m_palettes,
-                bakedMeshFor: m_bakedMeshFor
+                bakedMeshFor: m_bakedMeshFor,
+                picks: m_picks
             );
             m_meshDraws.Static = meshDraws;
         }
@@ -243,6 +253,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             probeWorstCase: probeWorstCase,
             maxPlacementScale: maxPlacementScale,
             slotBase: (slotBase + WorldRigCatalog.DynamicTransformCapacity),
+            picks: ((!probeWorstCase && !placementProbe) ? m_picks : null),
             textCatalog: m_text.Catalog
         );
 
@@ -302,7 +313,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             : index => m_emittedAvatarRigs[index]),
             scaleFor: (probeWorstCase
             ? null
-            : index => m_emittedAvatarScales[index])
+            : index => m_emittedAvatarScales[index]),
+            picks: (probeWorstCase ? null : m_picks)
         );
     }
     // A locally followed traveler has exactly one primary avatar for its entire route. While it is in the boot
@@ -754,6 +766,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 rootPosition: (m_animator.HasBodyRegistration(bodyIndex: index)
                 ? context.ParkPosition
                 : followedPosition),
+                reseat: m_avatarOwners.Reseats(owner: index),
                 scale: m_emittedAvatarScales[index],
                 table: slots
             ),

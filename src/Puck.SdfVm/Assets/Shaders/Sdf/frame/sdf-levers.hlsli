@@ -12,7 +12,7 @@
 // The debug-view-mode wire contract: the pass block's debugMode carries the mode index into DebugViewModes.Names
 // (src/Puck.SdfVm/DebugViewModes.cs — the list's ORDER is the wire value; KEEP IN SYNC, including the switch below).
 // Mode 0 / >= DebugViewModeCount render final shading.
-static const int DebugViewModeCount = 12;
+static const int DebugViewModeCount = 13;
 static const int DebugViewModeNormals = 2;
 // Mode 7 (slice) is special-cased in TWO other places: the primary stage skips the march for it (the slice never needs a
 // hit), and the beam prepass FORCE-SURVIVES every in-viewport tile for it (sdf-beam.comp) so the indirect dispatch
@@ -37,6 +37,8 @@ static const int DebugViewModeEvals = 10;
 // orange. Like the termination view it shows what the pipeline dispatched, so a tile outside the dispatch box keeps the
 // sky pre-pass's color. KEEP IN SYNC with DebugViewModes.Names in src/Puck.SdfVm/DebugViewModes.cs.
 static const int DebugViewModeVisibility = 11;
+// Mode 12 encodes visibility-derived motion in render pixels; its valid-history blue channel distinguishes a cut.
+static const int DebugViewModeMotion = 12;
 
 // The analytic-normal A/B toggle (the forward-mode dual's debug lever): 0 (the default) selects the analytic dual normal
 // (calculateNormalAnalytic), 1 selects the 4-tap finite-difference probe (calculateNormal) for comparison under

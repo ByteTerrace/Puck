@@ -1,0 +1,185 @@
+{
+  "host": {
+    "authority": null,
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "genlock": null,
+    "height": 256,
+    "journalDepth": 2000,
+    "listen": null,
+    "presentMode": "Immediate",
+    "presentation": "offscreen",
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 0,
+    "width": 256
+  },
+  "render": {
+    "sky": {
+      "layers": [
+        {
+          "$type": "gradient",
+          "stops": [
+            {
+              "elevation": -1,
+              "color": "#000000"
+            },
+            {
+              "elevation": 1,
+              "color": "#000000"
+            }
+          ]
+        }
+      ]
+    },
+    "lighting": {
+      "lights": [
+        {
+          "$type": "directional",
+          "direction": [
+            0,
+            0.435,
+            -0.9
+          ],
+          "color": "#FFFFFF",
+          "weight": 1
+        }
+      ]
+    }
+  },
+  "schema": "puck.world.definition.v1",
+  "views": {
+    "layouts": [
+      {
+        "name": "world",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": "sky-cam",
+            "height": 1,
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0.25
+      }
+    ],
+    "seatControl": {
+      "maxPitch": 0.01,
+      "minPitch": -0.01,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "world",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 0.01,
+          "pitch": 0.45,
+          "yaw": 0
+        },
+        {
+          "$type": "fieldOfView",
+          "fieldOfViewRadians": 1.4
+        }
+      ],
+      "version": "puck.camera.program.v1"
+    }
+  },
+  "cameras": [
+    {
+      "name": "sky-cam",
+      "renderWidth": 256,
+      "renderHeight": 256,
+      "rig": {
+        "name": "sky-cam",
+        "version": "puck.camera.program.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                0.5,
+                -1
+              ]
+            }
+          },
+          {
+            "$type": "fieldOfView",
+            "fieldOfViewRadians": 1.4
+          }
+        ]
+      }
+    }
+  ],
+  "prototypes": [
+    {
+      "id": "fog-target",
+      "document": {
+        "name": "fog-target",
+        "schema": "puck.creation.v1",
+        "palette": [
+          {
+            "roughness": 1,
+            "specular": 0,
+            "color": "#FF0000"
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "sphere",
+            "type": "Sphere",
+            "material": 0,
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              2,
+              2,
+              2
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "placements": {
+    "rows": [
+      {
+        "id": "fog-target",
+        "scale": 1,
+        "yawDegrees": 0,
+        "position": [
+          0,
+          -10,
+          -8
+        ],
+        "prototypeId": "fog-target"
+      }
+    ]
+  }
+}

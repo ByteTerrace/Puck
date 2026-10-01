@@ -6,6 +6,7 @@ struct SdfFieldSave {
     float distance;
     int material;
     float4 lanes;
+    int instanceIndex;
     int frameSlot;
     float3 gradient;
 };

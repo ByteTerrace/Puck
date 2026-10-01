@@ -147,7 +147,10 @@ public sealed record SdfMesh {
 /// <see cref="Puck.Abstractions.Cameras.ViewProjection"/>.</param>
 /// <param name="Material">The material-table index the triangles shade with, as an SDF hit's material does; a mesh
 /// with <see cref="SdfMesh.TriangleMaterials"/> adds each triangle's entry to it.</param>
-public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material);
+/// <param name="Identity">What the draw is across frames, compared with <see cref="object.Equals(object)"/>: the draw
+/// at an index whose identity differs from the one staged there before has no motion history, so the tables seed its
+/// previous object-to-world from this frame's rather than reading another draw's pose as motion.</param>
+public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material, object Identity);
 /// <summary>
 /// The raw word layout of the region a frame's mesh draws upload into (<see cref="SdfWorldTables.MeshRegionLayout"/>),
 /// read as a structured buffer of uints so every backend reads the same word offsets: first one record a draw
@@ -278,7 +281,7 @@ public static class SdfMeshRegion {
         }
 
         for (var draw = 0; (draw < draws.Count); draw++) {
-            var (mesh, matrix, material) = draws[draw];
+            var (mesh, matrix, material, _) = draws[draw];
             var placement = meshes[mesh];
             var record = destination.Slice(
                 length: DrawWords,

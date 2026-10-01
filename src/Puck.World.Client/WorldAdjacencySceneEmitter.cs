@@ -514,7 +514,8 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                         offset: 0
                     ),
                     palettes: m_palettes,
-                    meshDraws: meshDraws
+                    meshDraws: meshDraws,
+                    meshScope: projection.Name
                 );
             }
 
@@ -644,6 +645,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     rig: m_emittedRigs[motionIndex],
                     rootOrientation: mapped.Orientation,
                     rootPosition: mapped.Position,
+                    reseat: m_motionOwners.Reseats(owner: motionIndex),
                     scale: m_emittedScales[motionIndex],
                     table: slots
                 ),

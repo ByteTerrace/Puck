@@ -191,6 +191,9 @@ public sealed unsafe class VulkanDeviceCommands {
     /// <summary>The <c>vkWaitForPresentKHR</c> entry point; <see langword="null"/> unless <c>VK_KHR_present_wait</c> is enabled.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, VkResult> WaitForPresentKhr;
 
+    /// <summary>Gets the timestamp query commands resolved for this device.</summary>
+    public VulkanTimestampCommands Timestamps { get; }
+
     /// <summary>Resolves every entry point of the device identified by <paramref name="deviceHandle"/> through
     /// <paramref name="procedures"/>.</summary>
     /// <param name="deviceHandle">The native <c>VkDevice</c> handle; must be non-zero and must outlive the table.</param>
@@ -211,6 +214,7 @@ public sealed unsafe class VulkanDeviceCommands {
         );
 
         Handle = deviceHandle;
+        Timestamps = new VulkanTimestampCommands(deviceHandle: deviceHandle, procedures: procedures);
         Memory = memory;
         AcquireNextImageKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult>)procedures.ResolveOptionalDeviceProc(
             deviceHandle: deviceHandle,

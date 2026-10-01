@@ -272,6 +272,28 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <param name="cancellationToken">Cancels the wait.</param>
     /// <exception cref="OperationCanceledException">The wait was canceled.</exception>
     public void WaitReady(CancellationToken cancellationToken) => m_ready.Wait(cancellationToken: cancellationToken);
+    /// <summary>Blocks, on the frame thread between frames, until the pipeline builds the residency's frames started have
+    /// finished, successfully or not: its pipeline set's, its region-copy and mesh pass pipelines', and a kernel reload's.
+    /// It takes nothing and starts nothing, so the next frame (<see cref="Prepare"/>) builds the tables, refuses a failed
+    /// build or installs the reload as it would had frames been produced meanwhile. It serves a host that produces frames
+    /// on its own thread and has nothing to present until the builds finish, such as an offscreen capture, which would
+    /// otherwise produce empty frames while it waits.</summary>
+    /// <param name="cancellationToken">The token that ends the wait; the builds keep running.</param>
+    /// <returns><see langword="true"/> when a build was in flight, which has finished since; <see langword="false"/> when
+    /// none was: the tables are built, their build was refused, or no frame has started a build, so only another frame
+    /// can change what the residency presents.</returns>
+    /// <exception cref="ObjectDisposedException">The residency is released.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public bool WaitPipelineBuilds(CancellationToken cancellationToken) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        var waited = m_pipelines.WaitFinished(cancellationToken: cancellationToken);
+
+        return m_reloadBuild.WaitFinished(cancellationToken: cancellationToken) | waited;
+    }
     /// <summary>Starts a frame: forgets the frame captured, packed and uploaded in the previous one, so the frame's first
     /// read of the residency captures the current one. The render graph's package calls it once per produced frame, before
     /// the frame is scheduled.</summary>
@@ -546,6 +568,20 @@ public sealed partial class SdfWorldResidency : IDisposable {
     // The frame the tables last packed, which a frame that films nothing leaves standing, and whether a frame captured
     // since the tables last uploaded a program carries another one.
     private SdfFrame? m_packedFrame;
+    private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
+    private SdfFrame? m_frozenFrame;
+
+    /// <summary>Freezes the presentation source for a converging capture.</summary>
+    /// <param name="request">The request whose completion releases the snapshot.</param>
+    public void BeginConvergence(Puck.Abstractions.Presentation.FrameCaptureRequest request) {
+        ArgumentNullException.ThrowIfNull(argument: request);
+        if (!ReferenceEquals(objA: m_convergence, objB: request)) {
+            m_convergence = request;
+            m_frozenFrame = null;
+            m_frameSource.BeginConvergence(request: request);
+        }
+    }
+
     private bool m_programPending;
 
     // Captures the frame from the frame source when it films one this frame, first advancing its brick planner against
@@ -555,6 +591,16 @@ public sealed partial class SdfWorldResidency : IDisposable {
             return;
         }
 
+        var converging = (m_convergence is { Completion.IsCompleted: false });
+
+        if (converging && (m_frozenFrame is { } frozen)) {
+            m_frame = frozen with { ProgramChanged = false };
+            return;
+        }
+        if (!converging) {
+            m_frozenFrame = null;
+        }
+
         if (m_tables is { } tables) {
             m_frameSource.AdvanceBricks(bakes: tables);
         }
@@ -562,11 +608,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
         var frame = m_frameSource.CaptureFrame(
             width: m_width,
             height: m_height,
-            deltaSeconds: ((float)context.FrameDeltaSeconds),
+            deltaSeconds: (converging ? 0f : ((float)context.FrameDeltaSeconds)),
             interpolationAlpha: ((float)context.InterpolationAlpha)
         );
 
         m_frame = frame;
+        if (converging) {
+            m_frozenFrame = frame;
+        }
         m_programPending |= frame.ProgramChanged;
         Volatile.Write(
             location: ref m_meshDrawCount,

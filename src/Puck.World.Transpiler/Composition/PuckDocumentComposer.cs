@@ -210,7 +210,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
             );
 
             if (!(WorldDocumentName.IsSourceFile(path: path) || WorldDocumentName.IsDocumentFile(path: path))) {
-                return File.ReadAllBytes(path: path).AsSpan().SequenceEqual(other: content);
+                return CompileInputs.ReadAllBytes(path: path).AsSpan().SequenceEqual(other: content);
             }
 
             var slash = path.LastIndexOf(value: '/');
@@ -245,7 +245,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
 
                 if (found.IsSource
                     ? ((compiled?.DocumentNamed(name: found.Name) is { } document) && document.AsSpan().SequenceEqual(other: content))
-                    : File.ReadAllBytes(path: path).AsSpan().SequenceEqual(other: content)) {
+                    : CompileInputs.ReadAllBytes(path: path).AsSpan().SequenceEqual(other: content)) {
                     return true;
                 }
             }
@@ -264,6 +264,8 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
     /// relative to its directory.</param>
     /// <param name="rootBytes">The root document's already-read raw bytes (JSON, whether hand-authored or already
     /// lowered from a <c>.puck</c> source).</param>
+    /// <param name="origins">Optional authored scalar origins. When supplied, even a flat root returns a composed
+    /// tree, and composition bypasses held images so origins come from the authored documents.</param>
     /// <param name="composed">The composed tree (basis/imports members stripped) on success.</param>
     /// <param name="chainBytes">The bytes of every file touched composing the root.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
@@ -277,9 +279,11 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
         out IReadOnlyList<byte[]> chainBytes,
         out string reason,
         string catalogFingerprint = "",
-        IMachineValidationCatalog? catalog = null
+        IMachineValidationCatalog? catalog = null,
+        WorldDocumentOrigins? origins = null
     ) {
         return WorldDefinitionFileSource.TryComposeChainWithImports(
+            origins: origins,
             chainBytes: out chainBytes,
             composed: out composed,
             reason: out reason,

@@ -1,0 +1,399 @@
+{
+  "id": "pane-outline",
+  "title": "The presentation destination outlines its hovered pane on the GPU and clear restores the real pointer feed",
+  "binding": "The standard authored theme outlines a hovered pane in its accent (#FF6A2B at cursorAlpha 0.9), which over the magenta pane reads full red, a mid green and a blue well below magenta's: bounds no magenta, black or white pixel meets. A console-only presentation cursor first sits outside the left-half magenta pane, then inside it. The captures at the composed root read a top-edge region far from the cursor and its label: before the hover every pixel there is magenta, with the pointer inside the pane every pixel is the accent edge, and after clear every pixel is magenta again. The discriminating leg keeps the override outside the pane, so the hover capture stays magenta and the accent observation turns red. Clear removes the override for the unattended windowed canary. The normal OS pointer is never injected or moved.",
+  "bootShape": "windowed",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "solid.hlsl"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/pane-outline/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pointer",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pointer",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.panes",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pointer",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "plain-shows-no-outline",
+        "capture": "plain.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.001,
+          0.26,
+          0.006
+        ],
+        "reduce": "every",
+        "minimum": [
+          1,
+          0,
+          1,
+          1
+        ],
+        "maximum": [
+          1,
+          0,
+          1,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "hover-draws-the-accent-edge",
+        "capture": "hover.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.001,
+          0.26,
+          0.006
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.9,
+          0.25,
+          0,
+          1
+        ],
+        "maximum": [
+          1,
+          0.7,
+          0.7,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "clear-restores-the-no-hover-edge",
+        "capture": "clear.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.001,
+          0.26,
+          0.006
+        ],
+        "reduce": "every",
+        "minimum": [
+          1,
+          0,
+          1,
+          1
+        ],
+        "maximum": [
+          1,
+          0,
+          1,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "the-override-clears",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.view.pointer: override cleared]",
+        "present": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/pane-outline/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pointer",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pointer",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.panes",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pointer",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "plain-shows-no-outline",
+        "capture": "plain.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.001,
+          0.26,
+          0.006
+        ],
+        "reduce": "every",
+        "minimum": [
+          1,
+          0,
+          1,
+          1
+        ],
+        "maximum": [
+          1,
+          0,
+          1,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "hover-outside-the-pane-keeps-the-magenta-edge",
+        "capture": "hover.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.001,
+          0.26,
+          0.006
+        ],
+        "reduce": "every",
+        "minimum": [
+          1,
+          0,
+          1,
+          1
+        ],
+        "maximum": [
+          1,
+          0,
+          1,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "clear-restores-the-no-hover-edge",
+        "capture": "clear.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.001,
+          0.26,
+          0.006
+        ],
+        "reduce": "every",
+        "minimum": [
+          1,
+          0,
+          1,
+          1
+        ],
+        "maximum": [
+          1,
+          0,
+          1,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "line",
+        "name": "the-override-clears",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "[world.view.pointer: override cleared]",
+        "present": true
+      }
+    ]
+  }
+}

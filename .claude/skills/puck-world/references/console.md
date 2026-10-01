@@ -19,7 +19,7 @@ the project table in the main `SKILL.md`).
 - The stdin drain barrier and `world.wait`
 - The mirror
 - Screenshots
-- `.puck`-booted worlds: `world.reload` recompiles, `world.save` refuses the source
+- `.puck`-booted worlds: reload and source-preserving save
 - The document has ONE door — do not add a per-section verb
 - Grammar conventions for new verbs
 
@@ -335,9 +335,11 @@ the whole truth, and a script reading only one of them reads a half-answer:
 - stdout, at arming: `[world.screenshot: pending <path> — lands on the next
   composed frame]`. No file is promised yet. Let rendering progress with
   `world.wait`, then confirm the completion before reading it.
-- stderr, when the frame lands: `[capture] main -> <path>` (the render
-  graph's root node served it) or `[capture] world -> <path>` (the world's
-  instance did, as the root when nothing is drawn over the world). THIS is
+- stderr, when the frame lands: `[capture] main$overlay -> <path>` (a
+  windowed World's root, the overlay drawn over the scene, served it),
+  `[capture] main -> <path>` (the offscreen root graph's node did) or
+  `[capture] world -> <path>` (the world's instance did, as the root when
+  nothing is drawn over the world). THIS is
   the line that says a file exists.
 - stderr, at shutdown: `[world.screenshot] WARNING: a capture of <path> was
   still pending when the run ended … NO FILE WAS WRITTEN`
@@ -365,7 +367,7 @@ headroom, dynamic transforms and the frame grid; use the current `SdfProgram`
 layout to inspect it. It is a CPU-side diagnostic copy, not a GPU readback or
 loadable asset, and leaves simulation and rendering unchanged.
 
-## `.puck`-booted worlds: `world.reload` recompiles, `world.save` refuses the source
+## `.puck`-booted worlds: reload and source-preserving save
 
 A world booted from `.puck` source (`--world <x>.puck`, compiled by
 `src/Puck.World/PuckWorldLoader.cs`) reloads from that source: `world.reload`
@@ -374,10 +376,29 @@ lowers to, so an edit that lowers identically keeps the pin. `world.load` and
 `world.reload` read through the boot's own door,
 `WorldDefinitionLoader.TryLoadFileForAdmission`, with the host's machine
 catalog and the running instance's identity, so the document's boot draws
-refill exactly as the boot drew them before it is admitted and embedded. `world.save` with
-no argument, or to any `.puck` target, is refused by name because canonical
-JSON would overwrite the source; name a JSON path instead. The artist loop for
-a `.puck`-booted world is: edit the `.puck` file, then `world.reload`.
+refill exactly as the boot drew them before it is admitted and embedded.
+`world.save` with no argument updates the loaded source through
+`WorldSourceSave`: it prints changed authored nodes and proves the composed
+snapshot before an atomic write, retaining every unrelated source span.
+Template, compile-time `for` and module-generated rows refuse by name; their
+generator is the authoring surface. An engine-generated duplicate needs an
+authored name before source can spell it. A JSON target declaring the source as
+its `basis` can retain a refused edit as a delta.
+
+`world.watch on|off` shares `DependencyWatch` with `pipeline.watch`. It records
+`CompileInputs` across both compilation and document composition, including
+composed-image cache hits, and queues the existing `world.reload` through a
+session stamped by the enabling local console or seat ingress. Never reload
+by mutating the server directly. A new accepted origin schedules one reload
+after adoption, so an edit between the load's read and adoption is not lost.
+Failed reads retain their missing-input facts for recovery. A poll stats every
+input and re-reads contents only where the stamp moved or is within
+`WorldSourceWatch.RacyStampWindow` of the poll (`StampReads`, `ContentReads`
+count both); never hash every input per poll. `WorldSourceWatch`
+keeps the last reload diagnostic for the inspector; the normal command path
+and the editor report fan-out cover the terminal and toast. An accepted rebuild
+drops removed placement ids from editor selection and snap references while
+retaining the other editor settings.
 
 ## The document has ONE door — do not add a per-section verb
 

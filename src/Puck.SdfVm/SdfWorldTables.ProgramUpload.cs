@@ -70,6 +70,8 @@ public sealed partial class SdfWorldTables {
         // CADENCE GATE: a new program (words, live mask width, kernel variant, reseeded screen-surface table, invariant
         // instance grid) invalidates any prior frame's signature — bump the revision the signature folds in.
         m_programRevision++;
+        // A new program may give a dynamic slot another owner, so no slot keeps a previous pose across it.
+        m_seedDynamicHistory = true;
         ReconfigureWork();
 
         // Stage 1 kernel-variant selection — a pure function of the uploaded program's instruction stream (see

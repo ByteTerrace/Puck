@@ -25,14 +25,23 @@ public sealed class BufferedConsoleOutput : IDisposable {
     /// <summary>Initializes a new instance of the <see cref="BufferedConsoleOutput"/> class over the process's raw
     /// standard-output and standard-error streams, both UTF-8 without a byte-order mark (stdout buffered, stderr
     /// auto-flushed).</summary>
-    public BufferedConsoleOutput() {
+    public BufferedConsoleOutput() : this(output: Console.OpenStandardOutput(), error: Console.OpenStandardError()) { }
+    /// <summary>Initializes UTF-8 result writers over borrowed streams: stdout is buffered and stderr auto-flushed.
+    /// Disposing this output flushes and releases the writers while leaving both streams open.</summary>
+    /// <param name="output">The writable destination for accepted command results.</param>
+    /// <param name="error">The writable destination for refused command results.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> or <paramref name="error"/> is null.</exception>
+    public BufferedConsoleOutput(Stream output, Stream error) {
+        ArgumentNullException.ThrowIfNull(argument: output);
+        ArgumentNullException.ThrowIfNull(argument: error);
+
         var encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
         m_writer = new StreamWriter(
-            stream: Console.OpenStandardOutput(),
-            encoding: encoding,
             bufferSize: 4096,
-            leaveOpen: true
+            encoding: encoding,
+            leaveOpen: true,
+            stream: output
         ) {
             AutoFlush = false,
         };
@@ -40,10 +49,10 @@ public sealed class BufferedConsoleOutput : IDisposable {
         // codepage, which mangles every non-ASCII char (the em dash every refusal's pointer ends with) — so a driver
         // matching the source literal would miss on the refusal stream and hit on the success stream.
         m_errorWriter = new StreamWriter(
-            stream: Console.OpenStandardError(),
-            encoding: encoding,
             bufferSize: 4096,
-            leaveOpen: true
+            encoding: encoding,
+            leaveOpen: true,
+            stream: error
         ) {
             AutoFlush = true,
         };

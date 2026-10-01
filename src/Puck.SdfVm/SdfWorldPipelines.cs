@@ -20,7 +20,9 @@ namespace Puck.SdfVm;
 /// in the driver.
 /// </para>
 /// </summary>
-public sealed class SdfWorldPipelines : IDisposable {
+public sealed partial class SdfWorldPipelines : IDisposable {
+    // Optional pass builds join this table off-thread; reload preparation and publication share the same gate.
+    private readonly Lock m_gate = new();
     private readonly Slot?[] m_slots;
 
     private bool m_disposed;
@@ -120,12 +122,16 @@ public sealed class SdfWorldPipelines : IDisposable {
     /// every build no other holder leases is canceled before any is waited for, so disposal waits only for the creations
     /// already in the driver.</remarks>
     public void Dispose() {
-        if (m_disposed) {
-            return;
-        }
+        GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>?[] leases;
 
-        m_disposed = true;
-        GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>.Release(leases: [.. m_slots.Select(selector: static slot => slot?.Lease)]);
+        lock (m_gate) {
+            if (m_disposed) {
+                return;
+            }
+            m_disposed = true;
+            leases = [.. m_slots.Select(selector: static slot => slot?.Lease)];
+        }
+        GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>.Release(leases: leases);
     }
     /// <summary>Returns whether every pipeline of the set is ready, starting again any build that failed. Allocates
     /// nothing while a build runs or once every pipeline is ready.</summary>
@@ -161,6 +167,29 @@ public sealed class SdfWorldPipelines : IDisposable {
             slots: m_slots
         );
     }
+    /// <summary>Blocks until every pending build of the set has finished, successfully or not, without taking any result,
+    /// so the next <see cref="Poll"/> sees what it would had the holder kept polling
+    /// (<see cref="GpuBuildLease{TKey, T}.WaitFinished"/>).</summary>
+    /// <param name="cancellationToken">The token that ends the wait; the entries keep building.</param>
+    /// <returns><see langword="true"/> when any build was pending; <see langword="false"/> when none was.</returns>
+    /// <exception cref="ObjectDisposedException">The set has been disposed.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public bool WaitFinished(CancellationToken cancellationToken) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        var waited = false;
+
+        foreach (var slot in m_slots) {
+            if (slot is not null) {
+                waited |= slot.Lease.WaitFinished(cancellationToken: cancellationToken);
+            }
+        }
+
+        return waited;
+    }
     /// <summary>Leases replacements for the pipelines whose bytecode differs between the installed kernels and
     /// <paramref name="kernels"/>; unchanged bytecode leases nothing. Before it leases anything it reflects each changed
     /// kernel through <paramref name="reflector"/> and holds it to this host's interface
@@ -191,67 +220,75 @@ public sealed class SdfWorldPipelines : IDisposable {
             instance: this
         );
 
-        var baseline = m_kernels;
-        var changed = new List<(int Index, Slot Slot, ReadOnlyMemory<byte> Bytecode)>();
-        List<string>? refusals = null;
+        lock (m_gate) {
+            var baseline = m_kernels;
+            var changed = new List<(int Index, Slot? Slot, ReadOnlyMemory<byte> Bytecode)>();
+            List<string>? refusals = null;
 
-        for (var index = 0; (index < m_slots.Length); index++) {
-            if (m_slots[index] is not { } slot) {
-                continue;
+            for (var index = 0; (index < m_slots.Length); index++) {
+                var slot = m_slots[index];
+                var kernel = ((SdfKernel)index);
+
+                if ((slot is null) && (kernel != SdfKernel.Resolve)) {
+                    continue;
+                }
+                var bytecode = kernels[kernel];
+
+                if (bytecode.Span.SequenceEqual(other: baseline[kernel].Span)) {
+                    continue;
+                }
+
+                if (SdfKernelSet.InterfaceMismatch(kernel: kernel, reflected: reflector.Read(bytecode: bytecode.Span)) is { } mismatch) {
+                    (refusals ??= []).Add(item: $"'{SdfKernelSet.StemOf(kernel: kernel)}': {mismatch}");
+                }
+
+                changed.Add(item: (index, slot, bytecode));
             }
 
-            var kernel = ((SdfKernel)index);
-            var bytecode = kernels[kernel];
-
-            if (bytecode.Span.SequenceEqual(other: baseline[kernel].Span)) {
-                continue;
+            if (refusals is not null) {
+                throw new InvalidOperationException(message: $"The reloaded kernels do not read this host's interface (instruction set stamp '{SdfIsaHlsl.Stamp}'), so the set keeps its kernels: {string.Join(separator: " ", values: refusals)}");
             }
 
-            if (SdfKernelSet.InterfaceMismatch(kernel: kernel, reflected: reflector.Read(bytecode: bytecode.Span)) is { } mismatch) {
-                (refusals ??= []).Add(item: $"'{SdfKernelSet.StemOf(kernel: kernel)}': {mismatch}");
+            var replacements = new List<(int Index, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease)>();
+
+            try {
+                foreach (var (index, slot, bytecode) in changed) {
+                    replacements.Add(item: (index, cache.Acquire(
+                        device: device,
+                        key: GpuPassPipelineKey.OfCompute(
+                            bytecode: bytecode,
+                            description: (slot?.Description ?? SdfWorldTables.PipelineLayouts.Specs[index].Description)
+                        )
+                    )));
+                }
+            } catch {
+                GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>.Release(leases: [.. replacements.Select(selector: static replacement => replacement.Lease)]);
+
+                throw;
             }
 
-            changed.Add(item: (index, slot, bytecode));
+            return new SdfWorldPipelineReload(
+                baseline: baseline,
+                kernels: kernels,
+                replacements: [.. replacements],
+                target: this
+            );
         }
-
-        if (refusals is not null) {
-            throw new InvalidOperationException(message: $"The reloaded kernels do not read this host's interface (instruction set stamp '{SdfIsaHlsl.Stamp}'), so the set keeps its kernels: {string.Join(separator: " ", values: refusals)}");
-        }
-
-        var replacements = new List<(int Index, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease)>();
-
-        try {
-            foreach (var (index, slot, bytecode) in changed) {
-                replacements.Add(item: (index, cache.Acquire(
-                    device: device,
-                    key: GpuPassPipelineKey.OfCompute(
-                        bytecode: bytecode,
-                        description: slot.Description
-                    )
-                )));
-            }
-        } catch {
-            GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>.Release(leases: [.. replacements.Select(selector: static replacement => replacement.Lease)]);
-
-            throw;
-        }
-
-        return new SdfWorldPipelineReload(
-            baseline: baseline,
-            kernels: kernels,
-            replacements: [.. replacements],
-            target: this
-        );
     }
 
     internal void Commit(SdfWorldPipelineReload reload) {
-        m_kernels = reload.Kernels;
-        reload.Commit();
+        lock (m_gate) {
+            m_kernels = reload.Kernels;
+            reload.Commit();
+        }
     }
-    internal void Exchange(SdfWorldPipelineReload reload) =>
-        reload.Exchange(slots: m_slots);
+    internal void Exchange(SdfWorldPipelineReload reload) {
+        lock (m_gate) {
+            reload.Exchange(slots: m_slots);
+        }
+    }
     internal IGpuComputePipeline? OptionalPipeline(SdfKernel kernel) =>
-        m_slots[((int)kernel)];
+        (((Volatile.Read(location: ref m_slots[((int)kernel)]) is { } slot) && (slot.Lease.Current is not null)) ? slot : null);
     internal IGpuComputePipeline Pipeline(SdfKernel kernel) =>
         (m_slots[((int)kernel)] ?? throw new InvalidOperationException(message: $"The pipeline set has no '{SdfKernelSet.StemOf(kernel: kernel)}' pipeline."));
     internal void ThrowIfNotCurrent(SdfWorldPipelineReload reload) {
@@ -331,23 +368,21 @@ public sealed class SdfWorldPipelines : IDisposable {
     // between frames, with an identically defined layout, so both backends reuse the allocated sets.
     internal sealed class Slot(GpuComputePipelineDescription description, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> lease) : IGpuComputePipeline {
         public GpuComputePipelineDescription Description { get; } = description;
-        public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease { get; private set; } = lease;
+
+        private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> m_lease = lease;
 
         public nint DescriptorSetLayoutHandle => Native.DescriptorSetLayoutHandle;
         public IReadOnlyList<nint> GroupLayoutHandles => Native.GroupLayoutHandles;
         public nint Handle => Native.Handle;
         public nint LayoutHandle => Native.LayoutHandle;
+        public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease => Volatile.Read(location: ref m_lease);
 
         private IGpuComputePipeline Native => (Lease.Current?.Compute ?? throw new InvalidOperationException(message: $"The '{Description.Name}' pipeline is not built."));
 
         public void Dispose() =>
             Lease.Release();
         public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Exchange(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> replacement) {
-            var previous = Lease;
-
-            Lease = replacement;
-
-            return previous;
+            return Interlocked.Exchange(location1: ref m_lease, value: replacement);
         }
     }
 }
@@ -415,7 +450,11 @@ public sealed class SdfWorldPipelineReload : IDisposable {
         for (var index = 0; (index < m_replacements.Length); index++) {
             var (slot, lease) = m_replacements[index];
 
-            m_retired[index] = slots[slot]!.Exchange(replacement: lease);
+            if (slots[slot] is { } previous) {
+                m_retired[index] = previous.Exchange(replacement: lease);
+            } else {
+                slots[slot] = new SdfWorldPipelines.Slot(description: SdfWorldTables.PipelineLayouts.Specs[slot].Description, lease: lease);
+            }
         }
 
         m_state = State.Exchanged;

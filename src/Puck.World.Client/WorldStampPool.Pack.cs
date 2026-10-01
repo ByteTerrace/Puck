@@ -16,6 +16,10 @@ public sealed partial class WorldStampPool {
     // packed, and a moving one allocates nothing once the list has grown to its stamps.
     private readonly SdfMeshDraw?[] m_meshDraws = new SdfMeshDraw?[WorldPlacementPolicy.MaxStampRegistrations];
     private readonly List<SdfMeshDraw> m_meshDrawList = new(capacity: WorldPlacementPolicy.MaxStampRegistrations);
+    private WorldPickTarget?[] m_pickMeshTargets = [];
+
+    /// <summary>Gets the immutable mesh identities in draw order, replaced only when membership changes.</summary>
+    public IReadOnlyList<WorldPickTarget?> PickMeshTargets => m_pickMeshTargets;
 
     private bool m_meshDrawsChanged;
     private long m_meshDrawsRevision;
@@ -154,6 +158,7 @@ public sealed partial class WorldStampPool {
                     deltaSeconds: deltaSeconds,
                     moved: moved.Commit(
                     previous: previous,
+                    reseat: m_owners.Reseats(owner: index),
                     slots: transforms,
                     start: rootSlot
                 ),
@@ -173,6 +178,7 @@ public sealed partial class WorldStampPool {
             SetMeshDraw(
                 draw: ((live.Mesh is { } mesh)
                     ? WorldPlacementStamper.MeshDrawOf(
+                        identity: live,
                         material: live.MeshMaterial,
                         mesh: mesh,
                         origin: transforms[rootSlot].Position,
@@ -187,9 +193,24 @@ public sealed partial class WorldStampPool {
         if (m_meshDrawsChanged) {
             m_meshDrawList.Clear();
 
-            foreach (var draw in m_meshDraws) {
-                if (draw is { } posed) {
+            var identitiesChanged = false;
+            var drawIndex = 0;
+
+            for (var poolIndex = 0; (poolIndex < m_meshDraws.Length); poolIndex++) {
+                if (m_meshDraws[poolIndex] is { } posed) {
                     m_meshDrawList.Add(item: posed);
+                    identitiesChanged |= ((drawIndex >= m_pickMeshTargets.Length) ||
+                        !ReferenceEquals(objA: m_pickMeshTargets[drawIndex], objB: m_pool[poolIndex]?.PickTarget));
+                    drawIndex++;
+                }
+            }
+            if (identitiesChanged || (drawIndex != m_pickMeshTargets.Length)) {
+                m_pickMeshTargets = new WorldPickTarget?[drawIndex];
+                drawIndex = 0;
+                for (var poolIndex = 0; (poolIndex < m_meshDraws.Length); poolIndex++) {
+                    if (m_meshDraws[poolIndex] is not null) {
+                        m_pickMeshTargets[drawIndex++] = m_pool[poolIndex]?.PickTarget;
+                    }
                 }
             }
 

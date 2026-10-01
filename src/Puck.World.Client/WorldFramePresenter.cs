@@ -621,6 +621,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             )
             : chase
         );
+
+        m_seatCameraRigs[slot] = rig;
         var fieldOfView = 0f;
 
         var clock = new SdfCameraClock(
@@ -1155,19 +1157,22 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// frame (<see cref="IWorldScreenPresenter.Publish"/>), so every source the frame acquires sees one answer from
     /// the capture gate, then reconciles the document's <c>views.graphs</c> rows and the screens' source instances onto
     /// the runtime, hands every graph instance this frame's presented tick and
-    /// presentation time, then places each view of the world the last composed frame rendered in its rect at its render
-    /// scale and the live upscale sharpness, and, for each graph instance a slot of the last composed layout shows,
+    /// presentation time, then places each view of the world the last composed frame rendered in its output rect with the
+    /// live upscale sharpness, and, for each graph instance a slot of the last composed layout shows,
     /// places it in its slot's rect, advances its clock, and hands it this frame's camera, pointer and its own time, and
     /// then publishes the mapping of every pane the root draws (<see cref="WorldViewGraphHost.PublishPanes"/>), which the
     /// pane pointer, the picker and the hit walk read. The tick is the state mirror's delivered engine tick and the time
     /// the mirror's presented engine tick at this frame's interpolation fraction (one for an offscreen presentation), in
-    /// seconds, so a pass reads no wall clock. A lone view covering the whole display at native scale is not shown: the
-    /// root then stands for the world itself. Whether a pane covers the whole display decides whether pixels no view
+    /// seconds, so a pass reads no wall clock. A lone view covering the whole display with no tonemap is not shown at any
+    /// render scale, since the view reconstructs its own output: the root then stands for the world itself and publishes
+    /// it as no pane. Whether a pane covers the whole display decides whether pixels no view
     /// covers owe the letterbox color (<see cref="WorldViewGraphHost.PlaceViews"/>). The views and slots are the ones the
     /// last captured frame composed, since the world producer captures its frame inside the runtime's schedule, so a
     /// layout change places its views and panes one frame later.</summary>
     /// <param name="context">The host's frame context.</param>
-    public void PrepareGraph(in FrameContext context) {
+    public void PrepareGraph(in FrameContext context) => PrepareGraphCore(context: FrozenContext(context: in context));
+
+    private void PrepareGraphCore(in FrameContext context) {
         // The frame context's target extent IS the launcher's live client area (window.Width/Height at this frame's
         // BeginFrame) — the one place the World side can learn it. Published for the cursor feed's client→frame
         // mapping (see WorldCursorFeed.Decide); the per-seat views carry the FIXED frame extent instead.
@@ -1294,7 +1299,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             displayWidth: width
         );
     }
-
     // The frame values every graph instance presents this frame, at the frame's interpolation fraction, or one for an
     // offscreen presentation.
     private ShaderFrameValues PresentedFrame(in FrameContext context) {
@@ -1328,64 +1332,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         m_displayWidth = width;
         m_displayHeight = height;
         m_displayExtentSupplied = true;
-    }
-    /// <inheritdoc/>
-    public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
-        // deltaSeconds is the launcher's clamped presentation interval, distinct from its whole-step simulation delta.
-        // It may drive visual-only animation and the FPS witness, but never feeds authoritative world state.
-        m_elapsedSeconds += deltaSeconds;
-        m_frameRate.Sample(deltaSeconds: deltaSeconds);
-
-        if (m_displayExtentSupplied) {
-            width = m_displayWidth;
-            height = m_displayHeight;
-        } else {
-            m_displayWidth = width;
-            m_displayHeight = height;
-        }
-
-        // Simulation has already advanced on the launcher's exact fixed ticks; the client view holds the two latest
-        // snapshot poses. Each active entry's render pose is Lerp(previous tick → current, alpha) plus any eased
-        // server-correction offset, so above the fixed-step rate the crowd glides instead of stepping; a frame that banked zero
-        // sub-steps holds a stable lerp (previous == current), no snap-back. Presentation only: every body.where
-        // still reads the authoritative sim pose server-side.
-        m_client.UpdateRenderPoses(alpha: interpolationAlpha);
-        // Bound state presents at this frame's position between the last two ticks before anything reads it: the
-        // program build, the transform pack (look lanes, drivers, poses, effectors, body scale), and the cameras,
-        // markers and HUD the dress resolves.
-        m_client.StateMirror.Apply(fraction: (PinsStateFraction
-            ? 1f
-            : interpolationAlpha));
-
-        // Advance the animated-placement replay cursors on the render clock (hold-style — transforms move; the
-        // program itself never rebuilds for a timeline step), and latch the same delta for the scene's own
-        // catalog-avatar root followers (WorldSceneEmitter.PackDynamicTransforms consumes it once).
-        m_animator.Tick(deltaSeconds: deltaSeconds);
-        m_emitter.Tick(deltaSeconds: deltaSeconds);
-
-        // A no-op after PrepareGraph reconciled this frame's delivery; a capture no graph prepares reconciles here.
-        ReconcileDelivery();
-        m_bakes?.Pump(definition: m_client.Definition);
-
-        m_continuum.BeginFrame();
-        try {
-            var frame = m_composed.CaptureFrame(
-                deltaSeconds: deltaSeconds,
-                height: height,
-                interpolationAlpha: interpolationAlpha,
-                width: width
-            );
-
-            // The camera views film this frame, with the transforms and route choices its dress reads.
-            m_binder.PresentFrame(
-                authoritativeTick: m_simulation.Tick,
-                transforms: m_transforms
-            );
-
-            return frame;
-        } finally {
-            m_continuum.EndFrame();
-        }
     }
 
     /// <summary>Gets a value indicating whether every frame presents bound state at the delivered tick itself rather
@@ -1471,6 +1417,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // seat slot.
         var seatViewFallbackRegion = default(NormalizedRect);
         var seatViewFallbackCamera = default(CameraSnapshot);
+        var seatViewFallbackIndex = 0;
         var hasSeatViewFallback = false;
         var markerSeatCount = 0;
         Span<bool> seatSlotBound = stackalloc bool[PlayerRoster.MaxSlots];
@@ -1485,7 +1432,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             }
 
             if (composed.Camera is { } cameraName) {
-                // Named cameras share the live resolution setting with seat cameras, including layout transitions.
+                // Named cameras share the live resolution setting with seat cameras, including a layout transition's dip.
                 if (ResolveNamedCamera(
                     camera: out var namedCamera,
                     deltaSeconds: deltaSeconds,
@@ -1498,13 +1445,17 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         Camera: namedCamera,
                         Region: region
                     ) {
+                        CutRevision = ViewCut(index: m_views.Count, source: m_namedCameraRigCache[cameraName], revision: m_namedCameraRigCache[cameraName].Revision),
                         Quality = quality,
-                        RenderScale = (m_settings.RenderScale * transitionScale),
+                        RenderScale = m_settings.RenderScale,
+                        ResolvedRenderScale = (m_settings.RenderScale * transitionScale),
+                        UpscaleSharpness = m_settings.UpscaleSharpness,
                     });
                     if (!hasSeatViewFallback) {
                         hasSeatViewFallback = true;
                         seatViewFallbackCamera = namedCamera;
                         seatViewFallbackRegion = region;
+                        seatViewFallbackIndex = (m_views.Count - 1);
                     }
                 }
 
@@ -1546,19 +1497,24 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 camera: in camera,
                 height: height,
                 region: region,
+                renderInstance: ViewProducerName(view: m_views.Count),
                 slot: slot,
                 width: width
             );
-            // The live render-scale tier rides each view's own RenderScale: native = 1.0 is the bit-exact fast path,
-            // any lower tier renders that view's SDF at a reduced extent, which the root's place pass reconstructs. A
-            // layout transition dips it.
+            // The live render-scale tier is each view's ceiling (RenderScale), which sizes its scratch and chooses its
+            // passes: native renders its output grid directly, a lower tier reconstructs a reduced grid inside the view's
+            // own package. A layout transition dips only the grid inside that ceiling (ResolvedRenderScale), which
+            // allocates and rebuilds nothing, so a view at a native ceiling, which reconstructs nothing, does not dip.
             m_views.Add(item: new SdfViewSnapshot(
                 Camera: camera,
                 Region: region
             ) {
+                CutRevision = ViewCut(index: m_views.Count, source: m_seatCameraRigs[slot]!, revision: m_roster.Seat(slot: slot)!.View.CutRevision),
                 Grid = SeatGrid(slot: slot),
                 Quality = quality,
-                RenderScale = (m_settings.RenderScale * transitionScale),
+                RenderScale = m_settings.RenderScale,
+                ResolvedRenderScale = (m_settings.RenderScale * transitionScale),
+                UpscaleSharpness = m_settings.UpscaleSharpness,
             });
             // A seat presented elsewhere keeps its place among the views, so every view keeps its index, and its view
             // is latched into the scene of the world it is presented in, which renders it instead.
@@ -1611,6 +1567,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         camera: in seatViewFallbackCamera,
                         height: height,
                         region: seatViewFallbackRegion,
+                        renderInstance: ViewProducerName(view: seatViewFallbackIndex),
                         slot: slot,
                         width: width
                     );
@@ -1646,8 +1603,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     Y: 0f
                 )
             ) {
+                CutRevision = ViewCut(index: m_views.Count, source: this, revision: 0),
                 Quality = quality,
                 RenderScale = m_settings.RenderScale,
+                UpscaleSharpness = m_settings.UpscaleSharpness,
             });
         } else {
             m_noLocalSeatsNarrated = false;

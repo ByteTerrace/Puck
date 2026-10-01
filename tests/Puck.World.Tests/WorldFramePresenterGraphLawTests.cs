@@ -113,6 +113,36 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
     }
 
     public void Dispose() => m_stateDirectory.Dispose();
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void PresenterPublishesTheExactProducerForSeatAndCameraOnlyLayouts(bool cameraOnly) {
+        using var host = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: m_stateDirectory,
+            world: "tests/Puck.World.Canaries/editor-grid/fixture.world.json",
+            edit: definition => definition with {
+                CamerasRaw = [.. definition.Cameras, Filming(name: FirstCamera)],
+                ViewsRaw = definition.Views with {
+                    Layouts = [new WorldViewLayout(Name: "pick-producer", Slots: (cameraOnly
+                        ? [new WorldViewSlot(Camera: FirstCamera)]
+                        : [new WorldViewSlot(Camera: FirstCamera, Width: 0.5f),
+                            new WorldViewSlot(Width: 0.5f, X: 0.5f)]))],
+                },
+            }).Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var viewports = host.Services.GetRequiredService<WorldSeatViewports>();
+        var frame = presenter.CaptureFrame(deltaSeconds: Delta, height: Display, interpolationAlpha: 1f, width: Display);
+        var seat = viewports.Seat(slot: 0);
+        var expected = (cameraOnly ? 0 : 1);
+
+        Assert.True(condition: seat.Present);
+        Assert.Equal(expected: WorldRootGraph.ProducerOf(view: expected), actual: seat.RenderInstance);
+        Assert.Equal(expected: frame.Views[expected].Camera, actual: seat.Camera);
+        Assert.Equal(expected: frame.Views[expected].Region, actual: seat.Region);
+        _ = presenter.CaptureFrame(deltaSeconds: Delta, height: Display, interpolationAlpha: 1f, width: Display);
+        Assert.Same(expected: seat.RenderInstance, actual: viewports.Seat(slot: 0).RenderInstance);
+    }
     [Fact]
     public void AScreenRetargetedBetweenFramesReachesTheBinderBeforeTheFramePublishes() {
         var builder = WorldBootHarness.Compose(

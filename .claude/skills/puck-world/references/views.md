@@ -291,7 +291,8 @@ shows; absent, the host synthesizes the root graph (`WorldRootGraph`), which
 places every instance a layout slot names over the SDF world, then runs each
 `views.post` row (`WorldViewPostPass`: `name`, `package`, `config`, a graph
 document's package pass less its ports) as a pass of its post-process package
-in order, then the overlay. A post row's `package` must be a post-process
+in order, and a windowed host draws the overlay in its own instance over
+that scene (`WorldRootGraph.OverlayInstance`). A post row's `package` must be a post-process
 package the host's catalog offers (`WorldPostProcessVocabularyHook`, such as
 `sdf.film-grain`), its `name` must differ from every `views.graphs` row's, its
 `config` binds against its package's schema when the document validates

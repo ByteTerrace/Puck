@@ -590,6 +590,8 @@ public sealed class SdfCameraBoomFollower {
     public Vector3 Boom => m_follower.Value;
     /// <summary>Gets whether the boom currently holds an eased value rather than needing a fresh seed.</summary>
     public bool Seeded => m_follower.Seeded;
+    /// <summary>Gets the number of explicit camera cuts.</summary>
+    public long CutRevision { get; private set; }
 
     /// <summary>Eases <paramref name="eye"/> toward the boom held from earlier frames.</summary>
     /// <param name="dynamics"><see cref="SdfCameraDynamics.None"/> reseeds and passes the pose through untouched,
@@ -602,7 +604,9 @@ public sealed class SdfCameraBoomFollower {
     /// frames (the common case) re-derives nothing.</remarks>
     public void Apply(in SdfCameraDynamics dynamics, float deltaSeconds, ref Vector3 eye, ref Vector3 target) {
         if (!dynamics.IsLive) {
-            m_follower.Reseed();
+            if (m_follower.Seeded) {
+                Reseed();
+            }
             m_hasCachedResponse = false;
 
             return;
@@ -631,5 +635,8 @@ public sealed class SdfCameraBoomFollower {
     }
     /// <summary>Drops the eased value, so the next <see cref="Apply"/> seeds at that frame's pose — the cut a caller
     /// wants when the framing changes discontinuously.</summary>
-    public void Reseed() => m_follower.Reseed();
+    public void Reseed() {
+        CutRevision++;
+        m_follower.Reseed();
+    }
 }

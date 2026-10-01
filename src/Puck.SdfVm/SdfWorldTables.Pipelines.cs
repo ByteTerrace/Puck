@@ -24,10 +24,13 @@ public sealed partial class SdfWorldTables {
 
     // One of the per-view compute pipelines by its kernel.
     internal IGpuComputePipeline Pipeline(SdfKernel kernel) => m_pipelines.Pipeline(kernel: kernel);
-    // Whether a view's passes built against these tables record against the other tables as they are: every compute
-    // part uses PipelineLayouts.World (including every views variant and shadow), so the beam's layouts cover the frame,
-    // World and pass sets every compute part binds. The mesh pass draws
-    // through the same pipeline layout into the same render pass its framebuffers were created for.
+
+    // Resolve joins the same reloadable slot table only when a view needs it.
+    internal SdfWorldPipelines Pipelines => m_pipelines;
+
+    // Whether a view's passes built against these tables can follow the other tables: the beam covers the common
+    // compute layouts, mesh keeps its graphics layout and render pass, and an acquired resolve requires a ready
+    // resolve with compatible groups in the destination.
     internal bool SharesLayoutsWith(SdfWorldTables other) =>
         (
             ReferenceEquals(
@@ -37,6 +40,9 @@ public sealed partial class SdfWorldTables {
             (
                 Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles.SequenceEqual(second: other.Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles) &&
                 m_meshPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_meshPipeline.GroupLayoutHandles) &&
+                ((m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is not { } resolve) ||
+                    ((other.m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is { } otherResolve) &&
+                        resolve.GroupLayoutHandles.SequenceEqual(second: otherResolve.GroupLayoutHandles))) &&
                 ReferenceEquals(
                     objA: m_meshRenderPass,
                     objB: other.m_meshRenderPass
@@ -85,19 +91,18 @@ public sealed partial class SdfWorldTables {
     // The pipeline descriptions every residency shares. A nested holder, so its initializers run after the tables' own
     // statics, whatever order the partial files are compiled in.
     internal static class PipelineLayouts {
-        // Every per-view pipeline binds the sdf-world interface's groups, so a pass's frame and pass sets bind against any
-        // of the eleven, and the baker the sdf-bricks interface's. The mesh pass draws with the sdf-mesh interface's: one set
-        // per frame slot, the view and draw pushed.
+        // The native per-view pipelines share the sdf-world groups; the baker uses sdf-bricks. Optional resolve uses
+        // its own pass group. Mesh draws through sdf-mesh, with one set per frame slot and the view and draw pushed.
         internal static readonly GpuPipelineLayoutDescription World = SdfWorldInterfaces.WorldLayout.PipelineLayout(stages: GpuShaderStage.Compute);
         internal static readonly GpuPipelineLayoutDescription Mesh = SdfWorldInterfaces.MeshLayout.PipelineLayout(stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment);
         internal static readonly GpuPipelineLayoutDescription BrickBake = SdfWorldInterfaces.BrickBakeLayout.PipelineLayout(stages: GpuShaderStage.Compute);
-        // One per kernel, in SdfKernel order: each named by its kernel's stem, the baker on the sdf-bricks layout and every
-        // other kernel on the sdf-world layout.
+        // One per kernel in SdfKernel order, with the layout and name from the same immutable kernel set.
         internal static readonly PipelineSpec[] Specs = [.. SdfKernelSet.Kernels.Select(selector: static kernel => Spec(kernel: kernel))];
         // The order a set leases the pipelines in (SdfWorldPipelines.Acquire): the views variants, the longest driver
-        // translations, start last, lightest first (core, folds, full), and every other kernel before them in kernel order.
+        // translations, start last, lightest first (core, folds, full), and the other native kernels before them.
+        // Resolve joins this same slot table on demand through BuildResolve.
         internal static readonly SdfKernel[] BuildOrder = [
-            .. SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel is not (SdfKernel.Views or SdfKernel.ViewsCore or SdfKernel.ViewsFolds))),
+            .. SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel is not (SdfKernel.Views or SdfKernel.ViewsCore or SdfKernel.ViewsFolds or SdfKernel.Resolve))),
             SdfKernel.ViewsCore,
             SdfKernel.ViewsFolds,
             SdfKernel.Views,
@@ -108,7 +113,7 @@ public sealed partial class SdfWorldTables {
                 Brick: (kernel == SdfKernel.BrickBake),
                 Description: new GpuComputePipelineDescription(
                     Bindings: [],
-                    Layout: ((kernel == SdfKernel.BrickBake) ? BrickBake : World),
+                    Layout: SdfKernelSet.LayoutOf(kernel: kernel).PipelineLayout(stages: GpuShaderStage.Compute),
                     Name: SdfKernelSet.StemOf(kernel: kernel),
                     PushConstantBinding: null
                 )

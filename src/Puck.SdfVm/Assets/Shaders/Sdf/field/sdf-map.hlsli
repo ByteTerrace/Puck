@@ -136,7 +136,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // read by any op evaluating under that slot — currently SDF_OP_LANE_ERODE. Reset with the chain (RESET), set by
     // TRANSFORM_DYNAMIC, exactly like localPosition; zero under no dynamic slot.
     float4 currentLanes = float4(0.0, 0.0, 0.0, 0.0);
-    int currentSlot = -1;
+    int currentSlot = SDF_TRANSFORM_SLOT_NONE;
     // SDF_OP_LANE_ERODE's pending effect on the NEXT SDF_OP_SHAPE_BLEND: a cheap early-out skip (no field cost) or,
     // otherwise, a world-unit additive erosion. Consumed and cleared there; reset with the chain.
     bool laneErodeSkipShape = false;
@@ -155,7 +155,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     result.distance = sdfAmbientDistanceCeiling;
     result.material = 0;
     result.lanes = float4(0.0, 0.0, 0.0, 0.0);
-    result.frameSlot = -1;
+    result.instanceIndex = -1;
+    result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
 
     // The one-deep SCOPED-ACCUMULATOR slot (SDF_OP_PUSH_FIELD/POP_FIELD): PUSH saves the parent accumulator here and
     // reseeds `result`; POP composes the scope's `result` back into this saved value. This is a single NON-INDEXED pair,
@@ -166,7 +167,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     float savedFieldDistance = SDF_FAR_DISTANCE;
     int savedFieldMaterial = 0;
     float4 savedFieldLanes = float4(0.0, 0.0, 0.0, 0.0);
-    int savedFieldSlot = -1;
+    int savedFieldInstance = -1;
+    int savedFieldSlot = SDF_TRANSFORM_SLOT_NONE;
     float savedFieldBlendWeight = 0.0;
     int savedFieldBlendOther = 0;
 
@@ -181,6 +183,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
         // never fall inside an instance's range, so comparing the next world segment against the next owned segment
         // yields the globally ascending order the blend ops require.
         uint segment;
+        int segmentInstance = -1;
 
         if (!hasInstances) {
             if (linearCursor >= segmentCount) {
@@ -206,7 +209,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         && !sdfPartCannotImprove(pendingInstance, worldPosition, result.distance)
 #endif
                     ) {
-                        sdfComposePartProgram(result, worldPosition, part, dataOffset, trackMaterial);
+                        sdfComposePartProgram(result, worldPosition, part, dataOffset, (int)pendingInstance, trackMaterial);
                     }
                     sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
                         maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
@@ -214,6 +217,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 }
             }
 #endif
+            segmentInstance = (int)pendingInstance;
             segment = instanceSegment++;
 
             if (instanceSegment == instanceSegmentEnd) {
@@ -271,13 +275,13 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             if (planReady) {
                 float3 rigidBasePosition = worldPosition;
                 float4 rigidLanes = 0.0;
-                int rigidSlot = -1;
+                int rigidSlot = SDF_TRANSFORM_SLOT_NONE;
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
                 if (plan.z != 0u) {
                     uint dynamicSlot = (plan.z - 1u);
-                    rigidSlot = (int)dynamicSlot;
                     rigidLanes = sdfDynamicTransforms[3u * dynamicSlot + 2u];
+                    rigidSlot = (int)dynamicSlot;
                     float4 dynamicPosition = sdfDynamicTransforms[3u * dynamicSlot];
                     float4 dynamicOrientation = sdfDynamicTransforms[(3u * dynamicSlot) + 1u];
                     rigidBasePosition = rotatePointByInverseQuaternion((worldPosition - dynamicPosition.xyz), dynamicOrientation);
@@ -334,7 +338,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     float candidate = evaluateShape((SDF_INSTRUCTION_SHAPE(shapeHeader) & SDF_SHAPE_TYPE_MASK), rigidPosition, shapeData0, shapeData1);
                     int material = (trackMaterial ? (int)SDF_INSTRUCTION_MATERIAL(shapeHeader) : 0);
 
-                    sdfComposeCandidate(result, candidate, SDF_INSTRUCTION_BLEND(shapeHeader), material, rigidLanes, rigidSlot, shapeData1.x, trackMaterial);
+                    sdfComposeCandidate(result, candidate, SDF_INSTRUCTION_BLEND(shapeHeader), material, rigidLanes, segmentInstance, rigidSlot, shapeData1.x, trackMaterial);
                 }
 
                 continue;
@@ -361,7 +365,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             uint composeBlend = SDF_BLEND_UNION;
             int composeMaterial = 0;
             float4 composeLanes = float4(0.0, 0.0, 0.0, 0.0);
-            int composeSlot = -1;
+            int composeInstance = -1;
+            int composeSlot = SDF_TRANSFORM_SLOT_NONE;
             float composeSmooth = 0.0;
 
             switch (op) {
@@ -369,7 +374,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     localPosition = worldPosition;
                     distanceScale = 1.0;
                     currentLanes = float4(0.0, 0.0, 0.0, 0.0);
-                    currentSlot = -1;
+                    currentSlot = SDF_TRANSFORM_SLOT_NONE;
                     laneErodeSkipShape = false;
                     laneErodeAmount = 0.0;
                     if (trackMaterial) {
@@ -903,7 +908,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 
                         composeMaterial = material;
                         composeLanes = currentLanes;
-                    composeSlot = currentSlot;
+                        composeInstance = segmentInstance;
+                        composeSlot = currentSlot;
                     }
                     break;
                 }
@@ -918,6 +924,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     if (trackMaterial) {
                         savedFieldMaterial = result.material;
                         savedFieldLanes = result.lanes;
+                        savedFieldInstance = result.instanceIndex;
                         savedFieldSlot = result.frameSlot;
                         savedFieldBlendWeight = sdfMaterialBlendWeight;
                         savedFieldBlendOther = sdfMaterialBlendOther;
@@ -928,7 +935,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     if (trackMaterial) {
                         result.material = 0;
                         result.lanes = float4(0.0, 0.0, 0.0, 0.0);
-                        result.frameSlot = -1;
+                        result.instanceIndex = -1;
+                        result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
                     }
                     break;
                 }
@@ -951,6 +959,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     if (trackMaterial) {
                         composeMaterial = result.material;
                         composeLanes = result.lanes;
+                        composeInstance = result.instanceIndex;
                         composeSlot = result.frameSlot;
                     }
                     composeSmooth = data1.x;
@@ -960,6 +969,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     if (trackMaterial) {
                         result.material = savedFieldMaterial;
                         result.lanes = savedFieldLanes;
+                        result.instanceIndex = savedFieldInstance;
                         result.frameSlot = savedFieldSlot;
                         sdfMaterialBlendWeight = savedFieldBlendWeight;
                         sdfMaterialBlendOther = savedFieldBlendOther;
@@ -974,6 +984,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                             bool candidateWins = (t >= 0.5);
                             result.material = candidateWins ? composeMaterial : savedFieldMaterial;
                             result.lanes = candidateWins ? composeLanes : savedFieldLanes;
+                            result.instanceIndex = candidateWins ? composeInstance : savedFieldInstance;
                             result.frameSlot = candidateWins ? composeSlot : savedFieldSlot;
                             bool tableSeam = ((savedFieldMaterial < SDF_SCREEN_MATERIAL) && (composeMaterial < SDF_SCREEN_MATERIAL));
                             sdfMaterialBlendWeight = tableSeam ? min(t, 1.0 - t) : 0.0;
@@ -1003,6 +1014,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                                     bool candidateWins = (-b > a);
                                     result.material = candidateWins ? composeMaterial : savedFieldMaterial;
                                     result.lanes = candidateWins ? composeLanes : savedFieldLanes;
+                                    result.instanceIndex = candidateWins ? composeInstance : savedFieldInstance;
                                     result.frameSlot = candidateWins ? composeSlot : savedFieldSlot;
                                     // A losing scope leaves the parent's restored seam intact, as the shared tail does.
                                     if (candidateWins) {
@@ -1015,6 +1027,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                                     bool candidateWins = (b < a);
                                     result.material = candidateWins ? composeMaterial : savedFieldMaterial;
                                     result.lanes = candidateWins ? composeLanes : savedFieldLanes;
+                                    result.instanceIndex = candidateWins ? composeInstance : savedFieldInstance;
                                     result.frameSlot = candidateWins ? composeSlot : savedFieldSlot;
                                     if (candidateWins) {
                                         sdfMaterialBlendWeight = 0.0;
@@ -1029,7 +1042,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     // A losing scope cannot tint its parent. A winning hard union carries its own internal seam;
                     // a smooth outer composition instead creates a new two-material seam in the shared helper.
                     bool scopeWinsUnion = (composeBlend == SDF_BLEND_UNION) && (composeCandidate < result.distance);
-                    sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeLanes, composeSlot, composeSmooth, trackMaterial);
+                    sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeLanes, composeInstance, composeSlot, composeSmooth, trackMaterial);
                     if (trackMaterial && scopeWinsUnion) {
                         sdfMaterialBlendWeight = scopeBlendWeight;
                         sdfMaterialBlendOther = scopeBlendOther;
@@ -1050,7 +1063,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             // is a contact locus of ties). Then blend the candidate into result.distance. composePending is false for
             // every point/field op AND for a bound-skipped SHAPE, so those paths are byte-for-byte the pre-scope walk.
             if (composePending) {
-                sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeLanes, composeSlot, composeSmooth, trackMaterial);
+                sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeLanes, composeInstance, composeSlot, composeSmooth, trackMaterial);
             }
         }
     }

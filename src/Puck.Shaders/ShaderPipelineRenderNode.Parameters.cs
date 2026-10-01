@@ -33,6 +33,8 @@ public sealed partial class ShaderPipelineRenderNode {
 
         var block = MemoryMarshal.AsMemory(memory: pass.Parameters.Bytes).Span[((int)slot.Offset)..];
 
+        var previous = BinaryPrimitives.ReadUInt32LittleEndian(source: block);
+
         switch (slot.Type) {
             case ShaderValueType.Float:
                 BinaryPrimitives.WriteSingleLittleEndian(destination: block, value: ((float)value));
@@ -56,6 +58,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 break;
         }
 
+        if ((previous != BinaryPrimitives.ReadUInt32LittleEndian(source: block)) && (pass.Cadence is { } cadence)) { cadence.Signature = null; }
         return true;
     }
     /// <summary>Reads one scalar config field of an installed pass as the pass block holds it.</summary>

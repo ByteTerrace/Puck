@@ -437,7 +437,7 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                     : part.Dispatch),
                 InputAccesses: part.InputAccesses,
                 Inputs: [.. part.Inputs.Select(selector: Rename)],
-                Members: package.Members,
+                Members: (part.Members ?? package.Members),
                 Name: name,
                 OutputAccesses: part.OutputAccesses,
                 Outputs: [.. part.Outputs.Select(selector: Rename)],

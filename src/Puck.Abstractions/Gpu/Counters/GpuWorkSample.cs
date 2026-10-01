@@ -69,8 +69,8 @@ public sealed class GpuWorkSample {
     /// <param name="pass">The zero-based pass index, in <see cref="PassLabels"/> order.</param>
     /// <param name="column">The column: the index of the kind in <see cref="GpuWork.SubmissionKinds"/>.</param>
     /// <param name="value">The count, in the kind's unit; zero when the method returns <see langword="false"/>.</param>
-    /// <returns><see langword="true"/> when the pass executed; <see langword="false"/> when it was skipped or not
-    /// reached, which has no count rather than a count of zero.</returns>
+    /// <returns><see langword="true"/> when the pass executed; <see langword="false"/> when it was skipped, standing or
+    /// not reached, which has no count rather than a count of zero.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="pass"/> is negative or not less than
     /// <see cref="PassCount"/>, or <paramref name="column"/> is not a column of <see cref="GpuWork.SubmissionKinds"/>.</exception>
     public bool TryGetPassCount(int pass, int column, out long value) {

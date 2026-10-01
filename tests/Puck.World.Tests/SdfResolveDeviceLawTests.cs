@@ -1,0 +1,132 @@
+using System.Buffers.Binary;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using Puck.Abstractions.Gpu;
+using Puck.SdfVm;
+using Puck.Shaders;
+using Puck.Testing;
+using Xunit;
+
+namespace Puck.World.Tests;
+
+/// <summary>The shipped spatial resolve preserves the analytic step colors, and copies a grid of its output's own
+/// extent exactly. These inputs isolate the resolver from traversal, while the reduced-world canary exercises its
+/// ordinary package recorder.</summary>
+[SupportedOSPlatform("windows10.0.15063")]
+public sealed class SdfResolveDeviceLawTests {
+    private const uint RenderWidth = 16;
+    private const uint RenderHeight = 48;
+    private const uint OutputWidth = 64;
+    private const uint OutputHeight = 192;
+
+    [Fact]
+    public void VulkanResolvesTheAnalyticColors() {
+        using var device = HeadlessVulkanDevice.Create(applicationName: nameof(SdfResolveDeviceLawTests));
+
+        Verify(services: device.Services, extension: ".spv");
+    }
+    [Fact]
+    public void DirectXResolvesTheAnalyticColors() {
+        using var device = DirectXTestDevices.Hardware();
+
+        Verify(services: device.Services, extension: ".dxil");
+    }
+
+    private static void Verify(GpuDeviceServices services, string extension) {
+        foreach (var sharpness in new[] { 0f, 1f }) {
+            var color = Run(extension: extension, height: OutputHeight, services: services,
+                sharpness: sharpness, width: OutputWidth);
+            // Hand-derived values at fractions 1/8 and 7/8; the source stores its middle band as codes 64 and 191.
+            Check(color: color, value: ((sharpness == 0f) ? 0.125f : 0.083984375f), width: OutputWidth, x: 30, y: 20);
+            Check(color: color, value: ((sharpness == 0f) ? 0.875f : 0.916015625f), width: OutputWidth, x: 33, y: 20);
+            Check(color: color, value: ((sharpness == 0f) ? 0.3132353f : 0.2928079f), width: OutputWidth, x: 30, y: 90);
+            Check(color: color, value: (64f / 255f), width: OutputWidth, x: 29, y: 90);
+            Check(color: color, value: ((sharpness == 0f) ? 0.3132353f : 0.2928079f), width: OutputWidth, x: 2, y: 150);
+        }
+        var native = Run(extension: extension, height: RenderHeight, services: services,
+            sharpness: 1f, width: RenderWidth);
+
+        Check(color: native, value: 0f, width: RenderWidth, x: 7, y: 8);
+        Check(color: native, value: 1f, width: RenderWidth, x: 8, y: 8);
+    }
+    private static void Check(Half[] color, uint width, uint x, uint y, float value) {
+        var offset = ((int)(((y * width) + x) * 4));
+
+        for (var channel = 0; (channel < 3); channel++) {
+            Assert.InRange(actual: MathF.Abs(x: (((float)color[(offset + channel)]) - value)), low: 0f, high: 0.0005f);
+        }
+        Assert.Equal(expected: ((Half)1f), actual: color[(offset + 3)]);
+    }
+    private static Half[] Run(GpuDeviceServices services, string extension, float sharpness, uint width, uint height) {
+        var parameters = SdfWorldInterfaces.ResolveParameters;
+        var block = new byte[parameters.SizeBytes];
+
+        parameters.WriteExtent(block: block, height: height, width: width);
+        void Word(string member, uint value, int lane = 0) => BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: block.AsSpan(start: (((int)parameters.BlockOffsetOf(member: member)) + (lane * 4))), value: value);
+        Word(member: SdfWorldPackage.ImageExtent, value: RenderWidth);
+        Word(lane: 1, member: SdfWorldPackage.ImageExtent, value: RenderHeight);
+        Word(member: SdfWorldPackage.UpscaleSharpness, value: BitConverter.SingleToUInt32Bits(value: sharpness));
+        var source = new byte[((RenderWidth * RenderHeight) * 4)];
+
+        for (var y = 0u; (y < RenderHeight); y++) {
+            for (var x = 0u; (x < RenderWidth); x++) {
+                var value = ((byte)((y < 16) ? ((x < 8) ? 0 : 255) : ((x < ((y < 32) ? 8 : 1)) ? 64 : 191)));
+                var offset = (((y * RenderWidth) + x) * 4);
+
+                source[offset] = value; source[(offset + 1)] = value; source[(offset + 2)] = value; source[(offset + 3)] = 255;
+            }
+        }
+        var layout = parameters.Layout.PipelineLayout(stages: GpuShaderStage.Compute);
+        var description = new GpuComputePipelineDescription(Bindings: [], Layout: layout, Name: "sdf-resolve-proof", PushConstantBinding: null);
+        using var module = services.ShaderModuleFactory.Create(stage: GpuShaderStage.Compute,
+            bytecode: File.ReadAllBytes(path: Path.Combine(path1: SdfKernelSet.DefaultDirectory, path2: ("sdf-resolve.comp" + extension))));
+        using var pipeline = services.PipelineFactory.Create(computeShaderModule: module, description: description, name: default);
+        using var frame = services.BufferFactory.CreateHostVisible(data: new byte[256], name: default, usage: GpuBufferUsage.Uniform);
+        using var constants = services.BufferFactory.CreateHostVisible(data: block, name: default, usage: GpuBufferUsage.Uniform);
+        using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 16, usage: GpuBufferUsage.Storage);
+        using var output = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: height, name: default, usage: GpuImageUsage.Storage, width: width);
+        using var upload = services.SurfaceTransferFactory.CreateUpload();
+        var sourceView = upload.Upload(pixels: source, format: GpuPixelFormat.R8G8B8A8Unorm, width: RenderWidth, height: RenderHeight);
+        using var readback = services.SurfaceTransferFactory.CreateReadback();
+        using var commands = services.CommandPoolFactory.Create(name: default);
+        var pool = services.Bindings.CreatePool(name: default, sizes: GpuDescriptorPoolSizes.ForGroups(groups: layout.Groups));
+
+        try {
+            var frameSet = services.Bindings.AllocateSet(descriptorSetLayoutHandle: pipeline.GroupLayoutHandles[0], name: default, poolHandle: pool);
+            var set = services.Bindings.AllocateSet(descriptorSetLayoutHandle: pipeline.GroupLayoutHandles[3], name: default, poolHandle: pool);
+
+            services.Bindings.WriteConstantBuffer(descriptorSetHandle: frameSet, binding: 0, arrayElement: 0, bufferHandle: frame.BufferHandle, bufferSize: frame.SizeBytes);
+            services.Bindings.WriteConstantBuffer(descriptorSetHandle: set, binding: 0, arrayElement: 0, bufferHandle: constants.BufferHandle, bufferSize: constants.SizeBytes);
+            uint Binding(string member) => SdfWorldInterfaces.BindingOf(layout: parameters.Layout, member: member);
+            services.Bindings.WriteSampledImage(descriptorSetHandle: set, binding: Binding(member: SdfWorldPackage.CurrentColor), arrayElement: 0, imageViewHandle: sourceView);
+            services.Bindings.WriteStorageImage(descriptorSetHandle: set, binding: Binding(member: SdfWorldPackage.Output), arrayElement: 0, imageViewHandle: output.ImageViewHandle);
+            services.Bindings.WriteBuffer(descriptorSetHandle: set, binding: Binding(member: ShaderWorkCounters.Buffer), bufferHandle: counters.BufferHandle,
+                bufferSize: counters.SizeBytes, kind: GpuBindingKind.ReadWriteBuffer, elementStride: 4);
+            var recorder = services.Recorder;
+            var command = commands.CommandBufferHandle;
+
+            recorder.BeginCommandBuffer(commandBufferHandle: command);
+            recorder.TransitionImageLayout(commandBufferHandle: command, imageHandle: output.ImageHandle,
+                sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe, oldLayout: GpuImageLayout.Undefined,
+                destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader, newLayout: GpuImageLayout.General);
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: counters.BufferHandle,
+                sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe, destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+            recorder.ClearStorageBuffer(commandBufferHandle: command, bufferHandle: counters.BufferHandle, sizeBytes: counters.SizeBytes);
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: counters.BufferHandle,
+                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer, destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+            recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, pipelineHandle: pipeline.Handle);
+            recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: frameSet, group: 0, pipelineLayoutHandle: pipeline.LayoutHandle);
+            recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: set, group: 3, pipelineLayoutHandle: pipeline.LayoutHandle);
+            recorder.Dispatch(commandBufferHandle: command, groupCountX: ((width + 7) / 8), groupCountY: ((height + 7) / 8), groupCountZ: 1);
+            recorder.EndCommandBuffer(commandBufferHandle: command);
+            services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [command]);
+            var colors = readback.Read(bytesPerPixel: 8, format: GpuPixelFormat.R16G16B16A16Float, height: height, width: width,
+                sourceImageHandle: output.ImageHandle, sourceLayout: GpuImageLayout.General);
+
+            return MemoryMarshal.Cast<byte, Half>(span: colors.Span).ToArray();
+        } finally {
+            services.Bindings.DestroyPool(poolHandle: pool);
+        }
+    }
+}

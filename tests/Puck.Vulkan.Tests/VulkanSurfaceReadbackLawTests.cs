@@ -22,6 +22,22 @@ public sealed unsafe class VulkanSurfaceReadbackLawTests {
     private const nint DeviceHandle = 0x40;
     private const nint Image = 0x20;
 
+    [Fact]
+    public void AStorageCopyForwardsBothOffsetsAndItsDestinationUsesTransferWrite() {
+        var calls = Record(sourceLayout: GpuImageLayout.General, custom: recorder => {
+            recorder.TransitionBuffer(bufferHandle: Buffer, commandBufferHandle: CommandBuffer,
+                destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer,
+                sourceAccessMask: GpuAccess.ShaderRead, sourceStageMask: GpuStage.ComputeShader);
+            recorder.CopyBuffer(commandBufferHandle: CommandBuffer, destinationBufferHandle: Buffer,
+                destinationOffsetBytes: 16, sizeBytes: 8, sourceBufferHandle: 0x50, sourceOffsetBytes: 32);
+        });
+
+        Assert.Equal(expected: VulkanAccessFlags.TransferWrite, actual: calls[0].Arguments["destinationAccessMask"]);
+        Assert.Equal(expected: VulkanPipelineStageFlags.Transfer, actual: calls[0].Arguments["destinationStageMask"]);
+        Assert.Equal(expected: 32UL, actual: calls[1].Arguments["sourceOffsetBytes"]);
+        Assert.Equal(expected: 16UL, actual: calls[1].Arguments["destinationOffsetBytes"]);
+        Assert.Equal(expected: 8UL, actual: calls[1].Arguments["sizeBytes"]);
+    }
     public static TheoryData<GpuImageLayout> SourceLayouts() => [
         GpuImageLayout.External,
         GpuImageLayout.General,
@@ -81,7 +97,7 @@ public sealed unsafe class VulkanSurfaceReadbackLawTests {
         );
     }
 
-    private static List<Call> Record(GpuImageLayout sourceLayout) {
+    private static List<Call> Record(GpuImageLayout sourceLayout, Action<VulkanGpuRecorder>? custom = null) {
         var recording = DispatchProxy.Create<IVulkanCommandBufferRecordingApi, CallRecorder>();
         var commands = new VulkanDeviceCommands(
             deviceHandle: DeviceHandle,
@@ -98,6 +114,11 @@ public sealed unsafe class VulkanSurfaceReadbackLawTests {
             physicalDevice: default,
             presentQueue: default
         ));
+
+        if (custom is not null) {
+            custom(obj: new VulkanGpuRecorder(deviceContext: context, recordingApi: recording));
+            return ((CallRecorder)((object)recording)).Calls;
+        }
 
         VulkanSurfaceReadback.Record(
             bufferHandle: Buffer,

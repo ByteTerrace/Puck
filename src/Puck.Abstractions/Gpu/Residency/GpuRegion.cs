@@ -460,6 +460,10 @@ public sealed class GpuRegion : IDisposable {
     /// <summary>Gets the host's copy of the region: what every slot's <see cref="Buffer"/> holds once flushed and
     /// copied.</summary>
     public ReadOnlySpan<byte> Contents => m_contents;
+    /// <summary>Gets the retained CPU shadow payload bytes, excluding managed array overhead.</summary>
+    public ulong CpuShadowBytes => ((ulong)m_contents.LongLength);
+    /// <summary>Gets the retained CPU upload-header scratch payload bytes, excluding managed array overhead.</summary>
+    public ulong CpuScratchBytes => (((ulong)m_header.LongLength) * sizeof(uint));
     /// <summary>Gets whether the next <see cref="RecordCopy"/> records a copy: the region is staged and owes words.</summary>
     public bool OwesCopy => (
         (Policy == GpuResidencyPolicy.Staged) &&

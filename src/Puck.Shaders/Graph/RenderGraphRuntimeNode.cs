@@ -46,6 +46,8 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
 
     /// <summary>Gets or sets the reads the display shows inside its rendering instances this frame.</summary>
     public IReadOnlyList<RenderGraphFootprint> Footprints { get; set; }
+    /// <summary>Gets how many frames the node has produced, the next frame's <see cref="RenderGraphFrame.Index"/>.</summary>
+    public long FramesProduced => m_frame;
     /// <summary>Gets the services the host ties to the root's teardown, disposed in order after the runtime. A host
     /// disposes its root while the device is still alive, so a service holding GPU objects that its container would
     /// dispose only after the device context is released here instead; its later disposal by the container is a
@@ -112,7 +114,9 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     /// <inheritdoc/>
     public void RequestCapture(FrameCaptureRequest request) => Runtime.RequestCapture(request: request);
     /// <summary>Changes the display extent from the next produced frame on: the runtime schedules every instance's
-    /// footprint against it, so the root and every view it places render at the new extent.</summary>
+    /// footprint against it, so the root and every view it places render at the new extent. The root, shown at its own
+    /// extent, presents its last image until its graph installs the new one
+    /// (<see cref="ShaderPipelineRenderNode.ShownAtItsExtent"/>), and a capture waits for that frame.</summary>
     /// <param name="width">The display's width, in pixels.</param>
     /// <param name="height">The display's height, in pixels.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is zero or

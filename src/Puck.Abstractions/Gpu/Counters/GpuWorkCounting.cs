@@ -9,7 +9,8 @@ namespace Puck.Abstractions.Gpu;
 /// <para>
 /// Per-submission counts go to the pass the ledger is in: dispatches, indirect dispatches, draws, render passes,
 /// command buffers begun, image, memory, and buffer barriers, pipeline and descriptor-set binds, push-constant bytes,
-/// descriptor writes, bytes written to host-visible storage buffers, and storage image and buffer clears. Lifetime
+/// descriptor writes, bytes written to host-visible storage buffers, storage image and buffer clears, copies and
+/// buffer-copy bytes. Lifetime
 /// counts are the compute and graphics pipelines, shader modules, images, storage buffers, descriptor pools,
 /// and descriptor sets created. See <see cref="GpuWork"/> for the kinds.
 /// </para>
@@ -58,6 +59,7 @@ public static class GpuWorkCounting {
                 factory: services.ShaderModuleFactory,
                 ledger: ledger
             ),
+            TimestampFactory = ((services.TimestampFactory is { } timestamps) ? new CountingTimestampFactory(inner: Guard(instance: timestamps, ledger: ledger), ledger: ledger) : null),
             SurfaceTransferFactory = services.SurfaceTransferFactory,
         };
     }
@@ -192,7 +194,7 @@ public static class GpuWorkCounting {
 
 // The one shape every counting wrapper shares: it counts into its ledger after the forwarded call returns, and a
 // service of this type is refused as the inner of another wrapper, which would count every call twice.
-file abstract class CountingWrapper(GpuWorkLedger ledger) {
+internal abstract class CountingWrapper(GpuWorkLedger ledger) {
     protected GpuWorkLedger Ledger =>
         ledger;
 
@@ -207,6 +209,7 @@ file abstract class CountingWrapper(GpuWorkLedger ledger) {
             column: column
         );
 }
+
 file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuRecorder {
     public void BeginCommandBuffer(nint commandBufferHandle) {
         inner.BeginCommandBuffer(commandBufferHandle: commandBufferHandle);
@@ -332,14 +335,17 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         );
         Tally(column: GpuWork.CopiesColumn);
     }
-    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes) {
+    public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0, ulong destinationOffsetBytes = 0) {
         inner.CopyBuffer(
             commandBufferHandle: commandBufferHandle,
             destinationBufferHandle: destinationBufferHandle,
+            destinationOffsetBytes: destinationOffsetBytes,
             sizeBytes: sizeBytes,
-            sourceBufferHandle: sourceBufferHandle
+            sourceBufferHandle: sourceBufferHandle,
+            sourceOffsetBytes: sourceOffsetBytes
         );
         Tally(column: GpuWork.CopiesColumn);
+        Tally(amount: checked((long)sizeBytes), column: GpuWork.BufferCopyBytesColumn);
     }
     public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
         inner.ClearStorageBuffer(

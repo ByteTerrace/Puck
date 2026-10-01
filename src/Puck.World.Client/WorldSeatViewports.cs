@@ -17,7 +17,10 @@ public readonly record struct WorldSeatView(
     CameraSnapshot Camera,
     uint Width,
     uint Height
-);
+) {
+    /// <summary>Gets the exact rendered producer for this seat, or null until the presenter publishes one.</summary>
+    public string? RenderInstance { get; init; }
+}
 /// <summary>Where a client-pixel pointer position lies relative to one seat's view.</summary>
 public enum WorldSeatPointerPlace : byte {
     /// <summary>Inside the seat's viewport rect.</summary>
@@ -85,7 +88,8 @@ public sealed class WorldSeatViewports {
     /// <param name="camera">The render camera's snapshot.</param>
     /// <param name="width">The full frame width, px.</param>
     /// <param name="height">The full frame height, px.</param>
-    public void Publish(int slot, NormalizedRect region, in CameraSnapshot camera, uint width, uint height) {
+    /// <param name="renderInstance">The producer that rendered this view, used by presentation picking.</param>
+    public void Publish(int slot, NormalizedRect region, in CameraSnapshot camera, uint width, uint height, string? renderInstance = null) {
         if (((uint)slot) < ((uint)m_seats.Length)) {
             m_seats[slot] = new WorldSeatView(
                 Camera: camera,
@@ -93,7 +97,7 @@ public sealed class WorldSeatViewports {
                 Present: true,
                 Region: region,
                 Width: width
-            );
+            ) { RenderInstance = renderInstance };
         }
     }
     /// <summary>Publishes the live OS client-area extent — the space pointer positions arrive in, distinct from the

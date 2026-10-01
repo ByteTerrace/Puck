@@ -9,8 +9,8 @@ namespace Puck.Shaders.Tests;
 /// presenting, and installs the same replacement when it is tried again.
 /// </summary>
 public sealed partial class ShaderPipelineRenderNodeLawTests {
-    // The fake as a device context whose services pass through creation faults, as a backend's do.
-    private sealed class FaultingDevice(FakePipelineGpu gpu, GpuCreationFaults faults) : IGpuDeviceContext {
+    // A fake as a device context whose services pass through creation faults, as a backend's do.
+    private sealed class FaultingDevice(IGpuDeviceContext gpu, GpuCreationFaults faults) : IGpuDeviceContext {
         public long AdapterLuid => gpu.AdapterLuid;
         public GpuDeviceCapabilities? Capabilities => gpu.Capabilities;
         public GpuDeviceIdentity? Identity => gpu.Identity;
@@ -60,7 +60,8 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         // pass block. The passes record into each frame slot's one command list, which the installed graph's first
         // install created, so the candidate creates no command pool. Its shaders differ from the installed graph's, so its modules, render pass and pipelines are new
         // pass-pipeline cache entries, created through the node's faulting device. Samplers are the one creation the fake
-        // counts that the decorator cannot fail.
+        // counts that the decorator cannot fail. A candidate never creates a timestamp pool: pass timing creates its pools
+        // at its own demand, and GpuTimingCreationFaultRefusesTimingByNameAndFramesKeepRendering fails them.
         var expected = new Dictionary<GpuCreationKind, long> {
             [GpuCreationKind.Pipeline] = 3L,
             [GpuCreationKind.Buffer] = (4L * InFlight),
@@ -71,6 +72,11 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             [GpuCreationKind.CommandPool] = 0L,
             [GpuCreationKind.BindingsPool] = 1L,
         };
+
+        Assert.Equal(
+            actual: GpuCreationFaults.Kinds.ToArray().Except(second: expected.Keys),
+            expected: [GpuCreationKind.TimestampPool]
+        );
 
         var measuredGpu = new FakePipelineGpu();
         var measuredFaults = new GpuCreationFaults();
@@ -94,7 +100,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             foreach (var kind in GpuCreationFaults.Kinds) {
                 Assert.Equal(
                     actual: measuredFaults.SeenOf(kind: kind),
-                    expected: expected[kind]
+                    expected: expected.GetValueOrDefault(key: kind)
                 );
             }
 
@@ -108,7 +114,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
 
         var faulted = 0;
 
-        foreach (var kind in GpuCreationFaults.Kinds) {
+        foreach (var kind in expected.Keys) {
             for (var nth = 1; (nth <= expected[kind]); nth++) {
                 var gpu = new FakePipelineGpu();
                 var faults = new GpuCreationFaults();

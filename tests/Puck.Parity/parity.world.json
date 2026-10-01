@@ -245,7 +245,9 @@
         "station": "sky",
         "ticks": [
           600,
-          620
+          620,
+          640,
+          660
         ]
       },
       {
@@ -948,7 +950,146 @@
         }
       ]
     },
-    "shadows": "High"
+    "shadows": "High",
+    "sky": {
+      "layers": [
+        {
+          "$type": "gradient",
+          "stops": [
+            {
+              "elevation": -1,
+              "color": "#101829"
+            },
+            {
+              "elevation": 0,
+              "color": "#243455"
+            },
+            {
+              "elevation": 1,
+              "color": "#071020"
+            }
+          ]
+        },
+        {
+          "$type": "fog",
+          "density": 0.012
+        },
+        {
+          "$type": "sunDisc",
+          "light": 0,
+          "radius": 0.045,
+          "intensity": 2
+        },
+        {
+          "$type": "stars",
+          "density": 32,
+          "brightness": 4,
+          "seed": 3,
+          "twinkle": {
+            "share": 1,
+            "depth": 0.8,
+            "rate": 1
+          }
+        },
+        {
+          "$type": "clouds",
+          "coverage": 0.4,
+          "softness": 0.2,
+          "scale": 0.5,
+          "seed": 5,
+          "color": "#91A5C8",
+          "drift": [
+            0.2,
+            0.07
+          ],
+          "shear": [
+            0.05,
+            -0.03
+          ],
+          "spin": 0.2,
+          "curl": 0.3
+        }
+      ]
+    },
+    "cycle": {
+      "state": "skyMode",
+      "keys": [
+        {
+          "at": 0,
+          "sky": {
+            "layers": [
+              {
+                "$type": "gradient",
+                "stops": [
+                  {
+                    "color": "#101829"
+                  },
+                  {
+                    "color": "#243455"
+                  },
+                  {
+                    "color": "#071020"
+                  }
+                ]
+              },
+              {
+                "$type": "fog",
+                "density": 0.012
+              },
+              {
+                "$type": "sunDisc",
+                "intensity": 2
+              },
+              {
+                "$type": "stars",
+                "brightness": 4
+              },
+              {
+                "$type": "clouds",
+                "coverage": 0.4
+              }
+            ]
+          }
+        },
+        {
+          "at": 0.5,
+          "sky": {
+            "layers": [
+              {
+                "$type": "gradient",
+                "stops": [
+                  {
+                    "color": "#7E5360"
+                  },
+                  {
+                    "color": "#E39C75"
+                  },
+                  {
+                    "color": "#345C98"
+                  }
+                ]
+              },
+              {
+                "$type": "fog",
+                "density": 0.035
+              },
+              {
+                "$type": "sunDisc",
+                "intensity": 3
+              },
+              {
+                "$type": "stars",
+                "brightness": 0.2
+              },
+              {
+                "$type": "clouds",
+                "coverage": 0.65
+              }
+            ]
+          }
+        }
+      ]
+    }
   },
   "rules": [
     {
@@ -1045,6 +1186,63 @@
       },
       "mode": "Edge",
       "name": "toGrainSeed"
+    },
+    {
+      "name": "sky-610",
+      "mode": "Edge",
+      "gate": {
+        "$type": "compareState",
+        "state": {
+          "channel": "tick"
+        },
+        "comparison": "GreaterOrEqual",
+        "value": 610
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "skyMode",
+          "value": 0.25
+        }
+      ]
+    },
+    {
+      "name": "sky-630",
+      "mode": "Edge",
+      "gate": {
+        "$type": "compareState",
+        "state": {
+          "channel": "tick"
+        },
+        "comparison": "GreaterOrEqual",
+        "value": 630
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "skyMode",
+          "value": 0.5
+        }
+      ]
+    },
+    {
+      "name": "sky-650",
+      "mode": "Edge",
+      "gate": {
+        "$type": "compareState",
+        "state": {
+          "channel": "tick"
+        },
+        "comparison": "GreaterOrEqual",
+        "value": 650
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "skyMode",
+          "value": 0.75
+        }
+      ]
     }
   ],
   "schema": "puck.world.definition.v1",
@@ -1104,6 +1302,11 @@
         },
         "kind": "Fixed",
         "name": "bump"
+      },
+      {
+        "name": "skyMode",
+        "kind": "Fixed",
+        "value": "0"
       }
     ]
   },

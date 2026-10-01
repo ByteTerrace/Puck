@@ -14,12 +14,13 @@ public sealed partial class ShaderPipelineRenderNode {
         // The leases this slot's latest submission sampled, retired after its fence.
         public readonly LeaseRetireList Leases = new();
     }
-    // One storage of the plan, which every version of its forwarding chain names, with one instance per frame slot (one
-    // instance only for a host-owned storage).
+    // One storage of the plan, shared by its forwarding versions. Owned ordinary/history storage has one instance
+    // per flight slot; transient and retained intermediates share one queue-ordered instance.
     private sealed class RuntimeResource {
         public readonly ShaderPipelinePlannedStorage Storage;
         public readonly ShaderPipelineResource Spec;
         public readonly int Count;
+        public readonly CadenceVersion[] Cadence;
         // Per instance: whether it holds contents (cleared, written by a pass, or carried with them), and the unplanned
         // state a host event left it in, if any (see ShaderPipelineRenderNode.Tracker.cs).
         public readonly bool[] Initialized;
@@ -42,6 +43,7 @@ public sealed partial class ShaderPipelineRenderNode {
             Storage = storage;
             Spec = storage.Declaration;
             Count = count;
+            Cadence = (storage.Declaration.Retained ? storage.Versions.Select(selector: static name => new CadenceVersion(name: name)).ToArray() : []);
             Initialized = new bool[count];
             HasOverride = new bool[count];
             Override = new ShaderPipelineAccessState[count];
@@ -99,8 +101,9 @@ public sealed partial class ShaderPipelineRenderNode {
         public readonly ShaderPipelineAccess[] Accesses = [.. planned.Accesses];
         public readonly CompiledShader? Compiled = compiled;
         public readonly int Count = count;
-        public readonly uint Width = extent.Width;
-        public readonly uint Height = extent.Height;
+        public uint Width = extent.Width;
+        public uint Height = extent.Height;
+        public readonly ShaderPipelineDimensions? Dimensions = planned.Extent;
         public readonly ShaderPipelineParameterLayout ParametersLayout = planned.Parameters;
         public ShaderPipelineParameterValues Parameters = (planned.Parameters.TryBind(
             config: null,
@@ -128,6 +131,7 @@ public sealed partial class ShaderPipelineRenderNode {
         // null for a pass that states none; and the graph's copy pool, reserving every staged region's sets, on its first
         // pass and null on every other.
         public GpuRegion[]? Regions;
+        public ulong RegionCpuScratchBytes;
         public GpuRegionCopyPool? RegionCopySets;
         // The counter buffers the graph's kernels count their own work into, on its first pass when a pass counts
         // (ShaderPipelinePlan.CountsKernelWork) and null on every other.
@@ -151,6 +155,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public nint[]? Sets;
         public IGpuBuffer? GeometryBuffer;
         public IRenderGraphPackageRecorder? Package;
+        public PassCadence? Cadence;
         public RenderGraphPackageResource[]? PackageInputs;
         public RenderGraphPackageResource[]? PackageOutputs;
         public GpuImageLayout[]? PackageInputLayouts;

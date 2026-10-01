@@ -87,6 +87,13 @@ public static partial class WorldDefinitionValidator {
                 }
             }
 
+            if ((row.Converge < 0) || (row.Converge > WorldCapturesCapacity.MaxConvergenceFrames)) {
+                errors.Add(item: $"{path}.converge must be between 0 and {WorldCapturesCapacity.MaxConvergenceFrames}.");
+            }
+            if ((row.Converge > 0) && (row.Screen is not null)) {
+                errors.Add(item: $"{path}.converge requires an instance capture, not a source screen.");
+            }
+
             ValidateCaptureTicks(
                 errors: errors,
                 path: path,

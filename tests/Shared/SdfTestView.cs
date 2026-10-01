@@ -21,18 +21,13 @@ internal sealed class SdfTestView : IDisposable {
     public SdfTestView(SdfWorldResidency residency, SdfWorldPipelineCatalog pipelines, IGpuDeviceContext device, uint extent) {
         var packages = new RenderGraphPackageRecorders(regionCopy: pipelines.RegionCopy);
 
-        packages.Register(
-            factory: new SdfWorldPasses(resolve: _ => new SdfWorldView(
-                Residency: residency,
-                View: 0
-            )),
-            package: RenderGraphPackageCatalog.SdfWorld
-        );
+        Passes = new SdfWorldPasses(resolve: _ => new SdfWorldView(Residency: residency, View: 0));
+        packages.Register(factory: Passes, package: RenderGraphPackageCatalog.SdfWorld);
         Assert.True(condition: RenderGraphInstanceSet.TryCreate(
             instances: [new RenderGraphInstance(
                 ExternalPackage: RenderGraphPackageCatalog.SdfWorld,
                 Name: Instance,
-                Passes: SdfWorldPackage.Fragment.Passes.Count,
+                Passes: SdfWorldPackage.NativeFragment.Passes.Count,
                 Reads: [],
                 Refresh: RenderGraphRefresh.EveryFrame
             )],
@@ -59,6 +54,7 @@ internal sealed class SdfTestView : IDisposable {
     public ICaptureRequestTarget CaptureTarget => Runtime.CaptureTarget(instance: Instance);
     public bool IsReady => (Residency.IsReady && (Runtime.UnservedCaptureReason is null));
     public string? NotReadyReason => (Residency.NotReadyReason ?? Runtime.UnservedCaptureReason);
+    public SdfWorldPasses Passes { get; }
     public SdfWorldResidency Residency { get; }
     public RenderGraphRuntime Runtime { get; }
 
