@@ -4,6 +4,33 @@ namespace Puck.Hosting.Tests;
 // frames it waits. One nothing the display shows reaches is unread while something still names it, and unnamed, whose
 // graph a render-graph runtime releases, only once nothing does.
 public sealed partial class RenderGraphSchedulerLawTests {
+    [InlineData(0.0, 1.0)]
+    [InlineData(1.0, 0.0)]
+    [InlineData(0.0, 0.0)]
+    [Theory]
+    public void AZeroExtentRootStillNamesItsProducers(double width, double height) {
+        var set = Set(
+            Instance(name: "camera"),
+            Instance(name: "pane", reads: [new RenderGraphRead(Producer: "camera")])
+        );
+        var schedules = Run(
+            count: 2,
+            frame: index => Frame(
+                footprints: [new RenderGraphFootprint(Consumer: "pane", Height: 1, Producer: "camera", Width: 1)],
+                index: index,
+                roots: [new RenderGraphRoot(Height: ((index == 0) ? 1 : height), Instance: "pane", Width: ((index == 0) ? 1 : width))]
+            ) with { Named = [] },
+            set: set
+        );
+
+        Assert.Empty(collection: schedules[1].Renders);
+        foreach (var name in new[] { "pane", "camera" }) {
+            var row = Row(name: name, schedule: schedules[1], set: set);
+
+            Assert.Equal(expected: RenderGraphInstanceStatus.Unread, actual: row.Status);
+            Assert.Equal(expected: 0L, actual: row.LatestFrame);
+        }
+    }
     [Fact]
     public void AnInstanceOnlyAWaitingConsumerShowsWaitsAndOneNothingShowsIsUnread() {
         var set = Set(

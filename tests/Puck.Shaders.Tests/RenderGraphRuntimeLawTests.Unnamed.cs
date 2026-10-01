@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
@@ -112,6 +113,62 @@ public sealed partial class RenderGraphRuntimeLawTests {
         );
     }
 
+    [Fact]
+    public void AnUnnamedGraphKeepsItsPersistentBindingLeaseUntilTheBindingIsReleased() {
+        var scene = new NamingScene();
+        var retired = 0;
+
+        using (scene) {
+            scene.Settle(screenInView: true, seated: true);
+            scene.Runtime.Node(instance: scene.Set.IndexOf(name: "main")).HoldBinding(
+                lease: new GpuImageLease(ImageViewHandle: 0, Release: _ => retired++),
+                name: "near"
+            );
+            _ = scene.Runtime.ProduceFrame(
+                context: default,
+                frame: new RenderGraphFrame(DisplayHeight: Display, DisplayHertz: 60, DisplayWidth: Display,
+                    Footprints: [], Index: (scene.Runtime.Latest!.Frame + 1), Named: [], Roots: [])
+            );
+
+            Assert.False(condition: scene.Runtime.Node(instance: scene.Set.IndexOf(name: "main")).IsReady);
+            Assert.Equal(actual: retired, expected: 0);
+        }
+        Assert.Equal(actual: retired, expected: 1);
+    }
+    [Fact]
+    public void ACaptureWaitingOnTheRuntimeKeepsItsUnnamedTargetUntilWithdrawn() {
+        using var scene = new NamingScene();
+
+        scene.Settle(screenInView: true, seated: true);
+        var held = scene.Holdings(instance: "seat");
+        var request = CaptureRequest();
+
+        scene.Runtime.CaptureTarget(instance: "seat").RequestCapture(request: request);
+        Assert.Null(@object: scene.Runtime.Node(instance: scene.Set.IndexOf(name: "seat")).PendingCapturePath);
+        _ = scene.Produce(screenInView: true, seated: false);
+
+        Assert.Equal(expected: request.Path, actual: scene.Runtime.PendingCapturePath);
+        Assert.Equal(expected: RenderGraphInstanceStatus.Unnamed, actual: scene.Status(instance: "seat"));
+        Assert.Equal(expected: held, actual: scene.Holdings(instance: "seat"));
+
+        Assert.True(condition: request.TryFail(error: new OperationCanceledException()));
+        _ = scene.Produce(screenInView: true, seated: false);
+        Assert.Equal(expected: (0UL, 0), actual: (scene.Holdings(instance: "seat").Owned, scene.Holdings(instance: "seat").Recorders));
+    }
+    [Fact]
+    public void ALossWhileDrainingAnUnnamedGraphReachesTheHostBeforeAnythingIsReleased() {
+        using var scene = new NamingScene();
+
+        scene.Settle(screenInView: true, seated: true);
+        var held = scene.Holdings(instance: "seat");
+        var submissions = scene.Gpu.Submissions;
+
+        scene.Gpu.LoseNextIdleWait = true;
+
+        Assert.Throws<DeviceLostException>(testCode: () => scene.Produce(screenInView: true, seated: false));
+        Assert.Equal(expected: submissions, actual: scene.Gpu.Submissions);
+        Assert.Equal(expected: held, actual: scene.Holdings(instance: "seat"));
+    }
     [Fact]
     public void AnInstanceNothingNamesReleasesItsGraphAndRebuildsWhenShownAgain() {
         using var scene = new NamingScene();

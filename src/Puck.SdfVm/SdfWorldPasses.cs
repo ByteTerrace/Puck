@@ -280,6 +280,15 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     }
 
     /// <inheritdoc/>
+    public void OnGraphReleased(string instance) {
+        if (m_entries.TryGetValue(key: instance, value: out var entry)) {
+            entry.Picker.Clear();
+            entry.Temporal.Reset();
+            entry.TemporalFrame = -1;
+            entry.RenderedBindings = -1;
+        }
+    }
+    /// <inheritdoc/>
     /// <remarks>Discards every instance's temporal history: rebuilt tables number their pose revisions afresh.</remarks>
     public void OnDeviceLost() {
         foreach (var entry in m_entries.Values) {

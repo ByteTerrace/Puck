@@ -1,4 +1,3 @@
-using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
@@ -19,10 +18,12 @@ public sealed partial class RenderGraphRuntime {
     // capture.
     private void ReleaseUnnamed(RenderGraphSchedule schedule) {
         var drained = false;
+        var captured = CapturedInstance();
 
         for (var index = 0; (index < m_nodes.Length); index++) {
             if (
                 (schedule.Instances[index].Status != RenderGraphInstanceStatus.Unnamed) ||
+                (index == captured) ||
                 (m_sources[index] is not null) ||
                 (m_nodes[index] is not { HoldsGraphObjects: true, PendingCapturePath: null } node)
             ) {
@@ -30,7 +31,8 @@ public sealed partial class RenderGraphRuntime {
             }
 
             if (!drained) {
-                m_device.TryWaitIdle();
+                // This is the frame loop: a lost device must reach the host's recovery before rendering continues.
+                m_device.WaitIdle();
                 drained = true;
             }
 
@@ -39,6 +41,11 @@ public sealed partial class RenderGraphRuntime {
             m_previous[index] = Output.None;
             m_producerTainted[index] = false;
             schedule.Next.Forget(index: index);
+            var factories = m_packages.Factories;
+
+            for (var factory = 0; (factory < factories.Count); factory++) {
+                factories[factory].OnGraphReleased(instance: m_set.Instances[index].Name);
+            }
         }
     }
 }

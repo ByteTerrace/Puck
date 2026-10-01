@@ -209,6 +209,11 @@ public interface IRenderGraphPackageFactory {
     /// <summary>Releases whatever the factory holds on the device after the device was lost, without waiting for any
     /// submission. The runtime calls it once its nodes have released theirs.</summary>
     void OnDeviceLost() { }
+    /// <summary>Discards presentation history for an instance whose unnamed graph the runtime released. The runtime
+    /// calls each registered factory on the frame thread after the graph and its completed outputs are gone. A factory
+    /// that has no state for this instance does nothing; other instances and shared residency state stay intact.</summary>
+    /// <param name="instance">The instance whose graph was released.</param>
+    void OnGraphReleased(string instance) { }
     /// <summary>Starts a produced frame. The runtime calls it on the frame thread once a frame, before it asks any package
     /// whether an instance is unchanged and before any instance renders.</summary>
     /// <param name="context">The host's frame context of the frame being produced.</param>

@@ -690,8 +690,8 @@ instance name: `world` is the first view's node, whose passes are
 `sdf.world$sky` through `sdf.world$views`, `main` the scene's node, whose
 passes are the place and post passes, `main$overlay` the overlay's, and each
 pane its own node. Each graph instance's node also reports `owned-bytes`, the
-bytes of every GPU resource it owns now, which falls to zero while the instance
-is unnamed. It counts
+bytes of every GPU resource it owns now. An unnamed instance releases its graph;
+sources and pending capture targets keep theirs. It counts
 each residency's upload beside them: the world's as `sdf:world`, and each
 session or routed scene's as `sdf:<name>`. Camera instances share the world's
 upload and tables; their passes and scratch count under their instance names.

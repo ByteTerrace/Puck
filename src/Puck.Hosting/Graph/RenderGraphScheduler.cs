@@ -326,7 +326,7 @@ public static class RenderGraphScheduler {
             forced[index] = true;
         }
     }
-    // Marks each instance the host names, refusing a name that is no instance; a frame naming none names every instance.
+    // Marks the host's names and every root, including a root parked at zero extent; null names every instance.
     private static void Names(RenderGraphInstanceSet set, RenderGraphFrame frame, bool[] named) {
         if (frame.Named is not { } names) {
             Array.Fill(
@@ -348,6 +348,9 @@ public static class RenderGraphScheduler {
             }
 
             named[index] = true;
+        }
+        for (var position = 0; (position < frame.Roots.Count); position++) {
+            named[set.IndexOf(name: frame.Roots[position].Instance)] = true;
         }
     }
     private static void Unchangeds(RenderGraphInstanceSet set, RenderGraphFrame frame, bool[] unchanged) {

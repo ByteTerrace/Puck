@@ -101,6 +101,30 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.True(condition: rig.Stood());
         Assert.True(condition: rig.PreviousValid());
     }
+    [Fact]
+    public void RebuildingAnUnnamedViewDiscardsItsPreviousCameraEvenWhenItsEpochAndPosesStayStill() {
+        using var rig = new TemporalRig(views: 1, cadence: true);
+
+        rig.Selected.DebugMode = DebugViewModes.Motion;
+        rig.Produce();
+        rig.Produce();
+        Assert.True(condition: rig.PreviousValid());
+        var revision = rig.Passes.CounterOf(instance: "world")!.Revision;
+
+        rig.Produce(named: false);
+        Assert.Equal(expected: 0UL, actual: rig.Runtime.Node(instance: 0).OwnedBytes);
+        Assert.False(condition: rig.Passes.HasRenderedResolvedView(instance: "world"));
+        TestLiveness.Until(step: () => {
+            rig.Produce();
+            return !rig.Stood();
+        }, reason: () => "The released view never rendered again.");
+
+        Assert.Equal(expected: revision, actual: rig.Passes.CounterOf(instance: "world")!.Revision);
+        Assert.False(condition: rig.PreviousValid());
+        Assert.Equal(expected: 0U, actual: rig.HistoryFrames());
+        rig.Produce();
+        Assert.True(condition: rig.PreviousValid());
+    }
 
     // One sdf.world instance, "world", over a fixed frame on the upload model, optionally reading a feed that hands out a
     // tainted image until it fills. Construction produces until the view has rendered its installed graph.
@@ -165,11 +189,11 @@ public sealed partial class SdfWorldPassesLawTests {
 
         private ShaderPipelineRenderNode World => Runtime.Node(instance: Runtime.Instances.IndexOf(name: "world"));
 
-        public void Produce() {
+        public void Produce(bool named = true) {
             m_rendered = World.FrameCounter;
             var scheduled = new RenderGraphFrame(DisplayHeight: ((int)Extent), DisplayHertz: 60, DisplayWidth: ((int)Extent),
                 Footprints: ((m_feed is null) ? [] : [new RenderGraphFootprint(Consumer: "world", Height: 1.0, Producer: "feed", Width: 1.0)]),
-                Index: m_index, Roots: [new RenderGraphRoot(Height: 1, Instance: "world", Width: 1)], Tick: m_index++);
+                Index: m_index, Named: [], Roots: (named ? [new RenderGraphRoot(Height: 1, Instance: "world", Width: 1)] : []), Tick: m_index++);
 
             _ = Runtime.ProduceFrame(context: in m_context, frame: in scheduled);
         }

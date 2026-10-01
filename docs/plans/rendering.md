@@ -4382,8 +4382,12 @@ item 2 landed.
     - Delivers: for each 16-pixel tile, the pass walks the tile's masked
       segments over four to eight depth slabs, from the beam's entry to the far
       bound. It evaluates each `ShapeBlend` once at the slab ball's centre,
-      bounded by the ball's radius times the distance scale (the Lipschitz form
-      P15-7's ball test uses, as one shared function), and tracks which side
+      bounded by the world-space ball's radius times a certified Lipschitz
+      bound for that candidate, including its transforms and domain warps.
+      The interpreter's `distanceScale` alone is not that bound: a scale also
+      changes the coordinates at which the shape is evaluated. A candidate
+      without a finite certified bound stays live. The bound and P15-7's ball
+      test share the same function. The pass tracks which side
       each union, smooth union, intersection and subtraction chooses over the
       ball. It writes a per-tile bitmask of live segments with summary words,
       which `mapCore` and `mapGradCore` read through the existing
@@ -4408,9 +4412,12 @@ item 2 landed.
     radius. Inside a smooth blend's band it keeps every shape the blend weighs.
     - Evidence: on the Nexus a hit's gradient walk costs 71.6 shape
       evaluations, where the deciding shapes alone cost 6.0.
-    - Done when: the shapes-evaluated count (step 14) shows the gradient's
-      evaluations per hit falling toward the deciding shapes' on the Nexus,
-      `SdfFieldDeviceLawTests` holds the gradients, and parity passes.
+    - Done when: on the same Nexus camera, extent and hit samples, the count
+      of analytic shape-gradient evaluations equals the count of shapes with
+      nonzero blend weight in a reference full walk. The shapes-evaluated
+      count (step 14), including work to find the winners, must also be lower
+      than with this optimization off. `SdfFieldDeviceLawTests` holds the
+      gradients, and parity passes.
 
 **Decisions.** P4's visibility record is the surface sample record staged
 shading reads. P7b moves the SDF push blocks and binding constants onto groups;

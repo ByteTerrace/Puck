@@ -1290,6 +1290,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             m_device.WaitIdle();
         }
         ReleaseGraph();
+        RetireBindingHolds();
         ReleaseRegions();
         ReleaseRegionCopy();
     }
@@ -1300,8 +1301,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         CancelPreviewBuild();
     }
     // Disposes the installed graph and everything that follows it: timing, cadence recovery, objects waiting to retire,
-    // leases, binding holds, the preview, readback and encoder, and the frame slots. The regions and the region-copy
-    // pipeline the host's bindings rest on are the caller's to release.
+    // frame leases, the preview, readback and encoder, and the frame slots. Persistent binding holds, regions and the
+    // region-copy pipeline the host's bindings rest on are the caller's to release.
     private void ReleaseGraph() {
         ReleaseTiming();
         ReleaseCadenceRecovery();
@@ -1311,7 +1312,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         );
         ReleaseRetired();
         RetireAllLeases();
-        RetireBindingHolds();
         // The installed graph's copy pool went with its first pass, and the copies a frame owed with its slots.
         m_regionCopies = null;
         m_copyRecording = null;

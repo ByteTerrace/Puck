@@ -783,8 +783,10 @@ public sealed partial class RenderGraphSchedulerLawTests {
             set: set
         ));
     }
-    [Fact]
-    public void ASteadyFrameSchedulesWithoutAllocating() {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ASteadyFrameSchedulesWithoutAllocating(bool explicitNames) {
         var set = Set(
             Instance(name: "north"),
             Instance(name: "south"),
@@ -814,6 +816,7 @@ public sealed partial class RenderGraphSchedulerLawTests {
         ];
         // The budget fits one quarter-axis camera, so the north and south cameras alternate through the sort.
         const long Budget = (480 * 270);
+        string[]? names = (explicitNames ? ["security"] : null);
         RenderGraphSchedule[] schedules = [new(set: set), new(set: set)];
         var history = RenderGraphHistory.Empty(set: set);
         var frame = 0L;
@@ -836,7 +839,7 @@ public sealed partial class RenderGraphSchedulerLawTests {
                 footprints: footprints,
                 index: index,
                 roots: roots
-            ),
+            ) with { Named = names },
             set: set
         )[^1];
         var last = schedules[((frame - 1) % 2)];
@@ -861,7 +864,7 @@ public sealed partial class RenderGraphSchedulerLawTests {
                     footprints: footprints,
                     index: frame,
                     roots: roots
-                ),
+                ) with { Named = names },
                 history: history,
                 schedule: schedule,
                 set: set

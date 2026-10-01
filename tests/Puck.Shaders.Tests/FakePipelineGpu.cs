@@ -89,6 +89,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public bool Recording { get; set; }
     /// <summary>Gets or sets whether the next fenced submission throws before any commands reach the queue.</summary>
     public bool RefuseNextSubmission { get; set; }
+    /// <summary>Gets or sets whether the next device drain reports a lost device.</summary>
+    public bool LoseNextIdleWait { get; set; }
     /// <summary>Gets or sets whether the queue holds every submission unfinished: while set, no fence reads as
     /// signaled, though a wait still returns at once.</summary>
     public bool QueueHeld { get; set; }
@@ -533,6 +535,10 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Image, NewLayout: newLayout, OldLayout: oldLayout, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: imageHandle);
     public void WaitIdle() {
         WaitIdleCount++;
+        if (LoseNextIdleWait) {
+            LoseNextIdleWait = false;
+            throw new DeviceLostException(message: "Injected loss while draining.");
+        }
         Record(text: "device drain");
     }
     public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) {
