@@ -194,7 +194,7 @@ public sealed partial class RenderGraphRuntime {
                     image: completed.Image,
                     index: position,
                     layout: completed.Layout,
-                    lease: completed.Image.ImageViewHandle,
+                    lease: LeaseOf(image: completed.Image),
                     tainted: completed.Tainted
                 );
             } else if (unbound && !completed.Image.IsSameDeviceImage) {

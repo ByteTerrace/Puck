@@ -1362,7 +1362,14 @@ shown, and a frame releasing its producer is scheduled again so it does that
 frame (`RenderGraphRuntimeLawTests.Standing`, whose fake device records every
 command naming a released image in `FakePipelineGpu.UsesAfterRelease`). A new
 reader of an instance output reads it through `OutputAt` or `LatestOf`, never
-`m_current` directly. An
+`m_current` directly, and binds it under `LeaseOf`'s lease: every node image is
+one of the runtime's `GpuImageLeases` (`RenderGraphRuntime.Leases.cs`), disposed
+only once its owner dropped it and every reader's lease retired, so a reader
+never needs to know whose image it is (`RenderGraphRuntimeLawTests.ImageLeases`,
+whose fake queue finishes submissions in order through
+`FakePipelineGpu.CompletedThrough` and flags an image disposed under a pending
+reader). A node never stands for its own image (`OwnImageInput`), so feedback
+draws rather than closing a loop of standing outputs. An
 external producer's output declares the layout its own submissions leave the
 image in (`RenderGraphExternalOutput.Layout`); a declared layout the producer
 does not leave it in shows only as Vulkan validation errors, since the

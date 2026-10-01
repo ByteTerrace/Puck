@@ -37,6 +37,7 @@ public sealed partial class RenderGraphRuntime {
             if (!drained) {
                 // This is the frame loop: a lost device must reach the host's recovery before rendering continues.
                 m_device.WaitIdle();
+                RetireDrainedLeases();
                 drained = true;
             }
 

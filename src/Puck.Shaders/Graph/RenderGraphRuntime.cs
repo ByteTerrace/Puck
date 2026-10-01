@@ -92,6 +92,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private readonly Dictionary<string, InstanceCaptureTarget> m_captureTargets = new(comparer: StringComparer.Ordinal);
 
     private readonly IGpuDeviceContext m_device;
+    // Every image the runtime's nodes create, leased to each reader the runtime binds it to (RenderGraphRuntime.Leases.cs).
+    private readonly GpuImageLeases m_images;
     private readonly bool m_hostsOnDirectX;
     private readonly uint m_inFlightFrames;
     private readonly RenderGraphPackageRecorders m_packages;
@@ -123,7 +125,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private int m_turn;
     private int m_unproduced;
 
-    private RenderGraphRuntime(RenderGraphInstanceSet set, RenderGraphRuntimeGraph?[] graphs, ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, SourceGraph?[] sources, Binding[][] inputs, int root, IGpuDeviceContext device, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint inFlightFrames) {
+    private RenderGraphRuntime(RenderGraphInstanceSet set, RenderGraphRuntimeGraph?[] graphs, ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, SourceGraph?[] sources, Binding[][] inputs, int root, IGpuDeviceContext device, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint inFlightFrames, GpuImageLeases images) {
+        m_images = images;
         m_current = new Output[nodes.Length];
         m_device = device;
         m_graphs = graphs;
@@ -458,6 +461,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         var nodes = new ShaderPipelineRenderNode?[graphs.Count];
         var sources = new SourceGraph?[graphs.Count];
         var installed = new RenderGraphRuntimeGraph?[graphs.Count];
+        var images = new GpuImageLeases();
 
         try {
             for (var index = 0; (index < graphs.Count); index++) {
@@ -479,6 +483,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     (sources[index], nodes[index]) = CreateSource(
                         deviceContext: deviceContext,
                         hostsOnDirectX: hostsOnDirectX,
+                        images: images,
                         inFlightFrames: inFlightFrames,
                         instance: instance,
                         packages: packages,
@@ -528,6 +533,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 nodes[index] = CreateNode(
                     deviceContext: deviceContext,
                     hostsOnDirectX: hostsOnDirectX,
+                    images: images,
                     inFlightFrames: inFlightFrames,
                     name: set.Instances[index].Name,
                     packages: packages,
@@ -545,6 +551,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 device: deviceContext,
                 graphs: installed,
                 hostsOnDirectX: hostsOnDirectX,
+                images: images,
                 inFlightFrames: inFlightFrames,
                 inputs: inputs,
                 nodes: nodes,
@@ -651,10 +658,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     ));
     // The extent is a placeholder: the instance's first render requests its scheduled extent before the node builds
     // anything.
-    private static ShaderPipelineRenderNode CreateNode(string name, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint inFlightFrames) => new(
+    private static ShaderPipelineRenderNode CreateNode(string name, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint inFlightFrames, GpuImageLeases images) => new(
         deviceContext: deviceContext,
         height: 1,
         hostsOnDirectX: hostsOnDirectX,
+        images: images,
         inFlightFrames: inFlightFrames,
         name: name,
         outputLayout: GpuImageLayout.ShaderReadOnly,
@@ -875,6 +883,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                         Layout: output.Layout,
                         Width: output.Image.Width
                     ),
+                    lease: LeaseOf(image: output.Image),
                     name: binding.Version
                 );
             } else {
@@ -932,6 +941,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         )
     );
     private void Release() {
+        m_shown.RetireAll();
         Array.Fill(
             array: m_current,
             value: Output.None
@@ -1020,6 +1030,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             producers: m_producers
         );
         DisposeSources(sources: m_sources);
+        m_shown.RetireAll();
         ReleaseStandIns(wait: true);
     }
     /// <summary>Releases every instance's device objects after the device was lost and recreated, so nothing of the old
@@ -1098,6 +1109,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
 
         var renders = schedule.Renders;
+        // The node that submitted last this frame, whose submission follows the host's presentation of the last frame.
+        ShaderPipelineRenderNode? submitter = null;
         var holdingConvergence = ((m_convergence is { IsActive: true } convergence) &&
             (convergence.Samples >= convergence.Request.Converge) &&
             (m_nodes[m_captureInstance]?.PendingCapturePath == convergence.Request.Path));
@@ -1207,15 +1220,15 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             // A capture moves to its instance's node only once that node renders a graph over completed inputs, so the
             // frame it produces is the one the capture reads; until then it stays armed here, where
             // UnservedCaptureReasonOf explains it.
-            // A node whose published image is no longer what its output resolves to serves the capture only once it has
-            // rendered again.
+            // A node whose published image stands for one that is gone serves no capture until it has rendered again,
+            // which a shown one does this frame (WithRerenders).
             if (
                 (index == m_captureInstance) &&
                 CanServeConvergence &&
                 node.IsReady &&
                 (m_standInReads[index] is null) &&
                 (m_taintedReads[index] is null) &&
-                PublishesLatest(index: index)
+                (m_current[index].StandsFor.IsOwn || (LatestOf(index: index).Frame >= 0))
             ) {
                 m_capture.Forward(target: node);
             }
@@ -1260,6 +1273,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 surface: in surface
             );
 
+            submitter = node;
             m_previous[index] = m_current[index];
             m_current[index] = new Output(
                 Buffer: node.LatestOutputBuffer(),
@@ -1278,7 +1292,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             tick: frame.Tick
         );
 
-        return RootImage();
+        return Shown(
+            image: RootImage(),
+            submitter: submitter
+        );
     }
     // The root's latest completed image: a graph root's output, resolved through what it stands for, or an external
     // root's latest output, whose acquisition is released at once, since the surface is valid only

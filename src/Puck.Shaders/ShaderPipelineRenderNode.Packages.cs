@@ -231,6 +231,57 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return -1;
     }
+    // The position of the first input an output of the pass would stand for that is bound to one of the node's own images
+    // (its own previous output, through a host's read of itself or a loop of instances), or -1 when there is none. The
+    // node renders into its own images again a few frames later, so publishing one in its output's place would publish
+    // pixels it is about to overwrite: the recording must draw.
+    private int OwnImageInput(RuntimePass pass, int slot) {
+        var count = Math.Min(
+            val1: pass.Inputs.Length,
+            val2: pass.Outputs.Length
+        );
+
+        for (var index = 0; (index < count); index++) {
+            var (resource, name, _) = StandingOf(
+                input: pass.Inputs[index],
+                slot: slot
+            );
+
+            if (
+                resource.Spec.IsExternal &&
+                m_externalImages.TryGetValue(
+                    key: name,
+                    value: out var image
+                ) &&
+                OwnsImage(imageHandle: image.ImageHandle)
+            ) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+    // Whether an image is one the node created: an image of its installed graph, or one held from a replaced graph.
+    private bool OwnsImage(nint imageHandle) {
+        foreach (var resource in m_resources) {
+            if (resource?.Images is not { } images) {
+                continue;
+            }
+
+            foreach (var image in images) {
+                if (image?.ImageHandle == imageHandle) {
+                    return true;
+                }
+            }
+        }
+        foreach (var held in m_held) {
+            if (held.Handle == imageHandle) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     // What a package pass's input reads this frame: the version bound to it, or, when that version is the output of an
     // earlier pass that drew nothing, the input that output stands for, which is never itself a stand-in, since each
     // stand-in resolved through the one before it.
@@ -251,6 +302,11 @@ public sealed partial class ShaderPipelineRenderNode {
         if (outcome == RenderGraphPackageOutcome.DrewNothing) {
             if (pass.PackageAliasRefusal is { } refusal) {
                 throw new InvalidOperationException(message: refusal);
+            }
+            if (OwnImageInput(pass: pass, slot: slot) is var own and >= 0) {
+                var name = StandingOf(input: pass.Inputs[own], slot: slot).Name;
+
+                throw new InvalidOperationException(message: $"Package pass '{pass.Name}' drew nothing, but its input '{name}' is bound to an image the instance itself owns, which a later frame of it overwrites, so its output cannot stand for it.");
             }
             if (HostInputInAnotherLayout(pass: pass, slot: slot) is var host and >= 0) {
                 var name = StandingOf(input: pass.Inputs[host], slot: slot).Name;
@@ -358,7 +414,7 @@ public sealed partial class ShaderPipelineRenderNode {
             Height: pass.Height,
             Inputs: inputs,
             Leases: m_frameLeases,
-            MayStandIn: ((pass.PackageAliasRefusal is null) && (HostInputInAnotherLayout(pass: pass, slot: slot) < 0)),
+            MayStandIn: ((pass.PackageAliasRefusal is null) && (HostInputInAnotherLayout(pass: pass, slot: slot) < 0) && (OwnImageInput(pass: pass, slot: slot) < 0)),
             Outputs: outputs,
             PassBlock: passBlock,
             Reads: Reads,

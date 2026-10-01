@@ -100,8 +100,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// preview's included, is leased from <paramref name="pipelines"/>, which counts what it creates; the node's
     /// own ledger counts none of it. A graph's package passes are recorded by <paramref name="packages"/>' recorders, one
     /// per pass, created when the graph installs and disposed with it; a node without recorders refuses a graph that has
-    /// any.</summary>
-    public ShaderPipelineRenderNode(string name, IGpuDeviceContext deviceContext, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General, RenderGraphPackageRecorders? packages = null) {
+    /// any. With <paramref name="images"/>, every image the node creates is one of that table's, which a reader leases and
+    /// which outlives the node's own disposal of it until the last lease retires.</summary>
+    public ShaderPipelineRenderNode(string name, IGpuDeviceContext deviceContext, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General, RenderGraphPackageRecorders? packages = null, GpuImageLeases? images = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(deviceContext);
         ArgumentNullException.ThrowIfNull(pipelines);
@@ -115,7 +116,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         );
         m_gpu = GpuWorkCounting.Wrap(
             ledger: m_work,
-            services: deviceContext.Services
+            services: (images?.Wrap(services: deviceContext.Services) ?? deviceContext.Services)
         );
         m_device = deviceContext;
         m_pipelines = pipelines;
@@ -1054,6 +1055,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         HoldLeases();
         var slot = ((int)((m_frame - 1) % m_inFlight));
         var selected = m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput)];
+
+        m_latestSlot = slot;
         var commands = m_commands;
         var command = BeginFrameCommands(slot: slot);
 
@@ -1692,6 +1695,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
 
         slot.Fence!.Wait();
         NoteWaited(fence: slot.Fence);
+        m_latestSlot = slotIndex;
         PrepareTiming(slot: slotIndex);
         slot.Leases.RetireAll();
         BindRegionBuffers(slot: slotIndex);
@@ -1925,14 +1929,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             throw new InvalidDataException(message: "History requires at least two frame slots.");
         }
     }
-    /// <summary>Gets whether a named external resource is bound: an image or a buffer a host bound for it, which the
-    /// installed graph samples when it renders.</summary>
-    /// <param name="name">The external resource's name.</param>
-    /// <returns><see langword="true"/> when an image or a buffer is bound for the name.</returns>
-    public bool IsBound(string name) => (
-        m_externalImages.ContainsKey(key: name) ||
-        m_externalBuffers.ContainsKey(key: name)
-    );
     /// <summary>Requests one render while <see cref="Paused"/>. The initialization frame a paused node owes after a
     /// <see cref="Reset"/> never consumes a step, so a step requested before that frame renders one frame beyond it. A
     /// step taken while a candidate or resize builds waits until it installs, then renders once through it.</summary>

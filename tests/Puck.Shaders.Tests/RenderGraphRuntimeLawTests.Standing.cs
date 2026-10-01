@@ -14,10 +14,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
     private sealed class StandingScene : IDisposable {
         private long m_index;
 
-        // The instance whose package pass draws nothing, once its recorder exists.
-        private readonly string m_drawsNothing;
+        // The instances whose package pass draws nothing while StandsIn holds, once their recorders exist.
+        private readonly string[] m_drawsNothing;
 
-        public StandingScene(string drawsNothing, RenderGraphInstanceSet set, params RenderGraphRuntimeGraph[] graphs) {
+        public StandingScene(string[] drawsNothing, RenderGraphInstanceSet set, params RenderGraphRuntimeGraph[] graphs) {
             m_drawsNothing = drawsNothing;
             Set = set;
             Runtime = RenderGraphRuntimeLawTests.Runtime(Gpu, Recorders, set, "main", graphs);
@@ -27,10 +27,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public Recorders Recorders { get; } = new(Camera, Over);
 
         public RenderGraphRuntime Runtime { get; }
+
+        // Whether those passes draw nothing; a pass told it may not stand in draws, as a shipped package does.
+        public bool StandsIn { get; set; } = true;
+
         public RenderGraphInstanceSet Set { get; }
 
         public void Dispose() => Runtime.Dispose();
-        public ShaderPipelineRenderNode Node(string instance) => Runtime.Node(instance: Set.IndexOf(name: instance));
+        public ShaderPipelineRenderNode Node(string instance) => Runtime.NodeOf(instance: instance)!;
         // Produces one frame, returning what the display is handed, which must name no released image.
         public Surface Produce(IReadOnlyList<RenderGraphRoot> roots, IReadOnlyList<RenderGraphFootprint> footprints, IReadOnlyList<string>? named = null) {
             var frame = new RenderGraphFrame(
@@ -43,8 +47,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 Roots: roots
             );
 
-            if (Recorders.ByInstance.TryGetValue(key: m_drawsNothing, value: out var counter)) {
-                counter.Outcome = RenderGraphPackageOutcome.DrewNothing;
+            foreach (var name in m_drawsNothing) {
+                if (Recorders.ByInstance.TryGetValue(key: name, value: out var counter)) {
+                    counter.DrawsWhenRefused = true;
+                    counter.Outcome = (StandsIn
+                        ? RenderGraphPackageOutcome.DrewNothing
+                        : RenderGraphPackageOutcome.Drew);
+                }
             }
 
             var shown = Runtime.ProduceFrame(
@@ -107,7 +116,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     [Theory]
     public void AReaderOfASlowStandingViewFollowsItsCamera(bool previousFrame) {
         using var scene = new StandingScene(
-            "mid",
+            ["mid"],
             Set(
                 Instance(name: "camera"),
                 Refreshed("mid", 64, new RenderGraphRead(Producer: "camera")),
@@ -158,7 +167,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     [Fact]
     public void APendingCaptureKeepsEveryProducerInAStandingChain() {
         using var scene = new StandingScene(
-            "main",
+            ["main"],
             Set(
                 Instance(name: "camera"),
                 Refreshed("mid", 64, new RenderGraphRead(Producer: "camera")),
@@ -209,7 +218,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     [Fact]
     public void ARootStandingForAReleasedCameraRendersOverItsStandInThatFrame() {
         using var scene = new StandingScene(
-            "main",
+            ["main"],
             Set(
                 Instance(name: "camera"),
                 Refreshed("main", 2, new RenderGraphRead(Producer: "camera"))
@@ -261,7 +270,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     [Fact]
     public void ARootStandingForACameraFollowsItAcrossAGraphReplacementWithoutRenderingAgain() {
         using var scene = new StandingScene(
-            "main",
+            ["main"],
             Set(
                 Instance(name: "camera"),
                 Instance(name: "probe", reads: new RenderGraphRead(Producer: "camera")),
@@ -329,7 +338,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     [Fact]
     public void APreviousOutputStandingForAReleasedCameraBindsAStandIn() {
         using var scene = new StandingScene(
-            "mid",
+            ["mid"],
             Set(
                 Instance(name: "camera"),
                 Instance(name: "mid", reads: new RenderGraphRead(Producer: "camera")),

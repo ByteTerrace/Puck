@@ -560,20 +560,40 @@ draws instead: the overlay draws its empty frame, which reproduces its input.
 The runtime never keeps a standing output's image as its own. It records which
 producer's output the image is (`ShaderPipelineRenderNode.PublishedBinding`
 names the bound input), and every read resolves it to that producer's newest
-output no newer than the frame read, as a read of the producer would: binding,
-the image the display is handed, `TryLatestImage` and capture readiness. A
-drawn-nothing output equals its input, so it follows its producer at the
-producer's cadence while its own instance keeps its refresh and the budget, and
-it can never name an image its producer no longer keeps, whether the producer
-rendered on, replaced its graph, was released or retired in a reconfiguration.
-When what it stands for is gone, a reader binds the stand-in, the display is
-handed nothing and a capture waits, and the instance is named to render again
-whenever it is shown. A standing output of an external producer's leased image,
-or of a binding only a retired producer's hold keeps, lives for its frame only,
-so its instance renders every frame it is shown: that is the one case a pass
-that draws nothing costs a render a frame. A capture moves to an instance's node
-only while the node still publishes what its output resolves to, and the
-instance a captured output stands for keeps its graph while the capture waits.
+output no newer than the frame read, or than the frame before it when the
+instance read the producer's previous frame, as a read of the producer would:
+binding, the image the display is handed, `TryLatestImage` and capture
+readiness. A drawn-nothing output equals its input, so it follows its producer
+at the producer's cadence while its own instance keeps its refresh and the
+budget. When what it stands for is gone, released or retired in a
+reconfiguration, a reader binds the stand-in and the instance is named to
+render again whenever it is shown. A standing output of an external producer's
+leased image, or of a binding only a retired producer's hold keeps, lives for
+its frame only, so its instance renders every frame it is shown: that is the
+one case a pass that draws nothing costs a render a frame. A pass may not stand
+for an image its own instance owns, which it renders into again a few frames
+later: an instance reading its own previous frame, or a loop of instances
+reading each other, draws where it would close the loop, so every chain ends at
+another instance's own output. A capture moves to an instance's node only while
+its output resolves to an image, and the instances a captured output stands for
+keep their graphs while the capture waits.
+
+Image lifetime is tracked per image and per reader (`GpuImageLeases`, in
+`Puck.Hosting`). Every image an instance's node creates is one of the runtime's
+table's, and every reader the runtime hands an image to holds a
+`GpuImageLease` naming its own completion: a consumer node's binding and a
+package's or an external producer's read hold theirs in the frame slot's
+`LeaseRetireList`, retired once the submission that sampled the image has
+finished, and the display's lease moves to the first submission made after the
+host presented the image. An image its owner drops, because its graph is
+released, retired in a reconfiguration or replaced, is disposed only once every
+lease on it has retired. A kept consumer whose installed graph still samples an
+image of a retired instance holds that image under a lease of its own,
+whichever instance owns it, so the retired instances themselves are disposed at
+once; only a buffer binding still holds its retired producer
+(`RenderGraphRuntime.RetiredProducers`). Whose image a reader binds does not
+matter, so a reader of an output standing for another instance's image keeps
+that image alive past the retirement of every instance the chain ran through.
 An external image is bound in the layout its producer declares for its lease,
 which is the layout the producer's own submissions leave it in, and the planner
 plans its barriers from it. `PostProcessPackage` serves every post-process
@@ -713,8 +733,10 @@ instance name: `world` is the first view's node, whose passes are
 passes are the place and post passes, `main$overlay` the overlay's, and each
 pane its own node. Each graph instance's node also reports `owned-bytes`, the
 bytes of every GPU resource it owns now. An unnamed instance releases its graph;
-sources, pending capture targets and the instance a pending capture's output
-stands for keep theirs. It counts
+sources, pending capture targets and the instances a pending capture's output
+stands for keep theirs. An image a reader still leases is disposed when its last
+lease retires; the drain before a release retires every finished submission's
+leases, so a released instance's images go with it. It counts
 each residency's upload beside them: the world's as `sdf:world`, and each
 session or routed scene's as `sdf:<name>`. Camera instances share the world's
 upload and tables; their passes and scratch count under their instance names.
