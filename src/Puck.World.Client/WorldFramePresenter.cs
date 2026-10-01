@@ -733,10 +733,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             position: eye,
             target: target,
             fieldOfViewRadians: fieldOfView,
-            viewportWidth: (region.Width * width),
-            viewportHeight: (region.Height * height)
+            viewportWidth: CameraExtent(fraction: region.Width, pixels: width),
+            viewportHeight: CameraExtent(fraction: region.Height, pixels: height)
         );
     }
+    // An arriving slot starts collapsed. Keep its camera and view ordinal alive for prewarming, with a finite
+    // projection while it draws no pixels; positive extents retain their exact fractional-pixel aspect.
+    private static float CameraExtent(float fraction, uint pixels) => ((fraction == 0f) ? 1f : (fraction * pixels));
     // The one shared anchor→pose resolver the camera path reads: entity/part ride the live snapshot pose, a
     // placement rides its stamped transform (WorldAnchorGeometry, the same math speakers read), a group rides its
     // smoothed centroid + spread, a seat-relative anchor rides the seat's perceived body (or the recent speaker),
@@ -917,8 +920,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             position: eye,
             target: target,
             fieldOfViewRadians: fieldOfView,
-            viewportWidth: (region.Width * width),
-            viewportHeight: (region.Height * height)
+            viewportWidth: CameraExtent(fraction: region.Width, pixels: width),
+            viewportHeight: CameraExtent(fraction: region.Height, pixels: height)
         );
 
         return true;
@@ -1182,6 +1185,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             tonemap: m_client.Definition.Render.Tonemap,
             views: m_client.Definition.Views
         );
+        // The residency reuses its frozen frame without calling CaptureFrame again. BeginFrame cleared every
+        // placement, so publish the retained composition here on those frames as well.
+        if ((m_convergence is { Completion.IsCompleted: false }) && (m_convergedFrame is not null)) {
+            PlaceComposedFrame();
+        }
     }
 
     /// <summary>Gets or sets the work that follows this frame's composed cameras and graph placements, before the

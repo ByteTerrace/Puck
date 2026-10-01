@@ -704,12 +704,19 @@ drive ends, each one no observer holds ends, so nothing its recorded viewer pres
 
 The windowed and offscreen render roots prepare delivery and the graph set, then the package's
 frame capture runs the world's existing view composer before scheduling. That capture places each
-view and pane using the same eased rect its camera projects, including fractional pixel extents.
-Each occupant's allocation reserves its largest width and height across layouts, with the built-in
-seat ladder included where no catch-all layout covers it. Easing changes placement and the resolved
+SDF view using the same eased rect its camera projects, including fractional pixel extents, and places
+shader panes from that composition.
+Each occupant's allocation reserves the largest width and height of the physical slots it can
+transition through, including padded departing cameras and compacted view ordinals, with the built-in
+seat ladder included where no catch-all layout covers it. Collapsed arriving slots keep a finite
+camera while positive extents retain their fractional-pixel aspect. Frozen convergence frames publish
+their retained placements on every prepared frame. Easing changes placement and the resolved
 grid inside the render-scale ceiling without resizing or rebuilding a node. Editor comparisons
 record their viewports after that placement. `WorldCameraPlacementLawTests` pins agreement on every
 transition frame and a stable scheduled extent across quantization steps.
+Camera-paired shader panes receive the camera's basis and vertical FOV without its placed aspect.
+Shaders deriving aspect from their output image project for the allocation envelope, so their
+projection differs from the paired camera when placement and allocation have different aspects.
 
 Both rendered hosts hold the completed simulation tick while a tick-scheduled capture is owed.
 Repeated window resizes can delay frame production, but cannot advance the capture to a later tick

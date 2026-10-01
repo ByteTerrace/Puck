@@ -26,6 +26,85 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
     public void AnEasedRectCrossesQuantizationStepsWithoutChangingTheNodesExtent() {
         Run(checkPlacement: false, interrupted: false, subpixel: false);
     }
+    [Fact]
+    public void AnArrivingCameraKeepsAFiniteProjectionAtItsCollapsedFirstFrame() {
+        using var host = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: m_directory,
+            world: "tests/Puck.Counters/counters.world.json",
+            edit: definition => {
+                var camera = definition.Views.Layouts[0].Slots[0].Camera;
+
+                return definition with {
+                    ViewsRaw = definition.Views with {
+                        Layouts = [
+                            new WorldViewLayout(Name: "one", Slots: [new WorldViewSlot(Camera: camera)]),
+                            Layout(camera: camera, name: "two", width: 0.75f),
+                        ],
+                    },
+                };
+            }).Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var composition = host.Services.GetRequiredService<WorldCompositionState>();
+
+        composition.ActiveLayout = "one";
+        _ = presenter.CaptureFrame(deltaSeconds: 0.1f, height: 128, interpolationAlpha: 1f, width: 256);
+        composition.ActiveLayout = "two";
+        var arriving = presenter.CaptureFrame(deltaSeconds: 0.1f, height: 128, interpolationAlpha: 1f, width: 256);
+
+        Assert.Equal(expected: 2, actual: arriving.Views.Count);
+        Assert.Equal(expected: 0f, actual: arriving.Views[1].Region.Width);
+        Assert.Equal(expected: 0f, actual: arriving.Views[1].Region.Height);
+        Assert.True(condition: float.IsFinite(f: arriving.Views[1].Camera.AspectRatio));
+        Assert.True(condition: (arriving.Views[1].Camera.AspectRatio > 0f));
+        var growing = presenter.CaptureFrame(deltaSeconds: 0.01f, height: 128, interpolationAlpha: 1f, width: 256);
+
+        Assert.True(condition: (growing.Views[1].Region.Width > 0f));
+        Assert.Equal(expected: ((2f * growing.Views[1].Region.Width) / growing.Views[1].Region.Height),
+            actual: growing.Views[1].Camera.AspectRatio);
+    }
+    [Fact]
+    public void AResidencyReusingAFrozenCaptureStillPlacesEveryPreparedFrame() {
+        using var host = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: m_directory,
+            world: "tests/Puck.Counters/counters.world.json",
+            edit: definition => definition with {
+                ViewsRaw = definition.Views with {
+                    Layouts = [Layout(camera: definition.Views.Layouts[0].Slots[0].Camera, name: "split", width: 0.75f)],
+                },
+            }).Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var graphs = host.Services.GetRequiredService<WorldViewGraphHost>();
+        using var instances = FakeGraphInstances.Attach(
+            host: graphs,
+            create: static name => new ShaderPipelineRenderNode(
+                deviceContext: new RefusingGpuDevice(), height: 4, hostsOnDirectX: false,
+                name: name, pipelines: new GpuPassPipelineCache(), width: 4));
+        var context = new FrameContext(
+            AccumulatorTicks: 0, DeltaTicks: 5040, ElapsedTicks: 5040,
+            FrameDeltaTicks: 5040, Host: null!, StepTicks: 5040, TargetHeight: 128, TargetWidth: 256);
+        var request = new FrameCaptureRequest(path: Path.Combine(path1: m_directory.RootPath, path2: "frozen.png"), converge: 8);
+        var composed = 0;
+
+        presenter.FrameComposed = () => composed++;
+        presenter.ViewRendered = static _ => true;
+        presenter.BeginConvergence(request: request);
+        presenter.PrepareGraph(context: in context);
+        var first = presenter.CaptureFrame(deltaSeconds: 0f, height: 128, interpolationAlpha: 1f, width: 256);
+
+        for (var index = 0; (index < 8); index++) {
+            // SdfWorldResidency.Capture returns its frozen frame here without calling the presenter again.
+            presenter.PrepareGraph(context: in context);
+            Assert.True(condition: graphs.TryGet(instance: "main", pass: graphs.Synthesized!.ViewPasses[1], placement: out var placement));
+            Assert.True(condition: placement.Shown);
+            Assert.Equal(expected: first.Views[1].Region, actual: new NormalizedRect(
+                Height: placement.Height, Width: placement.Width, X: placement.Left, Y: placement.Top));
+            Assert.Contains(collection: graphs.Footprints, filter: footprint => (footprint.Producer == WorldRootGraph.ProducerOf(view: 1)));
+            Assert.Equal(actual: composed, expected: (index + 2));
+        }
+        Assert.True(condition: request.TryFail(error: new OperationCanceledException()));
+    }
 
     private void Run(bool interrupted, bool checkPlacement, bool subpixel) {
         using var host = WorldBootHarness.Compose(
@@ -80,7 +159,6 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
 
             _ = regions.Add(item: view.Region);
             if (checkPlacement) {
-                if (index == 0) { continue; }
                 Assert.True(condition: graphs.TryGet(instance: "main", pass: graphs.Synthesized!.ViewPasses[1], placement: out var placement));
                 Assert.Equal(expected: view.Region, actual: new NormalizedRect(
                     Height: placement.Height, Width: placement.Width, X: placement.Left, Y: placement.Top));
