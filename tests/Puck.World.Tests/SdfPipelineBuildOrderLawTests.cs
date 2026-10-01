@@ -40,9 +40,9 @@ public sealed class SdfPipelineBuildOrderLawTests {
             ]
         );
     }
-    [Theory]
     [InlineData(".spv")]
     [InlineData(".dxil")]
+    [Theory]
     public void TheBuildsOwnFullViewsKernelStartsFirst(string bytecodeExtension) {
         var kernels = SdfKernelSet.Load(bytecodeExtension: bytecodeExtension);
         var order = SdfWorldPipelines.BuildOrder(kernels: kernels);
