@@ -513,10 +513,10 @@ const FRACTION_MASK: u64 = (1u64 << FRACTION_BITS) - 1;
             values: [FixedQ4816.SinPolyC1Q60, FixedQ4816.SinPolyC2Q60, FixedQ4816.CosPolyC1Q60, FixedQ4816.CosPolyC2Q60]
         ));
         sb.Append(value: FormatI64Array(
-            comment: "log2 residual coefficients C1..C4, Q61 (FixedQ4816.Log2PolyC*Q61).",
+            comment: "log2 residual coefficients C1..C7, Q61 (FixedQ4816.Log2PolyC*Q61); log2 reads C1..C4, pow's wide logarithm all seven.",
             name: "LOG2_POLY_Q61",
             perLine: 4,
-            values: [FixedQ4816.Log2PolyC1Q61, FixedQ4816.Log2PolyC2Q61, FixedQ4816.Log2PolyC3Q61, FixedQ4816.Log2PolyC4Q61]
+            values: [FixedQ4816.Log2PolyC1Q61, FixedQ4816.Log2PolyC2Q61, FixedQ4816.Log2PolyC3Q61, FixedQ4816.Log2PolyC4Q61, FixedQ4816.Log2PolyC5Q61, FixedQ4816.Log2PolyC6Q61, FixedQ4816.Log2PolyC7Q61]
         ));
         sb.Append(value: FormatI64Array(
             comment: "exp2 residual coefficients C1..C4, Q62 (FixedQ4816.Exp2PolyC*Q62).",
@@ -632,7 +632,7 @@ pub fn atan2(y: i64, x: i64) -> i64 {
         angle = ATAN2_PI_Q61.wrapping_sub(angle);
     }
 
-    let raw = (angle.wrapping_add(1i64 << 44)) >> 45;
+    let raw = (angle.wrapping_add((1i64 << 44) - 1).wrapping_add((angle >> 45) & 1)) >> 45;
 
     if sign_y != 0 {
         raw.wrapping_neg()
@@ -723,7 +723,8 @@ pub fn log2(value: i64) -> i64 {
     let mantissa_q62 = raw << (62 - integer_part);
     let fraction = log2_fraction_q61(mantissa_q62);
 
-    ((integer_part - (FRACTION_BITS as i64)) << 16).wrapping_add((fraction.wrapping_add(1i64 << 44)) >> 45)
+    ((integer_part - (FRACTION_BITS as i64)) << 16)
+        .wrapping_add((fraction.wrapping_add((1i64 << 44) - 1).wrapping_add((fraction >> 45) & 1)) >> 45)
 }
 
 /// `2^value` in fixed point — ported from `FixedQ4816.Exp2`.
@@ -745,26 +746,26 @@ pub fn exp2(value: i64) -> i64 {
     exp2_mantissa((f >> 9) as usize, (f & 0x1FF) << 46, shift)
 }
 
-// `2^exponent` for an exponent carried at Q32 — ported from FixedQ4816.Exp2Q32: the same table and
-// polynomial as `exp2`, fed twenty-five residual bits instead of nine.
-fn exp2_q32(exponent_q32: i64) -> i64 {
-    if exponent_q32 >= (47i64 << 32) {
+// `2^exponent` for an exponent carried at Q56 — ported from FixedQ4816.Exp2Q56: the same table and
+// polynomial as `exp2`, fed forty-nine residual bits instead of nine.
+fn exp2_q56(exponent_q56: i64) -> i64 {
+    if exponent_q56 >= (47i64 << 56) {
         return i64::MAX;
     }
 
-    let k = exponent_q32 >> 32;
+    let k = exponent_q56 >> 56;
     let shift = 46i64.wrapping_sub(k);
 
     if shift >= 64 {
         return ZERO;
     }
 
-    let f = exponent_q32 & ((1i64 << 32) - 1);
+    let f = exponent_q56 & ((1i64 << 56) - 1);
 
-    exp2_mantissa((f >> 25) as usize, (f & ((1i64 << 25) - 1)) << 30, shift)
+    exp2_mantissa((f >> 49) as usize, (f & ((1i64 << 49) - 1)) << 6, shift)
 }
 
-// The shared tail of exp2 and exp2_q32 — ported from FixedQ4816.Exp2Mantissa.
+// The shared tail of exp2 and exp2_q56 — ported from FixedQ4816.Exp2Mantissa, narrowing with ties to even.
 fn exp2_mantissa(index: usize, residual_q62: i64, shift: i64) -> i64 {
     let r = residual_q62;
     let mut acc = EXP2_POLY_Q62[3];
@@ -781,17 +782,46 @@ fn exp2_mantissa(index: usize, residual_q62: i64, shift: i64) -> i64 {
     if shift <= 0 {
         mantissa
     } else {
-        ((mantissa as u64).wrapping_add(1u64 << (shift - 1)) >> shift) as i64
+        let magnitude = mantissa as u64;
+
+        ((magnitude + ((1u64 << (shift - 1)) - 1) + ((magnitude >> shift) & 1)) >> shift) as i64
     }
 }
 
-// The base-2 logarithm of a positive raw at Q46 — ported from FixedQ4816.Log2Q46.
-fn log2_q46(value: i64) -> i64 {
-    let raw = value as u64;
-    let integer_part = 63 - raw.leading_zeros() as i64;
-    let fraction = log2_fraction_q61(raw << (62 - integer_part));
+// The base-2 logarithm of a positive raw for pow's exponential path — ported from FixedQ4816.Log2Wide: an
+// integer part and a Q123 fraction with relative accuracy, the mantissa balanced about one, the last interval read
+// directly as log2(1 + r) with r = m/2 - 1, and the Taylor residual through degree six kept as a full i128 product.
+fn log2_wide(raw: u64) -> (i64, i128) {
+    let bit_index = 63 - raw.leading_zeros() as i64;
+    let mantissa_q62 = raw << (62 - bit_index);
+    let mut integer_part = bit_index - (FRACTION_BITS as i64);
+    let index = ((mantissa_q62 >> 55) & 0x7F) as usize;
+    let r: i64;
+    let mut table_q123: i128;
 
-    ((integer_part - (FRACTION_BITS as i64)) << 46).wrapping_add((fraction.wrapping_add(1i64 << 14)) >> 15)
+    if index == 127 {
+        r = (mantissa_q62.wrapping_sub(1u64 << 63) as i64) >> 1;
+        table_q123 = 0;
+        integer_part += 1;
+    } else {
+        let product = (mantissa_q62 as u128) * (LOG2_INVERSE_TABLE_Q62[index] as u128);
+
+        r = ((product >> 62) as u64).wrapping_sub(1u64 << 62) as i64;
+        table_q123 = ((LOG2_TABLE_Q61[index] as i64) as i128) << 62;
+
+        if index >= 64 {
+            table_q123 -= 1i128 << 123;
+            integer_part += 1;
+        }
+    }
+
+    let mut acc = LOG2_POLY_Q61[6];
+
+    for i in (0..6).rev() {
+        acc = LOG2_POLY_Q61[i].wrapping_add(big_mul_shift62(r, acc));
+    }
+
+    (integer_part, table_q123 + (r as i128) * (acc as i128))
 }
 
 // The exact-power width — ported from FixedQ4816.PowWhole's ten-limb stack buffer, which holds every power the
@@ -876,94 +906,200 @@ fn limb_shift_left_one(m: &mut [u64; POW_LIMBS]) {
     }
 }
 
-// 2^exponent / divisor rounded to nearest, ties to even, by restoring division — ported from
-// FixedQ4816.TryRoundPowerOfTwoQuotient. `None` when the rounded quotient reaches 2^63.
+// A u128 below 2^127 divided by 2^shift, rounded to nearest with ties to even — ported from
+// FixedQ4816.TryRoundShift. `None` when that reaches 2^63; a shift of 128 or more rounds to zero.
+fn round_shift_u128(value: u128, shift: u32) -> Option<u64> {
+    if shift >= 128 {
+        return Some(0);
+    }
+
+    let mut quotient = value >> shift;
+    let remainder = value & ((1u128 << shift) - 1);
+    let half = 1u128 << (shift - 1);
+
+    if remainder > half || (remainder == half && (quotient & 1) != 0) {
+        quotient += 1;
+    }
+
+    if quotient > (i64::MAX as u128) { None } else { Some(quotient as u64) }
+}
+
+// 2^exponent / divisor rounded to nearest, ties to even — ported from
+// FixedQ4816.TryRoundPowerOfTwoQuotient: one 128-by-64 estimate from the divisor's top 64 bits (never below the
+// quotient, at most two above it), corrected and rounded on the exact remainder. `None` when the rounded quotient
+// reaches 2^63.
 fn limb_round_power_of_two_quotient(exponent: u32, divisor: &[u64; POW_LIMBS]) -> Option<u64> {
-    let top_bit = limb_bit_length(divisor) as i64 - 1;
-    let steps = exponent as i64 - top_bit;
+    let bit_length = limb_bit_length(divisor) as i64;
+
+    if (exponent as i64) < bit_length - 1 {
+        return Some(0);
+    }
+
+    if (exponent as i64) - (bit_length - 1) >= 64 {
+        return None;
+    }
+
+    let cut = (bit_length - 64).max(0) as u32;
+    let limb = (cut >> 6) as usize;
+    let bit = cut & 63;
+    let top = if bit == 0 { divisor[limb] } else { (divisor[limb] >> bit) | (divisor[limb + 1] << (64 - bit)) };
+    let numerator = 1u128 << (exponent - cut);
+    let mut estimate = (numerator / (top as u128)) as u64;
+    let estimate_remainder = (numerator % (top as u128)) as u64;
+
+    if cut == 0 {
+        if estimate > (i64::MAX as u64) {
+            return None;
+        }
+
+        let twice = (estimate_remainder as u128) << 1;
+
+        if twice > (top as u128) || (twice == (top as u128) && (estimate & 1) != 0) {
+            estimate += 1;
+        }
+
+        return if estimate > (i64::MAX as u64) { None } else { Some(estimate) };
+    }
+
+    if estimate > (i64::MAX as u64) + 2 {
+        return None;
+    }
+
+    let clamped = estimate > (i64::MAX as u64);
+    let mut candidate = if clamped { i64::MAX as u64 } else { estimate };
+    let mut product = *divisor;
     let mut remainder = [0u64; POW_LIMBS];
-    let mut quotient: u64 = 0;
+    let mut negative;
 
-    if steps < 0 {
-        remainder[(exponent >> 6) as usize] = 1u64 << (exponent & 63);
+    limb_multiply(&mut product, candidate);
+    remainder[(exponent >> 6) as usize] = 1u64 << (exponent & 63);
+
+    // remainder = |2^exponent - candidate * divisor|, with its sign in `negative`.
+    if limb_compare(&remainder, &product) != core::cmp::Ordering::Less {
+        limb_subtract(&mut remainder, &product);
+        negative = false;
     } else {
-        if steps >= 64 {
-            return None;
+        limb_subtract(&mut product, &remainder);
+        remainder = product;
+        negative = true;
+    }
+
+    while negative {
+        if limb_compare(&remainder, divisor) == core::cmp::Ordering::Greater {
+            limb_subtract(&mut remainder, divisor);
+        } else {
+            let mut lifted = *divisor;
+
+            limb_subtract(&mut lifted, &remainder);
+            remainder = lifted;
+            negative = false;
         }
 
-        remainder[(top_bit >> 6) as usize] = 1u64 << (top_bit & 63);
+        candidate -= 1;
+    }
 
-        for step in 0..=steps {
-            if step > 0 {
-                limb_shift_left_one(&mut remainder);
-                quotient <<= 1;
-            }
-
-            if limb_compare(&remainder, divisor) != core::cmp::Ordering::Less {
-                limb_subtract(&mut remainder, divisor);
-                quotient |= 1;
-            }
-        }
-
-        if quotient > (i64::MAX as u64) {
-            return None;
-        }
+    if clamped && limb_compare(&remainder, divisor) != core::cmp::Ordering::Less {
+        return None;
     }
 
     limb_shift_left_one(&mut remainder);
 
     let comparison = limb_compare(&remainder, divisor);
 
-    if comparison == core::cmp::Ordering::Greater || (comparison == core::cmp::Ordering::Equal && (quotient & 1) != 0) {
-        quotient += 1;
+    if comparison == core::cmp::Ordering::Greater || (comparison == core::cmp::Ordering::Equal && (candidate & 1) != 0) {
+        candidate += 1;
     }
 
-    if quotient > (i64::MAX as u64) { None } else { Some(quotient) }
+    if candidate > (i64::MAX as u64) { None } else { Some(candidate) }
 }
 
 // x^n for a whole exponent 2 <= |n| <= 32 as the ONE correct rounding of the exact power — ported from
-// FixedQ4816.PowWhole: the exact integer X^|n| is shifted by 16(n-1) or divided into 2^(16(m+1)) once, and a
-// power that reaches the decided bit length while it is built is already past the carrier (positive) or below
-// half a raw (negative).
+// FixedQ4816.PowWhole: the power is built in one u128 while it stays below 2^127 and in limbs past that, then
+// shifted by 16(n-1) or divided into 2^(16(m+1)) once; a power that reaches the decided bit length is already
+// past the carrier (positive) or below half a raw (negative).
 fn pow_whole(magnitude: u64, exponent: i64, negative_result: bool) -> i64 {
     let power = exponent.unsigned_abs() as u32;
     let shift = if exponent > 0 { FRACTION_BITS * (power - 1) } else { FRACTION_BITS * (power + 1) };
-    let decided_bit_length = if exponent > 0 { shift + 64 } else { shift + 2 };
     let saturated = if negative_result { i64::MIN } else { i64::MAX };
-    let mut current = [0u64; POW_LIMBS];
-    let mut decided = false;
+    let base_bit_length = 64 - magnitude.leading_zeros();
+    let mut wide = magnitude as u128;
+    let mut built = 1u32;
 
-    current[0] = magnitude;
-
-    for _ in 1..power {
-        limb_multiply(&mut current, magnitude);
-
-        if limb_bit_length(&current) >= decided_bit_length {
-            decided = true;
-            break;
-        }
+    while built < power && (128 - wide.leading_zeros()) + base_bit_length <= 127 {
+        wide *= magnitude as u128;
+        built += 1;
     }
 
-    let rounded = if exponent > 0 {
-        if decided {
-            return saturated;
+    let rounded = if built == power {
+        if exponent > 0 {
+            match round_shift_u128(wide, shift) {
+                Some(rounded) => rounded,
+                None => return saturated,
+            }
+        } else if shift <= 126 {
+            let numerator = 1u128 << shift;
+            let mut quotient = numerator / wide;
+            let excess = (numerator - quotient * wide) << 1;
+
+            if excess > wide || (excess == wide && (quotient & 1) != 0) {
+                quotient += 1;
+            }
+
+            if quotient > (i64::MAX as u128) {
+                return saturated;
+            }
+
+            quotient as u64
+        } else {
+            let mut divisor = [0u64; POW_LIMBS];
+
+            divisor[0] = wide as u64;
+            divisor[1] = (wide >> 64) as u64;
+
+            match limb_round_power_of_two_quotient(shift, &divisor) {
+                Some(rounded) => rounded,
+                None => return saturated,
+            }
         }
-
-        let rounded = limb_round_at_shift(&current, shift);
-
-        if rounded > (i64::MAX as u64) {
-            return saturated;
-        }
-
-        rounded
     } else {
-        if decided {
-            return ZERO;
+        let decided_bit_length = if exponent > 0 { shift + 64 } else { shift + 2 };
+        let mut current = [0u64; POW_LIMBS];
+        let mut decided = false;
+
+        current[0] = wide as u64;
+        current[1] = (wide >> 64) as u64;
+
+        while built < power {
+            limb_multiply(&mut current, magnitude);
+            built += 1;
+
+            if limb_bit_length(&current) >= decided_bit_length {
+                decided = true;
+                break;
+            }
         }
 
-        match limb_round_power_of_two_quotient(shift, &current) {
-            Some(rounded) => rounded,
-            None => return saturated,
+        if exponent > 0 {
+            if decided {
+                return saturated;
+            }
+
+            let rounded = limb_round_at_shift(&current, shift);
+
+            if rounded > (i64::MAX as u64) {
+                return saturated;
+            }
+
+            rounded
+        } else {
+            if decided {
+                return ZERO;
+            }
+
+            match limb_round_power_of_two_quotient(shift, &current) {
+                Some(rounded) => rounded,
+                None => return saturated,
+            }
         }
     };
 
@@ -995,37 +1131,26 @@ fn pow_magnitude(x: i64, y: i64, whole: bool, negative_result: bool) -> i64 {
         return pow_whole(x as u64, exponent, negative_result);
     }
 
-    // Full-width y*log2(x) with the logarithm at Q46 (a Q62 product), the saturation gates applied on that
-    // exact product, then ONE ties-to-even rounding to the Q32 exponent exp2_q32 consumes — deliberately NOT
-    // `fixed::mul`: `mul` wraps to i64 before the gates ever see the result.
-    let exponent_q62 = (y as i128) * (log2_q46(x) as i128);
+    // y*log2(x) at Q56: the integer part exactly, the wide logarithm's fraction through its top 63 significant
+    // bits and one floor to Q56; the saturation gates apply to that i128 exponent before it narrows — deliberately
+    // NOT `fixed::mul`, which wraps to i64 before the gates ever see the result.
+    let (integer_part, fraction) = log2_wide(x as u64);
+    let fraction_magnitude = fraction.unsigned_abs();
+    let cut = ((128 - fraction_magnitude.leading_zeros()) as i32 - 63).max(0) as u32;
+    let fraction_top = (fraction_magnitude >> cut) as i64;
+    let signed_top = if fraction < 0 { -fraction_top } else { fraction_top };
+    let fraction_product = (y as i128) * (signed_top as i128);
+    let exponent_q56 = (((y as i128) * (integer_part as i128)) << 40) + (fraction_product >> (83 - cut));
 
-    if exponent_q62 >= (47i128 << 62) {
+    if exponent_q56 >= (47i128 << 56) {
         return if negative_result { i64::MIN } else { i64::MAX };
     }
 
-    if exponent_q62 <= -(18i128 << 62) {
+    if exponent_q56 <= -(18i128 << 56) {
         return ZERO;
     }
 
-    let exponent_negative = exponent_q62 < 0;
-    let exponent_magnitude = (if exponent_negative { -exponent_q62 } else { exponent_q62 }) as u128;
-    let mut rounded_exponent_magnitude = exponent_magnitude >> 30;
-    let exponent_remainder = (exponent_magnitude as u64) & ((1u64 << 30) - 1);
-
-    if (exponent_remainder > (1u64 << 29))
-        || ((exponent_remainder == (1u64 << 29)) && ((rounded_exponent_magnitude & 1) != 0))
-    {
-        rounded_exponent_magnitude += 1;
-    }
-
-    let exponent_q32 = if exponent_negative {
-        (rounded_exponent_magnitude as i64).wrapping_neg()
-    } else {
-        rounded_exponent_magnitude as i64
-    };
-
-    let scaled = exp2_q32(exponent_q32);
+    let scaled = exp2_q56(exponent_q56 as i64);
 
     if negative_result { scaled.wrapping_neg() } else { scaled }
 }

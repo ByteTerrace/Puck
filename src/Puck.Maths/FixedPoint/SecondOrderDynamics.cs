@@ -68,24 +68,25 @@ public readonly record struct SecondOrderDynamics {
         }
     }
     // Forms exp(−rate·t) for a Q32 decay rate and a Q16 duration. The base-2 exponent rate·t·log₂e is formed exactly —
-    // the Q48 product times FixedQ4816.Log2EQ62 — and rounded once to the Q32 exponent FixedQ4816.Exp2Q32 consumes,
+    // the Q48 product times FixedQ4816.Log2EQ62 — and rounded once to the Q56 exponent FixedQ4816.Exp2Q56 consumes,
     // so neither the rate·t product nor log₂e is quantized to Q16 first. A natural exponent of 2⁶ or more is far past
     // the kernel's 2⁻¹⁷ underflow floor and answers Zero before the widening, which keeps the product inside Int128.
     private static FixedQ4816 DecayFactor(long rateRaw, FixedQ4816 t) {
-        const int ExponentFractionBitCount = (CoefficientFractionBitCount + FixedQ4816.FractionBitCount);
-        var limit = (Int128.One << (ExponentFractionBitCount + 6));
+        const int NaturalFractionBitCount = (CoefficientFractionBitCount + FixedQ4816.FractionBitCount);
+        const int ExponentFractionBitCount = 56;
+        var limit = (Int128.One << (NaturalFractionBitCount + 6));
         var naturalExponent = (((Int128)rateRaw) * t.Value);
 
         if (naturalExponent >= limit) {
             return FixedQ4816.Zero;
         }
 
-        var exponentQ32 = FixedQ4816.RoundProduct(
-            fractionBitCount: ((ExponentFractionBitCount + 62) - (2 * FixedQ4816.FractionBitCount)),
+        var exponentQ56 = FixedQ4816.RoundProduct(
+            fractionBitCount: ((NaturalFractionBitCount + 62) - ExponentFractionBitCount),
             product: (Int128.Max(naturalExponent, -limit) * FixedQ4816.Log2EQ62)
         );
 
-        return FixedQ4816.Exp2Q32(exponentQ32: -exponentQ32);
+        return FixedQ4816.Exp2Q56(exponentQ56: -exponentQ56);
     }
     // Forms e = exp(-decayNumeratorRaw/2^32 · t) and reports the raw ζω·t product alongside it; false when the
     // exponent's own decay factor has already rounded to zero (the caller reports the settled state) or the

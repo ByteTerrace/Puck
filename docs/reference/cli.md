@@ -1705,7 +1705,7 @@ pristine-input forward/inverse latency, and explicit plan-construction cost:
 | Reusable transform plans | `TransformPlanCreation` | Construction time and allocated bytes for NTT, FFT and DCT plans. |
 | Encoded square and hex coordinates | `EncodedOperations` | Direct norm/sum, swap, scale and translation against decode–operate–encode, plus specialized hex radius against the general layer locator; 1024 deterministic mixed small and wide inputs, normalized per cell. |
 | Combination and permutation identities | `CombinationQueries`, `PermutationQueries` | Counts, ranking, unranking, and single combination elements over 512 deterministic inputs; permutations also compare with a validated quadratic inversion-count baseline. |
-| Fixed-point scalars and rates | `ScalarKernels`, `RateAccumulation` | Narrow and wide multiply, square root, fractional power, sine/cosine and complex divide; one tick of rate integration. |
+| Fixed-point scalars and rates | `ScalarKernels`, `RateAccumulation` | Narrow and wide multiply, square root, fractional power, small and deep-negative whole powers, sine/cosine and complex divide; one tick of rate integration. |
 | Rotations | `QuaternionKernels` | From-to construction, slerp, logarithm and normalization. |
 | Curvature splines | `CurvatureSplineKernels` | Compiling a spline and evaluating it. |
 | Lattices and noise | `LatticeKernels`, `LayerSequenceQueries` | Field noise (one sample and four octaves), lattice value noise, hex distance, the modular cusp and a sieve window; layer lookup and location in a layer sequence. |

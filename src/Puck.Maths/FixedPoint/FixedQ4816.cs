@@ -49,11 +49,17 @@ public readonly partial record struct FixedQ4816(long Value)
     /// atan2 octant fold-back reads.</summary>
     public const long PiQ61 = 7244019458077122842L;             // round(π · 2^61)
 
-    // log2(1 + r) ≈ r·(c1 + r·(c2 + r·(c3 + r·c4))), r ≤ 2⁻⁷: log2(e)/k alternating, at Q61 (truncation ≤ 2⁻³⁶).
+    // log2(1 + r) ≈ r·(c1 + r·(c2 + r·(c3 + r·c4))), r ≤ 2⁻⁷: log2(e)/k alternating, at Q61 (truncation ≤ 2⁻³⁶). The
+    // public Log2 and the Gaussian sampler read these four; Pow's logarithm continues the same Taylor series through
+    // c7, which holds the relative truncation of log2(1 + r)/r below r⁷/8 ≤ 2⁻⁵² — the fewest terms that keep a
+    // 47-unit exponent's error under the exponential's own 2⁻⁴⁴ mantissa error, with a factor of eight to spare.
     internal const long Log2PolyC1Q61 = 3326628274461080623L;
     internal const long Log2PolyC2Q61 = -1663314137230540311L;
     internal const long Log2PolyC3Q61 = 1108876091487026874L;
     internal const long Log2PolyC4Q61 = -831657068615270156L;
+    internal const long Log2PolyC5Q61 = 665325654892216125L;
+    internal const long Log2PolyC6Q61 = -554438045743513437L;
+    internal const long Log2PolyC7Q61 = 475232610637297232L;
     // 2^r ≈ 1 + r·(c1 + r·(c2 + r·(c3 + r·c4))), r ≤ 2⁻⁷: (ln 2)^k/k! at Q62 (truncation ≤ 2⁻⁴⁵).
     internal const long Exp2PolyC1Q62 = 3196577161300663915L;
     internal const long Exp2PolyC2Q62 = 1107849223398934356L;
@@ -556,9 +562,9 @@ public readonly partial record struct FixedQ4816(long Value)
         new(Value: value);
     /// <summary>Returns two raised to the power <paramref name="value"/>.</summary>
     /// <param name="value">The exponent.</param>
-    /// <returns><c>2^value</c>, rounded to nearest: exact at whole-number exponents, saturating to <see cref="MaxValue"/> at exponents of 47 and above, exactly <see cref="Epsilon"/> at an exponent of −17 — the true <c>2⁻¹⁷</c> is half a ULP and this kernel rounds that tie UP, the one half-up tie in a family that otherwise rounds half to even — and <see cref="Zero"/> at every exponent strictly below −17.</returns>
+    /// <returns><c>2^value</c>, rounded to nearest with ties to even: exact at whole-number exponents, saturating to <see cref="MaxValue"/> at exponents of 47 and above, and <see cref="Zero"/> at every exponent of −17 and below — the true <c>2⁻¹⁷</c> is exactly half a ULP, and that tie goes to the even neighbour, zero.</returns>
     /// <remarks>Pure integer arithmetic (a 128-interval mantissa table plus a quartic residual polynomial);
-    /// bit-identical across machines. The error is half a ULP from the closing round-half-up narrowing plus the
+    /// bit-identical across machines. The error is half a ULP from the closing ties-to-even narrowing plus the
     /// mantissa's own relative error, which stays under 2⁻⁴⁴ — the quartic's truncation of the exponential series
     /// dominates it. That reads as 0.51 ULP for results below 2²⁰, rising to 0.82 ULP just under 2²⁷ as the relative
     /// term catches up; above that, absolute ULP correctness is not representable and the relative error stays below
@@ -588,37 +594,38 @@ public readonly partial record struct FixedQ4816(long Value)
         );
     }
 
-    /// <summary>Returns <c>2^value</c> for an exponent carried at Q32 rather than Q16 — the same table and polynomial
-    /// as <see cref="Exp2"/> fed twenty-five residual bits instead of nine, so a caller that formed its exponent at
+    /// <summary>Returns <c>2^value</c> for an exponent carried at Q56 rather than Q16 — the same table and polynomial
+    /// as <see cref="Exp2"/> fed forty-nine residual bits instead of nine, so a caller that formed its exponent at
     /// full width (<see cref="Pow"/>, <see cref="CoshSinh"/>, <see cref="SecondOrderDynamics.Evaluate"/>'s decay
-    /// factors) does not quantize it to the Q16 grid first.</summary>
-    /// <param name="exponentQ32">The exponent, at thirty-two fraction bits.</param>
-    /// <returns><c>2^exponent</c> under <see cref="Exp2"/>'s saturation and underflow rules.</returns>
-    internal static FixedQ4816 Exp2Q32(long exponentQ32) {
-        const int ExponentFractionBitCount = 32;
+    /// factors) quantizes it far below the mantissa's own error rather than to the Q16 grid.</summary>
+    /// <param name="exponentQ56">The exponent, at fifty-six fraction bits.</param>
+    /// <returns><c>2^exponent</c> under <see cref="Exp2"/>'s saturation, underflow and rounding rules.</returns>
+    internal static FixedQ4816 Exp2Q56(long exponentQ56) {
+        const int ExponentFractionBitCount = 56;
+        const int ResidualBitCount = (ExponentFractionBitCount - 7);
 
-        if (exponentQ32 >= (47L << ExponentFractionBitCount)) {
+        if (exponentQ56 >= (47L << ExponentFractionBitCount)) {
             return MaxValue;
         }
 
-        var k = (exponentQ32 >> ExponentFractionBitCount);
+        var k = (exponentQ56 >> ExponentFractionBitCount);
         var shift = (46L - k);
 
         if (shift >= 64L) {
             return Zero;
         }
 
-        var f = exponentQ32 & ((1L << ExponentFractionBitCount) - 1L);
+        var f = exponentQ56 & ((1L << ExponentFractionBitCount) - 1L);
 
         return Exp2Mantissa(
-            index: ((int)(f >> (ExponentFractionBitCount - 7))),
-            residualQ62: ((f & ((1L << (ExponentFractionBitCount - 7)) - 1L)) << (62 - ExponentFractionBitCount)),
+            index: ((int)(f >> ResidualBitCount)),
+            residualQ62: ((f & ((1L << ResidualBitCount) - 1L)) << (62 - ExponentFractionBitCount)),
             shift: shift
         );
     }
 
-    // The shared tail of Exp2 and Exp2Q32: the interval mantissa times the quartic of the Q62 residual, then the
-    // round-half-up narrowing by shift (46 − k), already known to be below 64.
+    // The shared tail of Exp2 and Exp2Q56: the interval mantissa times the quartic of the Q62 residual, then the
+    // ties-to-even narrowing by shift (46 − k), already known to be below 64.
     private static FixedQ4816 Exp2Mantissa(int index, long residualQ62, long shift) {
         var r = residualQ62;
         var acc = Exp2PolyC4Q62;
@@ -645,10 +652,15 @@ public readonly partial record struct FixedQ4816(long Value)
         );
 
         // The round-shift runs unsigned: the mantissa sits just below 2^63, so adding the rounding half would
-        // overflow a signed sum for large shifts.
-        return new(Value: ((shift <= 0L)
-            ? mantissa
-            : ((long)((((ulong)mantissa) + (1UL << (((int)shift) - 1))) >> ((int)shift)))));
+        // overflow a signed sum for large shifts. Half less one plus the kept low bit is ties to even, branchless.
+        if (shift <= 0L) {
+            return new(Value: mantissa);
+        }
+
+        var bits = ((int)shift);
+        var magnitude = ((ulong)mantissa);
+
+        return new(Value: ((long)((magnitude + (((1UL << (bits - 1)) - 1UL) + ((magnitude >> bits) & 1UL))) >> bits)));
     }
 
     /// <summary>Returns the hyperbolic cosine and sine of <paramref name="argument"/>.</summary>
@@ -660,32 +672,33 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <c>cosh φ = 2^(s−1) + 2^(−s−1)</c> and <c>sinh φ = 2^(s−1) − 2^(−s−1)</c>. Halving after the sum would cap the
     /// pair at <c>2⁴⁶</c>, discarding the representable band up to <see cref="MaxValue"/> and answering half the
     /// saturated value beyond it. The scaled exponent is the exact <see cref="Int128"/> product of the argument with
-    /// <see cref="Log2EQ62"/>, clamped to ±48 and rounded once to the Q32 exponent <see cref="Exp2Q32"/> consumes,
+    /// <see cref="Log2EQ62"/>, clamped to ±48 and rounded once to the Q56 exponent <see cref="Exp2Q56"/> consumes,
     /// so a large argument cannot wrap the product's sign; the clamp is beyond the point where both terms are already
     /// constant, so it changes no answer. One rounding per term, and the sum is exact — a term can only approach
     /// <see cref="MaxValue"/> once the other has rounded to <see cref="Zero"/>. Each term is within half a ULP plus a
-    /// relative error below <c>ln 2·2⁻³³ + 2⁻⁴⁴</c> (the Q32 exponent's rounding and the exponential's mantissa), so
-    /// that relative term adds less than one ULP while the result is below <c>2¹⁷</c> and dominates above it.
-    /// Deterministic and bit-identical across machines.
+    /// relative error below <c>2⁻⁴⁴</c> — the exponential's mantissa; the Q56 exponent's rounding adds only
+    /// <c>ln 2·2⁻⁵⁷</c> — so the pair stays within about one ULP while the result is below <c>2²⁰</c>, and that
+    /// relative term dominates above it. Deterministic and bit-identical across machines.
     /// </remarks>
     internal static (FixedQ4816 Cosh, FixedQ4816 Sinh) CoshSinh(FixedQ4816 argument) {
         // The Q16 raw times log2(e) at Q62 is the exponent at Q78 exactly (below 2¹²⁶, so Int128 cannot wrap). It is
-        // clamped, then rounded once to the Q32 exponent Exp2Q32 consumes, with the −1 of the halving applied on that
+        // clamped, then rounded once to the Q56 exponent Exp2Q56 consumes, with the −1 of the halving applied on that
         // grid. Rounding ties to even on the magnitude keeps cosh exactly even and sinh exactly odd.
         const int ProductFractionBitCount = (FractionBitCount + 62);
-        const long OneQ32 = (1L << (2 * FractionBitCount));
+        const int ExponentFractionBitCount = 56;
+        const long OneQ56 = (1L << ExponentFractionBitCount);
         var product = (((Int128)argument.Value) * Log2EQ62);
         var limit = (((Int128)RawCoshSinhExponentLimit) << (ProductFractionBitCount - FractionBitCount));
         var scaled = RoundProduct(
-            fractionBitCount: (ProductFractionBitCount - (2 * FractionBitCount)),
+            fractionBitCount: (ProductFractionBitCount - ExponentFractionBitCount),
             product: Int128.Clamp(
                 max: limit,
                 min: -limit,
                 value: product
             )
         );
-        var forward = Exp2Q32(exponentQ32: (scaled - OneQ32));
-        var backward = Exp2Q32(exponentQ32: (-scaled - OneQ32));
+        var forward = Exp2Q56(exponentQ56: (scaled - OneQ56));
+        var backward = Exp2Q56(exponentQ56: (-scaled - OneQ56));
 
         return (
             Cosh: (forward + backward),
@@ -707,17 +720,74 @@ public readonly partial record struct FixedQ4816(long Value)
         var integerPart = BitOperations.Log2(value: raw);
         var fraction = Log2FractionQ61(mantissaQ62: (raw << (62 - integerPart)));
 
-        return new(Value: ((((long)(integerPart - FractionBitCount)) << FractionBitCount) + ((fraction + (1L << 44)) >> 45)));
+        // Ties to even on the fraction: the integer part's multiple of 2^16 shares its parity with the whole.
+        return new(Value: ((((long)(integerPart - FractionBitCount)) << FractionBitCount) + ((fraction + (((1L << 44) - 1L) + ((fraction >> 45) & 1L))) >> 45)));
     }
 
-    // The base-2 logarithm of a positive raw at Q46 — the same interval table and polynomial as Log2, its Q61 fraction
-    // rounded by fifteen bits instead of forty-five — for callers that multiply the logarithm before rounding.
-    private static long Log2Q46(FixedQ4816 value) {
-        var raw = ((ulong)value.Value);
-        var integerPart = BitOperations.Log2(value: raw);
-        var fraction = Log2FractionQ61(mantissaQ62: (raw << (62 - integerPart)));
+    // The base-2 logarithm of a positive raw for Pow's exponential path, as an integer part and a fraction at Q123
+    // whose error stays near 2⁻⁵² of the fraction's OWN size: Pow multiplies the logarithm by an exponent that can be
+    // large exactly when the logarithm is small, so it is relative accuracy that bounds the exponent's error. The same
+    // interval tables as Log2, with three differences. The mantissa is balanced about one: from 1.5 up it is read as
+    // m/2 against log₂(d_i) − 1, so the integer part carries the sign and the fraction stays below 0.6. The last
+    // interval, which ends at m = 2 where that fraction cancels to zero, is read directly as log₂(1 + r) with the
+    // exact r = m/2 − 1, at most 2⁻⁸ in magnitude. And the residual polynomial is the Taylor series of log₂(1 + r)/r
+    // through degree six, kept as the full Int128 product r·P(r) rather than truncated to Q61.
+    private static (long IntegerPart, Int128 FractionQ123) Log2Wide(ulong raw) {
+        var bitIndex = BitOperations.Log2(value: raw);
+        var mantissaQ62 = (raw << (62 - bitIndex));
+        var integerPart = ((long)(bitIndex - FractionBitCount));
+        var index = ((int)((mantissaQ62 >> 55) & 0x7FUL));
+        Int128 tableQ123;
+        long r;
 
-        return ((((long)(integerPart - FractionBitCount)) << 46) + ((fraction + (1L << 14)) >> 15));
+        if (index == 127) {
+            r = (unchecked((long)(mantissaQ62 - (1UL << 63))) >> 1);
+            tableQ123 = Int128.Zero;
+            ++integerPart;
+        } else {
+            var high = Math.BigMul(
+                a: mantissaQ62,
+                b: Log2InverseTableQ62[index],
+                low: out var low
+            );
+
+            r = unchecked((long)(((high << 2) | (low >> 62)) - (1UL << 62)));
+            tableQ123 = (((Int128)((long)Log2TableQ61[index])) << 62);
+
+            if (index >= 64) {
+                tableQ123 -= (Int128.One << 123);
+                ++integerPart;
+            }
+        }
+
+        var acc = Log2PolyC7Q61;
+
+        acc = (Log2PolyC6Q61 + BigMulShift62(
+            x: r,
+            y: acc
+        ));
+        acc = (Log2PolyC5Q61 + BigMulShift62(
+            x: r,
+            y: acc
+        ));
+        acc = (Log2PolyC4Q61 + BigMulShift62(
+            x: r,
+            y: acc
+        ));
+        acc = (Log2PolyC3Q61 + BigMulShift62(
+            x: r,
+            y: acc
+        ));
+        acc = (Log2PolyC2Q61 + BigMulShift62(
+            x: r,
+            y: acc
+        ));
+        acc = (Log2PolyC1Q61 + BigMulShift62(
+            x: r,
+            y: acc
+        ));
+
+        return (integerPart, (tableQ123 + (((Int128)r) * acc)));
     }
 
     /// <summary>Returns <paramref name="x"/> raised to the power <paramref name="y"/>.</summary>
@@ -734,9 +804,11 @@ public readonly partial record struct FixedQ4816(long Value)
     /// of the true power, to nearest with ties to even: the exact integer power of the base's raw is formed in a
     /// stack limb buffer and shifted (a positive exponent) or divided into a power of two (a negative one) once.
     /// Overflow and underflow are decided on that exact value, so a power saturates exactly when its correct
-    /// rounding leaves the carrier and answers <see cref="Zero"/> exactly when it rounds there. Other exponents
-    /// compute as <c>Exp2(y·Log2(|x|))</c>, with the logarithm carried at Q46 and the product rounded once to a Q32
-    /// exponent, so the result's relative error grows with <c>|y·log₂ x|</c>; a log-derived shortcut answers
+    /// rounding leaves the carrier and answers <see cref="Zero"/> exactly when it rounds there. Other exponents —
+    /// fractional ones and whole ones beyond ±32 — compute as <c>Exp2(y·log₂|x|)</c> with a logarithm of RELATIVE
+    /// accuracy near 2⁻⁵² (so a large exponent does not magnify it) and the product carried to a Q56 exponent, which
+    /// leaves the exponential's own envelope in charge: within about half a ULP while the result is below
+    /// <c>2²⁰</c>, and a relative error below <c>2⁻⁴⁴</c> above it. A log-derived shortcut answers
     /// <see cref="Zero"/> below an exponent product of −18. The sign is applied last, so an odd power of a negative
     /// base never comes back positive. <see cref="MinValue"/> is the one base whose magnitude 2⁴⁷ is a raw past the
     /// carrier: it never reaches either path, because every exponent of magnitude two or more either saturates or
@@ -835,26 +907,37 @@ public readonly partial record struct FixedQ4816(long Value)
             );
         }
 
-        // Form y·log2(x) at full width — the logarithm carried at Q46 rather than the public Q16 — apply Exp2's
-        // saturation gates on the exact Q62 product, then round it once to the Q32 exponent Exp2Q32 consumes. Using
-        // the public wrapping multiplication here can turn an exponent outside the Q48.16 range into an arbitrary value.
-        var exponentQ62 = (((Int128)y.Value) * Log2Q46(value: x));
+        // Form y·log₂(x) at Q56: the integer part exactly, the fraction through its top 63 significant bits (a
+        // relative cut of 2⁻⁶³, below the logarithm's own error) and one floor to Q56, far below the exponential's
+        // mantissa error. Exp2's saturation gates apply to that Int128 exponent before it narrows, so an exponent
+        // outside the Q48.16 range can neither wrap nor reach the kernel.
+        var (integerPart, fraction) = Log2Wide(raw: ((ulong)x.Value));
+        var fractionNegative = (fraction < Int128.Zero);
+        var fractionMagnitude = ((UInt128)(fractionNegative
+            ? -fraction
+            : fraction));
+        var cut = Math.Max(
+            val1: 0,
+            val2: ((128 - ((int)UInt128.LeadingZeroCount(value: fractionMagnitude))) - 63)
+        );
+        var fractionTop = ((long)(fractionMagnitude >> cut));
+        var fractionProduct = (((Int128)y.Value) * (fractionNegative
+            ? -fractionTop
+            : fractionTop));
+        var exponentQ56 = (((((Int128)y.Value) * integerPart) << 40) + (fractionProduct >> (83 - cut)));
 
-        if (exponentQ62 >= (((Int128)47L) << 62)) {
+        if (exponentQ56 >= (((Int128)47L) << 56)) {
             return (negativeResult
                 ? MinValue
                 : MaxValue
             );
         }
 
-        if (exponentQ62 <= -(((Int128)18L) << 62)) {
+        if (exponentQ56 <= -(((Int128)18L) << 56)) {
             return Zero;
         }
 
-        var scaled = Exp2Q32(exponentQ32: RoundProduct(
-            fractionBitCount: 30,
-            product: exponentQ62
-        ));
+        var scaled = Exp2Q56(exponentQ56: ((long)exponentQ56));
 
         return (negativeResult
             ? new(Value: -scaled.Value)
@@ -863,14 +946,15 @@ public readonly partial record struct FixedQ4816(long Value)
     }
     // x^n for a whole exponent 2 ≤ |n| ≤ 32, as the ONE correct rounding of the exact power. For x = X/2¹⁶ the raw
     // answer is X^n/2^(16(n−1)) at a positive exponent and 2^(16(m+1))/X^m at a negative one (m = −n), so the exact
-    // integer X^|n| — at most thirty-one multiplications by the raw, in a stack limb buffer — is shifted or divided
-    // once, to nearest with ties to even. Overflow and underflow are decided on that exact value: a power that
-    // reaches the decided bit length during the build is already past the carrier (positive) or below half a raw
-    // (negative), and only a raw of at least 2¹⁶ can reach it, where the powers only grow. A rounded magnitude of
-    // exactly 2^63 saturates too: it is representable only as MinValue, which is the negative caller's saturation.
+    // integer X^|n| is shifted or divided once, to nearest with ties to even. The power is built by multiplications by
+    // the raw in one UInt128 while it stays below 2¹²⁷ — every small power of a base near one, the common case —
+    // and continues in a stack limb buffer only past that. Overflow and underflow are decided on the exact value: a
+    // power that reaches the decided bit length is already past the carrier (positive) or below half a raw
+    // (negative), and integer powers only grow. A rounded magnitude of exactly 2^63 saturates too: it is
+    // representable only as MinValue, which is the negative caller's saturation.
     private static FixedQ4816 PowWhole(ulong magnitude, long exponent, bool negativeResult) {
-        // Positive: X^n is at most 2^(16·31 + 63) before its last multiply and 2^622 after it. Negative: X^m is at
-        // most 2^(16·33 + 1) before and 2^592 after. Ten limbs hold either, with the carry limb a multiply writes.
+        // Positive: X^n is below 2^(16·31 + 63) before its last multiply and 2^622 after it. Negative: X^m is below
+        // 2^(16·33 + 1) before and 2^592 after. Ten limbs hold either, with the carry limb a multiply writes.
         const int LimbCount = 10;
 
         var power = ((int)((exponent < 0L)
@@ -879,72 +963,123 @@ public readonly partial record struct FixedQ4816(long Value)
         var shift = ((exponent > 0L)
             ? (FractionBitCount * (power - 1))
             : (FractionBitCount * (power + 1)));
-        var decidedBitLength = ((exponent > 0L)
-            ? (shift + 64)
-            : (shift + 2));
-        Span<ulong> current = stackalloc ulong[LimbCount];
-        Span<ulong> next = stackalloc ulong[LimbCount];
-        var sign = LimbBig.SetFromInt64(
-            magnitude: current,
-            value: ((long)magnitude)
+        var saturated = (negativeResult
+            ? MinValue
+            : MaxValue
         );
-        var decided = false;
+        var baseBitLength = (64 - BitOperations.LeadingZeroCount(value: magnitude));
+        var wide = ((UInt128)magnitude);
+        var built = 1;
 
-        for (var factor = 1; (factor < power); ++factor) {
-            sign = LimbBig.MultiplyByInt64(
-                destination: next,
-                multiplier: ((long)magnitude),
-                source: current,
-                sourceSign: sign
-            );
-
-            var swap = current;
-
-            current = next;
-            next = swap;
-
-            if (PowBitLength(magnitude: current) >= decidedBitLength) {
-                decided = true;
-                break;
-            }
+        while (
+            (built < power) &&
+            (((128 - ((int)UInt128.LeadingZeroCount(value: wide))) + baseBitLength) <= 127)
+        ) {
+            wide *= magnitude;
+            ++built;
         }
 
         ulong rounded;
 
-        if (exponent > 0L) {
-            if (decided) {
-                return (negativeResult
-                    ? MinValue
-                    : MaxValue
-                );
-            }
+        if (built == power) {
+            if (exponent > 0L) {
+                if (!TryRoundShift(
+                    shift: shift,
+                    value: wide,
+                    rounded: out rounded
+                )) {
+                    return saturated;
+                }
+            } else if (shift <= 126) {
+                // 2^shift fits UInt128, so the quotient and its remainder are exact in one division.
+                var numerator = (UInt128.One << shift);
+                var quotient = (numerator / wide);
+                var excess = ((numerator - (quotient * wide)) << 1);
 
-            rounded = unchecked((ulong)LimbBig.RoundAtShift(
-                magnitude: current,
-                shift: shift,
-                sign: sign
-            ));
+                if (
+                    (excess > wide) ||
+                    ((excess == wide) && (UInt128.Zero != (quotient & UInt128.One)))
+                ) {
+                    ++quotient;
+                }
 
-            if (rounded > ((ulong)long.MaxValue)) {
-                return (negativeResult
-                    ? MinValue
-                    : MaxValue
+                if (quotient > ((UInt128)long.MaxValue)) {
+                    return saturated;
+                }
+
+                rounded = ((ulong)quotient);
+            } else {
+                Span<ulong> divisor = stackalloc ulong[LimbCount];
+
+                LimbBig.SetFromInt128(
+                    magnitude: divisor,
+                    value: ((Int128)wide)
                 );
+
+                if (!TryRoundPowerOfTwoQuotient(
+                    divisor: divisor,
+                    exponent: shift,
+                    quotient: out rounded
+                )) {
+                    return saturated;
+                }
             }
         } else {
-            if (decided) {
-                return Zero;
-            }
-            if (!TryRoundPowerOfTwoQuotient(
-                divisor: current,
-                exponent: shift,
-                quotient: out rounded,
-                remainder: next
-            )) {
-                return (negativeResult
-                    ? MinValue
-                    : MaxValue
+            var decidedBitLength = ((exponent > 0L)
+                ? (shift + 64)
+                : (shift + 2));
+            Span<ulong> current = stackalloc ulong[LimbCount];
+            Span<ulong> next = stackalloc ulong[LimbCount];
+            var sign = LimbBig.SetFromInt128(
+                magnitude: current,
+                value: ((Int128)wide)
+            );
+            var decided = false;
+
+            for (; (built < power); ++built) {
+                sign = LimbBig.MultiplyByInt64(
+                    destination: next,
+                    multiplier: ((long)magnitude),
+                    source: current,
+                    sourceSign: sign
                 );
+
+                var swap = current;
+
+                current = next;
+                next = swap;
+
+                if (PowBitLength(magnitude: current) >= decidedBitLength) {
+                    decided = true;
+                    break;
+                }
+            }
+
+            if (exponent > 0L) {
+                if (decided) {
+                    return saturated;
+                }
+
+                rounded = unchecked((ulong)LimbBig.RoundAtShift(
+                    magnitude: current,
+                    shift: shift,
+                    sign: sign
+                ));
+
+                if (rounded > ((ulong)long.MaxValue)) {
+                    return saturated;
+                }
+            } else {
+                if (decided) {
+                    return Zero;
+                }
+                if (!TryRoundPowerOfTwoQuotient(
+                    divisor: current,
+                    exponent: shift,
+                    quotient: out rounded
+                )) {
+                    return saturated;
+                }
             }
         }
 
@@ -953,7 +1088,6 @@ public readonly partial record struct FixedQ4816(long Value)
             : new(Value: ((long)rounded))
         );
     }
-
     // The bit length of a limb magnitude: one past the index of its highest set bit, zero for zero.
     private static int PowBitLength(ReadOnlySpan<ulong> magnitude) {
         var length = LimbBig.SignificantLength(magnitude: magnitude);
@@ -962,62 +1096,156 @@ public readonly partial record struct FixedQ4816(long Value)
             ? 0
             : ((length * 64) - BitOperations.LeadingZeroCount(value: magnitude[(length - 1)])));
     }
-    // Rounds 2^exponent / divisor to nearest, ties to even, by restoring division on LimbBig's signed add: the
-    // remainder starts at the divisor's own top power of two, so only the quotient's significant bits are produced,
-    // and a trial subtraction that goes negative is added back. False when the rounded quotient reaches 2^63; the
-    // remainder is scratch at least one bit wider than the divisor and the exponent.
-    private static bool TryRoundPowerOfTwoQuotient(int exponent, ReadOnlySpan<ulong> divisor, Span<ulong> remainder, out ulong quotient) {
-        var topBit = (PowBitLength(magnitude: divisor) - 1);
-        var steps = (exponent - topBit);
+    // Rounds a UInt128 below 2¹²⁷ divided by 2^shift to nearest, ties to even; false when that reaches 2^63. A shift
+    // of 128 or more leaves less than half a unit, so it rounds to zero.
+    private static bool TryRoundShift(UInt128 value, int shift, out ulong rounded) {
+        if (shift >= 128) {
+            rounded = 0UL;
 
-        quotient = 0UL;
-        remainder.Clear();
-
-        sbyte sign = 1;
-
-        if (steps < 0) {
-            remainder[(exponent >> 6)] = (1UL << (exponent & 63));
-        } else {
-            if (steps >= 64) {
-                return false;
-            }
-
-            remainder[(topBit >> 6)] = (1UL << (topBit & 63));
-
-            for (var step = 0; (step <= steps); ++step) {
-                if (step > 0) {
-                    LimbBig.ShiftLeft(
-                        bits: 1,
-                        magnitude: remainder
-                    );
-                    quotient <<= 1;
-                }
-
-                sign = LimbBig.AddInto(
-                    addend: divisor,
-                    addendSign: -1,
-                    destination: remainder,
-                    destinationSign: sign
-                );
-
-                if (sign < 0) {
-                    sign = LimbBig.AddInto(
-                        addend: divisor,
-                        addendSign: 1,
-                        destination: remainder,
-                        destinationSign: sign
-                    );
-                } else {
-                    quotient |= 1UL;
-                }
-            }
-
-            if (quotient > ((ulong)long.MaxValue)) {
-                return false;
-            }
+            return true;
         }
 
-        // The remainder against half the divisor, read as the sign of 2·remainder − divisor.
+        var quotient = (value >> shift);
+        var remainder = value & ((UInt128.One << shift) - UInt128.One);
+        var half = (UInt128.One << (shift - 1));
+
+        if (
+            (remainder > half) ||
+            ((remainder == half) && (UInt128.Zero != (quotient & UInt128.One)))
+        ) {
+            ++quotient;
+        }
+
+        rounded = ((ulong)quotient);
+
+        return (quotient <= ((UInt128)long.MaxValue));
+    }
+    // Rounds 2^exponent / divisor to nearest, ties to even, for a divisor of up to ten limbs; false when the rounded
+    // quotient reaches 2^63. The quotient comes from ONE 128-by-64 division of 2^(exponent − s) by the divisor's top
+    // 64 bits (s the bits below them): that estimate is never below the true quotient and never more than two above
+    // it, because the top word is at least 2^63. The exact remainder 2^exponent − q·divisor then corrects it, on
+    // LimbBig's signed add, and decides the rounding as the sign of 2·remainder − divisor.
+    private static bool TryRoundPowerOfTwoQuotient(int exponent, ReadOnlySpan<ulong> divisor, out ulong quotient) {
+        const int LimbCount = 10;
+
+        var divisorBitLength = PowBitLength(magnitude: divisor);
+
+        quotient = 0UL;
+
+        // 2^exponent below 2^(L−1) ≤ divisor: the quotient is zero and the remainder below half the divisor (a tie
+        // only at divisor = 2^(exponent+1), which ties to the even zero).
+        if (exponent < (divisorBitLength - 1)) {
+            return true;
+        }
+        if ((exponent - (divisorBitLength - 1)) >= 64) {
+            return false;
+        }
+
+        var cut = Math.Max(
+            val1: 0,
+            val2: (divisorBitLength - 64)
+        );
+        var limb = (cut >> 6);
+        var bit = cut & 63;
+        var top = ((0 == bit)
+            ? divisor[limb]
+            : ((divisor[limb] >> bit) | (divisor[(limb + 1)] << (64 - bit))));
+        var numerator = (UInt128.One << (exponent - cut));
+        ulong estimate;
+        ulong estimateRemainder;
+
+        if (X86Base.X64.IsSupported) {
+#pragma warning disable SYSLIB5004
+            (estimate, estimateRemainder) = X86Base.X64.DivRem(
+                divisor: top,
+                lower: ((ulong)numerator),
+                upper: ((ulong)(numerator >> 64))
+            );
+#pragma warning restore SYSLIB5004
+        } else {
+            estimate = ((ulong)(numerator / top));
+            estimateRemainder = ((ulong)(numerator % top));
+        }
+
+        if (0 == cut) {
+            // The divisor is the top word itself, so the estimate is the exact quotient.
+            if (estimate > ((ulong)long.MaxValue)) {
+                return false;
+            }
+
+            var twice = (((UInt128)estimateRemainder) << 1);
+
+            if (
+                (twice > top) ||
+                ((twice == top) && (0UL != (estimate & 1UL)))
+            ) {
+                ++estimate;
+            }
+
+            quotient = estimate;
+
+            return (estimate <= ((ulong)long.MaxValue));
+        }
+
+        // The estimate overshoots by at most two, so one at or past 2^63 + 2 already puts the quotient past the carrier.
+        if (estimate > (((ulong)long.MaxValue) + 2UL)) {
+            return false;
+        }
+
+        var clamped = (estimate > ((ulong)long.MaxValue));
+        var candidate = (clamped
+            ? ((ulong)long.MaxValue)
+            : estimate);
+        Span<ulong> remainder = stackalloc ulong[LimbCount];
+        Span<ulong> product = stackalloc ulong[LimbCount];
+
+        remainder[(exponent >> 6)] = (1UL << (exponent & 63));
+
+        sbyte sign = 1;
+        var productSign = LimbBig.MultiplyByInt64(
+            destination: product,
+            multiplier: ((long)candidate),
+            source: divisor,
+            sourceSign: 1
+        );
+
+        sign = LimbBig.AddInto(
+            addend: product,
+            addendSign: ((sbyte)(-productSign)),
+            destination: remainder,
+            destinationSign: sign
+        );
+
+        while (sign < 0) {
+            sign = LimbBig.AddInto(
+                addend: divisor,
+                addendSign: 1,
+                destination: remainder,
+                destinationSign: sign
+            );
+            --candidate;
+        }
+
+        if (clamped) {
+            // A clamped candidate is exact only when the remainder is now below the divisor; otherwise the true
+            // quotient is at least 2^63 and the answer saturates.
+            if (LimbBig.AddInto(
+                addend: divisor,
+                addendSign: -1,
+                destination: remainder,
+                destinationSign: sign
+            ) >= 0) {
+                return false;
+            }
+
+            sign = LimbBig.AddInto(
+                addend: divisor,
+                addendSign: 1,
+                destination: remainder,
+                destinationSign: -1
+            );
+        }
+
         LimbBig.ShiftLeft(
             bits: 1,
             magnitude: remainder
@@ -1032,12 +1260,14 @@ public readonly partial record struct FixedQ4816(long Value)
 
         if (
             (excess > 0) ||
-            ((excess == 0) && (0UL != (quotient & 1UL)))
+            ((excess == 0) && (0UL != (candidate & 1UL)))
         ) {
-            ++quotient;
+            ++candidate;
         }
 
-        return (quotient <= ((ulong)long.MaxValue));
+        quotient = candidate;
+
+        return (candidate <= ((ulong)long.MaxValue));
     }
 
     /// <summary>Linearly interpolates from <paramref name="from"/> to <paramref name="to"/> by <paramref name="amount"/>.</summary>
@@ -1247,7 +1477,7 @@ public readonly partial record struct FixedQ4816(long Value)
             angle = (PiQ61 - angle);
         }
 
-        var raw = ((angle + (1L << 44)) >> 45);
+        var raw = ((angle + (((1L << 44) - 1L) + ((angle >> 45) & 1L))) >> 45);
 
         return new(Value: ((signY != 0L)
             ? -raw
