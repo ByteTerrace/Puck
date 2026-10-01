@@ -7760,7 +7760,8 @@
     {
       "CoveredBy": [
         "scalar.pow-envelope",
-        "scalar.pow-exact-lattice"
+        "scalar.pow-exact-lattice",
+        "scalar.pow-whole-correctly-rounded"
       ],
       "Id": "Puck.Maths.FixedQ4816.Pow(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
       "State": "covered"

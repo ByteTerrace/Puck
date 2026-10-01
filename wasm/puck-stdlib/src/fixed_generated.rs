@@ -18,10 +18,9 @@
 
 use crate::fixed::{FRACTION_BITS, ONE, ZERO};
 
-// Mirrors FixedQ4816's private FractionBitMask/RawHalf — both derived directly from the public
-// FRACTION_BITS constant (16), so there is nothing here that could drift independently of it.
+// Mirrors FixedQ4816's private FractionBitMask — derived directly from the public FRACTION_BITS constant
+// (16), so there is nothing here that could drift independently of it.
 const FRACTION_MASK: u64 = (1u64 << FRACTION_BITS) - 1;
-const HALF_ULP: u64 = 1u64 << (FRACTION_BITS - 1);
 
 // Atan2 constants (FixedQ4816.Atan2HalfPiQ61 / PiQ61).
 const ATAN2_HALF_PI_Q61: i64 = 3622009729038561421;
@@ -547,22 +546,180 @@ fn log2_q46(value: i64) -> i64 {
     ((integer_part - (FRACTION_BITS as i64)) << 46).wrapping_add((fraction.wrapping_add(1i64 << 14)) >> 15)
 }
 
-// One squaring-ladder step — ported from FixedQ4816.TryMultiplyMagnitude. `None` when the rounded
-// magnitude leaves the i64 carrier (the caller saturates).
-fn try_multiply_magnitude(x: u64, y: u64) -> Option<u64> {
-    let magnitude = (x as u128) * (y as u128);
-    let mut truncated = magnitude >> FRACTION_BITS;
-    let remainder = (magnitude as u64) & FRACTION_MASK;
+// The exact-power width — ported from FixedQ4816.PowWhole's ten-limb stack buffer, which holds every power the
+// whole-exponent path forms before its verdict is decided.
+const POW_LIMBS: usize = 10;
 
-    if (remainder > HALF_ULP) || ((remainder == HALF_ULP) && ((truncated & 1) != 0)) {
-        truncated += 1;
+// The bit length of a little-endian limb magnitude — ported from FixedQ4816.PowBitLength.
+fn limb_bit_length(m: &[u64; POW_LIMBS]) -> u32 {
+    for i in (0..POW_LIMBS).rev() {
+        if m[i] != 0 {
+            return (i as u32) * 64 + 64 - m[i].leading_zeros();
+        }
     }
 
-    if truncated > (i64::MAX as u128) {
-        None
+    0
+}
+
+// m *= factor, in place — LimbBig.MultiplyByInt64 on a non-negative magnitude. The width bound makes the carry out
+// of the top limb zero.
+fn limb_multiply(m: &mut [u64; POW_LIMBS], factor: u64) {
+    let mut carry: u128 = 0;
+
+    for limb in m.iter_mut() {
+        let product = (*limb as u128) * (factor as u128) + carry;
+
+        *limb = product as u64;
+        carry = product >> 64;
+    }
+}
+
+fn limb_test_bit(m: &[u64; POW_LIMBS], position: u32) -> bool {
+    let limb = (position >> 6) as usize;
+
+    limb < POW_LIMBS && ((m[limb] >> (position & 63)) & 1) != 0
+}
+
+fn limb_any_bit_below(m: &[u64; POW_LIMBS], position: u32) -> bool {
+    let limb = (position >> 6) as usize;
+    let bit = position & 63;
+
+    m[..limb.min(POW_LIMBS)].iter().any(|&l| l != 0) || (bit != 0 && limb < POW_LIMBS && (m[limb] & ((1u64 << bit) - 1)) != 0)
+}
+
+// m / 2^shift rounded to nearest, ties to even, low 64 bits — LimbBig.RoundAtShift for a positive magnitude and a
+// shift of at least one.
+fn limb_round_at_shift(m: &[u64; POW_LIMBS], shift: u32) -> u64 {
+    let limb = (shift >> 6) as usize;
+    let bit = shift & 63;
+    let low = if limb < POW_LIMBS { m[limb] } else { 0 };
+    let high = if limb + 1 < POW_LIMBS { m[limb + 1] } else { 0 };
+    let truncated = if bit == 0 { low } else { (low >> bit) | (high << (64 - bit)) };
+    let round_up = limb_test_bit(m, shift - 1) && (limb_any_bit_below(m, shift - 1) || (truncated & 1) != 0);
+
+    truncated.wrapping_add(round_up as u64)
+}
+
+fn limb_compare(a: &[u64; POW_LIMBS], b: &[u64; POW_LIMBS]) -> core::cmp::Ordering {
+    for i in (0..POW_LIMBS).rev() {
+        if a[i] != b[i] {
+            return a[i].cmp(&b[i]);
+        }
+    }
+
+    core::cmp::Ordering::Equal
+}
+
+fn limb_subtract(a: &mut [u64; POW_LIMBS], b: &[u64; POW_LIMBS]) {
+    let mut borrow = false;
+
+    for i in 0..POW_LIMBS {
+        let (difference, first) = a[i].overflowing_sub(b[i]);
+        let (difference, second) = difference.overflowing_sub(borrow as u64);
+
+        a[i] = difference;
+        borrow = first || second;
+    }
+}
+
+fn limb_shift_left_one(m: &mut [u64; POW_LIMBS]) {
+    for i in (0..POW_LIMBS).rev() {
+        m[i] = (m[i] << 1) | if i > 0 { m[i - 1] >> 63 } else { 0 };
+    }
+}
+
+// 2^exponent / divisor rounded to nearest, ties to even, by restoring division — ported from
+// FixedQ4816.TryRoundPowerOfTwoQuotient. `None` when the rounded quotient reaches 2^63.
+fn limb_round_power_of_two_quotient(exponent: u32, divisor: &[u64; POW_LIMBS]) -> Option<u64> {
+    let top_bit = limb_bit_length(divisor) as i64 - 1;
+    let steps = exponent as i64 - top_bit;
+    let mut remainder = [0u64; POW_LIMBS];
+    let mut quotient: u64 = 0;
+
+    if steps < 0 {
+        remainder[(exponent >> 6) as usize] = 1u64 << (exponent & 63);
     } else {
-        Some(truncated as u64)
+        if steps >= 64 {
+            return None;
+        }
+
+        remainder[(top_bit >> 6) as usize] = 1u64 << (top_bit & 63);
+
+        for step in 0..=steps {
+            if step > 0 {
+                limb_shift_left_one(&mut remainder);
+                quotient <<= 1;
+            }
+
+            if limb_compare(&remainder, divisor) != core::cmp::Ordering::Less {
+                limb_subtract(&mut remainder, divisor);
+                quotient |= 1;
+            }
+        }
+
+        if quotient > (i64::MAX as u64) {
+            return None;
+        }
     }
+
+    limb_shift_left_one(&mut remainder);
+
+    let comparison = limb_compare(&remainder, divisor);
+
+    if comparison == core::cmp::Ordering::Greater || (comparison == core::cmp::Ordering::Equal && (quotient & 1) != 0) {
+        quotient += 1;
+    }
+
+    if quotient > (i64::MAX as u64) { None } else { Some(quotient) }
+}
+
+// x^n for a whole exponent 2 <= |n| <= 32 as the ONE correct rounding of the exact power — ported from
+// FixedQ4816.PowWhole: the exact integer X^|n| is shifted by 16(n-1) or divided into 2^(16(m+1)) once, and a
+// power that reaches the decided bit length while it is built is already past the carrier (positive) or below
+// half a raw (negative).
+fn pow_whole(magnitude: u64, exponent: i64, negative_result: bool) -> i64 {
+    let power = exponent.unsigned_abs() as u32;
+    let shift = if exponent > 0 { FRACTION_BITS * (power - 1) } else { FRACTION_BITS * (power + 1) };
+    let decided_bit_length = if exponent > 0 { shift + 64 } else { shift + 2 };
+    let saturated = if negative_result { i64::MIN } else { i64::MAX };
+    let mut current = [0u64; POW_LIMBS];
+    let mut decided = false;
+
+    current[0] = magnitude;
+
+    for _ in 1..power {
+        limb_multiply(&mut current, magnitude);
+
+        if limb_bit_length(&current) >= decided_bit_length {
+            decided = true;
+            break;
+        }
+    }
+
+    let rounded = if exponent > 0 {
+        if decided {
+            return saturated;
+        }
+
+        let rounded = limb_round_at_shift(&current, shift);
+
+        if rounded > (i64::MAX as u64) {
+            return saturated;
+        }
+
+        rounded
+    } else {
+        if decided {
+            return ZERO;
+        }
+
+        match limb_round_power_of_two_quotient(shift, &current) {
+            Some(rounded) => rounded,
+            None => return saturated,
+        }
+    };
+
+    if negative_result { (rounded as i64).wrapping_neg() } else { rounded as i64 }
 }
 
 // The magnitude kernel — ported from FixedQ4816.PowMagnitude. `x` is strictly positive; `negative_result`
@@ -586,42 +743,8 @@ fn pow_magnitude(x: i64, y: i64, whole: bool, negative_result: bool) -> i64 {
         }
     }
 
-    let log = log2(x);
-
     if whole && (-32..=32).contains(&exponent) {
-        // The log-derived magnitude decides only the underflow shortcut; overflow is decided exactly by the
-        // ladder's own rounded magnitude leaving the carrier, below.
-        if log.wrapping_mul(exponent) < (-18i64 << FRACTION_BITS) {
-            return ZERO;
-        }
-
-        let mut result: u64 = ONE as u64;
-        let mut base_magnitude: u64 = if exponent < 0 {
-            crate::fixed::div(ONE, x) as u64
-        } else {
-            x as u64
-        };
-        let mut remaining = if exponent < 0 { -exponent } else { exponent };
-
-        while remaining > 0 {
-            if (remaining & 1) != 0 {
-                match try_multiply_magnitude(result, base_magnitude) {
-                    Some(next) => result = next,
-                    None => return if negative_result { i64::MIN } else { i64::MAX },
-                }
-            }
-
-            remaining >>= 1;
-
-            if remaining > 0 {
-                match try_multiply_magnitude(base_magnitude, base_magnitude) {
-                    Some(next) => base_magnitude = next,
-                    None => return if negative_result { i64::MIN } else { i64::MAX },
-                }
-            }
-        }
-
-        return if negative_result { (result as i64).wrapping_neg() } else { result as i64 };
+        return pow_whole(x as u64, exponent, negative_result);
     }
 
     // Full-width y*log2(x) with the logarithm at Q46 (a Q62 product), the saturation gates applied on that
