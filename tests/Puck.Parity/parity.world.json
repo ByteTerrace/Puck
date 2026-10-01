@@ -271,12 +271,16 @@
       {
         "palette": [
           {
-            "color": "#3FAF6F",
+            "color": "#50A06C",
             "material": 0
           },
           {
-            "color": "#101010",
+            "color": "#1D261E",
             "material": 1
+          },
+          {
+            "color": "#8C6460",
+            "material": 2
           }
         ],
         "instance": "world",
