@@ -204,8 +204,8 @@ another world as a view instance (`WorldViewInstances`).
   the eye would see through the door, and the image parallaxes as the eye
   moves. The glass shows the image edge to edge, with no bezel. The frustum's
   shear rides the camera (`CameraSnapshot.FrustumOffset`), and so does its near
-  plane, just past the mapped glass and the counterpart face's own glass
-  (`CameraSnapshot.Near`): the view pass starts every ray there and a hit
+  plane, at the mapped glass and advanced past the counterpart face's own glass
+  when it seats a screen (`CameraSnapshot.Near`): the view pass starts every ray there and a hit
   through the image starts its ray there, so the window shows only what lies
   beyond the aperture, never the destination's geometry between the mapped eye
   and the glass, nor the glass of the face it looks through. The far distance
@@ -226,8 +226,9 @@ another world as a view instance (`WorldViewInstances`).
 shows it: a screen, through the footprint of its declared extent inside the
 world's view, or a HUD frame or a probe export, which the display shows
 directly. A session's footprint holds only while its consumer's last camera
-sees the glass it shows on (`WorldPortalVisibility`), so a portal face out of
-view renders nothing beneath it. It renders at most once a frame however many screens show it, at the
+sees the slab it shows on (`WorldPortalVisibility`). The test covers the slab's
+front, back and sides, which all sample the screen image; a slab wholly outside
+the frustum renders nothing beneath it. It renders at most once a frame however many screens show it, at the
 extent its footprint asks, and at the refresh `world.view-refresh` sets (a
 window session on every frame); between refreshes every consumer reads its
 latest completed image. A view nothing shows renders nothing and keeps its

@@ -94,8 +94,6 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
-        // A view whose registration or session is gone gives back its residency.
-        ReconcileViewResidencies();
         ReconcileSessionLifecycles();
         RetireParkedCaptures();
 
@@ -127,6 +125,8 @@ internal sealed partial class WorldScreenBinder {
         PublishFrameCaptures(context: in context);
         ReconcileNesting();
         SettleWindowRoutes();
+        // Reconciliation may have closed a view or routed it into a shared residency this frame.
+        ReconcileViewResidencies();
         m_frameContext = context;
         m_hasFrameContext = true;
         Mappings.Publish(images: this);

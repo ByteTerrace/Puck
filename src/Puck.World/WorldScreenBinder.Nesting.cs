@@ -70,6 +70,12 @@ internal sealed partial class WorldScreenBinder {
         var sessions = NestedSessionsOf();
 
         foreach (var slot in m_slots.Values) {
+            if (m_nestingDepth == 0) {
+                ReleaseSlotSession(slot: slot);
+
+                continue;
+            }
+
             if (slot.Session is { } feed) {
                 moved |= ReconcileFeed(
                     feed: feed,
@@ -549,12 +555,13 @@ internal sealed partial class WorldScreenBinder {
                 key: screens,
                 value: out var owner
             ) &&
+            ((owner.Feed is null) || (owner.Feed.Observation is { Ended: false })) &&
             (binder.m_instanceHost.ScreenSession(
                 instanceName: owner.Instance,
                 screenIndex: screen
             ) is { } hosted) &&
             (hosted.Source == source) &&
-            (hosted.Observation is not null) &&
+            (hosted.Observation is { Ended: false }) &&
             (hosted.InstanceName is not null)
         )
             ? hosted
@@ -610,10 +617,6 @@ internal sealed partial class WorldScreenBinder {
         );
         /// <inheritdoc/>
         public void Close(SessionFeed child) {
-            if (child.Nested is { } screens) {
-                _ = binder.m_nestedOwners.Remove(key: screens);
-            }
-
             binder.ReleaseSession(
                 feed: child,
                 index: child.ScreenIndex,

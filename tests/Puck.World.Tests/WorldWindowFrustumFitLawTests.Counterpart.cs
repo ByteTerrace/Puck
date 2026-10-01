@@ -16,6 +16,20 @@ public sealed partial class WorldWindowFrustumFitLawTests {
         var local = AuthoredGameFixtures.Load(relativePath: Local);
         var destination = AuthoredGameFixtures.Load(relativePath: Destination);
 
+        destination = destination with {
+            AuthoringRaw = (destination.Authoring with { DerivedFaceScreens = 1 }),
+            PlacementRowsRaw = [.. destination.Placements.Select(selector: static placement => ((placement.Id == "arch")
+                ? (placement with {
+                    FaceSources = [new WorldPlacementFace(
+                        Face: "glass",
+                        Source: WorldPortalFallback.SourceOf(session: new WorldScreenSource.Session(Destination: "return"))
+                    )],
+                })
+                : placement))],
+        };
+
+        Assert.Single(collection: WorldPrototypeFacets.Seated(definition: destination));
+
         Assert.True(condition: WorldFaceCatalog.For(definition: destination).TryFind(
             faceName: "glass",
             placementId: "arch",
@@ -55,6 +69,49 @@ public sealed partial class WorldWindowFrustumFitLawTests {
             Assert.True(condition: (against
                 ? (bareStart > back)
                 : (bareStart < front)));
+        }
+    }
+    // THE LAW: a counterpart with no seated screen draws no glass to skip. Advancing past a hypothetical slab would
+    // discard real geometry immediately beyond the mapped aperture, even though the arch's opening is empty.
+    [Theory]
+    [InlineData(0f, 1f)]
+    [InlineData(37f, 2f)]
+    [InlineData(180f, 0.5f)]
+    public void AnUnseatedCounterpartDoesNotAdvanceTheNearPlane(float yaw, float scale) {
+        var local = AuthoredGameFixtures.Load(relativePath: Local);
+        var destination = AuthoredGameFixtures.Load(relativePath: Destination);
+
+        destination = destination with {
+            PlacementRowsRaw = [.. destination.Placements.Select(selector: placement => ((placement.Id == "arch")
+                ? (placement with { Scale = scale, YawDegrees = yaw })
+                : placement))],
+        };
+
+        Assert.Empty(collection: WorldPrototypeFacets.Seated(definition: destination));
+        Assert.True(condition: WorldWindowFrustumFit.TryResolveApertures(
+            counterpart: out var counterpart,
+            destination: destination,
+            local: local,
+            screenIndex: DoorScreen(local: local),
+            source: out var source
+        ));
+
+        foreach (var eye in Eyes) {
+            Assert.True(condition: WorldWindowFrustumFit.TryFitWindow(
+                camera: out var bare,
+                destination: counterpart,
+                glass: WorldWindowFrustumFit.Glass(screen: DoorRow()),
+                localEye: eye,
+                source: source
+            ));
+            Assert.True(condition: WorldWindowFrustumFit.TryFitFromEye(
+                camera: out var window,
+                destination: destination,
+                eye: eye,
+                local: local,
+                screen: DoorRow()
+            ));
+            Assert.Equal(actual: window, expected: bare);
         }
     }
 

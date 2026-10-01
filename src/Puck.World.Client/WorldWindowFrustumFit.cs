@@ -35,6 +35,7 @@ public static class WorldWindowFrustumFit {
     public static bool TryResolveApertures(WorldDefinition local, WorldDefinition destination, int screenIndex, out WorldFaceGeometry source, out WorldFaceGeometry counterpart) {
         var resolved = TryResolveFrames(
             counterpart: out var counterpartFrame,
+            counterpartHasGlass: out _,
             destination: destination,
             local: local,
             screenIndex: screenIndex,
@@ -53,12 +54,13 @@ public static class WorldWindowFrustumFit {
 
     // The two face frames a window screen's apertures are: the local face that claims the screen index, and the
     // counterpart its portal facet names in the destination.
-    private static bool TryResolveFrames(WorldDefinition local, WorldDefinition destination, int screenIndex, out WorldFaceFrame source, out WorldFaceFrame counterpart) {
+    private static bool TryResolveFrames(WorldDefinition local, WorldDefinition destination, int screenIndex, out WorldFaceFrame source, out WorldFaceFrame counterpart, out bool counterpartHasGlass) {
         ArgumentNullException.ThrowIfNull(argument: local);
         ArgumentNullException.ThrowIfNull(argument: destination);
 
         source = default;
         counterpart = default;
+        counterpartHasGlass = false;
 
         foreach (var row in WorldFaceCatalog.For(definition: local).Rows) {
             if (row.ScreenIndex != screenIndex) {
@@ -93,6 +95,7 @@ public static class WorldWindowFrustumFit {
 
             source = row.Frame;
             counterpart = counterpartRow.Frame;
+            counterpartHasGlass = (counterpartRow.ScreenIndex >= 0);
 
             return true;
         }
@@ -213,7 +216,7 @@ public static class WorldWindowFrustumFit {
     }
     /// <summary>Fits a window screen's camera against an eye: the local face the screen shows on and its counterpart in
     /// the destination (<see cref="TryResolveApertures"/>), the glass its row draws (<see cref="Glass"/>), and the
-    /// eye. The camera's rays start past the glass the counterpart face draws (<see cref="WorldPrototypeFacets.GlassSpan"/>),
+    /// eye. When the counterpart seats a screen, the camera's rays start past its glass (<see cref="WorldPrototypeFacets.GlassSpan"/>),
     /// so the window never shows the destination's own glass it looks through, which shows a window of its own when the
     /// counterpart is a return portal.</summary>
     /// <param name="eye">The eye, in the local world's space.</param>
@@ -230,6 +233,7 @@ public static class WorldWindowFrustumFit {
 
         if (!TryResolveFrames(
             counterpart: out var counterpartFrame,
+            counterpartHasGlass: out var counterpartHasGlass,
             destination: destination,
             local: local,
             screenIndex: screen.Index,
@@ -250,6 +254,10 @@ public static class WorldWindowFrustumFit {
             source: source
         )) {
             return false;
+        }
+
+        if (!counterpartHasGlass) {
+            return true;
         }
 
         // The camera's rays start on the mapped glass, this far in front of the counterpart's frame along its normal, and

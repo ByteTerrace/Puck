@@ -47,6 +47,7 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
     private readonly Func<string, bool> m_shares;
 
     private readonly Dictionary<int, TChild> m_children = [];
+    private readonly Dictionary<int, WorldScreenSource.Session> m_childSources = [];
     // The views in screen order, and their screens, rebuilt whenever one opens or closes, so a frame walks them without
     // allocating.
     private readonly List<TChild> m_views = [];
@@ -176,6 +177,7 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
             if (
                 !within ||
                 (RowOf(screen: screen) is not { Source: WorldScreenSource.Session session }) ||
+                (m_childSources[screen] != session) ||
                 !sessions.Holds(
                     child: child,
                     screen: screen,
@@ -190,6 +192,7 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
         foreach (var screen in m_closing) {
             sessions.Close(child: m_children[screen]);
             _ = m_children.Remove(key: screen);
+            _ = m_childSources.Remove(key: screen);
             childrenMoved = true;
         }
 
@@ -227,6 +230,10 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
                     m_children.Add(
                         key: row.Index,
                         value: opened
+                    );
+                    m_childSources.Add(
+                        key: row.Index,
+                        value: session
                     );
                     childrenMoved = true;
                 }
@@ -270,6 +277,7 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
         }
 
         m_children.Clear();
+        m_childSources.Clear();
         m_views.Clear();
         m_viewScreens.Clear();
     }

@@ -7,7 +7,7 @@ namespace Puck.World.Client;
 /// Whether a camera sees a screen's glass, which decides whether the session the glass shows renders this frame: a
 /// portal face no level of a frame sees schedules nothing beneath it, so the counted cost of nesting follows what is
 /// visible. The test is conservative, with a margin about the frustum, so a face entering the view renders before it is
-/// shown: a face is unseen only when the camera stands behind its glass, or every corner of the glass lies past one
+/// shown: a face is unseen only when every corner of its sampled slab lies past one
 /// plane of the camera's frustum (its near plane, or one of its four sides widened by <see cref="Margin"/>).
 /// Presentation only: what a face shows never reaches simulation state.
 /// </summary>
@@ -18,26 +18,21 @@ public static class WorldPortalVisibility {
     /// <summary>Returns whether a camera sees a screen's glass.</summary>
     /// <param name="camera">The camera, in the screen's world.</param>
     /// <param name="glass">The screen row whose face is the glass.</param>
-    /// <returns><see langword="false"/> when the camera stands behind the glass's plane or the whole glass lies outside
+    /// <returns><see langword="false"/> when the whole sampled slab lies outside
     /// one plane of the camera's widened frustum; otherwise <see langword="true"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="glass"/> is <see langword="null"/>.</exception>
     public static bool Sees(in CameraSnapshot camera, WorldScreen glass) {
         ArgumentNullException.ThrowIfNull(argument: glass);
 
-        Vector3 origin = glass.Origin;
         var right = (Vector3.Normalize(value: glass.Right) * glass.HalfWidth);
         var up = (Vector3.Normalize(value: glass.Up) * glass.HalfHeight);
-        var normal = Vector3.Cross(
+        var normal = Vector3.Normalize(value: Vector3.Cross(
             vector1: right,
             vector2: up
-        );
-
-        if (Vector3.Dot(
-            vector1: (camera.Position - origin),
-            vector2: normal
-        ) <= 0f) {
-            return false;
-        }
+        ));
+        var thickness = (normal * glass.HalfDepth);
+        // WorldScreenStamper seats the slab behind Origin. Its back and sides sample the image too.
+        var origin = (((Vector3)glass.Origin) - thickness);
 
         var tangent = (camera.TanHalfFieldOfView * (1f + Margin));
         var horizontal = (camera.AspectRatio * tangent);
@@ -45,8 +40,8 @@ public static class WorldPortalVisibility {
         // One bit per frustum plane every corner so far lies outside of; a plane every corner lies outside culls the glass.
         var outside = 0b11111;
 
-        for (var corner = 0; (corner < 4); corner++) {
-            var point = ((origin + (((corner & 1) == 0) ? -right : right)) + (((corner & 2) == 0) ? -up : up));
+        for (var corner = 0; (corner < 8); corner++) {
+            var point = (((origin + (((corner & 1) == 0) ? -right : right)) + (((corner & 2) == 0) ? -up : up)) + (((corner & 4) == 0) ? -thickness : thickness));
             var toward = (point - camera.Position);
             var depth = Vector3.Dot(
                 vector1: toward,
