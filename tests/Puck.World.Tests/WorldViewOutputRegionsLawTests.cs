@@ -4,9 +4,9 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Each view and pane allocates the largest rect it reaches over the layout transition in flight, every rect a
-/// frame of that transition places fits inside it, it holds one extent until the transition settles, and a settled
-/// composition allocates exactly its rects.</summary>
+/// <summary>Each view and pane reserves every rect it reaches over the layout transition in flight, the spectator
+/// fallback fits inside its reservation, interrupted transitions retain reservations until the chain settles, and a
+/// settled composition requests exactly its rects.</summary>
 public sealed class WorldViewOutputRegionsLawTests {
     private static readonly WorldCamera[] Cameras = [new(
         Anchor: null,
@@ -25,6 +25,7 @@ public sealed class WorldViewOutputRegionsLawTests {
     // and then equal the settled rects.
     private static void HoldsEveryFrame(WorldViewDefaults views, string from, string to, float interruptAt = -1f, string? interruptTo = null) {
         var composer = new WorldViewComposer();
+        var regions = new WorldViewOutputRegions();
         var envelopes = new List<NormalizedRect>();
         NormalizedRect[]? during = null;
         var settledFrames = 0;
@@ -35,13 +36,13 @@ public sealed class WorldViewOutputRegionsLawTests {
             var layout = (((interruptTo is not null) && (seconds >= interruptAt)) ? interruptTo : to);
 
             composer.Compose(cameraOverride: null, elapsedSeconds: seconds, joinedCount: 1, layoutOverride: layout, views: views);
-            WorldViewOutputRegions.Views(cameras: Cameras, composer: composer, envelopes: envelopes, joinedCount: 1);
+            regions.Views(cameras: Cameras, composer: composer, envelopes: envelopes, joinedCount: 1);
 
             var ordinal = 0;
 
             foreach (var slot in composer.Slots) {
                 if (slot.Instance is { } instance) {
-                    var pane = WorldViewOutputRegions.Pane(composer: composer, instance: instance, region: slot.Region);
+                    var pane = regions.Pane(composer: composer, instance: instance, region: slot.Region);
 
                     Assert.True(condition: (pane.Width >= slot.Region.Width));
                     Assert.True(condition: (pane.Height >= slot.Region.Height));
@@ -90,12 +91,13 @@ public sealed class WorldViewOutputRegionsLawTests {
             ],
         };
         var composer = new WorldViewComposer();
+        var regions = new WorldViewOutputRegions();
         var envelopes = new List<NormalizedRect>();
 
         composer.Compose(cameraOverride: null, elapsedSeconds: 0f, joinedCount: 1, layoutOverride: "mixed", views: views);
         composer.Compose(cameraOverride: null, elapsedSeconds: 0f, joinedCount: 1, layoutOverride: "camera", views: views);
         composer.Compose(cameraOverride: null, elapsedSeconds: 0.6f, joinedCount: 1, layoutOverride: "camera", views: views);
-        WorldViewOutputRegions.Views(cameras: Cameras, composer: composer, envelopes: envelopes, joinedCount: 1);
+        regions.Views(cameras: Cameras, composer: composer, envelopes: envelopes, joinedCount: 1);
 
         // Past the midpoint the pane's slot shows the arriving camera and the departing camera still shrinks in its own:
         // two camera ordinals, each with an envelope covering its rect.
@@ -117,6 +119,70 @@ public sealed class WorldViewOutputRegionsLawTests {
         HoldsEveryFrame(from: "camera", interruptAt: 0.6f, interruptTo: "camera", to: "pane", views: views);
     }
     [Fact]
+    public void ASmallCameraAndAPaneReserveTheWholeDisplaySpectatorOnEitherSideOfTheCut() {
+        var views = new WorldViewDefaults {
+            Layouts = [
+                new WorldViewLayout(Name: "camera", Slots: [new WorldViewSlot(Camera: "camera", Width: 0.25f)], TransitionSeconds: 1f),
+                new WorldViewLayout(Name: "pane", Slots: [new WorldViewSlot(Instance: "pane", Width: 0.25f)], TransitionSeconds: 1f),
+            ],
+        };
+        var whole = new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f);
+
+        foreach (var (from, to) in new[] { ("camera", "pane"), ("pane", "camera") }) {
+            var composer = new WorldViewComposer();
+            var regions = new WorldViewOutputRegions();
+            var envelopes = new List<NormalizedRect>();
+
+            composer.Compose(cameraOverride: null, elapsedSeconds: 0f, joinedCount: 1, layoutOverride: from, views: views);
+            regions.Views(cameras: Cameras, composer: composer, envelopes: envelopes, joinedCount: 1);
+            for (var step = 0; (step < 10); step++) {
+                composer.Compose(cameraOverride: null, elapsedSeconds: (step * 0.1f), joinedCount: 1, layoutOverride: to, views: views);
+                regions.Views(cameras: Cameras, composer: composer, envelopes: envelopes, joinedCount: 1);
+                Assert.Equal(expected: whole, actual: Assert.Single(collection: envelopes));
+            }
+            composer.Compose(cameraOverride: null, elapsedSeconds: 1f, joinedCount: 1, layoutOverride: to, views: views);
+            regions.Views(cameras: Cameras, composer: composer, envelopes: envelopes, joinedCount: 1);
+            Assert.Equal(expected: ((to == "pane") ? whole : whole with { Width = 0.25f }), actual: Assert.Single(collection: envelopes));
+        }
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void InterruptedShrinksKeepTheirReservationUntilTheChainSettles(bool pane) {
+        WorldViewSlot Slot(float width) => (pane
+            ? new WorldViewSlot(Instance: "pane", Width: width)
+            : new WorldViewSlot(Camera: "camera", Width: width));
+        var views = new WorldViewDefaults {
+            Layouts = [
+                new WorldViewLayout(Name: "wide", Slots: [Slot(width: 0.75f)], TransitionSeconds: 1f),
+                new WorldViewLayout(Name: "narrow", Slots: [Slot(width: 0.25f)], TransitionSeconds: 1f),
+                new WorldViewLayout(Name: "tiny", Slots: [Slot(width: 0.125f)], TransitionSeconds: 1f),
+            ],
+        };
+        var composer = new WorldViewComposer();
+        var regions = new WorldViewOutputRegions();
+        var envelopes = new List<NormalizedRect>();
+
+        NormalizedRect Envelope() {
+            regions.Views(cameras: Cameras, composer: composer, envelopes: envelopes, joinedCount: 1);
+            return (pane ? regions.Pane(composer: composer, instance: "pane", region: composer.Slots[0].Region) : envelopes[0]);
+        }
+
+        composer.Compose(cameraOverride: null, elapsedSeconds: 0f, joinedCount: 1, layoutOverride: "wide", views: views);
+        var reserved = Envelope();
+
+        for (var step = 0; (step < 10); step++) {
+            var layout = (((step % 2) == 0) ? "narrow" : "tiny");
+
+            composer.Compose(cameraOverride: null, elapsedSeconds: step, joinedCount: 1, layoutOverride: layout, views: views);
+            Assert.Equal(expected: reserved, actual: Envelope());
+            composer.Compose(cameraOverride: null, elapsedSeconds: (step + 0.4f), joinedCount: 1, layoutOverride: layout, views: views);
+            Assert.Equal(expected: reserved, actual: Envelope());
+        }
+        composer.Compose(cameraOverride: null, elapsedSeconds: 11f, joinedCount: 1, layoutOverride: "tiny", views: views);
+        Assert.Equal(expected: reserved with { Width = 0.125f }, actual: Envelope());
+    }
+    [Fact]
     public void ASettledSplitAllocatesEachSeatItsHalfAndATransitionHoldsItsLargerEndpoint() {
         var views = new WorldViewDefaults {
             Layouts = [
@@ -125,21 +191,22 @@ public sealed class WorldViewOutputRegionsLawTests {
             ],
         };
         var composer = new WorldViewComposer();
+        var regions = new WorldViewOutputRegions();
         var envelopes = new List<NormalizedRect>();
         var half = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0f, Y: 0f);
         var whole = new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f);
 
         composer.Compose(cameraOverride: null, elapsedSeconds: 0f, joinedCount: 2, layoutOverride: "split", views: views);
-        WorldViewOutputRegions.Views(cameras: Cameras, composer: composer, envelopes: envelopes, joinedCount: 2);
+        regions.Views(cameras: Cameras, composer: composer, envelopes: envelopes, joinedCount: 2);
         Assert.Equal(actual: envelopes, expected: [half, half]);
 
         // Split to action: the first seat grows to the whole display and the second collapses, so both hold the larger
         // endpoint until the transition settles, then the first allocates the whole display and the second nothing.
         composer.Compose(cameraOverride: null, elapsedSeconds: 0.1f, joinedCount: 2, layoutOverride: "action", views: views);
-        WorldViewOutputRegions.Views(cameras: Cameras, composer: composer, envelopes: envelopes, joinedCount: 2);
+        regions.Views(cameras: Cameras, composer: composer, envelopes: envelopes, joinedCount: 2);
         Assert.Equal(actual: envelopes, expected: [whole, half]);
         composer.Compose(cameraOverride: null, elapsedSeconds: 0.6f, joinedCount: 2, layoutOverride: "action", views: views);
-        WorldViewOutputRegions.Views(cameras: Cameras, composer: composer, envelopes: envelopes, joinedCount: 2);
+        regions.Views(cameras: Cameras, composer: composer, envelopes: envelopes, joinedCount: 2);
         Assert.Equal(actual: envelopes, expected: [whole]);
     }
 }

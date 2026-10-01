@@ -709,14 +709,18 @@ shader panes from that composition.
 Each occupant's allocation is the largest width and height its slots reach over the layout
 transition in flight, from its starting rect to its ending one, with padded departing cameras and
 the slot a view ordinal holds on either side of the midpoint cut included (`WorldViewOutputRegions`).
-A settled layout allocates each view and pane exactly its rect, so the shipped split layout renders
+An endpoint with no rendered slot reserves the whole-display spectator. Interrupted transitions
+retain each occupant's largest reservation until the chain settles, so repeated interruptions never
+shrink its allocation mid-ease. A settled layout requests each view and pane's own rect, subject to
+the scheduler's quantization and shrink hysteresis, so the shipped split layout renders
 each seat at half the display. Easing changes placement and the resolved grid inside the
-render-scale ceiling without resizing a node; the allocation changes once a transition, as it
-starts when an occupant grows and as it settles when one shrinks. Collapsed arriving slots keep a
+render-scale ceiling without resizing a node; allocations grow as a transition starts and shrink
+as it settles. An occupant that grows on one axis and shrinks on the other changes allocation at
+both boundaries. Collapsed arriving slots keep a
 finite camera while positive extents retain their fractional-pixel aspect. Frozen convergence
 frames publish their retained placements on every prepared frame. Editor comparisons record their
 viewports after that placement. `WorldCameraPlacementLawTests` pins agreement on every transition
-frame, one rebuild a transition across quantization steps, and the split layout's half-display
+frame, one rebuild for a shrinking transition across quantization steps, and the split layout's half-display
 allocation. A pane's frame values carry its placed extent (`placedExtent`), the extent its paired
 camera projects for, so a pane shader projects at the placed aspect while its output keeps the
 allocation's.

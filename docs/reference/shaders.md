@@ -702,7 +702,8 @@ composer, then places the views and panes of that same frame.
 For every instance a slot shows it places the pane at the slot's rect, with
 the sharpness `world.upscale-sharpness` sets, adds a footprint (consumer
 `main`, producer the pane, at its largest width and height over the layout
-transition in flight, exactly its rect once settled) so easing its rect never
+transition in flight, retained through interruptions until the chain settles,
+then its own rect subject to scheduler quantization and shrink hysteresis) so easing its rect never
 resizes a node, advances the pane's clock, and feeds its
 camera, pointer and time. A pane the active layout does not show is not shown:
 its place pass draws nothing and its instance is not scheduled. Once every
@@ -727,7 +728,10 @@ views any layout or the player roster can compose. When a world has more than
 one, `main` composes the scene and runs one `place` pass per view ahead of the
 pane passes. The capture places each view at its current rect and adds a stable
 footprint reserving the largest extent it reaches over the layout transition
-in flight, exactly its rect once the layout settles. The view's own package allocates traversal targets at its quantized
+in flight, including the whole-display spectator at an endpoint without a rendered
+slot. Reservations retain their largest extent through interruptions until the
+chain settles, then request the view's own rect subject to scheduler quantization
+and shrink hysteresis. The view's own package allocates traversal targets at its quantized
 render ceiling and records the current render grid inside those targets; a
 layout transition's dip moves only that grid, so it rebuilds and allocates
 nothing. A view whose ceiling is below native appends `resolve`, reconstructing

@@ -155,8 +155,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly Dictionary<string, WorldCameraRigCompiler.Cache> m_namedCameraRigCache = new(comparer: StringComparer.Ordinal);
     private readonly WorldGroupAnchors m_groupAnchors = new();
     private readonly List<SdfViewSnapshot> m_views = new(capacity: PlayerRoster.MaxSlots);
-    // The extent the root reads each of m_views at, over the layout transition in flight (WorldViewOutputRegions).
+    // The extent the root reads each of m_views at, retained until the transition chain settles (WorldViewOutputRegions).
     private readonly List<NormalizedRect> m_viewEnvelopes = new(capacity: PlayerRoster.MaxSlots);
+    private readonly WorldViewOutputRegions m_outputRegions = new();
     // The frame's views: the presentation's own (m_views), which it places, then the camera views filming the frame.
     private readonly List<SdfViewSnapshot> m_frameViews = new(capacity: PlayerRoster.MaxSlots);
     private DynamicTransform[] m_transforms = [];
@@ -1248,7 +1249,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             if (
                 (composed.Instance is not { } name) ||
                 !graphs.Place(
-                    envelope: WorldViewOutputRegions.Pane(
+                    envelope: m_outputRegions.Pane(
                         composer: m_composer,
                         instance: name,
                         region: region
@@ -1643,7 +1644,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             m_noLocalSeatsNarrated = false;
         }
 
-        WorldViewOutputRegions.Views(
+        m_outputRegions.Views(
             cameras: m_client.Definition.Cameras,
             composer: m_composer,
             envelopes: m_viewEnvelopes,

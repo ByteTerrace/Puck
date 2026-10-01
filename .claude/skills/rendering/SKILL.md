@@ -1512,11 +1512,15 @@ not show draws nothing in its place pass and is not scheduled. A pane slot adds
 no SDF view. `WorldViewGraphHost.PlaceViews` and `Place` add footprints at the
 envelope the presenter hands them: the largest width and height each occupant
 reaches over the layout transition in flight (`WorldViewOutputRegions` over
-`WorldViewComposer.StartSlots` and `EndSlots`), which is exactly its rect once
-the layout settles. Placement uses the current eased rect with
+`WorldViewComposer.StartSlots` and `EndSlots`), including a whole-display
+spectator at an endpoint without a rendered slot. Reservations retain their largest
+extent through interrupted transitions until the chain settles, then request the
+occupant's own rect, subject to scheduler quantization and shrink hysteresis.
+Placement uses the current eased rect with
 `world.upscale-sharpness`; the envelope holds through easing, so quantization
-and hysteresis rebuild nothing and a transition rebuilds a node once, as it
-starts or settles
+and hysteresis rebuild nothing during an uninterrupted ease. Allocations grow as
+it starts and shrink as it settles; growth on one axis and shrinkage on the other
+rebuild at both boundaries
 (`WorldCameraPlacementLawTests.AnEasedRectCrossesQuantizationStepsWithoutRebuildingItsNodeUntilTheTransitionSettles`,
 `ASteadySplitLayoutAllocatesItsFirstViewAtItsPlacedHalf`).
 The view package reconstructs a reduced render grid to that native output
