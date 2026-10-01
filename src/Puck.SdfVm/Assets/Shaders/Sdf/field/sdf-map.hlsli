@@ -269,7 +269,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             bool planReady = true;
 
 #ifndef SDF_DYNAMIC_TRANSFORMS
-            planReady = (plan.z == 0u);
+            planReady = (plan.z == SDF_TRANSFORM_SLOT_STATIC_WORD);
 #endif
 
             if (planReady) {
@@ -278,8 +278,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 int rigidSlot = SDF_TRANSFORM_SLOT_NONE;
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
-                if (plan.z != 0u) {
-                    uint dynamicSlot = (plan.z - 1u);
+                if (plan.z != SDF_TRANSFORM_SLOT_STATIC_WORD) {
+                    uint dynamicSlot = (uint)SDF_TRANSFORM_SLOT_UNPACK(plan.z);
                     rigidLanes = sdfDynamicTransforms[3u * dynamicSlot + 2u];
                     rigidSlot = (int)dynamicSlot;
                     float4 dynamicPosition = sdfDynamicTransforms[3u * dynamicSlot];
