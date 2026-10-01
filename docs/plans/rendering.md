@@ -5749,7 +5749,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `world.timeline`.
 4. **P18-4, the sky block, the lights table and generated decoders.** The
    environment leaves the pass blocks, and nothing it draws changes.
-   - Built, its GPU checks outstanding: the lights table (`SdfLight` records),
+   - Landed: the lights table (`SdfLight` records),
      the sky block (`SdfSkyBlock`) and the sky's stops and softboxes
      (`SdfSkyStop`, `SdfSoftbox`) are World-group regions whose HLSL structs
      `puck shaders generate` writes from the C# types; `SdfLights` and `SdfSky`
@@ -5760,11 +5760,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      referenced by the shadow and views kernels, the sky block and stops by sky
      and views, and the softboxes by views alone; `composite` joins the sky's
      readers when P18-5 lands it. A star or cloud seed is exact now: the old
-     float rows rounded a seed past 2^24. The key-light specular uses a literal
-     unity scale, leaving its clearcoat multiply and add eligible for
-     contraction; exact pixel agreement remains unverified. Making that sum
-     `precise` also constrains upstream BRDF arithmetic, so it needs pixel
-     verification on both backends.
+     float rows rounded a seed past 2^24. The resolve pass declares the same
+     World group, since it binds the residency's one World set. Parity holds
+     every station under its contract on both backends; on Direct3D 12 two
+     pixels (one each at the converge and vocabulary stations) move by one code,
+     and Vulkan's captures are unchanged.
    - Delivers: the lights as a typed table (a World-group region of generated
      structs), the sky as a typed block (frame, layers, bodies, phases, the
      environment coefficients), both written as regions that owe only changed
