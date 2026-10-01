@@ -457,7 +457,6 @@ public readonly partial record struct FixedQ4816(long Value)
     public static FixedQ4816 AdditiveIdentity => default;
     /// <summary>Gets the smallest representable positive value, one unit in the last place (<c>2⁻¹⁶</c>).</summary>
     public static FixedQ4816 Epsilon => new(Value: RawEpsilon);
-
     /// <summary>Gets the largest representable value.</summary>
     public static FixedQ4816 MaxValue => new(Value: long.MaxValue);
     /// <summary>Gets the smallest (most negative) representable value.</summary>

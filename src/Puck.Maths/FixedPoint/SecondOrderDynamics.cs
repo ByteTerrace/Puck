@@ -82,7 +82,7 @@ public readonly record struct SecondOrderDynamics {
 
         var exponentQ32 = FixedQ4816.RoundProduct(
             fractionBitCount: ((ExponentFractionBitCount + 62) - (2 * FixedQ4816.FractionBitCount)),
-            product: (Int128.Max(naturalExponent, -limit) * FixedQ4816.Log2EQ62)
+            product: (Int128.Max(x: naturalExponent, y: -limit) * FixedQ4816.Log2EQ62)
         );
 
         return FixedQ4816.Exp2Q32(exponentQ32: -exponentQ32);
