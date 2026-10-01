@@ -16,24 +16,79 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | Path | Kind | Role | Facet | Member |
 |---|---|---|---|---|
 | `render.lighting.lights[][directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
+| `render.lighting.lights[][directional].weight` | State | Binding | Binding | `WorldRenderLight.Directional.Weight` |
+| `render.lighting.lights[][directional].angularRadius` | State | Binding | Binding | `WorldRenderLight.Directional.AngularRadius` |
 | `render.lighting.lights[][hemisphere].color` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Color` |
+| `render.lighting.lights[][hemisphere].base` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Base` |
+| `render.lighting.lights[][hemisphere].gradient` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Gradient` |
 | `render.lighting.lights[][rim].color` | State | Binding | Binding | `WorldRenderLight.Rim.Color` |
+| `render.lighting.lights[][rim].weight` | State | Binding | Binding | `WorldRenderLight.Rim.Weight` |
+| `render.lighting.lights[][rim].power` | State | Binding | Binding | `WorldRenderLight.Rim.Power` |
+| `render.lighting.lights[][point].radius` | State | Binding | Binding | `WorldRenderLight.Point.Radius` |
 | `render.lighting.lights[][point].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `render.lighting.lights[][point].color` | State | Binding | Binding | `WorldRenderLight.Point.Color` |
+| `render.lighting.lights[][point].weight` | State | Binding | Binding | `WorldRenderLight.Point.Weight` |
+| `render.lighting.lights[][occluder].radius` | State | Binding | Binding | `WorldRenderLight.Occluder.Radius` |
 | `render.lighting.lights[][occluder].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.lights[][occluder].weight` | State | Binding | Binding | `WorldRenderLight.Occluder.Weight` |
+| `render.lighting.curvature.cavity` | State | Binding | Binding | `WorldRenderCurvature.Cavity` |
+| `render.lighting.curvature.rim` | State | Binding | Binding | `WorldRenderCurvature.Rim` |
+| `render.lighting.curvature.ink` | State | Binding | Binding | `WorldRenderCurvature.Ink` |
+| `render.lighting.curvature.inkLow` | State | Binding | Binding | `WorldRenderCurvature.InkLow` |
+| `render.lighting.curvature.inkHigh` | State | Binding | Binding | `WorldRenderCurvature.InkHigh` |
 | `render.lighting.curvature.inkColor` | State | Binding | Binding | `WorldRenderCurvature.InkColor` |
+| `render.lighting.keys[].lights{*}[directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
+| `render.lighting.keys[].lights{*}[directional].weight` | State | Binding | Binding | `WorldRenderLight.Directional.Weight` |
+| `render.lighting.keys[].lights{*}[directional].angularRadius` | State | Binding | Binding | `WorldRenderLight.Directional.AngularRadius` |
+| `render.lighting.keys[].lights{*}[hemisphere].color` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Color` |
+| `render.lighting.keys[].lights{*}[hemisphere].base` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Base` |
+| `render.lighting.keys[].lights{*}[hemisphere].gradient` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Gradient` |
+| `render.lighting.keys[].lights{*}[rim].color` | State | Binding | Binding | `WorldRenderLight.Rim.Color` |
+| `render.lighting.keys[].lights{*}[rim].weight` | State | Binding | Binding | `WorldRenderLight.Rim.Weight` |
+| `render.lighting.keys[].lights{*}[rim].power` | State | Binding | Binding | `WorldRenderLight.Rim.Power` |
+| `render.lighting.keys[].lights{*}[point].radius` | State | Binding | Binding | `WorldRenderLight.Point.Radius` |
+| `render.lighting.keys[].lights{*}[point].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.keys[].lights{*}[point].color` | State | Binding | Binding | `WorldRenderLight.Point.Color` |
+| `render.lighting.keys[].lights{*}[point].weight` | State | Binding | Binding | `WorldRenderLight.Point.Weight` |
+| `render.lighting.keys[].lights{*}[occluder].radius` | State | Binding | Binding | `WorldRenderLight.Occluder.Radius` |
+| `render.lighting.keys[].lights{*}[occluder].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.keys[].lights{*}[occluder].weight` | State | Binding | Binding | `WorldRenderLight.Occluder.Weight` |
+| `render.lighting.keys[].curvature.cavity` | State | Binding | Binding | `WorldRenderCurvature.Cavity` |
+| `render.lighting.keys[].curvature.rim` | State | Binding | Binding | `WorldRenderCurvature.Rim` |
+| `render.lighting.keys[].curvature.ink` | State | Binding | Binding | `WorldRenderCurvature.Ink` |
+| `render.lighting.keys[].curvature.inkLow` | State | Binding | Binding | `WorldRenderCurvature.InkLow` |
+| `render.lighting.keys[].curvature.inkHigh` | State | Binding | Binding | `WorldRenderCurvature.InkHigh` |
+| `render.lighting.keys[].curvature.inkColor` | State | Binding | Binding | `WorldRenderCurvature.InkColor` |
+| `render.sky.layers[][gradient].stops[].elevation` | State | Binding | Binding | `WorldRenderSkyStop.Elevation` |
 | `render.sky.layers[][gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
+| `render.sky.layers[][fog].density` | State | Binding | Binding | `WorldRenderSkyLayer.Fog.Density` |
+| `render.sky.layers[][sunDisc].radius` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Radius` |
+| `render.sky.layers[][sunDisc].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Intensity` |
+| `render.sky.layers[][stars].brightness` | State | Binding | Binding | `WorldRenderSkyLayer.Stars.Brightness` |
+| `render.sky.layers[][stars].twinkle.share` | State | Binding | Binding | `WorldRenderSkyTwinkle.Share` |
+| `render.sky.layers[][stars].twinkle.depth` | State | Binding | Binding | `WorldRenderSkyTwinkle.Depth` |
+| `render.sky.layers[][stars].twinkle.rate` | State | Binding | Binding | `WorldRenderSkyTwinkle.Rate` |
+| `render.sky.layers[][clouds].coverage` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Coverage` |
+| `render.sky.layers[][clouds].softness` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Softness` |
+| `render.sky.layers[][clouds].scale` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Scale` |
 | `render.sky.layers[][clouds].color` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Color` |
-| `render.cycle.state` | State | Names | Read | `WorldRenderCycle.State` |
-| `render.cycle.keys[].lighting.lights[][directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
-| `render.cycle.keys[].lighting.lights[][hemisphere].color` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Color` |
-| `render.cycle.keys[].lighting.lights[][rim].color` | State | Binding | Binding | `WorldRenderLight.Rim.Color` |
-| `render.cycle.keys[].lighting.lights[][point].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
-| `render.cycle.keys[].lighting.lights[][point].color` | State | Binding | Binding | `WorldRenderLight.Point.Color` |
-| `render.cycle.keys[].lighting.lights[][occluder].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
-| `render.cycle.keys[].lighting.curvature.inkColor` | State | Binding | Binding | `WorldRenderCurvature.InkColor` |
-| `render.cycle.keys[].sky.layers[][gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
-| `render.cycle.keys[].sky.layers[][clouds].color` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Color` |
+| `render.sky.layers[][clouds].spin` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Spin` |
+| `render.sky.layers[][clouds].curl` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Curl` |
+| `render.sky.keys[].layers{*}[gradient].stops[].elevation` | State | Binding | Binding | `WorldRenderSkyStop.Elevation` |
+| `render.sky.keys[].layers{*}[gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
+| `render.sky.keys[].layers{*}[fog].density` | State | Binding | Binding | `WorldRenderSkyLayer.Fog.Density` |
+| `render.sky.keys[].layers{*}[sunDisc].radius` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Radius` |
+| `render.sky.keys[].layers{*}[sunDisc].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Intensity` |
+| `render.sky.keys[].layers{*}[stars].brightness` | State | Binding | Binding | `WorldRenderSkyLayer.Stars.Brightness` |
+| `render.sky.keys[].layers{*}[stars].twinkle.share` | State | Binding | Binding | `WorldRenderSkyTwinkle.Share` |
+| `render.sky.keys[].layers{*}[stars].twinkle.depth` | State | Binding | Binding | `WorldRenderSkyTwinkle.Depth` |
+| `render.sky.keys[].layers{*}[stars].twinkle.rate` | State | Binding | Binding | `WorldRenderSkyTwinkle.Rate` |
+| `render.sky.keys[].layers{*}[clouds].coverage` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Coverage` |
+| `render.sky.keys[].layers{*}[clouds].softness` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Softness` |
+| `render.sky.keys[].layers{*}[clouds].scale` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Scale` |
+| `render.sky.keys[].layers{*}[clouds].color` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Color` |
+| `render.sky.keys[].layers{*}[clouds].spin` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Spin` |
+| `render.sky.keys[].layers{*}[clouds].curl` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Curl` |
 | `render.environment.softboxes[].color` | State | Binding | Binding | `WorldRenderSoftbox.Color` |
 | `render.environment.horizon.low` | State | Binding | Binding | `WorldRenderHorizon.Low` |
 | `render.environment.horizon.high` | State | Binding | Binding | `WorldRenderHorizon.High` |
@@ -2516,6 +2571,26 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | Path | Member | Reason |
 |---|---|---|
 | `spawnPoints[].id` | `WorldSpawnPoint.Id` | a spawn point id |
+| `render.lighting.lights[][directional].name` | `WorldRenderLight.Directional.Name` | a light name a section key addresses |
+| `render.lighting.lights[][hemisphere].name` | `WorldRenderLight.Hemisphere.Name` | a light name a section key addresses |
+| `render.lighting.lights[][rim].name` | `WorldRenderLight.Rim.Name` | a light name a section key addresses |
+| `render.lighting.lights[][point].name` | `WorldRenderLight.Point.Name` | a light name a section key addresses |
+| `render.lighting.lights[][occluder].name` | `WorldRenderLight.Occluder.Name` | a light name a section key addresses |
+| `render.lighting.keys[].lights{*}[directional].name` | `WorldRenderLight.Directional.Name` | a light name a section key addresses |
+| `render.lighting.keys[].lights{*}[hemisphere].name` | `WorldRenderLight.Hemisphere.Name` | a light name a section key addresses |
+| `render.lighting.keys[].lights{*}[rim].name` | `WorldRenderLight.Rim.Name` | a light name a section key addresses |
+| `render.lighting.keys[].lights{*}[point].name` | `WorldRenderLight.Point.Name` | a light name a section key addresses |
+| `render.lighting.keys[].lights{*}[occluder].name` | `WorldRenderLight.Occluder.Name` | a light name a section key addresses |
+| `render.sky.layers[][gradient].name` | `WorldRenderSkyLayer.Gradient.Name` | a sky layer name a section key addresses |
+| `render.sky.layers[][fog].name` | `WorldRenderSkyLayer.Fog.Name` | a sky layer name a section key addresses |
+| `render.sky.layers[][sunDisc].name` | `WorldRenderSkyLayer.SunDisc.Name` | a sky layer name a section key addresses |
+| `render.sky.layers[][stars].name` | `WorldRenderSkyLayer.Stars.Name` | a sky layer name a section key addresses |
+| `render.sky.layers[][clouds].name` | `WorldRenderSkyLayer.Clouds.Name` | a sky layer name a section key addresses |
+| `render.sky.keys[].layers{*}[gradient].name` | `WorldRenderSkyLayer.Gradient.Name` | a sky layer name a section key addresses |
+| `render.sky.keys[].layers{*}[fog].name` | `WorldRenderSkyLayer.Fog.Name` | a sky layer name a section key addresses |
+| `render.sky.keys[].layers{*}[sunDisc].name` | `WorldRenderSkyLayer.SunDisc.Name` | a sky layer name a section key addresses |
+| `render.sky.keys[].layers{*}[stars].name` | `WorldRenderSkyLayer.Stars.Name` | a sky layer name a section key addresses |
+| `render.sky.keys[].layers{*}[clouds].name` | `WorldRenderSkyLayer.Clouds.Name` | a sky layer name a section key addresses |
 | `screens[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `screens[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `screens[].magazine.entries[][producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |

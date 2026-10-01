@@ -829,7 +829,75 @@ public static partial class WorldDocumentEmitter {
         lower: () => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: scope),
         scope: scope
     );
+
+    // A value keyed on a clock (`{ clock, keys [ { at, value, ease } ] }`) lowers its keys' values against the field
+    // it stands in, so `value: 0.5deg` on an angle converts as the field's own literal would; `at` is a time.
+    internal static bool TryLowerKeyed(IReadOnlyList<PropertyNode> properties, string? fieldKey, DocumentScope scope, out JsonObject? value) {
+        value = null;
+
+        if (
+            (fieldKey is null) ||
+            (WorldDocumentEmitterUnits.Classify(fieldKey: fieldKey) == Puck.Transpiler.Units.UnitDimension.None) ||
+            !properties.Any(predicate: static property => (property.Name == "clock")) ||
+            !properties.Any(predicate: static property => ((property.Name == "keys") && (property.Value is ArrayExpressionNode)))
+        ) {
+            return false;
+        }
+
+        var keyed = new JsonObject();
+
+        foreach (var property in properties) {
+            if ((property.Name != "keys") || (property.Value is not ArrayExpressionNode keys)) {
+                keyed[property.Name] = DocumentLowering.LowerValue(expr: property.Value, fieldKey: property.Name, scope: scope);
+
+                continue;
+            }
+
+            var lowered = new JsonArray();
+
+            foreach (var element in keys.Elements) {
+                if (element is not ObjectExpressionNode key) {
+                    lowered.Add(item: DocumentLowering.LowerValue(expr: element, fieldKey: property.Name, scope: scope));
+
+                    continue;
+                }
+
+                var loweredKey = new JsonObject();
+
+                foreach (var member in key.Properties) {
+                    loweredKey[member.Name] = DocumentLowering.LowerValue(
+                        expr: member.Value,
+                        fieldKey: ((member.Name == "value")
+                            ? fieldKey
+                            : member.Name),
+                        scope: scope
+                    );
+                }
+
+                lowered.Add(item: loweredKey);
+            }
+
+            keyed[property.Name] = lowered;
+        }
+
+        value = keyed;
+
+        return true;
+    }
+
     private static JsonObject LowerBlockToObject(BlockNode block, DocumentScope scope) {
+        if (
+            block.Statements.All(predicate: static statement => (statement is PropertyNode)) &&
+            TryLowerKeyed(
+            fieldKey: block.Identifier,
+            properties: [.. block.Statements.Cast<PropertyNode>()],
+            scope: scope,
+            value: out var keyed
+        )
+        ) {
+            return keyed!;
+        }
+
         var obj = new JsonObject();
 
         foreach (var stmt in block.Statements) {

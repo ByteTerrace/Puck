@@ -120,7 +120,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     // The mirrored world's environment, resolved each dressed frame. The track double-buffers its output, so the frame
     // the residency holds keeps its environment through the next dress, as the boot presentation's does.
-    private readonly WorldRenderCycleTrack m_cycle = new();
+    private readonly WorldEnvironmentResolve m_environment = new();
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
     // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
     // interpolated (not host-supplied) positions.
@@ -380,8 +380,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
             FarDistance = m_dressedFarDistance,
-            // The mirrored world's own sky and lighting, along its render.cycle when it authors one.
-            Environment = m_cycle.Resolve(
+            // The mirrored world's own sky and lighting, its keys on the mirrored world's own clocks.
+            Environment = m_environment.Resolve(
                 definition: m_mirror.Definition,
                 mirror: m_mirror.FollowState(),
                 revision: m_mirror.DefinitionRevision

@@ -14,7 +14,7 @@ their verbs afterwards; `world.save` folds a moved lever back into the section
 when the world authors one (`WorldSessionLevers.Fold`), and never writes a
 `render` section the world omits. Three members are read off the LIVE definition every frame instead,
 so `world.row.set render {…}` lands on the next frame with no rebuild:
-`lighting`/`sky`/`cycle` (`WorldRenderCycleTrack`) and `farDistance`
+`lighting`/`sky` (`WorldEnvironmentResolve`, every keyed value at its clock's presented phase) and `farDistance`
 (`WorldRenderFarDistance.Resolve`). `farDistance` is the depth every camera
 march ends at (the fine march's far exit, the beam's cone proofs, the fog and
 depth ramps' reach): nullable, absent resolves to the engine's pinned 40
@@ -33,7 +33,7 @@ remnant `exp(−fogDensity·far)` at the far plane. Renderer contract:
 
 `environment` (`WorldRenderEnvironment`, optional) and `tonemap`
 (`WorldTonemap` {`none`, `filmic`}, optional) are also read off the LIVE
-definition every frame, alongside `lighting`/`sky`/`cycle`; a `tonemap` change
+definition every frame, alongside `lighting`/`sky`; a `tonemap` change
 recomposes the synthesized root graph. `environment`
 carries `softboxes[]` (≤ `SdfEnvironment.MaxSoftboxes` 4 of `direction`,
 `size` [w, h], `color`?, `weight`?, `blur`?) and `horizon` ({`low`?, `high`?})
@@ -50,8 +50,14 @@ Renderer contract: `rendering` skill sync pairs, the `SdfEnvironment` rows;
 the tonemap is the root graph's view place passes, not an environment row.
 
 `lighting` (`WorldRenderLighting`, optional) carries `lights[]` (at most
-`SdfEnvironment.MaxLights` 8, in slot order — a `render.cycle` key moves a
-light by its slot and may not add, remove, or retype one) and `curvature`.
+`SdfEnvironment.MaxLights` 8, in slot order, each optionally `name`d) and
+`curvature`. Every value may be keyed on a `timeline` clock, and the section may
+be keyed whole (`clock`, `keys`): each key a partial record addressing a light
+by its `name`, of its own kind, stating values only (a light's `name` and
+`shadows` are structure and refused). The sky keys the same way, addressing a
+layer by `name`. `WorldRenderKeys.Expand` turns section keys into value keys
+and `WorldKeyResolver` resolves them, for the validator with no live source and
+for the client through its state mirror.
 Each light's `$type` union:
 
 | `$type` | Carries |
@@ -59,7 +65,7 @@ Each light's `$type` union:
 | `directional` | `direction`, `color`, `weight`, `angularRadius`, `shadows` — at most one shadowing light per world |
 | `hemisphere` | `color`, `base`, `gradient` |
 | `rim` | `color`, `weight`, `power` — a view-dependent silhouette brighten added after the material shade |
-| `point` | `position`, `radius`, `color`, `weight`, optional `anchor` — inverse-square falloff with a soft core (`intensity = weight / (1 + (distance / radius)^2)`); lambert diffuse plus the material's GGX specular from the light's own direction, both scaled by ambient occlusion like every non-shadow light; no shadow march, and refused alongside `render.cycle` (its position lane cannot ride the arc interpolation every other light's direction lane takes) |
+| `point` | `position`, `radius`, `color`, `weight`, optional `anchor` — inverse-square falloff with a soft core (`intensity = weight / (1 + (distance / radius)^2)`); lambert diffuse plus the material's GGX specular from the light's own direction, both scaled by ambient occlusion like every non-shadow light; no shadow march |
 
 A point light's `anchor` is a `WorldAnchor.Placement` only (every other anchor
 kind is refused by name): its position then rides that placement's — or, with
@@ -73,7 +79,7 @@ fresh every produced frame. Renderer contract: `rendering` skill sync pairs, the
 surface illumination. It declares `position`, positive `radius`,
 `weight`, and an optional entity, entity-part, or placement `anchor`.
 Anchors resolve each frame; unavailable anchors give weight zero.
-Point and Occluder positions interpolate linearly through render cycles.
+Point and Occluder positions are `BindableVector3`: keyed, they blend linearly, never along an arc.
 `world.lighting` reads back the authored light definitions.
 
 `CreationDocument.PaletteSize = 16` bounds `puck.creation.v1`'s `palette`

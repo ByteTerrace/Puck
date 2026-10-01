@@ -135,7 +135,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         using var north = Endpoint(definition: destination, identity: Away, position: AwayPose);
         var scene = new WorldRoutedScene(bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
         var frame = Capture(source: scene.FrameSource);
-        var sky = new WorldRenderCycleTrack().Resolve(
+        var sky = new WorldEnvironmentResolve().Resolve(
             definition: destination,
             mirror: north.FollowState(),
             revision: north.Mirror.DefinitionRevision

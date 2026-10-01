@@ -5634,6 +5634,28 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      the pass block keeps its 1,120 bytes, and the written pass-block bytes per
      pass fall from 1,048 to 1,024 (`world-counters`).
 3. **P18-3, keys on clocks, for every presentation value.**
+   - Landed: the keys substrate. Every colour, scalar, angle, direction and
+     vector a document binds may be keyed on a `timeline` clock
+     (`{ clock, keys [ { at, value, ease } ] }`, a block in `.puck`, with `at`
+     a time that takes `s`, `min` and `h`); the light and sky fields became
+     `BindableScalar`, `BindableAngle`, `BindableDirection`,
+     `BindableVector2` (cloud drift and shear) and `BindableVector3` (point and
+     occluder positions). `render.lighting` and `render.sky` key whole through
+     `clock` and `keys`, each key's partial record written as its kind under
+     the name it addresses (`layers { haze: fog(density: 0) }`), the kind
+     checked against the named layer's, so the record stays typed;
+     `WorldRenderKeys.Expand` turns a section key into the value keys of the
+     fields it states, one key track per field. `WorldKeyResolver` in
+     `Puck.World.Schema` is the one resolver; the validator calls it with no
+     source, and the state mirror, which registers each state clock's row,
+     with its own. Cloud rates and the twinkle's rate integrate in closed form
+     on the host, so the environment rows carry offsets and a phase. The
+     environment and the theme re-resolve only when a clock a key reads or a
+     slot they bind moves; `world.timeline` echoes the mirror's keyed
+     resolutions. The courtyard, the parity world, the sky-cycle canary and
+     the counted sky-cycle workload key on a `skyMode` state clock. The
+     softboxes' own numbers stay literal, since P18-9 deletes them, and a
+     clock keyed on another clock is not built.
    - Delivers: the keyed form of every bindable value (`keys(clock: …)`), the
      angle and direction bindables, section keys whose values are partial
      records addressed by name, blends by field type with per-key ease, the

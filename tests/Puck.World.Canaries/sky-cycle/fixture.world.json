@@ -15,88 +15,83 @@
     "width": 256
   },
   "render": {
-    "cycle": {
+    "farDistance": 100,
+    "sky": {
+      "clock": "skyMode",
       "keys": [
         {
           "at": 0,
-          "sky": {
-            "layers": [
-              {
-                "$type": "gradient",
-                "stops": [
-                  {
-                    "color": "#B6B2BA",
-                    "elevation": -1
-                  },
-                  {
-                    "color": "#B6B2BA",
-                    "elevation": -0.05
-                  },
-                  {
-                    "color": "#B6B2BA",
-                    "elevation": 0.35
-                  },
-                  {
-                    "color": "#B6B2BA",
-                    "elevation": 1
-                  }
-                ]
-              },
-              {
-                "$type": "fog",
-                "density": 0
-              },
-              {
-                "$type": "sunDisc",
-                "intensity": 0
-              }
-            ]
+          "layers": {
+            "air": {
+              "$type": "gradient",
+              "stops": [
+                {
+                  "color": "#B6B2BA",
+                  "elevation": -1
+                },
+                {
+                  "color": "#B6B2BA",
+                  "elevation": -0.05
+                },
+                {
+                  "color": "#B6B2BA",
+                  "elevation": 0.35
+                },
+                {
+                  "color": "#B6B2BA",
+                  "elevation": 1
+                }
+              ]
+            },
+            "haze": {
+              "$type": "fog",
+              "density": 0
+            },
+            "sun": {
+              "$type": "sunDisc",
+              "intensity": 0
+            }
           }
         },
         {
           "at": 0.5,
-          "sky": {
-            "layers": [
-              {
-                "$type": "gradient",
-                "stops": [
-                  {
-                    "color": "#9AABB7",
-                    "elevation": -1
-                  },
-                  {
-                    "color": "#D5DCE0",
-                    "elevation": -0.05
-                  },
-                  {
-                    "color": "#7CA7C6",
-                    "elevation": 0.35
-                  },
-                  {
-                    "color": "#3C658F",
-                    "elevation": 1
-                  }
-                ]
-              },
-              {
-                "$type": "fog",
-                "density": 0.004
-              },
-              {
-                "$type": "sunDisc",
-                "intensity": 1.5
-              }
-            ]
+          "layers": {
+            "air": {
+              "$type": "gradient",
+              "stops": [
+                {
+                  "color": "#9AABB7",
+                  "elevation": -1
+                },
+                {
+                  "color": "#D5DCE0",
+                  "elevation": -0.05
+                },
+                {
+                  "color": "#7CA7C6",
+                  "elevation": 0.35
+                },
+                {
+                  "color": "#3C658F",
+                  "elevation": 1
+                }
+              ]
+            },
+            "haze": {
+              "$type": "fog",
+              "density": 0.004
+            },
+            "sun": {
+              "$type": "sunDisc",
+              "intensity": 1.5
+            }
           }
         }
       ],
-      "state": "skyMode"
-    },
-    "farDistance": 100,
-    "sky": {
       "layers": [
         {
           "$type": "gradient",
+          "name": "air",
           "stops": [
             {
               "color": "#9AABB7",
@@ -118,12 +113,14 @@
         },
         {
           "$type": "fog",
-          "density": 0.004
+          "density": 0.004,
+          "name": "haze"
         },
         {
           "$type": "sunDisc",
           "intensity": 1.5,
           "light": 0,
+          "name": "sun",
           "radius": 0.018
         }
       ]
@@ -176,6 +173,14 @@
         "name": "skyMode",
         "kind": "Fixed",
         "value": "0.5"
+      }
+    ]
+  },
+  "timeline": {
+    "clocks": [
+      {
+        "name": "skyMode",
+        "state": "skyMode"
       }
     ]
   },

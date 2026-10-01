@@ -51,48 +51,72 @@
       "default": null
     },
     "lighting": {
-      "$ref": "./common.schema.json#/$defs/WorldRenderLighting",
       "description": "The scene\u0027s directional sun and ambient term. Optional, and every field within it is optional individually \u2014 an absent section, or an absent field within it, resolves to SdfFrame\u0027s pinned default for that field, so a world renders unchanged until it authors one.",
-      "default": null
-    },
-    "sky": {
-      "$ref": "./common.schema.json#/$defs/WorldRenderSky",
-      "description": "The procedural sky \u2014 a gradient, sun disc, star field, and distance fog. Optional; an absent section renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed.",
-      "default": null
-    },
-    "cycle": {
-      "description": "Lighting and sky keyed over a state row\u0027s value (a day/night cycle when that row advances). Optional; absent leaves Lighting/Sky static.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "state": {
-          "description": "The state row read (its slot cell; Fixed or Int).",
-          "type": "string"
+        "lights": {
+          "description": "The lights, at most SdfEnvironment.MaxLights, in slot order. At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "./common.schema.json#/$defs/WorldRenderLight"
+          },
+          "default": null
+        },
+        "curvature": {
+          "$ref": "./common.schema.json#/$defs/WorldRenderCurvature",
+          "description": "The stylized curvature enrichment \u2014 cavity darkening, curvature rim light, and an ink outline. Optional; absent (and all-zero) shades exactly as a world that declares none.",
+          "default": null
+        },
+        "clock": {
+          "description": "The clock the section\u0027s keys read, by name in the timeline section. Required with Keys and refused without them.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "keys": {
-          "description": "At least two keys, strictly ascending At in [0, 1).",
-          "type": "array",
+          "description": "The section\u0027s keys, ascending in time. A field a key states is keyed on Clock through the keys that state it, blended by the field\u0027s type and eased by each key\u0027s ease; a field no key states keeps its authored value.",
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
-            "description": "One point on a WorldRenderCycle.",
+            "description": "One key of Keys: a partial record of the section at one time.",
             "type": [
               "object",
               "null"
             ],
             "properties": {
               "at": {
-                "description": "The row-value fraction this key sits at, in [0, 1).",
+                "description": "Where on the section\u0027s clock the key sits, in the clock\u0027s span units, in [0, span).",
                 "type": "number"
               },
-              "lighting": {
-                "$ref": "./common.schema.json#/$defs/WorldRenderLighting",
-                "description": "The lighting fields this key moves, or null.",
+              "ease": {
+                "$ref": "./common.schema.json#/$defs/WorldEase",
+                "description": "How time eases from this key to the next key that states each field. Absent is Linear.",
                 "default": null
               },
-              "sky": {
-                "$ref": "./common.schema.json#/$defs/WorldRenderSky",
-                "description": "The sky fields this key moves, or null.",
+              "lights": {
+                "description": "The lights this key moves, by name: each the same kind as the light of that name, stating only the fields it moves. A light\u0027s name and shadowing are structure, which a key never states.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": {
+                  "$ref": "./common.schema.json#/$defs/WorldRenderLight"
+                },
+                "default": null
+              },
+              "curvature": {
+                "$ref": "./common.schema.json#/$defs/WorldRenderCurvature",
+                "description": "The curvature fields this key moves.",
                 "default": null
               }
             },
@@ -100,17 +124,87 @@
               "at"
             ],
             "additionalProperties": false,
-            "title": "WorldRenderCycleKey"
-          }
+            "title": "WorldRenderLightingKey"
+          },
+          "default": null
         }
       },
-      "required": [
-        "state",
-        "keys"
-      ],
       "additionalProperties": false,
       "default": null,
-      "title": "WorldRenderCycle"
+      "title": "WorldRenderLighting"
+    },
+    "sky": {
+      "description": "The procedural sky \u2014 a gradient, sun disc, star field, and distance fog. Optional; an absent section renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "layers": {
+          "description": "The layers.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "./common.schema.json#/$defs/WorldRenderSkyLayer"
+          },
+          "default": null
+        },
+        "clock": {
+          "description": "The clock the section\u0027s keys read, by name in the timeline section. Required with Keys and refused without them.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "keys": {
+          "description": "The section\u0027s keys, ascending in time. A field a key states is keyed on Clock through the keys that state it; a field no key states keeps its authored value.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "One key of Keys: a partial record of the sky at one time.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "at": {
+                "description": "Where on the section\u0027s clock the key sits, in the clock\u0027s span units, in [0, span).",
+                "type": "number"
+              },
+              "ease": {
+                "$ref": "./common.schema.json#/$defs/WorldEase",
+                "description": "How time eases from this key to the next key that states each field. Absent is Linear.",
+                "default": null
+              },
+              "layers": {
+                "description": "The layers this key moves, by name: each the same kind as the layer of that name, stating only the fields it moves. A gradient states every stop the layer has, in order. Counts, seeds, a layer\u0027s name and the sun disc\u0027s light are structure, which a key never states.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": {
+                  "$ref": "./common.schema.json#/$defs/WorldRenderSkyLayer"
+                },
+                "default": null
+              }
+            },
+            "required": [
+              "at"
+            ],
+            "additionalProperties": false,
+            "title": "WorldRenderSkyKey"
+          },
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldRenderSky"
     },
     "environment": {
       "description": "The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.",
@@ -141,13 +235,9 @@
                 "description": "The angular half-extent (width, height) the falloff widens by, both strictly positive."
               },
               "color": {
+                "$ref": "./common.schema.json#/$defs/BindableColor",
                 "description": "BindableColor\u0027s grammar: the softbox\u0027s linear colour. Absent is white.",
-                "default": null,
-                "title": "BindableColor",
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "default": null
               },
               "weight": {
                 "description": "The strength. Absent is 1.",
@@ -183,22 +273,14 @@
           ],
           "properties": {
             "low": {
+              "$ref": "./common.schema.json#/$defs/BindableColor",
               "description": "The ground-ward (direction.y = \u22121) colour. Absent is black.",
-              "default": null,
-              "title": "BindableColor",
-              "type": [
-                "string",
-                "null"
-              ]
+              "default": null
             },
             "high": {
+              "$ref": "./common.schema.json#/$defs/BindableColor",
               "description": "The sky-ward (direction.y = 1) colour. Absent is black.",
-              "default": null,
-              "title": "BindableColor",
-              "type": [
-                "string",
-                "null"
-              ]
+              "default": null
             }
           },
           "additionalProperties": false,
