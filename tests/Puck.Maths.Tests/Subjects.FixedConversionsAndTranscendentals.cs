@@ -1382,6 +1382,61 @@ internal static partial class Subjects {
         ("MinValue^−1", long.MinValue, -65536L, 0L),
     ];
 
+    /// <summary>Proves the power's WHOLE-exponent path is the single correct rounding of the true power at every
+    /// exponent 2 ≤ |n| ≤ 32, both base signs, and both saturation and underflow verdicts — the base folded so the
+    /// true magnitude lands between 2⁻²⁰ and 2⁵⁰, straddling both ends of the carrier.</summary>
+    /// <param name="left">Its lane supplies the base: the target magnitude from the top byte, the sign from the bit
+    /// below it, the mantissa from the rest.</param>
+    /// <param name="right">Its lane folds onto the exponent.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? FixedPowWholeCorrectlyRounded(long[] left, long[] right) {
+        var exponentIndex = ((int)(unchecked((ulong)right[0]) % 62UL));
+        var exponent = ((exponentIndex < 31)
+            ? -(exponentIndex + 2)
+            : (exponentIndex - 29));
+        var baseBits = unchecked((ulong)left[0]);
+        var targetLog2 = (((int)((baseBits >> 56) % 71UL)) - 20);
+        var bitIndex = Math.Clamp(
+            max: 62,
+            min: 0,
+            value: (16 + (targetLog2 / exponent))
+        );
+        var baseRaw = ((long)((1UL << bitIndex) | (baseBits & ((1UL << bitIndex) - 1UL))));
+
+        if (0UL != ((baseBits >> 55) & 1UL)) {
+            baseRaw = -baseRaw;
+        }
+
+        var power = BigInteger.Pow(
+            exponent: Math.Abs(value: exponent),
+            value: BigInteger.Abs(value: baseRaw)
+        );
+        var rounded = ((exponent > 0)
+            ? Oracles.RoundRationalTiesToEven(
+                denominator: (BigInteger.One << (16 * (exponent - 1))),
+                numerator: power
+            )
+            : Oracles.RoundRationalTiesToEven(
+                denominator: power,
+                numerator: (BigInteger.One << (16 * (1 - exponent)))
+            ));
+        var negative = ((baseRaw < 0L) && ((exponent & 1) != 0));
+        var expected = ((rounded > long.MaxValue)
+            ? (negative
+                ? long.MinValue
+                : long.MaxValue)
+            : (negative
+                ? -((long)rounded)
+                : ((long)rounded)));
+        var actual = FixedQ4816.Pow(
+            x: Raw(value: baseRaw),
+            y: Raw(value: (((long)exponent) << 16))
+        ).Value;
+
+        return ((actual == expected)
+            ? null
+            : $"Pow({baseRaw}, {exponent}) is {actual}, expected the correct rounding {expected}");
+    }
     /// <summary>Proves the power's FRACTIONAL path — the exponential of the once-rounded Q32 product of the exponent and
     /// the subject's own Q46 logarithm — lies inside the enclosure of the true value widened by the DERIVED envelope: the
     /// exponent carries at most (8·|yRaw| + 2¹⁸)/2⁵¹ of error from the Q46 logarithm and the single Q32 rounding, which

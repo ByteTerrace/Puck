@@ -730,20 +730,17 @@ public readonly partial record struct FixedQ4816(long Value)
     /// a zero exponent and itself at an exponent of one. An overflowing result saturates with its sign, to
     /// <see cref="MinValue"/> rather than <see cref="MaxValue"/> when the mathematical value is negative.</returns>
     /// <remarks>Whole-number exponents of zero and ±1 answer exactly: <see cref="One"/>, the base itself, and the
-    /// single correctly-rounded inverse. Other whole exponents within ±32 compute by squaring the base's magnitude
-    /// (a negative exponent squares its correctly-rounded inverse) on the carrier, so every ladder multiply rounds
-    /// once to Q16 with ties to even and the accumulated error grows with the exponent's binary weight — an exponent
-    /// of two carries the one rounded squaring, higher weights round more, and the result is not in general the
-    /// single correct rounding of the true power. Overflow on that path is decided exactly, by the ladder's own
-    /// rounded magnitude leaving the carrier: near the top of the range a power whose correctly rounded value is
-    /// representable can therefore still saturate when the ladder's accumulated rounding carries it past
-    /// <see cref="MaxValue"/>, and only within that accumulated rounding. A log-derived shortcut answers
-    /// <see cref="Zero"/> when <c>y·Log2(|x|)</c> sits below −18, where zero is the correct rounding with the
-    /// logarithm's half-ULP error to spare. Other exponents compute as <c>Exp2(y·Log2(|x|))</c>, whose relative error
-    /// grows with <c>|y·log₂ x|</c> because the intermediate exponent quantizes to Q16 (about 2⁻¹⁷ per unit). The
-    /// sign is applied last, so an odd power of a negative base never comes back positive. <see cref="MinValue"/> is
-    /// the one base whose magnitude 2⁴⁷ is a raw past the carrier: it never enters the squaring loop, because every
-    /// exponent of magnitude two or more either saturates or underflows regardless.</remarks>
+    /// single correctly-rounded inverse. Every other whole exponent within ±32 answers the single correct rounding
+    /// of the true power, to nearest with ties to even: the exact integer power of the base's raw is formed in a
+    /// stack limb buffer and shifted (a positive exponent) or divided into a power of two (a negative one) once.
+    /// Overflow and underflow are decided on that exact value, so a power saturates exactly when its correct
+    /// rounding leaves the carrier and answers <see cref="Zero"/> exactly when it rounds there. Other exponents
+    /// compute as <c>Exp2(y·Log2(|x|))</c>, with the logarithm carried at Q46 and the product rounded once to a Q32
+    /// exponent, so the result's relative error grows with <c>|y·log₂ x|</c>; a log-derived shortcut answers
+    /// <see cref="Zero"/> below an exponent product of −18. The sign is applied last, so an odd power of a negative
+    /// base never comes back positive. <see cref="MinValue"/> is the one base whose magnitude 2⁴⁷ is a raw past the
+    /// carrier: it never reaches either path, because every exponent of magnitude two or more either saturates or
+    /// underflows regardless.</remarks>
     public static FixedQ4816 Pow(FixedQ4816 x, FixedQ4816 y) {
         if (x.Value == 0L) {
             return ((y.Value == 0L)
@@ -826,67 +823,15 @@ public readonly partial record struct FixedQ4816(long Value)
             }
         }
 
-        var log = Log2(value: x);
-
         if (
             whole &&
             (exponent >= -32L) &&
             (exponent <= 32L)
         ) {
-            // The log-derived magnitude decides only the UNDERFLOW shortcut, where Zero is the correctly rounded
-            // answer with the log's half-ULP error to spare. Overflow is decided exactly, inside the loop, by the
-            // ladder's own rounded magnitude leaving the carrier — an estimate here would either saturate
-            // representable powers or admit a wrapping product.
-            if ((log.Value * exponent) < (-18L << FractionBitCount)) {
-                return Zero;
-            }
-
-            // A negative exponent squares the correctly-rounded INVERSE base: inverting the positive power
-            // afterwards would amplify the quantization of a small intermediate (and could divide by a
-            // rounded-to-zero one).
-            var result = ((ulong)RawOne);
-            var baseMagnitude = ((exponent < 0L)
-                ? ((ulong)(One / x).Value)
-                : ((ulong)x.Value)
-            );
-            var remaining = ((exponent < 0L)
-                ? -exponent
-                : exponent
-            );
-
-            while (remaining > 0L) {
-                if ((remaining & 1L) != 0L) {
-                    if (!TryMultiplyMagnitude(
-                        result: out result,
-                        x: result,
-                        y: baseMagnitude
-                    )) {
-                        return (negativeResult
-                            ? MinValue
-                            : MaxValue
-                        );
-                    }
-                }
-
-                remaining >>= 1;
-
-                if (remaining > 0L) {
-                    if (!TryMultiplyMagnitude(
-                        result: out baseMagnitude,
-                        x: baseMagnitude,
-                        y: baseMagnitude
-                    )) {
-                        return (negativeResult
-                            ? MinValue
-                            : MaxValue
-                        );
-                    }
-                }
-            }
-
-            return (negativeResult
-                ? new(Value: -((long)result))
-                : new(Value: ((long)result))
+            return PowWhole(
+                exponent: exponent,
+                magnitude: ((ulong)x.Value),
+                negativeResult: negativeResult
             );
         }
 
@@ -916,32 +861,183 @@ public readonly partial record struct FixedQ4816(long Value)
             : scaled
         );
     }
-    // One squaring-ladder step: the multiply operator's exact product and ties-to-even Q16 rounding, on magnitudes,
-    // reporting instead of wrapping when the rounded magnitude leaves the carrier. This is where the whole-exponent
-    // path's overflow decision is taken — on the ladder's own value, exactly, rather than estimated from the rounded
-    // logarithm. A magnitude of exactly 2^63 also reports: it is representable only as MinValue, which is precisely
-    // the saturation answer the negative caller returns.
-    private static bool TryMultiplyMagnitude(ulong x, ulong y, out ulong result) {
-        var magnitude = (((UInt128)x) * y);
-        var truncated = (magnitude >> FractionBitCount);
-        var remainder = ((ulong)magnitude) & FractionBitMask;
+    // x^n for a whole exponent 2 ≤ |n| ≤ 32, as the ONE correct rounding of the exact power. For x = X/2¹⁶ the raw
+    // answer is X^n/2^(16(n−1)) at a positive exponent and 2^(16(m+1))/X^m at a negative one (m = −n), so the exact
+    // integer X^|n| — at most thirty-one multiplications by the raw, in a stack limb buffer — is shifted or divided
+    // once, to nearest with ties to even. Overflow and underflow are decided on that exact value: a power that
+    // reaches the decided bit length during the build is already past the carrier (positive) or below half a raw
+    // (negative), and only a raw of at least 2¹⁶ can reach it, where the powers only grow. A rounded magnitude of
+    // exactly 2^63 saturates too: it is representable only as MinValue, which is the negative caller's saturation.
+    private static FixedQ4816 PowWhole(ulong magnitude, long exponent, bool negativeResult) {
+        // Positive: X^n is at most 2^(16·31 + 63) before its last multiply and 2^622 after it. Negative: X^m is at
+        // most 2^(16·33 + 1) before and 2^592 after. Ten limbs hold either, with the carry limb a multiply writes.
+        const int LimbCount = 10;
+
+        var power = ((int)((exponent < 0L)
+            ? -exponent
+            : exponent));
+        var shift = ((exponent > 0L)
+            ? (FractionBitCount * (power - 1))
+            : (FractionBitCount * (power + 1)));
+        var decidedBitLength = ((exponent > 0L)
+            ? (shift + 64)
+            : (shift + 2));
+        Span<ulong> current = stackalloc ulong[LimbCount];
+        Span<ulong> next = stackalloc ulong[LimbCount];
+        var sign = LimbBig.SetFromInt64(
+            magnitude: current,
+            value: ((long)magnitude)
+        );
+        var decided = false;
+
+        for (var factor = 1; (factor < power); ++factor) {
+            sign = LimbBig.MultiplyByInt64(
+                destination: next,
+                multiplier: ((long)magnitude),
+                source: current,
+                sourceSign: sign
+            );
+
+            var swap = current;
+
+            current = next;
+            next = swap;
+
+            if (PowBitLength(magnitude: current) >= decidedBitLength) {
+                decided = true;
+                break;
+            }
+        }
+
+        ulong rounded;
+
+        if (exponent > 0L) {
+            if (decided) {
+                return (negativeResult
+                    ? MinValue
+                    : MaxValue
+                );
+            }
+
+            rounded = unchecked((ulong)LimbBig.RoundAtShift(
+                magnitude: current,
+                shift: shift,
+                sign: sign
+            ));
+
+            if (rounded > ((ulong)long.MaxValue)) {
+                return (negativeResult
+                    ? MinValue
+                    : MaxValue
+                );
+            }
+        } else {
+            if (decided) {
+                return Zero;
+            }
+            if (!TryRoundPowerOfTwoQuotient(
+                divisor: current,
+                exponent: shift,
+                quotient: out rounded,
+                remainder: next
+            )) {
+                return (negativeResult
+                    ? MinValue
+                    : MaxValue
+                );
+            }
+        }
+
+        return (negativeResult
+            ? new(Value: -((long)rounded))
+            : new(Value: ((long)rounded))
+        );
+    }
+
+    // The bit length of a limb magnitude: one past the index of its highest set bit, zero for zero.
+    private static int PowBitLength(ReadOnlySpan<ulong> magnitude) {
+        var length = LimbBig.SignificantLength(magnitude: magnitude);
+
+        return ((0 == length)
+            ? 0
+            : ((length * 64) - BitOperations.LeadingZeroCount(value: magnitude[(length - 1)])));
+    }
+    // Rounds 2^exponent / divisor to nearest, ties to even, by restoring division on LimbBig's signed add: the
+    // remainder starts at the divisor's own top power of two, so only the quotient's significant bits are produced,
+    // and a trial subtraction that goes negative is added back. False when the rounded quotient reaches 2^63; the
+    // remainder is scratch at least one bit wider than the divisor and the exponent.
+    private static bool TryRoundPowerOfTwoQuotient(int exponent, ReadOnlySpan<ulong> divisor, Span<ulong> remainder, out ulong quotient) {
+        var topBit = (PowBitLength(magnitude: divisor) - 1);
+        var steps = (exponent - topBit);
+
+        quotient = 0UL;
+        remainder.Clear();
+
+        sbyte sign = 1;
+
+        if (steps < 0) {
+            remainder[(exponent >> 6)] = (1UL << (exponent & 63));
+        } else {
+            if (steps >= 64) {
+                return false;
+            }
+
+            remainder[(topBit >> 6)] = (1UL << (topBit & 63));
+
+            for (var step = 0; (step <= steps); ++step) {
+                if (step > 0) {
+                    LimbBig.ShiftLeft(
+                        bits: 1,
+                        magnitude: remainder
+                    );
+                    quotient <<= 1;
+                }
+
+                sign = LimbBig.AddInto(
+                    addend: divisor,
+                    addendSign: -1,
+                    destination: remainder,
+                    destinationSign: sign
+                );
+
+                if (sign < 0) {
+                    sign = LimbBig.AddInto(
+                        addend: divisor,
+                        addendSign: 1,
+                        destination: remainder,
+                        destinationSign: sign
+                    );
+                } else {
+                    quotient |= 1UL;
+                }
+            }
+
+            if (quotient > ((ulong)long.MaxValue)) {
+                return false;
+            }
+        }
+
+        // The remainder against half the divisor, read as the sign of 2·remainder − divisor.
+        LimbBig.ShiftLeft(
+            bits: 1,
+            magnitude: remainder
+        );
+
+        var excess = LimbBig.AddInto(
+            addend: divisor,
+            addendSign: -1,
+            destination: remainder,
+            destinationSign: sign
+        );
 
         if (
-            (remainder > RawHalf) ||
-            ((remainder == RawHalf) && ((truncated & UInt128.One) != UInt128.Zero))
+            (excess > 0) ||
+            ((excess == 0) && (0UL != (quotient & 1UL)))
         ) {
-            ++truncated;
+            ++quotient;
         }
 
-        if (truncated > ((UInt128)long.MaxValue)) {
-            result = 0UL;
-
-            return false;
-        }
-
-        result = ((ulong)truncated);
-
-        return true;
+        return (quotient <= ((ulong)long.MaxValue));
     }
 
     /// <summary>Linearly interpolates from <paramref name="from"/> to <paramref name="to"/> by <paramref name="amount"/>.</summary>

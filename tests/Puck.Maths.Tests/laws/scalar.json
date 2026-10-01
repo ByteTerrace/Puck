@@ -1627,8 +1627,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.Pow over the power-of-two lattice \u2014 every base 2^j and whole exponent n whose product j\u00B7n lands in [\u221216, 46], which is exactly the square-and-multiply path INCLUDING the negative-exponent branch that squares the correctly-rounded inverse base",
-        "Against": "the exact 2^(16 \u002B j\u00B7n) as a BigInteger shift. BIT-EXACT on both sides: every intermediate in the schedule is an exactly representable power of two, so nothing rounds anywhere in the chain and an error in the schedule, in the inverse branch or in either range gate cannot hide. This lattice CONTAINS the tree\u0027s two named Pow regressions, 0.5^\u221217 and 0.5^\u221218",
+        "Subject": "FixedQ4816.Pow over the power-of-two lattice \u2014 every base 2^j and whole exponent n whose product j\u00B7n lands in [\u221216, 46], which is exactly the whole-exponent path at both exponent signs, INCLUDING the negative-exponent branch that divides a power of two by the exact power",
+        "Against": "the exact 2^(16 \u002B j\u00B7n) as a BigInteger shift. BIT-EXACT on both sides: every exact power is a power of two, so the closing shift or division is itself exact and an error in the power, in the division or in either range gate cannot hide. This lattice CONTAINS the tree\u0027s two named Pow regressions, 0.5^\u221217 and 0.5^\u221218",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1637,7 +1637,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "FixedQ4816.Pow over the small whole-exponent ladder \u2014 nine integer bases of magnitude at most 100 raised to exponents 0 through 4",
-        "Against": "the exact BigInteger.Pow, scaled \u2014 the ascending-bit square-and-multiply schedule reproduced by a plain sequential fold in arbitrary width, which is a DIFFERENT schedule reaching the same value because every intermediate is exact. Bit-exact on both sides",
+        "Against": "the exact BigInteger.Pow, scaled \u2014 arbitrary-width integers rather than the subject\u0027s fixed stack limb buffer, reaching the same value because both powers are exact. Bit-exact on both sides",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1657,13 +1657,13 @@
         "Subject": "the negative-base surface over a twenty-six-row table, reached BOTH by the static call and by a constrained generic call through IPowerFunctions\u003CFixedQ4816\u003E",
         "Against": "Subjects.FixedNegativeBasePowers, a constant (base raw, exponent raw, result raw) table",
         "Shared": "",
-        "Citation": "each row hand-derived from x^y and the 2\u207B\u00B9\u2076 grid \u2014 (\u22122)^0 through (\u22122)^4 and the reciprocal exponents, the odd and even powers of \u22121, both parities past the \u00B132 squaring band on the exponential path, both underflows, and MinValue at exponents 0, 1, 2, 3 and \u22121. No expectation is captured from the subject. RULED, and the correction is the point: this leg used to pin \u0027every negative base yields Zero\u0027, which is the shape .NET\u0027s IPowerFunctions\u003CTSelf\u003E.Pow contract does not have \u2014 the interface returns x raised to y, and an integral exponent has a perfectly representable answer whose sign is the exponent\u0027s parity. The refusal survives only where it is real: a NON-whole exponent at a negative base, whose real power is not a real number and which this carrier has no not-a-number to report",
+        "Citation": "each row hand-derived from x^y and the 2\u207B\u00B9\u2076 grid \u2014 (\u22122)^0 through (\u22122)^4 and the reciprocal exponents, the odd and even powers of \u22121, both parities past the \u00B132 exact band on the exponential path, both underflows, and MinValue at exponents 0, 1, 2, 3 and \u22121. No expectation is captured from the subject. RULED, and the correction is the point: this leg used to pin \u0027every negative base yields Zero\u0027, which is the shape .NET\u0027s IPowerFunctions\u003CTSelf\u003E.Pow contract does not have \u2014 the interface returns x raised to y, and an integral exponent has a perfectly representable answer whose sign is the exponent\u0027s parity. The refusal survives only where it is real: a NON-whole exponent at a negative base, whose real power is not a real number and which this carrier has no not-a-number to report",
         "Absolute": ""
       },
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the sign survives every saturation verdict, which is what makes the parity rule total rather than interior: the odd overflow (\u22122\u2074\u2070)\u00B3 answers MinValue where the even (\u22122\u2074\u2070)\u00B2 answers MaxValue, and MinValue \u2014 the one base whose magnitude 2\u2074\u2077 is a raw past the carrier and so never enters the squaring loop \u2014 answers itself at exponent one, MaxValue at two, MinValue at three and Zero at minus one",
+        "Subject": "the sign survives every saturation verdict, which is what makes the parity rule total rather than interior: the odd overflow (\u22122\u2074\u2070)\u00B3 answers MinValue where the even (\u22122\u2074\u2070)\u00B2 answers MaxValue, and MinValue \u2014 the one base whose magnitude 2\u2074\u2077 is a raw past the carrier and so never reaches the exact-power path \u2014 answers itself at exponent one, MaxValue at two, MinValue at three and Zero at minus one",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1672,7 +1672,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "overflow on the whole-exponent path is the LADDER'S own verdict \u2014 the loop saturates exactly when a step's rounded magnitude leaves the carrier, never from a log-derived estimate \u2014 so the exponent-one identity holds through the very top raw on both signs (the first raw the retired constant-slack gate wrongly answered MaxValue for, 9220202148413599469, now answers itself), a true overflow still saturates with its sign, and the log-derived shortcut still answers Zero below an exponent product of \u221218. RULED, and the correction is the point: a constant 32-raw slack sized for the worst exponent saturated 3.17\u00B710\u00B9\u2075 representable raws at exponent one alone",
+        "Subject": "overflow on the whole-exponent path is decided on the EXACT power \u2014 the result saturates exactly when its correct rounding leaves the carrier, never from a log-derived estimate \u2014 so the exponent-one identity holds through the very top raw on both signs (the first raw the retired constant-slack gate wrongly answered MaxValue for, 9220202148413599469, now answers itself), a true overflow still saturates with its sign, and a power below half a raw answers Zero. RULED, and the correction is the point: a constant 32-raw slack sized for the worst exponent saturated 3.17\u00B710\u00B9\u2075 representable raws at exponent one alone; and the squaring ladder that replaced it rounded every step, putting x\u00B9\u2076 up to 67,964 raws from its correct rounding, which scalar.pow-whole-correctly-rounded now pins",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1681,7 +1681,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "the near-top squares either side of the exact exponent-two saturation threshold floor(\u221A(2\u2077\u2079 \u2212 2\u00B9\u2075)) \u2014 raws 777336460312, 777472127993 and 777472127994 at exponent two, where the ladder is the single rounded squaring",
+        "Subject": "the near-top squares either side of the exact exponent-two saturation threshold floor(\u221A(2\u2077\u2079 \u2212 2\u00B9\u2075)) \u2014 raws 777336460312, 777472127993 and 777472127994 at exponent two, where the exact power\u0027s one rounding is the multiply operator\u0027s own",
         "Against": "an independent BigInteger ties-to-even rounding of the exact square (Oracles.RoundRationalTiesToEven), saturated to MaxValue where it exceeds the carrier: the representable side must be BIT-EXACT \u2014 the answer the multiply operator itself gives \u2014 and the far side must saturate",
         "Shared": "",
         "Citation": "",
@@ -1691,6 +1691,36 @@
         "Kind": "Structural",
         "Flavor": "None",
         "Subject": "the exponent product on the fractional path is formed at Int128 width BEFORE the gates, so an exponent that would wrap the public multiplication \u2014 the raw 2\u2074\u2076 against the base four \u2014 still saturates rather than returning an arbitrary value",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.pow-whole-correctly-rounded",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Pow"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Pow at every whole exponent 2 \u2264 |n| \u2264 32 and both base signs, the base folded so the true magnitude lands between 2\u207B\u00B2\u2070 and 2\u2075\u2070 \u2014 straddling both the underflow to Zero and the saturation at the top of the carrier",
+        "Against": "the exact power in BigInteger \u2014 BigInteger.Pow of the raw, shifted by 16\u00B7(n \u2212 1) or divided into 2^(16\u00B7(1 \u2212 n)) \u2014 rounded once to nearest with ties to even by Oracles.RoundRationalTiesToEven and saturated with the parity\u0027s sign where it leaves the carrier. BIT-EXACT on both sides: the documented contract is the correct rounding, not an envelope",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: whole exponents beyond \u00B132 take the exponential path, which no law samples at a whole exponent \u2014 scalar.pow-envelope forces a non-zero exponent fraction \u2014 beyond the negative-base table\u0027s two parities there; the exponents 0 and \u00B11 answer exactly and are pinned by scalar.pow-exact-lattice",
         "Against": "",
         "Shared": "",
         "Citation": "",
