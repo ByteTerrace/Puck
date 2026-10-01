@@ -384,7 +384,7 @@ the view's render pixels, falls under the impostor's view edge (16 at the standa
 tier, so one impostor texel covers at most one pixel), the mesh again once it passes
 that edge by a quarter. The choice is the CPU's, made from each view's own camera
 (two views at two distances choose apart), and the `sdf.mesh.lod` source counts the
-draws recorded as `near` and `far`. The impostor's four textures pack into their own
+draws recorded as `near` and `far`. The impostor's five textures pack into their own
 atlases (`SdfMeshImpostor`, `SdfMeshAtlas` over impostors), bound in the World set of
 every pass and, for the depth, in the mesh pass's own set.
 
@@ -405,8 +405,9 @@ allows when the position is interpolated in screen space at the centroid. The hi
 passes shade a card pixel from the same views: albedo, normal and emission blended by
 view weight and texel coverage (`frame/sdf-mesh-impostor-surface.hlsli`), each
 sampled at the level the pixel's footprint wants, bilinear inside the view's tile,
-with the draw's first palette material, since the impostor stores no material
-identity. `SdfImpostorOracle` states the trace in doubles over the decoded depth,
+with each texel's own material: the impostor stores a material plane (R8, the
+program material id, never blended), and the card takes the texel of the most-weighted covering view at level
+zero, added to the draw's material as a mesh's texel entry is. `SdfImpostorOracle` states the trace in doubles over the decoded depth,
 and `SdfImpostorLawTests` hold it to the field's sphere and box.
 
 ---

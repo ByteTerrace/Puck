@@ -173,6 +173,64 @@ public sealed class SdfImpostorLawTests(ITestOutputHelper output) {
         }
     }
     [Fact]
+    public void ATwoMaterialCardNamesEachRegionsOwnMaterialAndTheFirstMaterialMutantDoesNot() {
+        // Two spheres of different materials side by side along X. A ray aimed at a sphere's center from any direction
+        // across Y and Z meets that sphere first, so the texel the views hold there names its material: 0 on the left, 1 on
+        // the right. The mutant, the first-material shading the material plane replaced, names 0 everywhere.
+        SdfMaterial[] materials = [new(Albedo: new Vector3(x: 0.8f, y: 0.2f, z: 0.1f)), new(Albedo: new Vector3(x: 0.1f, y: 0.5f, z: 0.9f), Emissive: 2f)];
+        var builder = new SdfProgramBuilder();
+
+        foreach (var material in materials) {
+            _ = builder.AddMaterial(material: material);
+        }
+
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: -0.4f, y: 0f, z: 0f)).Sphere(material: 0, radius: 0.3f);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0.4f, y: 0f, z: 0f)).Sphere(material: 1, radius: 0.3f);
+
+        var impostor = SdfBaker.Bake(
+            center: Vector3.Zero,
+            materials: materials,
+            program: builder.Build(buildInstanceGrid: false),
+            reach: 0.8f,
+            tier: SdfBakeTier.For(quality: SdfBakeQuality.Standard)
+        ).Impostor;
+        var oracle = new SdfImpostorOracle(impostor: impostor);
+        Vector3[] directions = [-Vector3.UnitZ, Vector3.UnitZ, -Vector3.UnitY, Vector3.UnitY, Vector3.Normalize(value: new Vector3(x: 0f, y: -0.5f, z: -1f)), Vector3.Normalize(value: new Vector3(x: 0f, y: 0.5f, z: 1f))];
+
+        var (checkedRays, mutantWrong) = (0, 0);
+
+        foreach (var direction in directions) {
+            foreach (var (x, expected) in new[] { (-0.4f, 0), (0.4f, 1) }) {
+                var center = new Vector3(x: x, y: 0f, z: 0f);
+                var start = ((center - (direction * (3f * impostor.Radius))) / impostor.Radius);
+                var travel = (direction / impostor.Radius);
+                var hit = oracle.TraceMaterial(
+                    firstMaterialOnly: false,
+                    material: out var material,
+                    start: (((double)start.X), ((double)start.Y), ((double)start.Z)),
+                    t: out _,
+                    travel: (((double)travel.X), ((double)travel.Y), ((double)travel.Z))
+                );
+                var mutantHit = oracle.TraceMaterial(
+                    firstMaterialOnly: true,
+                    material: out var mutant,
+                    start: (((double)start.X), ((double)start.Y), ((double)start.Z)),
+                    t: out _,
+                    travel: (((double)travel.X), ((double)travel.Y), ((double)travel.Z))
+                );
+
+                Assert.True(condition: (hit && mutantHit), userMessage: $"the ray at x {x} along {direction} misses");
+                Assert.Equal(actual: material, expected: expected);
+                checkedRays++;
+                mutantWrong += ((mutant != expected) ? 1 : 0);
+            }
+        }
+
+        Assert.Equal(actual: checkedRays, expected: 12);
+        // Half the rays are the second material's, and the mutant names every one of them wrong.
+        Assert.Equal(actual: mutantWrong, expected: 6);
+    }
+    [Fact]
     public void ExchangingTheViewBasisBreaksTheBoundsSoTheyDiscriminate() {
         var box = Bake(program: Make(emit: static builder => builder.ResetPoint().Box(halfExtents: new Vector3(x: 0.6f, y: 0.4f, z: 0.5f), material: 0, round: 0f)), reach: 0.9f).Impostor;
 

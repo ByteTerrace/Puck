@@ -5,9 +5,10 @@ namespace Puck.SdfVm;
 
 /// <summary>
 /// A baked prototype's octahedral impostor as the mesh pass draws it: <see cref="Views"/> by <see cref="Views"/>
-/// orthographic views of its bounding sphere (<see cref="SdfBakedImpostor"/>), each one tile of four textures that share
+/// orthographic views of its bounding sphere (<see cref="SdfBakedImpostor"/>), each one tile of five textures that share
 /// the mesh atlases' packing (<see cref="SdfMeshAtlas"/>): albedo (sRGB-encoded BC7, coverage in alpha), the octahedral
-/// normal pair (BC5), the hit's depth across the sphere (BC4) and emitted light (BC6H). A draw carrying one rasterizes a
+/// normal pair (BC5), the hit's depth across the sphere (BC4), each texel's material (R8, never blended) and emitted light
+/// (BC6H). A draw carrying one rasterizes a
 /// card in place of its mesh (<see cref="SdfMeshDraw.Impostor"/>), and the mesh pass and the hit passes find the surface
 /// the card shows by marching the camera's ray through the three nearest views' depth.
 /// </summary>
@@ -17,6 +18,7 @@ public sealed record SdfMeshImpostor : SdfTextureSet {
         SdfBakeTextureUsage.Albedo,
         SdfBakeTextureUsage.Normal,
         SdfBakeTextureUsage.Depth,
+        SdfBakeTextureUsage.Material,
         SdfBakeTextureUsage.Emission,
     ];
 
@@ -60,11 +62,11 @@ public sealed record SdfMeshImpostor : SdfTextureSet {
         ViewTexels = impostor.ViewTexels;
     }
 
-    // The impostor's four textures, which the base orders by usage.
+    // The impostor's five textures, which the base orders by usage.
     private static IReadOnlyList<SdfBakedTexture> TexturesOf(SdfBakedImpostor impostor) {
         ArgumentNullException.ThrowIfNull(argument: impostor);
 
-        return [impostor.Albedo, impostor.Normal, impostor.Depth, impostor.Emission];
+        return [impostor.Albedo, impostor.Normal, impostor.Depth, impostor.Material, impostor.Emission];
     }
 
     /// <summary>Gets the bounding sphere's center, in the prototype's engine frame.</summary>

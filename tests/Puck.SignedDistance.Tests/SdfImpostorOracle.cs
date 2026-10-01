@@ -14,7 +14,9 @@ internal sealed class SdfImpostorOracle(SdfBakedImpostor impostor) {
     internal const double MissGap = 16.0;
     internal const int Steps = 8;
 
+    private readonly byte[] m_albedo = impostor.Albedo.Decode(level: 0);
     private readonly byte[] m_depth = impostor.Depth.Decode(level: 0);
+    private readonly byte[] m_material = impostor.Material.Levels[0];
 
     // The octahedral map of a direction onto [-1, 1]^2, +Y the pole.
     internal static (double X, double Z) Encode((double X, double Y, double Z) v) {
@@ -85,6 +87,51 @@ internal sealed class SdfImpostorOracle(SdfBakedImpostor impostor) {
         }
 
         t = (sum / covered);
+
+        return true;
+    }
+    /// <summary>Marches a ray and names the material of the surface it meets: the texel the most-weighted covering view
+    /// holds at the hit, as <c>sdfImpostorSurfaceAt</c> chooses it.</summary>
+    /// <param name="start">The ray's point at parameter zero, in the sphere's unit coordinates.</param>
+    /// <param name="travel">The ray's change per unit parameter.</param>
+    /// <param name="firstMaterialOnly">Mutates the read to the first-material behaviour the material plane replaced: every
+    /// pixel of a card names material zero.</param>
+    /// <param name="t">The parameter of the hit.</param>
+    /// <param name="material">The material entry.</param>
+    /// <returns><see langword="true"/> when the views agree on a hit.</returns>
+    internal bool TraceMaterial((double X, double Y, double Z) start, (double X, double Y, double Z) travel, bool firstMaterialOnly, out double t, out int material) {
+        material = 0;
+
+        if (!Trace(start: start, swapBasis: false, t: out t, travel: travel)) {
+            return false;
+        }
+
+        if (firstMaterialOnly) {
+            return true;
+        }
+
+        var length = Math.Sqrt(d: Dot(a: travel, b: travel));
+        var chosen = Views(toward: ((-travel.X / length), (-travel.Y / length), (-travel.Z / length)), views: impostor.Views);
+        var spot = ((start.X + (travel.X * t)), (start.Y + (travel.Y * t)), (start.Z + (travel.Z * t)));
+        var heaviest = -1.0;
+
+        foreach (var (cell, weight) in new[] { (chosen.A, chosen.Wa), (chosen.B, chosen.Wb), (chosen.C, chosen.Wc) }) {
+            var toward = SdfBakedImpostor.ViewDirection(i: cell.I, j: cell.J, views: impostor.Views);
+            var v = (((double)toward.X), ((double)toward.Y), ((double)toward.Z));
+            var reference = ((Math.Abs(value: v.Item2) > 0.999) ? (0.0, 0.0, 1.0) : (0.0, 1.0, 0.0));
+            var right = Normalize(v: Cross(a: reference, b: v));
+            var up = Cross(a: v, b: right);
+            var tile = impostor.ViewTexels;
+            var ix = Math.Clamp(value: ((int)Math.Floor(d: (((Dot(a: spot, b: right) * 0.5) + 0.5) * tile))), min: 0, max: (tile - 1));
+            var iy = Math.Clamp(value: ((int)Math.Floor(d: ((0.5 - (Dot(a: spot, b: up) * 0.5)) * tile))), min: 0, max: (tile - 1));
+            var at = ((((cell.J * tile) + iy) * (impostor.Views * tile)) + ((cell.I * tile) + ix));
+            var covered = (weight * (m_albedo[((at * 4) + 3)] / 255.0));
+
+            if (covered > heaviest) {
+                heaviest = covered;
+                material = m_material[at];
+            }
+        }
 
         return true;
     }

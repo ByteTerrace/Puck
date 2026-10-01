@@ -1481,7 +1481,7 @@ direction toward the camera against their depth, discards what no majority of th
 covers, and writes the surface's ray parameter and depth, so a card pixel sorts
 against meshes and the field as the surface does. The hit passes shade it from the
 same views: albedo, normal and emission weighted by view and coverage, with the
-draw's first palette material. The CPU oracle `SdfImpostorOracle` states the trace,
+each texel's own material (the impostor stores a material plane). The CPU oracle `SdfImpostorOracle` states the trace,
 `SdfImpostorLawTests` hold it to the field's sphere and box within a stated share of
 the bounding radius, `SdfMeshLodLawTests` hold the selection and its handover, and
 `ParityBakeSelectionLawTests` hold the parity world's captures to meshes, so its
@@ -5075,8 +5075,9 @@ placement hands over to them by its size on screen:
 
 - *Atlas.* The impostor is a grid of orthographic views of the bake's bounding
   sphere, along the directions an octahedral map decodes with +Y its pole, each
-  view one tile of four textures: albedo with coverage (BC7, sRGB), normal (BC5),
-  depth across the sphere (BC4) and emission (BC6H), mipped per tile. They pack
+  view one tile of five textures: albedo with coverage (BC7, sRGB), normal (BC5),
+  depth across the sphere (BC4), material identity (R8, never blended) and
+  emission (BC6H), mipped per tile. They pack
   into impostor atlases beside the mesh atlases, never in one with them, since
   their tiles and chains differ.
 - *Sampling.* A card, a quad on the plane touching the sphere's near side, covers
@@ -5096,10 +5097,10 @@ placement hands over to them by its size on screen:
   view then records one of them. The choice is made per view on the CPU from that
   view's camera, so two views at two distances choose apart, and the shaders hold
   no copy of it.
-- *Limits.* The card shades with the prototype's first palette material, since the
-  impostor stores no material identity; a prototype whose materials differ in more
-  than albedo and emission shows one's roughness and specular. The nearest-texel
-  depth bends a silhouette by at most a texel; the oracle laws state the bound.
+- *Limits.* The nearest-texel depth bends a silhouette by at most a texel; the
+  oracle laws state the bound. A card reads a texel's material from the view
+  holding the most weight at the hit, unfiltered, so a boundary between two
+  materials is as sharp as a view texel.
 
 **Check:** baking one prototype twice produces the same key and, on one
 device, the same bytes; editing one prototype rebakes only that prototype; a

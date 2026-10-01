@@ -8,8 +8,9 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 /// <summary>
-/// THE LAW: an impostor reaches the mesh pass as the bake made it. A baked impostor becomes four textures, one of each of
-/// albedo, normal, depth and emission, each stored in the format its usage declares (BC7 in sRGB, BC5, BC4, BC6H) as
+/// THE LAW: an impostor reaches the mesh pass as the bake made it. A baked impostor becomes five textures, one of each of
+/// albedo, normal, depth, material and emission, each stored in the format its usage declares (BC7 in sRGB, BC5, BC4, R8,
+/// BC6H) as
 /// tile-aware chains of the view grid's extent, and a sphere the draw places and a view grid it searches. A set of
 /// another kind, a grid the textures do not fill, or a sphere that cannot be drawn is refused by name. The impostor atlases
 /// pack impostors as the mesh atlases pack meshes' textures, aligned to whole blocks at the last level of the chain, and
@@ -39,9 +40,9 @@ public sealed class SdfMeshImpostorLawTests {
         var bake = Bake(radius: 0.5f);
         var impostor = new SdfMeshImpostor(impostor: bake.Impostor);
 
-        Assert.Equal(expected: [SdfBakeTextureUsage.Albedo, SdfBakeTextureUsage.Normal, SdfBakeTextureUsage.Depth, SdfBakeTextureUsage.Emission], actual: impostor.UsageOrder);
-        Assert.Equal(expected: [GpuPixelFormat.Bc7Unorm, GpuPixelFormat.Bc5Unorm, GpuPixelFormat.Bc4Unorm, GpuPixelFormat.Bc6hUfloat], actual: impostor.Textures.Select(selector: static texture => texture.Format));
-        Assert.Equal(expected: [TextureColorSpace.Srgb, TextureColorSpace.Linear, TextureColorSpace.Linear, TextureColorSpace.Linear], actual: impostor.Textures.Select(selector: static texture => texture.ColorSpace));
+        Assert.Equal(expected: [SdfBakeTextureUsage.Albedo, SdfBakeTextureUsage.Normal, SdfBakeTextureUsage.Depth, SdfBakeTextureUsage.Material, SdfBakeTextureUsage.Emission], actual: impostor.UsageOrder);
+        Assert.Equal(expected: [GpuPixelFormat.Bc7Unorm, GpuPixelFormat.Bc5Unorm, GpuPixelFormat.Bc4Unorm, GpuPixelFormat.R8Unorm, GpuPixelFormat.Bc6hUfloat], actual: impostor.Textures.Select(selector: static texture => texture.Format));
+        Assert.Equal(expected: [TextureColorSpace.Srgb, TextureColorSpace.Linear, TextureColorSpace.Linear, TextureColorSpace.Linear, TextureColorSpace.Linear], actual: impostor.Textures.Select(selector: static texture => texture.ColorSpace));
         Assert.Equal(expected: (bake.Impostor.Center, bake.Impostor.Radius, bake.Impostor.Views, bake.Impostor.ViewTexels), actual: (impostor.Center, impostor.Radius, impostor.Views, impostor.ViewTexels));
         Assert.Equal(expected: (impostor.Views * impostor.ViewTexels), actual: impostor.Width);
         Assert.Equal(expected: impostor.ViewTexels, actual: impostor.TileTexels);

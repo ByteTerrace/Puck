@@ -272,7 +272,7 @@ These are one-line cautions; the owning pages hold the derivations.
   of the pass-pipeline cache beside the mesh pass's (`SdfMeshRasterPass.ImpostorKey`),
   because its fragment stage discards and writes depth, which the mesh stage's forced
   early test forbids; the hit passes shade a card pixel from the impostor's views
-  (`frame/sdf-mesh-impostor-surface.hlsli`) with the draw's first palette material,
+  (`frame/sdf-mesh-impostor-surface.hlsli`) with each texel's material (the impostor's R8 plane, read unfiltered),
   and reprojection takes its point through the draw's inverse matrix. A change to
   the trace moves `SdfImpostorOracle` and `SdfImpostorLawTests` with it.
 

@@ -2,9 +2,11 @@
 // (frame/sdf-mesh-impostor.hlsli), at the ray parameter the mesh pass wrote, as the albedo, the world normal and the light
 // the three nearest views show there, each weighted by its view's weight and by the coverage its texel holds, so a view that
 // shows nothing at the point does not dim or bend it. The world kernels' interface declares the impostor atlases
-// (sdfImpostorAlbedo, sdfImpostorNormals, sdfImpostorEmission) beside the depth atlas the trace reads; the mesh pass's does
+// (sdfImpostorAlbedo, sdfImpostorNormals, sdfImpostorMaterials, sdfImpostorEmission) beside the depth atlas the trace reads; the mesh pass's does
 // not, so its stages never include this module. Each atlas is read at the level the pixel's footprint wants, bilinear inside
-// the view's tile at that level, as frame/sdf-mesh-textures.hlsli reads a mesh's. KEEP IN SYNC with SdfBakedImpostor and
+// the view's tile at that level, as frame/sdf-mesh-textures.hlsli reads a mesh's. The material is an identity, never
+// filtered: the texel the most-weighted covering view holds at level zero, whose entry the includer adds to the draw's
+// material as a mesh's texel entry is. KEEP IN SYNC with SdfBakedImpostor and
 // SdfMeshImpostor (the albedo is sRGB-encoded with coverage in alpha, the normal an octahedral pair in the prototype's
 // frame, the emission linear).
 #ifndef FRAME_SDF_MESH_IMPOSTOR_SURFACE_HLSLI
@@ -18,6 +20,7 @@ struct SdfImpostorSurface {
     float3 albedo;   // linear
     float3 normal;   // world, facing the camera
     float3 emission; // linear light
+    int material;    // the winning view's texel entry, added to the draw's material
 };
 
 // One view's atlas value at a point of its plane and a level: bilinear inside the view's tile.
@@ -54,6 +57,19 @@ float3 sdfImpostorNormalFiltered(SdfImpostor impostor, uint2 cell, float2 ab, ui
 
     return lerp(lerp(d00, d10, weight.x), lerp(d01, d11, weight.x), weight.y);
 }
+// The material entry of one view's texel at a point of its plane, at level zero: the nearest texel, unfiltered.
+int sdfImpostorMaterialAt(SdfImpostor impostor, uint2 cell, float2 ab) {
+    uint width;
+    uint height;
+    uint levels;
+
+    sdfImpostorMaterials.GetDimensions(0u, width, height, levels);
+
+    SdfImpostorTile tile = sdfImpostorTileOf(impostor, cell, 0u, float2((float)width, (float)height));
+    float2 local = clamp(floor((sdfImpostorTileFraction(ab) * tile.edge)), 0.0, (tile.edge - 1.0));
+
+    return (int)round((sdfImpostorMaterials.Load(int3(int2((tile.origin + local)), 0)).r * 255.0));
+}
 // The surface of a card's pixel at ray parameter `t` along the unit `direction` from `origin`. `footprint` is the world
 // size of a pixel at the surface.
 SdfImpostorSurface sdfImpostorSurfaceAt(uint draw, float3 origin, float3 direction, float t, float footprint) {
@@ -75,6 +91,8 @@ SdfImpostorSurface sdfImpostorSurfaceAt(uint draw, float3 origin, float3 directi
     float3 emission = float3(0.0, 0.0, 0.0);
     float total = 0.0;
     float3 plain = float3(0.0, 0.0, 0.0);
+    float heaviest = -1.0;
+    int material = 0;
 
     [unroll] for (uint view = 0u; view < 3u; view++) {
         float3 toward = sdfImpostorViewDirection(views.cell[view].x, views.cell[view].y, impostor.views);
@@ -93,6 +111,11 @@ SdfImpostorSurface sdfImpostorSurfaceAt(uint draw, float3 origin, float3 directi
         normal += (weight * direction3);
         emission += (weight * light);
         total += weight;
+
+        if (weight > heaviest) {
+            heaviest = weight;
+            material = sdfImpostorMaterialAt(impostor, views.cell[view], ab);
+        }
         plain += (views.weight[view] * direction3);
     }
 
@@ -101,6 +124,7 @@ SdfImpostorSurface sdfImpostorSurfaceAt(uint draw, float3 origin, float3 directi
 
     albedo = ((total > 1.0e-4) ? saturate((albedo / total)) : float3(0.0, 0.0, 0.0));
     surface.albedo = lerp(pow(((albedo + 0.055) / 1.055), 2.4), (albedo / 12.92), step(albedo, 0.04045));
+    surface.material = material;
     surface.emission = ((total > 1.0e-4) ? (emission / total) : float3(0.0, 0.0, 0.0));
 
     float3 worldNormal = normalize(sdfMeshNormalToWorld(record, objectNormal));

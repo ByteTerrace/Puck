@@ -205,13 +205,15 @@ public static partial class SdfWorldPackage {
     /// <summary>The impostor depth atlas, BC4: 0 at a view's near side of the bounding sphere, 1 at its far side and where
     /// the view's ray missed.</summary>
     public const string ImpostorDepth = "sdfImpostorDepth";
+    /// <summary>The impostor material atlas: each texel's program material id, R8, read without filtering.</summary>
+    public const string ImpostorMaterials = "sdfImpostorMaterials";
     /// <summary>The impostor emission atlas: linear emitted light, BC6H.</summary>
     public const string ImpostorEmission = "sdfImpostorEmission";
 
     /// <summary>Gets the impostor atlases, World-group members of every compute pass (and, for the depth atlas, the mesh
-    /// pass's pass group), in the order the impostor atlases hold the usages they pack (albedo, normal, depth, emission):
+    /// pass's pass group), in the order the impostor atlases hold the usages they pack (albedo, normal, depth, material, emission):
     /// images that change only when the set of impostors a frame draws does.</summary>
-    public static IReadOnlyList<string> ImpostorAtlases { get; } = [ImpostorAlbedo, ImpostorNormals, ImpostorDepth, ImpostorEmission];
+    public static IReadOnlyList<string> ImpostorAtlases { get; } = [ImpostorAlbedo, ImpostorNormals, ImpostorDepth, ImpostorMaterials, ImpostorEmission];
     /// <summary>Gets the mesh atlases, World-group members of every compute pass, in the order the mesh atlases hold
     /// the usages they pack (albedo, normal, occlusion, material, emission): images that change only when the set of
     /// textured meshes a frame draws does.</summary>
@@ -351,6 +353,7 @@ public static partial class SdfWorldPackage {
         WorldImage(name: ImpostorAlbedo),
         WorldImage(name: ImpostorNormals),
         WorldImage(name: ImpostorDepth),
+        WorldImage(name: ImpostorMaterials),
         WorldImage(name: ImpostorEmission),
     ];
     /// <summary>Gets what every compute pass of the fragment reads: from its pass group, beside the extent, the values
