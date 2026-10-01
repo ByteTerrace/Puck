@@ -26,7 +26,7 @@ public sealed class WorldAuthorityBlobStoreTests {
 
         var outcome = await store.AppendJournalAsync(
             cancellationToken: TestContext.Current.CancellationToken,
-            entry: new WorldMutationJournalEntry(
+            entry: new WorldAuthorityJournalEntry(
                 Tick: 1UL,
                 EngineTick: 1UL,
                 Encoded: "a"u8.ToArray()
@@ -60,7 +60,7 @@ public sealed class WorldAuthorityBlobStoreTests {
         for (var index = 0; (index < 3); index++) {
             var appended = await store.AppendJournalAsync(
                 cancellationToken: cancellationToken,
-                entry: new WorldMutationJournalEntry(
+                entry: new WorldAuthorityJournalEntry(
                     Encoded: new byte[] { ((byte)index) },
                     EngineTick: ((ulong)(200 + index)),
                     Tick: ((ulong)(200 + index))
@@ -152,7 +152,7 @@ public sealed class WorldAuthorityBlobStoreTests {
         )).Ok);
         Assert.True(condition: (await store.AppendJournalAsync(
             identity,
-            new WorldMutationJournalEntry(
+            new WorldAuthorityJournalEntry(
                 2,
                 2,
                 "tail"u8.ToArray()
@@ -295,7 +295,7 @@ public sealed class WorldAuthorityBlobStoreTests {
         Assert.NotNull(value: takeover);
         var stale = await store.AppendJournalAsync(
             identity,
-            new WorldMutationJournalEntry(
+            new WorldAuthorityJournalEntry(
                 2,
                 2,
                 "old"u8.ToArray()
@@ -421,7 +421,7 @@ public sealed class WorldAuthorityBlobStoreTests {
             WorldAuthorityStoreOutcomeKind.PreconditionFailed,
             (await store.AppendJournalAsync(
                 identity,
-                new WorldMutationJournalEntry(
+                new WorldAuthorityJournalEntry(
                     5,
                     5,
                     "not-applied"u8.ToArray()
@@ -467,7 +467,7 @@ public sealed class WorldAuthorityBlobStoreTests {
         );
         var first = await store.AppendJournalAsync(
             identity,
-            new WorldMutationJournalEntry(
+            new WorldAuthorityJournalEntry(
                 2,
                 2,
                 "entry"u8.ToArray()
@@ -484,7 +484,7 @@ public sealed class WorldAuthorityBlobStoreTests {
         Assert.NotNull(value: first.PublishedRoot);
         var retry = await store.AppendJournalAsync(
             identity,
-            new WorldMutationJournalEntry(
+            new WorldAuthorityJournalEntry(
                 2,
                 2,
                 "entry"u8.ToArray()

@@ -28,16 +28,18 @@ public sealed partial class WorldSiloHost {
                     admission.TrySetResult(result: Task.FromResult(result: WorldAuthorityStoreOutcome.Failed(detail: "The activation is retiring.")));
                     return;
                 }
-                var queued = PublishAfterAsync(
-                    bookkeeping: bookkeeping,
-                    composed: composed,
-                    ct: ct,
-                    identity: identity,
-                    previous: bookkeeping.JournalTail
-                );
+                lock (bookkeeping.TailGate) {
+                    var queued = PublishAfterAsync(
+                        bookkeeping: bookkeeping,
+                        composed: composed,
+                        ct: ct,
+                        identity: identity,
+                        previous: bookkeeping.JournalTail
+                    );
 
-                bookkeeping.JournalTail = queued;
-                admission.TrySetResult(result: queued);
+                    bookkeeping.JournalTail = queued;
+                    admission.TrySetResult(result: queued);
+                }
             } else {
                 admission.TrySetResult(result: m_store.PublishDefinitionAsync(
                     identity,
