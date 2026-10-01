@@ -702,6 +702,26 @@ replays from its tape forwards nothing, its drive's last tick included: its dest
 replaying with it. A destination driving its own tape restores the sessions it recorded; when the
 drive ends, each one no observer holds ends, so nothing its recorded viewer pressed stays held.
 
+The windowed and offscreen render roots prepare delivery and the graph set, then the package's
+frame capture runs the world's existing view composer before scheduling. That capture places each
+view and pane using the same eased rect its camera projects, including fractional pixel extents.
+Each occupant's allocation reserves its largest width and height across layouts, with the built-in
+seat ladder included where no catch-all layout covers it. Easing changes placement and the resolved
+grid inside the render-scale ceiling without resizing or rebuilding a node. Editor comparisons
+record their viewports after that placement. `WorldCameraPlacementLawTests` pins agreement on every
+transition frame and a stable scheduled extent across quantization steps.
+
+Both rendered hosts hold the completed simulation tick while a tick-scheduled capture is owed.
+Repeated window resizes can delay frame production, but cannot advance the capture to a later tick
+or leave it blocking the next scheduled capture. A pending capture presents bound state and body
+poses at fraction one; its image, region tick and state hash describe the scheduled tick
+(`WorldTemporalCaptureLawTests.AWindowedCapturePinsItsClockAndBodyPoseAndReleasesTheFractionAfterServing`). The
+swapchain follows the window's client extent while the world's logical frame extent stays fixed.
+`WorldCaptureSchedulerLawTests.AWindowResizeStormWritesEveryScheduledTicksFrameWithoutBlockingTheNextCapture`
+checks every PNG's tick and hash through delayed frames. When a frame cannot be served, the existing
+readiness-dependent hold budgets produce a named refusal and withdraw the request; a run settles
+anything still owed before disposal (`WorldCaptureHoldLawTests`).
+
 A joined-world projection renders the destination from the destination's own delivered snapshots and
 its own measured clock, never through the host's presentation clock—independently scheduled or
 remote worlds do not share a presentation coordinate. It lights the destination under the

@@ -16,8 +16,8 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: <see cref="WorldFramePresenter.PrepareGraph"/>, the presenter's half of every frame of a world
-/// whose views place graph instances, allocates nothing once its frame is steady: it reads the composed slots, places the
+/// CONTRACT UNDER TEST: <see cref="WorldFramePresenter.PrepareGraph"/> and the placement completed by the world's
+/// capture allocate nothing beyond the capture itself once steady: they read the composed slots, place the
 /// views and each instance's pane, pairs an instance with its camera, and hands its node the frame values, all over
 /// storage the host and presenter already hold. The presenter is the one an offscreen boot composes, resolved with its
 /// device sealed, over the counters world with one graph instance, the shipped ink pipeline, paired with the world's
@@ -98,10 +98,12 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
         TargetHeight: Display,
         TargetWidth: Display
     );
-    // A frame as the host presents one: the presenter captures the frame, which composes the slots, then prepares the
-    // graph over them.
+    // A frame as the host presents one: prepare the graph's delivery, then capture the world and place its composition
+    // before the runtime schedules it.
     private static void Present(WorldFramePresenter presenter, ulong index) {
         var frame = Frame(index: index);
+
+        presenter.PrepareGraph(context: in frame);
 
         _ = presenter.CaptureFrame(
             deltaSeconds: Delta,
@@ -109,7 +111,6 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
             interpolationAlpha: 1f,
             width: Display
         );
-        presenter.PrepareGraph(context: in frame);
     }
 
     public void Dispose() => m_stateDirectory.Dispose();
@@ -248,6 +249,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
         var context = Frame(index: 3UL);
 
         presenter.PrepareGraph(context: in context);
+        _ = presenter.CaptureFrame(deltaSeconds: Delta, height: Display, interpolationAlpha: 1f, width: Display);
     }
     [Fact]
     public void ACameraExportExtentDoesNotResizeThePresentersDisplay() {
@@ -317,17 +319,16 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
         }
 
         var steady = Frame(index: index);
-
-        _ = presenter.CaptureFrame(
-            deltaSeconds: Delta,
-            height: Display,
-            interpolationAlpha: 1f,
-            width: Display
-        );
+        var captureBytes = AllocationWindow.Measure(window: () => {
+            _ = presenter.CaptureFrame(deltaSeconds: Delta, height: Display, interpolationAlpha: 1f, width: Display);
+        });
 
         Assert.Equal(
-            actual: AllocationWindow.Least(window: () => presenter.PrepareGraph(context: in steady)),
-            expected: 0L
+            actual: AllocationWindow.Measure(window: () => {
+                presenter.PrepareGraph(context: in steady);
+                _ = presenter.CaptureFrame(deltaSeconds: Delta, height: Display, interpolationAlpha: 1f, width: Display);
+            }),
+            expected: captureBytes
         );
         // The pane's node read its paired camera, so the steady frame covered the camera path.
         Assert.NotEqual(

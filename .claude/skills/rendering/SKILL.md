@@ -1464,6 +1464,20 @@ records `ImageSourceVerdict`'s exact verdict (`WorldCaptureManifestEntry.SourceV
 resolved through `IWorldCaptureSources`), which `puck parity compare` reads as
 `SOURCE-OK`/`SOURCE-FAILED`.
 
+Both rendered hosts hold the simulation at a tick-scheduled capture until it
+is served or refused. A window resize delays frame production without moving
+that tick. `WorldFramePresenter.CapturePending` reads the runtime's pending
+request, forwarded captures included, and pins bound state and body poses to
+fraction one while the frame is owed. Preparation writes graph parameters
+after that fraction is applied. The swapchain follows the client extent while
+the world's logical frame stays fixed. The hold budgets and named refusals
+are documented in the `puck-world` skill's
+[capture contract](../puck-world/references/schedules-and-tests.md#captures);
+`WorldCaptureSchedulerLawTests.AWindowResizeStormWritesEveryScheduledTicksFrameWithoutBlockingTheNextCapture`
+checks every delayed PNG's tick and state hash, and
+`WorldTemporalCaptureLawTests.AWindowedCapturePinsItsClockAndBodyPoseAndReleasesTheFractionAfterServing`
+checks pinning and release on a windowed presentation.
+
 `views.graphs` rows run on the same runtime. `WorldViewGraphHost`
 (`src/Puck.World.Client/WorldViewGraphHost*.cs`) drives it through
 `IRenderGraphInstances` (`src/Puck.Shaders/Graph`, implemented by
@@ -1487,17 +1501,21 @@ from the row's `inputs`. A row naming an engine `package` (such as `sdf.world`)
 compiles nothing. Panes are placed by the `place` package (`PlacePackage`,
 `IRenderGraphPlacements`, which the host implements):
 `WorldFramePresenter.PrepareGraph`, installed as
-`RenderGraphRuntimeNode.Prepare`, places every instance a slot of the last
-composed layout shows at the slot's rect with `world.upscale-sharpness`'s
-sharpness, adds a footprint (consumer `main`, producer the pane, at the slot's
-width and height), advances the pane's clock and feeds its camera, pointer and
-time. A pane the active layout does not show draws nothing in its place pass
-and is not scheduled. The composer runs inside the world producer's frame, so a
-layout change places panes one frame later, and a layout transition's
-render-scale dip does not reach panes. A pane slot adds no SDF view. Each SDF
-view of the last composed frame is placed through
-`WorldViewGraphHost.PlaceViews`, which `PrepareGraph` calls, and `PlaceView`
-(footprint: native rect; placement: rect with `world.upscale-sharpness`).
+`RenderGraphRuntimeNode.Prepare`, reconciles delivery and the graph set. The
+package's `BeginFrame` captures the world before scheduling; that capture runs
+the existing composer once and then places its views and panes. Each placement
+uses the rect its camera projects in that same frame, including an interrupted
+transition (`WorldCameraPlacementLawTests.EveryTransitionFramePlacesTheRectItsCameraProjects`).
+The capture advances each pane's clock and feeds its camera, pointer, time and
+bound parameters before publishing its mapping. A pane the active layout does
+not show draws nothing in its place pass and is not scheduled. A pane slot adds
+no SDF view. `WorldViewGraphHost.PlaceViews` and `Place` add footprints at the
+largest width and height each occupant uses across authored layouts, including
+the built-in seat ladder where no catch-all layout covers it
+(`WorldViewOutputRegions`). Placement uses the current eased rect with
+`world.upscale-sharpness`; the allocation envelope stays fixed through easing
+and at its endpoints, so quantization and hysteresis rebuild no node
+(`WorldCameraPlacementLawTests.AnEasedRectCrossesQuantizationStepsWithoutChangingTheNodesExtent`).
 The view package reconstructs a reduced render grid to that native output
 before `place` composes it, and `place` resamples it once more unless the
 scheduled extent equals the rect's pixels. The presenter sets each view's
@@ -1511,8 +1529,7 @@ so the world is still scheduled. A view is shown only once its instance has
 completed an image (`WorldFramePresenter.ViewRendered`,
 `RenderGraphRuntime.TryLatestImage`),
 and a lone full-display view without tonemap is not shown, so `main` stands for
-`world` and parity holds (`WorldViewPlacementLawTests`). Views, like panes, are
-placed one frame after a layout change. The first view's place pass carries
+`world` and parity holds (`WorldViewPlacementLawTests`). The first view's place pass carries
 the `place` config's `letterbox`, so pixels no view or pane covers show the
 letterbox color `place.comp.hlsl` states, and a layout covering the whole
 display pays nothing for it. While the first view is not shown, its pass still
@@ -1597,8 +1614,8 @@ screen pointer path reads a mapping rather than scaling a rect by hand. A warp
 pass is an input path only with a declared exact inverse; a new warp kind is a
 new `SourceWarpInverse` arm. The screen glass's bezel is data: its one statement
 is `WorldScreenMappings.Glass`, the warp every screen row's mapping carries. Panes publish their
-mappings from the placements `place` draws: `WorldFramePresenter.PrepareGraph`
-ends with `WorldViewGraphHost.PublishPanes`, which writes one whole-image
+mappings from the placements `place` draws: the world's capture completes
+placement with `WorldViewGraphHost.PublishPanes`, which writes one whole-image
 mapping per shown view and pane, in drawing order, named by the instance's
 `RenderGraphInstance.Handle` at the extent the runtime's latest schedule
 renders it at (`IRenderGraphInstances.Latest`), into `Panes` and the host's
@@ -1766,7 +1783,7 @@ dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~Creat
 dotnet test tests/Puck.SdfVm.Tests -c Release               # kernel variants, camera programs, environment packing
 dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~WorldRenderEnvelopeLawTests|FullyQualifiedName~ShapePanelLawTests|FullyQualifiedName~WorldStampPoolBoundLawTests"
 dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~SdfPipelineBuildLivenessLawTests"   # the pump never blocks on pipeline creation
-dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~WorldCaptureHoldLawTests"   # offscreen holds its clock at an armed capture, bounded, settled before disposal
+dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~WorldCaptureHoldLawTests"   # rendered hosts hold the capture tick, bounded, settled before disposal
 puck parity                                                 # parity world, offscreen, Vulkan then Direct3D 12
 puck canary sdf-decode-sign-refusal                         # puck.sdf.v1 decode sign refusals, offscreen on both backends
 puck canary world-counters                                  # world.counters gpu counted work, offscreen on both backends

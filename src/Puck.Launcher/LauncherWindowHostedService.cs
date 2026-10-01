@@ -225,7 +225,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // registered (a composition root that drives no fixed-step sim at all), mirroring the ORIGINAL
                 // m_simulation/m_inputRouter pairing check the constructor already enforces.
                 var pump = FixedStepPump.CreateHosted(
-                    holdsClock: false,
+                    holdsClock: true,
                     inputBacklog: m_inputBacklog,
                     inputClock: m_inputClock,
                     inputRouter: m_inputRouter,

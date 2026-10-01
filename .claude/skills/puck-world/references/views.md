@@ -303,8 +303,10 @@ whole ordered list (`WorldMutation.SetViewPost`), so a pass is added, reordered
 or removed by writing the list, and the host recomposes the running root from
 the rows the document names then. A probe parameter's `post` target
 writes a row's float config field live (`WorldPostPasses`). A pane the
-active layout does not show is not scheduled, and a layout change places panes
-one frame later. The `rendering` skill owns the graph document, the scheduler
+active layout does not show is not scheduled. The world's capture composes
+cameras and places the current layout before scheduling that same frame. View
+and pane allocations reserve their largest layout extent, so easing changes
+placement without rebuilding a node. The `rendering` skill owns the graph document, the scheduler
 and the host (`WorldViewGraphHost`).
 
 ## Pointer, cursor, Free Cam

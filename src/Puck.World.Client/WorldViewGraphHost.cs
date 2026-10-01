@@ -21,8 +21,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     public string DocumentDirectory { get; private set; }
     /// <summary>Every graph row with a source that the runtime runs, by its authored name.</summary>
     public IReadOnlyDictionary<string, Entry> Entries => m_entries;
-    /// <summary>Gets this frame's footprints: the synthesized root showing the world, then each pane at its slot's
-    /// extent. The render root reads this list, which the host rewrites in place every frame.</summary>
+    /// <summary>Gets this frame's footprints: the synthesized root showing the world, then each view and pane at its
+    /// allocation envelope across layouts. The render root reads this list, rewritten in place every frame.</summary>
     public IReadOnlyList<RenderGraphFootprint> Footprints => m_footprints;
     /// <summary>Gets the views the display shows directly beside the root, a HUD frame's or a probe export's camera, each
     /// at the fraction of the display its declared extent covers. The host rewrites the list in place whenever the set is
@@ -273,6 +273,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private List<RenderGraphFootprint> m_screenFootprints = [];
 
     private WorldViewDefaults? m_lastViews;
+
+    private WorldViewDefaults m_frameViews = new();
+
     // The render.tonemap the running set was composed with.
     private WorldTonemap m_lastTonemap;
     // The last refusal Reconcile reported, so a section it keeps retrying reports each refusal once.
@@ -585,6 +588,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <param name="views">The accepted document's <c>views</c> section.</param>
     /// <param name="tonemap">The accepted document's <c>render.tonemap</c>, or <see langword="null"/> for none.</param>
     public void BeginFrame(WorldViewDefaults views, WorldTonemap? tonemap = null) {
+        m_frameViews = views;
         Reconcile(
             tonemap: tonemap,
             views: views
@@ -595,7 +599,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_cameras.Clear();
     }
     /// <summary>Places a pane this frame: the synthesized root shows the instance inside a normalized rect of the display,
-    /// renders it at that rect's extent, and reconstructs it at the given sharpness. An instance the root does not place
+    /// renders it at its allocation envelope across layouts, and reconstructs it at the given sharpness. An instance the root does not place
     /// is ignored, and so is a refused one (<see cref="Entry.Refusal"/>): the root draws the world beneath its slot, and
     /// nothing the root shows waits on it.</summary>
     /// <param name="instance">The <c>views.graphs</c> instance the slot names.</param>
@@ -626,11 +630,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 Width: region.Width
             )
         );
+        var output = WorldViewOutputRegions.Pane(instance: instance, region: region, views: m_frameViews);
+
         m_footprints.Add(item: new RenderGraphFootprint(
             Consumer: WorldViewGraphs.MainInstance,
-            Height: region.Height,
+            Height: output.Height,
             Producer: instance,
-            Width: region.Width
+            Width: output.Width
         ));
 
         return true;
@@ -647,8 +653,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <param name="uncovered">Whether part of the display lies outside everything the root shows this frame, so the
     /// first view's place pass, when the view is not shown, writes the letterbox color everywhere rather than standing
     /// for its base (<see cref="RenderGraphPlacement.Uncovered"/>).</param>
+    /// <param name="outputRegion">The stable allocation envelope, independent of the current placement.</param>
     /// <returns><see langword="true"/> when the root places the view this frame.</returns>
-    public bool PlaceView(int view, NormalizedRect region, float sharpness, bool shown, bool uncovered) {
+    public bool PlaceView(int view, NormalizedRect region, float sharpness, bool shown, bool uncovered, NormalizedRect outputRegion) {
         if (
             (m_synthesized is not { Plan: not null } synthesized) ||
             (((uint)view) >= ((uint)synthesized.ViewPasses.Count))
@@ -668,9 +675,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         m_footprints.Add(item: new RenderGraphFootprint(
             Consumer: WorldViewGraphs.MainInstance,
-            Height: region.Height,
+            Height: outputRegion.Height,
             Producer: synthesized.Producers[view].Name,
-            Width: region.Width
+            Width: outputRegion.Width
         ));
 
         return true;
@@ -683,7 +690,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// its views. The display counts as covered only when one rect covers it whole: a lone view standing for the world, a shown
     /// view over the whole display, or a pane that covers it (<paramref name="panesCover"/>); otherwise pixels no rect
     /// covers show the letterbox color, even while the first view is not shown.</summary>
-    /// <param name="views">The views of the world's last composed frame, in view order.</param>
+    /// <param name="views">The views of the world's current composed frame, in view order.</param>
     /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
     /// <param name="rendered">Whether the world has rendered a view into its output, by 0-based view, or
     /// <see langword="null"/> when no view has an output yet.</param>
@@ -698,6 +705,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_lone = false;
         if (views.Count == 0) {
             _ = PlaceView(
+                outputRegion: whole,
                 region: whole,
                 sharpness: sharpness,
                 shown: false,
@@ -745,6 +753,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
             _ = PlaceView(
                 uncovered: !covered,
+                outputRegion: WorldViewOutputRegions.View(view: view, views: m_frameViews),
                 region: snapshot.Region,
                 sharpness: sharpness,
                 shown: Shows(

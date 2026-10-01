@@ -218,6 +218,7 @@ internal static class WorldRenderRoot {
         }
 
         binder.Runtime = runtime;
+        frameSource.CapturePending = () => (runtime.PendingCapturePath is not null);
         // A view the root places shows once its instance has completed an image, so a capture is never served over a
         // stand-in.
         frameSource.ViewRendered = view => runtime.TryLatestImage(
@@ -227,6 +228,11 @@ internal static class WorldRenderRoot {
 
         var overlaid = (overlay is not null);
         var timing = sp.GetRequiredService<WorldGpuTiming>();
+
+        frameSource.FrameComposed = () => {
+            host.PresentComparison();
+            compareCapture.RecordPreparedFrame();
+        };
 
         // The host composes the root again whenever the document's panes, views, views.post or render.tonemap move, from
         // the post passes and tonemap the document names then, so a live views.post or render.tonemap edit reaches the
@@ -266,8 +272,6 @@ internal static class WorldRenderRoot {
                 compareCapture.Poll();
                 bakes?.Pump(definition: client.Definition);
                 frameSource.PrepareGraph(context: in context);
-                host.PresentComparison();
-                compareCapture.RecordPreparedFrame();
                 timing.Tick();
             },
             Roots = host.Roots,

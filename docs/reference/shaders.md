@@ -695,11 +695,13 @@ address these rows by name.
 The `place` package (`PlacePackage`) draws a pane into `main`. Its placements
 come from `IRenderGraphPlacements`, which the host implements. Each frame
 `WorldFramePresenter.PrepareGraph`, installed as
-`RenderGraphRuntimeNode.Prepare`, walks the slots of the last composed layout.
+`RenderGraphRuntimeNode.Prepare`, reconciles delivery and the graph set. The
+package captures the world before scheduling, runs the existing layout
+composer, then places the views and panes of that same frame.
 For every instance a slot shows it places the pane at the slot's rect, with
 the sharpness `world.upscale-sharpness` sets, adds a footprint (consumer
-`main`, producer the pane, at the slot's width and height) so the scheduler
-renders the pane at that extent, advances the pane's clock, and feeds its
+`main`, producer the pane, at its largest width and height across layouts) so
+easing its rect never resizes a node, advances the pane's clock, and feeds its
 camera, pointer and time. A pane the active layout does not show is not shown:
 its place pass draws nothing and its instance is not scheduled. Once every
 slot is placed, the host publishes the mapping of each view and pane the
@@ -710,9 +712,10 @@ that mapping, which a steady frame publishes without allocating;
 [pointing at a displayed source](commands.md#pointing-at-a-displayed-source)
 covers what reads it.
 
-The layout composer runs inside the world producer's frame, so a layout change
-places panes one frame later. A
-layout transition's render-scale dip does not apply to panes, and a pane slot
+The layout composer and placement share one captured frame: the rect each
+camera projects is the rect the display places, including fractional pixels
+during an interrupted transition. A layout transition's render-scale dip does
+not apply to panes, and a pane slot
 adds no view to the SDF engine.
 
 Split-screen seats are placed the same way. The SDF engine renders each view
@@ -720,8 +723,9 @@ of a layout into its own output image, and each view is a producer of its own:
 `world` for the first, then `world$2`, `world$3` and so on, up to the most
 views any layout or the player roster can compose. When a world has more than
 one, `main` composes the scene and runs one `place` pass per view ahead of the
-pane passes. `PrepareGraph` places each view at its rect and adds that rect's native
-footprint. The view's own package allocates traversal targets at its quantized
+pane passes. The capture places each view at its current rect and adds a stable
+footprint reserving its largest layout extent, including the built-in seat
+ladder where no catch-all layout covers it. The view's own package allocates traversal targets at its quantized
 render ceiling and records the current render grid inside those targets; a
 layout transition's dip moves only that grid, so it rebuilds and allocates
 nothing. A view whose ceiling is below native appends `resolve`, reconstructing
@@ -731,7 +735,7 @@ A view at a native ceiling renders its output grid directly and does not dip. A 
 engine has rendered it, and a single view covering the whole display with no
 tonemap is not placed, so `main` passes
 `world` through unchanged; with a tonemap it is placed like any other, since its
-place pass applies the tonemap. A layout change places its views one frame later, like its panes.
+place pass applies the tonemap.
 The first view's place pass sets the `place` config's `letterbox`, so outside
 its rect it writes the letterbox color, `(0.015, 0.016, 0.02)`, which the
 kernel states, rather than its base; every later place pass keeps its base

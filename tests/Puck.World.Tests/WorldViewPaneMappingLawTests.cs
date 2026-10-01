@@ -55,6 +55,7 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
 
     // The render.tonemap each frame composes the root with.
     private WorldTonemap? m_tonemap;
+    private WorldViewDefaults? m_frameViews;
     private long m_frame;
     private RenderGraphHistory? m_history;
 
@@ -99,9 +100,22 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
     }
     // The host's half of a frame, as the presenter's PrepareGraph drives it: begin, place, publish.
     private void Prepare(NormalizedRect? pane) {
+        // The first composed frame authors this fixture's allocation envelopes. Later placement and visibility
+        // changes use those same images, just as easing within one document does.
+        var paneRegion = (pane ?? new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f));
+
+        if (m_frameViews is null) {
+            m_frameViews = Views with {
+                Layouts = [new WorldViewLayout(Name: "pane", Slots: [
+                    .. m_views.Select(selector: static view => new WorldViewSlot(
+                        Height: view.Region.Height, Width: view.Region.Width, X: view.Region.X, Y: view.Region.Y)),
+                    new WorldViewSlot(Height: paneRegion.Height, Instance: Pane, Width: paneRegion.Width, X: paneRegion.X, Y: paneRegion.Y),
+                ])],
+            };
+        }
         m_host.BeginFrame(
             tonemap: m_tonemap,
-            views: Views
+            views: m_frameViews!
         );
         m_host.PlaceViews(
             panesCover: false,

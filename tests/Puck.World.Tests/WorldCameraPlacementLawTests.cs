@@ -1,0 +1,144 @@
+using Microsoft.Extensions.DependencyInjection;
+using Puck.Abstractions.Presentation;
+using Puck.Hosting;
+using Puck.Shaders;
+using Puck.Testing;
+using Puck.World.Client;
+using Xunit;
+
+namespace Puck.World.Tests;
+
+/// <summary>The host prepares its graph before the residency captures the world. That capture composes both the
+/// cameras and placements, and an eased rect does not change a view's scheduled allocation extent.</summary>
+public sealed class WorldCameraPlacementLawTests : IDisposable {
+    private readonly TemporaryDirectory m_directory = new();
+
+    public void Dispose() => m_directory.Dispose();
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [Theory]
+    public void EveryTransitionFramePlacesTheRectItsCameraProjects(bool interrupted, bool subpixel) {
+        Run(checkPlacement: true, interrupted: interrupted, subpixel: subpixel);
+    }
+    [Fact]
+    public void AnEasedRectCrossesQuantizationStepsWithoutChangingTheNodesExtent() {
+        Run(checkPlacement: false, interrupted: false, subpixel: false);
+    }
+
+    private void Run(bool interrupted, bool checkPlacement, bool subpixel) {
+        using var host = WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: m_directory,
+            world: "tests/Puck.Counters/counters.world.json",
+            edit: definition => {
+                var camera = definition.Views.Layouts[0].Slots[0].Camera;
+
+                return definition with {
+                    ViewsRaw = definition.Views with {
+                        Layouts = [
+                            Layout(camera: camera, name: "wide", width: 0.75f),
+                            Layout(camera: camera, name: "narrow", width: (subpixel ? 0.001f : 0.25f)),
+                        ],
+                    },
+                };
+            }).Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var graphs = host.Services.GetRequiredService<WorldViewGraphHost>();
+        var composition = host.Services.GetRequiredService<WorldCompositionState>();
+        var gpu = new FakeGpuDevice(trackObjects: true);
+        using var instances = FakeGraphInstances.Attach(
+            host: graphs,
+            create: static name => new ShaderPipelineRenderNode(
+                deviceContext: new RefusingGpuDevice(), height: 4, hostsOnDirectX: false,
+                name: name, pipelines: new GpuPassPipelineCache(), width: 4));
+        using var node = new ShaderPipelineRenderNode(
+            deviceContext: gpu, height: 4, hostsOnDirectX: false,
+            name: WorldRootGraph.ProducerOf(view: 1), pipelines: new GpuPassPipelineCache(), width: 4);
+
+        presenter.ResizeDisplay(height: 128, width: 256);
+        presenter.ViewRendered = static _ => true;
+        composition.ActiveLayout = "wide";
+        RenderGraphSchedule[]? schedules = null;
+        RenderGraphHistory? history = null;
+        (int Width, int Height)? extent = null;
+        ShaderPipelinePlan? installed = null;
+        var creations = 0;
+        var regions = new HashSet<NormalizedRect>();
+
+        for (var index = 0; (index < 20); index++) {
+            if (index == 2) { composition.ActiveLayout = "narrow"; }
+            if (interrupted && (index == 5)) { composition.ActiveLayout = "wide"; }
+            var context = new FrameContext(
+                AccumulatorTicks: 0, DeltaTicks: 5040, ElapsedTicks: (((ulong)index) * 5040),
+                FrameDeltaTicks: 5040, Host: null!, StepTicks: 5040, TargetHeight: 128, TargetWidth: 256);
+
+            presenter.PrepareGraph(context: in context);
+            var frame = presenter.CaptureFrame(deltaSeconds: 0.1f, height: 128, interpolationAlpha: 1f, width: 256);
+            var view = frame.Views[1];
+
+            _ = regions.Add(item: view.Region);
+            if (checkPlacement) {
+                if (index == 0) { continue; }
+                Assert.True(condition: graphs.TryGet(instance: "main", pass: graphs.Synthesized!.ViewPasses[1], placement: out var placement));
+                Assert.Equal(expected: view.Region, actual: new NormalizedRect(
+                    Height: placement.Height, Width: placement.Width, X: placement.Left, Y: placement.Top));
+                Assert.Equal(expected: ((2f * view.Region.Width) / view.Region.Height), actual: view.Camera.AspectRatio);
+            } else {
+                schedules ??= [new RenderGraphSchedule(set: instances.Instances), new RenderGraphSchedule(set: instances.Instances)];
+                var schedule = schedules[(index % 2)];
+
+                history ??= RenderGraphHistory.Empty(set: instances.Instances);
+                RenderGraphScheduler.Schedule(
+                    frame: new RenderGraphFrame(DisplayHeight: 128, DisplayHertz: 60, DisplayWidth: 256,
+                        Footprints: graphs.Footprints, Index: index, Roots: [new RenderGraphRoot(Height: 1, Instance: "main", Width: 1)], Tick: index),
+                    history: history, schedule: schedule, set: instances.Instances);
+                history = schedule.Next;
+                var row = schedule.Instances[instances.Instances.IndexOf(name: WorldRootGraph.ProducerOf(view: 1))];
+
+                if (index == 0) { continue; }
+                extent ??= (row.Width, row.Height);
+                Assert.Equal(expected: extent.Value, actual: (row.Width, row.Height));
+                node.Resize(width: ((uint)row.Width), height: ((uint)row.Height));
+                if (index == 1) {
+                    // Run the real node on a device-free fill graph. Its allocation extent comes from the same
+                    // schedule the runtime uses; camera dressing and SDF grid dipping have their own package laws.
+                    node.Swap(pipeline: Fill());
+                    TestLiveness.Until(step: () => {
+                        _ = node.ProduceFrame(context: default);
+                        return node.IsReady;
+                    });
+                    installed = node.Plan;
+                    creations = gpu.Created.Count;
+                } else {
+                    _ = node.ProduceFrame(context: in context);
+                    Assert.Same(expected: installed, actual: node.Plan);
+                    Assert.Equal(expected: creations, actual: gpu.Created.Count);
+                }
+            }
+        }
+        Assert.True(condition: (regions.Count > 3));
+    }
+    private static CompiledShaderPipeline Fill() {
+        var plan = new ShaderPipelineCompiler().Compile(definition: new RenderGraphDefinition(
+            name: "fill",
+            outputs: ["image"],
+            passes: [new ShaderPipelinePass(
+                EntryPoint: "main", Inputs: [], Kind: ShaderPipelineDocumentPassKind.Compute,
+                Name: "fill", Outputs: ["image"], Source: "fill.hlsl")],
+            resources: [new ShaderPipelineResource(
+                Dimensions: ShaderPipelineDimensions.Relative(), Format: "R8G8B8A8Unorm", Name: "image")]
+        ));
+        var bytecode = new Dictionary<ShaderStage, ReadOnlyMemory<byte>> { [ShaderStage.Compute] = new byte[] { 0x03, 0x02, 0x23, 0x07 } };
+
+        return new CompiledShaderPipeline(plan: plan, shaders: new Dictionary<string, CompiledShader> {
+            ["fill"] = new(diagnostics: [], dxil: bytecode, name: "fill", sourceHash: "fill", sourcePath: "fill.hlsl", spirv: bytecode),
+        });
+    }
+    private static WorldViewLayout Layout(string? camera, string name, float width) => new(
+        Name: name,
+        Slots: [new WorldViewSlot(Camera: camera, Width: 0.25f), new WorldViewSlot(Camera: camera, Width: width, X: 0.25f)],
+        TransitionRenderScale: 0.5f,
+        TransitionSeconds: 0.6f);
+}
