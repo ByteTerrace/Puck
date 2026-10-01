@@ -222,8 +222,9 @@ it from the reader's own rows. Every federation egress that knows its traveler
 composes for it; the seatless `Observe` lane composes for the public observer. A
 state clock a projected value keys on is a reading of its row's slot: it crosses as
 an anchor of its phase (`WorldClockAnchor`, re-sent by the recipient's
-`WorldProjectionFeed` only where the shared `Predict` misses), never as the row, and a
-recipient that may not read the slot refuses the composition. Laws:
+`WorldProjectionFeed` only where the shared `Predict` misses), never as the row; a
+bindable bound to state is a reading of its cell; a recipient that may not read either
+refuses the composition by name. Laws:
 `ProjectionAnchorLawTests`. The local HUD and view bindings stay unfiltered: they draw
 the one shared screen the author chose. Details and the laws:
 [references/console.md](references/console.md).

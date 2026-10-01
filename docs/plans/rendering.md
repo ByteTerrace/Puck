@@ -5705,7 +5705,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      courtyard's toggle.
    - Landed: remote presentation. A presentation-tier recipient is fed by its
      own `WorldProjectionFeed` through the tier-governed
-     `WorldProjectionDocument`, with no side metadata or held-value history.
+     `WorldProjectionDocument`, with no side metadata or held-value history;
+     every projection and delta travels as compact canonical JSON
+     (`WorldProjection.SerializeWire`), and the canonical indented form stays
+     the one `WorldProjection.Serialize` writes. Delivering prototypes by
+     content reference is an [open item](open-items.md#cross-plan-maintenance).
      Tick-only clock closures evaluate locally. A disclosed state clock
      crosses as an anchored clock (`WorldClock.Anchor`, refused in an authored
      document) carrying a `WorldClockAnchor`: its engine tick, its phase as a
@@ -5724,8 +5728,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      (`WorldDocumentBasis.Diff`, merged by `WorldProjectionHold` on the far
      side), and only when one changed; a delta of values alone reaches the
      recipient as a state delivery. Every state clock a value keys on must
-     pass the disclosure boundary for its row's slot, or the composition
-     refuses before any derived value is emitted. A late view hydrates the
+     pass the disclosure boundary for its row's slot, and every bindable bound
+     to a state cell for that cell (every cell of its row for a per-body
+     read), or the composition refuses by name before any derived value is
+     emitted. A late view hydrates the
      exact current phase; a clock whose row holds no number seeds a late view
      from the phase the world loaded with (`WorldServer.ClockSeeds`), or zero
      clamped into the row's closed envelope, while an early view keeps its

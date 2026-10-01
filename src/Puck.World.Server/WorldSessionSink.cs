@@ -21,7 +21,6 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     );
 
     private WorldDefinition? m_hydrated;
-
     private bool m_withheld;
 
     private EntitySnapshot[] m_redacted = [];
@@ -203,7 +202,6 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         m_feed.Release();
         m_hydrated = null;
     }
-
     /// <summary>Discloses a definition as this session's tier shows it, for a read door — see
     /// <see cref="Disclose(WorldDefinition, WorldDisclosureTier, StateArena, Principal?, bool)"/>. Whether the session observes right now is the
     /// delivery's question, not this one's.</summary>

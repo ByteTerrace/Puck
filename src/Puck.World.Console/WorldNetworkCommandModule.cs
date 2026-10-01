@@ -229,7 +229,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             revision: server.Population.Revision,
             time: in time
         )!;
-        var bytes = WorldProjection.Serialize(projection: projection);
+        var bytes = WorldProjection.SerializeWire(projection: projection);
 
         return $"presentation: {bytes.Length} bytes, {WorldProjectionDocument.SchemaVersion} carrying {string.Join(
             separator: ",",

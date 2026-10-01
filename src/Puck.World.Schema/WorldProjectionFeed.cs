@@ -20,7 +20,7 @@ public enum WorldProjectionDeliveryKind : byte {
 /// <param name="Kind">What is owed.</param>
 /// <param name="Projection">The projection the recipient holds once it takes the delivery, or <see langword="null"/>
 /// when nothing is owed.</param>
-/// <param name="Payload">The canonical bytes to send: the whole projection, or the delta; empty when nothing is
+/// <param name="Payload">The compact canonical bytes to send: the whole projection, or the delta; empty when nothing is
 /// owed.</param>
 /// <param name="ValuesOnly">Whether the delivery changes only values, never a recipient's shape: a delta of the
 /// timeline, the observations or the provenance alone.</param>
@@ -80,7 +80,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
             tier: WorldDisclosureTier.Presentation,
             time: in time
         )!;
-        var payload = WorldProjection.Serialize(projection: projection);
+        var payload = WorldProjection.SerializeWire(projection: projection);
         var tree = WorldProjectionDelta.Tree(utf8Json: payload);
 
         if (m_tree is null) {
@@ -158,7 +158,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
 
         return ((delta is null)
             ? Whole(
-                payload: WorldProjection.Serialize(projection: m_held),
+                payload: WorldProjection.SerializeWire(projection: m_held),
                 projection: m_held,
                 tree: m_tree
             )
@@ -176,7 +176,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
     }
 
     private WorldProjectionDelivery Partial(WorldProjectionDocument projection, JsonObject delta) {
-        var payload = CanonicalJsonDocument.Serialize(node: delta);
+        var payload = CanonicalJsonDocument.SerializeCompact(node: delta);
 
         WorldProjectionWork.Count(kind: WorldProjectionWork.Deltas);
         WorldProjectionWork.Count(
@@ -320,7 +320,7 @@ public sealed class WorldProjectionHold {
             if (!WorldProjection.TryDeserialize(
                 projection: out var projection,
                 reason: out reason,
-                utf8Json: CanonicalJsonDocument.Serialize(node: whole)
+                utf8Json: CanonicalJsonDocument.SerializeCompact(node: whole)
             ) || !WorldProjection.TryToDefinition(
                 definition: out definition,
                 projection: projection!,

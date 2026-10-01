@@ -38,7 +38,8 @@ public sealed class WorldProjectionWork : IWorkCounterSource {
     /// <summary>Gets the kind counting member deltas delivered: the members of a recipient's projection that changed,
     /// and nothing else.</summary>
     public static WorkKind Deltas { get; } = new(name: "world.projection.deltas", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting the canonical bytes of every projection and delta delivered.</summary>
+    /// <summary>Gets the kind counting the compact canonical bytes of every projection and delta delivered, as they
+    /// travel.</summary>
     public static WorkKind Bytes { get; } = new(name: "world.projection.bytes", unit: "bytes", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting clock anchors sent: one per clock whose recipient's prediction differed from the
     /// authority's phase.</summary>

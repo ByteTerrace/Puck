@@ -572,7 +572,7 @@ public static partial class WorldFederationCodec {
             tier: tier,
             time: in time
         ) is { } projection)
-            ? WorldProjection.Serialize(projection: projection)
+            ? WorldProjection.SerializeWire(projection: projection)
             : ((tier == WorldDisclosureTier.Replica)
                 ? WorldDefinitionSerialization.Serialize(definition: definition)
                 : throw new ArgumentOutOfRangeException(

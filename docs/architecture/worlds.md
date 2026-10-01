@@ -685,7 +685,8 @@ members of its projection that changed, as a delta (`WorldDocumentBasis.Diff`, t
 basis uses) that `WorldProjectionHold` merges over the projection the recipient holds, and nothing when
 nothing changed. A delta of values alone (the timeline, the observations, the provenance) reaches the
 recipient as a state delivery rather than a new definition; on the federation wire it travels as a
-`ProjectionDelta` frame.
+`ProjectionDelta` frame. Projections and deltas travel as compact canonical JSON
+(`WorldProjection.SerializeWire`); the indented canonical form is what `WorldProjection.Serialize` writes.
 
 A projection carries a timeline's tick clocks as authored, and each state clock a carried value keys on
 as an anchored clock: an anchor of its phase (`WorldClockAnchor`: the engine tick, the phase as a `u64`
@@ -697,8 +698,10 @@ An anchor carries a rate only over a span the authority proves affine: a Fixed s
 an advance adding whole raw units every tick, which the next tick confirms. Every other movement, a rate
 change, a quantized advance, a cycle's staircase, an eased row or a seek, carries rate zero and
 re-anchors wherever the phase moves, so a sky held still or moving along a proved span sends nothing.
-A state clock is a reading of its row's slot, so a recipient that may not read that cell refuses the
-composition before any derived value is emitted. A late view hydrates the exact current phase; while a
+A state clock is a reading of its row's slot, and a bindable bound to a state cell a reading of that
+cell (of every cell of its row when it reads per body), so a recipient that may not read one refuses the
+composition by name before any derived value is emitted, rather than presenting the value at its
+fallback. A late view hydrates the exact current phase; while a
 clock's row holds no number, an early view keeps predicting its last anchor and a late view seeds from
 the phase the world loaded with, or zero clamped into the row's closed envelope. The last anchor per
 recipient per clock is a counted row under the `world.projection` work source, released when the

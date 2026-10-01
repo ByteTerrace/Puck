@@ -387,6 +387,50 @@ public sealed class ProjectionAnchorLawTests(ITestOutputHelper output) {
         );
     }
     [Fact]
+    public void A_value_bound_to_state_the_recipient_may_not_read_refuses_by_name_before_anything_is_emitted() {
+        static WorldDefinition Bound(StateVisibility? visibility) {
+            var document = Document(row: Row(raw: 0L));
+
+            return (document with {
+                RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: new BindableScalar(binding: "state.secret"), Name: "haze")])),
+            }).WithWorldState(rows: [
+                .. document.State,
+                new WorldStateRow(
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Fixed(rawBits: FixedQ4816.FromDouble(value: 0.01d).Value))],
+                    Kind: CellKind.Fixed,
+                    Name: CellName.Parse(candidate: "secret"),
+                    Visibility: visibility
+                ),
+            ]);
+        }
+
+        Laws.RefusalWithControl(
+            lawId: "projection.hidden-binding-sends-no-derived-value",
+            deniedOutcome: () => {
+                var hidden = Bound(visibility: new StateVisibility(Readers: ["seat1"]));
+                var thrown = Record.Exception(testCode: () => Fixtures.Project(authority: "boot", definition: hidden, revision: 1, tier: WorldDisclosureTier.Presentation));
+
+                using var fixture = Fixtures.FreshServer(definition: hidden);
+                var mirror = new WorldSessionMirror(placeholder: WorldProjection.Undisclosed);
+                var observation = fixture.Server.TryObserveAsSession(refusal: out var refusal, sink: mirror, sourceAuthority: Viewer);
+
+                if (thrown is null) {
+                    observation?.Dispose();
+
+                    return true;
+                }
+
+                // The observer is handed nothing: neither the value at its fallback nor any other member.
+                Assert.Same(expected: WorldProjection.Undisclosed, actual: mirror.Definition);
+                Assert.Equal(expected: "render.sky.layers[0].density binds state row 'secret' this recipient may not read; a hidden source sends no derived value.", actual: thrown.Message);
+                Assert.Contains(actualString: refusal, expectedSubstring: "binds state row 'secret'");
+
+                return (observation is not null);
+            },
+            controlOutcome: () => (Fixtures.Project(authority: "boot", definition: Bound(visibility: null), revision: 1, tier: WorldDisclosureTier.Presentation) is not null)
+        );
+    }
+    [Fact]
     public void The_last_anchor_per_recipient_per_clock_is_a_row_released_when_the_recipient_leaves_or_loses_disclosure() {
         var work = new WorldProjectionWork();
 
@@ -587,20 +631,27 @@ public sealed class ProjectionAnchorLawTests(ITestOutputHelper output) {
         }
 
         var hydration = (work.Read(kind: WorldProjectionWork.Bytes) + WorldFederationCodec.DocumentHeaderBytes);
-        var courtyard = (WorldProjection.Serialize(projection: Fixtures.Project(
+        var courtyardProjection = Fixtures.Project(
             authority: "boot",
             definition: AuthoredGameFixtures.Load(relativePath: "src/Puck.World/Assets/worlds/moth-courtyard.puck"),
             revision: 1,
             tier: WorldDisclosureTier.Presentation
-        )!).Length + WorldFederationCodec.DocumentHeaderBytes);
+        )!;
+        var courtyardWire = WorldProjection.SerializeWire(projection: courtyardProjection);
+        var courtyard = (courtyardWire.Length + WorldFederationCodec.DocumentHeaderBytes);
+        var courtyardCanonical = WorldProjection.Serialize(projection: courtyardProjection).Length;
+        var prototypes = Puck.Abstractions.Documents.CanonicalJsonDocument.SerializeCompact(node: WorldProjectionDelta.Tree(utf8Json: courtyardWire)["prototypes"]!).Length;
 
         output.WriteLine(message: $"steady sky: {(steady / seconds)} bytes per recipient per second");
         output.WriteLine(message: $"busy sky: {(busy / seconds)} bytes per recipient per second");
         output.WriteLine(message: $"nonlinear clock: {(nonlinear / seconds)} bytes per recipient per second");
-        output.WriteLine(message: $"late-join hydration: {hydration} bytes (fixture world), {courtyard} bytes (courtyard)");
+        output.WriteLine(message: $"late-join hydration: {hydration} bytes (fixture world), {courtyard} bytes (courtyard; {prototypes} of them its prototypes; {courtyardCanonical} indented)");
 
         Assert.Equal(actual: steady, expected: 0L);
         Assert.InRange(actual: busy, high: (nonlinear - 1L), low: 1L);
         Assert.InRange(actual: nonlinear, high: (hydration * ticks), low: (ticks * 50L));
+        // The wire carries the compact form: no indentation.
+        Assert.True(condition: (courtyardWire.Length < courtyardCanonical));
+        Assert.DoesNotContain(collection: courtyardWire, expected: ((byte)'\n'));
     }
 }

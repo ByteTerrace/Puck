@@ -234,7 +234,8 @@ public static class WorldProjection {
     /// predictions hold and replaces where they miss, or <see langword="null"/> for a one-off composition that no
     /// recipient keeps anchors from, which carries each state clock's anchor at <paramref name="time"/>.</param>
     /// <exception cref="InvalidOperationException">A carried value keys on a state clock whose row the recipient may not
-    /// read: the composition refuses before any derived value is emitted.</exception>
+    /// read, or binds a state cell it may not read: the composition refuses by name before any derived value is
+    /// emitted.</exception>
     public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, StateArena arena, in ArenaTime time, Principal? recipient = null, bool unrestricted = false, WorldClockAnchorLedger? anchors = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
@@ -251,6 +252,11 @@ public static class WorldProjection {
                 arena: arena,
                 definition: definition,
                 keyed: keyed,
+                recipient: recipient
+            );
+            RefuseHiddenBindings(
+                arena: arena,
+                definition: definition,
                 recipient: recipient
             );
         }
@@ -399,6 +405,48 @@ public static class WorldProjection {
             }
         }
     }
+    // A bindable bound to a state cell is a reading of that cell, under the rule a state clock's keys are: a recipient
+    // that may not read the cell, or, for a value read per body, every cell of its row, is sent no value derived from
+    // it.
+    private static void RefuseHiddenBindings(WorldDefinition definition, StateArena arena, Principal? recipient) {
+        foreach (var (path, binding) in WorldKeyedValues.BoundOf(definition: definition)) {
+            if (definition.State.FirstOrDefault(predicate: row => string.Equals(
+                a: row.Name.Value,
+                b: binding.Row,
+                comparisonType: StringComparison.Ordinal
+            )) is not { } row) {
+                continue;
+            }
+
+            bool Reads(CellName key) => WorldStateDisclosure.CanRead(
+                arena: arena,
+                definition: definition,
+                key: key,
+                recipient: recipient,
+                row: row
+            );
+            var perBody = string.Equals(
+                a: binding.Key,
+                b: StateBinding.BodyKey,
+                comparisonType: StringComparison.Ordinal
+            );
+
+            // A key no cell name spells reads nothing, which the validator refuses; a per-body read reads every cell.
+            var reads = (perBody
+                ? (Reads(key: WorldStateRow.SlotKey) && (row.Cells ?? []).All(predicate: held => Reads(key: held.Key)))
+                : (!CellName.TryParse(
+                    candidate: (binding.Key ?? WorldStateRow.SlotKey.Value),
+                    name: out var cell,
+                    reason: out _
+                ) || Reads(key: cell)));
+
+            if (reads) {
+                continue;
+            }
+
+            throw new InvalidOperationException(message: $"{path} binds state row '{binding.Row}' this recipient may not read; a hidden source sends no derived value.");
+        }
+    }
     // The timeline a projection carries: each tick clock as authored, each state clock a value keys on as the anchored
     // clock the recipient's ledger carries for it, or, for a one-off composition no recipient holds anchors from, the
     // anchor of its phase now; and nothing else; null when that is no clock.
@@ -495,6 +543,19 @@ public static class WorldProjection {
             : [.. spaces.Where(predicate: space => named.Contains(item: space.Name.Value))]);
     }
 
+    /// <summary>Serializes a projection to its compact canonical UTF-8 bytes, the form it travels to a recipient in:
+    /// <see cref="Serialize"/>'s members and order with no whitespace.</summary>
+    /// <param name="projection">The projection.</param>
+    /// <returns>The compact canonical UTF-8 byte form.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="projection"/> is <see langword="null"/>.</exception>
+    public static byte[] SerializeWire(WorldProjectionDocument projection) {
+        ArgumentNullException.ThrowIfNull(argument: projection);
+
+        return CanonicalJsonDocument.SerializeCompact(
+            jsonTypeInfo: WorldJsonContext.Default.WorldProjectionDocument,
+            value: projection
+        );
+    }
     /// <summary>Serializes a projection to its canonical UTF-8 bytes.</summary>
     /// <param name="projection">The projection.</param>
     /// <returns>The canonical UTF-8 byte form.</returns>
