@@ -26,9 +26,11 @@ public sealed partial class WorldServer {
 
     internal bool AllowsSessionQuery(Principal session, WorldQuery query) => (
         m_sessionSinks.TryGetValue(key: session, value: out var attached) &&
-        !attached.Observation.Ended &&
         attached.Observation.AllowsQuery(query: query)
     );
+    internal WorldDefinition? ReadSessionDefinition(Principal session) => (m_sessionSinks.TryGetValue(key: session, value: out var attached)
+        ? attached.Observation.ReadDefinition()
+        : null);
 
     /// <inheritdoc cref="WorldGrants.TryAdmitSession"/>
     public bool TryAdmitSession(string sourceAuthority, out Principal session, out WorldDisclosureTier tier, out string refusal) => m_grants.TryAdmitSession(

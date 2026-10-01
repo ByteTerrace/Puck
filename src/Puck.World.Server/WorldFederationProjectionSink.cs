@@ -13,6 +13,8 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     public const int PendingDeliveryLimit = 8;
     /// <summary>The named reason for detaching an observer whose wire queue fills.</summary>
     public const string BackpressureDetachReason = "world.observation.backpressure";
+    /// <summary>The named reason for detaching a projection whose authority route is no longer current.</summary>
+    public const string InvalidatedDetachReason = "world.observation.invalidated";
 
     private readonly Channel<(WorldFederationResponse Kind, byte[] Body)> m_frames = Channel.CreateBounded<(WorldFederationResponse, byte[])>(options: new BoundedChannelOptions(capacity: PendingDeliveryLimit) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = true });
     private readonly WorldProjectionSampler m_sampler = new(updateSeconds: disclosure().Policy.UpdateSeconds);
@@ -22,15 +24,16 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
 
     /// <summary>The number of encoded records currently retained for this subscriber.</summary>
     public int PendingDeliveries => m_frames.Reader.Count;
-    /// <summary>The detach reason, when overflow ended this subscription.</summary>
+    /// <summary>The reason this subscription ended.</summary>
     public string? DetachReason { get; private set; }
 
     private bool Current() {
         if (m_invalidated) { return false; }
         if (isCurrent?.Invoke() != false) { return true; }
+        DetachReason = InvalidatedDetachReason;
         m_invalidated = true;
         m_frames.Writer.TryComplete();
-        return false;
+        throw new IOException(message: InvalidatedDetachReason);
     }
     private async Task PumpAsync(Stream output, CancellationToken ct) {
         await foreach (var item in m_frames.Reader.ReadAllAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false)) {
@@ -62,6 +65,9 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             DetachReason = BackpressureDetachReason;
             m_invalidated = true;
             m_frames.Writer.TryComplete();
+            // The hub detaches a faulting sink immediately, even if its wire consumer never resumes draining.
+            // Keep channel completion successful so the queued revisions still precede the terminal reason.
+            throw new IOException(message: BackpressureDetachReason);
         }
     }
 

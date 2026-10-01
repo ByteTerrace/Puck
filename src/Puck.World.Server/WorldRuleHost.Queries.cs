@@ -139,7 +139,7 @@ public sealed partial class WorldRuleHost {
             !Host.AllowsSessionQuery(query: query, session: principal)
         ) {
             return new QueryAnswer(
-                Text: "[query refused: session disclosure does not carry this readback]",
+                Text: WorldSessionObservation.QueryRefusal,
                 Refused: true
             );
         }

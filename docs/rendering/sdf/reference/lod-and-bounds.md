@@ -14,6 +14,9 @@ accumulated result for the current sample.
   by `s`, as it multiplies the candidate. A non-uniform scale leaves the shape
   always evaluated, because its candidate `min(s)·f(S⁻¹p)` grows more slowly
   with distance than any sphere's lower bound, so no finite sphere bounds it.
+  Sweep and path candidates have a local distance cap; their spheres are kept
+  only when the accumulated uniform scale is at least one, so the kernels'
+  world-distance cap guard remains sound.
 - Sampled-region bounds cover a brick-backed carve cache.
 - Screen-surface frames bound texture parameterization, not field influence.
 
@@ -106,4 +109,3 @@ hole.
 Per-segment bounds for placed creations whose shapes compose through a scope
 or a blend other than Union remain an open priority, tracked nowhere: this
 paragraph is the whole record of the item.
-

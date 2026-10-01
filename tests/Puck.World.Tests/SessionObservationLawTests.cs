@@ -16,7 +16,7 @@ namespace Puck.World.Tests;
 /// holds <c>observe all</c>, and releasing it ends the session. Every case pairs a denial with the same act under one
 /// reversed fact.
 /// </summary>
-public sealed class SessionObservationLawTests {
+public sealed partial class SessionObservationLawTests {
     /// <summary>The authority the viewer observes from; the wildcard entry admits it.</summary>
     private const string Viewer = "viewer/portal";
 

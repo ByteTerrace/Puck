@@ -6,6 +6,30 @@ namespace Puck.World.Tests;
 
 public sealed class WorldProjectionBackpressureLawTests {
     [Fact]
+    public void AChangedAuthorityRouteDetachesWithoutWaitingForTheWire() {
+        var current = true;
+        var sink = new WorldFederationProjectionSink(
+            authority: "authority/one",
+            disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)),
+            isCurrent: () => current,
+            revision: static () => 1,
+            tier: WorldDisclosureTier.Replica
+        );
+        var hub = new WorldOutputHub();
+
+        using var lease = hub.Subscribe(sink: sink);
+        var snapshot = new WorldSnapshot(Authority: "authority/one", Entries: ReadOnlyMemory<EntitySnapshot>.Empty, Revision: 1, StepTicks: 1UL, Tick: 1UL);
+
+        hub.DeliverSnapshot(snapshot: in snapshot);
+        current = false;
+        snapshot = snapshot with { Authority = "authority/two", Tick = 2UL };
+        hub.DeliverSnapshot(snapshot: in snapshot);
+
+        Assert.False(condition: hub.HasTypedSubscribers);
+        Assert.Equal(expected: 1, actual: sink.PendingDeliveries);
+        Assert.Equal(expected: WorldFederationProjectionSink.InvalidatedDetachReason, actual: sink.DetachReason);
+    }
+    [Fact]
     public async Task AStalledProjectionKeepsOnlyItsBoundedPrimerAndDetachesBeforeLaterEpochs() {
         var disclosure = new WorldSinkDisclosure(
             ObserverBodyIndex: -1,
@@ -17,6 +41,9 @@ public sealed class WorldProjectionBackpressureLawTests {
             revision: () => 1,
             tier: WorldDisclosureTier.Replica
         );
+        var hub = new WorldOutputHub();
+
+        using var lease = hub.Subscribe(sink: sink);
 
         for (var tick = 1UL; (tick <= ((ulong)(WorldFederationProjectionSink.PendingDeliveryLimit + 1))); tick++) {
             var snapshot = new WorldSnapshot(
@@ -27,10 +54,11 @@ public sealed class WorldProjectionBackpressureLawTests {
                 Tick: tick
             );
 
-            sink.DeliverSnapshot(snapshot: in snapshot);
+            hub.DeliverSnapshot(snapshot: in snapshot);
             Assert.True(condition: (sink.PendingDeliveries <= WorldFederationProjectionSink.PendingDeliveryLimit));
         }
 
+        Assert.False(condition: hub.HasTypedSubscribers);
         Assert.Equal(
             expected: WorldFederationProjectionSink.BackpressureDetachReason,
             actual: sink.DetachReason

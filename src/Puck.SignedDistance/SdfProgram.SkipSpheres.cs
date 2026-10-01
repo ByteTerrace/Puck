@@ -214,6 +214,9 @@ public sealed partial class SdfProgram {
                         if (
                             chainBoundable &&
                             (((uint)SdfBlendOp.Union) == instruction.Blend) &&
+                            // Sweep and Path cap their local candidate at SDF_FAR_DISTANCE. The kernel's world-unit
+                            // far guard only protects that cap when the accumulated scale does not shrink it.
+                            ((scale >= 1f) || ((instruction.Shape != ((uint)SdfShapeType.Sweep)) && (instruction.Shape != ((uint)SdfShapeType.Path)))) &&
                             TryGetLocalBound(
                             center: out var localCenter,
                             convexPolygonProfiles: m_convexPolygonProfiles,

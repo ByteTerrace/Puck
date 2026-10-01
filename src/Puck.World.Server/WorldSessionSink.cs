@@ -47,18 +47,13 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         return false;
     }
-    // Runs one delivery to the observer, recording a fault and ending the observation before the hub detaches it.
-    private void Forward(Action deliver) {
-        try {
-            deliver();
-        } catch (Exception exception) {
-            Fault = exception;
-            observation.MarkEnded();
-            server.GrantTable.MarkSessionFaulted(session: observation.Session);
-            server.NoteFaultedSession(session: observation.Session);
-
-            throw;
-        }
+    // Records a delivery fault before it reaches the hub's detach handler. Delivery uses direct calls so a steady
+    // snapshot or value-only update does not allocate a capturing delegate.
+    private void EndAfterFault(Exception exception) {
+        Fault = exception;
+        observation.MarkEnded();
+        server.GrantTable.MarkSessionFaulted(session: observation.Session);
+        server.NoteFaultedSession(session: observation.Session);
     }
     // Ends a withheld span: the observer takes the current disclosed definition before anything newer.
     private void Resume() {
@@ -137,13 +132,17 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             return;
         }
 
-        Forward(deliver: () => {
+        try {
             m_withheld = false;
             inner.DeliverDefinition(
                 definition: Disclose(definition: definition)!,
                 version: version
             );
-        });
+        } catch (Exception exception) {
+            EndAfterFault(exception: exception);
+
+            throw;
+        }
     }
     public void DeliverSessionLever(WorldSessionLever lever) {
     }
@@ -161,24 +160,27 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             snapshot: in snapshot
         );
 
-        Forward(deliver: () => {
+        try {
             Resume();
             inner.DeliverSnapshot(snapshot: in redacted);
-        });
+        } catch (Exception exception) {
+            EndAfterFault(exception: exception);
+
+            throw;
+        }
     }
     // A projection renumbers the rows it keeps, so a state stamp's row ordinals name the authority's rows, not the
-    // projection's: below Replica the observer takes the whole disclosed definition instead.
+    // projection's: below Replica the observer takes the whole disclosed definition instead. Body redaction does
+    // not renumber a Replica's state rows and must not turn value-only updates into structural rebuilds.
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
         if (!Discloses()) {
             return;
         }
 
-        var copy = stamp;
-
-        Forward(deliver: () => {
+        try {
             if (
                 m_withheld ||
-                !DisclosesFullReplica
+                (Tier != WorldDisclosureTier.Replica)
             ) {
                 m_withheld = false;
                 inner.DeliverDefinition(
@@ -191,9 +193,13 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
             inner.DeliverState(
                 definition: definition,
-                stamp: in copy,
+                stamp: in stamp,
                 version: version
             );
-        });
+        } catch (Exception exception) {
+            EndAfterFault(exception: exception);
+
+            throw;
+        }
     }
 }
