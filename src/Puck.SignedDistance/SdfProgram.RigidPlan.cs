@@ -43,7 +43,7 @@ public sealed partial class SdfProgram {
         );
     }
     // Packs one fixed directory entry per segment followed by three vectors per compiled leaf:
-    //   dir  = (absolute first-leaf vector, leaf count, dynamic slot + 1 [0 = static], 0)
+    //   dir  = (absolute first-leaf vector, leaf count, packed dynamic slot [PackTransformSlot], 0)
     //   leaf = (local position.xyz, shapeInstruction | identityRotationBit), local quaternion, tight sphere
     // Original instruction ranges remain available to both generic evaluators.
     private void PackRigidPlan(int rigidPlanOffsetVectors, in RigidPlan plan) {
@@ -55,7 +55,7 @@ public sealed partial class SdfProgram {
 
             m_words[entryBase] = ((uint)(leafTableOffsetVectors + (3 * segmentPlan.FirstLeaf)));
             m_words[(entryBase + 1)] = ((uint)segmentPlan.LeafCount);
-            m_words[(entryBase + 2)] = ((uint)(segmentPlan.DynamicSlot + 1));
+            m_words[(entryBase + 2)] = PackTransformSlot(slot: segmentPlan.DynamicSlot);
         }
 
         for (var index = 0; (index < plan.Leaves.Count); index++) {

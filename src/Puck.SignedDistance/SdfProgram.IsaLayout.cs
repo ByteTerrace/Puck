@@ -122,6 +122,38 @@ public sealed partial class SdfProgram {
     /// record's transform-slot lane hold for a static hit, and a light's, volume's, rigid segment's or part binding's
     /// slot when nothing moves it (<c>SDF_TRANSFORM_SLOT_NONE</c>).</summary>
     public const int NoDynamicTransformSlot = -1;
+    /// <summary>The unsigned word a rigid segment's slot lane and a part binding's pose lane hold for
+    /// <see cref="NoDynamicTransformSlot"/>: the packed form of a static transform (<see cref="PackTransformSlot"/>,
+    /// <c>SDF_TRANSFORM_SLOT_STATIC_WORD</c>).</summary>
+    public const uint StaticTransformSlotWord = ((uint)(NoDynamicTransformSlot - NoDynamicTransformSlot));
+
+    /// <summary>Packs a transform slot into the unsigned word a rigid segment's slot lane and a part binding's pose lane
+    /// store: offset so <see cref="NoDynamicTransformSlot"/> packs to <see cref="StaticTransformSlotWord"/> and every
+    /// dynamic slot to a word above it. <see cref="UnpackTransformSlot"/> inverts it, and the kernels spell that inverse
+    /// <c>SDF_TRANSFORM_SLOT_UNPACK</c>.</summary>
+    /// <param name="slot">The slot: <see cref="NoDynamicTransformSlot"/>, or a dynamic slot through
+    /// <see cref="MaxDynamicTransformSlot"/>.</param>
+    /// <returns>The packed word.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is below <see cref="NoDynamicTransformSlot"/>
+    /// or above <see cref="MaxDynamicTransformSlot"/>.</exception>
+    public static uint PackTransformSlot(int slot) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            other: NoDynamicTransformSlot,
+            value: slot
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            other: MaxDynamicTransformSlot,
+            value: slot
+        );
+
+        return ((uint)(slot - NoDynamicTransformSlot));
+    }
+    /// <summary>Unpacks the word a rigid segment's slot lane or a part binding's pose lane stores
+    /// (<see cref="PackTransformSlot"/>) back into its transform slot.</summary>
+    /// <param name="word">The packed word.</param>
+    /// <returns>The slot: <see cref="NoDynamicTransformSlot"/> for <see cref="StaticTransformSlotWord"/>, or the dynamic
+    /// slot the word packs.</returns>
+    public static int UnpackTransformSlot(uint word) => checked((((int)word) + NoDynamicTransformSlot));
 
     // An instance's flags for the high bits of its segmentEnd lane: shadow-transparent when its compose only removes
     // material (a pure Subtraction-family carve, which the sdf.shadow-proxy gather omits so the shadow ray marches the

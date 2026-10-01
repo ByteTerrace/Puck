@@ -4518,8 +4518,9 @@ resolution, and stay there.
   writes fresh history from the current frame. A reset is never a clear and
   never a reallocation. The history resets when:
   - the view the instance resolves changes (`SdfWorldPasses`' binding count
-    moves), which covers a residency switch, a follow in place (S25's portal
-    crossing and every other `CanFollow` follow) and a new view index;
+    moves), which covers a residency switch, a follow in place (a seat's
+    portal crossing into the destination's residency and every other
+    `CanFollow` follow) and a new view index;
   - the camera cuts: the view's camera frame source moves a cut revision when
     a camera program reseeds (`SdfCameraProgram`'s drop of its eased value) or
     a layout change swaps what a slot shows;
@@ -4536,8 +4537,8 @@ resolution, and stay there.
   Everything else, including a large camera move, is left to per-pixel
   rejection.
 - **Crossing and following hold no frame.** A follow in place keeps the
-  instance's passes, scratch and history storage, so S25's crossing still shows
-  the destination in the crossing frame; the reset makes that frame the
+  instance's passes, scratch and history storage, so a seat's portal crossing
+  still shows the destination in the crossing frame; the reset makes that frame the
   destination's spatial resolve, with no trace of the departed world. A session
   view's history is its own and resets on the same rules; a routed seat view and
   a portal window's session view of the same destination keep separate
@@ -5105,9 +5106,11 @@ clocks and its duplicates.
   cycle. No world, canary or parity station draws stars, clouds, twinkle or a
   cycle blend. The parity world renders the pinned sky.
 
-The portal session and window sky, which draws a destination under its own sky
-at its presentation's quality with a residency per endpoint and per-view
-quality levers, is S27's. This package builds on it and does not re-plan it.
+A portal session or window already draws its destination under the
+destination's own sky and sky clock, from the one residency its endpoint's seats
+and fully disclosed windows share (`WorldRoutedScene`), each view at its own
+quality (`SdfViewSnapshot.Quality`). Quality levers a portal window sets on its
+own view are open work. This package builds on that and does not re-plan it.
 
 **Owns:** the sky, the atmosphere and the lighting derived from them; the
 celestial bodies and the lights they cast, with any number of shadowed lights;
@@ -5527,7 +5530,8 @@ target; each step settles its own vocabulary rows in
   drawn by `WorldSessionSceneEmitter` over its endpoint's mirror, the dressing
   a `session$<screen>` view and a `WorldRoutedScene` already share, from a
   fixed anchor in it, turned with the viewer's camera and never translated,
-  through S27's per-endpoint residency. It is dressed at reduced cost: its own render
+  through the one residency its endpoint's views share (`WorldRoutedScene`).
+  It is dressed at reduced cost: its own render
   scale (`scale`), a refresh divisor (`refresh`), shadows and ambient occlusion
   off unless its levers turn them on, and a far distance of its own. It renders
   only while some view's previous frame showed it on an uncovered pixel, and
@@ -5884,8 +5888,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       explained.
     - Counted-cost gate: atmosphere evaluations counted under `composite`, zero
       on a covered pixel with no atmosphere authored.
-11. **P18-11, infinity views: other worlds and far geometry.** After S27 and
-    S28.
+11. **P18-11, infinity views: other worlds and far geometry.** Unblocked: an
+    endpoint's views share one residency, and camera views render as views of
+    the world's own residency.
     - Delivers: the `view` and `far` kinds and the `far` and `view` body
       shapes, each an `sdf.world` instance (`sky$<layer>`) scheduled by demand
       from the previous frame's uncovered pixels, rendered in its mask's rect,
@@ -6035,12 +6040,14 @@ fraction in live tiles, at least h.
   lighting-visible one. P18-13 follows
   P15-5. P18-14 records beside P15-8, and the two decisions are best taken
   together.
-- **S27 and S28.** P18-11's `view` layer and body shape ride S27's
-  per-endpoint residency and per-view quality levers, and follow it. P18-11
-  also follows S28, which folds camera views into the host residency and so
-  attacks the aperture open item before infinity views add residencies. Every
-  other step is independent of both; P18-2 moves a routed scene onto its own
-  clock, which S27's sky fix reads.
+- **The per-endpoint residency and camera views.** P18-11's `view` layer and
+  body shape ride the one residency an endpoint's views share
+  (`WorldRoutedScene`), which has landed; quality levers a view of another
+  world sets on its own view are open work. Camera views render as views of
+  the world's own residency, which took their residencies out of the aperture
+  before infinity views add any, so nothing blocks P18-11. Every other step is
+  independent of both; P18-2 moves a routed scene onto its own clock, which the
+  routed scene's sky, drawn on the destination's own sky clock, reads.
 - **The editor.** P18-12 follows E5 for the panel, E10 for reload and compare,
   and E11 for saving, and adds only the sky's rows to each; it does not
   reimplement them.
@@ -6048,8 +6055,8 @@ fraction in live tiles, at least h.
   binding path, so a later styling package keys on the same clocks with no
   mechanism of its own.
 - **The aperture open item.** Each infinity view is a residency, so P18-11
-  reports its tables' bytes in `world.budget`, lands after S28, and carries a
-  per-world cap on infinity views (see the settled decisions below).
+  reports its tables' bytes in `world.budget` and carries a per-world cap on
+  infinity views (see the settled decisions below).
 
 **Settled by the lead.** Each of these is a decision, recorded with its reason.
 
@@ -6065,8 +6072,9 @@ fraction in live tiles, at least h.
   light's lobe, and the reflection path leaves every light-casting body out, so
   no body's highlight is counted twice. Crescents and rings are therefore not
   reflected in their true shape; the analytic lobe is kept.
-- **Infinity views wait for the aperture work and are capped.** P18-11 follows
-  S28, which reduces the residencies the aperture holds. It also carries a
+- **Infinity views are capped.** Camera views render as views of the world's
+  own residency, which reduced the residencies the aperture holds before P18-11
+  adds any. P18-11 also carries a
   per-world cap on infinity views as a counted ceiling (`world.budget` reports
   the live count against it), and a world that exceeds the cap is refused by
   name at validation and at a live edit. The RTX 2060's host-visible heap is
@@ -6098,7 +6106,8 @@ wall-clock or GPU timing.
 **Depends on:** P14 for the pass package and its plan; P15-1 for the counted
 march steps, texels and ceilings; P11's graph instances and history for the
 shared environment instance and retained resources; P12's image sources for
-`panorama`; S27 and S28 for P18-11; P15-5 for P18-13; and E5, E9, E10 and E11 for
+`panorama`; the per-endpoint residency and camera views as views of the
+world's own residency, both landed, for P18-11; P15-5 for P18-13; and E5, E9, E10 and E11 for
 P18-12.
 
 ## Sequencing
@@ -6172,7 +6181,9 @@ bake's textures (P17) come before P6's choice between a bake and the field.
 **The sky.** P18 follows P14. Its baseline (P18-1) needs P15-1's counted march
 steps and ceilings; its clocks, keys, sky block, passes and cadence (P18-2 to
 P18-6) land before or after P15-2 to P15-7, and move behind `resolve` once P15-4
-has landed. Its views of other worlds (P18-11) follow S27 and S28, its shadow
+has landed. Its views of other worlds (P18-11) are unblocked, since an
+endpoint's views share one residency and camera views render as views of the
+world's own residency; its shadow
 amortization (P18-13) follows P15-5, its editor surface (P18-12) follows the
 editor's E5, E10 and E11, and its floor defaults (P18-14) are best decided
 beside P15-8.
