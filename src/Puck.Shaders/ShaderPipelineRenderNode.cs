@@ -1611,6 +1611,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             ((m_pending is not null) || m_resizePending)
         ) {
             if (m_frame != 0) {
+                PinStandingCaptureIfOffered();
                 CaptureIfPending();
             }
             return m_lastSurface;
@@ -1626,6 +1627,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             (!m_outputRefreshRequested || m_installedUnrendered)
         ) {
             if (m_frame != 0) {
+                PinStandingCaptureIfOffered();
                 CaptureIfPending();
             }
             return m_lastSurface;

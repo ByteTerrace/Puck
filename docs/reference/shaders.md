@@ -594,6 +594,17 @@ once; only a buffer binding still holds its retired producer
 (`RenderGraphRuntime.RetiredProducers`). Whose image a reader binds does not
 matter, so a reader of an output standing for another instance's image keeps
 that image alive past the retirement of every instance the chain ran through.
+Each lease retires once; a second retirement is refused by name.
+
+A lease keeps an image alive, not its pixels: its owner renders into every
+image of its frame-slot ring again within a few frames, and the ring cannot step
+past an image, since a storage has one instance per slot, a previous-frame read
+is the slot before, and every slot's descriptor sets come from a pool admitted
+at install. So a capture an instance serves without rendering (paused, or while
+its encoder builds) while it publishes another instance's image reads a copy:
+the runtime offers the node the image its output stands for that frame, and the
+node copies it into an image of its own, publishes the copy and serves the
+capture from it, with the tick its owner rendered it from.
 An external image is bound in the layout its producer declares for its lease,
 which is the layout the producer's own submissions leave it in, and the planner
 plans its barriers from it. `PostProcessPackage` serves every post-process

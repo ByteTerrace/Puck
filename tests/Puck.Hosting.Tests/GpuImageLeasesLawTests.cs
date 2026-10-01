@@ -5,7 +5,7 @@ namespace Puck.Hosting.Tests;
 
 /// <summary>
 /// Laws for <see cref="GpuImageLeases"/>: an image its owner disposes while a reader leases it is disposed only once the
-/// last lease retires, an unleased one at once; a lease retired after its image went changes nothing; a handle no
+/// last lease retires, an unleased one at once; a lease retired twice is refused by name and counts once; a handle no
 /// owner created there is not leased; and leasing and retiring allocate nothing once the table has grown.
 /// </summary>
 public sealed class GpuImageLeasesLawTests {
@@ -29,8 +29,34 @@ public sealed class GpuImageLeasesLawTests {
         second.Retire();
         Assert.Equal(expected: (1, 0), actual: (factory.Disposed, images.Deferred));
         Assert.False(condition: images.TryLease(imageHandle: image.ImageHandle, lease: out _));
+    }
+    [Fact]
+    public void ALeaseRetiredTwiceIsRefusedByNameAndCountsOnce() {
+        var images = new GpuImageLeases();
+        var factory = new CountingImages();
+        var image = images.Wrap(factory: factory).Create(format: GpuPixelFormat.R8G8B8A8Unorm, height: 1, name: default, usage: GpuImageUsage.Sampled, width: 1);
+
+        Assert.True(condition: images.TryLease(imageHandle: image.ImageHandle, lease: out var first));
+        Assert.True(condition: images.TryLease(imageHandle: image.ImageHandle, lease: out var second));
+        image.Dispose();
+        first.Retire();
+
+        // Retired twice while another lease holds the image: refused, and the image stays alive for the other lease.
+        Assert.Contains(expectedSubstring: "retired twice", actualString: Assert.Throws<InvalidOperationException>(testCode: first.Retire).Message);
+        Assert.Equal(expected: (0, 1), actual: (factory.Disposed, images.Deferred));
+
+        // Retired twice after its slot holds a newer lease on another image: refused, and the newer lease still counts.
+        var other = images.Wrap(factory: factory).Create(format: GpuPixelFormat.R8G8B8A8Unorm, height: 1, name: default, usage: GpuImageUsage.Sampled, width: 1);
+
+        Assert.True(condition: images.TryLease(imageHandle: other.ImageHandle, lease: out var reused));
+        Assert.Throws<InvalidOperationException>(testCode: first.Retire);
+        other.Dispose();
+        Assert.Equal(expected: 0, actual: factory.Disposed);
+
         second.Retire();
-        Assert.Equal(expected: 1, actual: factory.Disposed);
+        reused.Retire();
+        Assert.Equal(expected: (2, 0), actual: (factory.Disposed, images.Deferred));
+        Assert.Throws<InvalidOperationException>(testCode: second.Retire);
     }
     [Fact]
     public void AnUnleasedImageIsDisposedAtOnceAndAStrangerIsNotLeased() {

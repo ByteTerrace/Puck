@@ -15,9 +15,10 @@ namespace Puck.Hosting;
 /// </para>
 /// </summary>
 public sealed class GpuImageLeases {
-    // A lease token is an entry's index in its low bits and the entry's generation above them, so a lease retired after its
-    // image was disposed and its entry reused is ignored rather than counted against another image. Each lease retires
-    // once, as a LeaseRetireList retires it.
+    // A token is a slot's index in its low bits and the slot's generation above them: an image's entry for the wrapper
+    // that disposes it, and a lease's own slot for the lease. A lease's slot is live from the lease until it retires, and
+    // its generation moves when it retires, so a lease retired a second time, whether its slot is free or holds another
+    // lease by then, is refused by name rather than counted against any image.
     private const int IndexBits = 20;
     private const int IndexMask = ((1 << IndexBits) - 1);
 
@@ -28,7 +29,10 @@ public sealed class GpuImageLeases {
 
     private Entry[] m_entries = [];
     private int m_free = -1;
+    private LeaseSlot[] m_leases = [];
+    private int m_freeLease = -1;
 
+    private int m_leasesUsed;
     private int m_used;
 
     /// <summary>Initializes a new instance of the <see cref="GpuImageLeases"/> class.</summary>
@@ -73,12 +77,35 @@ public sealed class GpuImageLeases {
             }
 
             ref var entry = ref m_entries[index];
+            int slot;
 
+            if (m_freeLease >= 0) {
+                slot = m_freeLease;
+                m_freeLease = m_leases[slot].NextFree;
+            } else {
+                if (m_leasesUsed == m_leases.Length) {
+                    Array.Resize(
+                        array: ref m_leases,
+                        newSize: Math.Max(
+                            val1: 16,
+                            val2: (m_leasesUsed * 2)
+                        )
+                    );
+                }
+
+                slot = m_leasesUsed++;
+            }
+
+            ref var held = ref m_leases[slot];
+
+            held.Entry = index;
+            held.Live = true;
+            held.NextFree = -1;
             entry.Leases++;
             lease = new GpuImageLease(
                 ImageViewHandle: entry.Image!.ImageViewHandle,
                 Release: m_release,
-                ReleaseToken: (entry.Generation << IndexBits) | index
+                ReleaseToken: (held.Generation << IndexBits) | slot
             );
 
             return true;
@@ -186,25 +213,31 @@ public sealed class GpuImageLeases {
 
         disposed?.Dispose();
     }
+    // Retires one lease: refuses one already retired, then drops its count on the image and disposes an image its owner
+    // dropped once nothing leases it.
     private void Release(int token) {
         IGpuImage? disposed = null;
 
         lock (m_gate) {
-            var index = token & IndexMask;
-
-            if (index >= m_used) {
-                return;
-            }
-
-            ref var entry = ref m_entries[index];
+            var slot = token & IndexMask;
 
             if (
-                (entry.Generation != (token >>> IndexBits)) ||
-                (entry.Image is null) ||
-                (entry.Leases == 0)
+                (slot >= m_leasesUsed) ||
+                !m_leases[slot].Live ||
+                (m_leases[slot].Generation != (token >>> IndexBits))
             ) {
-                return;
+                throw new InvalidOperationException(message: $"An image lease (token {token}) was retired twice: each lease retires once, after the last submission that read its image.");
             }
+
+            ref var held = ref m_leases[slot];
+            var index = held.Entry;
+
+            held.Live = false;
+            held.Generation = (held.Generation + 1) & (int.MaxValue >>> IndexBits);
+            held.NextFree = m_freeLease;
+            m_freeLease = slot;
+
+            ref var entry = ref m_entries[index];
 
             entry.Leases--;
 
@@ -232,6 +265,13 @@ public sealed class GpuImageLeases {
         return image;
     }
 
+    // One lease: the image entry it counts against, and whether it is still to retire.
+    private struct LeaseSlot {
+        public int Entry;
+        public int Generation;
+        public bool Live;
+        public int NextFree;
+    }
     private struct Entry {
         public bool Dropped;
         public bool Leasable;

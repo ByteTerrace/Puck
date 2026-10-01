@@ -32,6 +32,43 @@ public sealed partial class RenderGraphRuntime {
 
         m_shown.RetireAll();
     }
+    // Offers a node a pending capture's source when the node publishes another instance's image: the image its output
+    // stands for this frame, under a lease, with the tick its owner rendered it from. A node that serves the capture
+    // without rendering copies it first (ShaderPipelineRenderNode.CapturePin.cs); one that renders lets the offer go.
+    private void OfferCaptureSource(int index, ShaderPipelineRenderNode node) {
+        if (
+            (node.PendingCapturePath is null) ||
+            (node.PublishedBinding is null)
+        ) {
+            return;
+        }
+
+        var latest = LatestOf(index: index);
+
+        if (
+            (latest.Frame < 0) ||
+            !latest.Image.IsSameDeviceImage
+        ) {
+            return;
+        }
+
+        var owner = OwnerOf(index: index);
+
+        node.OfferCaptureSource(
+            image: new ShaderPipelineExternalImage(
+                Format: latest.Image.Format,
+                Height: latest.Image.Height,
+                ImageHandle: latest.Image.ImageHandle,
+                ImageViewHandle: latest.Image.ImageViewHandle,
+                Layout: latest.Layout,
+                Width: latest.Image.Width
+            ),
+            lease: LeaseOf(image: latest.Image),
+            tick: ((owner >= 0)
+                ? m_nodes[owner]?.PublishedStateTick
+                : null)
+        );
+    }
     // Hands the display the root's image under a lease. The host presents it in a submission before its next call, so the
     // leases of earlier frames' images move to the latest submission made this frame, which follows that presentation on
     // the one queue; with no submission this frame they keep waiting.

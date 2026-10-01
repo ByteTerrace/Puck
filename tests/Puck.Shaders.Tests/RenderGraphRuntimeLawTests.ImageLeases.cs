@@ -95,6 +95,61 @@ public sealed partial class RenderGraphRuntimeLawTests {
             expected: scene.Recorders.Of(instance: "camera").OutputImage
         );
     }
+    /// <summary>A paused root keeps publishing the camera image it stood for when it last rendered, while the camera
+    /// keeps rendering and writes that image again. A capture of the root, served without a render, reads a copy the
+    /// root made of the camera's image of the frame that served it, never the image the camera has since rewritten.</summary>
+    [Fact]
+    public void APausedRootStandingForACameraServesACaptureFromTheServingFramesPixels() {
+        using var scene = new StandingScene(
+            ["main"],
+            Set(
+                Instance(name: "camera"),
+                Instance("main", reads: new RenderGraphRead(Producer: "camera"))
+            ),
+            Graph(pipeline: CameraGraph()),
+            Graph(OverGraph(reader: false), ("world", "camera"))
+        );
+        RenderGraphFootprint[] filmed = [new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "camera", Width: 1.0)];
+
+        scene.Gpu.ReadbackSupported = true;
+
+        var stood = scene.ProduceUntilMainStandsForCamera(
+            footprints: filmed,
+            roots: MainRoot
+        );
+        var main = scene.Node(instance: "main");
+        var rewritten = new HashSet<nint>();
+
+        main.Paused = true;
+
+        // The camera renders on into every image of its ring, the one the root still publishes among them.
+        for (var frame = 0; (frame < 4); frame++) {
+            _ = scene.Produce(footprints: filmed, roots: MainRoot);
+            _ = rewritten.Add(item: scene.Recorders.Of(instance: "camera").OutputImage);
+        }
+
+        Assert.Contains(expected: stood.ImageHandle, collection: rewritten);
+
+        var request = CaptureRequest();
+        var served = ((nint)0);
+
+        scene.Runtime.RequestCapture(request: request);
+
+        for (var frame = 0; ((frame < 8) && !request.Completion.IsCompleted); frame++) {
+            _ = scene.Produce(footprints: filmed, roots: MainRoot);
+            served = scene.Recorders.Of(instance: "camera").OutputImage;
+        }
+
+        Assert.True(condition: request.Completion.IsCompleted);
+        Assert.Null(@object: Outcome(request: request).Error);
+
+        var read = Assert.Single(collection: scene.Gpu.Readbacks).Image;
+
+        Assert.Contains(
+            expected: (served, read),
+            collection: scene.Gpu.CopiedImages
+        );
+    }
     /// <summary>A view stands for the camera, and a kept root's installed graph reads the view. A reconfiguration retires
     /// both while the root's replacement waits in the driver: the root keeps sampling the image it bound, the camera's,
     /// under a lease, though neither the view nor the camera holds it any more; once the replacement installs, the image

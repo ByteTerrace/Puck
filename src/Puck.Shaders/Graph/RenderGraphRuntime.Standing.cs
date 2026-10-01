@@ -91,6 +91,33 @@ public sealed partial class RenderGraphRuntime {
 
         return Output.None;
     }
+    // The instance whose own output an instance's latest output resolves to, or -1 when it resolves to nothing or to a
+    // one-frame image, which no instance owns.
+    private int OwnerOf(int index) {
+        var owner = index;
+        var output = m_current[index];
+        var frame = long.MaxValue;
+
+        for (var depth = 0; (depth <= (2 * m_nodes.Length)); depth++) {
+            var standing = output.StandsFor;
+
+            if (standing.IsOwn) {
+                return ((output.Frame >= 0) ? owner : -1);
+            }
+            if (standing.IsOneFrame) {
+                return -1;
+            }
+
+            frame -= (standing.PreviousFrame ? 1L : 0L);
+            owner = standing.Producer;
+            output = RecordedAt(
+                frame: frame,
+                producer: owner
+            );
+        }
+
+        return -1;
+    }
     // An instance's latest output as the display, a host or a capture sees it now.
     private Output LatestOf(int index) => Resolve(
         frame: long.MaxValue,

@@ -1233,6 +1233,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 m_capture.Forward(target: node);
             }
 
+            OfferCaptureSource(
+                index: index,
+                node: node
+            );
+
             var submitted = node.FrameCounter;
             Surface surface;
 
