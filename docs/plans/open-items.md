@@ -33,7 +33,7 @@ These items belong to no single programme.
 - [ ] Let Snake grow past six segments. `history(row, age)` takes an expression age, and an age outside the ring reads the empty value (`HistoryAgeLawTests`), but [`snake.puck`](../../src/Puck.World/Assets/worlds/games/snake.puck) still reads four fixed ages, clears its tail through a branch per length, and caps `snakeLength` at six.
 - [ ] Give every test's thread-pool liveness bound the SdfVm harness rule: block on the build's own completion (`BackgroundBuild.WaitFinished`, `SdfWorldResidency.WaitPipelineBuilds`) under one generous bound instead of spinning under 30 seconds. About 40 sites in `tests/Puck.Shaders.Tests`, 20 in `tests/Puck.World.Tests` and 5 in `tests/Puck.Hosting.Tests` still spin; the rule needs a shared file those projects link.
 - [ ] Find the `SHADERPKG_OUTPUT` failure of a `--no-incremental` Release build, where a World shader package directory held binaries but no manifest; clearing `src/Puck.World/obj/Release/net10.0/worlds` and building again passed. Unconfirmed as a packaging race.
-- [ ] Remove the temporary-directory cleanup race in `WorldWindowFrustumFitLawTests.TheCanarysSeatViewRidesItsBody_SoAStepReframesTheWindow`, which failed once on a locked `puck-portal-window-eye-*` directory under load.
+- [x] Remove the temporary-directory cleanup race in `WorldWindowFrustumFitLawTests.TheCanarysSeatViewRidesItsBody_SoAStepReframesTheWindow`, which failed once on a locked `puck-portal-window-eye-*` directory under load: its directory, and its spectator sibling's, delete best effort (`TemporaryDirectory`'s `bestEffortDelete`), waiting for a handle the disposed host still holds and never failing the law over one.
 
 ## [State and language](state-and-language.md)
 
