@@ -37,8 +37,27 @@ public sealed class WorldStateReadView {
     /// <param name="reader">The acting principal, as its ingress stamped it.</param>
     /// <returns>The view; for <see cref="Principal.Console"/>, the live document whole.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="server"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The session has no live disclosed read view.</exception>
     public static WorldStateReadView Of(WorldServer server, Principal reader) {
         ArgumentNullException.ThrowIfNull(argument: server);
+
+        if (reader.Kind == PrincipalKind.Session) {
+            var definition = (server.ReadSessionDefinition(session: reader)
+                ?? throw new InvalidOperationException(message: WorldSessionObservation.QueryRefusal));
+
+            // A session reads the same definition its deliveries carry. Visibility-only redaction of the authority
+            // document would expose unobserved rows and authoritative sections at Presentation fidelity.
+            return new WorldStateReadView(
+                arenaBytes: (ReferenceEquals(objA: definition, objB: server.Definition) ? server.Arena.Bytes : 0L),
+                completedEngineTick: server.CompletedEngineTicks,
+                completedTick: (server.NextInputTick - 1UL),
+                disclosed: new WorldStateDisclosed(
+                    Definition: definition,
+                    Withheld: new Dictionary<string, WorldWithheldRow>(comparer: StringComparer.Ordinal)
+                ),
+                reader: reader
+            );
+        }
 
         return new WorldStateReadView(
             arenaBytes: server.Arena.Bytes,

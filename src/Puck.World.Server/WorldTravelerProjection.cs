@@ -68,11 +68,13 @@ internal static class WorldTravelerProjection {
             );
 
             sink = new(
-                server,
-                request.Ceiling,
-                () => disclosure,
-                Current,
-                principal
+                authority: server.AuthorityIdentity,
+                disclosure: () => disclosure,
+                isCurrent: Current,
+                recipient: principal,
+                revision: () => server.Population.Revision,
+                server: server,
+                tier: request.Ceiling
             );
             sink.PrimeRoute(route: WorldLocalForwardedAuthority.DescribeRoute(
                 endpoint: endpoint,

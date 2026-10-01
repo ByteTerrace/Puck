@@ -1562,6 +1562,8 @@ public sealed class WorldPeerHost : IDisposable {
     // observer. A seat reads its own disclosure through ObserveTraveler, whose credential resolves to its principal.
     private async Task StreamProjectionAsync(Stream stream, WorldDisclosureTier tier, CancellationToken ct) {
         var sink = new WorldFederationProjectionSink(
+            authority: m_server.AuthorityIdentity,
+            revision: () => m_server.Population.Revision,
             server: m_server,
             tier: tier,
             disclosure: () => new WorldSinkDisclosure(

@@ -8,7 +8,15 @@ accumulated result for the current sample.
 
 - Instance bounds cover a contiguous instruction range in world space.
 - Segment analysis identifies portions of an instance that can be bounded and
-  skipped independently.
+  skipped independently: each Union shape reached through rigid moves and
+  uniform scales gets its own sphere, and a segment of such shapes gets one
+  sphere over all of them. A uniform scale `s` multiplies the sphere's radius
+  by `s`, as it multiplies the candidate. A non-uniform scale leaves the shape
+  always evaluated, because its candidate `min(s)·f(S⁻¹p)` grows more slowly
+  with distance than any sphere's lower bound, so no finite sphere bounds it.
+  Sweep and path candidates have a local distance cap; their spheres are kept
+  only when the accumulated uniform scale is at least one, so the kernels'
+  world-distance cap guard remains sound.
 - Sampled-region bounds cover a brick-backed carve cache.
 - Screen-surface frames bound texture parameterization, not field influence.
 
@@ -98,6 +106,6 @@ The stored field includes its conservative scale and boundary floor. A missing
 or unavailable brick must fall back to an uncarved conservative result, never a
 hole.
 
-Per-segment bounds for placed creations remain an open priority, tracked
-nowhere: this paragraph is the whole record of the item.
-
+Per-segment bounds for placed creations whose shapes compose through a scope
+or a blend other than Union remain an open priority, tracked nowhere: this
+paragraph is the whole record of the item.

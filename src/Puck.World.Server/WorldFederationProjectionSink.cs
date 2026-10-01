@@ -1,4 +1,5 @@
 using Puck.Commands;
+using System.Text;
 using System.Threading.Channels;
 using Puck.World.Protocol;
 
@@ -6,27 +7,52 @@ namespace Puck.World.Server;
 
 /// <summary>Samples borrowed authority snapshots at the live disclosure cadence, redacts only frames that are due,
 /// and copies them into a bounded wire queue; no socket writes run on the authority tick. A presentation-tier peer is
-/// fed by its own <see cref="WorldProjectionFeed"/>: its whole projection first, then projection deltas of the members
-/// that change, its state clocks' anchors among them, checked at every authoritative tick whether or not the tick's
-/// frame is sampled; the feed is released when the stream ends.</summary>
-internal sealed class WorldFederationProjectionSink(WorldServer server, WorldDisclosureTier tier, Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, Principal? recipient = null) : IClientSink {
-    private readonly Channel<(WorldFederationResponse Kind, byte[] Body)> m_frames = Channel.CreateBounded<(WorldFederationResponse, byte[])>(options: new BoundedChannelOptions(capacity: 8) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = true });
+/// fed by its own <see cref="WorldProjectionFeed"/> over the authority <paramref name="server"/> names: its whole
+/// projection first, then projection deltas of the members that change, its state clocks' anchors among them, checked
+/// at every authoritative tick whether or not the tick's frame is sampled; <see cref="Release"/> lets the feed go when
+/// the stream ends.</summary>
+/// <param name="tier">The tier the admission door decided for the peer.</param>
+/// <param name="authority">The composing authority's addressable namespace.</param>
+/// <param name="revision">Reads the document revision a composition names.</param>
+/// <param name="disclosure">Reads the live snapshot disclosure.</param>
+/// <param name="isCurrent">Reads whether the projection's authority route still holds, or <see langword="null"/> for
+/// one that always does.</param>
+/// <param name="recipient">The authenticated recipient, or <see langword="null"/> for the public observer.</param>
+/// <param name="server">The authority whose store, clock and document a presentation-tier feed reads; required at
+/// <see cref="WorldDisclosureTier.Presentation"/>.</param>
+public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, string authority, Func<int> revision,
+    Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, Principal? recipient = null, WorldServer? server = null) : IWorldDetachableSink {
+    /// <summary>The maximum encoded records one projection subscriber retains while its wire consumer is behind.</summary>
+    public const int PendingDeliveryLimit = 8;
+    /// <summary>The named reason for detaching an observer whose wire queue fills.</summary>
+    public const string BackpressureDetachReason = "world.observation.backpressure";
+    /// <summary>The named reason for detaching a projection whose authority route is no longer current.</summary>
+    public const string InvalidatedDetachReason = "world.observation.invalidated";
+
+    private readonly Channel<(WorldFederationResponse Kind, byte[] Body)> m_frames = Channel.CreateBounded<(WorldFederationResponse, byte[])>(options: new BoundedChannelOptions(capacity: PendingDeliveryLimit) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = true });
     private readonly WorldProjectionSampler m_sampler = new(updateSeconds: disclosure().Policy.UpdateSeconds);
     private readonly WorldProjectionFeed? m_feed = ((tier == WorldDisclosureTier.Presentation)
         ? new WorldProjectionFeed(
             recipient: recipient,
-            seeds: server.ClockSeeds
+            seeds: (server ?? throw new ArgumentNullException(paramName: nameof(server), message: "A presentation-tier projection reads its authority's store, clock and document.")).ClockSeeds
         )
         : null);
     private EntitySnapshot[] m_redacted = [];
 
     private bool m_invalidated;
 
+    /// <summary>The number of encoded records currently retained for this subscriber.</summary>
+    public int PendingDeliveries => m_frames.Reader.Count;
+    /// <inheritdoc/>
+    public string? DetachReason { get; private set; }
+
     private bool Current() {
         if (m_invalidated) { return false; }
         if (isCurrent?.Invoke() != false) { return true; }
+        DetachReason = InvalidatedDetachReason;
         m_invalidated = true;
         m_frames.Writer.TryComplete();
+
         return false;
     }
     private async Task PumpAsync(Stream output, CancellationToken ct) {
@@ -40,7 +66,9 @@ internal sealed class WorldFederationProjectionSink(WorldServer server, WorldDis
         }
         if (m_invalidated) {
             await WorldFederationCodec.WriteResponseAsync(
-                body: default,
+                body: ((DetachReason is { } reason)
+                    ? Encoding.UTF8.GetBytes(s: reason)
+                    : ReadOnlyMemory<byte>.Empty),
                 ct: ct,
                 kind: WorldFederationResponse.ProjectionInvalidated,
                 stream: output
@@ -73,25 +101,18 @@ internal sealed class WorldFederationProjectionSink(WorldServer server, WorldDis
                 break;
         }
     }
-    private void Project(WorldDefinition definition, WorldDocumentVersion version) {
-        var time = server.DeliveryTime;
-
-        Present(
-            delivery: m_feed!.Compose(
-                arena: server.Arena,
-                authority: server.AuthorityIdentity,
-                definition: definition,
-                revision: server.Population.Revision,
-                time: in time
-            ),
-            engineTick: time.EngineTick,
-            tick: time.Tick,
-            version: version
-        );
-    }
     private void Write(WorldFederationResponse kind, byte[] body) {
+        if (m_invalidated) {
+            return;
+        }
         if (!m_frames.Writer.TryWrite(item: (kind, body))) {
-            m_frames.Writer.TryComplete(error: new IOException(message: "federation observer exceeded its bounded projection backlog"));
+            // The stream's primer, definition revisions, and authority route cannot be reconstructed from a lone
+            // latest snapshot. Detach so the peer reopens with a fresh primer instead of accepting an ambiguous gap.
+            DetachReason = BackpressureDetachReason;
+            m_invalidated = true;
+            // Completing the channel successfully keeps the queued records ahead of the terminal reason; the hub
+            // detaches on the reason after this delivery, whether or not the wire consumer ever drains again.
+            m_frames.Writer.TryComplete();
         }
     }
 
@@ -103,25 +124,33 @@ internal sealed class WorldFederationProjectionSink(WorldServer server, WorldDis
         }
 
         if (m_feed is not null) {
-            Project(
-                definition: definition,
+            var time = server!.DeliveryTime;
+
+            Present(
+                delivery: m_feed.Compose(
+                    arena: server.Arena,
+                    authority: authority,
+                    definition: definition,
+                    revision: revision(),
+                    time: in time
+                ),
+                engineTick: time.EngineTick,
+                tick: time.Tick,
                 version: version
             );
 
             return;
         }
 
-        var time = server.DeliveryTime;
-
         Write(
             WorldFederationResponse.Definition,
             WorldFederationCodec.EncodeDocument(
-                authority: server.AuthorityIdentity,
+                authority: authority,
                 definition: definition,
                 recipient: recipient,
-                revision: server.Population.Revision,
+                revision: revision(),
                 tier: tier,
-                time: in time,
+                time: (server?.DeliveryTime ?? ArenaTime.At(engineTick: 0UL, tick: 0UL)),
                 version: version
             )
         );
@@ -135,7 +164,7 @@ internal sealed class WorldFederationProjectionSink(WorldServer server, WorldDis
         if (m_feed is not null) {
             Present(
                 delivery: m_feed.Step(
-                    definition: server.Definition,
+                    definition: server!.Definition,
                     engineTick: snapshot.EngineTick,
                     tick: snapshot.Tick
                 ),
@@ -171,22 +200,18 @@ internal sealed class WorldFederationProjectionSink(WorldServer server, WorldDis
         definition: definition,
         version: version
     );
-    public void PrimeRoute(in WorldAuthorityRouteDescription route) {
-        var time = server.DeliveryTime;
-
-        Write(
-            WorldFederationResponse.Route,
-            WorldFederationCodec.EncodeRoute(
-                authority: server.AuthorityIdentity,
-                revision: server.Population.Revision,
-                route: in route,
-                tier: tier,
-                time: in time
-            )
-        );
-    }
+    public void PrimeRoute(in WorldAuthorityRouteDescription route) => Write(
+        WorldFederationResponse.Route,
+        WorldFederationCodec.EncodeRoute(
+            authority: authority,
+            revision: revision(),
+            route: in route,
+            tier: tier,
+            time: (server?.DeliveryTime ?? ArenaTime.At(engineTick: 0UL, tick: 0UL))
+        )
+    );
     /// <summary>Releases what the peer's feed holds, its anchor rows included: the peer is gone. Called under the
-    /// authority gate, once the sink is detached, so no delivery follows it.</summary>
+    /// authority gate once the sink is detached, so no delivery follows it.</summary>
     public void Release() => m_feed?.Release();
     public Task StreamAsync(Stream output, CancellationToken ct) =>
         WorldProjectionStream.RunAsync(
@@ -198,6 +223,7 @@ internal sealed class WorldFederationProjectionSink(WorldServer server, WorldDis
             ct
         );
 }
+
 /// <summary>Ends a one-way projection when either its producer ends or its consumer disconnects.</summary>
 internal static class WorldProjectionStream {
     public static async Task RunAsync(Stream output, Func<CancellationToken, Task> produce, CancellationToken ct) {

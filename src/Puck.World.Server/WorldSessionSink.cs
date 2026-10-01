@@ -11,28 +11,56 @@ namespace Puck.World.Server;
 /// own <see cref="WorldProjectionFeed"/>: its whole projection first, then only the members that change, and its state
 /// clocks' anchors at the ticks its predictions miss; a withheld span or the end of the observation releases what the
 /// feed holds. The answers, compositions and levers this world's hub fans out belong to its own clients and never
-/// reach a session. An observer that throws ends its observation; the hub detaches it.</summary>
-internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservation observation, IClientSink inner) : IClientSink {
+/// reach a session. An observer that throws, or that ends its own subscription as an
+/// <see cref="IWorldDetachableSink"/>, ends its observation; the hub detaches it.</summary>
+internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservation observation, IClientSink inner) : IWorldDetachableSink {
+    private readonly IWorldDetachableSink? m_detachable = (inner as IWorldDetachableSink);
     private readonly WorldProjectionFeed m_feed = new(
         recipient: observation.Session,
         seeds: server.ClockSeeds
     );
 
     private WorldDefinition? m_hydrated;
+
     private bool m_withheld;
 
     private EntitySnapshot[] m_redacted = [];
 
+    /// <summary>Gets the reason the observer ended its own subscription with, or <see langword="null"/> while it still
+    /// takes deliveries; the session ends with it.</summary>
+    public string? DetachReason { get; private set; }
     /// <summary>Gets what the observer threw, once it has.</summary>
     public Exception? Fault { get; private set; }
 
+    private bool CanObserve => (
+        (Tier != WorldDisclosureTier.Frames) &&
+        server.ObservesAsSession(session: observation.Session)
+    );
     private WorldDisclosureTier Tier => observation.Tier;
 
+    // Queries are read doors into the same disclosed view as deliveries. Only state observations have their own
+    // recipient-filtered projection; the remaining readbacks describe authoritative state that a Presentation or
+    // redacted Replica mirror does not carry, so they require the whole replica.
+    internal bool AllowsQuery(WorldQuery query) => (
+        CanObserve &&
+        ((query is WorldQuery.StateObservations) || DisclosesFullReplica)
+    );
+
+    private bool DisclosesFullReplica => (
+        (Tier == WorldDisclosureTier.Replica) &&
+        new WorldSinkDisclosure(
+            ObserverBodyIndex: -1,
+            Policy: server.Definition.Population.ObserverDisclosure
+        ).IsFull
+    );
+
+    // Nothing reaches an observer once it has ended its own subscription.
     private bool Discloses() {
-        if (
-            (Tier != WorldDisclosureTier.Frames) &&
-            server.ObservesAsSession(session: observation.Session)
-        ) {
+        if (DetachReason is not null) {
+            return false;
+        }
+
+        if (CanObserve) {
             return true;
         }
 
@@ -44,17 +72,28 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         return false;
     }
-    // Runs one delivery to the observer, recording a fault and ending the observation before the hub detaches it.
-    private void Forward(Action deliver) {
-        try {
-            deliver();
-        } catch (Exception exception) {
-            Fault = exception;
-            observation.MarkEnded();
-            server.GrantTable.MarkSessionFaulted(session: observation.Session);
-            server.NoteFaultedSession(session: observation.Session);
-
-            throw;
+    // Ends the observation once its observer takes no more deliveries, by a fault or by its own detach reason: from
+    // this moment the session acts no more, and the next step ends it.
+    private void EndObservation() {
+        observation.MarkEnded();
+        server.GrantTable.MarkObserverEnded(session: observation.Session);
+        server.NoteObserverEnded(session: observation.Session);
+    }
+    // Records a delivery fault before it reaches the hub's detach handler. Delivery uses direct calls so a steady
+    // snapshot or value-only update does not allocate a capturing delegate.
+    private void EndAfterFault(Exception exception) {
+        Fault = exception;
+        EndObservation();
+    }
+    // Adopts the reason an observer ended its own subscription with during the delivery just made, so the hub detaches
+    // this sink after the same delivery.
+    private void FollowObserverDetach() {
+        if (
+            (DetachReason is null) &&
+            (m_detachable?.DetachReason is { } reason)
+        ) {
+            DetachReason = reason;
+            EndObservation();
         }
     }
     // Hands a presentation-tier observer what its feed owes: a whole projection as a definition, a delta of values as
@@ -148,14 +187,14 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                 definition: server.Definition,
                 version: server.DocumentVersion
             );
-
-            return;
+        } else {
+            Project(
+                definition: server.Definition,
+                version: server.DocumentVersion
+            );
         }
 
-        Project(
-            definition: server.Definition,
-            version: server.DocumentVersion
-        );
+        FollowObserverDetach();
     }
 
     /// <summary>Releases what the observer's feed holds, its anchor rows included: the observation ended, or its
@@ -164,10 +203,24 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         m_feed.Release();
         m_hydrated = null;
     }
+
+    /// <summary>Discloses a definition as this session's tier shows it, for a read door — see
+    /// <see cref="Disclose(WorldDefinition, WorldDisclosureTier, StateArena, Principal?, bool)"/>. Whether the session observes right now is the
+    /// delivery's question, not this one's.</summary>
+    /// <param name="definition">The definition.</param>
+    /// <returns>The disclosed definition, or <see langword="null"/> at the frames tier.</returns>
+    /// <exception cref="InvalidOperationException">The composed projection does not hydrate.</exception>
+    public WorldDefinition? Disclose(WorldDefinition definition) => Disclose(
+        arena: server.Arena,
+        definition: definition,
+        recipient: observation.Session,
+        tier: Tier,
+        unrestricted: false
+    );
     /// <summary>Discloses a definition as a tier shows it: verbatim at <see cref="WorldDisclosureTier.Replica"/>, a
     /// projection composed for <paramref name="recipient"/> from <paramref name="arena"/> at
     /// <see cref="WorldDisclosureTier.Presentation"/>, and nothing at <see cref="WorldDisclosureTier.Frames"/>. A
-    /// one-off composition for a measurement: it holds no anchor and feeds no observer.</summary>
+    /// one-off composition for a read or a measurement: it holds no anchor and feeds no observer.</summary>
     /// <param name="definition">The definition.</param>
     /// <param name="tier">The tier.</param>
     /// <param name="arena">The store the definition's disclosed values and audiences are read from: the live store
@@ -216,7 +269,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             return;
         }
 
-        Forward(deliver: () => {
+        try {
             m_withheld = false;
 
             if (Tier == WorldDisclosureTier.Replica) {
@@ -224,15 +277,19 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                     definition: definition,
                     version: version
                 );
-
-                return;
+            } else {
+                Project(
+                    definition: definition,
+                    version: version
+                );
             }
 
-            Project(
-                definition: definition,
-                version: version
-            );
-        });
+            FollowObserverDetach();
+        } catch (Exception exception) {
+            EndAfterFault(exception: exception);
+
+            throw;
+        }
     }
     public void DeliverSessionLever(WorldSessionLever lever) {
     }
@@ -249,11 +306,16 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             scratch: ref m_redacted,
             snapshot: in snapshot
         );
+
         var tick = snapshot.Tick;
         var engineTick = snapshot.EngineTick;
 
-        Forward(deliver: () => {
+        try {
             Resume();
+
+            if (DetachReason is not null) {
+                return;
+            }
 
             // A state clock's anchor reaches the observer ahead of the tick whose phase it holds.
             if (Tier == WorldDisclosureTier.Presentation) {
@@ -267,19 +329,30 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                     tick: tick,
                     version: server.DocumentVersion
                 );
+                FollowObserverDetach();
+
+                if (DetachReason is not null) {
+                    return;
+                }
             }
 
             inner.DeliverSnapshot(snapshot: in redacted);
-        });
+            FollowObserverDetach();
+        } catch (Exception exception) {
+            EndAfterFault(exception: exception);
+
+            throw;
+        }
     }
+    // Below Replica the observer's feed decides what the values owe it: nothing, a delta of the members they moved, or
+    // a whole projection after a withheld span. Body redaction does not renumber a Replica's state rows and must not
+    // turn value-only updates into structural rebuilds.
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
         if (!Discloses()) {
             return;
         }
 
-        var copy = stamp;
-
-        Forward(deliver: () => {
+        try {
             if (Tier != WorldDisclosureTier.Replica) {
                 m_withheld = false;
                 Present(
@@ -290,10 +363,11 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                         revision: server.Population.Revision,
                         time: server.DeliveryTime
                     ),
-                    engineTick: copy.EngineTick,
-                    tick: copy.Tick,
+                    engineTick: stamp.EngineTick,
+                    tick: stamp.Tick,
                     version: version
                 );
+                FollowObserverDetach();
 
                 return;
             }
@@ -304,15 +378,21 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                     definition: definition,
                     version: version
                 );
+                FollowObserverDetach();
 
                 return;
             }
 
             inner.DeliverState(
                 definition: definition,
-                stamp: in copy,
+                stamp: in stamp,
                 version: version
             );
-        });
+            FollowObserverDetach();
+        } catch (Exception exception) {
+            EndAfterFault(exception: exception);
+
+            throw;
+        }
     }
 }
