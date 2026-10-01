@@ -72,4 +72,43 @@ internal static partial class Oracles {
 
         return (stiffness, decayRate, oscillationRate, dampingOverOscillation, targetVelocityGain, retargetGain);
     }
+    /// <summary>An enclosure of <c>exp(−x) · 2^(16 + GuardBitCount)</c> for a non-negative exponent <c>x</c> given at
+    /// Q32 — the decay factor <see cref="SecondOrderDynamics.Evaluate"/> forms for <c>x = ζω·t</c>.</summary>
+    /// <param name="rateRaw">The exponent <c>x</c>, Q32 raw; must be non-negative.</param>
+    /// <returns>The enclosure, at guard scale.</returns>
+    /// <remarks>Route: the Taylor series of <c>e^x</c> summed at a hundred and sixty working bits from the exact dyadic
+    /// <c>x</c>, every term floored for the lower chain and ceilinged for the upper one, the upper chain closed with a
+    /// geometric bound on the omitted tail once the term ratio is at most one half; then the reciprocal of each chain,
+    /// rounded outward. No base-2 reduction, no log₂e, no table and no polynomial of the subject's appear here.</remarks>
+    public static Enclosure EncloseExpNegative(long rateRaw) {
+        const int WorkingBitCount = 160;
+
+        var one = (BigInteger.One << WorkingBitCount);
+        var x = (new BigInteger(value: rateRaw) << (WorkingBitCount - 32));
+        var lowTerm = one;
+        var highTerm = one;
+        var lowSum = one;
+        var highSum = one;
+
+        for (var k = 1; ; ++k) {
+            lowTerm = ((lowTerm * x) / (one * k));
+            highTerm = (((highTerm * x) + ((one * k) - BigInteger.One)) / (one * k));
+            lowSum += lowTerm;
+            highSum += highTerm;
+
+            // Past k ≥ 2x every further term is at most half its predecessor, so the omitted tail is below the last
+            // upper term; adding twice it plus k keeps the upper chain an upper bound with room to spare.
+            if (((x * 2) <= (one * (k + 1))) && (highTerm <= BigInteger.One)) {
+                highSum += ((2 * highTerm) + k);
+                break;
+            }
+        }
+
+        var scaled = (one << (16 + GuardBitCount));
+
+        return new(
+            Low: (scaled / highSum),
+            High: ((scaled + (lowSum - BigInteger.One)) / lowSum)
+        );
+    }
 }

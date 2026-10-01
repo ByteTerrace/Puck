@@ -590,7 +590,8 @@ public readonly partial record struct FixedQ4816(long Value)
 
     /// <summary>Returns <c>2^value</c> for an exponent carried at Q32 rather than Q16 — the same table and polynomial
     /// as <see cref="Exp2"/> fed twenty-five residual bits instead of nine, so a caller that formed its exponent at
-    /// full width (<see cref="Pow"/>, <see cref="CoshSinh"/>) does not quantize it to the Q16 grid first.</summary>
+    /// full width (<see cref="Pow"/>, <see cref="CoshSinh"/>, <see cref="SecondOrderDynamics.Evaluate"/>'s decay
+    /// factors) does not quantize it to the Q16 grid first.</summary>
     /// <param name="exponentQ32">The exponent, at thirty-two fraction bits.</param>
     /// <returns><c>2^exponent</c> under <see cref="Exp2"/>'s saturation and underflow rules.</returns>
     internal static FixedQ4816 Exp2Q32(long exponentQ32) {

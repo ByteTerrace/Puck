@@ -21218,13 +21218,15 @@
     },
     {
       "CoveredBy": [
-        "dynamics.create-constants-vs-oracle"
+        "dynamics.create-constants-vs-oracle",
+        "dynamics.decay-factor-vs-series"
       ],
       "Id": "Puck.Maths.SecondOrderDynamics.DecayRateRaw",
       "State": "covered"
     },
     {
       "CoveredBy": [
+        "dynamics.decay-factor-vs-series",
         "dynamics.step-vs-evaluate-close-agreement"
       ],
       "Id": "Puck.Maths.SecondOrderDynamics.Evaluate(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,System.UInt64,System.UInt64)",
@@ -21314,6 +21316,7 @@
     },
     {
       "CoveredBy": [
+        "dynamics.decay-factor-vs-series",
         "dynamics.step-vs-evaluate-close-agreement"
       ],
       "Id": "Puck.Maths.SecondOrderSample.Value",
