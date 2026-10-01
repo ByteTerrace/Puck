@@ -59,8 +59,9 @@ public static class WorldStateDisclosure {
             rowOrdinal: ordinal
         ));
     }
-    /// <summary>Projects only rows and cells with explicit observation policies; token attributes inherit their
-    /// zone's restrictions. Discloses stored truth for cells carrying dynamics (the arena never eases), while
+    /// <summary>Projects the rows and cells with explicit observation policies, and every row in
+    /// <paramref name="presented"/> whether or not it has one, each under the same per-cell rule; token attributes
+    /// inherit their zone's restrictions. Discloses stored truth for cells carrying dynamics (the arena never eases), while
     /// value-over-time traits such as advance and cycle evaluate live.</summary>
     /// <param name="definition">The live document, for the row declarations.</param>
     /// <param name="arena">The live store.</param>
@@ -69,7 +70,9 @@ public static class WorldStateDisclosure {
     /// <returns>The observed rows, or <see langword="null"/> when the document discloses nothing.</returns>
     /// <param name="unrestricted">Whether to disclose as a reader every restriction admits — the most any recipient could
     /// be handed, which a measurement sizing for every possible recipient reads — instead of as <paramref name="recipient"/>.</param>
-    public static IReadOnlyList<WorldObservedRow>? Compose(WorldDefinition definition, StateArena arena, in ArenaTime time, Principal? recipient, bool unrestricted = false) {
+    /// <param name="presented">The rows a presentation reads, which cross as observations of the cells the recipient
+    /// may read whether or not they declare a policy, or <see langword="null"/> for none.</param>
+    public static IReadOnlyList<WorldObservedRow>? Compose(WorldDefinition definition, StateArena arena, in ArenaTime time, Principal? recipient, bool unrestricted = false, IReadOnlySet<string>? presented = null) {
         var observer = new Observer(
             arena: arena,
             definition: definition,
@@ -90,7 +93,8 @@ public static class WorldStateDisclosure {
                 (row.Visibility is null) &&
                 !observer.AnyCellRestricted(
                 rowOrdinal: rowOrdinal
-            )
+            ) &&
+                (presented?.Contains(item: row.Name.Value) != true)
             ) {
                 continue;
             }

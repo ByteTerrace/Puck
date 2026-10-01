@@ -438,7 +438,7 @@ public static partial class WorldFederationCodec {
     }
     private static void WriteCommitMember(WireWriter writer, WorldTransferCommitMember member) {
         writer.WriteBlock(value: ((member.Profile?.Document is { } profileDocument)
-            ? WorldDefinitionSerialization.Serialize(definition: profileDocument)
+            ? WorldDefinitionSerialization.SerializeCompact(definition: profileDocument)
             : []));
         writer.WriteBoolean(value: member.HasMappedArrival);
         writer.WriteString(value: member.BodyMotionProgramName);
@@ -572,9 +572,9 @@ public static partial class WorldFederationCodec {
             tier: tier,
             time: in time
         ) is { } projection)
-            ? WorldProjection.SerializeWire(projection: projection)
+            ? WorldProjection.SerializeCompact(projection: projection)
             : ((tier == WorldDisclosureTier.Replica)
-                ? WorldDefinitionSerialization.Serialize(definition: definition)
+                ? WorldDefinitionSerialization.SerializeCompact(definition: definition)
                 : throw new ArgumentOutOfRangeException(
                     paramName: nameof(tier),
                     actualValue: tier,

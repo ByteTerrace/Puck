@@ -1557,7 +1557,7 @@ public static partial class WorldDefinitionSerialization {
         );
     }
     /// <summary>Serializes a definition to its compact canonical UTF-8 bytes: <see cref="Serialize"/>'s document with
-    /// no whitespace, the form a compiled world stores.</summary>
+    /// no whitespace, the form a compiled world stores and every definition travels on the wire in.</summary>
     /// <param name="definition">The definition to serialize.</param>
     /// <returns>The compact canonical UTF-8 byte form.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>

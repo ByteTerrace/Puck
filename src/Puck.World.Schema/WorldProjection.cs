@@ -171,8 +171,10 @@ public sealed record WorldProjectionDocument(
 /// value from the composing authority's own state and sends the literal, because the projection discloses no state
 /// section for a receiver to answer one against.</para>
 /// <para>At <see cref="WorldDisclosureTier.Replica"/> <see cref="Compose"/> answers <see langword="null"/> and the
-/// caller serializes the definition verbatim. For a flat document that download is hash-identical to the authored
-/// file; for a document loaded from a <c>basis</c> delta it is the flattened composition — self-contained by
+/// caller sends the definition whole, in the compact form every definition travels in
+/// (<see cref="WorldDefinitionSerialization.SerializeCompact"/>). For a flat document that download re-serializes to
+/// the authored file's canonical bytes; for a document loaded from a <c>basis</c> delta it is the flattened
+/// composition — self-contained by
 /// construction, since a live document never carries a basis (see <see cref="WorldDefinition.Basis"/>), and a
 /// receiver has no directory to resolve one against.</para>
 /// </remarks>
@@ -246,6 +248,7 @@ public static class WorldProjection {
         // Every state clock a carried value keys on is a dependency of a derived value: it must pass the disclosure
         // boundary before anything is composed, or nothing is.
         var keyed = KeyedClocks(definition: definition);
+        var bound = WorldKeyedValues.BoundOf(definition: definition);
 
         if (!unrestricted) {
             RefuseHiddenClocks(
@@ -256,6 +259,7 @@ public static class WorldProjection {
             );
             RefuseHiddenBindings(
                 arena: arena,
+                bound: bound,
                 definition: definition,
                 recipient: recipient
             );
@@ -343,6 +347,10 @@ public static class WorldProjection {
         var observations = WorldStateDisclosure.Compose(
             arena: arena,
             definition: definition,
+            presented: PresentedRows(
+                bound: bound,
+                definition: definition
+            ),
             recipient: recipient,
             time: in time,
             unrestricted: unrestricted
@@ -408,8 +416,8 @@ public static class WorldProjection {
     // A bindable bound to a state cell is a reading of that cell, under the rule a state clock's keys are: a recipient
     // that may not read the cell, or, for a value read per body, every cell of its row, is sent no value derived from
     // it.
-    private static void RefuseHiddenBindings(WorldDefinition definition, StateArena arena, Principal? recipient) {
-        foreach (var (path, binding) in WorldKeyedValues.BoundOf(definition: definition)) {
+    private static void RefuseHiddenBindings(WorldDefinition definition, StateArena arena, IReadOnlyList<WorldBoundValue> bound, Principal? recipient) {
+        foreach (var (path, binding) in bound) {
             if (definition.State.FirstOrDefault(predicate: row => string.Equals(
                 a: row.Name.Value,
                 b: binding.Row,
@@ -446,6 +454,27 @@ public static class WorldProjection {
 
             throw new InvalidOperationException(message: $"{path} binds state row '{binding.Row}' this recipient may not read; a hidden source sends no derived value.");
         }
+    }
+    // The rows a presented bindable reads, which cross as observations so the recipient reads the value the authority
+    // presents rather than its fallback; a field row crosses as the field it is, never also as an observation.
+    private static HashSet<string>? PresentedRows(WorldDefinition definition, IReadOnlyList<WorldBoundValue> bound) {
+        if (bound.Count == 0) {
+            return null;
+        }
+
+        var rows = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var (_, binding) in bound) {
+            if (definition.State.FirstOrDefault(predicate: row => string.Equals(
+                a: row.Name.Value,
+                b: binding.Row,
+                comparisonType: StringComparison.Ordinal
+            )) is { Field: null }) {
+                _ = rows.Add(item: binding.Row);
+            }
+        }
+
+        return rows;
     }
     // The timeline a projection carries: each tick clock as authored, each state clock a value keys on as the anchored
     // clock the recipient's ledger carries for it, or, for a one-off composition no recipient holds anchors from, the
@@ -548,7 +577,7 @@ public static class WorldProjection {
     /// <param name="projection">The projection.</param>
     /// <returns>The compact canonical UTF-8 byte form.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="projection"/> is <see langword="null"/>.</exception>
-    public static byte[] SerializeWire(WorldProjectionDocument projection) {
+    public static byte[] SerializeCompact(WorldProjectionDocument projection) {
         ArgumentNullException.ThrowIfNull(argument: projection);
 
         return CanonicalJsonDocument.SerializeCompact(

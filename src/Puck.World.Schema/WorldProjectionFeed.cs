@@ -80,7 +80,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
             tier: WorldDisclosureTier.Presentation,
             time: in time
         )!;
-        var payload = WorldProjection.SerializeWire(projection: projection);
+        var payload = WorldProjection.SerializeCompact(projection: projection);
         var tree = WorldProjectionDelta.Tree(utf8Json: payload);
 
         if (m_tree is null) {
@@ -158,7 +158,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
 
         return ((delta is null)
             ? Whole(
-                payload: WorldProjection.SerializeWire(projection: m_held),
+                payload: WorldProjection.SerializeCompact(projection: m_held),
                 projection: m_held,
                 tree: m_tree
             )

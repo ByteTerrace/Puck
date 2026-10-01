@@ -686,7 +686,9 @@ basis uses) that `WorldProjectionHold` merges over the projection the recipient 
 nothing changed. A delta of values alone (the timeline, the observations, the provenance) reaches the
 recipient as a state delivery rather than a new definition; on the federation wire it travels as a
 `ProjectionDelta` frame. Projections and deltas travel as compact canonical JSON
-(`WorldProjection.SerializeWire`); the indented canonical form is what `WorldProjection.Serialize` writes.
+(`WorldProjection.SerializeCompact`), as does a replica's whole definition
+(`WorldDefinitionSerialization.SerializeCompact`); the indented canonical forms are kept for what hashes, stores
+or displays a document.
 
 A projection carries a timeline's tick clocks as authored, and each state clock a carried value keys on
 as an anchored clock: an anchor of its phase (`WorldClockAnchor`: the engine tick, the phase as a `u64`
@@ -701,7 +703,8 @@ re-anchors wherever the phase moves, so a sky held still or moving along a prove
 A state clock is a reading of its row's slot, and a bindable bound to a state cell a reading of that
 cell (of every cell of its row when it reads per body), so a recipient that may not read one refuses the
 composition by name before any derived value is emitted, rather than presenting the value at its
-fallback. A late view hydrates the exact current phase; while a
+fallback. A row a presented bindable binds that the recipient may read crosses as an observation of the
+cells it may read, whether or not the row declares a policy, and moves with the row's deltas. A late view hydrates the exact current phase; while a
 clock's row holds no number, an early view keeps predicting its last anchor and a late view seeds from
 the phase the world loaded with, or zero clamped into the row's closed envelope. The last anchor per
 recipient per clock is a counted row under the `world.projection` work source, released when the

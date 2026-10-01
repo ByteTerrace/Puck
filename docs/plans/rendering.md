@@ -5707,8 +5707,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      own `WorldProjectionFeed` through the tier-governed
      `WorldProjectionDocument`, with no side metadata or held-value history;
      every projection and delta travels as compact canonical JSON
-     (`WorldProjection.SerializeWire`), and the canonical indented form stays
-     the one `WorldProjection.Serialize` writes. Delivering prototypes by
+     (`WorldProjection.SerializeCompact`), as does a replica's definition
+     (`WorldDefinitionSerialization.SerializeCompact`), and the canonical
+     indented forms stay for what hashes, stores or displays a document. Delivering prototypes by
      content reference is an [open item](open-items.md#cross-plan-maintenance).
      Tick-only clock closures evaluate locally. A disclosed state clock
      crosses as an anchored clock (`WorldClock.Anchor`, refused in an authored
@@ -5731,7 +5732,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      pass the disclosure boundary for its row's slot, and every bindable bound
      to a state cell for that cell (every cell of its row for a per-body
      read), or the composition refuses by name before any derived value is
-     emitted. A late view hydrates the
+     emitted; a row a presented bindable binds crosses as an observation of
+     the cells the recipient may read, policy or not, so a bound value is
+     never presented at its fallback. A late view hydrates the
      exact current phase; a clock whose row holds no number seeds a late view
      from the phase the world loaded with (`WorldServer.ClockSeeds`), or zero
      clamped into the row's closed envelope, while an early view keeps its

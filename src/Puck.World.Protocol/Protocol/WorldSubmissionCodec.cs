@@ -1231,7 +1231,7 @@ public static partial class WorldSubmissionCodec {
                 byte[] json;
 
                 try {
-                    json = WorldDefinitionSerialization.Serialize(definition: definition);
+                    json = WorldDefinitionSerialization.SerializeCompact(definition: definition);
                 } catch (Exception exception) when ((exception is ArgumentException or InvalidDataException or JsonException or NotSupportedException)) {
                     throw new LeafCodecException(failure: Fail(
                         WorldCodecRefusal.PayloadMalformed,

@@ -86,13 +86,15 @@ names a cell no observed row carries. Its `timeline` carries the tick clocks and
 for each state clock a carried value keys on, an anchored clock holding a
 `WorldClockAnchor` instead of the row; `Compose` takes the recipient's
 `WorldClockAnchorLedger` and refuses a clock whose row's slot, or a bindable
-whose bound cell (every cell for a per-body read), the recipient may not read, and `TryToDefinition` refuses a carried row, a malformed anchor, or a
+whose bound cell (every cell for a per-body read), the recipient may not read,
+while a row a bindable binds that it may read crosses in `observations` whether
+or not it declares a policy, and `TryToDefinition` refuses a carried row, a malformed anchor, or a
 keyed clock the timeline does not carry.
 
 A presentation-tier recipient is fed by one `WorldProjectionFeed` (the session
 sink and the federation projection sink each hold one): a whole projection first,
 then member deltas (`WorldDocumentBasis.Diff`) only when a member changed, all as
-compact canonical JSON (`WorldProjection.SerializeWire`), and a
+compact canonical JSON (`WorldProjection.SerializeCompact`), and a
 timeline delta at the authoritative ticks a held anchor's prediction misses.
 `WorldProjectionHold` is the receiving half. The feed counts under
 `WorldProjectionWork` (`world.projection`), whose anchor rows retained and

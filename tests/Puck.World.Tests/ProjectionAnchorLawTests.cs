@@ -431,6 +431,37 @@ public sealed class ProjectionAnchorLawTests(ITestOutputHelper output) {
         );
     }
     [Fact]
+    public void A_value_bound_to_a_row_the_recipient_may_read_crosses_and_follows_the_row_never_its_fallback() {
+        var document = Document(row: Row(raw: 0L));
+        var density = new BindableScalar(binding: "state.mist");
+
+        static long Raw(double value) => FixedQ4816.FromDouble(value: value).Value;
+        var definition = (document with {
+            RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: density, Name: "haze")])),
+        }).WithWorldState(rows: [
+            .. document.State,
+            new WorldStateRow(
+                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Fixed(rawBits: Raw(value: 0.02d)))],
+                Kind: CellKind.Fixed,
+                Name: CellName.Parse(candidate: "mist")
+            ),
+        ]);
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        var (observation, mirror) = Observe(fixture: fixture);
+        float Presented() => ClientFixtures.StateMirror(definition: mirror.Definition).Scalar(fallback: float.NaN, scalar: in density);
+
+        // The row declares no policy, so any recipient may read it: it crosses, and the value reads it.
+        Assert.Equal(expected: ((float)(Raw(value: 0.02d) / 65536d)), actual: Presented());
+
+        // A write reaches the recipient as a delta of the row's value, never a fallback in between.
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(Principal: Principal.Console, Row: "mist", Key: WorldStateRow.SlotKey.Value, Value: Raw(value: 0.05d), Kind: WorldDocumentWriteKind.Set));
+        fixture.Step();
+        Assert.Equal(expected: ((float)(Raw(value: 0.05d) / 65536d)), actual: Presented());
+        observation.Dispose();
+    }
+    [Fact]
     public void The_last_anchor_per_recipient_per_clock_is_a_row_released_when_the_recipient_leaves_or_loses_disclosure() {
         var work = new WorldProjectionWork();
 
@@ -637,7 +668,7 @@ public sealed class ProjectionAnchorLawTests(ITestOutputHelper output) {
             revision: 1,
             tier: WorldDisclosureTier.Presentation
         )!;
-        var courtyardWire = WorldProjection.SerializeWire(projection: courtyardProjection);
+        var courtyardWire = WorldProjection.SerializeCompact(projection: courtyardProjection);
         var courtyard = (courtyardWire.Length + WorldFederationCodec.DocumentHeaderBytes);
         var courtyardCanonical = WorldProjection.Serialize(projection: courtyardProjection).Length;
         var prototypes = Puck.Abstractions.Documents.CanonicalJsonDocument.SerializeCompact(node: WorldProjectionDelta.Tree(utf8Json: courtyardWire)["prototypes"]!).Length;
