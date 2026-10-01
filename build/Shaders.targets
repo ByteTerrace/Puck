@@ -179,16 +179,18 @@
         <PuckWriteShaderHashSidecars Condition="'$(DxcProbeExitCode)' == '0'" BytecodeFiles="@(_PuckCompiledBytecode)" Includes="@(ShaderInclude)" />
     </Target>
 
-    <!-- Universal across all three current consumers (Puck.SdfVm, Puck.Overlays, Puck.Vulkan.Presentation): a
-         project that declares no VertexShaderSource never triggers a vertex Exec above, so re-globbing here is a
-         no-op for a stage that never ran. Fixes the from-clean-build gap for every consumer, not only Puck.SdfVm:
+    <!-- Shared by every shader project: one that declares no VertexShaderSource never triggers a vertex Exec above,
+         so re-globbing here is a no-op for a stage that never ran. Fixes the from-clean-build gap for every consumer:
          MSBuild expands item globs once, before any target runs, so an evaluation-time ShaderBytecode/Content glob
          cannot see bytecode CompileShaders emits later in the SAME build — a brand-new shader
          would ship with an incomplete Content list otherwise. Owns the shipped Content declaration alone; a
          consuming project keeps only its own evaluation-time @(ShaderBytecode) glob (needed by
          ValidateShaderBytecodeSources, which runs before CompileShaders can populate anything), not a second
-         static Content declaration. -->
-    <Target Name="CollectShaderBytecode" AfterTargets="CompileShaders" BeforeTargets="AssignTargetPaths">
+         static Content declaration. It also runs ahead of NuGet's _GetPackageFiles, after the orphan sweep, so a
+         pack that skips the build (CI packs over a finished build) ships the same bytecode a build does: no build
+         target runs then, and the bytecode is otherwise declared nowhere. -->
+    <Target Name="CollectShaderBytecode" AfterTargets="CompileShaders" BeforeTargets="AssignTargetPaths;_GetPackageFiles"
+            DependsOnTargets="ValidateShaderBytecodeSources">
         <ItemGroup>
             <ShaderBytecode Remove="@(ShaderBytecode)" />
             <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
@@ -201,8 +203,8 @@
          Direct3D 11 device, so each @(Direct3D11KernelSource) item's entry points (its Entries metadata) compile to
          cs_5_0 DXBC here, beside the source as <stem>.<entry>.dxbc, and ship as content: a world run creates a kernel
          from its bytecode and compiles nothing. Direct3D 11 exists only on Windows, so a build elsewhere writes no kernel
-         bytecode. -->
-    <Target Name="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths">
+         bytecode. A kernel already compiled is only declared, so a pack that skips the build ships it too. -->
+    <Target Name="CompileDirect3D11Kernels" BeforeTargets="AssignTargetPaths;_GetPackageFiles">
         <PuckCompileDirect3D11Kernels Condition="'@(Direct3D11KernelSource)' != '' and $([MSBuild]::IsOSPlatform('Windows'))" Sources="@(Direct3D11KernelSource)">
             <Output ItemName="_PuckDirect3D11KernelBytecode" TaskParameter="Bytecode" />
         </PuckCompileDirect3D11Kernels>
@@ -215,6 +217,10 @@
          after collection to catch stale caches that timestamp checks miss.
          Missing bytecode or sidecars trigger compilation through Outputs above. -->
     <Target Name="ValidateShaderBytecodeFresh" AfterTargets="CollectShaderBytecode">
+        <!-- A pack or publish with no build collects and validates too, and must not ship a project without a kernel it
+             declares. -->
+        <Error Condition="'%(_PuckExpectedBytecode.Identity)' != '' and !Exists('%(_PuckExpectedBytecode.Identity)')"
+               Text="Shader bytecode '%(_PuckExpectedBytecode.Identity)' is missing. Build normally before packing or publishing with --no-build." />
         <ItemGroup>
             <_PuckValidateBytecode Include="@(ShaderBytecode)">
                 <SourcePath>%(ShaderBytecode.RootDir)%(ShaderBytecode.Directory)%(ShaderBytecode.Filename).hlsl</SourcePath>
