@@ -1941,7 +1941,14 @@ ball test reads the same tile-masked field the march does, with parts included,
 multiplied by the program's step scale, so never scale it again or read `abs` of
 it. The seed bound is the world-space gap to a wallpaper LOD transition; a finite
 branch Lipschitz factor cannot prove an empty ball across that discontinuity.
-Never seed past a fold without the step bound. The evaluation adds to `sdfWorkSteps` and
+Never seed past a fold without the step bound. The ball test assumes the field at
+the midpoint bounds the distance to every surface the march could accept within
+the ball, so a branch of `mapCore` chosen by the sample's position (as the
+wallpaper LOD is) must tighten `sdfMapSeedBound` by the world-space gap to its
+switch. Choices fixed for the whole pass or tile (instance masks, part readiness,
+detail and secondary flags, kernel tiers), exact skips (bound culls,
+`sdfPartCannotImprove`), scope clamps and mesh substitution (the march's bound)
+need none. The evaluation adds to `sdfWorkSteps` and
 `sdfEvalCount`. A change to the candidate, the ball test or the accepted band
 reruns `SdfMarchSeedLawTests` (whose red legs must still fail), the `march-seed`
 canary on both backends with `--debug-layers`, and `puck counters compare` over
