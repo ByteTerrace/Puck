@@ -61,8 +61,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
         var slots = new Slot?[specs.Length];
 
         try {
-            // The views variants, the longest driver translations, start last, so the others install first.
-            foreach (var kernel in SdfWorldTables.PipelineLayouts.BuildOrder) {
+            foreach (var kernel in BuildOrder(kernels: kernels)) {
                 var spec = specs[((int)kernel)];
                 var bytecode = kernels[kernel];
 
@@ -93,12 +92,26 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             slots: slots
         );
     }
-    /// <summary>Describes how far the set's builds have come as a clause: <c>building (3 of 11 pipelines
-    /// created)</c>.</summary>
+    /// <summary>Orders a kernel set's up-front pipelines by when a set starts building them: longest bytecode first, ties
+    /// in <see cref="SdfKernel"/> order. A cold driver's translation grows with the kernel, and a set is ready only once its
+    /// slowest pipeline is, so the longest starts while the device's threads are free rather than behind the rest.</summary>
+    /// <param name="kernels">The compiled kernel set for a device's backend.</param>
+    /// <returns>Every kernel a set leases up front (all but the resolve kernel, which builds on demand), in build
+    /// order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="kernels"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<SdfKernel> BuildOrder(SdfKernelSet kernels) {
+        ArgumentNullException.ThrowIfNull(argument: kernels);
+
+        return [.. SdfWorldTables.PipelineLayouts.Leased.OrderByDescending(keySelector: kernel => kernels[kernel].Length)];
+    }
+    /// <summary>Describes how far the set's builds have come as a clause: <c>building (9 of 11 pipelines
+    /// created; waiting on sdf-world-surface, sdf-world-views)</c>, naming the pipelines not yet built in
+    /// <see cref="SdfKernel"/> order.</summary>
     /// <returns>The clause.</returns>
     public string Describe() {
         var built = 0;
         var total = 0;
+        var waiting = new List<string>();
 
         foreach (var slot in m_slots) {
             if (slot is null) {
@@ -109,12 +122,14 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
             if (slot.Lease.Current is not null) {
                 built++;
+            } else {
+                waiting.Add(item: slot.Description.Name);
             }
         }
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"building ({built} of {total} pipelines created)"
+            handler: $"building ({built} of {total} pipelines created{((waiting.Count == 0) ? string.Empty : $"; waiting on {string.Join(separator: ", ", values: waiting)}")})"
         );
     }
     /// <inheritdoc/>
