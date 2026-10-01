@@ -252,6 +252,28 @@ public sealed class WorldNestedScreensLawTests {
         Assert.True(condition: WorldPortalVisibility.Sees(camera: Looking(from: new Vector3(x: 2f, y: 1f, z: -0.1f), at: new Vector3(x: 0f, y: 1f, z: -0.1f)), glass: glass));
         Assert.True(condition: WorldPortalVisibility.Sees(camera: (Looking(from: new Vector3(x: 0f, y: 1f, z: -0.1f), at: new Vector3(x: 0f, y: 1f, z: -1f)) with { Near = 0.05f }), glass: glass));
     }
+    // THE LAW: the slab spans from the face at its origin to its back plane one full depth behind, and a camera whose
+    // near plane clips either plane away still sees the slab through the other. Testing only one plane's four corners
+    // would cull a slab that is in view.
+    [Fact]
+    public void ASlabIsSeenThroughEitherPlaneOfItsCornersAlone() {
+        var glass = Screen(source: new WorldScreenSource.None());
+
+        CameraSnapshot Looking(float z, float towardZ) => (CameraSnapshot.LookAt(
+            fieldOfViewRadians: 1f,
+            position: new Vector3(x: 0f, y: 1f, z: z),
+            target: new Vector3(x: 0f, y: 1f, z: towardZ),
+            viewportHeight: 64,
+            viewportWidth: 64
+        ) with { Near = 0.2f });
+
+        // Behind the slab, looking at it: the back plane (z = -0.2) lies inside the near plane; only the face corners
+        // (z = 0) lie beyond it.
+        Assert.True(condition: WorldPortalVisibility.Sees(camera: Looking(towardZ: 1f, z: -0.3f), glass: glass));
+        // In front of the face, looking at it: the face corners lie inside the near plane; only the back corners lie
+        // beyond it.
+        Assert.True(condition: WorldPortalVisibility.Sees(camera: Looking(towardZ: -1f, z: 0.1f), glass: glass));
+    }
     // THE LAW: an authority can keep a session while its screen changes projection, camera or resolution. Its view
     // must reopen with those settings even when the session provider still holds the same destination.
     [Fact]
