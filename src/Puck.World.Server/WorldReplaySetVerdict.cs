@@ -21,7 +21,7 @@ public readonly record struct WorldReplayCrossingVerdict(ulong TransferId, strin
 /// crossing on any of its tapes is verified, so a tape that departs a traveler to a remote or untaped authority never
 /// reports as passing, however exactly its own trajectory replays.</summary>
 /// <param name="Primary">The recording's own verdict.</param>
-/// <param name="Companions">Each companion authority's verdict, in recorded order.</param>
+/// <param name="Companions">The verdict of each companion authority a crossing involves, in recorded order.</param>
 /// <param name="Crossings">Every crossing a tape in the set departed or landed, in pairing order.</param>
 public sealed record WorldReplaySetVerdict(WorldReplayVerdict Primary, IReadOnlyList<WorldReplayAuthorityVerdict> Companions, IReadOnlyList<WorldReplayCrossingVerdict> Crossings) {
     /// <summary>Gets whether every authority matched, ignoring crossings.</summary>
@@ -45,6 +45,34 @@ public sealed record WorldReplaySetVerdict(WorldReplayVerdict Primary, IReadOnly
         }
 
         return text.ToString();
+    }
+    /// <summary>Names every authority a tape of the set names as a crossing's source or destination: the tape's own
+    /// authority wherever it departed or landed a traveler, and the other half's authority it names.</summary>
+    /// <param name="tapes">The tapes of the set.</param>
+    /// <returns>The authorities a crossing in the set involves.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="tapes"/> is <see langword="null"/>.</exception>
+    public static IReadOnlySet<string> CrossingAuthorities(IEnumerable<WorldReplaySnapshot> tapes) {
+        ArgumentNullException.ThrowIfNull(argument: tapes);
+
+        var authorities = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var tape in tapes) {
+            foreach (var tick in tape.Ticks) {
+                foreach (var entry in tick.Authority) {
+                    switch (entry) {
+                        case WorldReplayEntry.Transfer { DepartedSlots.Count: > 0 } departure:
+                            _ = authorities.Add(item: tape.Authority);
+                            _ = authorities.Add(item: departure.Target);
+                            break;
+                        case WorldReplayEntry.Arrival arrival:
+                            _ = authorities.Add(item: tape.Authority);
+                            _ = authorities.Add(item: arrival.SourceAuthority);
+                            break;
+                    }
+                }
+            }
+        }
+        return authorities;
     }
     /// <summary>Pairs every crossing the tapes of one set carry. A departure is a source tape's committed transfer;
     /// an arrival is a destination tape's landed cohort; the two halves share the source authority and the

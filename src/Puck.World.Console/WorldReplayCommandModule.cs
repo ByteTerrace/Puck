@@ -209,7 +209,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.record",
-            description: "Arms deterministic recording (Immediate): replay.record <name> begins capturing the running session's per-tick server-input stream and starting state; replay.stop persists it. Refuses to arm, loudly, on any of THREE boot-anchored conditions this session: an addon has already had an admitted execution attempted (offline replay creates fresh guests at sim-counter zero, which cannot re-establish a guest's prior accumulated state), a screen machine has already stepped, or a screen op (insert/eject/select/options/link/unlink) has already applied — the latter two because offline replay reconstructs a FRESH WorldMachineHost from the tape's own definition snapshot, which can never recover a booted cartridge's accumulated core state or an already-landed screen op. Grant verb masks ride the shared tape leaf codec.",
+            description: "Arms deterministic recording (Immediate): replay.record <name> begins capturing the running session's per-tick server-input stream and starting state, and tapes every other row of the process beside it as one set (a row that cannot be taped is named on stderr); replay.stop persists the set. Refuses to arm, loudly, on any of THREE boot-anchored conditions this session: an addon has already had an admitted execution attempted (offline replay creates fresh guests at sim-counter zero, which cannot re-establish a guest's prior accumulated state), a screen machine has already stepped, or a screen op (insert/eject/select/options/link/unlink) has already applied — the latter two because offline replay reconstructs a FRESH WorldMachineHost from the tape's own definition snapshot, which can never recover a booted cartridge's accumulated core state or an already-landed screen op. Grant verb masks ride the shared tape leaf codec.",
             handler: (_, args) => Record(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
@@ -239,7 +239,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.verify",
-            description: "Replays a saved recording through a FRESH world and reports MATCH/MISMATCH (Immediate): replay.verify <name> rehydrates the boot-image starting state, re-drives the recorded stream offline, and compares the replayed tail hash against the recorded LIVE tail (a genuine live-vs-replay fidelity check).",
+            description: "Replays a saved recording through a FRESH world and reports MATCH/MISMATCH (Immediate): replay.verify <name> rehydrates the boot-image starting state, re-drives the recorded stream offline, and compares the replayed tail hash against the recorded LIVE tail (a genuine live-vs-replay fidelity check). Every row taped beside it is re-driven the same way, and every crossing between them is paired by its handoff token; a crossing whose other half is on a remote or untaped authority is NOT VERIFIED, and the verb fails unless every authority matches and every crossing is verified.",
             handler: (_, args) => Verify(args: args)
         );
         yield return CommandDefinition.WithWireArgs(

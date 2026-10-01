@@ -99,16 +99,22 @@ public sealed partial class WorldReplayTape {
 
         return [.. tapes];
     }
-    // Every tape in the set re-drives against its own recorded world. A companion row's seats re-resolve against this
-    // process's catalog: their pinned rates, not the catalog, drive the re-run.
+    // The tape and every companion holding a half of a crossing re-drive against their own recorded worlds; a
+    // companion no crossing names adds no evidence about any crossing and is not re-driven. A companion row's seats
+    // re-resolve against this process's catalog: their pinned rates, not the catalog, drive the re-run.
     private WorldReplaySetVerdict CompareSet(WorldReplaySnapshot recording) {
         var primary = Compare(recording: recording);
         var tapes = new List<(WorldReplaySnapshot Tape, WorldReplayVerdict Verdict)>(capacity: (recording.Companions.Count + 1)) {
             (recording, primary),
         };
         var companions = new List<WorldReplayAuthorityVerdict>(capacity: recording.Companions.Count);
+        var crossing = WorldReplaySetVerdict.CrossingAuthorities(tapes: [recording, .. recording.Companions]);
 
         foreach (var companion in recording.Companions) {
+            if (!crossing.Contains(item: companion.Authority)) {
+                continue;
+            }
+
             var verdict = Compare(recording: companion);
 
             tapes.Add(item: (companion, verdict));
