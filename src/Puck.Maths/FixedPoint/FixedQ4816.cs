@@ -983,9 +983,9 @@ public readonly partial record struct FixedQ4816(long Value)
         if (built == power) {
             if (exponent > 0L) {
                 if (!TryRoundShift(
+                    rounded: out rounded,
                     shift: shift,
-                    value: wide,
-                    rounded: out rounded
+                    value: wide
                 )) {
                     return saturated;
                 }
@@ -1148,7 +1148,7 @@ public readonly partial record struct FixedQ4816(long Value)
         var bit = cut & 63;
         var top = ((0 == bit)
             ? divisor[limb]
-            : ((divisor[limb] >> bit) | (divisor[(limb + 1)] << (64 - bit))));
+            : (divisor[limb] >> bit) | (divisor[(limb + 1)] << (64 - bit)));
         var numerator = (UInt128.One << (exponent - cut));
         ulong estimate;
         ulong estimateRemainder;

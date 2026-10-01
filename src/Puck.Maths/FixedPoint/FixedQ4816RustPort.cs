@@ -72,7 +72,7 @@ public static class FixedQ4816RustPort {
         long[] bases = [98304L, 49152L, 65543L, 205887L, 1L, 12345678901L];
 
         foreach (var magnitude in bases) {
-            foreach (var x in (long[])[magnitude, -magnitude]) {
+            foreach (var x in ((long[])[magnitude, -magnitude])) {
                 for (var n = -32L; (n <= 32L); ++n) {
                     if ((n >= -1L) && (n <= 1L)) {
                         continue;

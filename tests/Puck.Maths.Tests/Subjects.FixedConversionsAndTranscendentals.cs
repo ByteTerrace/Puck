@@ -1468,7 +1468,7 @@ internal static partial class Subjects {
         // large exponents a base near one admits and results up to 2⁴⁰, where an exponent error shows as many ULP.
         var limit = ((long)BigInteger.Min(
             left: (BigInteger.One << 47),
-            right: ((new BigInteger(value: 40L) << (FixedQ4816.FractionBitCount + FixedQ4816.FractionBitCount + LogarithmGuardBitCount)) / BigInteger.Max(
+            right: ((new BigInteger(value: 40L) << ((FixedQ4816.FractionBitCount + FixedQ4816.FractionBitCount) + LogarithmGuardBitCount)) / BigInteger.Max(
                 left: logarithmScaled,
                 right: BigInteger.One
             ))
@@ -1501,7 +1501,7 @@ internal static partial class Subjects {
         // 2^72, floored and ceilinged to the 2^48 the exponential enclosure takes.
         var first = (logarithm.Low * exponentRaw);
         var second = (logarithm.High * exponentRaw);
-        var dropped = ((FixedQ4816.FractionBitCount + FixedQ4816.FractionBitCount + LogarithmGuardBitCount) - ExponentBitCount);
+        var dropped = (((FixedQ4816.FractionBitCount + FixedQ4816.FractionBitCount) + LogarithmGuardBitCount) - ExponentBitCount);
         var low = Oracles.EncloseExp2(
             scaledExponent: (BigInteger.Min(
                 left: first,
