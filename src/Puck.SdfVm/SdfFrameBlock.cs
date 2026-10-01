@@ -76,11 +76,6 @@ public static class SdfFrameBlock {
     private static readonly int ViewportCount = Offset(member: SdfWorldPackage.ViewportCount);
     private static readonly int WorkCounterRow = Offset(member: ShaderWorkCounters.Row);
 
-    /// <summary>The nearest forward distance, in world units, a view's surfaces are rendered from (<see cref="NearOf"/>):
-    /// the mesh pass's reversed-Z depth needs a positive near. The kernels read it as <c>SDF_MINIMUM_NEAR</c>, which
-    /// <see cref="SdfIsaHlsl"/> generates from this value.</summary>
-    public const float MinimumNear = 0.02f;
-
     /// <summary>Gets the bytes of the pass block, a multiple of 16.</summary>
     public static int SizeBytes => ((int)Layout.SizeBytes);
 
@@ -123,16 +118,16 @@ public static class SdfFrameBlock {
     public static void WriteWorkCounterRow(Span<byte> block, uint row) =>
         WriteUInt32(block: block, offset: WorkCounterRow, value: row);
     /// <summary>Returns the forward distance of the plane a view's surfaces are rendered from: the camera's own
-    /// <see cref="CameraSnapshot.Near"/>, or <see cref="MinimumNear"/> when that is nearer. The kernels start every
+    /// <see cref="CameraSnapshot.Near"/>, or <see cref="SdfWorldPackage.MinimumNear"/> when that is nearer. The kernels start every
     /// surface march where its ray crosses this plane and the mesh pass clips there
     /// (<see cref="ViewProjection.Create"/>'s <c>near</c>). The pass block carries the camera's own near distance, which
     /// the bounded volumes start from, and the kernels apply this floor themselves.</summary>
     /// <param name="camera">The view's camera.</param>
-    /// <returns>The plane's forward distance, in world units; at least <see cref="MinimumNear"/>.</returns>
+    /// <returns>The plane's forward distance, in world units; at least <see cref="SdfWorldPackage.MinimumNear"/>.</returns>
     public static float NearOf(in CameraSnapshot camera) =>
         MathF.Max(
             x: camera.Near,
-            y: MinimumNear
+            y: SdfWorldPackage.MinimumNear
         );
     /// <summary>Writes a view's values into a pass block: its render extent and tile grid, the frame's bound screens,
     /// instance-mask width and mesh draws the tables packed, the view's camera and quality

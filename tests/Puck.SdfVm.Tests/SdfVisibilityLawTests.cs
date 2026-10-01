@@ -12,7 +12,7 @@ namespace Puck.SdfVm.Tests;
 /// slot past them is refused by name. A record is current exactly inside its frame's dispatch box.
 /// </summary>
 public sealed partial class SdfVisibilityLawTests {
-    private static string Root => RepositoryPaths.Resolve(relativePath: SdfWorldInterfaces.KernelDirectory);
+    private static string Root => RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory);
 
     [Fact]
     public void EveryTableSlotSurvivesEachLaneThatCarriesIt() {

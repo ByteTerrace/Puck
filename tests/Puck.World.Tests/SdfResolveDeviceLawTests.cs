@@ -98,7 +98,7 @@ public sealed class SdfResolveDeviceLawTests {
 
             services.Bindings.WriteConstantBuffer(descriptorSetHandle: frameSet, binding: 0, arrayElement: 0, bufferHandle: frame.BufferHandle, bufferSize: frame.SizeBytes);
             services.Bindings.WriteConstantBuffer(descriptorSetHandle: set, binding: 0, arrayElement: 0, bufferHandle: constants.BufferHandle, bufferSize: constants.SizeBytes);
-            uint Binding(string member) => SdfWorldInterfaces.BindingOf(layout: parameters.Layout, member: member);
+            uint Binding(string member) => SdfKernelInterfaces.BindingOf(layout: parameters.Layout, member: member);
             services.Bindings.WriteSampledImage(descriptorSetHandle: set, binding: Binding(member: SdfWorldPackage.CurrentColor), arrayElement: 0, imageViewHandle: sourceView);
             services.Bindings.WriteStorageImage(descriptorSetHandle: set, binding: Binding(member: SdfWorldPackage.Output), arrayElement: 0, imageViewHandle: output.ImageViewHandle);
             services.Bindings.WriteBuffer(descriptorSetHandle: set, binding: Binding(member: ShaderWorkCounters.Buffer), bufferHandle: counters.BufferHandle,

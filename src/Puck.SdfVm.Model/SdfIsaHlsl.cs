@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Puck.Abstractions.Gpu;
+using Puck.Shaders;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -20,9 +21,10 @@ namespace Puck.SdfVm;
 /// <para>The instruction set's fingerprint (<see cref="DescribeFingerprint"/>) names its whole encoding: the generated
 /// text, which states every enum, lane accessor, stride and constant the kernels read, and the encoding the model's
 /// builder and packer produce (<see cref="SdfEncodingProbe.Describe()"/>: where every field, bitfield and table entry
-/// lands). <c>puck shaders generate</c> records it (<see cref="SdfIsaFingerprint"/>, read as <see cref="Fingerprint"/>).
-/// The SDF kernels' interfaces carry it as their stamp (<see cref="Stamp"/>, <see cref="SdfWorldInterfaces"/>), so every kernel's bytecode reflects the
-/// instruction set it was compiled against, and a reload refuses kernels whose stamp is not this host's.</para>
+/// lands). <c>puck shaders generate</c> records it in <c>SdfIsaFingerprint</c> (<see cref="FingerprintSourcePath"/>), which
+/// the engine reads. The SDF kernels' interfaces carry it as their stamp (<see cref="StampOf"/>,
+/// <see cref="SdfKernelInterfaces"/>), so every kernel's bytecode reflects the instruction set it was compiled against,
+/// and a reload refuses kernels whose stamp is not this host's.</para>
 /// </summary>
 public static class SdfIsaHlsl {
     /// <summary>The file name of the generated include, which sits with the other generated declarations in
@@ -31,16 +33,11 @@ public static class SdfIsaHlsl {
 
     private const string Guard = "SDF_ISA_HLSLI";
 
-    /// <summary>The repository-relative path of the generated source that records <see cref="Fingerprint"/>.</summary>
+    /// <summary>The repository-relative path of the generated source that records the fingerprint
+    /// (<see cref="DescribeFingerprint"/>) as <c>SdfIsaFingerprint.Value</c> in <c>Puck.SdfVm</c>, so a host names its
+    /// instruction set without describing the encoding. <c>--check</c> holds the record to
+    /// <see cref="DescribeFingerprint"/>.</summary>
     public const string FingerprintSourcePath = "src/Puck.SdfVm/SdfIsaFingerprint.cs";
-
-    /// <summary>Gets the fingerprint of this build's instruction set, as <c>puck shaders generate</c> recorded it when it
-    /// wrote the kernels' declarations (<see cref="SdfIsaFingerprint.Value"/>), so a host names its instruction set
-    /// without describing the encoding. <c>--check</c> holds the record to <see cref="DescribeFingerprint"/>.</summary>
-    public static uint Fingerprint => SdfIsaFingerprint.Value;
-    /// <summary>Gets the stamp the SDF kernels' interfaces carry for this build's instruction set: <see cref="StampOf"/>
-    /// of <see cref="Fingerprint"/>.</summary>
-    public static string Stamp { get; } = StampOf(fingerprint: Fingerprint);
 
     /// <summary>Returns the fingerprint of the model's instruction set: <see cref="FingerprintOf"/> of the generated
     /// include and the model's described encoding. It moves with any member, value, lane or constant the kernels read
@@ -51,7 +48,7 @@ public static class SdfIsaHlsl {
             encoding: SdfEncodingProbe.Describe(),
             include: Generate()
         );
-    /// <summary>Generates the source that records a fingerprint as <see cref="SdfIsaFingerprint.Value"/>.</summary>
+    /// <summary>Generates the source that records a fingerprint as <c>SdfIsaFingerprint.Value</c>.</summary>
     /// <param name="fingerprint">The fingerprint (<see cref="DescribeFingerprint"/>).</param>
     /// <returns>The C# text.</returns>
     public static string GenerateFingerprintSource(uint fingerprint) =>
@@ -244,7 +241,7 @@ public static class SdfIsaHlsl {
         );
         declarations.Real(
             name: "SDF_MINIMUM_NEAR",
-            value: SdfFrameBlock.MinimumNear
+            value: SdfWorldPackage.MinimumNear
         );
         declarations.Count(
             name: "SDF_NOISE_PERIOD_CELLS",

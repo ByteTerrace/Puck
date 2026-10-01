@@ -11,7 +11,7 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfLightInterfaceLawTests {
     private const string Interface = "shade/sdf-light.hlsli";
 
-    private static string Root => RepositoryPaths.Resolve(relativePath: SdfWorldInterfaces.KernelDirectory);
+    private static string Root => RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory);
 
     [Fact]
     public void OnlyTheLightInterfaceBranchesOnALightsKind() {

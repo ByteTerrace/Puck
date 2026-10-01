@@ -93,9 +93,13 @@ public sealed record RenderGraphPackagePort(
             )
         );
     }
-
-    // What a port or resource carries, as a refusal names it: the kind, and a buffer's stride and count.
-    internal static string Describe(ShaderPipelineResourceKind kind, uint? strideBytes, IReadOnlyList<ShaderPipelineCountTerm>? count) {
+    /// <summary>Describes what a port or resource carries, as a refusal names it: the kind, and a buffer's stride and
+    /// count.</summary>
+    /// <param name="kind">The resource kind.</param>
+    /// <param name="strideBytes">A buffer's element stride, or <see langword="null"/>.</param>
+    /// <param name="count">A buffer's element count, or <see langword="null"/>.</param>
+    /// <returns>The description.</returns>
+    public static string Describe(ShaderPipelineResourceKind kind, uint? strideBytes, IReadOnlyList<ShaderPipelineCountTerm>? count) {
         if (kind != ShaderPipelineResourceKind.Buffer) {
             return kind.ToString();
         }
@@ -122,20 +126,20 @@ public sealed record RenderGraphPackagePort(
 /// config schema and, for a post-process package, the stages it draws with. It is the one declaration of a package's
 /// interface: the planner lays a pass of it out from it (<see cref="ShaderPipelineParameterLayout.ForPackage"/>),
 /// <c>puck shaders generate</c> writes its checked-in declarations from it, and its recorder binds by it.</summary>
-/// <param name="Id">The id a <see cref="RenderGraphPackagePass"/> names.</param>
+/// <param name="Id">The id a <c>RenderGraphPackagePass</c> names.</param>
 /// <param name="Inputs">The input ports, in port order: what each version a pass of it reads carries, and the stage that
 /// reads it.</param>
 /// <param name="Outputs">The output ports, in port order: what each version a pass of it writes carries, and the stage
 /// that writes it, at least one.</param>
 /// <param name="Members">The pass-group members the package's shaders read beside the extent and config, in order: the
-/// values its recorder writes into the pass block each frame (<see cref="RenderGraphPackageRecording.PassBlock"/>)
+/// values its recorder writes into the pass block each frame (<c>RenderGraphPackageRecording.PassBlock</c>)
 /// and the resources it binds in the pass group's set. Every member is in <see cref="ShaderInterfaceGroup.Pass"/>; the
 /// planner lays them out with the frame group (<see cref="ShaderPipelineParameterLayout.ForPackage"/>).</param>
 /// <param name="Summary">What the package renders.</param>
-/// <param name="Config">The config schema a pass of it binds its <see cref="RenderGraphPackagePass.Config"/> against,
+/// <param name="Config">The config schema a pass of it binds its <c>RenderGraphPackagePass.Config</c> against,
 /// name to field, or <see langword="null"/> when it takes no config.</param>
 /// <param name="Stages">The deployed stages of a post-process package, which samples its one input image in a fullscreen
-/// draw into its one output and which <see cref="PostProcessPackage"/> serves, or <see langword="null"/> for any other
+/// draw into its one output and which <c>PostProcessPackage</c> serves, or <see langword="null"/> for any other
 /// package. A world's <c>views.post</c> rows name post-process packages alone.</param>
 /// <param name="PushesIndex">Whether the package's pipelines push one 4-byte index, which its interface declares
 /// (<see cref="ShaderInterface.PushesIndex"/>) and its shaders read as <c>pushedIndex.index</c>.</param>
@@ -155,7 +159,7 @@ public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPack
 /// stand for the package's ports (<see cref="RenderGraphPackageFragment.InputVersions"/>,
 /// <see cref="RenderGraphPackageFragment.OutputVersions"/>).</summary>
 /// <param name="Name">The pass's name within the fragment, which its recorder is created for
-/// (<see cref="RenderGraphPackageRecorderContext.Part"/>) and which names the spliced pass after the pass that runs the
+/// (<c>RenderGraphPackageRecorderContext.Part</c>) and which names the spliced pass after the pass that runs the
 /// package.</param>
 /// <param name="Inputs">The versions it reads.</param>
 /// <param name="InputAccesses">How it reads each of <paramref name="Inputs"/>, one read access per input.</param>
@@ -165,7 +169,7 @@ public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPack
 /// for one invocation per pixel, fixed groups, or an indirect dispatch whose arguments one of its versions holds.</param>
 /// <param name="CountsKernelWork">Whether its kernels count their own work into the node's counter buffers
 /// (<see cref="GpuKernelCounters"/>): the node then clears and copies them around its frame's passes, and hands the pass
-/// its row (<see cref="RenderGraphPackageRecording.WorkCounters"/>).</param>
+/// its row (<c>RenderGraphPackageRecording.WorkCounters</c>).</param>
 /// <param name="Members">A part's interface members, or null for its package's common members.</param>
 public sealed record RenderGraphFragmentPass(string Name, IReadOnlyList<ResourceReference> Inputs, IReadOnlyList<RenderGraphPortAccess> InputAccesses, IReadOnlyList<ResourceReference> Outputs, IReadOnlyList<RenderGraphPortAccess> OutputAccesses, ShaderPipelineDispatch? Dispatch = null, bool CountsKernelWork = false, IReadOnlyList<ShaderInterfaceMember>? Members = null);
 /// <summary>The passes a package runs as. The graph compiler splices them into a graph in place of each pass naming the
@@ -198,7 +202,7 @@ public sealed record RenderGraphPackageStages(string Directory, string Vertex, s
 public sealed class RenderGraphPackageCatalog {
     /// <summary>The format of the engine's working images: every SDF view's color, and every version of a world's root graph
     /// that the views are placed into and the post passes and the overlay draw over. A float image, one at SDR white with
-    /// headroom above it, which the display encode quantizes for the display or a capture (<see cref="SurfaceEncoder"/>).</summary>
+    /// headroom above it, which the display encode quantizes for the display or a capture (<c>SurfaceEncoder</c>).</summary>
     public const GpuPixelFormat WorkingFormat = GpuPixelFormat.R16G16B16A16Float;
     /// <summary>The id of the SDF world view: primary traversal, surfaces, ambient occlusion and lighting of one view,
     /// from the instance's camera, run as the fragment <see cref="SdfWorldPackage.NativeFragment"/> declares. The screens it

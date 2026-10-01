@@ -5,7 +5,7 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// The build and the runtime shader compiler run one DXC recipe. <c>build/Shaders.targets</c> compiles every stage
-/// source with the options <c>build/ShaderRecipe.props</c> holds for its stage and target, and that file is
+/// source with the options <c>build/ShaderRecipe.targets</c> holds for its stage and target, and that file is
 /// <see cref="ShaderCompiler.GenerateBuildRecipe"/>'s output, so a stage source compiles with exactly the arguments
 /// <see cref="ShaderCompiler.StepsOf"/> gives the compiler, followed by the output and the source.
 /// </summary>
@@ -49,7 +49,8 @@ public sealed partial class ShaderBuildRecipeLawTests {
         }
     }
 
-    // One build invocation: DXC, a recipe property, and -Fo the stage source's bytecode beside it, then the source.
-    [GeneratedRegex(pattern: "Command=\"&quot;\\$\\(DxcCommand\\)&quot; \\$\\((?<property>PuckDxc\\w+)\\) -Fo &quot;%\\((?<item>\\w+)\\.RootDir\\)%\\(\\k<item>\\.Directory\\)%\\(\\k<item>\\.Filename\\)\\.(?<extension>spv|dxil)&quot; &quot;%\\(\\k<item>\\.FullPath\\)&quot;\"")]
+    // One build invocation: DXC, a recipe property, and -Fo the stage source's bytecode beside it under this run's
+    // temporary name, which the sidecar task moves into place, then the source.
+    [GeneratedRegex(pattern: "Command=\"&quot;\\$\\(DxcCommand\\)&quot; \\$\\((?<property>PuckDxc\\w+)\\) -Fo &quot;%\\((?<item>\\w+)\\.RootDir\\)%\\(\\k<item>\\.Directory\\)%\\(\\k<item>\\.Filename\\)\\.(?<extension>spv|dxil)\\.\\$\\(_PuckShaderToken\\)\\.tmp&quot; &quot;%\\(\\k<item>\\.FullPath\\)&quot;\"")]
     private static partial Regex ExecCommand();
 }

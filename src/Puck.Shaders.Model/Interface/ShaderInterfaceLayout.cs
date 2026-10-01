@@ -123,7 +123,7 @@ public sealed class ShaderInterfaceLayout {
     /// its number with its kind and descriptor count, visible to the pipeline's stages, and the 4-byte index pushed when
     /// the interface declares one (<see cref="ShaderInterface.PushesIndex"/>).</summary>
     /// <param name="stages">The pipeline's shader stages, from its pass kind
-    /// (<see cref="ShaderPipelinePassKinds.Stages"/>).</param>
+    /// (<c>ShaderPipelinePassKinds.Stages</c>).</param>
     /// <returns>The pipeline layout.</returns>
     /// <exception cref="ArgumentException"><paramref name="stages"/> is not compute alone or graphics stages
     /// alone.</exception>
@@ -156,8 +156,8 @@ public sealed class ShaderInterfaceLayout {
     /// <para>A stamped interface (<see cref="ShaderInterface.Stamp"/>) holds the module to its stamp before anything else:
     /// the module must read its pass block, and under the stamped name, since a module that reads none carries no stamp
     /// and one whose pass block carries another stamp was compiled from other declarations.</para></summary>
-    /// <param name="reflected">The module's bindings, as <see cref="SpirvInterfaceReader"/> or
-    /// <see cref="DxilInterfaceReader"/> reads them.</param>
+    /// <param name="reflected">The module's bindings, as <c>SpirvInterfaceReader</c> or
+    /// <c>DxilInterfaceReader</c> reads them.</param>
     /// <returns>The disagreement, or <see langword="null"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reflected"/> is <see langword="null"/>.</exception>
     public string? Mismatch(IReadOnlyList<ShaderInterfaceBinding> reflected) {
@@ -186,7 +186,7 @@ public sealed class ShaderInterfaceLayout {
 
         return $"the module reads {binding}; interface '{Interface.Name}' ({Interface.Hash}) lays out {((expected is null)
             ? $"no {(binding.Pushed ? "pushed " : "")}{binding.Kind} at set {binding.Set} binding {binding.Binding}"
-            : expected.ToString())}{(binding.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: SpirvInterfaceReader.UnnamedPrefix)
+            : expected.ToString())}{(binding.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: ShaderInterfaceBinding.UnnamedPrefix)
                 ? $"; the module names no resource at set {binding.Set} binding {binding.Binding}, so which resource it binds there cannot be told; compile it with the debug names DXC emits"
                 : "")}.";
     }

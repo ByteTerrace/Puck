@@ -508,8 +508,8 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
                     bufferSize: bakeBlock.SizeBytes,
                     descriptorSetHandle: bakeSet
                 );
-                WriteBuffer(buffer: requestBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfWorldInterfaces.BakeRequest, set: bakeSet);
-                WriteBuffer(buffer: m_brickPoolBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfWorldInterfaces.BakePool, set: bakeSet);
+                WriteBuffer(buffer: requestBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfKernelInterfaces.BakeRequest, set: bakeSet);
+                WriteBuffer(buffer: m_brickPoolBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfKernelInterfaces.BakePool, set: bakeSet);
             }
         }
 
@@ -523,7 +523,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // Writes a buffer at an interface member's binding, as the kind its member declares and at its element's stride, the
     // structured view the kernel's generated declaration reads on Direct3D 12.
     private void WriteBuffer(nint set, ShaderInterfaceLayout layout, string member, IGpuBuffer buffer) {
-        var resource = SdfWorldInterfaces.ResourceOf(layout: layout, member: member);
+        var resource = SdfKernelInterfaces.ResourceOf(layout: layout, member: member);
 
         m_bindings.WriteBuffer(
             binding: resource.Binding,

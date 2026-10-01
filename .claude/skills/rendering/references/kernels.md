@@ -134,7 +134,7 @@ march by (`sdfMeshSampleAt`); primary alone reads it, and records a mesh hit's
 draw and triangle for the later stages; the target and its depth attachment are transient fragment
 resources the instance allocates with its graph. The pass draws with its own
 `sdf-mesh` interface, one set per frame slot from a pool of its own, pushes the
-draw (`SdfWorldInterfaces.MeshPushedIndex`), and skips a frame with no mesh
+draw (`SdfKernelInterfaces.MeshPushedIndex`), and skips a frame with no mesh
 draws (`IRenderGraphPackageRecorder.Skips`), recording neither its draws nor its
 target and depth barriers, when the pass block's `meshDraws` tells the hit
 passes not to read the target. A view the cadence gate declares unchanged records none of
@@ -221,7 +221,7 @@ together. `SdfViewsKernelVariantLawTests` pins the host half.
 
 No SDF kernel declares a binding or a register by hand. Every per-view kernel
 includes `isa/sdf-world.interface.hlsli` (through `field/sdf-vm.hlsli`) and the baker
-`isa/sdf-bricks.interface.hlsli`, both generated from `SdfWorldInterfaces` and
+`isa/sdf-bricks.interface.hlsli`, both generated from `SdfKernelInterfaces` and
 owned by `puck shaders generate`; the pass-pipeline cache creates each pipeline from its
 interface's layout (`SdfWorldPipelines.Acquire`), and the tables and recorders write every
 binding by member name. A binding's

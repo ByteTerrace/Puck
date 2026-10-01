@@ -12,7 +12,7 @@ namespace Puck.SdfVm.Tests;
 /// pass's row, never a count of its own making.
 /// </summary>
 public sealed partial class SdfWorkCountingLawTests {
-    private static string Root => RepositoryPaths.Resolve(relativePath: SdfWorldInterfaces.KernelDirectory);
+    private static string Root => RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory);
     private static IEnumerable<string> Sources => Directory.EnumerateFiles(path: Root, searchPattern: "*.hlsl*", searchOption: SearchOption.AllDirectories)
         .Select(selector: path => Path.GetRelativePath(path: path, relativeTo: Root).Replace(newChar: '/', oldChar: '\\'))
         .Where(predicate: static path => (

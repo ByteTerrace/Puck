@@ -10,7 +10,7 @@ namespace Puck.Shaders;
 /// The config-schema binder every <c>puck.*.v1</c> manifest with a name → <see cref="ShaderConfigField"/>
 /// <c>config</c> block shares: validates a document's authored configuration, resolves every absent field to its
 /// default, and emits the schema as JSON Schema. A render graph package's config (<see cref="RenderGraphPackage.Config"/>),
-/// a document pass's and a <see cref="ProbeKindManifest"/>'s all bind through these rules, never a second copy.
+/// a document pass's and a <c>ProbeKindManifest</c>'s all bind through these rules, never a second copy.
 /// </summary>
 public static class ShaderConfigBinding {
     private static string Describe(ShaderConfigField field) {

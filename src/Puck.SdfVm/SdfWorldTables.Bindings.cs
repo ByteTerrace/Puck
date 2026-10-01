@@ -45,7 +45,7 @@ public sealed partial class SdfWorldTables {
     }
     // Returns the binding, in its group, of a resource of the world interface.
     internal static uint WorldBinding(string member) =>
-        SdfWorldInterfaces.BindingOf(
+        SdfKernelInterfaces.BindingOf(
             layout: SdfWorldInterfaces.WorldLayout,
             member: member
         );

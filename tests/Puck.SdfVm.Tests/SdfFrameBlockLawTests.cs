@@ -276,10 +276,10 @@ public sealed class SdfFrameBlockLawTests {
     public void ThePassBlockCarriesTheCamerasOwnNearAndTheSurfacesRenderFromTheFloorAtLeast() {
         Assert.Matches(
             actualString: SdfIsaHlsl.Generate(),
-            expectedRegexPattern: $@"(?m)^#define SDF_MINIMUM_NEAR +{System.Text.RegularExpressions.Regex.Escape(str: SdfFrameBlock.MinimumNear.ToString(format: "R", provider: System.Globalization.CultureInfo.InvariantCulture))}$"
+            expectedRegexPattern: $@"(?m)^#define SDF_MINIMUM_NEAR +{System.Text.RegularExpressions.Regex.Escape(str: SdfWorldPackage.MinimumNear.ToString(format: "R", provider: System.Globalization.CultureInfo.InvariantCulture))}$"
         );
 
-        foreach (var (near, surfaces) in ((ReadOnlySpan<(float, float)>)[(0f, SdfFrameBlock.MinimumNear), (0.01f, SdfFrameBlock.MinimumNear), (8.9f, 8.9f)])) {
+        foreach (var (near, surfaces) in ((ReadOnlySpan<(float, float)>)[(0f, SdfWorldPackage.MinimumNear), (0.01f, SdfWorldPackage.MinimumNear), (8.9f, 8.9f)])) {
             var authored = Frame();
             var frame = (authored with { Views = [(authored.Views[0] with { Camera = (authored.Views[0].Camera with { Near = near }) })] });
             var block = new byte[SdfFrameBlock.SizeBytes];

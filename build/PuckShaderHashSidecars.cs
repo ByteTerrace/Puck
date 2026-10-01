@@ -2,14 +2,21 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
 
 using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
 
 /// <summary>
-/// Writes a "&lt;bytecode-file&gt;.hash" sidecar beside each shader bytecode file compiled this pass, recording
+/// Publishes each shader bytecode file compiled this pass and writes a "&lt;bytecode-file&gt;.hash" sidecar beside it, recording
 /// a source-side hash (the source <c>.hlsl</c> concatenated with every <c>ShaderInclude</c> item, in item
 /// order — a real streamed byte concatenation) and a bytecode-side hash of the compiled file itself.
+/// <para>DXC writes each file to a temporary name carrying the run's <see cref="Token"/>, and this task moves it into
+/// place whole, then replaces the sidecar whole, so no reader in this or another build ever sees half a file. Two builds
+/// of one checkout (two test runs, a build beside a canary's World build) compile the same sources to the same bytes,
+/// so whichever publishes last leaves a consistent pair. A replace refused while another process holds the file (a
+/// concurrent reader, an antivirus scan of a file just written) is retried (<see cref="PuckShaderHashing.Retry"/>).</para>
 /// </summary>
 /// <remarks>
 /// Runs once per build over the whole item list at once, in real C# compiled by <c>RoslynCodeTaskFactory</c>
@@ -23,12 +30,19 @@ public sealed class PuckWriteShaderHashSidecars : Task {
     public ITaskItem[] BytecodeFiles { get; set; } = Array.Empty<ITaskItem>();
     /// <summary>The shared <c>ShaderInclude</c> items every source may depend on, in item order.</summary>
     public ITaskItem[] Includes { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>The token of this run's temporary bytecode names: DXC wrote each file as
+    /// "&lt;bytecode-file&gt;.&lt;token&gt;.tmp".</summary>
+    public string Token { get; set; } = "";
 
     public override bool Execute() {
         foreach (var bytecode in BytecodeFiles) {
             var bytecodePath = bytecode.GetMetadata(metadataName: "FullPath");
             var sourcePath = bytecode.GetMetadata(metadataName: "SourcePath");
+            var compiledPath = (((bytecodePath + ".") + Token) + ".tmp");
 
+            if (File.Exists(path: compiledPath)) {
+                PuckShaderHashing.Publish(destinationPath: bytecodePath, log: Log, temporaryPath: compiledPath);
+            }
             if (!File.Exists(path: bytecodePath) || !File.Exists(path: sourcePath)) {
                 continue;
             }
@@ -43,11 +57,7 @@ public sealed class PuckWriteShaderHashSidecars : Task {
 
             try {
                 File.WriteAllText(contents: $"source:{sourceHash}\nbytecode:{bytecodeHash}\n", path: temporaryPath);
-                if (File.Exists(path: sidecarPath)) {
-                    File.Replace(destinationBackupFileName: null, destinationFileName: sidecarPath, sourceFileName: temporaryPath);
-                } else {
-                    File.Move(destFileName: sidecarPath, sourceFileName: temporaryPath);
-                }
+                PuckShaderHashing.Publish(destinationPath: sidecarPath, log: Log, temporaryPath: temporaryPath);
             } finally {
                 if (File.Exists(path: temporaryPath)) {
                     File.Delete(path: temporaryPath);
@@ -194,6 +204,61 @@ public sealed class PuckRemoveOrphanedShaderBytecode : Task {
 
 /// <summary>Shared hashing helpers for the shader-hash-sidecar tasks above.</summary>
 internal static class PuckShaderHashing {
+    private const int Attempts = 20;
+
+    /// <summary>Runs a file operation, retrying it while another process holds the file: a sharing violation or a refused
+    /// replace (<see cref="IOException"/>, <see cref="UnauthorizedAccessException"/>) waits a little longer each time, up
+    /// to about ten seconds in all, and is rethrown after the last attempt.</summary>
+    public static T Retry<T>(Func<T> operation, TaskLoggingHelper log, string path) {
+        for (var attempt = 1; ; attempt++) {
+            try {
+                return operation();
+            } catch (Exception error) when ((((error is IOException) || (error is UnauthorizedAccessException)) && (attempt < Attempts))) {
+                log?.LogMessage(importance: MessageImportance.Low, message: $"Retrying '{path}' (attempt {attempt}): {error.Message}");
+                Thread.Sleep(millisecondsTimeout: (50 * attempt));
+            }
+        }
+    }
+    /// <summary>Moves a complete temporary file over its destination, whole: a reader sees the old file or the new one,
+    /// never part of either. A destination another publisher created meanwhile is replaced on the next attempt.</summary>
+    public static void Publish(string temporaryPath, string destinationPath, TaskLoggingHelper log) {
+        Retry(
+            log: log,
+            operation: () => {
+                if (File.Exists(path: destinationPath)) {
+                    File.Replace(destinationBackupFileName: null, destinationFileName: destinationPath, sourceFileName: temporaryPath);
+                } else {
+                    File.Move(destFileName: destinationPath, sourceFileName: temporaryPath);
+                }
+
+                return true;
+            },
+            path: destinationPath
+        );
+    }
+    /// <summary>Reads a whole file while letting a publisher replace it, so a reader never refuses a concurrent build's
+    /// replace and never holds one up; an open refused mid-replace is retried.</summary>
+    public static byte[] ReadAllBytes(string path) =>
+        Retry(log: null, operation: () => ReadOnce(path: path), path: path);
+
+    private static byte[] ReadOnce(string path) {
+        using (var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: path, share: FileShare.ReadWrite | FileShare.Delete)) {
+            var bytes = new byte[stream.Length];
+            var read = 0;
+
+            while (read < bytes.Length) {
+                var count = stream.Read(bytes, read, (bytes.Length - read));
+
+                if (count == 0) {
+                    throw new IOException(message: $"'{path}' ended early while it was read.");
+                }
+                read += count;
+            }
+
+            return bytes;
+        }
+    }
+
     /// <summary>Streams <paramref name="firstPath"/> followed by every item in <paramref name="includes"/>, in
     /// order, through one SHA-256 instance — a real byte concatenation, not a hash-of-hashes. Carriage returns are
     /// dropped before hashing so the hash is a function of the committed text, not of the checkout's line-ending
@@ -213,9 +278,7 @@ internal static class PuckShaderHashing {
     /// <summary>Hashes one file's raw bytes.</summary>
     public static string HashFile(string path) {
         using (var sha256 = SHA256.Create()) {
-            using (var stream = File.OpenRead(path: path)) {
-                return ToHex(bytes: sha256.ComputeHash(inputStream: stream));
-            }
+            return ToHex(bytes: sha256.ComputeHash(buffer: ReadAllBytes(path: path)));
         }
     }
     /// <summary>Reads a two-line "source:&lt;hex&gt;" / "bytecode:&lt;hex&gt;" sidecar.</summary>
@@ -223,7 +286,7 @@ internal static class PuckShaderHashing {
         var sourceHash = "";
         var bytecodeHash = "";
 
-        foreach (var line in File.ReadAllLines(path: path)) {
+        foreach (var line in Encoding.UTF8.GetString(bytes: ReadAllBytes(path: path)).Split('\n')) {
             if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "source:")) {
                 sourceHash = line.Substring(startIndex: "source:".Length).Trim();
             } else if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "bytecode:")) {
@@ -249,7 +312,7 @@ internal static class PuckShaderHashing {
     }
 
     private static void AppendFile(CryptoStream destination, string path) {
-        var bytes = File.ReadAllBytes(path: path);
+        var bytes = ReadAllBytes(path: path);
         var count = 0;
 
         for (var i = 0; (i < bytes.Length); i++) {
