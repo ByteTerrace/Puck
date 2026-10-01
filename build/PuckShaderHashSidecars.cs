@@ -135,10 +135,10 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
 
         if (Directory.Exists(path: directory)) {
             foreach (var extension in new[] { "*.spv", "*.dxil" }) {
-                foreach (var path in Directory.EnumerateFiles(path: directory, searchPattern: extension, searchOption: SearchOption.AllDirectories)) {
+                foreach (var path in Directory.EnumerateFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: extension)) {
                     var item = new TaskItem(itemSpec: path);
 
-                    item.SetMetadata(metadataName: "SourcePath", metadataValue: Path.ChangeExtension(path: path, extension: ".hlsl"));
+                    item.SetMetadata(metadataName: "SourcePath", metadataValue: Path.ChangeExtension(extension: ".hlsl", path: path));
                     collected.Add(item: item);
                 }
             }
@@ -185,7 +185,7 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
         }
 
         foreach (var bytecode in collected) {
-            bytecode.ItemSpec = bytecode.ItemSpec.Substring(startIndex: projectRoot.Length).Replace(oldChar: '\\', newChar: '/');
+            bytecode.ItemSpec = bytecode.ItemSpec.Substring(startIndex: projectRoot.Length).Replace(newChar: '/', oldChar: '\\');
         }
         collected.Sort(comparison: (left, right) => string.Compare(strA: left.ItemSpec, strB: right.ItemSpec, comparisonType: StringComparison.Ordinal));
 

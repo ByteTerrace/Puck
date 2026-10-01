@@ -231,8 +231,11 @@
          ValidateShaderBytecodeSources, which runs before CompileShaders can populate anything), not a second
          static Content declaration. It also runs ahead of NuGet's _GetPackageFiles, after the orphan sweep, so a
          pack that skips the build (CI packs over a finished build) ships the same bytecode a build does: no build
-         target runs then, and the bytecode is otherwise declared nowhere. -->
+         target runs then, and the bytecode is otherwise declared nowhere. A project that declares no stage source and
+         no bytecode (most of the tree imports this file) skips it whole, so it neither compiles the inline task nor
+         takes a publication lock. -->
     <Target Name="CollectShaderBytecode" AfterTargets="CompileShaders" BeforeTargets="AssignTargetPaths;_GetPackageFiles"
+            Condition="'@(VertexShaderSource)' != '' or '@(FragmentShaderSource)' != '' or '@(ComputeShaderSource)' != '' or '@(ShaderBytecode)' != ''"
             DependsOnTargets="ValidateShaderBytecodeSources">
         <ItemGroup>
             <ShaderBytecode Remove="@(ShaderBytecode)" />

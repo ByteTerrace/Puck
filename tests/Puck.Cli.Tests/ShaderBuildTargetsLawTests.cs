@@ -112,6 +112,9 @@ public sealed class ShaderBuildTargetsLawTests {
             // Both compilers finish while publication is held, including on Linux. Moving managed intermediates does
             // not create a second lock for the same source-tree outputs, and the lock is never held during compilation.
             _ = WaitFor(find: () => (((first.IsCompleted || second.IsCompleted) || (Directory.EnumerateFiles(path: fixture.PathOf(path: "Assets/Shaders"), searchPattern: "a.comp.spv.*.tmp").Count() == 2)) ? "publishers reached publication" : null));
+            // A publisher that took a lock of its own would finish within this wait; one sharing the held lock cannot.
+            _ = await Task.WhenAny(task1: Task.WhenAll(first, second), task2: Task.Delay(cancellationToken: TestContext.Current.CancellationToken, delay: TimeSpan.FromSeconds(value: 2)));
+            Assert.False(condition: (first.IsCompleted || second.IsCompleted), userMessage: "A publisher finished while the source tree's publication lock was held.");
             Assert.False(condition: File.Exists(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv")));
             Assert.False(condition: File.Exists(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash")));
         } finally {
