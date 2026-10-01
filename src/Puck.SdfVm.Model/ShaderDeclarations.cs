@@ -16,8 +16,11 @@ public sealed record ShaderDeclaration(string Path, Func<string> Generate);
 /// <para>Every declaration is generated for the model's own instruction set (<see cref="SdfIsaHlsl.DescribeFingerprint"/>),
 /// never the recorded one, so one run brings every file level.</para>
 /// <para>The model compiles no shader, so a project whose kernels include these files generates them first: it
-/// references <c>Puck.Shaders.Generator</c>, whose build runs <see cref="WriteChanged"/> over the tree before any kernel
-/// compiles. A file that already holds its text is left untouched, so an unchanged model recompiles no kernel.</para>
+/// references <c>Puck.Shaders.Generator</c>, whose build runs <see cref="Reconcile"/> over the tree before any kernel
+/// compiles. A file that already holds its text is left untouched, so an unchanged model recompiles no kernel. A
+/// continuous-integration build is never a generation run: it names each file that differs and fails, as
+/// <c>puck shaders generate --check</c> does, and writes nothing, so no CI step after a build can carry a regenerated
+/// file into a commit.</para>
 /// </summary>
 public static class ShaderDeclarations {
     /// <summary>The suffix of a generated interface include's file name.</summary>
@@ -123,17 +126,20 @@ public static class ShaderDeclarations {
             .Where(predicate: static file => !file.Split(separator: '/').Any(predicate: static segment => (segment is "bin" or "obj")))
             .Order(comparer: StringComparer.Ordinal)];
     }
-    /// <summary>Writes every declaration the model owns under a tree whose text differs from the file's, and leaves every
-    /// other file untouched, so a build that runs it before its kernels recompiles only the kernels a changed declaration
-    /// reaches. Line endings never count as a difference, and each write replaces its file whole.</summary>
+    /// <summary>Finds every declaration the model owns under a tree whose text differs from the file's, and, when asked,
+    /// writes each one, leaving every other file untouched, so a build that runs it before its kernels recompiles only the
+    /// kernels a changed declaration reaches. Line endings never count as a difference, and each write replaces its file
+    /// whole.</summary>
     /// <param name="repositoryRoot">The repository root.</param>
-    /// <param name="written">Receives the repository-relative path of each file written.</param>
+    /// <param name="write">Whether to write each differing file, rather than only name it.</param>
+    /// <param name="differing">Receives the repository-relative path of each file whose text differs from the model's,
+    /// written or not.</param>
     /// <param name="problems">Receives one line per include no generator owns and per package whose include is missing or
     /// named twice (<see cref="Of"/>).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public static void WriteChanged(string repositoryRoot, List<string> written, List<string> problems) {
+    public static void Reconcile(string repositoryRoot, bool write, List<string> differing, List<string> problems) {
         ArgumentNullException.ThrowIfNull(argument: repositoryRoot);
-        ArgumentNullException.ThrowIfNull(argument: written);
+        ArgumentNullException.ThrowIfNull(argument: differing);
         ArgumentNullException.ThrowIfNull(argument: problems);
 
         foreach (var declaration in Of(files: InterfaceFiles(repositoryRoot: repositoryRoot), packages: RenderGraphPackageCatalog.Engine, problems: problems)) {
@@ -145,6 +151,12 @@ public static class ShaderDeclarations {
                 b: text,
                 comparisonType: StringComparison.Ordinal
             )) {
+                continue;
+            }
+
+            differing.Add(item: declaration.Path);
+
+            if (!write) {
                 continue;
             }
 
@@ -160,8 +172,6 @@ public static class ShaderDeclarations {
             } finally {
                 File.Delete(path: temporary);
             }
-
-            written.Add(item: declaration.Path);
         }
     }
 }

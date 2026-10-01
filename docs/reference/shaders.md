@@ -1048,6 +1048,11 @@ model's, under the checkout's `src` tree, and touches nothing else, so a model
 change that moves no declaration recompiles no kernel. It runs again only when
 an assembly it runs has changed. A kernel reading a declaration the model has
 only just gained builds in one pass, with no header seeded by hand.
+A continuous-integration build (`ContinuousIntegrationBuild`, which the tree sets
+on CI) is never a generation run: the generator writes nothing there and fails
+the build naming each generated file that disagrees with the model, so no CI
+step after a build, such as the formatting bot's commit, can carry a
+regenerated file the change forgot.
 
 `puck shaders generate` writes the same list, and the build's shader recipe
 (`build/ShaderRecipe.targets`), which a build reads when it is evaluated and so
