@@ -971,7 +971,8 @@ extraction (from the response's first line, or with `"line"` from the first
 indented line of its record that starts with that text), equality/inequality, strict ordering of two extracted numbers
 (`greater`: left above right), inclusive bounds, minimum margins,
 byte-level file equality/inequality (`filesDiffer`), per-channel bounds over a
-region of one capture (`imageRegion`), and image agreement
+region of one capture (`imageRegion`), a capture's mean difference from a
+box-filtered reference over a region (`imageDifference`), and image agreement
 between two captured frames (`framesAgree`, stating `agree` explicitly—
 `RgbaFrameDifference` counts the pixels that moved by at least 2 LSB; `CanaryFrameNoise` compares
 that against a 64-pixel noise budget). Two live windowed captures of identical
@@ -990,6 +991,15 @@ center lies inside), `reduce` (`every` pixel or the per-channel `mean`), a
 `toleranceCodes` widening in 8-bit codes, and an explicit `holds`. Bounds come
 from the author's arithmetic, never from a recorded run. A missing capture, a
 wrong extent, or a region with no pixel center fails in either direction.
+An `imageDifference` names a run-relative `capture`, its `extent`, a run-relative
+`reference` whose extent is a whole multiple of the capture's on both axes, a
+normalized `region`, `maximumMeanCodes` and an explicit `holds`. The reference is
+box-filtered down to the capture's extent; each region pixel's difference is the
+mean of its absolute red, green and blue differences in 8-bit codes, and the claim
+holds when their mean is at most `maximumMeanCodes` (0 demands every pixel equal).
+The verdict prints the measured mean and the largest pixel difference. A missing
+capture or reference, a wrong extent, or a reference that is no whole multiple
+fails in either direction.
 A leg's `world` is a repository-relative `.world.json` document or `.puck`
 source; a leg booting a composition source may name the declared world it boots
 with `entry`, passed to the World as `--entry`. A manifest may start a companion authority

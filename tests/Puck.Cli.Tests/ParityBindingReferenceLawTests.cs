@@ -280,18 +280,57 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
         );
     }
     [Fact]
-    public void TheWaitTickFollowsTheWorldsLastCaptureTick() {
+    public void TheScheduleFollowsTheWorldsCaptureTicks() {
         Assert.True(
-            condition: ParityCommand.TryReadWaitTick(
+            condition: ParityCommand.TryReadSchedule(
                 error: out var error,
+                reconstructionTick: out var reconstructionTick,
                 waitTick: out var waitTick,
                 worldPath: RepositoryPaths.Resolve(relativePath: WorldPath)
             ),
             userMessage: error
         );
+        // Past the converge station's last capture, and reconstruction on its lead before the station's first.
         Assert.Equal(
             actual: waitTick,
-            expected: 1255UL
+            expected: 1360UL
+        );
+        Assert.Equal(
+            actual: reconstructionTick,
+            expected: 1240UL
+        );
+    }
+    // A station captured once reconstruction is on must converge, since every station that does not holds with
+    // reconstruction off; a converging station with no room for the lead is refused too.
+    [Fact]
+    public void AStationThatDoesNotConvergeAfterReconstructionTurnsOnIsRefusedByName() {
+        var late = WriteWorld(edit: static world => world["captures"]!["rows"]![0]!["ticks"] = new JsonArray(JsonValue.Create(value: 1320UL)));
+
+        Assert.False(condition: ParityCommand.TryReadSchedule(
+            error: out var error,
+            reconstructionTick: out _,
+            waitTick: out _,
+            worldPath: late
+        ));
+        Assert.Contains(
+            actualString: error,
+            expectedSubstring: "without converging"
+        );
+        var early = WriteWorld(edit: static world => {
+            var rows = world["captures"]!["rows"]!.AsArray();
+
+            rows[(rows.Count - 1)]!["ticks"] = new JsonArray(JsonValue.Create(value: 30UL));
+        });
+
+        Assert.False(condition: ParityCommand.TryReadSchedule(
+            error: out error,
+            reconstructionTick: out _,
+            waitTick: out _,
+            worldPath: early
+        ));
+        Assert.Contains(
+            actualString: error,
+            expectedSubstring: "leaves no room for the 60-tick reconstruction lead"
         );
     }
     /// <summary>The <c>bound</c> station's grain seed is bound to a state row the world's rules move from 0 to 13 at
@@ -405,8 +444,9 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
     public void AScheduleWithNoRoomForTheWaitMarginIsRefusedByName() {
         var path = WriteWorld(edit: static world => world["captures"]!["rows"]![0]!["ticks"] = new JsonArray(JsonValue.Create(value: (ulong.MaxValue - 5UL))));
 
-        Assert.False(condition: ParityCommand.TryReadWaitTick(
+        Assert.False(condition: ParityCommand.TryReadSchedule(
             error: out var error,
+            reconstructionTick: out _,
             waitTick: out _,
             worldPath: path
         ));
@@ -427,8 +467,9 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
             path: path
         );
 
-        Assert.False(condition: ParityCommand.TryReadWaitTick(
+        Assert.False(condition: ParityCommand.TryReadSchedule(
             error: out var error,
+            reconstructionTick: out _,
             waitTick: out _,
             worldPath: path
         ));

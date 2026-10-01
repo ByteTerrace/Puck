@@ -1,7 +1,5 @@
 # Every frame renders, so each capture shows the scene as it stands.
 world.cadence off
-# The seat's view reconstructs over time, so the crossing's first frame is its history's reset frame.
-world.temporal on
 # The wait releases on the engine's readiness, a cold driver cache included; the leg's own timeout bounds it.
 world.wait ready 600
 world.wait 20

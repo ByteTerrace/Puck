@@ -4262,7 +4262,7 @@ export type WorldCaptureRow = {
    */
   palette: (WorldCapturePaletteEntry | null)[];
   /**
-   * The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any views.post pass or the overlay is drawn over it.
+   * The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any views.post pass or the overlay is drawn over it, and a world camera's name (one not relative to a seat) captures that camera's view, which renders while a screen, a HUD frame or a probe export shows it.
    */
   instance?: string | null;
   /**

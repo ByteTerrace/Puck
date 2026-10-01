@@ -708,8 +708,9 @@ internal static partial class CanaryAssertions {
         );
 
     // authorityTranscripts resolves an assertion's optional authority id to that authority's own transcript; a null
-    // authority (the ordinary, non-federated shape) always reads primaryTranscript. filesDiffer, framesAgree, and imageRegion always
-    // read primaryTranscript.RunDirectory regardless of authority, since capture paths are leg-scoped, not per-process.
+    // authority (the ordinary, non-federated shape) always reads primaryTranscript. filesDiffer, framesAgree, imageRegion
+    // and imageDifference always read primaryTranscript.RunDirectory regardless of authority, since capture paths are
+    // leg-scoped, not per-process.
     // authorityEndpoint substitutes {authority} in a line assertion's text: the runner binds a companion authority to
     // a free loopback port per leg, so a manifest names the endpoint by token rather than pinning a port the runner
     // owns. An empty value leaves the token unsubstituted, which fails a "present" check rather than matching.
@@ -783,6 +784,12 @@ internal static partial class CanaryAssertions {
                 case CanaryImageRegionAssertion region:
                     results.Add(item: EvaluateImageRegion(
                         assertion: region,
+                        transcript: primaryTranscript
+                    ));
+                    break;
+                case CanaryImageDifferenceAssertion difference:
+                    results.Add(item: EvaluateImageDifference(
+                        assertion: difference,
                         transcript: primaryTranscript
                     ));
                     break;
