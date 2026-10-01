@@ -145,6 +145,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_set = set;
         m_standInReads = new string?[nodes.Length];
         m_taintedReads = new string?[nodes.Length];
+        ResetStale(count: nodes.Length);
         m_producerTainted = new bool[nodes.Length];
         m_captureInstance = root;
 
@@ -949,6 +950,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
         Array.Clear(array: m_standInReads);
         Array.Clear(array: m_taintedReads);
+        ResetStale(count: m_stale.Length);
         Array.Clear(array: m_producerTainted);
         m_history = RenderGraphHistory.Empty(set: m_set);
         m_latest = null;
@@ -1150,10 +1152,16 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
                 if (!produced) {
                     m_unproduced++;
+                    MarkStale(
+                        index: index,
+                        reason: $"the instance '{m_set.Instances[index].Name}' produced no output this frame{((producer.NotReadyReason is { } notReady) ? $": {notReady}" : string.Empty)}"
+                    );
                     schedule.Next.Withdraw(
                         index: index,
                         previous: prior
                     );
+                } else {
+                    MarkCurrent(index: index);
                 }
 
                 continue;
@@ -1172,6 +1180,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 )
             ) {
                 m_unproduced++;
+                MarkStale(
+                    index: index,
+                    reason: $"the source '{m_set.Instances[index].Name}' wrote no image for tick {frame.Tick}"
+                );
                 schedule.Next.Withdraw(
                     index: index,
                     previous: prior
@@ -1184,6 +1196,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 schedule: schedule
             )) {
                 m_unproduced++;
+                MarkStale(
+                    index: index,
+                    reason: $"the instance '{m_set.Instances[index].Name}' reads a buffer with no completed output"
+                );
 
                 continue;
             }
@@ -1233,6 +1249,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
             if (node.FrameCounter == submitted) {
                 m_unproduced++;
+                MarkUnproduced(
+                    index: index,
+                    node: node
+                );
 
                 // A source whose conversion has not built yet is asked again, since its cadence may never ask twice.
                 if (source is not null) {
@@ -1251,6 +1271,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 m_convergence!.Count();
             }
 
+            MarkRendered(
+                index: index,
+                schedule: schedule
+            );
             m_previous[index] = m_current[index];
             m_current[index] = new Output(
                 Buffer: node.LatestOutputBuffer(),
@@ -1267,6 +1291,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             schedule: schedule,
             tick: frame.Tick
         );
+        Complete();
 
         return RootImage();
     }

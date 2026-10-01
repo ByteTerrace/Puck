@@ -386,9 +386,10 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `entry` member); a composition with neither is refused by name. `host.presentation` has three values: windowed,
   `none` (`HeadlessWorldSimulation` — full authority, no GPU), and
   `offscreen` (full authority + GPU composition to images, no window —
-  what `puck parity` boots; its time is its tick count, one tick per produced
-  frame however long a frame takes, so a wait of N ticks has N rendered frames
-  behind it, and its pump steps no tick past an armed capture until the
+  what `puck parity` boots; its time is its tick count, one tick per rendered
+  frame however long a frame takes, holding a tick whose frame the render
+  graph has not rendered yet (`[offscreen] holding tick T …` on stderr), so a
+  wait of N ticks has N rendered frames behind it, and its pump steps no tick past an armed capture until the
   capture is served or refused). Tick-scheduled `captures`, the `schedule`
   section (armed only by `--schedule-dir`), verdict rows, and `.puck` `test`
   lowering are in [references/schedules-and-tests.md](references/schedules-and-tests.md).

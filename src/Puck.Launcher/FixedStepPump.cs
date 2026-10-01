@@ -256,6 +256,11 @@ public sealed class FixedStepPump {
 
         return true;
     }
+    /// <summary>Spends a host interval without stepping, for a host that holds its tick while the tick's frame has not
+    /// rendered: the simulation steps none of that time, so it rebases <see cref="CaptureOriginTicks"/> by all of it,
+    /// and input captured meanwhile is due in the step after the hold.</summary>
+    /// <param name="intervalTicks">The host interval since the previous call, in engine ticks.</param>
+    public void Hold(ulong intervalTicks) => CaptureOriginTicks += intervalTicks;
 
     // Drains the console before a step, then decides whether the step runs: it does not when the drain changed the
     // simulation's rate (read before the drain as ratePerSecond), when the host may not step, or when a holding pump's

@@ -476,12 +476,19 @@ These are one-line cautions; the owning pages hold the derivations.
   declares unchanged keeps the tick of the render that stands). A
   `FrameCaptureRequest` carries no tick of its own: a node that names none
   records none. `puck parity`'s tick verdict holds it to the armed tick. The
-  offscreen host's time is its tick count: it steps one tick per produced frame
-  (`FixedStepPump.TryStep`) and composes a frame for every step
-  (`OffscreenTickHostedService.ComposesFrame`), the owed frame again, advancing
-  nothing, only while a capture waits for it, and each frame's interval is the
-  simulation time it advanced, so a slow frame never bursts ticks and a capture's
-  frame reprojects from the tick before (`OffscreenTickPacingLawTests`).
+  offscreen host's time is its tick count: it steps one tick per rendered frame
+  (`FixedStepPump.TryStep`), composing the same tick again, advancing nothing,
+  while the root reports its frame `NotYetRenderable` or a capture waits for it
+  (`OffscreenTickHostedService.ComposesFrame`, `HoldsTick`), so a slow frame
+  never bursts ticks and a capture's frame reprojects from the tick before
+  (`OffscreenTickPacingLawTests`). `IRenderRoot.ProduceFrame` returns a
+  `RootFrame`, whose completion the World's root reads from
+  `RenderGraphRuntime.Completion`: rendered only when the root rendered the
+  frame and every instance it reads within the frame did too (a previous-frame
+  read, a refresh divisor, an unchanged view or a paused node stands on
+  purpose), `Refused` when a node's refused build stops it. A new way for an
+  instance to skip its render states which it is (`RenderGraphRuntime.Completion.cs`,
+  `RenderGraphRuntimeLawTests.Completion`).
 - **Buffer hazards are planned, never barriered by hand.** An SDF view's scratch
   is `SdfWorldPackage.Fragment`'s resources, and the render-graph planner plans
   every barrier between its passes; see

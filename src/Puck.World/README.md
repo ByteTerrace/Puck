@@ -340,9 +340,12 @@ session screens render as in the windowed shape, through the views
 `Puck.Launcher.OffscreenTickHostedService` are the seams; the server steps
 exactly like `host.presentation: none` (`HeadlessWorldSimulation`). The
 offscreen host's time is its tick count, never the wall clock: it steps one
-tick per produced frame and composes a frame for every tick, so a slow frame
-delays the next tick instead of letting the simulation catch up several ticks
-in one iteration. A script that waits N ticks has N rendered frames behind it,
+tick per rendered frame, so a slow frame delays the next tick instead of
+letting the simulation catch up several ticks in one iteration. Until the
+render graph reports the tick's frame rendered (a cold pipeline build, a graph
+rebuilding, an input with no output for the frame), the host composes the same
+tick again and steps none, narrating the hold once as `[offscreen] holding
+tick T until its frame renders: <reason>`. A script that waits N ticks has N rendered frames behind it,
 and a capture's frame reprojects from the frame of the tick before. The wall
 clock only keeps the host from running faster than the world's rate
 ([host pacing](../../docs/reference/hosting.md#host-pacing)).

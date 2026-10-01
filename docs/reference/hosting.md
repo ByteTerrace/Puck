@@ -72,11 +72,12 @@ using Puck.Hosting;
 sealed class StatusPixelRoot : IRenderRoot {
     private readonly byte[] pixels = [0x20, 0x80, 0xE0, 0xFF];
 
-    public Surface ProduceFrame(in FrameContext context) => Surface.CpuPixels(
-        pixels: pixels,
-        width: 1,
-        height: 1,
-        format: GpuPixelFormat.R8G8B8A8Unorm);
+    public RootFrame ProduceFrame(in FrameContext context) => RootFrame.Rendered(
+        surface: Surface.CpuPixels(
+            pixels: pixels,
+            width: 1,
+            height: 1,
+            format: GpuPixelFormat.R8G8B8A8Unorm));
 
     public void Dispose() { }
 }
@@ -97,8 +98,16 @@ var context = new FrameContext(
     TargetWidth: width,
     TargetHeight: height);
 
-Surface surface = root.ProduceFrame(context: in context);
+RootFrame frame = root.ProduceFrame(context: in context);
 ```
+
+A `RootFrame` carries the surface and whether it shows the frame asked for
+(`FrameCompletion`): `Rendered`, `NotYetRenderable` with a reason (a pipeline
+still building, a graph rebuilding, an input with no output for the frame), or
+`Refused` with the refusal that stops it. A root that cannot render the frame
+may still hand out an older frame's surface. The windowed host presents
+whatever surface it gets; the offscreen host steps on only past a rendered or
+refused frame (see [host pacing](#host-pacing)).
 
 `RenderTicks` is `ElapsedTicks + AccumulatorTicks`, and
 `InterpolationAlpha` is the remainder divided by `StepTicks`. They are useful
@@ -188,14 +197,23 @@ The fields most often confused in `FrameContext` have distinct meanings:
 |---|---|---|
 | Windowed | The wall clock, paced to the display | Each frame hands `FixedStepPump.Advance` the wall interval it sampled, and the pump runs every whole step that interval covers. After a slow frame it catches up, composing one frame for several ticks, because a player's simulation keeps real time. |
 | Headless (`host.presentation: none`) | The wall clock, on a waitable-timer grid | The same `Advance` rule. A headless authority serving remote clients keeps real time, because its peers send input and expect snapshots in real time; it renders nothing, so no frame needs a tick of its own. `--unpaced` takes one step an iteration through `TryStep` and waits for nothing. |
-| Offscreen (`host.presentation: offscreen`) | Its tick count | Each iteration calls `FixedStepPump.TryStep`, which runs at most one step whatever the interval was, then composes the frame that step owes. Every tick composes and renders exactly one frame, so the tick each frame shows is a function of the script, never of how long a frame took. |
+| Offscreen (`host.presentation: offscreen`) | Its tick count | Each iteration calls `FixedStepPump.TryStep`, which runs at most one step whatever the interval was, then composes the frame that step owes, and steps the next tick only once the root reports that frame rendered. Every tick has exactly one rendered frame, so the tick each frame shows is a function of the script, never of how long a frame took. |
 
 Offscreen, a slow frame (the first render, a rebuild, a hitch) delays the next
-tick rather than bursting several ticks into one iteration. A script that waits
-N ticks has N rendered frames behind it, and each frame reprojects from the
-frame of the tick before it. A frame's `DeltaTicks` and `FrameDeltaTicks` are
-one step, its `AccumulatorTicks` is zero, and a frame composed again while a
-capture still owes it advances nothing. The wall clock only keeps the loop from
+tick rather than bursting several ticks into one iteration. A frame the root
+reports `NotYetRenderable` holds its tick: the host composes the same tick
+again, steps none, and narrates the hold once on standard error
+(`[offscreen] holding tick T until its frame renders: <reason>`), until the
+root renders it. A cold pipeline build, a graph rebuilding at a new extent and
+an input that produced nothing for the frame each hold the tick, so no frame
+shows an older image for a newer tick. A refused frame releases the tick, since
+nothing the host does can render it; the root names the refusal. A device loss
+holds the tick whose frame it lost. A script that waits N ticks has N rendered
+frames behind it, and each frame reprojects from the frame of the tick before
+it. A tick's first composition carries one step of `DeltaTicks` and
+`FrameDeltaTicks`; composing it again, while its frame has not rendered or a
+capture still owes it, advances nothing, so presentation moves once a tick
+however many attempts its frame takes. `AccumulatorTicks` is always zero. The wall clock only keeps the loop from
 running faster than the simulation's rate: the loop waits for its next period,
 and an iteration already a period late starts the next one at once with no
 steps owed. The interval an iteration measured decides no step. Whatever it
@@ -211,7 +229,14 @@ All three hosts and their shared input capture clock read the same registered
 its reacquire budget and waits too. `OffscreenTickPacingLawTests` runs the real
 loop over a manual clock whose frames cost seconds and holds every frame to one
 tick, and a capture to the tick its frame composed; each law replays the same
-frame costs through `Advance` as its red leg.
+frame costs through `Advance` as its red leg, and holds a tick its root cannot
+render yet to one rendered frame, against one step an iteration as its red leg.
+The World's root reports its completion from the render graph runtime
+(`RenderGraphRuntime.Completion`): the root's image shows the frame only when
+the root rendered it and every instance it reads within the frame rendered it
+too, or stands unchanged on purpose (a refresh divisor, an unchanged view, a
+paused pane). `RenderGraphRuntimeLawTests` holds a cold build and a producer
+that keeps its older output to it.
 
 The offscreen boot authority also limits a fast-forwarding replay fork to one
 authority tick per host step. Windowed and headless authorities keep replay
@@ -220,8 +245,8 @@ changes pacing without dropping recorded input.
 
 ## Render lifecycle and publication
 
-A host has one `IRenderRoot`, which produces one `Surface` a frame and is
-disposable. A root that owns device resources releases stale handles in
+A host has one `IRenderRoot`, which produces one `RootFrame` a frame (a surface
+and its completion) and is disposable. A root that owns device resources releases stale handles in
 `OnDeviceLost` and rebuilds them on a later frame, and a root holding an armed
 capture refuses it (`CaptureRequestSlot.RefuseForDeviceLoss`); device loss must
 not advance or reset simulation. The World's root, `RenderGraphRuntimeNode`,

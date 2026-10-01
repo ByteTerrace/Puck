@@ -3,7 +3,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Pacing;
-using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Hosting;
 using Xunit;
@@ -64,7 +63,7 @@ public sealed class OffscreenBoundaryLawTests {
 
         public void Dispose() { }
         public void OnDeviceLost() => Losses++;
-        public Surface ProduceFrame(in FrameContext context) {
+        public RootFrame ProduceFrame(in FrameContext context) {
             if ((Failed is null) && (context.ElapsedTicks == (lossTick * StepTicks))) {
                 Failed = context;
 
@@ -120,11 +119,17 @@ public sealed class OffscreenBoundaryLawTests {
         Assert.Equal(expected: 4, actual: root.Frames.Count);
         for (var index = 0; (index < root.Frames.Count); index++) {
             var frame = root.Frames[index];
+            // The tick whose frame was lost is composed again with nothing more to advance: its first composition, the
+            // lost one, already carried its step.
+            var delta = ((index == (((int)lossTick) - 1))
+                ? 0UL
+                : StepTicks);
 
             Assert.Equal(expected: ((((ulong)index) + 1UL) * StepTicks), actual: frame.ElapsedTicks);
-            Assert.Equal(expected: (StepTicks, StepTicks, 0UL), actual: (frame.DeltaTicks, frame.FrameDeltaTicks, frame.AccumulatorTicks));
+            Assert.Equal(expected: (delta, delta, 0UL), actual: (frame.DeltaTicks, frame.FrameDeltaTicks, frame.AccumulatorTicks));
         }
-        Assert.Equal(expected: root.Failed!.Value, actual: root.Frames[(((int)lossTick) - 1)]);
+        Assert.Equal(expected: ((lossTick * StepTicks), StepTicks), actual: (root.Failed!.Value.ElapsedTicks, root.Failed.Value.DeltaTicks));
+        Assert.Equal(expected: root.Failed.Value with { DeltaTicks = 0UL, FrameDeltaTicks = 0UL }, actual: root.Frames[(((int)lossTick) - 1)]);
     }
     [InlineData("offscreen")]
     [InlineData("headless")]

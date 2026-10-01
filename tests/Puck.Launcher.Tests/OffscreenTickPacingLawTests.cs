@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Puck.Abstractions.Pacing;
-using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Hosting;
 using Xunit;
@@ -27,10 +26,17 @@ public sealed class OffscreenTickPacingLawTests {
     private const ulong CaptureTick = 10UL;
     private const int Frames = 12;
 
-    // One produced frame: the simulation tick it composed, the frame context it was handed, and whether it served the
-    // armed capture.
-    private readonly record struct ProducedFrame(ulong Tick, ulong ElapsedTicks, ulong DeltaTicks, ulong FrameDeltaTicks, ulong AccumulatorTicks, bool Served);
+    // One produced frame: the simulation tick it composed, the frame context it was handed, whether it served the armed
+    // capture, and the completion the root reported.
+    private readonly record struct ProducedFrame(ulong Tick, ulong ElapsedTicks, ulong DeltaTicks, ulong FrameDeltaTicks, ulong AccumulatorTicks, bool Served, FrameCompletion Completion = FrameCompletion.Rendered);
 
+    // A root that cannot render tick 1 for its first four compositions (a cold build) nor tick 5 for its first two (a
+    // rebuild), and renders every other composition.
+    private static FrameCompletion ColdThenRebuild(ulong tick, int attempt) => (tick, attempt) switch {
+        (1UL, <= 4) => FrameCompletion.NotYetRenderable,
+        (5UL, <= 2) => FrameCompletion.NotYetRenderable,
+        _ => FrameCompletion.Rendered,
+    };
     // What the frame composing a tick costs: a slow first render, a rebuild, a hitch two ticks before the capture, and
     // fast frames between them.
     private static TimeSpan CostOf(ulong tick) => tick switch {
@@ -74,7 +80,9 @@ public sealed class OffscreenTickPacingLawTests {
     }
     // Records every frame, costs each the time the law gives it on the host clock, serves an armed capture on the
     // second frame composed for it (a render chain that needs one frame more), and ends the run after its frames.
-    private sealed class PacingRoot(PacingSimulation simulation, int frames) : IRenderRoot {
+    private sealed class PacingRoot(PacingSimulation simulation, int frames, Func<ulong, int, FrameCompletion>? completion = null) : IRenderRoot {
+        private int m_attempts;
+        private ulong m_attemptTick;
         private int m_framesWhileOwed;
 
         public ManualClock? Clock { get; init; }
@@ -82,15 +90,27 @@ public sealed class OffscreenTickPacingLawTests {
         public TerminalControl? Terminal { get; set; }
 
         public void Dispose() { }
-        public Surface ProduceFrame(in FrameContext context) {
+        public RootFrame ProduceFrame(in FrameContext context) {
             var served = (
                 simulation.AwaitsFrame &&
                 (++m_framesWhileOwed == 2)
             );
 
             simulation.CaptureServed |= served;
+
+            if (m_attemptTick != simulation.Completed) {
+                m_attemptTick = simulation.Completed;
+                m_attempts = 0;
+            }
+
+            var completed = (completion?.Invoke(
+                arg1: simulation.Completed,
+                arg2: ++m_attempts
+            ) ?? FrameCompletion.Rendered);
+
             Frames.Add(item: new ProducedFrame(
                 AccumulatorTicks: context.AccumulatorTicks,
+                Completion: completed,
                 DeltaTicks: context.DeltaTicks,
                 ElapsedTicks: context.ElapsedTicks,
                 FrameDeltaTicks: context.FrameDeltaTicks,
@@ -103,7 +123,13 @@ public sealed class OffscreenTickPacingLawTests {
                 Terminal?.RequestExit();
             }
 
-            return default;
+            return new RootFrame(
+                Completion: completed,
+                Reason: ((completed == FrameCompletion.Rendered)
+                    ? null
+                    : "the law's root has not rendered this tick"),
+                Surface: default
+            );
         }
     }
     private sealed class NoBindings : IInputBindings {
@@ -114,10 +140,11 @@ public sealed class OffscreenTickPacingLawTests {
     }
 
     // Runs the real offscreen host over the manual clock until the root has produced its frames.
-    private static async Task<(PacingSimulation Simulation, List<ProducedFrame> Frames)> RunHostAsync(ulong? captureTick, int frames) {
+    private static async Task<(PacingSimulation Simulation, List<ProducedFrame> Frames)> RunHostAsync(ulong? captureTick, int frames, Func<ulong, int, FrameCompletion>? completion = null) {
         var clock = new ManualClock();
         var simulation = new PacingSimulation(captureTick: captureTick);
         var root = new PacingRoot(
+            completion: completion,
             frames: frames,
             simulation: simulation
         ) {
@@ -257,14 +284,27 @@ public sealed class OffscreenTickPacingLawTests {
     [InlineData(true, true, true, true)]
     [InlineData(false, false, false, true)]
     [Theory]
-    public void AFrameIsComposedOnlyForAStepOrAFrameAStepOwes(bool hasSimulation, bool stepped, bool awaitsFrame, bool composes) =>
+    public void AFrameIsComposedOnlyForAStepOrAFrameAStepOwes(bool hasSimulation, bool stepped, bool owesFrame, bool composes) =>
         Assert.Equal(
             actual: OffscreenTickHostedService.ComposesFrame(
-                awaitsFrame: awaitsFrame,
                 hasSimulation: hasSimulation,
+                owesFrame: owesFrame,
                 stepped: stepped
             ),
             expected: composes
+        );
+    [InlineData(true, FrameCompletion.Rendered, false)]
+    [InlineData(true, FrameCompletion.NotYetRenderable, true)]
+    [InlineData(true, FrameCompletion.Refused, false)]
+    [InlineData(false, FrameCompletion.NotYetRenderable, false)]
+    [Theory]
+    public void OnlyAFrameNotYetRenderableHoldsItsTick(bool hasSimulation, FrameCompletion completion, bool holds) =>
+        Assert.Equal(
+            actual: OffscreenTickHostedService.HoldsTick(
+                completion: completion,
+                hasSimulation: hasSimulation
+            ),
+            expected: holds
         );
     /// <summary>One step per call, whatever the interval: a slow iteration's interval rebases the input pin by what the
     /// step does not take, and steps nothing more. The red leg hands the same interval to <see cref="FixedStepPump.Advance"/>,
@@ -387,5 +427,130 @@ public sealed class OffscreenTickPacingLawTests {
             expected: CaptureTick
         );
         Assert.True(condition: (replayed[(replayedServed - 2)].Tick < (CaptureTick - 1UL)));
+    }
+    /// <summary>A root that cannot render a tick yet holds it: over a cold build of tick 1 and a rebuild at tick 5, the
+    /// host composes the held tick again, stepping none and advancing nothing, until the root renders it, so the rendered
+    /// frames show ticks 1, 2, 3 and on with none skipped, each tick's first composition spanning its step. The red leg
+    /// drives the same root through one step an iteration whatever it reports, and ticks 1 and 5 never get a rendered
+    /// frame.</summary>
+    [Fact]
+    public async Task ATickHeldByAColdBuildRendersItsOwnFrameBeforeTheNextTickSteps() {
+        var (simulation, frames) = await RunHostAsync(
+            captureTick: null,
+            completion: ColdThenRebuild,
+            frames: Frames
+        );
+        var rendered = frames.Where(predicate: static frame => (frame.Completion == FrameCompletion.Rendered)).ToList();
+
+        Assert.True(condition: EveryFrameIsOneTick(frames: frames));
+        Assert.Equal(
+            actual: rendered.Select(selector: static frame => frame.Tick),
+            expected: Enumerable.Range(
+                count: rendered.Count,
+                start: 1
+            ).Select(selector: static tick => ((ulong)tick))
+        );
+        Assert.Equal(
+            actual: frames.Select(selector: static frame => (frame.Tick, frame.DeltaTicks, frame.Completion)).Take(count: 9),
+            expected: [
+                (1UL, StepTicks, FrameCompletion.NotYetRenderable),
+                (1UL, 0UL, FrameCompletion.NotYetRenderable),
+                (1UL, 0UL, FrameCompletion.NotYetRenderable),
+                (1UL, 0UL, FrameCompletion.NotYetRenderable),
+                (1UL, 0UL, FrameCompletion.Rendered),
+                (2UL, StepTicks, FrameCompletion.Rendered),
+                (3UL, StepTicks, FrameCompletion.Rendered),
+                (4UL, StepTicks, FrameCompletion.Rendered),
+                (5UL, StepTicks, FrameCompletion.NotYetRenderable),
+            ]
+        );
+        Assert.All(
+            action: static frame => Assert.Equal(
+                actual: frame.ElapsedTicks,
+                expected: (frame.Tick * StepTicks)
+            ),
+            collection: frames
+        );
+        Assert.Equal(
+            actual: simulation.Completed,
+            expected: frames[^1].Tick
+        );
+
+        var unheld = new PacingSimulation(captureTick: null);
+        var root = new PacingRoot(
+            completion: ColdThenRebuild,
+            frames: Frames,
+            simulation: unheld
+        );
+        var registry = new CommandRegistry(modules: []);
+
+        using var router = new InputRouter(
+            bindings: new NoBindings(),
+            principalResolver: new ConsolePrincipal(),
+            registry: registry
+        );
+        var pump = new FixedStepPump(
+            captureOriginTicks: 0UL,
+            inputRouter: router,
+            registry: registry,
+            simulation: unheld
+        );
+
+        while (root.Frames.Count < Frames) {
+            _ = pump.TryStep(
+                intervalTicks: StepTicks,
+                stepTicks: StepTicks
+            );
+
+            var context = new FrameContext(
+                AccumulatorTicks: 0UL,
+                DeltaTicks: StepTicks,
+                ElapsedTicks: pump.ElapsedTicks,
+                FrameDeltaTicks: StepTicks,
+                Host: HostContext.Empty,
+                StepTicks: StepTicks,
+                TargetHeight: 32U,
+                TargetWidth: 32U
+            );
+
+            _ = root.ProduceFrame(context: in context);
+        }
+
+        // Ticks 1 and 5 stepped on with no rendered frame.
+        Assert.Equal(
+            actual: root.Frames.Where(predicate: static frame => (frame.Completion != FrameCompletion.Rendered)).Select(selector: static frame => frame.Tick),
+            expected: [1UL, 5UL]
+        );
+        Assert.DoesNotContain(
+            collection: root.Frames.Where(predicate: static frame => (frame.Completion == FrameCompletion.Rendered)).Select(selector: static frame => frame.Tick),
+            filter: static tick => ((tick == 1UL) || (tick == 5UL))
+        );
+    }
+    /// <summary>A refused frame releases its tick: the root names its refusal, and the host steps on one tick per
+    /// iteration as for a rendered frame.</summary>
+    [Fact]
+    public async Task ARefusedFrameReleasesItsTick() {
+        var (_, frames) = await RunHostAsync(
+            captureTick: null,
+            completion: static (tick, _) => ((tick >= 3UL)
+                ? FrameCompletion.Refused
+                : FrameCompletion.Rendered),
+            frames: Frames
+        );
+
+        Assert.Equal(
+            actual: frames.Select(selector: static frame => (frame.Tick, frame.DeltaTicks)),
+            expected: Enumerable.Range(
+                count: Frames,
+                start: 1
+            ).Select(selector: static tick => (((ulong)tick), StepTicks))
+        );
+        Assert.All(
+            action: static frame => Assert.Equal(
+                actual: frame.Completion,
+                expected: FrameCompletion.Refused
+            ),
+            collection: frames.Skip(count: 2)
+        );
     }
 }

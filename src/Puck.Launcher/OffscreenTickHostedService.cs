@@ -9,24 +9,27 @@ namespace Puck.Launcher;
 
 /// <summary>
 /// The offscreen boot shape's outermost host loop — a real GPU device and the composed-frame render pipeline with NO
-/// window and NO swapchain. Its frames are its only output, so its time is its tick count, never the wall clock: each
+/// window and NO swapchain. Its frames are its only output, so its time is its tick count, never the wall clock: an
 /// iteration runs at most one step of the SAME <see cref="FixedStepPump"/> the other hosts drive
-/// (<see cref="FixedStepPump.TryStep"/>) and composes the frame that step owes (<see cref="ComposesFrame"/>), so every
-/// tick composes and renders exactly one frame, whatever a frame cost. A slow frame (the first render, a rebuild, a
-/// hitch) delays the next tick rather than bursting several ticks into one iteration, so a script that waits N ticks
-/// has N frames rendered behind it, and a frame reprojects from the frame of the tick before. The wall clock only
-/// keeps the loop from running faster than the simulation's rate; it decides no step, and each frame's presentation
-/// interval is the simulation time it advanced. The console pump and every registered
-/// <see cref="ISnapshotInputCapture"/> contribution run every iteration exactly like the other two host loops.
-/// <para>Its pump holds its clock for its frames (<see cref="IFixedStepSimulation.HoldsClock"/>): while a frame a step
-/// owes has not been served, for whatever reason the render chain cannot serve it yet, the loop keeps producing frames
-/// and draining the console but steps no further tick. Those frames are the one exception to one frame per step: the
-/// owed frame is composed again, advancing no simulation time, until one serves it.</para>
+/// (<see cref="FixedStepPump.TryStep"/>) and composes the frame that step owes (<see cref="ComposesFrame"/>), and it
+/// steps the next tick only once the root reports that frame rendered (<see cref="RootFrame.Completion"/>). Until then
+/// (a pipeline still building, a graph rebuilding, an input with no output for the frame, a device rebuilt after a
+/// loss) it holds the tick (<see cref="HoldsTick"/>), composing the same tick again and stepping none, so every tick has
+/// exactly one rendered frame, whatever a frame cost, and no frame shows an older image for a newer tick. A refused
+/// frame releases the tick: the root names its refusal. A script that waits N ticks has N rendered frames behind it,
+/// and a frame reprojects from the frame of the tick before. The wall clock only keeps the loop from running faster
+/// than the simulation's rate; it decides no step. A tick's first composition spans the step it advanced and every later
+/// one spans nothing, so presentation moves once a tick however many attempts its frame takes. The console pump and
+/// every registered <see cref="ISnapshotInputCapture"/> contribution run every iteration exactly like the other two
+/// host loops.
+/// <para>Its pump also holds its clock for its captures (<see cref="IFixedStepSimulation.HoldsClock"/>): while a frame a
+/// step owes has not served the capture armed at its tick, the loop keeps producing frames and draining the console but
+/// steps no further tick, composing the owed frame again, advancing no simulation time, until one serves it.</para>
 /// <para>The host reads its wall clock through a <see cref="TimeProvider"/>: <see cref="TimeProvider.System"/> unless
 /// the container registers one, which is how a law runs the real loop over frames it makes slow.</para>
 /// <para>A device loss follows the windowed host's policy (<see cref="DeviceLossRecovery"/>), rebuilding through the
-/// <see cref="IDeviceRebuild"/> the offscreen GPU activation registers; a loss it cannot recover from faults the
-/// run.</para>
+/// <see cref="IDeviceRebuild"/> the offscreen GPU activation registers, and holds the tick whose frame it lost; a loss
+/// it cannot recover from faults the run.</para>
 /// </summary>
 public sealed class OffscreenTickHostedService : BackgroundService {
     private readonly IHostApplicationLifetime m_applicationLifetime;
@@ -133,17 +136,29 @@ public sealed class OffscreenTickHostedService : BackgroundService {
     }
 
     /// <summary>Returns whether the offscreen host composes a frame after an iteration: one that stepped the simulation,
-    /// or one that stepped nothing while a step still owes a frame (<see cref="IFixedStepSimulation.AwaitsFrame"/>, a
-    /// capture armed at its tick not yet served), so every tick composes one frame and the host never steps past an owed
-    /// frame. A host with no simulation composes a frame every iteration.</summary>
+    /// or one that stepped nothing while its tick still owes a frame (a frame the root has not rendered yet, or a capture
+    /// armed at the tick and not yet served, <see cref="IFixedStepSimulation.AwaitsFrame"/>), so every tick composes until
+    /// its frame renders and the host never steps past an owed frame. A host with no simulation composes a frame every
+    /// iteration.</summary>
     /// <param name="hasSimulation">Whether the host steps a simulation.</param>
     /// <param name="stepped">Whether the iteration ran its step.</param>
-    /// <param name="awaitsFrame">Whether the simulation owes a frame after the iteration.</param>
+    /// <param name="owesFrame">Whether the tick still owes a frame after the iteration.</param>
     /// <returns><see langword="true"/> when the host composes a frame.</returns>
-    public static bool ComposesFrame(bool hasSimulation, bool stepped, bool awaitsFrame) => (
+    public static bool ComposesFrame(bool hasSimulation, bool stepped, bool owesFrame) => (
         !hasSimulation ||
         stepped ||
-        awaitsFrame
+        owesFrame
+    );
+    /// <summary>Returns whether the offscreen host holds its tick after composing a frame: the root has not rendered the
+    /// frame yet (<see cref="FrameCompletion.NotYetRenderable"/>), so the next iteration composes the same tick again and
+    /// steps none. A rendered frame releases the tick, and so does a refused one, whose refusal the root names; a host
+    /// with no simulation holds nothing.</summary>
+    /// <param name="hasSimulation">Whether the host steps a simulation.</param>
+    /// <param name="completion">The composed frame's completion.</param>
+    /// <returns><see langword="true"/> when the tick is held.</returns>
+    public static bool HoldsTick(bool hasSimulation, FrameCompletion completion) => (
+        hasSimulation &&
+        (completion == FrameCompletion.NotYetRenderable)
     );
 
     private void RunOffscreenLoop(CancellationToken stoppingToken) {
@@ -184,6 +199,10 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                 writeLine: m_bufferedOutput.WriteErrorLine
             );
             var hostFrame = 0UL;
+            // Whether the last stepped tick's frame has not rendered yet, and whether the tick has been composed once: its
+            // first composition carries the step it advanced, and every later one advances nothing.
+            var holding = false;
+            var composedTick = false;
             var nextDeadline = time.GetTimestamp();
             var exitAfterTimestamp = ((m_options.ExitAfter is { } exitAfter)
                 ? (nextDeadline + ((long)(exitAfter.TotalSeconds * frequency)))
@@ -217,11 +236,21 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                 var period = (frequency / ((long)ratePerSecond));
 
                 // One step at most, whatever the iteration's interval was: the interval only rebases the input pin and
-                // is the host time a hold withholds.
-                var stepped = (pump?.TryStep(
-                    intervalTicks: intervalTicks,
-                    stepTicks: stepTicks
-                ) ?? false);
+                // is the host time a hold withholds. A tick whose frame has not rendered steps nothing.
+                var stepped = false;
+
+                if (holding) {
+                    pump?.Hold(intervalTicks: intervalTicks);
+                } else {
+                    stepped = (pump?.TryStep(
+                        intervalTicks: intervalTicks,
+                        stepTicks: stepTicks
+                    ) ?? false);
+                }
+
+                if (stepped) {
+                    composedTick = false;
+                }
 
                 m_bufferedOutput.Flush();
 
@@ -230,15 +259,18 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                 // from inside this call, so the returned surface needs no further handling — it is simply not presented
                 // anywhere.
                 if (ComposesFrame(
-                    awaitsFrame: (m_simulation?.AwaitsFrame ?? false),
                     hasSimulation: (pump is not null),
+                    owesFrame: (holding || (m_simulation?.AwaitsFrame ?? false)),
                     stepped: stepped
                 )) {
-                    // The frame spans the simulation time its step advanced: one step, or none for an owed frame composed
-                    // again. A host with no simulation spans one step of its own rate a frame.
-                    var deltaTicks = (stepped
+                    // The tick's first composition spans the step it advanced; composing it again, until it renders or a
+                    // capture is served, advances nothing, so presentation moves once a tick however many attempts its
+                    // frame takes. A host with no simulation spans one step of its own rate a frame.
+                    var deltaTicks = (((pump is not null) && !composedTick)
                         ? stepTicks
                         : 0UL);
+
+                    composedTick = true;
                     // Read once, so a resize between frames reaches the whole frame and never half of it.
                     var (targetWidth, targetHeight) = m_renderOptions.Extent;
                     var frameContext = new FrameContext(
@@ -254,25 +286,41 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                         TargetWidth: targetWidth
                     );
 
-                    // Recovery refuses captures on the lost device, but the completed step still owes its frame.
-                    // Retry that same context before another step; an unrecoverable loss faults the run.
-                    while (true) {
-                        try {
-                            m_faults?.ThrowIfLossDue();
-                            _ = m_root.ProduceFrame(context: in frameContext);
-                            deviceLoss.NoteFrameProduced();
+                    // A frame the root has not rendered holds the tick: the next iteration composes it again and steps
+                    // nothing. A device loss is the same: recovery refuses captures on the lost device, and the completed
+                    // step still owes its frame. An unrecoverable loss faults the run.
+                    var wasHolding = holding;
+                    string? reason;
 
-                            break;
-                        } catch (DeviceLostException deviceLost) {
-                            if (!deviceLoss.TryRecover(
-                                deviceLost: deviceLost,
-                                rebuild: m_deviceRebuild
-                            )) {
-                                throw;
-                            }
+                    try {
+                        m_faults?.ThrowIfLossDue();
 
-                            m_bufferedOutput.Flush();
+                        var produced = m_root.ProduceFrame(context: in frameContext);
+
+                        deviceLoss.NoteFrameProduced();
+                        holding = HoldsTick(
+                            completion: produced.Completion,
+                            hasSimulation: (pump is not null)
+                        );
+                        reason = produced.Reason;
+                    } catch (DeviceLostException deviceLost) {
+                        if (!deviceLoss.TryRecover(
+                            deviceLost: deviceLost,
+                            rebuild: m_deviceRebuild
+                        )) {
+                            throw;
                         }
+
+                        holding = (pump is not null);
+                        reason = "the device was lost and rebuilt";
+                    }
+
+                    // Each hold is narrated once, as it starts, so a run that never renders names why.
+                    if (
+                        holding &&
+                        !wasHolding
+                    ) {
+                        m_bufferedOutput.WriteErrorLine(value: $"[offscreen] holding tick {(frameContext.ElapsedTicks / stepTicks)} until its frame renders: {reason}");
                     }
 
                     m_bufferedOutput.Flush();

@@ -577,7 +577,8 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                                 TargetHeight: height,
                                 TargetWidth: width
                             );
-                            var surface = m_root.ProduceFrame(context: in frameContext);
+                            // A windowed display presents whatever the root has, rendered for this frame or not.
+                            var surface = m_root.ProduceFrame(context: in frameContext).Surface;
 
                             m_capture?.Capture(
                                 context: in frameContext,

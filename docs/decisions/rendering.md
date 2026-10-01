@@ -384,8 +384,13 @@ the package format first was rejected, because nothing would select them and no
 check could tell a correct variant from a wrong one.
 
 **The offscreen host's time is its tick count.** Its frames are its only
-output, so it steps one tick per produced frame and composes a frame for every
-tick, never several ticks in one iteration after a slow frame. A wall-clock
+output, so it steps one tick per rendered frame, never several ticks in one
+iteration after a slow frame, and it steps the next tick only once the root
+reports the current tick's frame rendered. A frame that is not yet renderable
+(a cold build, a rebuild, an input with no output for the frame) holds the
+tick, composing it again, so the tick-to-frame mapping is total and no frame
+shows an older image for a newer tick; a refused frame releases the tick, since
+holding cannot render it. A wall-clock
 catch-up would make the tick a frame shows depend on how long the frame before
 it took: a script that waited a few ticks could read a GPU result before it
 landed, and a capture's frame could reproject across several ticks. Stepping
