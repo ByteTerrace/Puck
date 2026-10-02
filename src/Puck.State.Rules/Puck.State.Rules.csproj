@@ -17,10 +17,10 @@
              carries the board queries and pattern walk the match/board operands dispatch to; Puck.State.Vectors
              carries the mix, mean, nearest and remember kernels the four vector transforms dispatch to. Nothing
              else, and nothing points back. -->
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
-        <ProjectReference Include="..\Puck.State.Generators\Puck.State.Generators.csproj" />
-        <ProjectReference Include="..\Puck.State.Topology\Puck.State.Topology.csproj" />
-        <ProjectReference Include="..\Puck.State.Vectors\Puck.State.Vectors.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.State/Puck.State.csproj" />
+        <ProjectReference Include="../Puck.State.Generators/Puck.State.Generators.csproj" />
+        <ProjectReference Include="../Puck.State.Topology/Puck.State.Topology.csproj" />
+        <ProjectReference Include="../Puck.State.Vectors/Puck.State.Vectors.csproj" />
     </ItemGroup>
 </Project>

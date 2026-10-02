@@ -14,10 +14,10 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="../../src/Puck.Hosting/Puck.Hosting.csproj" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="..\Shared\VirtualClock.cs" Link="VirtualClock.cs" />
-        <Compile Include="..\Shared\TestLiveness.cs" Link="TestLiveness.cs" />
+        <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
+        <Compile Include="../Shared/TestLiveness.cs" Link="TestLiveness.cs" />
     </ItemGroup>
 </Project>

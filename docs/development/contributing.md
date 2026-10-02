@@ -42,7 +42,12 @@ Prefer the cheapest correct tool:
 ## File paths
 
 Use `/` in authored paths, configuration, stored path identities, and path output,
-including on Windows. Prefer current `System.IO` APIs that accept these paths
+including on Windows. That includes every MSBuild project, props, and targets
+file: imports, item includes and excludes, links, package paths, and path
+properties all spell `/`. Puck's own MSBuild readers still read `\` as a
+separator the way MSBuild does, so the spelling is held by a `Puck.Cli.Tests`
+law that refuses a backslash anywhere in a tracked MSBuild file outside
+`experimental/`. Prefer current `System.IO` APIs that accept these paths
 directly; do not convert `/` to the platform separator before file access.
 Normalize platform-produced paths to `/` at Puck's output and storage boundaries
 with `Puck.Abstractions.PuckPaths.Normalize`, which resolves a path to its full

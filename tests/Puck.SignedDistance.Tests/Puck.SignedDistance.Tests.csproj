@@ -14,13 +14,13 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.SignedDistance\Puck.SignedDistance.csproj" />
+        <ProjectReference Include="../../src/Puck.SignedDistance/Puck.SignedDistance.csproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- The bake sampling fixture BakeSamplingFixtureLawTests holds to a fresh bake. -->
-        <Content Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="Fixtures/**" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="..\Shared\SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />
+        <Compile Include="../Shared/SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />
     </ItemGroup>
 </Project>

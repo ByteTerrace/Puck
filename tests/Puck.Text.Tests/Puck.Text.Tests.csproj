@@ -14,13 +14,13 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.Text\Puck.Text.csproj" />
+        <ProjectReference Include="../../src/Puck.Text/Puck.Text.csproj" />
     </ItemGroup>
     <ItemGroup>
-        <Content Include="..\..\src\Puck.Text\Assets\Fonts\source\JetBrainsMono-Regular.ttf" Link="Fonts\JetBrainsMono-Regular.ttf" CopyToOutputDirectory="PreserveNewest" />
-        <Content Include="Assets\Fonts\jetbrains-mono-oracle.json" Link="Fonts\jetbrains-mono-oracle.json" CopyToOutputDirectory="PreserveNewest" />
-        <Content Include="Assets\Fonts\source-serif-oracle.json" Link="Fonts\source-serif-oracle.json" CopyToOutputDirectory="PreserveNewest" />
-        <Content Include="Assets\Fonts\*.otf" Link="Fonts\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-        <Content Include="Assets\Fonts\SourceSerif-LICENSE.md" Link="Fonts\SourceSerif-LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="../../src/Puck.Text/Assets/Fonts/source/JetBrainsMono-Regular.ttf" Link="Fonts/JetBrainsMono-Regular.ttf" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="Assets/Fonts/jetbrains-mono-oracle.json" Link="Fonts/jetbrains-mono-oracle.json" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="Assets/Fonts/source-serif-oracle.json" Link="Fonts/source-serif-oracle.json" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="Assets/Fonts/*.otf" Link="Fonts/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="Assets/Fonts/SourceSerif-LICENSE.md" Link="Fonts/SourceSerif-LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 </Project>

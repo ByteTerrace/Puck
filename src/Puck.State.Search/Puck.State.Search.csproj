@@ -15,8 +15,8 @@
              and the shared plan vocabulary; Puck.State.Rules carries the evaluator, the effect host, and the
              compiled rules a candidate's judge runs; Puck.Maths carries the hash fold a position key and an input
              stamp are built from. Nothing else, and nothing points back. -->
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
-        <ProjectReference Include="..\Puck.State.Rules\Puck.State.Rules.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.State/Puck.State.csproj" />
+        <ProjectReference Include="../Puck.State.Rules/Puck.State.Rules.csproj" />
     </ItemGroup>
 </Project>

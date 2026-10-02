@@ -28,7 +28,7 @@
              analyzer over this project as well would only add a second, uncontrolled execution whose diagnostics
              are not the ones under test. -->
         <ProjectReference
-            Update="..\..\src\Puck.Analyzers\Puck.Analyzers.csproj"
+            Update="../../src/Puck.Analyzers/Puck.Analyzers.csproj"
             OutputItemType=""
             ReferenceOutputAssembly="true"
         />
@@ -36,6 +36,6 @@
     <ItemGroup>
         <!-- Every case compiles the repository's real marker attribute rather than a copy of it, so a change to
              the attribute's targets or properties reaches these tests instead of drifting away from them. -->
-        <EmbeddedResource Include="..\..\build\VerifiedCodeAttribute.cs" LogicalName="VerifiedCodeAttribute.cs" />
+        <EmbeddedResource Include="../../build/VerifiedCodeAttribute.cs" LogicalName="VerifiedCodeAttribute.cs" />
     </ItemGroup>
 </Project>
