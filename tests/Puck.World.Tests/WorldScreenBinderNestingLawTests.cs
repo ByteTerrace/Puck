@@ -81,7 +81,7 @@ public sealed class WorldScreenBinderNestingLawTests {
     [Fact]
     public void DepthZeroReleasesTheBootFeedsAndRaisingItReopensThem() {
         using var state = new TemporaryDirectory(prefix: "puck-binder-depth-");
-        using var host = Boot(state: state);
+        var host = Boot(state: state);
         var binder = BindScreens(host: host);
         var instances = host.Services.GetRequiredService<WorldInstanceHost>();
 
@@ -111,7 +111,7 @@ public sealed class WorldScreenBinderNestingLawTests {
     [Fact]
     public void RemovingARootPortalDoesNotRetainItsNestedOwner() {
         using var state = new TemporaryDirectory(prefix: "puck-binder-remove-");
-        using var host = Boot(state: state);
+        var host = Boot(state: state);
         var retired = RemovePortal(host: host);
 
         GC.Collect();
@@ -127,7 +127,7 @@ public sealed class WorldScreenBinderNestingLawTests {
     [Fact]
     public void AnEndedObservationNeitherShowsNorHoldsItsDescendants() {
         using var state = new TemporaryDirectory(prefix: "puck-binder-ended-");
-        using var host = Boot(state: state);
+        var host = Boot(state: state);
         var binder = BindScreens(host: host);
         var instances = host.Services.GetRequiredService<WorldInstanceHost>();
 
@@ -152,7 +152,7 @@ public sealed class WorldScreenBinderNestingLawTests {
     [Fact]
     public void AnEndedNestedObservationReleasesOnlyItsOwnLevel() {
         using var state = new TemporaryDirectory(prefix: "puck-binder-ended-nested-");
-        using var host = Boot(state: state);
+        var host = Boot(state: state);
         var binder = BindScreens(host: host);
         var instances = host.Services.GetRequiredService<WorldInstanceHost>();
 

@@ -12,12 +12,20 @@ namespace Puck.Testing;
 /// <see cref="RootPath"/> and may be forward-slashed; a write creates any subdirectory its name names.</summary>
 /// <param name="prefix">The temp-directory name prefix — kept distinct per caller so a directory that survives an
 /// aborted run (a killed process, a debugger break) still names which law left it behind.</param>
-internal sealed class TemporaryDirectory(string prefix = "puck-test-") : IDisposable {
+/// <param name="teardownBound">The bound on the entire teardown, including owner disposal; laws can supply a short
+/// bound to exercise a stuck owner.</param>
+internal sealed class TemporaryDirectory(string prefix = "puck-test-", TimeSpan? teardownBound = null) : IDisposable {
     // How long a delete waits between tries, in milliseconds, and how many paths a failure message names.
     private const int DeleteRetryMilliseconds = 50;
     private const int NamedPaths = 12;
 
+    private static readonly AsyncLocal<CancellationToken> TeardownCancellation = new();
+
     private readonly List<IDisposable> m_owned = [];
+    private readonly TimeSpan m_teardownBound = (((teardownBound ?? TestLiveness.Bound) > TimeSpan.Zero)
+        ? (teardownBound ?? TestLiveness.Bound)
+        : throw new ArgumentOutOfRangeException(paramName: nameof(teardownBound)));
+    private string m_teardownStep = "starting teardown";
 
     /// <summary>Gets the directory's absolute path.</summary>
     public string RootPath { get; } = Directory.CreateTempSubdirectory(prefix: prefix).FullName;
@@ -86,8 +94,10 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-") : IDispos
             ]
         );
     }
-    private void DisposeOwned(List<Exception> failures) {
+    private void DisposeOwned(List<Exception> failures, CancellationToken cancellationToken) {
         for (var index = (m_owned.Count - 1); (index >= 0); --index) {
+            cancellationToken.ThrowIfCancellationRequested();
+            Volatile.Write(location: ref m_teardownStep, value: $"disposing {m_owned[index].GetType().FullName}");
             try {
                 m_owned[index].Dispose();
             } catch (Exception error) {
@@ -109,11 +119,14 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-") : IDispos
 
         return owner;
     }
-    public void Dispose() {
+
+    private void DisposeCore(CancellationToken cancellationToken) {
         var failures = new List<Exception>();
         var strays = new List<string>();
 
-        DisposeOwned(failures: failures);
+        DisposeOwned(cancellationToken: cancellationToken, failures: failures);
+        cancellationToken.ThrowIfCancellationRequested();
+        Volatile.Write(location: ref m_teardownStep, value: $"deleting {RootPath}");
         if (!Directory.Exists(path: RootPath)) {
             failures.Add(item: new DirectoryNotFoundException(message: $"The directory {RootPath} was removed before its law finished."));
         } else {
@@ -124,6 +137,7 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-") : IDispos
                 TestLiveness.Until(
                     reason: () => Describe(lastFailure: lastFailure, strays: strays),
                     step: () => {
+                        cancellationToken.ThrowIfCancellationRequested();
                         var current = Snapshot();
 
                         foreach (var (file, state) in current) {
@@ -134,7 +148,14 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-") : IDispos
 
                         previous = current;
 
-                        return TryDelete(failure: out lastFailure, path: RootPath);
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var deleted = TryDelete(failure: out lastFailure, path: RootPath);
+
+                        if (!deleted) {
+                            Volatile.Write(location: ref m_teardownStep, value: Describe(lastFailure: lastFailure, strays: strays));
+                        }
+
+                        return deleted;
                     },
                     wait: token => {
                         // A pause between tries; the delete has no completion signal to block on.
@@ -157,6 +178,41 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-") : IDispos
         } else if (failures.Count > 1) {
             throw new AggregateException(innerExceptions: failures);
         }
+    }
+
+    public void Dispose() {
+        using var cancelled = CancellationTokenSource.CreateLinkedTokenSource(token: TeardownCancellation.Value);
+        var cancellationToken = cancelled.Token;
+        // A dedicated worker keeps a blocking owner's Dispose off the test runner and does not need a pool timer
+        // to enforce the bound. The calling thread bounds the whole teardown, including nested directories.
+        var teardown = Task.Factory.StartNew(
+            action: () => {
+                TeardownCancellation.Value = cancellationToken;
+                DisposeCore(cancellationToken: cancellationToken);
+            },
+            cancellationToken: CancellationToken.None,
+            creationOptions: TaskCreationOptions.LongRunning,
+            scheduler: TaskScheduler.Default
+        );
+
+        try {
+            if (teardown.Wait(timeout: m_teardownBound)) {
+                return;
+            }
+        } catch (AggregateException) {
+            teardown.GetAwaiter().GetResult();
+        }
+
+        cancelled.Cancel();
+        // An owner cannot be forcibly stopped. If it eventually returns, cancellation prevents disposal of its
+        // dependencies or deletion underneath it; observe the worker's eventual exception without waiting for it.
+        _ = teardown.ContinueWith(
+            continuationAction: static task => _ = task.Exception,
+            cancellationToken: CancellationToken.None,
+            continuationOptions: TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            scheduler: TaskScheduler.Default
+        );
+        throw new TimeoutException(message: $"Directory teardown exceeded {m_teardownBound} while {Volatile.Read(location: ref m_teardownStep)}. Still present under {RootPath}; teardown does not delete while an owner is blocked.");
     }
     /// <summary>Returns the absolute path of <paramref name="name"/> under this directory.</summary>
     /// <param name="name">The relative path.</param>
