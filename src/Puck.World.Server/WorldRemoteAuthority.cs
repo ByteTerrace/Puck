@@ -196,6 +196,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
     private int m_cannotProve;
     private WorldDefinition m_definition;
     private long m_lastObservedTickBits;
+
+    private readonly Lock m_observedRouteGate = new();
+
     private WorldAuthorityRouteDescription? m_observedRoute;
 
     // The physical entry stays fixed even when a traveler's logical destination changes.
@@ -897,27 +900,41 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         }
     }
     private void PublishObservedRoute(WorldAuthorityRouteDescription route) {
-        var changed = ((m_observedRoute is not { } observed) || (observed.Entity != route.Entity));
+        lock (m_observedRouteGate) {
+            var changed = ((m_observedRoute is not { } observed) || (observed.Entity != route.Entity));
 
-        m_observedRoute = route;
-        if (
-            changed &&
-            (m_submissionCredential is { } credential)
-        ) { InvalidateAcknowledgement(credential: in credential); }
-        Volatile.Write(
-            location: ref m_definition,
-            value: route.Definition
-        );
-        Volatile.Write(
-            location: ref m_authority,
-            value: route.Entity.Authority
-        );
-        _ = Interlocked.Exchange(
-            location1: ref m_lastObservedTickBits,
-            value: unchecked((long)route.Tick)
-        );
-        m_routeChanged?.Invoke(obj: route);
+            m_observedRoute = route;
+            if (
+                changed &&
+                (m_submissionCredential is { } credential)
+            ) { InvalidateAcknowledgement(credential: in credential); }
+            Volatile.Write(
+                location: ref m_definition,
+                value: route.Definition
+            );
+            Volatile.Write(
+                location: ref m_authority,
+                value: route.Entity.Authority
+            );
+            _ = Interlocked.Exchange(
+                location1: ref m_lastObservedTickBits,
+                value: unchecked((long)route.Tick)
+            );
+            m_routeChanged?.Invoke(obj: route);
+        }
     }
+
+    /// <summary>Delivers the latest observed route after its owner publishes the seat claim. Observation starts before
+    /// that claim exists, so its first route notification may have had no seat to update. Delivery is serialized with
+    /// incoming route frames so an older turn cannot overtake a newer one.</summary>
+    public void RepublishObservedRoute() {
+        lock (m_observedRouteGate) {
+            if (m_observedRoute is { } route) {
+                m_routeChanged?.Invoke(obj: route);
+            }
+        }
+    }
+
     // A Completion body is one whole downstream frame, decoded in place over the answer's own buffer.
     private static bool TryReadCompletion(ReadOnlyMemory<byte> body, out WorldSubmissionResult? result, out string reason) {
         result = null;
