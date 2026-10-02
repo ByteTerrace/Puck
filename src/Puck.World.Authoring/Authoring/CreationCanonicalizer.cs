@@ -1105,11 +1105,9 @@ public static partial class CreationCanonicalizer {
             ));
         }
     }
-    // A NaN/infinite param would reach SdfProgramBuilder's own throwing guards at emission time (e.g.
-    // RequireDirection/RequireFinite), well past the point a document author could see a reason why — refused here
-    // instead, alongside the position/rotation/scale finite checks every other shape field already gets. Range clamps
-    // (spacing floors, non-negative limits, the enum fallbacks) are Normalize's job, mirroring NormalizeWallpaper's
-    // old clamp-not-refuse posture; only what Normalize cannot safely repair is refused here.
+    // A NaN/infinite param, or a wallpaper group SdfProgram would refuse, would reach the builder's own guards at
+    // emission, past the point an author could see why, so it is refused here. Range clamps (spacing floors, limits,
+    // the polar axis and wallpaper plane fallbacks) are Normalize's; only what Normalize cannot repair is refused.
     private static void ValidateDomain(IReadOnlyList<ShapeDomainOp>? domain, List<DocumentValidationError> errors, string path) {
         if (domain is not { Count: > 0 } ops) {
             return;
@@ -1215,6 +1213,11 @@ public static partial class CreationCanonicalizer {
                         if (!Enum.IsDefined(value: wallpaper.Group)) {
                             errors.Add(item: new(
                                 Message: $"group '{wallpaper.Group}' is not recognized.",
+                                Path: $"{opPath}.group"
+                            ));
+                        } else if (!SdfWallpaperFold.IsContinuous(group: wallpaper.Group)) {
+                            errors.Add(item: new(
+                                Message: $"group '{wallpaper.Group}' folds discontinuously, so its field could read past a neighbouring copy; fold through a mirror group ({string.Join(separator: ", ", values: Enum.GetValues<SdfWallpaperGroup>().Where(predicate: SdfWallpaperFold.IsContinuous))}).",
                                 Path: $"{opPath}.group"
                             ));
                         }
@@ -1788,9 +1791,7 @@ public static partial class CreationCanonicalizer {
                     x: Math.Max(val1: wallpaper.Cell.X, val2: 0.001f),
                     y: Math.Max(val1: wallpaper.Cell.Y, val2: 0.001f)
                 ),
-                Group: (Enum.IsDefined(value: wallpaper.Group)
-                ? wallpaper.Group
-                : SdfWallpaperGroup.P1),
+                Group: wallpaper.Group,
                 Limit: new Vector2(
                     x: Math.Max(val1: (wallpaper.Limit?.X ?? ShapeDomainOp.Wallpaper.UnboundedLimit), val2: 0f),
                     y: Math.Max(val1: (wallpaper.Limit?.Y ?? ShapeDomainOp.Wallpaper.UnboundedLimit), val2: 0f)
