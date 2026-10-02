@@ -119,6 +119,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     // The mirrored world's environment, resolved each dressed frame. The track double-buffers its output, so the frame
     // the residency holds keeps its environment through the next dress, as the boot presentation's does.
+    private readonly WorldValueDomainReports? m_domains;
     private readonly WorldEnvironmentResolve m_environment;
 
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
@@ -147,6 +148,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false, WorldValueDomainReports? domains = null) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
+        m_domains = domains;
         m_environment = new WorldEnvironmentResolve(domains: domains);
 
         m_mirror = mirror;
@@ -228,9 +230,11 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// default projection.</param>
     /// <param name="width">The view's width, in pixels.</param>
     /// <param name="height">The view's height, in pixels.</param>
+    /// <param name="domains">The reports a bound camera operand presented outside its field's domain goes to, or
+    /// <see langword="null"/> to clamp it without reporting.</param>
     /// <returns>The camera, in the destination's space.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mirror"/> is <see langword="null"/>.</exception>
-    public static CameraSnapshot ResolveCamera(WorldSessionMirror mirror, string? cameraName, uint width, uint height) {
+    public static CameraSnapshot ResolveCamera(WorldSessionMirror mirror, string? cameraName, uint width, uint height, WorldValueDomainReports? domains = null) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
         var definition = mirror.Definition;
@@ -246,6 +250,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             );
             var rig = WorldCameraRigCompiler.Compile(
                 definition: definition,
+                domains: domains,
                 mirror: mirror.FollowState(),
                 program: cameraRow.Rig
             );
@@ -373,6 +378,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         var camera = (m_windowFit?.Invoke() ?? ResolveCamera(
             cameraName: m_effectiveCameraName,
+            domains: m_domains,
             height: height,
             mirror: m_mirror,
             width: width

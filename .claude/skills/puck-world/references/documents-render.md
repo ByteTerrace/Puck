@@ -70,8 +70,13 @@ rows, so a stray live value never refuses a mutation, a replay or a snapshot),
 and the presentation (`WorldEnvironmentResolve`, `WorldThemeResolve`,
 `WorldMarkerAlphas`) maps each resolved value through
 `WorldValueDomainReports.Clamp`, which reports the first stray value per field
-site and row once (`[world.value: …]`, wired in `WorldPostBuildWiring`). A new
-bindable scalar member needs its row, or `WorldValueDomainLawTests` fails.
+site and row once (`[world.value: …]`, wired in `WorldPostBuildWiring`); a
+camera program's blend weight is clamped as its rig refreshes its slots. A new
+bindable scalar member needs its row, or `WorldValueDomainLawTests` fails. A
+domain a kernel depends on is closed at a floor the kernel is proved against,
+never open at zero (an open end clamps to a float the GPU may flush): cloud
+softness, a sky layer's and a creation volume's (`VolumeDocument.SoftnessDomain`,
+judged by `CreationCanonicalizer`), is `[SdfSky.MinCloudSoftness, 1]`.
 Each light's `$type` union:
 
 | `$type` | Carries |

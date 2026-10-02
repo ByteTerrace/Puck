@@ -23,7 +23,7 @@ public readonly record struct WorldValueSite(string Section, int Index = -1, str
 }
 /// <summary>
 /// Maps a resolved presentation scalar into its field's declared domain (<see cref="WorldValueFields"/>) and reports
-/// the first value each bound row presents outside it. The value presented is <see cref="WorldValueDomain.Clamp"/> of
+/// the first value each bound row presents outside it. The value presented is <see cref="Authoring.WorldValueDomain.Clamp"/> of
 /// the value the state mirror resolves, a pure function of the current state, so a seek, a replay or a capture that
 /// rebuilds presentation from state presents the same value; only the report remembers anything. A field at one site
 /// bound to one row is reported once, however often or however far its row strays.

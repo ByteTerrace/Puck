@@ -59,9 +59,11 @@ public static class WorldCameraRigCompiler {
     /// true for the seat rig a joined seat steers, false for an authored camera that renders its own angles.</param>
     /// <param name="mirror">The state mirror whose registered slots the program's bound operands read each
     /// frame.</param>
+    /// <param name="domains">The reports a bound operand presented outside its field's domain goes to, or
+    /// <see langword="null"/> to clamp it without reporting.</param>
     /// <returns>A fresh presentation rig.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public static IWorldCameraProgramRig Compile(WorldCameraProgram program, WorldDefinition definition, WorldStateMirror mirror, bool interactive = false) {
+    public static IWorldCameraProgramRig Compile(WorldCameraProgram program, WorldDefinition definition, WorldStateMirror mirror, bool interactive = false, WorldValueDomainReports? domains = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: mirror);
@@ -75,6 +77,7 @@ public static class WorldCameraRigCompiler {
 
         return new CompiledRig(
             definition: definition,
+            domains: domains,
             mirror: mirror,
             scalarSources: translation.ScalarSources,
             set: new SdfCameraProgramSet(Programs: translation.Programs),
@@ -110,9 +113,11 @@ public static class WorldCameraRigCompiler {
         /// <see cref="Compile"/>).</param>
         /// <param name="interactive">Whether the program's orbit op folds in the live look (see
         /// <see cref="Compile"/>).</param>
+        /// <param name="domains">The reports a bound operand presented outside its field's domain goes to, or
+        /// <see langword="null"/> to clamp it without reporting; read when the rig compiles.</param>
         /// <returns>The rig.</returns>
         /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-        public IWorldCameraProgramRig Resolve(WorldCameraProgram program, WorldDefinition definition, WorldStateMirror mirror, bool interactive = false) {
+        public IWorldCameraProgramRig Resolve(WorldCameraProgram program, WorldDefinition definition, WorldStateMirror mirror, bool interactive = false, WorldValueDomainReports? domains = null) {
             ArgumentNullException.ThrowIfNull(argument: definition);
             ArgumentNullException.ThrowIfNull(argument: program);
             ArgumentNullException.ThrowIfNull(argument: mirror);
@@ -160,6 +165,7 @@ public static class WorldCameraRigCompiler {
             m_views = definition.ViewsRaw;
             m_rig = Compile(
                 definition: definition,
+                domains: domains,
                 interactive: interactive,
                 mirror: mirror,
                 program: program
@@ -171,8 +177,9 @@ public static class WorldCameraRigCompiler {
 
     // One per-frame scalar slot's source: the authored binding whose mirror slot it reads (null for none), or the
     // group-spread widening an offset op's pullback applies. Exactly one arm is live per slot.
-    // A bound or keyed operand, read through the mirror each frame; an angle's keys turn along the shorter arc.
-    private readonly record struct ScalarSource(BindableScalar? Value, float Fallback, float SpreadPullback, bool IsAngle = false);
+    // A bound or keyed operand, read through the mirror each frame; an angle's keys turn along the shorter arc. A
+    // restricted operand names its field and site, and is mapped into the field's domain as it is read.
+    private readonly record struct ScalarSource(BindableScalar? Value, float Fallback, float SpreadPullback, bool IsAngle = false, WorldValueField? Field = null, WorldValueSite Site = default);
     // One per-frame subject slot's source — an authored subject other than the program's own reference pose.
     private readonly record struct SubjectSource(WorldCameraSubject Subject);
     // The authored-to-IR walk. Programs are keyed by authored name so a blend that reaches the same program twice
@@ -251,7 +258,7 @@ public static class WorldCameraRigCompiler {
                 slot: slot
             );
         }
-        private SdfCameraScalar Scalar(BindableScalar scalar, float fallback) {
+        private SdfCameraScalar Scalar(BindableScalar scalar, float fallback, WorldValueField? field = null, WorldValueSite site = default) {
             if ((scalar.State is null) && (scalar.Keys is null)) {
                 return SdfCameraScalar.FromLiteral(value: (((scalar.Literal is { } literal) && float.IsFinite(f: literal))
                     ? literal
@@ -262,6 +269,8 @@ public static class WorldCameraRigCompiler {
 
             ScalarSources.Add(item: new ScalarSource(
                 Fallback: fallback,
+                Field: field,
+                Site: site,
                 SpreadPullback: 0f,
                 Value: scalar
             ));
@@ -408,7 +417,12 @@ public static class WorldCameraRigCompiler {
                                 ProgramB: Translate(program: programB),
                                 Weight: Scalar(
                                     fallback: 0f,
-                                    scalar: blend.Weight
+                                    field: WorldValueFields.BlendWeight,
+                                    scalar: blend.Weight,
+                                    site: new WorldValueSite(
+                                        Index: index,
+                                        Section: $"camera program '{program.Name}'.operations"
+                                    )
                                 )
                             ));
                         }
@@ -485,6 +499,7 @@ public static class WorldCameraRigCompiler {
         }
     }
     private sealed class CompiledRig : IWorldCameraProgramRig {
+        private readonly WorldValueDomainReports? m_domains;
         private readonly WorldStateMirror m_mirror;
         private readonly SdfCameraProgramRig m_rig;
         private readonly IReadOnlyList<ScalarSource> m_scalarSources;
@@ -492,8 +507,9 @@ public static class WorldCameraRigCompiler {
 
         private WorldDefinition m_definition;
 
-        public CompiledRig(SdfCameraProgramSet set, WorldDefinition definition, WorldStateMirror mirror, IReadOnlyList<ScalarSource> scalarSources, IReadOnlyList<SubjectSource> subjectSources) {
+        public CompiledRig(SdfCameraProgramSet set, WorldDefinition definition, WorldStateMirror mirror, IReadOnlyList<ScalarSource> scalarSources, IReadOnlyList<SubjectSource> subjectSources, WorldValueDomainReports? domains) {
             m_definition = definition;
+            m_domains = domains;
             m_mirror = mirror;
             m_rig = new SdfCameraProgramRig(
                 programs: set,
@@ -528,10 +544,21 @@ public static class WorldCameraRigCompiler {
                             angle: new BindableAngle(value: value),
                             fallback: source.Fallback
                         )
-                        : m_mirror.Scalar(
-                            fallback: source.Fallback,
-                            scalar: in value
-                        ))
+                        : ((source.Field is { } field)
+                            ? WorldValueDomainReports.Clamp(
+                                domains: m_domains,
+                                field: field,
+                                scalar: in value,
+                                site: source.Site,
+                                value: m_mirror.Scalar(
+                                    fallback: source.Fallback,
+                                    scalar: in value
+                                )
+                            )
+                            : m_mirror.Scalar(
+                                fallback: source.Fallback,
+                                scalar: in value
+                            )))
                     : (1f + (source.SpreadPullback * MathF.Max(
                         x: Spread,
                         y: 0f

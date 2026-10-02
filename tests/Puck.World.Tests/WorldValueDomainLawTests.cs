@@ -1,7 +1,12 @@
+using System.Numerics;
 using System.Reflection;
+using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.Overlays;
+using Puck.SdfVm;
+using Puck.SdfVm.Views;
 using Puck.SignedDistance;
+using Puck.World.Authoring;
 using Puck.World.Client;
 using Xunit;
 
@@ -18,7 +23,9 @@ public sealed class WorldValueDomainLawTests {
     private const string Row = "bound";
 
     // How a test authors a field into a document and reads back what the presentation made of it.
-    private sealed record Case(Func<BindableScalar, WorldDefinition> Author, string Path, Func<WorldDefinition, WorldStateMirror, WorldValueDomainReports, float>? Present = null, float[]? Controls = null);
+    // A report names the field where the presentation finds it, which is the document path unless the case says
+    // otherwise (ReportPath).
+    private sealed record Case(Func<BindableScalar, WorldDefinition> Author, string Path, Func<WorldDefinition, WorldStateMirror, WorldValueDomainReports, float>? Present = null, float[]? Controls = null, string? ReportPath = null);
 
     private static readonly IReadOnlyDictionary<WorldValueField, Case> Cases = new Dictionary<WorldValueField, Case> {
         [WorldValueFields.DirectionalWeight] = Lit(author: s => new WorldRenderLight.Directional(Weight: s), present: static e => e.Lights[0].Weight, member: "weight"),
@@ -70,11 +77,40 @@ public sealed class WorldValueDomainLawTests {
         [WorldValueFields.BloomNeutralRingAlpha] = Bloom(field: nameof(WorldThemeElevation.BloomNeutralRingAlpha), author: static (e, s) => e with { BloomNeutralRingAlpha = s }, present: static e => e.BloomNeutralRingAlpha),
         [WorldValueFields.BloomHeldInsetAlpha] = Bloom(field: nameof(WorldThemeElevation.BloomHeldInsetAlpha), author: static (e, s) => e with { BloomHeldInsetAlpha = s }, present: static e => e.BloomHeldInsetAlpha),
         [WorldValueFields.MarkerChipAlpha] = Marker(author: s => new WorldMarkerStyle(ChipAlpha: s, Size: 12f, RingAlpha: 0.35f, RingColor: new BindableColor(Raw: "#9BA3AB")), present: static a => a.Chip, member: "chipAlpha"),
+        [WorldValueFields.BlendWeight] = new Case(
+            Author: static s => Fixtures.BuildDocument() with {
+                CamerasRaw = [
+                    Camera(name: "probe", rig: Program(name: "probe-rig", operations: new WorldCameraProgramOp.Blend(A: "low-rig", B: "high-rig", Weight: s))),
+                    Camera(name: "low", rig: Program(name: "low-rig", operations: new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: LowFov))),
+                    Camera(name: "high", rig: Program(name: "high-rig", operations: new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: HighFov))),
+                ],
+            },
+            Path: "cameras[0].rig.operations[0].weight",
+            // A compiled rig knows its program by name, not where the document declares it.
+            ReportPath: "camera program 'probe-rig'.operations[0].weight",
+            // The blend's field of view is the two programs' interpolated by the presented weight.
+            Present: static (definition, mirror, domains) => ((WorldCameraRigCompiler.Compile(
+                definition: definition,
+                domains: domains,
+                mirror: mirror,
+                program: definition.Cameras[0].Rig
+            ).Resolve(
+                anchor: new SdfAnchor(Orientation: Quaternion.Identity, Position: Vector3.Zero),
+                clock: new SdfCameraClock(AuthoritativeTick: 0UL, PresentationSeconds: 0f)
+            ).FovRadians - LowFov) / (HighFov - LowFov))
+        ),
         [WorldValueFields.MarkerRingAlpha] = Marker(author: s => new WorldMarkerStyle(ChipAlpha: 0.9f, Size: 12f, RingAlpha: s, RingColor: new BindableColor(Raw: "#9BA3AB")), present: static a => a.Ring, member: "ringAlpha"),
     };
 
     public static TheoryData<string> Bindable => [.. Cases.Where(predicate: static pair => (pair.Value.Present is not null)).Select(selector: static pair => Key(field: pair.Key))];
-    public static TheoryData<string> Restricted => [.. WorldValueFields.All.Where(predicate: static candidate => candidate.Domain.IsRestricted).Select(selector: static candidate => Key(field: candidate))];
+
+    // Rows for plain numbers a creation authors, judged where the creation is canonicalized, not in a world section.
+    private static readonly IReadOnlySet<WorldValueField> LiteralOnly = new HashSet<WorldValueField> { WorldValueFields.VolumeSoftness };
+
+    private const float HighFov = 1.5f;
+    private const float LowFov = 0.5f;
+
+    public static TheoryData<string> Restricted => [.. WorldValueFields.All.Where(predicate: static candidate => (candidate.Domain.IsRestricted && !LiteralOnly.Contains(item: candidate))).Select(selector: static candidate => Key(field: candidate))];
     public static TheoryData<string> Shapes => [
         "closed:[0, 1]",
         "closed:[-1, 1]",
@@ -84,6 +120,18 @@ public sealed class WorldValueDomainLawTests {
         .. WorldValueFields.All.Where(predicate: static candidate => candidate.Domain.IsRestricted).Select(selector: static candidate => $"field:{Key(field: candidate)}"),
     ];
 
+    private static WorldCamera Camera(string name, WorldCameraProgram rig) => new(
+        Anchor: null,
+        Name: name,
+        RenderHeight: 240u,
+        RenderWidth: 320u,
+        Rig: rig
+    );
+    private static WorldCameraProgram Program(string name, WorldCameraProgramOp operations) => new(
+        Name: name,
+        Operations: [operations],
+        Version: WorldCameraProgram.CurrentVersion
+    );
     private static string Key(WorldValueField field) => $"{field.Owner.Name}.{field.Member}";
     private static WorldValueField FieldOf(string key) => WorldValueFields.All.Single(predicate: field => (Key(field: field) == key));
     private static WorldDefinition Render(WorldRenderLighting? lighting = null, WorldRenderSky? sky = null) => Fixtures.BuildDocument() with {
@@ -192,14 +240,16 @@ public sealed class WorldValueDomainLawTests {
         Assert.All(collection: WorldValueFields.All, action: field => Assert.Contains(collection: properties, expected: field));
         Assert.Equal(
             expected: model.OrderBy(keySelector: static pair => $"{pair.DeclaringType.FullName}.{pair.Member}"),
-            actual: declared.OrderBy(keySelector: static pair => $"{pair.Owner.FullName}.{pair.Member}")
+            actual: declared.Where(predicate: static pair => !LiteralOnly.Any(predicate: field => ((field.Owner == pair.Owner) && (field.Member == pair.Member)))).OrderBy(keySelector: static pair => $"{pair.Owner.FullName}.{pair.Member}")
         );
+        // A literal-only row names a plain number, which no binding can reach.
+        Assert.All(collection: LiteralOnly, action: static field => Assert.Equal(expected: typeof(float?), actual: field.Owner.GetProperty(name: field.Member)!.PropertyType));
         Assert.All(collection: WorldValueFields.All, action: static field => Assert.Same(expected: field, actual: WorldValueFields.Of(member: field.Member, owner: field.Owner)));
 
         // Every restricted field is authored by this suite, which is how the laws below reach the validator and the
         // presentation for each.
         Assert.Equal(
-            expected: WorldValueFields.All.Where(predicate: static field => field.Domain.IsRestricted).Select(selector: Key).Order(),
+            expected: WorldValueFields.All.Where(predicate: static field => (field.Domain.IsRestricted && !LiteralOnly.Contains(item: field))).Select(selector: Key).Order(),
             actual: Cases.Keys.Select(selector: Key).Order()
         );
     }
@@ -326,7 +376,7 @@ public sealed class WorldValueDomainLawTests {
         // One field at one site bound to one row reports once, however often its row strays.
         Assert.Equal(expected: 1, actual: domains.Reported);
         Assert.Single(collection: reports);
-        Assert.Contains(expectedSubstring: $"{authoring.Path} reads", actualString: reports[0]);
+        Assert.Contains(expectedSubstring: $"{(authoring.ReportPath ?? authoring.Path)} reads", actualString: reports[0]);
         Assert.Contains(expectedSubstring: $"state.{Row}", actualString: reports[0]);
     }
     [Fact]
@@ -335,7 +385,7 @@ public sealed class WorldValueDomainLawTests {
 
         Laws.Refuses(
             definition: WithRow(definition: softness, value: 0d),
-            needle: $"render.sky.layers[0].softness binds state.{Row} whose starting value 0 lies outside (0, 1]"
+            needle: $"render.sky.layers[0].softness binds state.{Row} whose starting value 0 lies outside {WorldValueFields.CloudSoftness.Domain}"
         );
         Assert.True(condition: Admits(definition: WithRow(definition: softness, value: 0.5d), reason: out var reason), userMessage: reason);
 
@@ -347,24 +397,85 @@ public sealed class WorldValueDomainLawTests {
         );
     }
     [Fact]
-    public void A_softness_written_to_zero_or_below_reaches_the_record_inside_its_domain_and_reports_once() {
-        var softness = Layer(layer: new WorldRenderSkyLayer.Clouds(Softness: new BindableScalar(binding: $"state.{Row}")));
+    public void A_cloud_softness_below_its_floor_is_refused_at_load_and_presents_the_floor() {
+        // The floor is a closed end the kernels' smoothstep bands are proved against, not an open zero.
+        Assert.Equal(expected: new WorldValueDomain(Maximum: 1f, Minimum: SdfSky.MinCloudSoftness), actual: WorldValueFields.CloudSoftness.Domain);
+
+        var literal = Layer(layer: new WorldRenderSkyLayer.Clouds(Softness: 1e-30f));
+
+        Laws.Refuses(
+            definition: literal,
+            needle: $"render.sky.layers[0].softness {1e-30f} must be finite and within {WorldValueFields.CloudSoftness.Domain}"
+        );
+        Assert.True(condition: Admits(definition: Layer(layer: new WorldRenderSkyLayer.Clouds(Softness: SdfSky.MinCloudSoftness)), reason: out var reason), userMessage: reason);
+
         var domains = new WorldValueDomainReports();
         var reports = new List<string>();
         var resolve = new WorldEnvironmentResolve(domains: domains);
 
         domains.Report = reports.Add;
 
-        Assert.True(condition: Admits(definition: WithRow(definition: softness, value: 0.5d), reason: out var reason), userMessage: reason);
+        // An unvalidated literal below the floor still presents the floor; a literal reports nothing.
+        Assert.Equal(
+            expected: SdfSky.MinCloudSoftness,
+            actual: resolve.Resolve(definition: literal, mirror: ClientFixtures.StateMirror(definition: literal), revision: 0).Sky.Block.CloudSoftness
+        );
+        Assert.Empty(collection: reports);
+
+        // A bound row written to 0 or below presents the floor and reports once.
+        var bound = Layer(layer: new WorldRenderSkyLayer.Clouds(Softness: new BindableScalar(binding: $"state.{Row}")));
+
+        Assert.True(condition: Admits(definition: WithRow(definition: bound, value: 0.5d), reason: out var boundReason), userMessage: boundReason);
 
         foreach (var value in new[] { 0d, -1d }) {
-            var live = WithRow(definition: softness, value: value);
-            var record = resolve.Resolve(definition: live, mirror: ClientFixtures.StateMirror(definition: live), revision: 0).Sky.Block.CloudSoftness;
+            var live = WithRow(definition: bound, value: value);
 
-            Assert.True(condition: ((record > 0f) && (record <= 1f)), userMessage: $"softness {value} reached the record as {record}");
+            Assert.Equal(
+                expected: SdfSky.MinCloudSoftness,
+                actual: resolve.Resolve(definition: live, mirror: ClientFixtures.StateMirror(definition: live), revision: 0).Sky.Block.CloudSoftness
+            );
         }
 
         Assert.Single(collection: reports);
-        Assert.Contains(expectedSubstring: $"render.sky.layers[0].softness reads 0 from state.{Row}, outside (0, 1]", actualString: reports[0]);
+        Assert.Contains(expectedSubstring: $"render.sky.layers[0].softness reads 0 from state.{Row}, outside {WorldValueFields.CloudSoftness.Domain}", actualString: reports[0]);
+    }
+    [Fact]
+    public void A_cloud_volume_softness_below_its_floor_is_refused_where_its_creation_is_canonicalized() {
+        static IReadOnlyList<DocumentValidationError> Errors(float softness) {
+            var document = CreationFixtures.Document(name: "cloud", shapes: [CreationFixtures.UnitSphereShape]) with {
+                Volumes = [
+                    new VolumeDocument(
+                        Kind: VolumeDocument.CloudKind,
+                        Position: Vector3.Zero,
+                        Rotation: Quaternion.Identity,
+                        HalfExtent: Vector3.One,
+                        Ramp: [new VolumeDensityStopDocument(Color: "#FFFFFF", Density: 0f), new VolumeDensityStopDocument(Color: "#FFFFFF", Density: 1f)],
+                        Softness: softness
+                    ),
+                ],
+            };
+
+            try {
+                _ = CreationCanonicalizer.Canonicalize(document: document);
+
+                return [];
+            } catch (DocumentValidationException exception) {
+                return exception.Errors;
+            }
+        }
+
+        var domain = WorldValueFields.VolumeSoftness.Domain;
+
+        Assert.Same(expected: WorldValueFields.Of(member: nameof(VolumeDocument.Softness), owner: typeof(VolumeDocument)), actual: WorldValueFields.VolumeSoftness);
+        Assert.Equal(expected: VolumeDocument.SoftnessDomain, actual: domain);
+        Assert.Empty(collection: Errors(softness: domain.Lowest));
+        Assert.Empty(collection: Errors(softness: domain.Highest));
+
+        foreach (var softness in new[] { 0f, 1e-30f, MathF.BitDecrement(x: domain.Lowest), MathF.BitIncrement(x: domain.Highest) }) {
+            Assert.Contains(
+                collection: Errors(softness: softness),
+                filter: error => ((error.Path == "volumes[0].softness") && error.Message.Contains(comparisonType: StringComparison.Ordinal, value: $"within {domain}"))
+            );
+        }
     }
 }

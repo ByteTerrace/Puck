@@ -1,3 +1,5 @@
+using Puck.World.Authoring;
+
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {

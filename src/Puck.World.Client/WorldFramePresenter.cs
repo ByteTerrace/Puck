@@ -809,6 +809,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private IWorldCameraProgramRig ResolveCameraModeRig(WorldCameraProgram cameraRig, WorldDefinition definition, WorldStateMirror mirror, int slot) =>
         (m_cameraModeRigCache[slot] ??= new WorldCameraRigCompiler.Cache()).Resolve(
             definition: definition,
+            domains: m_domains,
             mirror: mirror,
             program: cameraRig
         );
@@ -944,6 +945,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         return cache.Resolve(
             definition: definition,
+            domains: m_domains,
             mirror: m_client.StateMirror,
             program: program
         );
