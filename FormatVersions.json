@@ -17,7 +17,7 @@
             "token": "6"
         },
         "AssetChunk.Version": {
-            "shape": "ec82951d242ea658",
+            "shape": "bdb150ba07ab2f8f",
             "source": "src/Puck.World.Schema/CompiledWorldChunks.cs",
             "token": "1"
         },
@@ -47,7 +47,7 @@
             "token": "puck.input.bindings.v1"
         },
         "BrandingCommand.ManifestSchema": {
-            "shape": "c1c6594aca72b592",
+            "shape": "4632c3a77c19e2b9",
             "source": "src/Puck.Cli/Branding/BrandingCommand.cs",
             "token": "puck.branding.v1"
         },
@@ -59,11 +59,6 @@
         "CartridgeDocument.SchemaId": {
             "shape": "78728ab61b5ad0e8",
             "source": "src/Puck.GamingBricks.Forge/CartridgeDocument.cs",
-            "token": "puck.cartridge.v1"
-        },
-        "CartridgeVocabulary.Schema": {
-            "shape": "902467c574195280",
-            "source": "src/Puck.GamingBricks.Transpiler/CartridgeVocabulary.cs",
             "token": "puck.cartridge.v1"
         },
         "CborAttestationCodec.FormatVersion": {
@@ -92,7 +87,7 @@
             "token": "puck.creation.v1"
         },
         "DefinitionChunk.Version": {
-            "shape": "ec82951d242ea658",
+            "shape": "bdb150ba07ab2f8f",
             "source": "src/Puck.World.Schema/CompiledWorldChunks.cs",
             "token": "2"
         },
@@ -105,11 +100,6 @@
             "shape": "6898995033ac4699",
             "source": "src/Puck.Cli/Formats/FormatVersionsLedger.cs",
             "token": "2"
-        },
-        "GamingBrickContentPolicies.PuckCartridgeFormat": {
-            "shape": "b4f5bb2afcf1a563",
-            "source": "src/Puck.Machines/GamingBrickContentPolicies.cs",
-            "token": "puck.cartridge.v1"
         },
         "HgdMachineIdentity.CurrentVersion": {
             "shape": "1b553c48ce495a53",
@@ -147,14 +137,9 @@
             "token": "3"
         },
         "ParityManifestLoader.ContractSchema": {
-            "shape": "4b394e273b1b84c4",
+            "shape": "53da48c9f2fe5eed",
             "source": "src/Puck.Cli/Parity/ParityManifestLoader.cs",
             "token": "puck.parity.contract.v1"
-        },
-        "ParityManifestLoader.ManifestSchema": {
-            "shape": "4b394e273b1b84c4",
-            "source": "src/Puck.Cli/Parity/ParityManifestLoader.cs",
-            "token": "puck.parity.manifest.v1"
         },
         "PbakBundle.SupportedVersion": {
             "shape": "26474a2937e7c800",
@@ -212,9 +197,9 @@
             "token": "puck.render.graph.v1"
         },
         "SdfBaker.Version": {
-            "shape": "975d38676adfc33d",
+            "shape": "02c658afda3f7d3a",
             "source": "src/Puck.SignedDistance/Baking/SdfBaker.cs",
-            "token": "7"
+            "token": "8"
         },
         "SdfDocumentDecoder.Schema": {
             "shape": "762fae7b2ea0564b",
@@ -222,7 +207,7 @@
             "token": "puck.sdf.v1"
         },
         "ShaderCompiler.CompilerVersion": {
-            "shape": "7b736844cda5c487",
+            "shape": "10bf531cf8841447",
             "source": "src/Puck.Shaders/ShaderCompiler.cs",
             "token": "puck-shader-compiler-4"
         },
@@ -251,40 +236,45 @@
             "source": "src/Puck.Analyzers/VerifiedCodeManifest.cs",
             "token": "csharp-tokens-v1"
         },
+        "WasmBinaryFormat.Magic": {
+            "shape": "293a4f56b6458d75",
+            "source": "src/Puck.Assets/WasmBinaryFormat.cs",
+            "token": "\u0000asm"
+        },
         "WorldArtifactKey.Schema": {
-            "shape": "9b9b40f63f8ade7e",
+            "shape": "40dd411644102d3d",
             "source": "src/Puck.Cli/WorldArtifactKey.cs",
-            "token": "puck.world-artifact-key.v1"
+            "token": "puck.world-artifact-key.v2"
         },
         "WorldAuthorityCheckpointCodec.Magic": {
-            "shape": "1f4807bee38e14cf",
+            "shape": "ca31268313ec8751",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
             "token": "PCKP"
         },
         "WorldAuthorityCheckpointCodec.SupportedVersion": {
-            "shape": "1f4807bee38e14cf",
+            "shape": "ca31268313ec8751",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
-            "token": "15"
+            "token": "16"
         },
         "WorldAuthorityReceiptSnapshot.CurrentSchema": {
-            "shape": "764cca9b8ff447a7",
+            "shape": "5c328d90f0ca66d1",
             "source": "src/Puck.World.Server/WorldAuthorityReceiptSnapshot.cs",
             "token": "puck.world.receipts.v1"
         },
         "WorldAuthorityRecoveryRootCodec.Schema": {
-            "shape": "4ee689f53fe3bbcc",
+            "shape": "0f29b233bb0d3521",
             "source": "src/Puck.World.Server/WorldAuthorityRecoveryRoot.cs",
             "token": "puck.authority.recovery-root.v1"
         },
         "WorldAuthorityStoreWireCodec.JournalMagic": {
-            "shape": "3ce4a5a0c9b117ad",
+            "shape": "f8ff9d5b78e79767",
             "source": "src/Puck.World.Protocol/Codecs/WorldAuthorityStoreWireCodec.cs",
             "token": "PJNL"
         },
         "WorldAuthorityStoreWireCodec.JournalVersion": {
-            "shape": "3ce4a5a0c9b117ad",
+            "shape": "f8ff9d5b78e79767",
             "source": "src/Puck.World.Protocol/Codecs/WorldAuthorityStoreWireCodec.cs",
-            "token": "2"
+            "token": "3"
         },
         "WorldBakePack.FormatVersion": {
             "shape": "5f66d837fc05da21",
@@ -297,12 +287,12 @@
             "token": "PWBK"
         },
         "WorldCameraProgram.CurrentVersion": {
-            "shape": "6de6a043610fbaf8",
+            "shape": "aa52442ae9e6a8e8",
             "source": "src/Puck.World.Schema/WorldCameraProgram.cs",
             "token": "puck.camera.program.v1"
         },
         "WorldCaptureManifest.SchemaId": {
-            "shape": "ed45b2a48e8a13a6",
+            "shape": "57d035308dc2510a",
             "source": "src/Puck.World.Console/WorldCaptureScheduler.cs",
             "token": "puck.parity.manifest.v1"
         },
@@ -312,7 +302,7 @@
             "token": "PUCKWCC3"
         },
         "WorldCounterpartAttestation.SchemaVersion": {
-            "shape": "a2d4c0f0bfcdf489",
+            "shape": "c00ef1b714119498",
             "source": "src/Puck.World.Schema/WorldCounterpartAttestation.cs",
             "token": "puck.world.counterpart-attestation.v1"
         },
@@ -327,13 +317,8 @@
             "token": "puck.counters.report.v1"
         },
         "WorldDefinition.SchemaVersion": {
-            "shape": "a2d4c0f0bfcdf489",
+            "shape": "c00ef1b714119498",
             "source": "src/Puck.World.Schema/WorldDefinition.cs",
-            "token": "puck.world.definition.v1"
-        },
-        "WorldDocumentVocabulary.Schema": {
-            "shape": "9c8e5ae05d0bb569",
-            "source": "src/Puck.World.Transpiler/Lowering/WorldDocumentVocabulary.cs",
             "token": "puck.world.definition.v1"
         },
         "WorldExtensionConfiguration.CurrentSchema": {
@@ -342,12 +327,12 @@
             "token": "puck.world.extensions.v1"
         },
         "WorldFederationCodec.WireKey": {
-            "shape": "728f2457db20acc7",
+            "shape": "a789a83747af0f58",
             "source": "src/Puck.World.Server/WorldFederationCodec.cs",
             "token": "PUCKFED5"
         },
         "WorldProjectionDocument.SchemaVersion": {
-            "shape": "a2d4c0f0bfcdf489",
+            "shape": "c00ef1b714119498",
             "source": "src/Puck.World.Schema/WorldProjection.cs",
             "token": "puck.world.projection.v1"
         },
@@ -367,7 +352,7 @@
             "token": "puck.world.qualification-exercise.v1"
         },
         "WorldReleaseFixtureArchive.Schema": {
-            "shape": "0493f33dae21a08c",
+            "shape": "398603b676d3f114",
             "source": "src/Puck.World.Server/WorldReleaseFixtureArchive.cs",
             "token": "puck.world.release-fixture.v1"
         },
@@ -397,24 +382,19 @@
             "token": "puck.world.rewind.closed-group.v1"
         },
         "WorldReplaySnapshot.Magic": {
-            "shape": "7ede0891f1b62914",
+            "shape": "dc84a328d990f8f3",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "WLRP"
         },
         "WorldReplaySnapshot.ShapeToken": {
-            "shape": "7ede0891f1b62914",
+            "shape": "dc84a328d990f8f3",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
-            "token": "4"
+            "token": "5"
         },
         "WorldScheduleSection.ManifestSchemaId": {
             "shape": "a63d4c4af217e350",
             "source": "src/Puck.World.Schema/WorldSchedule.cs",
             "token": "puck.world.schedule-manifest.v1"
-        },
-        "WorldSemanticValidator.RootSchemaId": {
-            "shape": "ca6b8d8165d9b068",
-            "source": "src/Puck.World.Transpiler/Validation/WorldSemanticValidator.cs",
-            "token": "puck.world.definition.v1"
         },
         "WorldSiloDefinition.SchemaVersion": {
             "shape": "fb3ab1864cd7f1a5",
