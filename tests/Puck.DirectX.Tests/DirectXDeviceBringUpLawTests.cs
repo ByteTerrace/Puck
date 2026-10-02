@@ -83,12 +83,14 @@ public sealed class DirectXDeviceBringUpLawTests {
             minimumFeatureLevel: DirectXFeatureLevel.Level110
         );
 
-        _ = Assert.Throws<ArgumentException>(testCode: () => context.Device);
+        var failure = Record.Exception(testCode: () => { _ = context.Device; });
 
+        // A host with no Direct3D 12 refuses at the factory before the fake device API creates anything.
         if (api.Created.Count == 0) {
             Assert.Skip(reason: "no Direct3D 12 software device on this host");
         }
 
+        _ = Assert.IsType<ArgumentException>(@object: failure);
         Assert.False(condition: context.IsInitialized);
         Assert.Null(@object: context.Identity);
         Assert.Null(@object: context.Capabilities);

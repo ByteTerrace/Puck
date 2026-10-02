@@ -204,7 +204,7 @@ internal static class AdmissionWireFixture {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
-        host.Start(listen: "127.0.0.1:0");
+        PeerTestClient.StartOrSkip(host: host);
 
         return host;
     }

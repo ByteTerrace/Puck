@@ -238,6 +238,8 @@ public sealed class GpuPipelineCacheLawTests : IDisposable {
     }
     [Fact]
     public void AWriteThatCannotReplaceTheFileLeavesItWholeAndStaysOwed() {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "A held handle blocks a rename only on Windows."); return; }
+
         var file = Open(
             contentKey: "key",
             identity: DirectX

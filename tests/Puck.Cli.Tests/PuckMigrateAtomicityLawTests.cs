@@ -136,6 +136,8 @@ public sealed class PuckMigrateAtomicityLawTests {
     // its own turn in the write phase with earlier destinations already replaced.
     [Fact]
     public void AThirdSourceThatCannotBeWrittenLeavesAllFive() {
+        if (!OperatingSystem.IsWindows() && Environment.IsPrivilegedProcess) { Assert.Skip(reason: "A privileged Unix process writes a read-only file."); return; }
+
         var directory = Fixture(third: World);
 
         try {

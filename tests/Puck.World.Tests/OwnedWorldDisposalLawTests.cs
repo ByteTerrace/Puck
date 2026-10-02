@@ -517,6 +517,8 @@ public sealed class OwnedWorldDisposalLawTests {
     /// leave a half-written or clobbered copy behind: the destination it chose stays absent.</summary>
     [Fact]
     public void FailingFileMove_LeavesTheSourceBytes_AndTheEarlierQuarantinedCopy() {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "A pinned handle blocks a move only on Windows."); return; }
+
         using var dir = new TemporaryDirectory();
         var target = Populate(dir: dir)[0];
 

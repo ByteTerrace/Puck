@@ -10,6 +10,8 @@ public sealed class Win32CameraColorimetryTests {
     [SupportedOSPlatform("windows10.0.19041")]
     [Theory]
     public void Every_subtype_converts_through_a_kernel_compiled_at_build(string subtype) {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Direct3D 11 kernels compile at build only on Windows."); return; }
+
         var bytecode = File.ReadAllBytes(path: Win32D3D11CameraFrameConverter.KernelPath(subtype: subtype));
 
         // A DXBC container opens with its four-character code.
