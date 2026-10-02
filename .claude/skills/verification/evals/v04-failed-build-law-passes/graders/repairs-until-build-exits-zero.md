@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response repairs the withheld tree until its build exits 0, confirms the exit status, and only then reads the law's result.
+The response says the withheld tree's build has to be repaired until it exits 0 before the law's result is read.
