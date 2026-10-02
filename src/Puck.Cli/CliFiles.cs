@@ -6,7 +6,7 @@ namespace Puck.Cli;
 // Whole-file JSON and directory-tree operations the automation verbs share. Written JSON is indented and
 // newline-terminated so a committed artifact diffs line by line.
 internal static class CliFiles {
-    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions Indented = new() { NewLine = "\n", WriteIndented = true };
 
     public static void CopyDirectory(string source, string destination) {
         Directory.CreateDirectory(path: destination);

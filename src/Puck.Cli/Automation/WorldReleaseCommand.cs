@@ -258,7 +258,7 @@ internal static class WorldReleaseCommand {
         var action = NextAction(record: record);
 
         if (json) {
-            var options = new JsonSerializerOptions { WriteIndented = true, Converters = { new JsonStringEnumConverter() } };
+            var options = new JsonSerializerOptions { NewLine = "\n", WriteIndented = true, Converters = { new JsonStringEnumConverter() } };
             var document = JsonSerializer.SerializeToNode(
                 options: options,
                 value: record
@@ -523,7 +523,7 @@ internal static class WorldReleaseCommand {
 
             Console.WriteLine(value: JsonSerializer.Serialize(
                 point,
-                new JsonSerializerOptions { WriteIndented = true }
+                new JsonSerializerOptions { NewLine = "\n", WriteIndented = true }
             ));
             Console.WriteLine(value: $"Recovery point: {point.RequestId:D}; identity: {point.Identity}");
             return CliExit.Success;

@@ -114,7 +114,7 @@ internal static class QualificationPlan {
             },
         };
 
-        return $"{overlay.ToJsonString(options: new JsonSerializerOptions { WriteIndented = true })}\n";
+        return $"{overlay.ToJsonString(options: new JsonSerializerOptions { NewLine = "\n", WriteIndented = true })}\n";
     }
     /// <summary>Reads what a pipeline workload's world authors for its instance.</summary>
     /// <param name="worldText">The world document's JSON text.</param>

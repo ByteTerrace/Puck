@@ -20,6 +20,7 @@ namespace Puck.Recording.Document;
 [JsonSerializable(typeof(OverlayRow))]
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    NewLine = "\n",
     WriteIndented = true
 )]
 internal sealed partial class RecordingJsonContext : JsonSerializerContext {
