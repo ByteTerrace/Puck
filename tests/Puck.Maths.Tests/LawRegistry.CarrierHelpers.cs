@@ -13,6 +13,18 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.4,
         NeighborhoodFraction: 0.3
     );
+    private static readonly Domain QuaternionArc = new(
+        Key: "quaternion-arc",
+        Block: 512,
+        EdgeFraction: 0.4,
+        NeighborhoodFraction: 0.3
+    );
+    private static readonly Domain QuaternionAntiparallel = new(
+        Key: "quaternion-antiparallel",
+        Block: 512,
+        EdgeFraction: 0.4,
+        NeighborhoodFraction: 0.3
+    );
     private static readonly Domain TryArithmetic = new(
         Key: "integer-try-arithmetic",
         Block: 512,
@@ -42,6 +54,18 @@ internal static partial class LawRegistry {
         ClaimCase(
             claim: Subjects.VectorUnitAxesAreExact,
             id: "vector.unit-axes-are-exact"
+        ),
+        SweptCase(
+            claim: Subjects.FixedQuaternionSlerpFollowsTheArc,
+            domain: QuaternionArc,
+            id: "quaternion.slerp-follows-the-arc",
+            width: 4
+        ),
+        SweptCase(
+            claim: Subjects.FixedQuaternionFromToNearAntiparallel,
+            domain: QuaternionAntiparallel,
+            id: "quaternion.from-to-near-antiparallel",
+            width: 3
         ),
         SweptCase(
             claim: Subjects.FixedVectorIsWithinMatchesLength,

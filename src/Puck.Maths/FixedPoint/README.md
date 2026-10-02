@@ -592,10 +592,14 @@ after long chains.
 - `FromTo(from, to)` is the geometric-product rotor `(f̂ × t̂, 1 + f̂·t̂)`
   normalized, and normalization is what halves the full-angle rotor into the
   half-angle quaternion. Its norm is `2·cos(θ/2)`, which vanishes at a half
-  turn, so within about 0.45° of antiparallel—a candidate norm below 512 raw
-—it falls back to π about a deterministic axis perpendicular to `from`,
-  chosen by whichever basis vector is least aligned with it. Either input zero
-  answers `Identity`.
+  turn, but the cross product is exact at full width and the scalar is off
+  only by the two floored norms, so the rotor stays within a quarter of a raw
+  of the true rotation until the directions are within about `2⁻²⁷` rad of
+  antiparallel. Inside that gap it answers the half turn about `f × t`
+  itself, which carries `from` to within the gap of `to`; exactly
+  antiparallel inputs, whose cross product vanishes, rotate π about a
+  deterministic axis perpendicular to `from`, chosen by whichever basis vector
+  is least aligned with it. Either input zero answers `Identity`.
 - `Slerp` walks the shortest arc, negating the far endpoint when the dot is
   negative, and falls back to a normalized linear blend above a cosine of
   65503 raw, where the sine ratio is unstable. One `SinCos` serves both

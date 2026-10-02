@@ -8163,6 +8163,7 @@
       "CoveredBy": [
         "quaternion.algebraic-sanity-and-fromto-poles",
         "quaternion.from-to-full-width-alignment",
+        "quaternion.from-to-near-antiparallel",
         "quaternion.from-to-shortest-arc"
       ],
       "Id": "Puck.Maths.FixedQuaternion.FromTo(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
@@ -8255,6 +8256,7 @@
     {
       "CoveredBy": [
         "quaternion.slerp-endpoints-and-arc",
+        "quaternion.slerp-follows-the-arc",
         "quaternion.slerp-ladder-transcription"
       ],
       "Id": "Puck.Maths.FixedQuaternion.Slerp(Puck.Maths.FixedQuaternion,Puck.Maths.FixedQuaternion,Puck.Maths.FixedQ4816)",

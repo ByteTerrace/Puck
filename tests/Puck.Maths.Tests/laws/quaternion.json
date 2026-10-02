@@ -1434,5 +1434,47 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "quaternion.slerp-follows-the-arc",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQuaternion",
+        "Name": "Slerp"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQuaternion.Slerp from a start drawn over the carrier (normalized; a zero draw becomes Identity) toward the point A\u00B7cos \u03B8 \u002B P\u00B7sin \u03B8, normalized, with P = (\u2212y, x, \u2212w, z) exactly orthogonal to A, at t drawn over [0, 1] and \u03B8 from ten four-dimensional arc angles: 0.01, 0.03, both sides of the nlerp seam (dot 65503/65536, \u03B8 \u2248 0.0317: raws 2075 and 2086), 0.04, 0.1, 0.3, 1, just under \u03C0/2 (a rotation of nearly a half turn) and 2 (past \u03C0/2, which Slerp folds by negating the target). Each output lane must lie within 3 raw of the arc\u0027s point, so the law pins position ALONG the arc (the angle t\u00B7\u03B8), not only direction as quaternion.slerp-ladder-transcription does, and the nlerp branch\u0027s non-uniform angular rate and the seam\u0027s small-sine divide are both inside its reach",
+        "Against": "Oracles.Slerp: from the EXACT input lanes, \u03B8 = atan2(\u221A(|A|\u00B2|B|\u00B2 \u2212 (A\u00B7B)\u00B2), A\u00B7B) by Oracles.EncloseAtan2 (the arctangent series, not the subject\u0027s table), \u03C6 = t\u00B7\u03B8, sin \u03C6 and cos \u03C6 by Oracles.EncloseSinCosScaled, each 40 guard bits below Q16, and the arc point cos \u03C6\u00B7A\u1D62/|A| \u002B sin \u03C6\u00B7(B\u1D62|A|\u00B2 \u2212 (A\u00B7B)A\u1D62)/(|A|\u00B7\u221A(|A|\u00B2|B|\u00B2 \u2212 (A\u00B7B)\u00B2)) with its two norms as integer square roots at 2\u2074\u2070 extra scale, compared in BigInteger. Shares nothing with the subject\u0027s Q16 Atan2, SinCosQ32, Q16 divides, nlerp branch or Normalize. ENVELOPE: 3 raw per lane is the committed empirical envelope, not a derived bound: the measured worst is 1.57 raw over the Default sweep and 1.97 raw over 48,000 seeded pairs against a double-precision slerp, at 0.75\u20131.3 raw below the seam and 1.16\u20131.57 above it, so the suspected loss of about eleven bits above the seam is refuted; parallel inputs, where the arc is undefined, are skipped",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quaternion.from-to-near-antiparallel",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQuaternion",
+        "Name": "FromTo"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQuaternion.FromTo(a, b).Rotate(\u00E2) for a drawn over the carrier (folded below 2\u2074\u2070 so b stays representable) and b = \u2212a \u002B (a \u00D7 \u00EA)/2^s with \u00EA the axis least aligned with a, so the gap from antiparallel is about 2^\u2212s for s drawn over [0, 40]: from about 45\u00B0, through the 0.45\u00B0 band FromTo once answered with an arbitrary perpendicular half turn, across the 2\u207B\u00B2\u2077 boundary where the rotor\u0027s scalar becomes noise and the half turn about a \u00D7 b takes over, down to exact antiparallel (a \u00D7 \u00EA/2^s rounding to zero), where the basis-axis half turn answers",
+        "Against": "the exact integer direction of b, against which the rotated start is held by one BigInteger inequality: |r \u00D7 b|\u00B2\u00B72\u00B3\u00B2 \u2264 6\u00B2\u00B7|r|\u00B2|b|\u00B2 with r\u00B7b \u003E 0, so r lies within 6 raw of b\u0027s direction. Nothing is rooted and nothing shares the subject\u0027s preconditioner, rotor, landing or Normalize. ENVELOPE: 6 raw laterally is the committed empirical envelope, not a derived bound: Q16 rounding of the rotor lanes, of \u00E2 and of Rotate\u0027s two fused stages; the measured worst over 32,000 seeded pairs from a 0.1 rad gap to exact antiparallel is 4.7 raw. With the 0.45\u00B0 fallback the same measure reached 505 raw. Second check, the SHORTEST arc: wherever a \u00D7 b is non-zero, the quaternion\u0027s vector part lies along a \u00D7 b within 4 raw (|v \u00D7 (a \u00D7 b)|\u00B2\u00B72\u00B3\u00B2 \u2264 4\u00B2\u00B7|v|\u00B2|a \u00D7 b|\u00B2, v\u00B7(a \u00D7 b) \u003E 0) \u2014 which separates the true half turn inside the 2\u207B\u00B2\u2077 gap from any other half turn that also carries a onto \u2212a",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

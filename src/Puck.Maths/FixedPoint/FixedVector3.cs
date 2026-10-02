@@ -521,8 +521,8 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
     /// both <paramref name="tangent1"/> and <paramref name="normal"/>, but not renormalized.</param>
     /// <remarks>Branches on which axis component of <paramref name="normal"/> has the smallest magnitude and crosses
     /// that axis with <paramref name="normal"/> to build <paramref name="tangent1"/>, then normalizes — the same
-    /// deterministic perpendicular construction <see cref="FixedQuaternion.FromTo"/> uses for its antiparallel
-    /// fallback, factored out here so both callers share one implementation. When <paramref name="normal"/> is unit,
+    /// deterministic perpendicular construction <see cref="FixedQuaternion.FromTo"/> uses for exactly antiparallel
+    /// inputs, factored out here so both callers share one implementation. When <paramref name="normal"/> is unit,
     /// <paramref name="tangent2"/> is unit too, to within the fused-rounding envelope <see cref="Cross"/> already
     /// carries; when it is not, <paramref name="tangent2"/>'s magnitude tracks <paramref name="normal"/>'s. The
     /// branch boundary is a discontinuity in which axis pair is CHOSEN, not a claim that the chosen vectors vary
