@@ -733,18 +733,23 @@ public sealed partial class WorldTransferEscrow {
             var principal = reservationMember.Principal;
             SessionReply reply;
 
+            var occupant = new WorldTransferredOccupant(
+                CatalogRig: reservationMember.CatalogRig,
+                TravelTurn: members[index].TravelTurn
+            );
+
             if (lease.Request.PeerAdmission) {
                 reply = (reservationMember.Source.IsLive
                     ? m_server.GrantTable.AdmitTransferredPeer(
                         slot: slot,
-                        travelTurn: members[index].TravelTurn,
+                        occupant: occupant,
                         verdict: lease.Arrival
                     )
                     : m_server.GrantTable.AdmitTransferredEntity(
                         slot: slot,
                         source: reservationMember.Source,
                         identity: reservationMember.Identity,
-                        travelTurn: members[index].TravelTurn
+                        occupant: occupant
                     )
                 );
             } else {

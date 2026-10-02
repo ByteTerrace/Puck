@@ -8,7 +8,7 @@ public sealed partial class WorldGrants {
     /// <summary>Commits an autonomous traveler into the entity-table index reserved by destination escrow. Its
     /// authored intent source survives the crossing; unlike a live peer, it receives no connection route or Drive
     /// grant and remains server-authored.</summary>
-    internal SessionReply AdmitTransferredEntity(int slot, IntentSource source, WorldIdentity? identity, Puck.Maths.FixedQ4816 travelTurn) {
+    internal SessionReply AdmitTransferredEntity(int slot, IntentSource source, WorldIdentity? identity, WorldTransferredOccupant occupant) {
         if (source.IsLive) {
             return new SessionReply(
                 Accepted: false,
@@ -19,10 +19,10 @@ public sealed partial class WorldGrants {
         }
         if (!Host.Population.TryAdmitTransferredEntityAt(
             admitted: out var admitted,
+            occupant: occupant,
             refusal: out var refusal,
             slot: slot,
-            source: source,
-            travelTurn: travelTurn
+            source: source
         )) {
             return new SessionReply(
                 Accepted: false,
@@ -57,14 +57,14 @@ public sealed partial class WorldGrants {
     /// wire-supplied profile does not reach the identity columns: they name the authenticated authority the verdict
     /// was decided against.</param>
     /// <returns>The admission verdict.</returns>
-    /// <param name="travelTurn">The traveler's accumulated arrival turn, which the admitted event records.</param>
-    internal SessionReply AdmitTransferredPeer(int slot, WorldAdmissionVerdict? verdict, Puck.Maths.FixedQ4816 travelTurn) {
+    /// <param name="occupant">What the traveler brings, which the admitted event records.</param>
+    internal SessionReply AdmitTransferredPeer(int slot, WorldAdmissionVerdict? verdict, WorldTransferredOccupant occupant) {
         if (!TryAdmitVerifiedParticipant(
             verdict: verdict,
             reservedSlot: slot,
             source: IntentSource.Live,
             authorityTransferred: true,
-            travelTurn: travelTurn,
+            occupant: occupant,
             admitted: out _,
             refusal: out var refusal
         )) {
@@ -168,9 +168,9 @@ public sealed partial class WorldGrants {
     /// connection.</param>
     /// <param name="admitted">The admitted peer entry on success.</param>
     /// <param name="refusal">The named refusal on failure.</param>
-    /// <param name="travelTurn">A transferred traveler's accumulated arrival turn; zero for a connection.</param>
+    /// <param name="occupant">What a transferred traveler brings; <see langword="null"/> for a connection.</param>
     /// <returns><see langword="true"/> on success.</returns>
-    private bool TryAdmitVerifiedParticipant(WorldAdmissionVerdict? verdict, int? reservedSlot, IntentSource source, bool authorityTransferred, out WorldPeerEventEntry admitted, out string refusal, Puck.Maths.FixedQ4816 travelTurn = default) {
+    private bool TryAdmitVerifiedParticipant(WorldAdmissionVerdict? verdict, int? reservedSlot, IntentSource source, bool authorityTransferred, out WorldPeerEventEntry admitted, out string refusal, WorldTransferredOccupant? occupant = null) {
         if (verdict is not { } decision) {
             admitted = default;
             refusal = "admission carries no door verdict — nothing authorizes this ingress";
@@ -220,7 +220,7 @@ public sealed partial class WorldGrants {
                 admitted: out admitted,
                 refusal: out refusal,
                 authorityTransferred: authorityTransferred,
-                travelTurn: travelTurn
+                occupant: occupant
             )
             : Host.Population.TryAdmitRemotePeer(
                 source: source,
