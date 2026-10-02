@@ -10,11 +10,11 @@ namespace Puck.World.Server;
 /// <param name="Ordinal">The checkpoint's own ordinal.</param>
 /// <param name="Tick">The engine tick the checkpoint was captured at.</param>
 public readonly record struct WorldAuthorityCheckpointBlob(ReadOnlyMemory<byte> Encoded, long Ordinal, ulong Tick);
-/// <summary>The mutation journal tail for one checkpoint ordinal — every entry recorded since that checkpoint, in
+/// <summary>The authority journal tail for one checkpoint ordinal — every entry recorded since that checkpoint, in
 /// append order.</summary>
 /// <param name="CheckpointOrdinal">The checkpoint ordinal this tail is relative to.</param>
 /// <param name="Entries">The recorded entries, in append order; empty when nothing has been appended yet.</param>
-public readonly record struct WorldMutationJournalTail(long CheckpointOrdinal, IReadOnlyList<WorldMutationJournalEntry> Entries);
+public readonly record struct WorldAuthorityJournalTail(long CheckpointOrdinal, IReadOnlyList<WorldAuthorityJournalEntry> Entries);
 /// <summary>What kind of thing happened to one store write — the fail-closed vocabulary every
 /// <see cref="IWorldAuthorityStore"/> write answers with, naming both refusal axes an
 /// <see cref="Puck.Storage.ObjectBlobWriteResult"/> can carry apart from a genuine transport failure.</summary>
@@ -119,14 +119,15 @@ public interface IWorldAuthorityStore {
     /// <exception cref="InvalidDataException">A checkpoint blob's content does not hash to what the root
     /// recorded.</exception>
     Task<WorldAuthorityCheckpointBlob?> LoadLatestAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken);
-    /// <summary>Loads every mutation recorded since a checkpoint ordinal.</summary>
+    /// <summary>Loads every journal entry — committed mutations and crossing records — recorded since a checkpoint
+    /// ordinal.</summary>
     /// <param name="identity">The hosted world's identity.</param>
     /// <param name="afterOrdinal">The checkpoint ordinal to load the tail of.</param>
     /// <param name="cancellationToken">A token to observe.</param>
     /// <returns>The tail — empty when nothing has been appended since that checkpoint.</returns>
     /// <exception cref="InvalidDataException">A root is present but its checkpoint ordinal does not match
     /// <paramref name="afterOrdinal"/>.</exception>
-    Task<WorldMutationJournalTail> LoadJournalTailAsync(WorldAuthorityIdentity identity, long afterOrdinal, CancellationToken cancellationToken);
+    Task<WorldAuthorityJournalTail> LoadJournalTailAsync(WorldAuthorityIdentity identity, long afterOrdinal, CancellationToken cancellationToken);
     /// <summary>Writes a new checkpoint candidate and publishes it through the private authority root CAS.</summary>
     /// <param name="identity">The hosted world's identity.</param>
     /// <param name="encoded">The checkpoint's raw encoded bytes.</param>
@@ -139,17 +140,19 @@ public interface IWorldAuthorityStore {
     /// <param name="cancellationToken">A token to observe.</param>
     /// <returns>The write outcome.</returns>
     Task<WorldAuthorityStoreOutcome> WriteCheckpointAsync(WorldAuthorityIdentity identity, ReadOnlyMemory<byte> encoded, ulong tick, CancellationToken cancellationToken, WorldAuthorityFence? fence = null, WorldAuthorityOperationReceipt? receipt = null, long? capturedJournalSequence = null);
-    /// <summary>Appends one mutation to the journal tail of the CURRENT latest checkpoint named by the private root —
+    /// <summary>Appends one entry to the journal tail of the CURRENT latest checkpoint named by the private root —
     /// a read-modify-write root-CAS loop, so two concurrent appends never silently clobber one another.</summary>
     /// <param name="identity">The hosted world's identity.</param>
-    /// <param name="entry">The mutation to append.</param>
+    /// <param name="entry">The committed mutation or crossing record to append.</param>
     /// <param name="fence">The activation fence acquired by the owning writer. <see langword="null"/> is permitted
     /// only for epoch-zero bootstrap or an already-released empty-token root; it never acquires an active lease.</param>
     /// <param name="receipt">An optional operation receipt published atomically with the append.</param>
     /// <param name="cancellationToken">A token to observe.</param>
     /// <returns>The write outcome; <see cref="WorldAuthorityStoreOutcomeKind.Failed"/> when no checkpoint has ever
-    /// been written for this identity (a journal is always relative to one).</returns>
-    Task<WorldAuthorityStoreOutcome> AppendJournalAsync(WorldAuthorityIdentity identity, WorldMutationJournalEntry entry, CancellationToken cancellationToken, WorldAuthorityFence? fence = null, WorldAuthorityOperationReceipt? receipt = null);
+    /// been written for this identity (a journal is always relative to one), and
+    /// <see cref="WorldAuthorityStoreOutcomeKind.RecoveryRequired"/> when the root compare-and-swap's outcome could
+    /// not be reconciled, so the entry may or may not be durable. A throw means the entry did not land.</returns>
+    Task<WorldAuthorityStoreOutcome> AppendJournalAsync(WorldAuthorityIdentity identity, WorldAuthorityJournalEntry entry, CancellationToken cancellationToken, WorldAuthorityFence? fence = null, WorldAuthorityOperationReceipt? receipt = null);
     /// <summary>Publishes a hosted world's composed definition as an immutable candidate named by the authority root.</summary>
     /// <param name="identity">The hosted world's identity.</param>
     /// <param name="composed">The composed definition to publish.</param>

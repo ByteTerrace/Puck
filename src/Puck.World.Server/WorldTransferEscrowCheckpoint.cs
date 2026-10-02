@@ -3,12 +3,14 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>The escrow's own checkpointed state — every table this row's slice owns.</summary>
+/// <summary>The escrow's own checkpointed state — every table this row's slice owns, and the first crossing sequence
+/// the checkpoint does not reflect, which is where recovery starts redoing the authority's crossing log.</summary>
 public sealed record WorldTransferEscrowCheckpoint(
     IReadOnlyList<WorldTransferLeaseCheckpoint> Leases,
     IReadOnlyList<WorldTransferCommittedCheckpoint> Committed,
     IReadOnlyList<(WorldEntityAddress Incarnation, WorldTransferKey Transfer)> LatestCommittedTransfer,
     IReadOnlyList<(WorldEntityAddress Incarnation, WorldTransferKey Transfer, ulong ExpectedEpoch)> MobilityLeases,
     IReadOnlyList<(string SourceAuthority, WorldEntityAddress Incarnation, ulong Epoch, Principal Principal)> MobilityAdmissions,
-    IReadOnlyList<(int Slot, string Border)> BorderAdmissions
+    IReadOnlyList<(int Slot, string Border)> BorderAdmissions,
+    ulong CrossingSequence
 );

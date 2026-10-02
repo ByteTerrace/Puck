@@ -1154,8 +1154,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         }
     }
     /// <summary>Resolves this transfer's commit step.</summary>
-    public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out bool accepted, out string reason) {
-        accepted = false;
+    public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out WorldTransferStatus status, out string reason) {
+        status = WorldTransferStatus.Missing;
         reason = string.Empty;
 
         _ = TryResolveTransferStep(
@@ -1171,9 +1171,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         );
 
         return DecodeCommitAnswer(
-            accepted: out accepted,
             answer: answer,
-            reason: out reason
+            reason: out reason,
+            status: out status
         );
     }
     public void Dispose() {

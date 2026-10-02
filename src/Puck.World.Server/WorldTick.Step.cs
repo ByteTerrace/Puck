@@ -260,6 +260,10 @@ public sealed partial class WorldTick {
         }
     }
     private void StepCore(in FixedStepContext context) {
+        // Arrivals landed since the last step reach the tape here, on the stepping thread, ahead of everything this
+        // step applies — the position a replay re-lands them at.
+        Host.FlushArrivalNotes();
+        TapFederatedIntents();
         // Settled here, before anything below can compose or rebase a mutation: context.ElapsedTicks is this whole
         // step's own engine-time coordinate (the exact engine tick the step completes at), so every write and read
         // this tick performs — an administrative mutation drained below, a rule's own writes, a response sweep —
@@ -274,7 +278,7 @@ public sealed partial class WorldTick {
         Host.Extensions.Drain();
         Host.Addons?.TickAddons(tick: (context.Tick + 1UL));
         _ = DrainPendingOps(tick: context.Tick);
-        Host.TransferForwarder?.ResolveContinuations(source: Host);
+        WorldAdjacencyOwnership.ResolveContinuations(server: Host);
         Host.InputHold.PrepareParticipants(population: Host.Population);
 
         m_tickWrittenCount = 0;
@@ -771,7 +775,10 @@ public sealed partial class WorldTick {
                 return;
         }
 
-        Host.ServerEventTap?.Invoke(obj: serverEvent);
+        // An arrival's own admissions are re-derived when its tape entry lands it again, so they are not taped twice.
+        if (!Host.LandingArrival) {
+            Host.ServerEventTap?.Invoke(obj: serverEvent);
+        }
     }
     /// <summary>The administrative drain — applies every buffered document-level operation (mutations, rebuilds,
     /// undo, addon lifecycle changes) without advancing simulation time: no addon tick, no intent drain, no body

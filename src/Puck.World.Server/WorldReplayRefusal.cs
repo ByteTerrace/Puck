@@ -59,6 +59,12 @@ internal enum ReplayRefusal {
     /// disagreement is a real determinism finding that a later-tick pose comparison alone could never surface.</summary>
     [Refusal(door: "replay.tape", condition: "a recorded mutation's accept/refuse outcome disagrees with what the replay's own apply pipeline produced for it", kind: RefusalKind.Verdict)]
     MutationOutcomeMismatch,
+
+    /// <summary>A recorded arrival that landed live does not land again through the re-drive's own escrow in the
+    /// body indices it landed in — the destination's own state at that tick no longer admits the cohort the source
+    /// handed over.</summary>
+    [Refusal(door: "replay.tape", condition: "a recorded arrival does not land again through the re-drive's own escrow in the body indices it landed in live", kind: RefusalKind.Verdict)]
+    ArrivalRefused,
 }
 /// <summary>Constructs this door's <see cref="InvalidDataException"/>s tagged with the <see cref="ReplayRefusal"/>
 /// each throw site names. <see cref="InvalidDataException"/> is sealed (unlike <c>SdfDocumentException</c> elsewhere

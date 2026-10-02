@@ -25,7 +25,11 @@ public sealed partial class WorldInstanceHost {
                 pending.TargetName,
                 pending.Landed
             );
-            return true;
+            // Written ahead of the acknowledgement that lets the destination retire its exact commit receipt.
+            return TrySettle(
+                arrived: true,
+                pending: pending
+            );
         } catch (Exception exception) when ((exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException)) {
             if (!pending.PublicationFailureReported) {
                 pending.PublicationFailureReported = true;
