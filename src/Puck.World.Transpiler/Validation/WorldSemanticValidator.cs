@@ -9,10 +9,6 @@ namespace Puck.World.Transpiler.Validation;
 
 /// <summary>Validates lowered world definitions against engine semantic rules and maps errors to source spans.</summary>
 public static class WorldSemanticValidator {
-    /// <summary>The schema identifier a document declares to state that it is a whole world rather than a
-    /// fragment.</summary>
-    public const string RootSchemaId = "puck.world.definition.v1";
-
     // The source map indexes the source's own lowered document; a refusal's path indexes the composed one, whose
     // lists a basis or an import may have lengthened or reordered, so the path is traced back into the source's own
     // document first (WorldDocumentBasis.TraceToLayer), and a node only a basis or an import contributes has no span.
@@ -69,7 +65,7 @@ public static class WorldSemanticValidator {
 
     /// <summary>Returns a value indicating whether <paramref name="loweredJson"/> is a ROOT — a whole world that
     /// stands on its own or on a basis chain — rather than a MODULE, a fragment some other root imports.</summary>
-    /// <remarks>A root declares <see cref="RootSchemaId"/>, a <c>basis</c>, or both; every other document is a
+    /// <remarks>A root declares <see cref="WorldDefinition.SchemaVersion"/>, a <c>basis</c>, or both; every other document is a
     /// module. Only a root is worth validating as a world (a module reports as missing every field its importer
     /// supplies) and only a root's unresolvable names are real findings. <c>imports</c> alone does not make a root:
     /// a module may itself import sibling modules.</remarks>
@@ -82,7 +78,7 @@ public static class WorldSemanticValidator {
             (loweredJson["basis"] is not null) ||
             string.Equals(
             a: loweredJson["schema"]?.ToString(),
-            b: RootSchemaId,
+            b: WorldDefinition.SchemaVersion,
             comparisonType: StringComparison.Ordinal
         )
         );
