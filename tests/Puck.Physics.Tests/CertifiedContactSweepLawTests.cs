@@ -51,6 +51,13 @@ public sealed class CertifiedContactSweepLawTests {
 
         return hash.Value;
     }
+    // The review's witness lattice: one cell, one layer, one field held at one with a height scale of the cell.
+    private static FieldLattice UnitLattice(FixedQ4816 cell, FixedVector3 origin) => new(input: new FieldLatticeInput(
+        Lattice: new FieldLatticeTopology(CellSize: cell, Depth: 1, Layers: 1, Origin: origin, StepEveryTicks: 1, Width: 1),
+        Fields: [new FieldDescriptorInput(Name: "ground", Initial: FixedQ4816.One, Minimum: FixedQ4816.Zero, Maximum: FixedQ4816.One, HeightScale: cell, IsMedium: false, Color: "#808080")],
+        Reactions: [],
+        Paint: []
+    ));
     // One cell at the origin, one unit on a side, its column one unit high: a box from y = -1 to y = 1.
     private static FieldLattice OneCellLattice() {
         var lattice = new FieldLattice(input: new FieldLatticeInput(
@@ -463,6 +470,45 @@ public sealed class CertifiedContactSweepLawTests {
         Assert.Equal(expected: FixedQ4816.FromInteger(value: 2), actual: answer);
         Assert.True(condition: solid.TryDistanceBounds(distance: out var bounds, lower: far, upper: far));
         Assert.True(condition: bounds.Contains(value: answer), userMessage: $"the answer {Read(value: answer)} lies outside {bounds}");
+    }
+    [Fact]
+    public void TheLatticePointQueryAndItsBoundsShareOneArithmeticAtTheCarriersEnds() {
+        // The review's witness (R1): a column whose top is the carrier's greatest value, queried from its least. The point
+        // query once subtracted in wrapping Q48.16, so min.y - p.y wrapped to -131073 raws and p.y - max.y to one raw,
+        // and it answered one raw, while the exact bounds answered the reach: two units that exclude it. Both are exact
+        // now, and the column, 2⁶⁴ raws away, lies past the reach.
+        var lattice = UnitLattice(cell: FixedQ4816.One, origin: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromRawBits(value: (long.MaxValue - 65536L)), Z: FixedQ4816.Zero));
+        var solid = new FieldLatticeSolid(lattice: lattice);
+        var half = FixedQ4816.FromDouble(value: 0.5);
+        var point = FixedPosition.FromLocal(local: new FixedVector3(X: half, Y: FixedQ4816.MinValue, Z: half));
+
+        Assert.True(condition: solid.TryDistance(distance: out var distance, material: out _, position: point));
+        Assert.True(condition: solid.TryDistanceBounds(distance: out var bounds, lower: point, upper: point));
+        Assert.True(condition: bounds.Contains(value: distance), userMessage: $"the point answer {distance.Value} raws lies outside {bounds}");
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 2), actual: distance);
+    }
+    [Fact]
+    public void ALatticeWhoseReachTheCarrierCannotHoldIsRefusedByName() {
+        // The review's witness (R2): a cell of 7·2⁴⁴ units, whose two-cell reach wraps to -2⁴⁵. The point query at the
+        // column's centre answers -C/2, but every gap the bounds clamped to the wrapped reach went negative, and the
+        // bounds read [R, R], which exclude it. The reach is the lattice's own constant, so a lattice whose reach the
+        // carrier cannot hold is refused when its solid is built, never wrapped.
+        var cell = FixedQ4816.FromInteger(value: (7L << 44));
+        var lattice = UnitLattice(cell: cell, origin: FixedVector3.Zero);
+        var refusal = Record.Exception(testCode: () => new FieldLatticeSolid(lattice: lattice));
+
+        if (refusal is null) {
+            var solid = new FieldLatticeSolid(lattice: lattice);
+            var centre = FixedPosition.FromLocal(local: new FixedVector3(X: (cell / FixedQ4816.FromInteger(value: 2)), Y: FixedQ4816.Zero, Z: (cell / FixedQ4816.FromInteger(value: 2))));
+
+            Assert.True(condition: solid.TryDistance(distance: out var distance, material: out _, position: centre));
+            Assert.True(condition: solid.TryDistanceBounds(distance: out var bounds, lower: centre, upper: centre));
+            Assert.True(condition: bounds.Contains(value: distance), userMessage: $"the point answer {distance} lies outside {bounds}");
+            Assert.Fail(message: "a lattice whose reach the carrier cannot hold was admitted");
+        }
+
+        Assert.IsType<ArgumentOutOfRangeException>(@object: refusal);
+        Assert.Contains(actualString: refusal.Message, expectedSubstring: "reach");
     }
     [Fact]
     public void TheLatticeBoundsEncloseEveryPointAnswerAndTheUnionRefusesWithAnyPart() {

@@ -480,9 +480,14 @@ proven over a swept clearance box rather than sample points alone.
 lattice's height columns into a contact field—exact within two cells of a
 column, a conservative lower bound beyond—and encloses its answers over a box
 by the nearest column within reach, so a certified sweep proves a body clear of
-it. Its column indices and box gaps are taken in a wide type and clamped before
-they narrow to the lattice's own index, so a coordinate anywhere in the carrier,
-its ends included, reads the columns it lies near and never a wrapped one.
+it. Its column indices are taken in a wide type and clamped before they narrow
+to the lattice's own index, and the point query and its bounds read every
+column's box and gap in one exact wide arithmetic, so a coordinate anywhere in
+the carrier, its ends included, reads the columns it lies near and neither
+answer wraps where the other does not. A lattice whose cell puts the solid's
+two-cell reach past the carrier (`FieldLatticeSolid.CellFits`) is refused by
+world validation, and the solid's constructor throws for one that reaches it
+unvalidated.
 `UnionField` composes it with another field
 (a world's authored solids) by nearest distance, so a glacier or a filled pond
 is real geometry a body's contact resolve reaches through the ordinary field

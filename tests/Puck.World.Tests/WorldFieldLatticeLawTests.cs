@@ -154,6 +154,14 @@ public sealed class WorldFieldLatticeLawTests {
         );
     }
     [Fact]
+    public void ALatticeWhoseSolidReachTheCarrierCannotHoldIsRefusedByName() {
+        // A cell of 7·2⁴⁴ units fits the carrier, but the lattice solid's reach, two cells, does not: it wrapped to
+        // -2⁴⁵, and every bound the solid gave read that. Half that cell is admitted.
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: Fixtures.WithLattice(composite: Fields(cellSize: 123145302310912f), definition: Fixtures.BuildDocument()), neighbours: null, reason: out var reason));
+        Assert.Contains(actualString: reason, expectedSubstring: $"contact reach, {FieldLatticeSolid.ReachCells} cells, past Q48.16");
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: Fixtures.WithLattice(composite: Fields(cellSize: 61572651155456f), definition: Fixtures.BuildDocument()), neighbours: null, reason: out reason), userMessage: reason);
+    }
+    [Fact]
     public void PopulationCreatesFields_WhenCollisionAndTargetsDoNotRequireAnSdfField() {
         var definition = Fixtures.WithLattice(
             definition: Fixtures.BuildDocument(),
