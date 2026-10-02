@@ -308,4 +308,77 @@ public sealed class CrossingTapeOrderLawTests {
         Assert.Single(collection: described, predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "departure #"));
         Assert.Single(collection: described, predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "restore #"));
     }
+
+    // The fields a rollback restores that tell a returning body's authority apart: whether it was transferred in or is a
+    // remote human, the mobility credential and its generation, and whether it is parked and until when.
+    private static (bool AuthorityTransferred, bool RemoteHuman, WorldMobilityIdentity? Mobility, int MobilityGeneration, bool Parked, long? ParkedUntilTick)? Restored(WorldServer server) {
+        foreach (var entry in server.Population.Capture().Entries) {
+            if (entry.Index == 0) {
+                return (entry.IsAuthorityTransferred, entry.IsRemoteHuman, entry.Mobility, entry.MobilityGeneration, entry.Parked, entry.ParkedUntilTick);
+            }
+        }
+
+        return null;
+    }
+
+    // THE LAW: a re-driven rollback of an in-doubt departure restores the body exactly as the live rollback did, field
+    // by field: transfer and remote-human flags, mobility credential and generation, parking and its deadline, on
+    // every tick from the rollback on. The red leg restores on the re-drive without the departing credential.
+    [InlineData("unreachable")]
+    [InlineData("uncertain")]
+    [Theory]
+    public void ARedrivenRollbackRestoresTheFieldsTheLiveRollbackRestored(string commitFault) {
+        using var scenario = new Scenario();
+        var name = scenario.Begin();
+        var live = new List<(bool, bool, WorldMobilityIdentity?, int, bool, long?)?>();
+
+        scenario.Host.SetPeerCallFault(
+            fault: new SeamPeerCall(
+                afterAcknowledge: null,
+                commitFault: commitFault,
+                destination: scenario.Destination.Server
+            ),
+            instanceName: "row-b"
+        );
+        scenario.EnqueueCrossing();
+        // The recording's first four ticks are Begin's own; the live state is sampled after each tick from here.
+        for (var tick = 0; (tick < 4); tick++) {
+            live.Add(item: null);
+        }
+
+        int? rollback = null;
+
+        for (var tick = 0; ((tick < 2000) && ((rollback is null) || (tick < (rollback + 4)))); tick++) {
+            scenario.Step();
+            live.Add(item: Restored(server: scenario.Source.Server));
+            if ((rollback is null) && (tick > 0) && scenario.Source.Server.Population.IsActive(index: 0)) {
+                rollback = tick;
+            }
+        }
+
+        Assert.NotNull(@object: rollback);
+        _ = scenario.Tape.StopRecording();
+
+        WorldReplaySnapshot snapshot;
+
+        using (var stream = File.OpenRead(path: scenario.Tape.PathFor(name: name))) {
+            snapshot = WorldReplaySnapshot.Read(stream: stream);
+        }
+
+        var replayed = new List<(bool, bool, WorldMobilityIdentity?, int, bool, long?)?>();
+
+        _ = snapshot.DriveTraces(
+            addonHostFactory: static (_, _) => new NullAddonHost(),
+            engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
+            observeTick: (_, server) => replayed.Add(item: Restored(server: server)),
+            profiles: scenario.Source.Server.Profiles
+        );
+
+        Assert.Equal(expected: live.Count, actual: replayed.Count);
+        for (var tick = (4 + rollback!.Value); (tick < live.Count); tick++) {
+            Assert.True(condition: live[tick].HasValue, userMessage: $"tick {tick}: the live rollback left no body at index 0");
+            Assert.Equal(expected: live[tick], actual: replayed[tick]);
+        }
+    }
 }

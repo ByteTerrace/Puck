@@ -1637,7 +1637,19 @@ public sealed partial class WorldReplaySnapshot {
         profiles: profiles
     ).Pose;
     /// <summary>Re-drives once and returns both the pose inspection trace and authoritative state-system trace.</summary>
-    public WorldReplayHashTraces DriveTraces(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, IWorldDocumentSource? documents = null) {
+    /// <param name="profiles">The live catalog the re-drive's detached copy and drift reports read.</param>
+    /// <param name="engines">The machine engines the shadow's machine host mounts.</param>
+    /// <param name="machineHostFactory">Builds the shadow's machine host.</param>
+    /// <param name="addonHostFactory">Builds the shadow's addon host.</param>
+    /// <param name="documents">The source a recorded <c>world.load</c>/<c>world.reload</c> re-reads its origin through;
+    /// <see langword="null"/> reads JSON files directly.</param>
+    /// <param name="observeTick">Called after each re-driven tick with its recorded tick index and the shadow server,
+    /// once both traces sampled it, for an inspection of the shadow's state that the traces only hash; it must not
+    /// change the shadow.</param>
+    /// <returns>Both traces, one entry per recorded tick.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="profiles"/>, <paramref name="engines"/>,
+    /// <paramref name="machineHostFactory"/>, or <paramref name="addonHostFactory"/> is <see langword="null"/>.</exception>
+    public WorldReplayHashTraces DriveTraces(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory, IWorldDocumentSource? documents = null, Action<int, WorldServer>? observeTick = null) {
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: engines);
         ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
@@ -1754,6 +1766,10 @@ public sealed partial class WorldReplaySnapshot {
             authoritativeHashes[tick] = WorldStateHashComposition.HashAuthoritative(
                 server: server,
                 tick: (server.NextInputTick - 1UL)
+            );
+            observeTick?.Invoke(
+                arg1: tick,
+                arg2: server
             );
         }
 

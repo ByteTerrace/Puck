@@ -90,6 +90,7 @@ public sealed partial class WorldInstanceHost {
             BodyColor: member.BodyColor,
             Designations: member.Designations,
             DynamicState: member.DynamicState,
+            Mobility: member.Mobility,
             Peer: member.Peer,
             Position: member.Position,
             Profile: member.Profile,
@@ -97,7 +98,6 @@ public sealed partial class WorldInstanceHost {
             SourceGrants: member.SourceGrants,
             Yaw: member.Yaw
         ),
-        mobility: member.Mobility,
         transferId: transferId,
         // Inactive slots are absent from population checkpoints and can be reused while recovery waits, so the
         // departure turn is recovered from the retained commit, undoing only this attempted arrival.

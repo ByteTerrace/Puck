@@ -19,7 +19,8 @@ namespace Puck.World.Server;
 /// <param name="Peer">The transferred peer's or entity's admission, or <see langword="null"/> for a local seat.</param>
 /// <param name="AdmissionGrants">The grant templates the peer's admission installed.</param>
 /// <param name="SourceGrants">The grant rows the peer's principal held here.</param>
-public sealed record WorldDetachedBody(int Slot, WorldIdentity? Profile, Vector3 BodyColor, FixedVector3 Position, FixedQ4816 Yaw, WorldBodyTransferState DynamicState, WorldTargetDesignation[] Designations, WorldPeerEventEntry? Peer, IReadOnlyList<WorldAdmissionGrant> AdmissionGrants, IReadOnlyList<WorldGrant> SourceGrants);
+/// <param name="Mobility">The body's mobility credential at the detach, which a rollback installs again.</param>
+public sealed record WorldDetachedBody(int Slot, WorldIdentity? Profile, Vector3 BodyColor, FixedVector3 Position, FixedQ4816 Yaw, WorldBodyTransferState DynamicState, WorldTargetDesignation[] Designations, WorldPeerEventEntry? Peer, IReadOnlyList<WorldAdmissionGrant> AdmissionGrants, IReadOnlyList<WorldGrant> SourceGrants, WorldMobilityIdentity Mobility);
 public sealed partial class WorldServer {
     // A re-drive's departures, held until the recorded rollback that restores each one.
     private readonly Dictionary<(ulong TransferId, int Slot), (WorldDetachedBody Body, FixedQ4816 TravelTurn)> m_redrivenDepartures = new();
@@ -47,6 +48,13 @@ public sealed partial class WorldServer {
         }
 
         // Captured before the detach, which discards pose, dynamic state and designations and keeps only the profile.
+        // The credential is the one a reservation issued for this body, or, on a replay's re-drive (which taped no
+        // reservation), the same credential issued here: it is a function of the authority, the index and the
+        // generation, so every path detaches the body with the credential its rollback installs again.
+        var mobility = m_population.EnsureMobility(
+            authority: AuthorityIdentity,
+            index: slot
+        );
         var position = body.FixedPosition;
         var bodyColor = m_population.BodyColor(index: slot);
         var yaw = body.FixedYaw;
@@ -90,6 +98,7 @@ public sealed partial class WorldServer {
             BodyColor: bodyColor,
             Designations: designations,
             DynamicState: dynamicState,
+            Mobility: mobility,
             Peer: peer,
             Position: position,
             Profile: profile,
@@ -99,17 +108,15 @@ public sealed partial class WorldServer {
         );
     }
     /// <summary>Rolls one departure back: puts the detached body at its source index again with its departure turn,
-    /// its mobility credential when one is given, its color and scale, and the grant rows the detach revoked, then
-    /// reports the return to <see cref="DepartureTap"/>. The host's crossing and a replay's re-drive both restore here.
-    /// The caller holds the authority gate.</summary>
+    /// the mobility credential it departed with, its color and scale, and the grant rows the detach revoked, then
+    /// reports the return to <see cref="DepartureTap"/>. The host's crossing and a replay's re-drive both restore here,
+    /// so a re-driven rollback restores exactly what the live one did. The caller holds the authority gate.</summary>
     /// <param name="transferId">The source-scoped transfer id the body departed under.</param>
     /// <param name="detached">The body <see cref="DetachForTransfer"/> detached.</param>
     /// <param name="travelTurn">The body's accumulated arrival turn at its departure.</param>
-    /// <param name="mobility">The body's mobility credential, or <see langword="null"/> to keep the one its index
-    /// holds.</param>
     /// <returns><see langword="true"/> when the body is back; <see langword="false"/> when its index is occupied.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="detached"/> is <see langword="null"/>.</exception>
-    public bool RestoreDetachedForTransfer(ulong transferId, WorldDetachedBody detached, FixedQ4816 travelTurn, WorldMobilityIdentity? mobility) {
+    public bool RestoreDetachedForTransfer(ulong transferId, WorldDetachedBody detached, FixedQ4816 travelTurn) {
         ArgumentNullException.ThrowIfNull(argument: detached);
 
         var restored = ((detached.Peer is { } peer)
@@ -140,13 +147,11 @@ public sealed partial class WorldServer {
             travelTurn: travelTurn
         );
         // A slot reused while the crossing was in doubt has a new local generation, not the returning individual's
-        // durable identity, so a known credential is installed again.
-        if (mobility is { } credential) {
-            m_population.SetMobility(
-                index: detached.Slot,
-                mobility: in credential
-            );
-        }
+        // durable identity, so the departing credential is installed again.
+        m_population.SetMobility(
+            index: detached.Slot,
+            mobility: detached.Mobility
+        );
         m_population.SetBodyColor(
             color: detached.BodyColor,
             slot: detached.Slot
@@ -202,7 +207,6 @@ public sealed partial class WorldServer {
         }
         if (!RestoreDetachedForTransfer(
             detached: departure.Body,
-            mobility: null,
             transferId: transferId,
             travelTurn: departure.TravelTurn
         )) {
