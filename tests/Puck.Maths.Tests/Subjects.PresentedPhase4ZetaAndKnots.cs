@@ -2334,9 +2334,9 @@ internal static partial class Subjects {
     // planar two-square sum cannot reach it.
     private static readonly BigInteger FourSquareCarry = (BigInteger.One << 128);
 
-    // round(log2(e)·2^16) = round(94548.4622…). Carried here as its own literal with its own provenance rather than
-    // read from the subject's private field.
-    private const long Log2ERaw = 94548L;
+    // round(log2(e)·2^62) = round(6653256548922161245.872…), from log2(e) = 1/ln 2 evaluated at eighty significant
+    // digits. Carried here as its own literal with its own provenance rather than read from the subject's field.
+    private const long Log2EQ62Raw = 6653256548922161246L;
     // round(π·2^16). The raw endpoint FixedQ4816.Atan2 attains at both signs; the VALUE it names is strictly inside
     // (−π, π], which is why the closed raw range and the documented open value range are the same statement.
     private const long PiRaw = 205887L;

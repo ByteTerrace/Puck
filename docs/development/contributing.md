@@ -231,8 +231,9 @@ The Humble battery's reference corpora are declared in its `corpora.json`
 once and the stages resolve it without configuration. `--lane gate` measures
 every row recorded as passing and must stay green; `--lane frontier` measures
 the recorded fails and inconclusives; a plain run measures both. The recipe above
-matches CI's `artifacts/hgb-post` directory for `summary.json`, `results.junit.xml`,
-and the candidate ledger; `--accept` promotes the candidate under the refusal rules
+writes to CI's `artifacts/hgb-post` directory, where a run leaves its report table,
+its JSON summary and its JUnit results (all three written by `PostReport` in
+`src/Puck.Machines.Post`) and the candidate ledger; `--accept` promotes the candidate under the refusal rules
 in the project README. Iterate with `--filter`; never chain runs to record.
 The Advanced battery works the same way: its corpora are pinned in its own
 `corpora.json`, the BIOS and commercial cartridges are command-line flags, and

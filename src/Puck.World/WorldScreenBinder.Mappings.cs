@@ -33,7 +33,7 @@ internal sealed partial class WorldScreenBinder : IWorldScreenImages {
                 break;
             default:
                 if (
-                    (ReadOf(screen: screen) is { } instance) &&
+                    (InstanceOf(screen: screen) is { } instance) &&
                     (FeedOf(instance: instance) is { } source)
                 ) {
                     (width, height) = (((int)source.Descriptor.Width), ((int)source.Descriptor.Height));
@@ -50,7 +50,8 @@ internal sealed partial class WorldScreenBinder : IWorldScreenImages {
         Mappings.Reconcile(
             cameras: m_cameras,
             live: m_live,
-            screens: m_rows
+            screens: m_rows,
+            sessionsPastDepth: (m_nestingDepth == 0)
         );
         ReconcileViews();
     }

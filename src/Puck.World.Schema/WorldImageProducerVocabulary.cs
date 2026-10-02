@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Puck.Abstractions.Sources;
 using Puck.Assets.Qr;
+using Puck.World.Authoring;
 
 namespace Puck.World;
 
@@ -61,8 +62,8 @@ public abstract class WorldImageProducerShape<T> : WorldImageProducerShape where
     }
 }
 /// <summary>
-/// The image producers a document may name, by id: the four the engine ships (<c>testPattern</c>, <c>qr</c>,
-/// <c>camera</c>, <c>capture</c>) and every one a host adds through <see cref="Register"/>. The validator refuses a
+/// The image producers a document may name, by id: the five the engine ships (<c>testPattern</c>, <c>qr</c>,
+/// <c>color</c>, <c>camera</c>, <c>capture</c>) and every one a host adds through <see cref="Register"/>. The validator refuses a
 /// <see cref="WorldScreenSource.Producer"/> naming an id no shape is registered under, and otherwise refuses what the
 /// producer's shape refuses; adding a producer changes neither the document model nor its generated schemas.
 /// Registration is process-wide, as the other document vocabularies are, and refuses a second shape under a taken id.
@@ -71,7 +72,7 @@ public static class WorldImageProducerVocabulary {
     private static readonly Lock Gate = new();
     private static readonly ImageSourceProducerRegistry<WorldImageProducerShape> Registry = Shipped();
 
-    /// <summary>Gets the registered shapes in registration order: the shipped four first.</summary>
+    /// <summary>Gets the registered shapes in registration order: the shipped five first.</summary>
     public static IReadOnlyList<WorldImageProducerShape> Shapes {
         get {
             lock (Gate) {
@@ -85,6 +86,7 @@ public static class WorldImageProducerVocabulary {
 
         registry.Register(producer: new TestPatternShape());
         registry.Register(producer: new QrShape());
+        registry.Register(producer: new ColorShape());
         registry.Register(producer: new CameraShape());
         registry.Register(producer: new CaptureShape());
 
@@ -250,6 +252,20 @@ public static class WorldImageProducerVocabulary {
                 path: $"{path}.profile",
                 profile: settings.Profile
             );
+        }
+    }
+    private sealed class ColorShape : WorldImageProducerShape<WorldColorSettings> {
+        public override ImageContentClass Content => ImageContentClass.Deterministic;
+        public override string Id => WorldImageProducerSettings.ColorId;
+        public override ImageSourceTransport Transport => ImageSourceTransport.Uploaded;
+
+        protected override void Check(WorldColorSettings settings, WorldDefinition definition, string path, List<string> errors) {
+            if (!HexColor.TryParse(
+                rgb: out _,
+                value: settings.Color
+            )) {
+                errors.Add(item: $"{path}.color '{settings.Color}' must be #RRGGBB.");
+            }
         }
     }
     private sealed class QrShape : WorldImageProducerShape<WorldQrSettings> {

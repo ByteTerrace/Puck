@@ -50,10 +50,12 @@ internal sealed partial class WorldScreenBinder {
             }
         }
 
-        // Every session-sourced slot resolved (headless-safe, at boot or a live reconcile) but not yet registered completes
-        // its view now that the render envelope is known.
-        foreach (var slot in m_slots.Values) {
-            if (slot.Session is { FrameSource: null } feed) {
+        // Every session feed resolved (headless-safe, at boot or a live reconcile) but not yet registered completes its
+        // view now that the render envelope is known, at every level.
+        EnsureFeeds();
+
+        foreach (var feed in m_feeds) {
+            if (feed.FrameSource is null) {
                 RegisterSessionView(feed: feed);
             }
         }
@@ -92,8 +94,6 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
-        // A view whose registration or session is gone gives back its residency.
-        ReconcileViewResidencies();
         ReconcileSessionLifecycles();
         RetireParkedCaptures();
 
@@ -123,10 +123,14 @@ internal sealed partial class WorldScreenBinder {
         );
         ServiceProbeFeeds(deviceContext: deviceContext);
         PublishFrameCaptures(context: in context);
+        ReconcileNesting();
         SettleWindowRoutes();
+        // Reconciliation may have closed a view or routed it into a shared residency this frame.
+        ReconcileViewResidencies();
         m_frameContext = context;
         m_hasFrameContext = true;
         Mappings.Publish(images: this);
+        PublishNestedMappings();
     }
     /// <summary>Sets the deterministic refresh divisor of every camera view and every session view but a window's. One
     /// renders every produced frame; larger values keep the last image between refreshes.</summary>

@@ -1139,8 +1139,9 @@ validator refuses `Passthrough` by name. `SourceFocus` in `Puck.Input` routes
 keys and text to a focused passthrough source, sends each release where its
 press went, and returns focus to the game on Control, Alt and Escape.
 `RenderGraphHitWalk` in `src/Puck.Hosting/Graph` continues a hit on a rendered
-source through the producer's camera up to a depth limit, normally
-`RenderGraphInstanceSet.NestingDepth`, entering at the topmost pane under a
+source through the producer's camera through at most a depth limit of screens,
+normally the set's declared `RenderGraphInstanceSet.NestingDepth` (the boot
+world's `views.nestingDepth`), entering at the topmost pane under a
 display point by the one rule `SourcePanes.Topmost` states: the last pane in
 drawing order whose face holds the point, a letterbox bar or bezel covering what
 is beneath. `SourcePanePicker` is the CPU `ISourcePicker` over that rule: it picks
@@ -1356,10 +1357,11 @@ described by `ImageSourceDescriptor` (`Puck.Abstractions.Sources`): producer,
 transport, extent, pixel format (including palette-indexed and NV12), color
 encoding, cadence, presentation stamp, content class and capture fill. A world
 document names a producer by id, as a `producer` source with a settings object,
-so the four shipped producers (`testPattern`, `qr`, `camera`, `capture`) and any
-a host adds register a shape in `WorldImageProducerVocabulary` and a runtime in
-`WorldImageProducers` with no schema change. `testPattern`, `qr`, `camera` and
-`capture` are producer ids rather than source kinds, and no `console` source
+so the five shipped producers (`testPattern`, `qr`, `color`, `camera`,
+`capture`) and any a host adds register a shape in
+`WorldImageProducerVocabulary` and a runtime in `WorldImageProducers` with no
+schema change. `testPattern`, `qr`, `color`, `camera` and `capture` are producer
+ids rather than source kinds, and no `console` source
 exists. The machine, view, probe and
 session arms stay typed because each names a document row; an emulator joins as
 a machine engine. External content resolves through `WorldCaptureGate`, so a
@@ -3935,17 +3937,23 @@ Each commit is marked with what it waits on.
    runs `RenderGraphHitWalk` over the runtime's instance set from the published
    panes, with each view's seat camera and each pane's paired camera, and the pane
    pointer maps through its instance's published mapping. Each view's world
-   producer reports the published screens as the surface placements inside its
-   world, so a walk continues from a view through a screen into its source (step
-   1's screen half). A portal's window is a session view: a walk through its
-   glass continues through the camera the window last rendered from
-   (`WorldSessionSceneEmitter.TryCamera`, a window's fitted camera with its
-   shear) into the destination, which reports no placements under the depth-one
-   policy, and ends on the surface its ray meets among the destination's static
-   placements (`RenderGraphHitPath.Surface`). The portal check's laws are
-   `WorldViewPaneMappingLawTests.APickThroughAPortalReachesTheDestinationsSurfaceThroughTheCameraItsWindowRendered`
-   and `WorldWindowFrustumFitLawTests`, and the `portal-window` canary picks the
-   destination's marker through a live window on both backends.
+   producer reports the screens of the world it renders as the surface
+   placements inside that world, so a walk continues from a view through a
+   screen into its source (step 1's screen half); a seat presented in another
+   world reports that world's screens. A portal's window is a session view: a
+   walk through its glass continues through the camera the window last rendered
+   from (`WorldSessionSceneEmitter.TryCamera`, a window's fitted camera with its
+   shear) into the destination, which reports its own screens, so the walk
+   continues through a portal inside it, each world tested against its own
+   screens, through at most the set's nesting depth of screens, and ends on the
+   surface its ray meets among the last world's static placements
+   (`RenderGraphHitPath.Surface`). The portal check's laws are
+   `WorldViewPaneMappingLawTests.APickThroughAPortalReachesTheDestinationsSurfaceThroughTheCameraItsWindowRendered`,
+   `WorldViewPaneMappingLawTests.ASeatPresentedElsewhereIsHitTestedAgainstThatWorldsScreens`,
+   `RenderGraphHitWalkLawTests.AHitWalksThroughTwoNestedLevelsEachWorldAgainstItsOwnScreens`
+   and `WorldWindowFrustumFitLawTests`; the `portal-window` canary picks the
+   destination's marker through a live window, and the `portal-nested` canary
+   picks a third world's wall two levels deep, on both backends.
 
 ### P14 — The SDF engine as a pass package
 
@@ -4213,10 +4221,12 @@ item 2 landed.
    at its own quality, and the binder resolves a window into the scene's one
    residency (`WorldScreenBinder.TryResolveWindowView`;
    `WorldRoutedPresentationLawTests.AWindowIsAViewOfTheSceneItsWorldsSeatsRenderAtItsOwnQuality`).
-   Open work: session screens attach through that door. Each reads its
-   own observation of the destination and renders its own residency, so a
-   portal window and a traveller's routed view of one destination keep two
-   residencies until the window reads the endpoint's mirror.
+   A portal window attaches through that door at every depth while its
+   session discloses everything (`WorldSessionWindowRoute`), so a traveller's
+   routed view and every fully disclosed window onto one destination, at any
+   level of nesting, render from the endpoint's one residency; a window disclosed
+   less renders its own. Each view of that residency binds the screens of the
+   level it renders (`ISdfScreenSources.ReadOf` takes the view).
    A camera view renders a view of the world's own residency at its own
    quality. A diegetic screen showing a live camera (a race billboard)
    costs its instance's passes, output and scratch while sharing the world's
@@ -4543,10 +4553,12 @@ resolution, and stay there.
   a seat's portal crossing keeps the instance's passes, scratch and history
   storage and shows the destination in the crossing frame. Otherwise its passes
   rebuild. The reset makes the first destination frame a spatial resolve, with
-  no trace of the departed world. A session
-  view's history is its own and resets on the same rules; a routed seat view and
-  a portal window's session view of the same destination keep separate
-  histories whether they share an endpoint residency or use separate residencies.
+  no trace of the departed world. A session view's history is its own and
+  resets on the same rules, at every level of nesting: each level is an instance
+  of its own, so a routed seat view, a portal window's view and a deeper level's
+  view of the same destination keep separate histories whether they share an
+  endpoint residency or use separate residencies, and no level reprojects
+  another's frames.
 - **Reprojection is validated by identity and depth.** History keeps, beside
   the color, each output pixel's ray parameter and identity (a history surface).
   A history sample whose identity differs from the current pixel's, or whose
@@ -4818,7 +4830,41 @@ counted rows recorded in the same change.
      keeps that output size through reader scale, split layouts and display
      resizing. Its camera uses the authored aspect on its first capture.
      Unspecified extents keep the scheduler's quantization and hysteresis.
-5. **P15-5, the temporal resolve.** Reconstruction on.
+5. **P15-5, the temporal resolve.** Landed. Reconstruction on.
+   - Landed: a temporal view runs the temporal fragment, whose resolve reads
+     the history color and surface the previous frame wrote at the output
+     extent and writes this frame's. It weights the 3x3 render samples around
+     each output pixel, reprojects history through `sdfReprojection`, rejects it
+     where the identity differs or the ray distance differs by more than 5%,
+     clips it to the neighbourhood's YCoCg box and caps its weight at eight
+     samples; `reactivity`, written by `sky` and `views` (a screen is fully
+     reactive, an emissive surface by its emissive share), lowers that weight.
+     An epoch's first frame, and any pixel whose history is rejected, is the
+     spatial resolve exactly. `IsUnchanged` holds a temporal view unchanged only
+     one period after its last change. `place` sharpens a source at its rect's
+     extent by `world.upscale-sharpness` when the view reconstructs.
+     `world.temporal` and the render section's `temporal` member turn it on for
+     the world's own views; `quality.puck` turns it off at `low` and on at
+     `medium` and `high`; camera and session views never ask for it. A view
+     following a crossing into another residency requests that residency's
+     resolve pipeline, so `portal-walk` crosses with reconstruction on. The
+     canaries hold `temporal-convergence` within 1.5 codes of the supersampled
+     reference over its subject, `temporal-ghosting` within 2 codes of the
+     still frame over the vacated strip, `temporal-disocclusion` within 4 codes
+     of the spatial path over the revealed pixels, and `temporal-reset`'s first
+     frame after a cut to the spatial path exactly; the parity world's
+     `converge` station holds on both backends under its vocabulary contract.
+     The resolve binds the World set as well as the frame and pass sets, one
+     more descriptor-set bind a resolve dispatch, and writes its pass set once a
+     frame slot. `portal-walk` crosses with reconstruction on and holds its
+     crossing frame to a relaunch's spatial crossing frame exactly, while a
+     frame with gathered history differs from the spatial one; no world can
+     author a crossing that keeps history, so the epoch reset on a crossing is
+     held by law (P15-2). The runtime counts the frames each instance's
+     schedule leaves it unread and absent from displayed outputs, including
+     held consumer outputs, and hands the count to the package's cadence
+     question and recordings, and the count is part of the epoch, so a parked
+     view shown again resets while a spatial view's still output stands.
    - Delivers: the history color and history surface as the fragment's history
      versions at output extent; reprojection through `sdfReprojection`, rejected
      by identity and depth; neighbourhood rectification; the `reactivity` image

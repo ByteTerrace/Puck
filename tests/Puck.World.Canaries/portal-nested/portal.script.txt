@@ -1,0 +1,16 @@
+# The engine ready first: its pipeline set installed and its first frame produced.
+world.wait ready 45
+world.cadence off
+world.wait 20
+# The door's glass shows a window onto the middle world, whose own door shows a window onto the inner world.
+world.screens
+world.nesting
+world.screenshot {run}/front.png
+world.wait captures 30
+# The room's view moves into a centred three-quarter slot, so it is a pane a display point walks into. A lone view over
+# the whole display is the display itself at any render scale: the root stands for it and publishes it as no pane.
+world.row.set views.layouts {"name":"doorway","seatCount":0,"slots":[{"height":0.75,"width":0.75,"x":0.125,"y":0.125}],"transitionRenderScale":1,"transitionSeconds":0}
+world.wait 10
+# A pick at the middle of the display walks through the room's view onto its door's glass, through the window's camera
+# into the middle world onto its door's glass, and through that window's camera into the inner world.
+world.view.panes 128.375 71.625

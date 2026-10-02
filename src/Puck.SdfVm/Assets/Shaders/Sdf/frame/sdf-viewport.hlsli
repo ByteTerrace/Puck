@@ -19,7 +19,7 @@ struct ViewportData {
     float4 extent;
     // x = the view's near distance (read through worldNearDistance below). yz = the off-axis (asymmetric) frustum's
     // tangent-space center offset (SdfAsymmetricFrustum), including this sample's ray jitter, consumed by
-    // march/sdf-cone.hlsli's cameraRayDirection. An unjittered symmetric camera has (0,0). w = FAR DISTANCE.
+    // cameraRayDirection below. An unjittered symmetric camera has (0,0). w = FAR DISTANCE.
     float4 lens;
 };
 ViewportData worldView() {
@@ -33,6 +33,36 @@ ViewportData worldView() {
     float2 jitterLens = (jitterNdc * float2(passGroup.aspectRatio, 1.0) * passGroup.tanHalfFieldOfView);
     data.lens = float4(passGroup.nearDistance, (passGroup.frustumOffset + jitterLens), passGroup.farDistance);
     return data;
+}
+
+// The perspective ray for a viewport-local UV (pixel centers in [0,1] within the viewport's region; screen-up maps
+// to the camera's +up). SYMMETRIC by construction: `direction`'s defining expression below is untouched from before
+// the off-axis branch existed, so a camera that never sets lens.yz (every camera but a border window) takes
+// the IDENTICAL sum in the IDENTICAL order — bit-exact, not merely numerically equal, which is what a build with the
+// branch not taken needs to prove byte-identity against a build without it at all.
+float3 cameraRayDirection(ViewportData view, float2 localUv) {
+    float2 ndc = ((localUv * 2.0) - 1.0);
+
+    ndc.y = -ndc.y;
+
+    float tanHalfFov = view.right.w;
+    float aspect = view.up.w;
+
+    float3 direction = (
+        view.forward.xyz +
+        (((ndc.x * aspect) * tanHalfFov) * view.right.xyz) +
+        ((ndc.y * tanHalfFov) * view.up.xyz)
+    );
+
+    // Off-axis (asymmetric) frustum shear for a border window (SdfAsymmetricFrustum, Puck.SdfVm.Views): the lens
+    // row's two otherwise-zero lanes carry the frustum's tangent-space center offset, appended as a TRAILING
+    // term so the symmetric sum above is never reassociated (float addition is not associative — computing the
+    // offset into a fresh accumulator first, then adding, can round differently than one flat left-to-right sum).
+    if ((view.lens.y != 0.0) || (view.lens.z != 0.0)) {
+        direction += ((view.lens.y * view.right.xyz) + (view.lens.z * view.up.xyz));
+    }
+
+    return normalize(direction);
 }
 
 // The view camera's own near distance (CameraSnapshot.Near): the forward distance of the plane its image begins on,
@@ -68,6 +98,12 @@ float worldFarDistance(ViewportData view) {
 // sky, the tile passes' coverage, the hit passes and views) reads this one value, so none can disagree on it.
 uint2 worldViewDims(ViewportData view) {
     return max((uint2)view.extent.xy, uint2(1u, 1u));
+}
+
+// The element of `pixel` in viewport `viewIndex` of a temporal view's reactivity buffer: one float a render-extent pixel,
+// laid out as the visibility records are (SdfWorldPackage.Parts.Reactivity).
+uint sdfReactivityIndex(uint2 pixel, uint viewIndex, uint2 extent) {
+    return ((((viewIndex * extent.y) + pixel.y) * extent.x) + pixel.x);
 }
 
 #endif

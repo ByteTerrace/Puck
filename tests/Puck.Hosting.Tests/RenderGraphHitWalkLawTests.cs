@@ -346,51 +346,168 @@ public sealed class RenderGraphHitWalkLawTests {
             actual: path.Steps[^1].Hit.PixelX
         );
     }
+    // THE LAW: the nesting depth is declared, never read off the reads. A set of three chained instances, one that reads
+    // itself and two that read each other's previous frame all nest the depth they declare, the default when they
+    // declare none; a depth below zero or past the cap is refused by name before anything else is checked.
     [Fact]
-    public void TheNestingDepthCountsTheLongestChainOfSameFrameReads() {
+    public void TheNestingDepthIsDeclaredAndRefusedPastItsCap() {
+        RenderGraphInstance[] chained = [
+            Instance(
+                name: "main",
+                reads: new RenderGraphRead(Producer: "tv")
+            ),
+            Instance(
+                name: "tv",
+                reads: new RenderGraphRead(Producer: "inner")
+            ),
+            Instance(name: "inner"),
+        ];
+        RenderGraphInstance[] mirror = [Instance(
+            name: "mirror",
+            reads: new RenderGraphRead(Producer: "mirror")
+        )];
+
         Assert.Equal(
-            expected: 2,
-            actual: Set(
-                Instance(
-                    name: "main",
-                    reads: new RenderGraphRead(Producer: "tv")
-                ),
-                Instance(
-                    name: "tv",
-                    reads: new RenderGraphRead(Producer: "inner")
-                ),
-                Instance(name: "inner"),
-                Instance(
-                    name: "pane",
-                    reads: new RenderGraphRead(Producer: "inner")
-                )
-            ).NestingDepth
+            expected: RenderGraphInstanceSet.DefaultNestingDepth,
+            actual: Set(chained).NestingDepth
         );
         Assert.Equal(
-            expected: 0,
-            actual: Set(Instance(
-                name: "mirror",
-                reads: new RenderGraphRead(Producer: "mirror")
-            )).NestingDepth
+            expected: RenderGraphInstanceSet.DefaultNestingDepth,
+            actual: Set(mirror).NestingDepth
+        );
+
+        foreach (var depth in ((int[])[0, 1, RenderGraphInstanceSet.MaxNestingDepth])) {
+            Assert.True(
+                condition: RenderGraphInstanceSet.TryCreate(
+                    instances: chained,
+                    nestingDepth: depth,
+                    refusal: out var accepted,
+                    set: out var declared
+                ),
+                userMessage: accepted?.Message
+            );
+            Assert.Equal(expected: depth, actual: declared.NestingDepth);
+        }
+
+        foreach (var depth in ((int[])[-1, (RenderGraphInstanceSet.MaxNestingDepth + 1)])) {
+            Assert.False(condition: RenderGraphInstanceSet.TryCreate(
+                instances: chained,
+                nestingDepth: depth,
+                refusal: out var refusal,
+                set: out _
+            ));
+            Assert.Equal(expected: RenderGraphInstanceRefusalCode.NestingDepthInvalid, actual: refusal.Code);
+            Assert.Contains(expectedSubstring: $"nest {depth} deep", actualString: refusal.Message);
+        }
+    }
+    // THE LAW: a hit walks through two levels of nesting, each world tested against its own screens. The display's pane
+    // shows the main view; the main world's screen shows the portal's view, whose world stands its own screen a unit to
+    // the right of where the main world's stands, showing the inner view, whose world shows a desktop. A walk under a
+    // limit of two reaches the desktop two levels deep, the second hop landing on the portal world's own screen, which
+    // the main world's mapping, a unit to its left, could not have met; the red leg, the same walk under a limit of one,
+    // stops at the portal world's screen by its depth limit; the pane is no level, so even a limit of zero enters the
+    // main world and stops only at its first screen.
+    [Fact]
+    public void AHitWalksThroughTwoNestedLevelsEachWorldAgainstItsOwnScreens() {
+        RenderGraphInstance[] instances = [
+            Instance(
+                name: "main",
+                reads: new RenderGraphRead(Producer: "portal")
+            ),
+            Instance(
+                name: "portal",
+                reads: new RenderGraphRead(Producer: "inner")
+            ),
+            Instance(name: "inner"),
+        ];
+        var shifted = (Screen(source: SourceHandle.Instance(name: "inner")) with {
+            Placement = new SourcePlacement.Surface(
+                HalfHeight: 1f,
+                HalfWidth: 1f,
+                Origin: Vector3.UnitX,
+                Right: Vector3.UnitX,
+                Up: Vector3.UnitY
+            ),
+        });
+        var scene = new Scene(placements: [
+            [Screen(source: SourceHandle.Instance(name: "portal"))],
+            [shifted],
+            [Screen(source: SourceHandle.Producer(name: "desktop"))],
+        ]);
+        var pane = SourceMapping.WholePane(
+            height: 256,
+            region: new NormalizedRect(
+                Height: 1f,
+                Width: 1f,
+                X: 0f,
+                Y: 0f
+            ),
+            source: SourceHandle.Instance(name: "main"),
+            width: 256
+        );
+
+        // The pane fills a 256 square display, so the display point 0.5 + 0.6/16 across is the main camera's image
+        // point there, which lands four times as far from the centre of the main screen: the portal's image 0.65
+        // across. The portal camera's ray through it meets z = 0 at x = 1.2, which the main world's screen, spanning
+        // -1 to 1, misses, and the portal world's own, spanning 0 to 2, meets 0.6 across: the inner image's point,
+        // which lands on the inner world's screen 0.9 across, the desktop.
+        RenderGraphHitPath Walk(int limit) {
+            Assert.True(
+                condition: RenderGraphInstanceSet.TryCreate(
+                    instances: instances,
+                    nestingDepth: limit,
+                    refusal: out var refusal,
+                    set: out var set
+                ),
+                userMessage: refusal?.Message
+            );
+
+            return RenderGraphHitWalk.WalkDisplay(
+                display: null,
+                displayHeight: 256,
+                displayWidth: 256,
+                maxDepth: set.NestingDepth,
+                panes: [pane],
+                point: new FixedVector2(
+                    X: FixedQ4816.FromDouble(value: (256 * (0.5 + (0.6 / 16)))),
+                    Y: FixedQ4816.FromDouble(value: ((256 * 0.5) + 0.5))
+                ),
+                scene: scene,
+                set: set
+            );
+        }
+
+        var deep = Walk(limit: 2);
+
+        Assert.Equal(
+            expected: (RenderGraphHitEnd.Producer, 2),
+            actual: (deep.End, deep.Instance)
         );
         Assert.Equal(
-            expected: 0,
-            actual: Set(
-                Instance(
-                    name: "left",
-                    reads: new RenderGraphRead(
-                        PreviousFrame: true,
-                        Producer: "right"
-                    )
-                ),
-                Instance(
-                    name: "right",
-                    reads: new RenderGraphRead(
-                        PreviousFrame: true,
-                        Producer: "left"
-                    )
-                )
-            ).NestingDepth
+            expected: [-1, 0, 1, 2],
+            actual: deep.Steps.Select(selector: static step => step.Instance)
+        );
+        Assert.Equal(
+            expected: SourceHandle.Instance(name: "inner"),
+            actual: deep.Steps[2].Mapping.Source
+        );
+        Assert.Equal(
+            expected: SourceHandle.Producer(name: "desktop"),
+            actual: deep.Steps[^1].Mapping.Source
+        );
+
+        var shallow = Walk(limit: 1);
+
+        Assert.Equal(
+            expected: (RenderGraphHitEnd.DepthLimit, 1, 3),
+            actual: (shallow.End, shallow.Instance, shallow.Steps.Count)
+        );
+
+        var paneOnly = Walk(limit: 0);
+
+        Assert.Equal(
+            expected: (RenderGraphHitEnd.DepthLimit, 0, 2),
+            actual: (paneOnly.End, paneOnly.Instance, paneOnly.Steps.Count)
         );
     }
 

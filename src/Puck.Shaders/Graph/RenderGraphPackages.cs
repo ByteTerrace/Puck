@@ -216,8 +216,9 @@ public sealed class RenderGraphPackageCatalog {
     /// interface is <c>sdf-film-grain</c>.</summary>
     public const string SdfFilmGrain = "sdf.film-grain";
     /// <summary>The id of the one placement pass: its base image, with its source reconstructed into a destination rect
-    /// over it, an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to
-    /// clamped Catmull-Rom at sharpness 1. A rect of the whole output resamples the whole source. Its kernel is
+    /// over it, an exact copy where the rect has the source's extent, or a contrast-adaptive sharpen of it there when the
+    /// config asks (<see cref="PlaceSharpen"/>), otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at
+    /// sharpness 1. A rect of the whole output resamples the whole source. Its kernel is
     /// <c>Assets/Shaders/Graph/place.comp.hlsl</c>, compiled at build; its config is the rect (<see cref="PlaceRect"/>),
     /// the sharpness (<see cref="PlaceSharpness"/>), whether the destination outside the rect is the letterbox color
     /// rather than the base (<see cref="PlaceLetterbox"/>) and whether the reconstructed source is tonemapped
@@ -236,8 +237,12 @@ public sealed class RenderGraphPackageCatalog {
     /// left, top, width, height.</summary>
     public const string PlaceRect = "rect";
     /// <summary>The <see cref="Place"/> config field holding the reconstruction's sharpness, from 0 (bilinear) to 1
-    /// (clamped Catmull-Rom).</summary>
+    /// (clamped Catmull-Rom), and the strength of the sharpen <see cref="PlaceSharpen"/> asks for.</summary>
     public const string PlaceSharpness = "sharpness";
+    /// <summary>The <see cref="Place"/> config field that, at 1, sharpens a source shown at the rect's own extent, which
+    /// is otherwise an exact copy, by a contrast-adaptive sharpen of <see cref="PlaceSharpness"/>'s strength: a
+    /// temporally resolved view asks for it. At sharpness 0 the copy stays exact; 0, the default, never sharpens.</summary>
+    public const string PlaceSharpen = "sharpen";
     /// <summary>The <see cref="Place"/> config field that, at 1, puts the reconstructed source through the Narkowicz
     /// ACES-fit filmic curve inside the rect: a world's root sets it on each view's place pass when
     /// <c>render.tonemap</c> is <c>Filmic</c>, so the scene is tonemapped where it enters the frame and the base, the
@@ -368,7 +373,8 @@ public sealed class RenderGraphPackageCatalog {
         .. ShaderWorkCounters.Members,
     ];
     /// <summary>Gets the config schema of <see cref="Place"/>: the letterbox switch, off by default, the rect, whole by
-    /// default, the sharpness, 0 by default, the tonemap switch, off by default, and optional comparison mode and wipe.</summary>
+    /// default, the sharpness, 0 by default, the sharpen switch, off by default, the tonemap switch, off by default, and
+    /// optional comparison mode and wipe.</summary>
     public static IReadOnlyDictionary<string, ShaderConfigField> PlaceConfig { get; } = new ReadOnlyDictionary<string, ShaderConfigField>(dictionary: new Dictionary<string, ShaderConfigField>(comparer: StringComparer.Ordinal) {
         [PlaceCompareMode] = new ShaderConfigField(
             Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
@@ -390,6 +396,13 @@ public sealed class RenderGraphPackageCatalog {
             Max: 1,
             Min: 0,
             Type: ShaderValueType.Float4
+        ),
+        [PlaceSharpen] = new ShaderConfigField(
+            Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),
+            Description: "1 sharpens a source at the rect's own extent by a contrast-adaptive sharpen of the sharpness's strength; 0 keeps its exact copy.",
+            Max: 1,
+            Min: 0,
+            Type: ShaderValueType.Uint
         ),
         [PlaceSharpness] = new ShaderConfigField(
             Default: System.Text.Json.JsonDocument.Parse(json: "0").RootElement.Clone(),

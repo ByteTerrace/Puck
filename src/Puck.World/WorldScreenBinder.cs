@@ -83,7 +83,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private readonly Func<uint, GpuImageLease> m_fillImage;
     private readonly WorldCaptureFills m_fills;
 
-    // The producers every producer source opens through: the four the engine ships, then any the host registers.
+    // The producers every producer source opens through: the five the engine ships, then any the host registers.
     private readonly WorldImageProducers m_producers = new();
 
     /// <summary>Gets the image producers the binder opens screen sources through, which the render root registers with its
@@ -253,6 +253,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_fillImage = m_fills.Acquire;
         m_producers.Register(producer: new WorldTestPatternProducer());
         m_producers.Register(producer: new WorldQrProducer());
+        m_producers.Register(producer: new WorldColorProducer());
         m_producers.Register(producer: new CameraProducer(binder: this));
         m_producers.Register(producer: new CaptureProducer(binder: this));
 
@@ -465,8 +466,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
 
         m_disposed = true;
 
-        foreach (var slot in m_slots.Values) {
-            slot.Session?.Dispose();
+        EnsureFeeds();
+
+        foreach (var feed in m_feeds) {
+            feed.Dispose();
         }
 
         m_fills.Dispose();

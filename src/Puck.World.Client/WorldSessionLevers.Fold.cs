@@ -92,6 +92,7 @@ public static partial class WorldSessionLevers {
             AmbientOcclusion = settings.AmbientOcclusion,
             RenderScale = WorldRenderScaleTiers.Nearest(scale: settings.RenderScale),
             UpscaleSharpness = settings.UpscaleSharpness,
+            Temporal = settings.Temporal,
         });
 
         return ((captured == render)

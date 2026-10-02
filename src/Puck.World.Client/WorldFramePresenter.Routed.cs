@@ -82,6 +82,11 @@ public sealed partial class WorldFramePresenter {
 
         return SceneOf(endpoint: endpoint).Attach();
     }
+
+    /// <summary>Gets the scene of every world a seat is presented in or a window is attached to, as the last Dress left
+    /// them, enumerated without allocating.</summary>
+    public Dictionary<WorldAuthorityEndpoint, WorldRoutedScene>.ValueCollection RoutedScenes => m_routedScenes.Values;
+
     /// <summary>Returns whether a routed scene is still the scene of a world a seat is presented in or a window is
     /// attached to, as the last Dress latched it.</summary>
     /// <param name="scene">The scene.</param>

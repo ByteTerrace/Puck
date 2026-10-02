@@ -248,6 +248,7 @@ public sealed partial class RenderGraphRuntime {
         var current = new Output[count];
         var previous = new Output[count];
         var producerTainted = new bool[count];
+        var unreadFrames = new long[count];
 
         for (var index = 0; (index < count); index++) {
             var old = kept[index];
@@ -262,6 +263,9 @@ public sealed partial class RenderGraphRuntime {
                 (old >= 0) &&
                 m_producerTainted[old]
             );
+            unreadFrames[index] = ((old >= 0)
+                ? m_unreadFrames[old]
+                : 0L);
 
             // A new uploaded source's node takes its conversion graph at its descriptor's extent; a kept one keeps it.
             if (sources[index] is { } source) {
@@ -318,6 +322,8 @@ public sealed partial class RenderGraphRuntime {
         m_standInReads = new string?[count];
         m_taintedReads = new string?[count];
         m_unproduced = 0;
+        m_unreadFrames = unreadFrames;
+        m_visible = new bool[count];
         refusal = null;
 
         // The pending request follows this composition's indices and dependency closure. A changed composition

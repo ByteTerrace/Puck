@@ -22,6 +22,29 @@ public interface IWorldViewScenes {
     /// <param name="point">The point, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the view answers for its world and the ray meets a surface of it.</returns>
     bool TrySurface(string view, SourceRay ray, out FixedVector3 point);
+    /// <summary>Finds the screens standing in the world a view renders, when that world is not the one the host's
+    /// <see cref="WorldViewGraphHost.Screens"/> publishes: a session's destination, or the world a seat's view is
+    /// presented in.</summary>
+    /// <param name="view">The view's instance name.</param>
+    /// <param name="placements">The screens' mappings, each named by the instance it shows, when this returns
+    /// <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the view renders another world than the boot world's screens stand in.</returns>
+    bool TryPlacements(string view, out IReadOnlyList<SourceMapping> placements);
+    /// <summary>Finds the glass a session view shows on, in the world a consumer that reads it renders.</summary>
+    /// <param name="consumer">The reading instance's name.</param>
+    /// <param name="producer">The read instance's name.</param>
+    /// <param name="glass">The screen row the session shows on, when this returns <see cref="WorldPortalGlass.Found"/>.</param>
+    /// <returns>Whether the producer is a session the consumer's world shows, and where.</returns>
+    WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass);
+}
+/// <summary>Where a session view stands in the world of an instance that reads it.</summary>
+public enum WorldPortalGlass : byte {
+    /// <summary>The read instance is no session view.</summary>
+    None = 0,
+    /// <summary>A screen of the consumer's world shows the session, on the glass found.</summary>
+    Found = 1,
+    /// <summary>The consumer renders a world none of whose screens shows the session.</summary>
+    Elsewhere = 2,
 }
 public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     private readonly Dictionary<string, CameraSnapshot> m_cameras = new(comparer: StringComparer.Ordinal);
@@ -115,9 +138,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
                 m_displayMapping = (m_display ?? m_displayMapping);
             }
 
-            // A lone whole-display view shown only for its tonemap publishes no pane, as the view the root stands for
-            // does: the display shows the world itself either way.
-            for (var view = (m_loneTonemapped ? 1 : 0); (view < views); view++) {
+            // A lone whole-display view shown only for its tonemap or sharpen publishes no pane, as the view the root stands
+            // for does: the display shows the world itself either way.
+            for (var view = (m_loneThroughItsPass ? 1 : 0); (view < views); view++) {
                 PublishPane(
                     instance: synthesized.Producers[view].Name,
                     latest: latest,
@@ -252,12 +275,24 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     }
 
     /// <inheritdoc/>
-    /// <remarks>Every view's world producer (<c>world</c>, <c>world$&lt;view&gt;</c>) and every camera view renders the one
+    /// <remarks>Each world is tested against its own screens. A view that renders another world than the boot world
+    /// reports that world's screens (<see cref="IWorldViewScenes.TryPlacements"/>): a session reports its destination's,
+    /// each named by the session one level deeper it shows, and a seat's view presented in another world that world's.
+    /// Every other view's world producer (<c>world</c>, <c>world$&lt;view&gt;</c>) and every camera view renders the boot
     /// world, so each reports the mappings <see cref="Screens"/> last published; any other instance reports none, so a
-    /// ray cast into it ends on its world. A session (<c>session$&lt;screen&gt;</c>) reports none under the depth-one
-    /// policy: a projected destination's own screens bind dark (its view renders static placements and no screens), so
-    /// a walk through a portal ends in the destination's world, never in a screen inside it.</remarks>
+    /// ray cast into it ends on its world. A walk through a portal therefore continues through the portals inside its
+    /// destination, to the set's nesting depth.</remarks>
     IReadOnlyList<SourceMapping> IRenderGraphHitScene.Placements(int instance) {
+        if (
+            (InstanceName(index: instance) is { } routed) &&
+            (ViewScenes is { } scenes) &&
+            scenes.TryPlacements(
+                placements: out var placements,
+                view: routed
+            )
+        ) {
+            return placements;
+        }
         if (
             (Screens is { } screens) &&
             (InstanceName(index: instance) is { } name) &&

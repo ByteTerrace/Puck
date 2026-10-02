@@ -40,6 +40,8 @@ public static partial class WorldSessionLevers {
     /// <summary>The target present rate in Hz, 0 meaning automatic display pacing (<c>world.target</c>), folding into
     /// <c>host</c>.</summary>
     public const string TargetHertz = "target";
+    /// <summary>Temporal reconstruction of the world's own views (<c>world.temporal</c>).</summary>
+    public const string Temporal = "temporal";
     /// <summary>The upscale sharpness (<c>world.upscale-sharpness</c>).</summary>
     public const string UpscaleSharpness = "upscale-sharpness";
 
@@ -102,6 +104,10 @@ public static partial class WorldSessionLevers {
         sink.Register(
             name: RenderScale,
             setter: lever => settings.RenderScale = ((float)lever.A)
+        );
+        sink.Register(
+            name: Temporal,
+            setter: lever => settings.Temporal = Flag(lever: lever)
         );
         sink.Register(
             name: UpscaleSharpness,

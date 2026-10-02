@@ -270,8 +270,8 @@ These are one-line cautions; the owning pages hold the derivations.
   stress test for handle reuse must render a frame between image swaps
   (`world.wait`); swaps inside one frame never publish the retired handle.
 - **Screens.** A screen bound to nothing (`SdfWorldTables.SetScreenBound`, set
-  every frame from whether `ISdfScreenSources.ReadOf` names an instance) shades
-  as dark glass, lit faintly by the sun. Inside view V's own render, a screen
+  every frame from whether `ISdfScreenSources.ReadOf` names an instance in any
+  view of the residency's frame) shades as dark glass, lit faintly by the sun. Inside view V's own render, a screen
   showing V samples V's previous output: a read of an instance's own output
   binds its latest output completed before this frame (`RenderGraphScheduler`),
   so a mirror never samples the image it writes. A leased
@@ -385,9 +385,9 @@ These are one-line cautions; the owning pages hold the derivations.
   reading it draws a stand-in (`RenderGraphRuntime.Bind`).
   An `sdf.world` pass maps the reads its instance is handed that its graph
   binds to no version (`IRenderGraphPackageFactory.SamplesReads`) to its
-  screens through `ISdfScreenSources` (`ReadOf` names each screen's instance: a
-  source's, or a camera view's or a session's), taking each read's lease once
-  however many screens show it. The binder
+  screens through `ISdfScreenSources` (`ReadOf` names each screen's instance in
+  the pass's own view: a source's, or a camera view's or a session's), taking
+  each read's lease once however many screens show it. The binder
   publishes before the runtime schedules (`WorldFramePresenter.PrepareGraph`).
   An external image (camera, capture, probe output) is resolved through the
   binder's `WorldCaptureGate`, never directly: a new path that samples one
@@ -1584,14 +1584,19 @@ an image rendered at the extent last requested of it (`UnservedCaptureReasonOf`
 names the extent it waits for). Never tie a camera's aspect to a node's
 installed extent; that distorts every placed view during a resize or a layout
 transition.
-A session screen renders an `SdfWorldResidency` of its
-own, one view and no brick pool, from the destination's own frame source on its
-own clock, released in `ReconcileViewResidencies` once the session is gone. A
-camera view reads every
-source within the frame and every view a screen shows, itself included, at its
-previous frame; a session reads nothing; the world's instance reads every view a
-screen shows within the frame, so the reads grow with the views shown, never
-with the square of every view. `WorldViewGraphHost.TryCompose` puts the views
+A session screen whose session discloses everything renders a view of its
+destination endpoint's scene (`WorldSessionWindowRoute`), the one residency every
+seat and every such session presenting that world shares, at any depth; any
+other renders an `SdfWorldResidency` of its own, one view and no brick pool, from
+the destination's own frame source on its own clock, released in
+`ReconcileViewResidencies` once the session is gone. A camera view reads every
+source within the frame and every view a screen of its world shows, itself
+included, at its previous frame; a session reads, within the frame, what its own
+world's screens show one level deeper (`WorldView.Reads`: sessions, and source
+instances only nested worlds show, `WorldViewInstances.NestedSources`); the
+world's instance reads every view a screen of a world the display shows directly
+shows (`WorldViewInstances.IsShownDirectly`) within the frame, so the reads grow
+with the views shown, never with the square of every view. `WorldViewGraphHost.TryCompose` puts the views
 after the sources. A view's demand (`WorldViewDemand`, flags) is every way
 something shows it: a screen, through a footprint of its declared extent over the
 display, and a HUD frame or a probe export, as a root beside the runtime's
@@ -1626,7 +1631,10 @@ hovered or outlined, but its whole-display mapping is `DisplayView`, which the
 walk starts from where no pane holds the point. The pane pointer reads its instance's published mapping
 (`TryGetPane`), so it maps the pane as the display last showed it. A hit on a
 rendered source continues through `RenderGraphHitWalk` (`src/Puck.Hosting/Graph`)
-up to `RenderGraphInstanceSet.NestingDepth`; `WorldViewGraphHost.Walk` runs it
+through at most `RenderGraphInstanceSet.NestingDepth` screens, a depth the set
+declares (the World's from its boot document's `views.nestingDepth`, 3 by
+default, refused past `MaxNestingDepth`, 8) and never derives from its reads;
+entering a pane's instance from the display counts no screen. `WorldViewGraphHost.Walk` runs it
 over the runtime's live set, with each view's seat camera and each pane's
 paired camera, and `world.view.panes` echoes the panes, a pick, a walk and the
 hovered pane. The picker is the presentation destination's one hover: each
@@ -1651,12 +1659,32 @@ producer reports those mappings as its placements
 (`WorldViewGraphHost.Screens`), so the walk continues through a screen, and a
 camera view reports them too, so a walk through a screen showing a camera view
 continues into the view through the camera it last filmed from
-(`WorldViewGraphHost.ViewScenes`, the binder). A session reports no placements
-(the depth-one policy: a projected destination's screens bind dark), and a walk
-through a screen showing one continues through the camera its last frame rendered
-from, a window's fitted camera with its shear, and ends on the surface its ray
-meets among the destination's static placements (`RenderGraphHitPath.Surface`,
-`WorldSessionSceneEmitter.TrySurface`). The GPU
+(`WorldViewGraphHost.ViewScenes`, the binder). Each world is tested against its
+own screens: a session, and a seat's view presented in another world, report
+that world's (`IWorldViewScenes.TryPlacements`), so a walk through a screen
+showing a session continues through the camera its last frame rendered from, a
+window's fitted camera with its shear, through any portal inside the
+destination, and ends on the surface its ray meets among the last world's
+static placements (`RenderGraphHitPath.Surface`,
+`WorldSessionSceneEmitter.TrySurface`).
+Portals nest. A destination's own screens draw wherever it renders: the session
+emitter draws its rows and seated faces (`WorldPrototypeFacets.Seated`), and the
+binder keeps one `WorldNestedScreens` per presented world, a routed world at
+depth 0 (`routed$<digest>`, a digest of its authority, `WorldViewNames.Routed`) and each session's destination one level deeper,
+whose session screens open session feeds of their own while the world is
+shallower than the nesting depth, named `WorldViewNames.Nested`
+(`session$<screen>$<screen>…`). A screen at the depth shows its session's
+`fallback` colour through the `color` producer (`WorldPortalFallback`); a world
+shown through a screen shows only sessions and producers whose content is
+deterministic. Views of one residency render one world at different levels, so
+`ISdfScreenSources.ReadOf` takes the view: a routed scene's seat views read the
+routed world's level, each window view its feed's (`RoutedScreenSources`), and
+the residency's bound flag holds while any view of its frame reads the screen.
+A window fits to the eye of the view one level up and starts its rays past the
+counterpart's own glass (`WorldPrototypeFacets.GlassSpan`). A session's
+footprint holds only while its consumer's last camera sees its glass
+(`WorldPortalVisibility`, `IWorldViewScenes.PortalGlass`), so a face out of view
+schedules nothing beneath it. `world.nesting` echoes every level. The GPU
 draws every screen from its mapping: the residency hands each screen's published
 mapping (`ISdfScreenSources.MappingOf`) to `SdfWorldTables.SetScreenMapping`,
 which packs its single-precision draw form (`SourceMapping.Draw`, the warp's
@@ -1901,14 +1929,55 @@ the same render-pixel offset to the march and mesh projection. While a capture
 converges the index is the runtime's count (`RenderGraphConvergence.Samples`,
 handed to each contributing package by `BeginConvergence`), never the
 instance's own renders: a frame the runtime does not count renders the same
-sample again. Ordinary rendering keeps jitter zero until reconstruction is
-enabled, and cadence enforces it: `SdfWorldPasses.IsUnchanged` lets a view stand
+sample again. Ordinary rendering keeps jitter zero unless the view reconstructs
+over time, and cadence enforces it: `SdfWorldPasses.IsUnchanged` lets a view stand
 only while `SdfTemporalHistory.Stands` finds a render now would feed the same
 temporal inputs (jitter always; previous view and poses where the pass reads
 motion). A new temporal input a pass reads joins `Stands` in the same change.
 `SdfTemporalHistoryLawTests`, `SdfWorldPassesLawTests.Temporal` and the
 runtime's convergence laws hold these. Run the `temporal-jitter` and
 `temporal-motion` canaries on both backends after changing this contract.
+
+## Temporal reconstruction
+
+A view reconstructs over time exactly when its quality asks
+(`SdfViewQuality.Temporal`; `Restrict` keeps it only when both ask, so
+`WorldScreenBinder.CameraViewQuality` keeps camera views spatial and session
+views never ask). `world.temporal` is the lever for the world's own views and
+the quality presets carry it. The ask selects `SdfWorldPackage.TemporalFragment`
+(`SdfWorldPasses.FragmentOf`) and is folded into the render-extent revision, so
+a change rebuilds beside the installed graph. Each recorder captures at creation
+whether its graph is the temporal fragment and hands it to `TemporalOf`, so the
+epoch's `Enabled` and `Temporal` follow the installed graph, never the request:
+a graph still building never jitters, and the resolve never reads history its
+graph did not write. The history is two fragment history versions at the output
+extent (color with the gathered weight in alpha; the surface's ray distance and
+identity), zero-initialized, so a fresh graph reads nothing; the reactivity
+buffer is the sky's then views' at the render extent. The one resolve kernel
+switches on the pass block's `temporal` and the debug mode; a spatial resolve
+binds the tables' fillers at every temporal member. Its first epoch frame calls
+`puckReconstruct`, the spatial path itself, so a reset frame is the spatial
+frame exactly. `SdfTemporalHistory.Stands` lets a temporal epoch stand only once
+`Frames` and the renders since `Changed` (which `IsUnchanged` calls when the
+residency reports a change) both reach `Period`. The epoch carries the instance's unread frames, which the render graph counts
+for each frame its schedule leaves the instance unread and absent from displayed
+outputs, including held consumer outputs, and hands to
+`IsUnchanged` and every recording (`RenderGraphPackageRecording.UnreadFrames`),
+so a parked view shown again starts a new epoch; never infer parking from a
+render gap, which cadence leaves too. `place` sharpens a temporal
+view at its own extent (`RenderGraphPlacement.Sharpen`), and the root places a
+lone view when one sharpens (`WorldRootGraph.Sharpens`). A residency builds its
+resolve pipeline only on request, so `SdfWorldPasses.Refresh` requests the
+arrival residency's (`SdfWorldPipelines.RequestResolve`, from the build source
+`BuildAsync` last used) whenever a followed view changes residency; without it
+`CanFollow` fails and a temporal view crossing a portal holds the departed world
+(`ATemporalViewCrossesToAnotherResidencyInPlace`; `portal-walk` crosses with
+`world.temporal on` and holds its crossing frame to a relaunch's spatial one
+exactly). Run `temporal-convergence`,
+`temporal-ghosting`, `temporal-disocclusion` and `temporal-reset` on both
+backends with `--debug-layers` after changing the resolve, the fragment or the
+reprojection; `SdfPassPlanLawTests.Temporal` and `SdfWorldPassesLawTests.Temporal`
+hold the plan and the convergence rule without a device.
 
 ## Route adjacent work
 
