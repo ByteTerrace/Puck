@@ -19,7 +19,7 @@ gitignored build products; never commit them.
 `ValidateShaderBytecodeSources` removes bytecode without a same-stem `.hlsl`
 when its sidecar records its bytes (the build wrote it), printing one line per
 file, and fails the build on any other sourceless bytecode, which it leaves in
-place; `ValidateShaderBytecodeFresh` fails it on bytecode stale against its
+place; `CollectShaderBytecode` fails it on bytecode stale against its
 source or sidecar. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader Model 6.6;
 do not raise that floor without evidence from every supported GPU.
 
@@ -55,7 +55,10 @@ interface: a kernel compiled against another instruction set (its pass block's
 stamp) or binding anything where the host does not place it. Reflecting a DXIL
 kernel needs the `dxcompiler.dll` beside the `dxc` on the path. The
 `sdf-shader-reload` canary holds both outcomes on both backends. Scene buffers, images, baked bricks, and world state
-survive; the cadence signature is invalidated. The last
+survive; the cadence signature is invalidated. A reload also builds again any
+views kernel the residency refused (its creation failed; `NotReadyReason`
+names it), even when the tree leaves its bytecode unchanged: that, or a device
+loss, is the only retry a refused views kernel gets. The last
 successful set survives device-loss recovery. `views.graphs` instances
 (`pipeline.reload`) and `views.post` post-process packages are outside this
 command, and host ABI or
@@ -247,7 +250,12 @@ full binding map is in
 `coneMarchTileBounds` abandons its gap and tail searches after
 `TileGapStallLimit` consecutive occupied samples with non-increasing clearance,
 keeping the established entry and far-plane sentinels; a stall never proves
-empty space. Programs admitted for independent part tracing use
+empty space. Every cone step goes through `coneMarchAdvance`, which crosses a
+wallpaper LOD switch through `sdfMarchAdvance`; an entry or second entry
+reached by a crossing is the switch's depth, never the landing's, and the cone
+relies on its apex being the LOD origin (`sdf-beam` sets both to the camera).
+Log-sphere walls stay in a cone's clearance (`sdfMapConeClearance`), since they
+are not centred on its apex. Programs admitted for independent part tracing use
 `IndependentConeMarchSteps` entry samples without gap or tail searches. When
 changing these heuristics, compare whole-frame cost and hit/material captures,
 including grazing rays and separated bands.

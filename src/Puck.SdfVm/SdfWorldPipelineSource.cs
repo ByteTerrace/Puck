@@ -12,7 +12,8 @@ namespace Puck.SdfVm;
 // the pump that drains the console. The leases outlive the tables built from them (a capacity or
 // export rebuild reuses them) and are released on device loss and disposal. The holder builds its tables here
 // (TryBuild), which refuses a failed build by name instead of throwing it, and tries it again only when an input it was
-// built from changes. The set is ready only once the region copy and the mesh pass are too: the tables record their
+// built from changes. The set is ready once every pipeline but the views variants is built (SdfWorldPipelines.PollRequired),
+// and the region copy and the mesh pass are too: the tables record their
 // upload and mesh region with the first and a view's mesh pass draws with the second.
 internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     private readonly BackgroundBuild<Leases> m_acquire = new();
@@ -21,7 +22,8 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_regionCopy;
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_meshRaster;
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_impostorRaster;
-    // Whether every pipeline of the leased set has been seen ready.
+    // Whether every pipeline the tables need has been seen ready: all of the leased set but the views variants, which
+    // the tables dispatch only once the program's is built (SdfWorldTables.ViewsWaiting).
     private bool m_ready;
     // The latest refused engine build and what it was built from, until a build succeeds or the lease is released.
     private Exception? m_refusal;
@@ -31,7 +33,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
 
     // The composition's pipeline catalog, whose pass-pipeline cache a reload leases replacements from.
     public SdfWorldPipelineCatalog Catalog => catalog;
-    // The ready set, or null before every pipeline of the leased set has built.
+    // The set, once every pipeline the tables need has built, or null before.
     public SdfWorldPipelines? Current => (m_ready ? m_lease : null);
     // The device's ready region-copy pipeline, or null before it has built.
     public IGpuComputePipeline? RegionCopy => m_regionCopy?.Current?.Compute;
@@ -90,7 +92,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             m_impostorRaster = leases.ImpostorRaster;
         }
 
-        m_ready = m_lease.Poll();
+        m_ready = m_lease.PollRequired();
 
         return ((!m_ready || (m_regionCopy!.Poll() is null) || (m_meshRaster!.Poll() is null) || (m_impostorRaster!.Poll() is null))
             ? null

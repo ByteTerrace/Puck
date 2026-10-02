@@ -37,6 +37,9 @@ public sealed partial class RenderGraphRuntime {
         m_stale[index] = reason;
         m_staleRefused[index] = refused;
     }
+    // Whether an instance presents its last image on purpose: a paused node renders only when stepped, so that image is
+    // its output for every frame until then, both for its own standing and for an instance that reads it.
+    private bool Stands(int index) => (m_nodes[index] is { Paused: true });
     // A scheduled graph instance whose node produced nothing this frame. A paused node presents its last image on purpose.
     // This is the one place a graph instance's refusal becomes Refused: a package's refusal of the instance
     // (IRenderGraphPackageFactory.RefusalOf, such as an SDF residency's refused tables), the node's refused build or a
@@ -45,7 +48,7 @@ public sealed partial class RenderGraphRuntime {
     private void MarkUnproduced(int index, ShaderPipelineRenderNode node, string? waiting = null) {
         var name = m_set.Instances[index].Name;
 
-        if (node.Paused) {
+        if (Stands(index: index)) {
             MarkCurrent(index: index);
         } else if ((PackageRefusalOf(index: index) ?? m_sources[index]?.Upload.Fault) is { } refusal) {
             MarkStale(
@@ -165,8 +168,9 @@ public sealed partial class RenderGraphRuntime {
             }
             if (
                 (m_producers[producer] is null) &&
+                !Stands(index: producer) &&
                 (read.Frame >= 0) &&
-                (OutputAt(
+                (RecordedAt(
                     frame: read.Frame,
                     producer: producer
                 ).Frame < read.Frame)

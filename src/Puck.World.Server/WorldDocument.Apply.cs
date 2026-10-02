@@ -1894,68 +1894,6 @@ public sealed partial class WorldDocument {
         principal = new Principal[capacity];
         collided = new bool[capacity];
     }
-    /// <summary>Attaches a client sink the per-tick snapshot is delivered to, immediately delivering the live
-    /// definition followed by a primer snapshot of the current table, so the client renders the current state before
-    /// its first ordinary tick delivery. A subscribe, not an overwrite: <see cref="WorldOutputHub"/> supports more
-    /// than one attached sink (play-and-host — a local sink plus N future connections plus the tape all
-    /// subscribing), so a second call adds a second subscriber rather than displacing the first.</summary>
-    /// <param name="sink">The sink to deliver snapshots to.</param>
-    /// <returns>A lease that detaches <paramref name="sink"/> when disposed — see
-    /// <see cref="WorldOutputHub.Subscribe(IClientSink)"/> for the threading/idempotency contract. Disposal takes the sink out of
-    /// every future delivery; it never retracts what the primer or an earlier tick already delivered.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
-    internal IDisposable AttachSink(IClientSink sink) =>
-        AttachSink(
-            sink: sink,
-            disclosure: WorldSinkDisclosure.Full
-        );
-    /// <summary>Attaches a sink whose snapshot deliveries are filtered by <paramref name="disclosure"/> — see
-    /// <see cref="AttachSink(IClientSink)"/> for the lifetime contract, which is identical. The attach primer is
-    /// filtered the same way an ordinary tick's delivery is, so a redacted sink never sees an unredacted first
-    /// frame.</summary>
-    /// <param name="sink">The sink to deliver snapshots to.</param>
-    /// <param name="disclosure">What this sink's observer is delivered.</param>
-    /// <returns>A lease that detaches <paramref name="sink"/> when disposed.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
-    internal IDisposable AttachSink(IClientSink sink, in WorldSinkDisclosure disclosure) {
-        ArgumentNullException.ThrowIfNull(argument: sink);
-
-        var lease = Host.Output.Subscribe(
-            disclosure: in disclosure,
-            sink: sink
-        );
-
-        // Both the definition and the primer go to the NEWLY attached sink only (not a hub-wide broadcast) — an
-        // already-attached sink must not replay a stale definition/snapshot every time a later sink joins. Isolated
-        // the SAME way WorldOutputHub isolates an ordinary tick delivery fault (its own remarks): a sink that throws
-        // during its own attach primer must not take down whoever called AttachSink, and is detached before it ever
-        // reaches an ordinary tick delivery.
-        try {
-            sink.DeliverDefinition(definition: m_definition, version: Host.DocumentVersion);
-
-            var primer = BuildPrimerSnapshot();
-
-            if (disclosure.IsFull) {
-                sink.DeliverSnapshot(snapshot: in primer);
-            } else {
-                var scratch = Array.Empty<EntitySnapshot>();
-                var redacted = WorldOutputHub.Redact(
-                    disclosure: in disclosure,
-                    scratch: ref scratch,
-                    snapshot: in primer
-                );
-
-                sink.DeliverSnapshot(snapshot: in redacted);
-            }
-        } catch (Exception exception) {
-            if (Host.Output.HasNarrationSink) {
-                Host.Output.Narrate(channel: "world.output", text: $"[world.output: {sink.GetType().Name} threw during its own attach primer — detached] {exception}");
-            }
-            lease.Dispose();
-        }
-
-        return lease;
-    }
     /// <summary>Buffers one live world mutation for the next <see cref="WorldServer.Step"/> (drained before intents). Retains the
     /// submitting envelope's connection/correlation identity so the eventual accept/reject <see cref="WorldEditEcho"/>
     /// routes back to the submitter (see <see cref="WorldEditEcho.ConnectionId"/>) — a deferred op's echo fires later

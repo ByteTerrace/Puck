@@ -21,11 +21,11 @@ library depend on a GPU backend.
 drains the console before each step. It holds the first step until a piped
 script reaches its first tick wait, or standard input ends. The
 [commands reference](../../docs/reference/commands.md#who-can-dispatch-a-command)
-explains the timing a script can rely on. The offscreen loop's pump also holds
-its clock for owed frames: before each step it asks the simulation
+explains the timing a script can rely on. Windowed and offscreen pumps also hold
+their clocks for owed frames: before each step they ask the simulation
 (`IFixedStepSimulation.HoldsClock`), and while a frame a step owes is unserved
-it withholds the step and spends the time rather than owing it. The windowed
-and headless pumps never ask. A loop that produces frames calls
+they withhold the step and spend the time rather than owing it. The headless
+pump never asks. A loop that produces frames calls
 `IFixedStepSimulation.SettleOwedFrames` in its teardown before it disposes its
 render root.
 

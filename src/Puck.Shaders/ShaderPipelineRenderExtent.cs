@@ -9,6 +9,10 @@ public interface IShaderPipelineRenderExtent {
     /// records a grid it was not built for. A change rebuilds beside the installed graph, which presents its last image
     /// until the replacement installs.</summary>
     long Revision { get; }
+    /// <summary>Gets this frame's render grid as a fraction of the output on each axis: the fraction
+    /// <see cref="FrameAt"/> resolves into pixels, which the node records with each submission it renders
+    /// (<see cref="ShaderPipelineRenderNode.TryGetRenderGrid"/>).</summary>
+    double Grid { get; }
 
     /// <summary>Resolves the allocation ceiling against the output.</summary>
     /// <param name="width">The output width.</param>

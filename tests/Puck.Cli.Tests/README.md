@@ -40,6 +40,13 @@ build. Pruning keeps the most recently used builds and every leased one, and a
 killed run's leftover directories and lock files are removed only after six hours.
 `WorldArtifactClosureLawTests` evaluates the World's project graph with MSBuild
 and requires every input it names to lie under a keyed path.
+`ShaderBuildTargetsLawTests` runs the shared shader targets over isolated projects
+with a CPU-only compiler stand-in. It checks restored include inputs, unchanged
+builds, temporary cleanup, refusal of missing compiler outputs, and collection
+of existing Direct3D 11 kernels without compiling during pack.
+`ShaderDeclarationBuildLawTests` runs the generator targets with the built
+`Puck.Shaders.Generator` host. It checks repair of drift and missing declarations,
+unchanged file times, and explicit checking without generation.
 `CanaryListenerLawTests` checks that the canary port probe hands out UDP ports.
 It also checks that a World refusing its listener is classified as an
 infrastructure failure rather than unsupported.

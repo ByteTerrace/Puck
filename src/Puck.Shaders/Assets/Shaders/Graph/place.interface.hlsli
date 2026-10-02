@@ -1,4 +1,4 @@
-// Generated from shader interface 'place' (sha256/c9ed9ca34b973ca6c5ad7aac265c9501de22cb04ce6f7379a2d0301aa767a48a). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'place' (sha256/a00d2d1884eabb98db9ab0cc7fad6f1a6427cc5ae3b728e4ec027939d8b4fbbc). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_PLACE
 #define PUCK_SHADER_INTERFACE_PLACE
 
@@ -19,6 +19,8 @@ struct PlaceFrame {
     [[vk::offset(64)]] float3 cameraTarget;
     [[vk::offset(76)]] uint _pad76;
     [[vk::offset(80)]] float3 cameraUp;
+    [[vk::offset(92)]] uint _pad92;
+    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<PlaceFrame> frameGroup : register(b0, space0);
 

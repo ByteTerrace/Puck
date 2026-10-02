@@ -89,7 +89,7 @@ boot that finds no compiled world derives everything and runs the same world.
 
 **The file.** A compiled world is a [chunk container](../reference/assets.md#chunk-containers)
 with the magic `PWLD` and format version 1, named `<name>.puckb` after its
-document (`moth.puck` and `moth.world.json` both map to `moth.puckb`). Its header
+document (`moth.puck` maps to `moth.puckb`, and `puck.world.json` to `puck.puckb`). Its header
 holds, in order, four keys, and a boot whose own four keys differ ignores the
 whole file:
 
@@ -655,6 +655,22 @@ An observation feed provides:
 - redaction and fidelity enforcement at every projection/read door, including queries;
 - the destination presentation clock and step width.
 
+The in-process output hub delivers synchronously on the tick thread. Its snapshots borrow reused storage,
+so each sink consumes or copies them before returning. The federation projection sink copies encoded records
+into a per-subscription queue of at most eight pending deliveries (`WorldFederationProjectionSink.PendingDeliveryLimit`).
+When that queue fills, it detaches with `world.observation.backpressure` and ends the stream with a projection
+invalidation. The hub detaches it immediately; draining the retained records does not keep the subscription alive.
+A peer reopens for a fresh primer: a snapshot alone cannot repair a missed definition revision
+or authority route. The queued records retain their original order and authority/session epochs until that
+invalidation; no later record enters a detached queue. A retired authority route detaches with
+`world.observation.invalidated`. Faulting sinks still detach independently.
+
+Session queries cross the same disclosure decision as delivery. A `Frames` session reads no query result;
+`Presentation` sessions can query only recipient-filtered state observations, whose projection is also used
+for delivery. Authoritative readbacks require a `Replica` admission and disclose-all observer policy. A
+session whose observation has ended has no query read door. Session state read views use the delivered tier's
+definition projection; Frames and ended sessions are refused there too.
+
 A session screen observes its destination as a session. When the screen binds,
 `WorldServer.TryObserveAsSession` admits one against the destination's own `admission` rows for
 the viewer's authority, and releasing the screen ends it. The screen's mirror starts knowing nothing
@@ -704,6 +720,40 @@ hold, a ray off the glass) one release clears what the session pointed and press
 replays from its tape forwards nothing, its drive's last tick included: its destinations are not
 replaying with it. A destination driving its own tape restores the sessions it recorded; when the
 drive ends, each one no observer holds ends, so nothing its recorded viewer pressed stays held.
+
+The windowed and offscreen render roots prepare delivery and the graph set, then the package's
+frame capture runs the world's existing view composer before scheduling. That capture places each
+SDF view using the same eased rect its camera projects, including fractional pixel extents, and places
+shader panes from that composition.
+Each occupant's allocation is the largest width and height its slots reach over the layout
+transition in flight, from its starting rect to its ending one, with padded departing cameras and
+the slot a view ordinal holds on either side of the midpoint cut included (`WorldViewOutputRegions`).
+An endpoint with no rendered slot reserves the whole-display spectator. Interrupted transitions
+retain each occupant's largest reservation until the chain settles, so repeated interruptions never
+shrink its allocation mid-ease. A settled layout requests each view and pane's own rect, subject to
+the scheduler's quantization and shrink hysteresis, so the shipped split layout renders
+each seat at half the display. Easing changes placement and the resolved grid inside the
+render-scale ceiling without resizing a node; allocations grow as a transition starts and shrink
+as it settles. An occupant that grows on one axis and shrinks on the other changes allocation at
+both boundaries. Collapsed arriving slots keep a
+finite camera while positive extents retain their fractional-pixel aspect. Frozen convergence
+frames publish their retained placements on every prepared frame. Editor comparisons record their
+viewports after that placement. `WorldCameraPlacementLawTests` pins agreement on every transition
+frame, one rebuild for a shrinking transition across quantization steps, and the split layout's half-display
+allocation. A pane's frame values carry its placed extent (`placedExtent`), the extent its paired
+camera projects for, so a pane shader projects at the placed aspect while its output keeps the
+allocation's.
+
+Both rendered hosts hold the completed simulation tick while a tick-scheduled capture is owed.
+Repeated window resizes can delay frame production, but cannot advance the capture to a later tick
+or leave it blocking the next scheduled capture. A pending capture presents bound state and body
+poses at fraction one; its image, region tick and state hash describe the scheduled tick
+(`WorldTemporalCaptureLawTests.AWindowedCapturePinsItsClockAndBodyPoseAndReleasesTheFractionAfterServing`). The
+swapchain follows the window's client extent while the world's logical frame extent stays fixed.
+`WorldCaptureSchedulerLawTests.AWindowResizeStormWritesEveryScheduledTicksFrameWithoutBlockingTheNextCapture`
+checks every PNG's tick and hash through delayed frames. When a frame cannot be served, the existing
+readiness-dependent hold budgets produce a named refusal and withdraw the request; a run settles
+anything still owed before disposal (`WorldCaptureHoldLawTests`).
 
 A joined-world projection renders the destination from the destination's own delivered snapshots and
 its own measured clock, never through the host's presentation clock—independently scheduled or

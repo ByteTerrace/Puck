@@ -512,6 +512,8 @@ public sealed class AudioMixer {
         );
     }
     private static void SmoothstepAttenuation(long d2Q16, long min2Q16, long max2Q16, out int attenuationQ16) {
+        // The two edges are settled here rather than by the curve, because equal radii must still read silent at
+        // the radius and full inside it, where a step between equal edges cannot know which side is which.
         if (d2Q16 >= max2Q16) {
             attenuationQ16 = 0;
 
@@ -524,10 +526,14 @@ public sealed class AudioMixer {
             return;
         }
 
-        // Squared-smoothstep: smoothstep over the SQUARED-distance ratio — finite support, no sqrt.
-        var t = (((max2Q16 - d2Q16) << 16) / (max2Q16 - min2Q16));
-
-        attenuationQ16 = ((int)((((t * t) >> 16) * ((3L << 16) - (2L * t))) >> 16));
+        // Squared-smoothstep: smoothstep over the SQUARED-distance ratio — finite support, no sqrt — from silence at
+        // the outer radius to full at the inner one. FixedQ4816.Smoothstep forms the ratio at full width, so the
+        // squared radii (saturated to the carrier) cannot wrap it at any distance.
+        attenuationQ16 = ((int)FixedQ4816.Smoothstep(
+            edge0: FixedQ4816.FromRawBits(value: max2Q16),
+            edge1: FixedQ4816.FromRawBits(value: min2Q16),
+            value: FixedQ4816.FromRawBits(value: d2Q16)
+        ).Value);
     }
     // Finds or creates the ramp row for an emitter id (a new row enters from silence) and marks it live.
     private int TouchRow(int id) {

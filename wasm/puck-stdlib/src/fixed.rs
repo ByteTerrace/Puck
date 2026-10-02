@@ -18,7 +18,9 @@
 //!   instead — read from the live `FixedQ4816` type by the `wasm-stdlib` CLI verb
 //!   (`dotnet run --project src/Puck.Cli -c Release -- wasm-stdlib`), never transcribed by hand — and
 //!   `fixed_vectors.rs` carries the known-answer vectors (also generated, also read from the live
-//!   host) that prove the port hasn't drifted. The six functions below are plain re-exports of
+//!   host) that prove the port hasn't drifted. `smoothstep` is generated the same way: its result
+//!   is the correct rounding except within a sliver of a rounding midpoint, where its Q62 ratio
+//!   decides the bits. The seven functions below are plain re-exports of
 //!   that module: there is one public surface, and it never changes shape depending on which
 //!   module actually does the arithmetic. This addon module is fully self-contained — there is no
 //!   WASM import here or anywhere else in the crate.
@@ -238,7 +240,8 @@ fn isqrt_u128(value: u128) -> u128 {
 // polynomial recipe (see the module doc above). `fixed_generated.rs` carries the actual port —
 // its tables and polynomial coefficients are read from the live `FixedQ4816` type by the
 // `wasm-stdlib` CLI verb, never transcribed by hand — and `fixed_vectors.rs` carries the
-// known-answer vectors (also generated) that prove it hasn't drifted. The six functions below are
+// known-answer vectors (also generated) that prove it hasn't drifted. `smoothstep` joins them because
+// its last bit, near a rounding midpoint, is decided by its Q62 ratio. The seven functions below are
 // plain re-exports: they exist so an addon author's call sites never need to know which module
 // actually does the arithmetic, and so this file stays the one place documenting the ABI-facing
 // signatures (including `atan2`'s `(y, x)` argument order).
@@ -296,4 +299,12 @@ pub fn pow(x: i64, y: i64) -> i64 {
 #[must_use]
 pub fn sin(angle: i64) -> i64 {
     crate::fixed_generated::sin(angle)
+}
+
+/// The Hermite smoothstep of `value` between `edge0` and `edge1` — mirrors `FixedQ4816.Smoothstep`; see
+/// `fixed_generated::smoothstep` for the port itself.
+#[inline]
+#[must_use]
+pub fn smoothstep(edge0: i64, edge1: i64, value: i64) -> i64 {
+    crate::fixed_generated::smoothstep(edge0, edge1, value)
 }

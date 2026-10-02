@@ -7,7 +7,7 @@ namespace Puck.SdfVm.Tests;
 /// Laws for <see cref="ShaderDeclarations"/>, the one list of HLSL declarations the C# model owns, as the kernel builds
 /// run it: on the tree its interface files are owned with no problem and every declaration matches its checked-in file,
 /// and over a tree holding every declaration it names exactly the one that drifted, rewriting it only when asked (a
-/// continuous-integration build only names it) and leaving every other file's bytes and time untouched, so an unchanged
+/// check only names it) and leaving every other file's bytes and time untouched, so an unchanged
 /// declaration recompiles no kernel.
 /// </summary>
 public sealed class ShaderDeclarationsLawTests {
@@ -28,10 +28,8 @@ public sealed class ShaderDeclarationsLawTests {
             );
         }
     }
-    [InlineData(true)]
-    [InlineData(false)]
-    [Theory]
-    public void AReconcileNamesOnlyTheDriftedDeclarationAndWritesItOnlyWhenAsked(bool write) {
+    [Fact]
+    public void AReconcileRewritesOnlyTheDriftedDeclaration() {
         var source = RepositoryPaths.RequireRoot();
         var declarations = ShaderDeclarations.Of(files: ShaderDeclarations.InterfaceFiles(repositoryRoot: source), packages: RenderGraphPackageCatalog.Engine, problems: []);
         var root = Directory.CreateTempSubdirectory(prefix: "puck-shader-declarations-");
@@ -53,14 +51,14 @@ public sealed class ShaderDeclarationsLawTests {
 
             File.WriteAllText(contents: driftedText, path: driftedPath);
 
-            var differing = new List<string>();
+            var written = new List<string>();
             var problems = new List<string>();
 
-            ShaderDeclarations.Reconcile(differing: differing, problems: problems, repositoryRoot: root.FullName, write: write);
+            ShaderDeclarations.Reconcile(problems: problems, repositoryRoot: root.FullName, written: written);
 
             Assert.Empty(collection: problems);
-            Assert.Equal(actual: differing, expected: [drifted.Path]);
-            Assert.Equal(actual: File.ReadAllText(path: driftedPath), expected: (write ? drifted.Generate() : driftedText));
+            Assert.Equal(actual: written, expected: [drifted.Path]);
+            Assert.Equal(actual: File.ReadAllText(path: driftedPath), expected: drifted.Generate());
 
             foreach (var declaration in declarations.Where(predicate: declaration => !ReferenceEquals(objA: declaration, objB: drifted))) {
                 Assert.Equal(actual: File.GetLastWriteTimeUtc(path: Path.Combine(path1: root.FullName, path2: declaration.Path)), expected: settled);

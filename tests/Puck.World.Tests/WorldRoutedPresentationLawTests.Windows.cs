@@ -17,7 +17,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
     [Fact]
     public void AWindowIsAViewOfTheSceneItsWorldsSeatsRenderAtItsOwnQuality() {
         using var state = new TemporaryDirectory(prefix: "puck-routed-window-");
-        using var host = WorldBootHarness.Compose(
+        var host = state.Own(owner: WorldBootHarness.Compose(
             edit: definition => (definition with {
                 ViewsRaw = (definition.Views with {
                     Layouts = [new WorldViewLayout(Name: "seat", Slots: [new WorldViewSlot(Height: 1f, Width: 1f, X: 0f, Y: 0f)])],
@@ -26,7 +26,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,
             world: "tests/Puck.Counters/counters.world.json"
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var client = host.Services.GetRequiredService<WorldClient>();
         var routes = host.Services.GetRequiredService<WorldSeatAuthorityRouter>();

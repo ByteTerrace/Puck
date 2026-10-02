@@ -309,6 +309,43 @@ public sealed class WorldFieldRowLawTests {
 
         Assert.Equal(expected: 2, actual: bakes.Uploads.Count);
     }
+    /// <summary>The field emitter's program revision moves exactly when its live program changes, which names a height
+    /// field's brick only once its first upload is ready. Attaching the engine's brick service to a world that holds no
+    /// field, or to one whose field has no ready brick yet, leaves the revision unmoved, so the first frame's program is
+    /// never rebuilt unchanged and a still view renders once; the field's first ready brick moves it; and a new service,
+    /// which forgets every ready brick, moves it again.</summary>
+    [Fact]
+    public void TheFieldProgramRevisionMovesOnlyWhenTheLiveProgramChanges() {
+        var bare = Fixtures.BuildDocument();
+        var bareClient = ClientFixtures.Client(definition: bare);
+        var bareEmitter = new WorldFieldEmitter(client: bareClient);
+
+        bareClient.DeliverDefinition(definition: bare, version: default);
+        var unattached = Revision(emitter: bareEmitter);
+
+        bareEmitter.AdvanceBricks(bakes: new RecordingBrickBakes());
+        Assert.Equal(expected: unattached, actual: Revision(emitter: bareEmitter));
+
+        var definition = Document();
+        var client = ClientFixtures.Client(definition: definition);
+        var emitter = new WorldFieldEmitter(client: client);
+        var bakes = new RecordingBrickBakes();
+
+        client.DeliverDefinition(definition: definition, version: default);
+        var start = Revision(emitter: emitter);
+
+        // The first advance uploads the field's brick, which no program names until the upload is ready.
+        emitter.AdvanceBricks(bakes: bakes);
+        Assert.Single(collection: bakes.Uploads);
+        Assert.Equal(expected: start, actual: Revision(emitter: emitter));
+
+        emitter.AdvanceBricks(bakes: bakes);
+        var ready = Revision(emitter: emitter);
+
+        Assert.NotEqual(actual: ready, expected: start);
+        emitter.AdvanceBricks(bakes: new RecordingBrickBakes());
+        Assert.NotEqual(expected: ready, actual: Revision(emitter: emitter));
+    }
     /// <summary>Every color a program or a decal bakes is registered in the mirror at install, beside the height
     /// field's row: a palette entry's color and bounce, a weathering deposit's and an inset stop's color, the height
     /// field's color and a text screen's ink.</summary>
@@ -480,6 +517,15 @@ public sealed class WorldFieldRowLawTests {
             actual: colors.Resolve(fallback: Vector3.One, value: "state.colors.bump")
         );
         Assert.True(condition: colors.IsMirrored);
+    }
+
+    // The emitter's one revision component.
+    private static int Revision(WorldFieldEmitter emitter) {
+        Span<int> revision = stackalloc int[1];
+
+        emitter.WriteRevision(destination: revision);
+
+        return revision[0];
     }
 
     // A brick service that completes every upload at once and keeps each upload's voxels.

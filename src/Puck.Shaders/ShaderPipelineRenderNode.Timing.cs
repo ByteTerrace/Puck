@@ -16,6 +16,9 @@ public sealed partial class ShaderPipelineRenderNode {
     private long m_timingEpoch;
     private bool m_timingCompleted;
     private string? m_timingRefusal;
+    private long m_timingFrames;
+    private double m_timingLatest;
+    private long m_timingLatestSubmission;
     private long m_timingRefusedFaultsRevision;
 
     /// <summary>Gets or sets whether pass timestamp queries are recorded. Off by default: no pools, buffers or query
@@ -42,6 +45,15 @@ public sealed partial class ShaderPipelineRenderNode {
     /// <summary>Gets the current graph's completed per-pass means. Empty while disabled, unsupported, or awaiting its
     /// first timed submission. A pass with no completed pair has zero samples, never a fabricated time.</summary>
     public ReadOnlySpan<GpuPassTiming> Timings => ((m_timingCompleted && (m_timingRevision == m_revision)) ? m_timings : []);
+    /// <summary>Gets how many timed submissions this node has read back, which moves with each one and never repeats.</summary>
+    public long TimingFrames => m_timingFrames;
+    /// <summary>Gets the summed pass time, in milliseconds, of the latest timed submission read back for the current graph,
+    /// or zero while <see cref="Timings"/> is empty.</summary>
+    public double LatestTimingMilliseconds => (Timings.IsEmpty ? 0d : m_timingLatest);
+    /// <summary>Gets the identity of the submission <see cref="LatestTimingMilliseconds"/> timed, as the node's work ledger
+    /// numbers it: the newest submission read back, whichever frame slot held it. Zero while <see cref="Timings"/> is
+    /// empty.</summary>
+    public long LatestTimingSubmission => (Timings.IsEmpty ? 0L : m_timingLatestSubmission);
     /// <summary>Gets the logical bytes of timestamp readback buffers still owned, including disabled slots awaiting fences.</summary>
     public ulong TimingReadbackBytes {
         get { var bytes = 0UL; foreach (var slot in m_timingSlots) { if (slot.Readback is not null) { bytes += ((ulong)slot.Bytes.Length); } } return bytes; }
@@ -56,6 +68,19 @@ public sealed partial class ShaderPipelineRenderNode {
         }
     }
 
+    // Whether a slot still holds work PollTimings acts on: a fence to read back after, or a pool to retire once timing
+    // stopped.
+    private bool TimingPending {
+        get {
+            foreach (var slot in m_timingSlots) {
+                if ((slot.Fence is not null) || (!TimingActive && (slot.Pool is not null))) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
     // Timing records only while it is enabled and not refused.
     private bool TimingActive => (m_timingEnabled && (m_timingRefusal is null));
 
@@ -144,6 +169,7 @@ public sealed partial class ShaderPipelineRenderNode {
     private void SubmitTiming(int slot, IGpuSubmissionFence fence) {
         if (TimingActive && (m_timingSlots.Length != 0) && (m_timingSlots[slot].Pool is not null)) {
             m_timingSlots[slot].Fence = fence;
+            m_timingSlots[slot].Submission = m_submissions;
         }
     }
     private void PollTimings() {
@@ -156,6 +182,7 @@ public sealed partial class ShaderPipelineRenderNode {
             slot.Readback!.Read(destination: slot.Bytes);
             var pool = slot.Pool!;
             var mask = ((pool.ValidBits == 64) ? ulong.MaxValue : ((1UL << ((int)pool.ValidBits)) - 1));
+            var frame = 0d;
 
             for (var pass = 0; (pass < slot.Recorded.Length); pass++) {
                 if (!slot.Recorded[pass]) { continue; }
@@ -169,10 +196,17 @@ public sealed partial class ShaderPipelineRenderNode {
                 var index = ((pass * TimingWindow) + m_timingNext[pass]);
                 var total = (((entry.Milliseconds * entry.Samples) - m_timingValues[index]) + value);
 
+                frame += value;
                 m_timingValues[index] = value;
                 m_timingNext[pass] = ((m_timingNext[pass] + 1) % TimingWindow);
                 m_timings[pass] = entry with { Milliseconds = (total / count), Samples = count };
             }
+            // Several slots can complete in one poll, so the newest submission, not the last slot read, is the latest.
+            if (slot.Submission > m_timingLatestSubmission) {
+                m_timingLatest = frame;
+                m_timingLatestSubmission = slot.Submission;
+            }
+            m_timingFrames++;
         }
     }
     private void ReleaseTiming() {
@@ -195,6 +229,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public bool[] Recorded = [];
         public long Revision;
         public long Epoch;
+        public long Submission;
 
         public void Dispose() {
             Pool?.Dispose();

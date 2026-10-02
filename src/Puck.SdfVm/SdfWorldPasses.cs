@@ -69,7 +69,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
     /// <inheritdoc/>
     /// <remarks>The refusal of the residency the instance's view renders from (<see cref="SdfWorldResidency.Refusal"/>):
-    /// its tables' build, refused by name, which only a change to what the tables are built from retries.</remarks>
+    /// its tables' build or the views kernel its program selects, refused by name, which only a change to what they are
+    /// built from retries.</remarks>
     public string? RefusalOf(string instance) {
         lock (m_gate) {
             return ((m_entries.TryGetValue(
@@ -159,9 +160,10 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// <remarks>An instance stands only while a render taken now would feed its passes the temporal inputs its latest
     /// render fed them (<see cref="SdfTemporalHistory.Stands"/>): a sample jittered for a converging capture renders
     /// once more at the pixel center, the <c>motion</c> view renders until its previous view and previous poses
-    /// settle, and a temporally resolved view renders one jitter period after its inputs last changed, then stands
-    /// converged. A view whose installed graph is not the one its temporal ask selects renders, and so does a temporal
-    /// view shown again after frames nothing showed it (<paramref name="unreadFrames"/>), whose epoch starts anew.</remarks>
+    /// settle, and a temporally resolved view renders one jitter period after its inputs or sample grid last changed, then
+    /// stands converged. A view whose installed graph is not the one its temporal ask selects renders, and so does a
+    /// temporal view shown again after frames nothing showed it (<paramref name="unreadFrames"/>), whose epoch starts
+    /// anew.</remarks>
     public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) {
         var entry = Refresh(instance: instance);
 
@@ -170,7 +172,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             !view.Residency.IsUnchanged(
                 context: in context,
                 view: view.View
-            )
+            ) ||
+            (entry.RenderedScale != entry.CurrentScale)
         ) {
             entry.Temporal.Changed();
 
@@ -180,7 +183,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         return (
             !entry.Picker.Pending &&
             (entry.RenderedBindings == entry.Bindings) &&
-            (entry.RenderedScale == entry.CurrentScale) &&
             (entry.RenderedSharpness == entry.CurrentSharpness) &&
             (entry.InstalledTemporal == entry.RequestsTemporal) &&
             (view.Residency.Tables is { } tables) &&
@@ -318,6 +320,15 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
     }
 
+    /// <inheritdoc/>
+    public void OnGraphReleased(string instance) {
+        if (m_entries.TryGetValue(key: instance, value: out var entry)) {
+            entry.Picker.Clear();
+            entry.Temporal.Reset();
+            entry.TemporalFrame = -1;
+            entry.RenderedBindings = -1;
+        }
+    }
     /// <inheritdoc/>
     /// <remarks>Discards every instance's temporal history: rebuilt tables number their pose revisions afresh.</remarks>
     public void OnDeviceLost() {

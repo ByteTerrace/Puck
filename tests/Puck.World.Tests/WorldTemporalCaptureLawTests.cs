@@ -1,21 +1,63 @@
+using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.Testing;
 using Puck.World.Client;
+using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Tests;
 
 public sealed class WorldTemporalCaptureLawTests {
     [Fact]
-    public void ConvergingPresentationHoldsEveryFrameValueAcrossDifferentHostIntervals() {
-        using var state = new TemporaryDirectory(prefix: "puck-temporal-capture-");
+    public void AWindowedCapturePinsItsClockAndBodyPoseAndReleasesTheFractionAfterServing() {
+        using var state = new TemporaryDirectory(prefix: "puck-window-capture-");
         using var host = WorldBootHarness.Compose(
-            presentation: WorldHostPresentation.Offscreen,
+            presentation: WorldHostPresentation.Windowed,
             stateDirectory: state,
             world: "tests/Puck.Counters/counters.world.json"
         ).Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var client = host.Services.GetRequiredService<WorldClient>();
+        var position = new Vector3(x: 12f, y: 0f, z: 0f);
+
+        client.DeliverSnapshot(snapshot: Snapshot(position: Vector3.Zero, tick: 0));
+        client.DeliverSnapshot(snapshot: Snapshot(position: position, tick: 1));
+        client.StateMirror.Install(engineTick: 0, tick: 0);
+        client.StateMirror.Refresh(stamp: new WorldStateStamp(EngineTick: 1680, Everything: false, MovedRows: Array.Empty<int>(), Tick: 1));
+        var pending = false;
+
+        presenter.CapturePending = () => pending;
+
+        foreach (var owesCapture in new[] { false, true, false }) {
+            pending = owesCapture;
+            var frame = presenter.CaptureFrame(deltaSeconds: 0f, height: 64, interpolationAlpha: 0.25f, width: 64);
+
+            Assert.Equal(expected: new PresentedTick(Fraction: 0d, Whole: (owesCapture ? 1680UL : 420UL)), actual: frame.Clock);
+            Assert.Equal(expected: (position * (owesCapture ? 1f : 0.25f)), actual: client.Position(index: 0));
+        }
+    }
+
+    private static WorldSnapshot Snapshot(Vector3 position, ulong tick) => new(
+        EngineTick: (tick * 1680UL),
+        Entries: new[] { new EntitySnapshot(
+            Active: true, BodyColor: Vector3.One, CatalogRig: 0, Continuity: EntityContinuity.Continuous,
+            Generation: 1, Index: 0, Kit: 0, Look: 0, Orientation: Quaternion.Identity, Position: position) },
+        Revision: 0,
+        StepTicks: 1680,
+        Tick: tick
+    );
+
+    [Fact]
+    public void ConvergingPresentationHoldsEveryFrameValueAcrossDifferentHostIntervals() {
+        using var state = new TemporaryDirectory(prefix: "puck-temporal-capture-");
+        var host = state.Own(owner: WorldBootHarness.Compose(
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: state,
+            world: "tests/Puck.Counters/counters.world.json"
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
 
         _ = presenter.CaptureFrame(deltaSeconds: 0.2f, height: 64, interpolationAlpha: 1f, width: 64);

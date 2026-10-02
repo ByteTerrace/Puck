@@ -16,7 +16,7 @@ namespace Puck.Cli.NuGet;
 /// </summary>
 internal static class NuGetCommand {
     private static readonly StringComparer PackageComparer = StringComparer.OrdinalIgnoreCase;
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions JsonOptions = new() { NewLine = "\n", WriteIndented = true };
 
     internal static async Task<string> ExpectedCommitAsync(string root) {
         return ((Environment.GetEnvironmentVariable(variable: "GITHUB_SHA") is { Length: > 0 } commit)

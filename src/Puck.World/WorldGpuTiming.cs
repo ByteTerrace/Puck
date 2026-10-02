@@ -3,21 +3,34 @@ using System.Text;
 
 namespace Puck.World;
 
-/// <summary>Presentation-only timestamp demand. The demand is applied to the graph's nodes on the frame thread, and
-/// off never walks the graph during a steady frame.</summary>
+/// <summary>Presentation-only timestamp demand: the operator's (<c>world.gpu-timing</c>) or dynamic resolution's, which
+/// reads the world's views' frame time from it. The demand is applied to the graph's nodes on the frame thread, and off
+/// never walks the graph during a steady frame.</summary>
 /// <param name="probe">The optional live render root.</param>
 internal sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
     // Every on or off is a new demand, applied whole on the next frame even when the two cancel out between frames, so
     // an off then on still asks a node that refused timing to try once more.
     private long m_demand;
     private long m_applied;
+    private bool m_operator;
+    private bool m_dynamicResolution;
 
     public bool Available => (probe?.Root is not null);
-    public bool Enabled { get; private set; }
+    public bool Enabled => (m_operator || m_dynamicResolution);
+    // Whether the operator asked for the readout, which dynamic resolution's demand alone never shows.
+    public bool ReadoutEnabled => m_operator;
 
     public void Set(bool enabled) {
-        Enabled = enabled;
+        m_operator = enabled;
         m_demand++;
+    }
+    // Dynamic resolution's demand, a new demand only when it moves what the nodes record.
+    public void Require(bool required) {
+        if (m_dynamicResolution == required) { return; }
+        var was = Enabled;
+
+        m_dynamicResolution = required;
+        if (Enabled != was) { m_demand++; }
     }
     public void Tick() {
         var renewed = (m_demand != m_applied);
@@ -39,9 +52,10 @@ internal sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
     }
 
     public string Describe() {
-        var text = new StringBuilder(value: $"[world.gpu-timing: {(Enabled ? "on" : "off")} window={Puck.Shaders.ShaderPipelineRenderNode.TimingWindow}");
+        var state = (m_operator ? "on" : (m_dynamicResolution ? "off (recording for dynamic resolution)" : "off"));
+        var text = new StringBuilder(value: $"[world.gpu-timing: {state} window={Puck.Shaders.ShaderPipelineRenderNode.TimingWindow}");
 
-        if (Enabled && (probe?.Root?.Runtime is { } runtime)) {
+        if (m_operator && (probe?.Root?.Runtime is { } runtime)) {
             for (var index = 0; (index < runtime.Instances.Instances.Count); index++) {
                 if (runtime.Producer(instance: index) is not null) { continue; }
                 var node = runtime.Node(instance: index);

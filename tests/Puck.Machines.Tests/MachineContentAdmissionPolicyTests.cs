@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Puck.Abstractions.Machines;
+using Puck.GamingBricks.Forge;
 
 namespace Puck.Machines.Tests;
 
@@ -26,7 +27,7 @@ public sealed class MachineContentAdmissionPolicyTests {
     [Fact]
     public void AssetPathUsesItsExplicitDispositionAndNeverFormatAdmission() {
         var refused = GamingBrickContentPolicies.Puck().Evaluate(request: Request(
-            format: GamingBrickContentPolicies.PuckCartridgeFormat,
+            format: CartridgeDocument.SchemaId,
             role: MachineFieldRole.AssetPath
         ));
         var allowed = GamingBrickContentPolicies.Puck(assetAdmission: MachineAssetAdmission.Allow).Evaluate(request: Request(
@@ -156,7 +157,7 @@ public sealed class MachineContentAdmissionPolicyTests {
     }
     [Fact]
     public void PuckPresetAllowsTheExactAuthoredFormat() {
-        var decision = GamingBrickContentPolicies.Puck().Evaluate(request: Request(format: GamingBrickContentPolicies.PuckCartridgeFormat));
+        var decision = GamingBrickContentPolicies.Puck().Evaluate(request: Request(format: CartridgeDocument.SchemaId));
 
         Assert.True(condition: decision.Allowed);
         Assert.Equal(

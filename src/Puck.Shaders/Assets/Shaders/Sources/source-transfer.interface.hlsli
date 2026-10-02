@@ -1,4 +1,4 @@
-// Generated from shader interface 'source-transfer' (sha256/62b8f7b13c31d8ce3819293f29ff9478dda7b071d226a2e6240adac0f8215e24). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'source-transfer' (sha256/6a55945effd7b64d75591b4a251b7ce97b942bc058c2b2bd39875d94a81d184d). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SOURCE_TRANSFER
 #define PUCK_SHADER_INTERFACE_SOURCE_TRANSFER
 
@@ -19,6 +19,8 @@ struct SourceTransferFrame {
     [[vk::offset(64)]] float3 cameraTarget;
     [[vk::offset(76)]] uint _pad76;
     [[vk::offset(80)]] float3 cameraUp;
+    [[vk::offset(92)]] uint _pad92;
+    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SourceTransferFrame> frameGroup : register(b0, space0);
 

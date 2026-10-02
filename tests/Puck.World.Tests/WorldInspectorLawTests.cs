@@ -29,7 +29,7 @@ public sealed class WorldInspectorLawTests {
                 builder.Services.RemoveAt(index: index);
             }
         }
-        using var host = builder.Build();
+        var host = files.Own(owner: builder.Build());
         var registry = host.Services.GetRequiredService<CommandRegistry>();
         var source = host.Services.GetRequiredService<IInspectorSource>();
 

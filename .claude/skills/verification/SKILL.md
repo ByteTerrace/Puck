@@ -1,6 +1,6 @@
 ---
 name: verification
-description: Routes the verification of a Puck change and defines what a finished lane proves. Covers the gate route (`puck gate` when the CLI lists it), running gates from a private copy of the head's own CLI, ledgers and generated files checked with `--check`, `puck affected` against the lane's merge base, never testing binaries a failed build left behind, red legs proved by withholding the fix (`puck laws prove` when listed), GPU legs one at a time per GPU under a grant, and flake versus failure. Use before calling any change verified, before handing back or merging a lane, when writing a law or canary, when running parity, canaries or GPU tests, and when a gate fails. Subsystem commands belong to their owners: maths-laws for the Maths law suite, gaming-bricks for the emulator batteries, rendering for GPU, parity and capture specifics, puck-world for World runs and stdin scripts. review-passes owns briefing and verifying a Codex review-and-fix pass.
+description: Routes the verification of a Puck change and defines what a finished lane proves. Covers the gate route (`puck gate` when the CLI lists it), running gates from a private copy of the head's own CLI, ledgers and generated files checked with `--check`, `puck affected` against the lane's merge base, never testing binaries a failed build left behind, red legs proved by withholding the fix (`puck laws prove` when listed), GPU legs one at a time per GPU under a grant, and flake versus failure. Use before calling any change verified, before handing back or merging a lane, when writing a law or canary, when running parity, canaries or GPU tests, and when a gate fails. Subsystem commands belong to their owners: maths-laws for the Maths law suite, gaming-bricks for the emulator batteries, rendering for GPU, parity and capture specifics, puck-world for World runs and stdin scripts. review-passes owns briefing and verifying a cross-family review-and-fix pass.
 ---
 
 # Verification
@@ -68,6 +68,8 @@ check form:
 |---|---|
 | `FileLengths.json` | `puck lengths --check` |
 | `CommentSmells.json` | `puck comment-smells --check` |
+| `FormatVersions.json` | `puck formats --check` |
+| `CanaryCeilings.json` | `puck canary-ceilings --check` |
 | Formatting of touched files | `puck format --check --file-list <scratchpad>/<lane>-files.json` |
 | The project-map layering block | `puck architecture --check` |
 | `docs/world-name-registry.md` | `puck registry --check` |
@@ -75,8 +77,9 @@ check form:
 | A committed test baseline | `puck baselines <artifact> --check` |
 
 Run the recording form only to apply a deliberate change: `puck lengths` after
-shrinking a recorded file, `puck format --file-list` over your own files, a
-baseline whose movement the change explains. Review the rewritten file's diff
+shrinking a recorded file, `puck format --file-list` over your own files,
+`puck formats` after bumping a format token, `puck canary-ceilings` after
+changing canary cost, a baseline whose movement the change explains. Review the rewritten file's diff
 and commit it in the same change. A ledger rewritten during verification hides
 the drift the check exists to report.
 
@@ -176,7 +179,7 @@ command for the parts it covers.
 
 | Skill | Route there for |
 |---|---|
-| [`review-passes`](../review-passes/SKILL.md) | Briefing a Codex review-and-fix pass, and verifying and landing its fixes. |
+| [`review-passes`](../review-passes/SKILL.md) | Briefing a cross-family review-and-fix pass, and verifying and landing its fixes. |
 | [`maths-laws`](../maths-laws/SKILL.md) | The Maths law suite's tiers, mutation probe and recorded registers. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | The Humble and Advanced Post batteries. |
 | [`rendering`](../rendering/SKILL.md) | Which canaries, parity stations and captures a render change owes; GPU counters and ceilings. |

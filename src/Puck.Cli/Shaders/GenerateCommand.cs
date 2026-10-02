@@ -10,8 +10,10 @@ namespace Puck.Cli.Shaders;
 /// list the kernel builds generate before their kernels compile, and the build's shader recipe
 /// (<see cref="ShaderCompiler.BuildRecipePath"/>), which <c>build/Shaders.targets</c> imports when a build is evaluated
 /// and so is generated here alone. A checked-in <c>*.interface.hlsli</c> no generator owns, and a package whose include
-/// cannot be found, fail both modes by name. Exit 0 wrote or matched, 1 check found drift or an include is unowned or
-/// missing, 2 missing repository root.</summary>
+/// cannot be found, fail both modes by name. A check also fails on a file that matches the model only in the working
+/// tree while its staged copy differs or is missing, since a kernel build writes every declaration the model changed: CI runs the check
+/// after its candidate CLI is built, and the commit, not the build, is what it judges. Exit 0 wrote or matched, 1 check
+/// found drift or an include is unowned or missing, 2 missing repository root.</summary>
 internal static class GenerateCommand {
     private const string Verb = "shaders generate";
 
@@ -36,9 +38,10 @@ internal static class GenerateCommand {
     internal static int Run(string repositoryRoot, IReadOnlyList<string> files, RenderGraphPackageCatalog packages, bool check) {
         var problems = new List<string>();
         var matched = true;
+        var current = new List<string>();
 
         foreach (var include in Includes(files: files, packages: packages, problems: problems)) {
-            matched &= CliGeneratedFile.WriteOrCheck(
+            if (CliGeneratedFile.WriteOrCheck(
                 check: check,
                 detail: "",
                 relativePath: include.Path,
@@ -46,7 +49,19 @@ internal static class GenerateCommand {
                 source: "the model",
                 text: include.Generate(),
                 verb: Verb
-            );
+            )) {
+                current.Add(item: include.Path);
+            } else {
+                matched = false;
+            }
+        }
+        // A kernel build writes every declaration the model has changed, so a tree a build has run over matches the model
+        // whatever the change committed. The check therefore also holds each file to what is staged: one that matches the
+        // model only in the working tree is drift the change has not committed.
+        if (check) {
+            foreach (var path in Unstaged(paths: current, repositoryRoot: repositoryRoot)) {
+                problems.Add(item: $"{path} matches the model only in the working tree, and its staged copy differs or is missing; a build or `puck {Verb}` wrote it, so stage and commit it");
+            }
         }
         foreach (var problem in problems) {
             Console.Error.WriteLine(value: $"{Verb}: {problem}.");
@@ -55,6 +70,35 @@ internal static class GenerateCommand {
         return ((matched && (problems.Count == 0)) ? 0 : 1);
     }
 
+    // The paths whose working-tree text differs from or is absent from the index, when the root is a git work tree's top.
+    private static IReadOnlyList<string> Unstaged(string repositoryRoot, IReadOnlyList<string> paths) {
+        if (paths.Count == 0) {
+            return [];
+        }
+
+        var top = CliGit.Run(repositoryRoot, "rev-parse", "--show-toplevel");
+
+        if ((top.ExitCode != 0) || !string.Equals(
+            a: Path.GetFullPath(path: top.Stdout.Trim()).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            b: Path.GetFullPath(path: repositoryRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )) {
+            return [];
+        }
+
+        var staged = CliGit.Run(repositoryRoot, ["ls-files", "--cached", "-z", "--", .. paths]);
+        var differing = CliGit.Run(repositoryRoot, ["diff", "--name-only", "-z", "--no-ext-diff", "--no-textconv", "--", .. paths]);
+
+        if ((staged.ExitCode != 0) || (differing.ExitCode != 0)) {
+            throw new InvalidOperationException(message: $"Cannot check generated shader declarations against the git index: {staged.Stderr}{differing.Stderr}");
+        }
+
+        var indexed = staged.Stdout.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\0').ToHashSet(comparer: StringComparer.Ordinal);
+
+        return [.. paths.Where(predicate: path => !indexed.Contains(item: path))
+            .Concat(second: differing.Stdout.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\0'))
+            .Distinct(comparer: StringComparer.Ordinal)];
+    }
     private static int Run(bool check) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
@@ -73,7 +117,7 @@ internal static class GenerateCommand {
     }
 
     public static Command Create() => CliOptions.CheckVerb(
-        checkDescription: "Regenerate every include in memory and compare against the checked-in file; write nothing, and exit 1 naming each file that differs and its first differing line, and each interface include no generator owns.",
+        checkDescription: "Regenerate every include in memory and compare against the working file and, in a git work tree, its staged copy; write nothing, and exit 1 naming each missing or differing file and each interface include no generator owns.",
         description: """
         The files the C# model owns, generated and checked.
 

@@ -207,6 +207,49 @@ tier a view uses is a host decision, not baked into the content. In `Puck.World`
 `world.render-scale` sets it for every player view and `world.upscale-sharpness`
 sets the reconstruction blend.
 
+### Dynamic resolution
+
+With dynamic resolution on (`world.dynamic-resolution`), one controller,
+`WorldDynamicResolution`, moves the world's own views' render grid each frame
+between a floor and the render-scale ceiling. The grid is
+`SdfViewSnapshot.ResolvedRenderScale`, the same grid a layout transition dips,
+so the two compose; it moves inside the allocation the ceiling sized, so no
+frame reallocates, rebuilds or resets history. A view at a native ceiling
+reconstructs nothing, so while dynamic resolution is on a native tier
+allocates its views at three-quarter.
+
+Each fresh load sample moves the grid through one response: within 10% of its
+budget the grid holds, and outside it the grid moves toward the scale whose
+area meets the budget by at most a sixteenth of itself down or a thirty-second
+up. The sample is the views' GPU frame time against the display period, from
+the same pass timestamps `world.gpu-timing` reads; a present-paced swapchain
+reports every kept present as exactly its period, so only the GPU's time shows
+the headroom to raise the grid again. A device that times nothing falls back to
+the present interval, and a host with neither, an offscreen one, to the views'
+counted march steps against the floor tier's committed ceilings per output
+pixel. Counted work per frame then scales with the grid, which
+`world.counters gpu` shows as the sky pass's texels written.
+
+A sample counts only at the grid the views render now. Each view's node
+records the quantized grid of every submission it renders, and a reading,
+summed over each view's renders not read before, names their common grid; a
+reading from another grid, such as one read back after the grid moved, is not
+a sample, and a view standing on a render already read adds nothing. While a
+standing view still owes a readback, the runtime polls its completed counters
+and timestamps each frame, so its final submission becomes readable when its
+fence signals; a view that owes nothing is not polled at all. A present
+interval names no frame, so each view's node also keeps a summary of every
+render completed since it was last read, and an interval counts only when every
+view's summary names the current grid. A view removed from the graph hands its
+completed renders to the runtime first, so a render it finished before leaving
+still counts in the next read; the runtime keeps them only for the views the
+controller reads, never for a pane or a source. Render completion fences survive an install's
+counter invalidation; device loss drops renders whose completion is
+unobserved. When the budget lies between two
+adjacent grids, the controller settles on the cheaper one rather than
+alternating: a sample over the budget marks its grid, and the grid rises onto
+the mark only once a sample, compared exactly against the budget, predicts it
+within the budget.
 ## The sky once, and a composite last
 
 Views shades only the pixels a surface covers. It writes the **lit image**: each
@@ -298,7 +341,14 @@ the two is the one case the clip does not reproduce sample by sample.
 
 The transport costs no extra memory: it is one word of two half floats an output
 pixel, the size of a single float distance, and the history surface fits it in
-its three words by holding the distance and the weight as half floats. `SdfSurfaceTransport` is the CPU reference, and
+its three words by holding the distance and the weight as half floats. A pixel the
+resolve copies whole from one render sample, which every pixel is when the output
+has the render grid's extent and no jitter, as on the first frame of a temporal
+epoch at native scale, carries that sample's ray distance in the word instead,
+marked by its top bit. The composite then derives the sample's transport at the
+same line of code, with the same `precise` arithmetic, that a native view's
+composite runs on the same sample, so that first frame equals the spatial frame
+to the bit on any GPU rather than within the rounding of two half floats. `SdfSurfaceTransport` is the CPU reference, and
 `SdfSurfaceTransportLawTests` hold the blend to the per-sample result. Because
 each hit's transmittance is in the lit image, a change of fog density reaches
 views and the resolve, while a change of the fog's color, the gradient, reaches
@@ -365,9 +415,9 @@ renders one jitter period after its inputs last change and then stands, its
 output converged (`SdfTemporalHistory.Stands`). A render-grid dip or recovery
 restarts this settling period, including a grid change that takes effect only
 when a replacement graph installs. A view the display stopped showing is parked:
-the render graph counts the frames its schedule leaves an instance unread and
-absent from displayed outputs, including held consumer outputs. Cadence gaps in
-a consumer do not park its nested views. Every recording carries the count
+the render graph counts the frames its schedule leaves an instance unread, which
+means nothing the display shows reaches it, held consumer outputs included.
+Cadence gaps in a consumer do not park its nested views. Every recording carries the count
 (`RenderGraphPackageRecording.UnreadFrames`), and `IsUnchanged` receives it too.
 The count is part of the epoch, so a temporal view shown again starts
 a new epoch while a spatial view's still output stands without a render.

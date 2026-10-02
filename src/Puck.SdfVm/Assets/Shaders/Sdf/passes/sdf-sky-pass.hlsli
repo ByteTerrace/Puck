@@ -27,22 +27,30 @@ float4 sdfSkyPassLit(int2 pixel) {
     return (sdfSkyPassCurrent(clamped) ? lit.Load(int3(clamped, 0)) : float4(0.0, 0.0, 0.0, 0.0));
 }
 // The transport of the surface share a pixel shows, of coverage `coverage` (sdf-transport.hlsli): its fog's in-scatter
-// weight, at most its coverage, and the ray distance its media are clipped at, zero where it shows no surface. A native
-// view's pixel is its one render sample, whose transport its own record gives; a resolved one's is the resolve's.
+// weight, at most its coverage, and the ray distance its media are clipped at, zero where it shows no surface. A pixel
+// that is one render sample, every pixel of a native view and each pixel a resolve copied whole (the first frame of a
+// temporal epoch at its render grid's extent among them), takes only that sample's ray distance from its source and
+// derives the rest at the one site below that both reach, so a resolved copy of a sample composites with exactly the
+// arithmetic its native view runs. A reconstruction's transport is the resolve's.
 void sdfSkyPassSurface(uint2 pixel, float coverage, out float fog, out float distance) {
-    float2 surface = float2(0.0, 0.0);
+    bool sample = true;
+    float t = 0.0;
+    uint word = 0u;
 
     if (passGroup.resolvedSurface != 0u) {
-        surface = sdfUnpackTransport(transport[((pixel.y * passGroup.extent.x) + pixel.x)]);
+        word = transport[((pixel.y * passGroup.extent.x) + pixel.x)];
+        sample = sdfTransportIsSample(word);
+        t = sdfTransportSampleDistance(word);
     } else if (SDF_VISIBILITY_CURRENT(pixel, cullBounds)) {
         SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, passGroup.imageExtent));
 
-        if (sdfVisibilityHit(visibility)) {
-            surface = sdfSampleTransport(coverage, visibility.t);
-        }
+        t = (sdfVisibilityHit(visibility) ? visibility.t : 0.0);
     }
+
+    float2 surface = (sample ? sdfSampleTransport(coverage, t) : sdfUnpackTransport(word));
+
     fog = clamp(surface.x, 0.0, coverage);
-    distance = sdfTransportDistance(coverage, surface);
+    distance = (sample ? ((surface.y > 0.0) ? t : 0.0) : sdfTransportDistance(coverage, surface));
 }
 // The pixel's view without the sample's jitter.
 ViewportData sdfSkyPassView() {

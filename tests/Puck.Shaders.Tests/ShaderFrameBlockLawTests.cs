@@ -31,6 +31,10 @@ public sealed class ShaderFrameBlockLawTests {
             x: 10.5f,
             y: 11.5f
         ),
+        PlacedExtent: new Vector2(
+            x: 250.5f,
+            y: 500.25f
+        ),
         PointerDown: true,
         PointerPresses: 12,
         Tick: 0x0123456789ABCDEFUL,
@@ -52,6 +56,7 @@ public sealed class ShaderFrameBlockLawTests {
         [ShaderFrameInterface.CameraFov] = [Bits(value: 0.75f)],
         [ShaderFrameInterface.CameraTarget] = [Bits(value: 4.5f), Bits(value: 5.5f), Bits(value: 6.5f)],
         [ShaderFrameInterface.CameraUp] = [Bits(value: 7.5f), Bits(value: 8.5f), Bits(value: 9.5f)],
+        [ShaderFrameInterface.PlacedExtent] = [Bits(value: 250.5f), Bits(value: 500.25f)],
     };
 
     public static TheoryData<string> ShippedSources => new(values: [
@@ -74,6 +79,7 @@ public sealed class ShaderFrameBlockLawTests {
         );
         layout.WriteFrame(
             block: frame,
+            extent: (640, 360),
             frame: 77,
             values: Values
         );

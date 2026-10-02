@@ -74,6 +74,10 @@ public static class SdfSurfaceTransport {
     /// distance a march reaches. KEEP IN SYNC with <c>SdfTransportInverseDistanceScale</c> in
     /// <c>shade/sdf-transport.hlsli</c>.</summary>
     public const float InverseDistanceScale = 1024f;
+    /// <summary>The top bit of a transport word, set on a word that carries one render sample's ray distance whole and
+    /// clear on a reconstruction's two half floats. KEEP IN SYNC with <c>SdfTransportSampleBit</c> in
+    /// <c>shade/sdf-transport.hlsli</c>.</summary>
+    public const uint SampleBit = 0x8000_0000u;
 
     /// <summary>Returns the fraction of a surface's light the fog lets through over a ray distance.</summary>
     /// <param name="distance">The ray distance in world units.</param>
@@ -141,6 +145,77 @@ public static class SdfSurfaceTransport {
         weights[Math.Min(val1: (origin + 1), val2: (renderWidth - 1))] += fraction;
 
         return weights;
+    }
+    /// <summary>Returns the word a reconstruction's transport is held in: the in-scatter weight's half float low and the
+    /// scaled inverse distance's high, its sign bit cleared so the word never reads as a sample word.</summary>
+    /// <param name="pixel">The reconstructed pixel.</param>
+    /// <returns>The packed word.</returns>
+    public static uint PackWord(SdfSurfaceSample pixel) =>
+        ((uint)BitConverter.HalfToUInt16Bits(value: ((Half)pixel.Fog))) |
+        ((((uint)BitConverter.HalfToUInt16Bits(value: ((Half)MathF.Min(x: pixel.InverseDistance, y: 65504f)))) & 0x7FFFu) << 16);
+    /// <summary>Returns the word one render sample copied whole is held in: its ray distance's float bits under
+    /// <see cref="SampleBit"/>, so the composite reads the distance back exactly.</summary>
+    /// <param name="distance">The sample's ray distance, zero for a sample with no surface.</param>
+    /// <returns>The sample word.</returns>
+    public static uint SampleWord(float distance) =>
+        (BitConverter.SingleToUInt32Bits(value: distance) & ~SampleBit) | SampleBit;
+    /// <summary>Returns the transport word the resolve's spatial path writes for an output pixel, which the first frame
+    /// of a temporal epoch writes too: where the pixel is one render sample copied whole (the output at the render
+    /// grid's extent with no jitter), that sample's word, and otherwise its reconstruction's.</summary>
+    /// <param name="samples">The render samples the pixel is reconstructed from.</param>
+    /// <param name="weights">Their weights, one each, summing to one.</param>
+    /// <param name="exact">Whether the pixel is its one render sample, the only one in <paramref name="samples"/>.</param>
+    /// <param name="fogDensity">The fog's density per world unit.</param>
+    /// <returns>The word.</returns>
+    /// <exception cref="ArgumentException"><paramref name="exact"/> is set over other than one sample.</exception>
+    public static uint SpatialWord(ReadOnlySpan<SdfRenderSample> samples, ReadOnlySpan<float> weights, bool exact, float fogDensity) {
+        if (exact) {
+            if (samples.Length != 1) {
+                throw new ArgumentException(message: "A pixel copied whole is one render sample.", paramName: nameof(samples));
+            }
+
+            return SampleWord(distance: samples[0].Distance);
+        }
+
+        var transported = new SdfSurfaceSample[samples.Length];
+
+        for (var index = 0; (index < samples.Length); index++) {
+            transported[index] = Sample(fogDensity: fogDensity, sample: samples[index]);
+        }
+
+        return PackWord(pixel: Filter(samples: transported, weights: weights));
+    }
+    /// <summary>Returns the fog's in-scatter weight and the media clip distance the composite takes for a pixel of a
+    /// given coverage. A pixel that is one render sample (a native view's, or a resolved sample word's) derives both
+    /// from the sample's ray distance by one computation, so a sample copied whole reads exactly as its native view
+    /// reads it; a packed word is unpacked.</summary>
+    /// <param name="word">The pixel's transport word, or <see langword="null"/> for a native view's pixel.</param>
+    /// <param name="nativeDistance">A native pixel's ray distance from its record, zero for no surface.</param>
+    /// <param name="coverage">The pixel's coverage, from its lit image.</param>
+    /// <param name="fogDensity">The fog's density per world unit.</param>
+    /// <returns>The in-scatter weight, at most the coverage, and the clip distance, zero for no surface.</returns>
+    public static (float Fog, float Distance) ReadSurface(uint? word, float nativeDistance, float coverage, float fogDensity) {
+        var sample = ((word is not { } packed) || ((packed & SampleBit) != 0u));
+        var distance = ((word is { } carried) ? BitConverter.UInt32BitsToSingle(value: carried & ~SampleBit) : nativeDistance);
+        SdfSurfaceSample surface;
+
+        if (sample) {
+            surface = Sample(fogDensity: fogDensity, sample: new SdfRenderSample(Color: Vector3.Zero, Coverage: coverage, Distance: distance));
+        } else {
+            var bits = word!.Value;
+
+            surface = new SdfSurfaceSample(
+                Coverage: coverage,
+                Fog: ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)(bits & 0xFFFFu)))),
+                InverseDistance: ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)(bits >> 16)))),
+                Lit: Vector3.Zero
+            );
+        }
+
+        return (
+            Math.Clamp(value: surface.Fog, max: coverage, min: 0f),
+            (sample ? ((surface.InverseDistance > 0f) ? distance : 0f) : SurfaceDistance(pixel: surface))
+        );
     }
     /// <summary>Returns the ray distance a resolved pixel's surface share clips its media at: the harmonic mean of its
     /// samples' distances, each weighted as its color is.</summary>

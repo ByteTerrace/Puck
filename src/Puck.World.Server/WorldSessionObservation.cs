@@ -6,6 +6,8 @@ namespace Puck.World.Server;
 /// <summary>One unembodied session observing a world, as <see cref="WorldServer.TryObserveAsSession"/> admitted it.
 /// Disposing it ends the session, which revokes its rows and detaches its sink.</summary>
 public sealed class WorldSessionObservation : IDisposable {
+    internal const string QueryRefusal = "[query refused: session disclosure does not carry this readback]";
+
     private readonly WorldServer m_server;
 
     private WorldSessionSink? m_sink;
@@ -53,6 +55,10 @@ public sealed class WorldSessionObservation : IDisposable {
     );
 
     internal void Attach(WorldSessionSink sink) => m_sink = sink;
+    internal bool AllowsQuery(WorldQuery query) => (!m_ended && (m_sink?.AllowsQuery(query: query) == true));
+    internal WorldDefinition? ReadDefinition() => (AllowsQuery(query: new WorldQuery.StateObservations())
+        ? m_sink!.Disclose(definition: m_server.Definition)
+        : null);
     internal void MarkEnded() => m_ended = true;
 
     /// <summary>Discloses a candidate definition as it would reach this observation's renderer, for a consumer that

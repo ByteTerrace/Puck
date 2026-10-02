@@ -44,6 +44,7 @@ public sealed partial class ShaderPackager {
     private readonly ShaderSourceLimits m_limits;
     private readonly ShaderPipelineLoader m_loader;
     private readonly bool m_reflectDxil;
+    private readonly Action<string>? m_removingAbandoned;
 
     /// <summary>Initializes a new instance of the <see cref="ShaderPackager"/> class.</summary>
     /// <param name="compiler">The compiler a build compiles every pass with; a load runs none of its tools.</param>
@@ -54,14 +55,18 @@ public sealed partial class ShaderPackager {
     /// modules to it.</param>
     /// <param name="store">The build's package store: the directory holding one package per shipped source, each in the
     /// directory <see cref="StorePathOf"/> names for its key; <see langword="null"/> when there is none.</param>
+    /// <param name="removingAbandoned">Called with a store package directory holding no manifest just before
+    /// <see cref="StoreAsync"/> removes it, while it holds that package's lock (<see cref="LockPackageAsync"/>), so a host
+    /// can say what it removes; <see langword="null"/> for none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="compiler"/> is <see langword="null"/>.</exception>
-    public ShaderPackager(ShaderCompiler compiler, ShaderSourceLimits? limits = null, bool reflectDxil = true, string? store = null) {
+    public ShaderPackager(ShaderCompiler compiler, ShaderSourceLimits? limits = null, bool reflectDxil = true, string? store = null, Action<string>? removingAbandoned = null) {
         ArgumentNullException.ThrowIfNull(argument: compiler);
 
         m_compiler = compiler;
         m_limits = (limits ?? ShaderSourceLimits.Default);
         m_loader = new ShaderPipelineLoader(compiler: compiler);
         m_reflectDxil = reflectDxil;
+        m_removingAbandoned = removingAbandoned;
         Store = ((store is null)
             ? null
             : Path.GetFullPath(path: store));

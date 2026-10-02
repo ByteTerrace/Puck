@@ -173,7 +173,10 @@ public sealed partial class RenderGraphRuntime {
                 frame: ((frame < 0)
                     ? long.MaxValue
                     : frame),
-                producer: producer
+                producer: producer,
+                readFrame: ((frame < 0)
+                    ? long.MaxValue
+                    : (schedule.Frame - (previousFrame ? 1L : 0L)))
             );
 
             if (
@@ -192,7 +195,7 @@ public sealed partial class RenderGraphRuntime {
                     image: completed.Image,
                     index: position,
                     layout: completed.Layout,
-                    lease: completed.Image.ImageViewHandle,
+                    lease: LeaseOf(image: completed.Image),
                     tainted: completed.Tainted
                 );
             } else if (!completed.Image.IsSameDeviceImage) {
