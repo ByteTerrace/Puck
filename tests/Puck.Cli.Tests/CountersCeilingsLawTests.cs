@@ -255,6 +255,29 @@ public sealed class CountersCeilingsLawTests {
             expected: "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$shadow node=world breaks its required zero: reads 7"
         );
     }
+    // The recorded files state a required zero exactly where the recorder would: every zero of a kernel kind is marked, so a
+    // file recorded or edited without the mark, and a mark on anything else, fails here and not on a foreign device.
+    [Fact]
+    public void EveryCommittedCeilingsFileMarksExactlyItsKernelKindZerosAsRequired() {
+        Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
+
+        var files = Directory.GetFiles(path: Path.Combine(path1: repositoryRoot, path2: "tests", path3: "Puck.Counters"), searchPattern: "*.ceilings.json");
+
+        Assert.NotEmpty(collection: files);
+
+        foreach (var file in files) {
+            Assert.True(condition: CountersCeilings.TryRead(ceilings: out var ceilings, path: file, reason: out var reason), userMessage: $"{file}: {reason}");
+
+            foreach (var ceiling in ceilings.Runs.SelectMany(selector: static run => run.Ceilings)) {
+                var kind = GpuWork.SubmissionKinds.ToArray().Single(predicate: kind => (kind.Name == ceiling.Kind));
+
+                Assert.True(
+                    condition: (ceiling.RequiredZero == CountersCeilings.IsRequiredZero(ceiling: ceiling.Ceiling, kind: kind, recorded: ceiling.Class)),
+                    userMessage: $"{Path.GetFileName(path: file)}: kind={ceiling.Kind} pass={(ceiling.Pass ?? "outside")} node={ceiling.Node} ceiling {ceiling.Ceiling} has requiredZero={ceiling.RequiredZero}"
+                );
+            }
+        }
+    }
     [Fact]
     public void AnotherWorkloadOrExtentIsRefusedByName() {
         var report = Report(vulkan: Run(backend: "vulkan"));
