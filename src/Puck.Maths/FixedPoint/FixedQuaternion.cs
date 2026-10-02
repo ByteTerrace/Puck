@@ -25,9 +25,11 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
       IUnaryNegationOperators<FixedQuaternion, FixedQuaternion>,
       IAdditiveIdentity<FixedQuaternion, FixedQuaternion>,
       IMultiplicativeIdentity<FixedQuaternion, FixedQuaternion> {
-    // Below this candidate norm (2·cos(θ/2) ≈ within 0.45° of a half turn) FromTo's geometric-product construction
-    // degenerates — the rotation plane is noise — and the perpendicular-axis fallback takes over.
-    private static readonly FixedQ4816 AntiparallelThreshold = FixedQ4816.FromRawBits(value: 512L);
+    // FromTo's rotor scalar |f||t| + f·t carries the floored norms' error, about 2⁴⁷ against |f||t| ≈ 2⁹², so its
+    // angle is off by about 2⁻⁴⁵/θ′ for a gap θ′ from antiparallel. Below a cross product of 2⁻²⁷ of |f||t| (a gap
+    // near 2⁻²⁷ rad, where that error would pass a quarter of a raw) the scalar is noise and the half turn takes over.
+    private const int AntiparallelGapBitCount = 27;
+
     // Above this cosine the interpolation angle is too small for a stable sine ratio; Slerp falls back to a
     // normalized linear blend.
     private static readonly FixedQ4816 NlerpThreshold = FixedQ4816.FromRawBits(value: 65503L);
@@ -275,9 +277,12 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
     /// either vector is zero.</returns>
     /// <remarks>The geometric-product construction <c>(f̂ × t̂, 1 + f̂·t̂)</c>, normalized — normalization halves the
     /// full-angle rotor into the half-angle quaternion (see <see cref="FixedComplex.FromTo"/> for the planar case).
-    /// Directions within ~0.45° of antiparallel (where the construction's norm <c>2·cos(θ/2)</c> vanishes) rotate π
-    /// about a deterministic axis perpendicular to <paramref name="from"/>. A common full-range preconditioner keeps
-    /// directional precision independent of the inputs' absolute scale.</remarks>
+    /// The cross product is exact at full width and the scalar is off only by the two floored norms, so the rotor stays
+    /// within a quarter of a raw of the true rotation until the directions are within about 2⁻²⁷ rad of antiparallel.
+    /// Inside that gap the result is the half turn about <c>f × t</c> itself, which carries <paramref name="from"/> to
+    /// within the gap of <paramref name="to"/>; exactly antiparallel directions rotate π about a deterministic axis
+    /// perpendicular to <paramref name="from"/>. A common full-range preconditioner keeps directional precision
+    /// independent of the inputs' absolute scale.</remarks>
     public static FixedQuaternion FromTo(FixedVector3 from, FixedVector3 to) {
         if (
             ((from.X.Value | from.Y.Value | from.Z.Value) == 0L) ||
@@ -325,18 +330,69 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
         var toNorm = ((FusedArithmetic.SquareMagnitude(value: tx) + FusedArithmetic.SquareMagnitude(value: ty)) + FusedArithmetic.SquareMagnitude(value: tz)).SquareRoot();
         var normProduct = (((UInt128)fromNorm) * toNorm);
         var scalar = (((Int128)normProduct) + dot);
-        var rotorMagnitude = UInt128.Max(
+        var crossMagnitude = UInt128.Max(
             x: UInt128.Max(
                 x: MagnitudeOf(value: crossX),
                 y: MagnitudeOf(value: crossY)
             ),
-            y: UInt128.Max(
-                x: MagnitudeOf(value: crossZ),
-                y: MagnitudeOf(value: scalar)
-            )
+            y: MagnitudeOf(value: crossZ)
         );
-        // Land the rotor's largest component in [2^45, 2^46), carrying |f||t| through the same shift so the
-        // antiparallel test below compares like with like.
+
+        // Within a gap of about 2⁻²⁷ rad of antiparallel the scalar is noise, but the cross product is exact and
+        // exactly perpendicular to f, so a half turn about it carries f to −f, within that gap of t. Only exactly
+        // antiparallel inputs, whose cross product vanishes, need another axis: π about f̂ × ê for the basis vector
+        // ê least aligned with f̂. (The largest cross lane stands for |f × t| here; the bound is a design constant,
+        // not a rounding.)
+        if (
+            (dot < Int128.Zero) &&
+            ((crossMagnitude << AntiparallelGapBitCount) < normProduct)
+        ) {
+            if (crossMagnitude == UInt128.Zero) {
+                FixedVector3.OrthonormalBasis(
+                    normal: from.Normalize(),
+                    tangent1: out var axis,
+                    tangent2: out _
+                );
+
+                return new(
+                    X: axis.X,
+                    Y: axis.Y,
+                    Z: axis.Z,
+                    W: FixedQ4816.Zero
+                );
+            }
+
+            var crossShift = (46 - FusedArithmetic.BitLength(value: crossMagnitude));
+
+            var (ax, ay, az, _) = FixedVectorMath.Normalize(
+                w: 0L,
+                x: LandRotorLane(
+                    shift: crossShift,
+                    value: crossX
+                ),
+                y: LandRotorLane(
+                    shift: crossShift,
+                    value: crossY
+                ),
+                z: LandRotorLane(
+                    shift: crossShift,
+                    value: crossZ
+                )
+            );
+
+            return new(
+                X: FixedQ4816.FromRawBits(value: ax),
+                Y: FixedQ4816.FromRawBits(value: ay),
+                Z: FixedQ4816.FromRawBits(value: az),
+                W: FixedQ4816.Zero
+            );
+        }
+
+        var rotorMagnitude = UInt128.Max(
+            x: crossMagnitude,
+            y: MagnitudeOf(value: scalar)
+        );
+        // Land the rotor's largest component in [2^45, 2^46): only its direction matters.
         var rotorShift = (46 - FusedArithmetic.BitLength(value: rotorMagnitude));
         var cx = LandRotorLane(
             shift: rotorShift,
@@ -354,37 +410,6 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
             shift: rotorShift,
             value: scalar
         );
-
-        // The rotor's norm is 2·|f||t|·cos(θ/2); it counts as antiparallel below AntiparallelThreshold/One of |f||t|.
-        // Carried through the rotor's own shift, |f||t| either fits a machine word — then the squared comparison runs
-        // exactly — or exceeds 2^63 against a landed rotor below 2^47, which is antiparallel by a wide margin.
-        var antiparallel = ((FusedArithmetic.BitLength(value: normProduct) + rotorShift) > 63);
-
-        if (!antiparallel) {
-            var landedNormProduct = ((ulong)FusedArithmetic.ScaleProductSum(
-                shift: rotorShift,
-                value: (false, normProduct)
-            ));
-            var rotorNormSquared = (((FusedArithmetic.SquareMagnitude(value: cx) + FusedArithmetic.SquareMagnitude(value: cy)) + FusedArithmetic.SquareMagnitude(value: cz)) + FusedArithmetic.SquareMagnitude(value: cw));
-
-            antiparallel = ((rotorNormSquared * ((UInt128)((ulong)(FixedQ4816.One.Value * FixedQ4816.One.Value)))) < ((((UInt128)landedNormProduct) * landedNormProduct) * ((UInt128)((ulong)(AntiparallelThreshold.Value * AntiparallelThreshold.Value)))));
-        }
-
-        if (antiparallel) {
-            // Antiparallel: π about f̂ × ê for the basis vector ê least aligned with f̂.
-            FixedVector3.OrthonormalBasis(
-                normal: from.Normalize(),
-                tangent1: out var axis,
-                tangent2: out _
-            );
-
-            return new(
-                X: axis.X,
-                Y: axis.Y,
-                Z: axis.Z,
-                W: FixedQ4816.Zero
-            );
-        }
 
         (cx, cy, cz, cw) = FixedVectorMath.Normalize(
             w: cw,

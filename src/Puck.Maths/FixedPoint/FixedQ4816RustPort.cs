@@ -4,8 +4,8 @@ using System.Text;
 namespace Puck.Maths;
 
 /// <summary>
-/// Emits the Rust port of <see cref="FixedQ4816"/>'s six algorithm-pinned transcendentals — <c>atan2</c>,
-/// <c>sin</c>/<c>cos</c>, <c>exp2</c>, <c>log2</c>, and <c>pow</c> — for
+/// Emits the Rust port of <see cref="FixedQ4816"/>'s seven algorithm-pinned functions — <c>atan2</c>,
+/// <c>sin</c>/<c>cos</c>, <c>exp2</c>, <c>log2</c>, <c>pow</c>, and <c>smoothstep</c> — for
 /// <c>wasm/puck-stdlib/src</c>: <see cref="EmitGenerated"/> produces the ported functions plus
 /// their tables and polynomial coefficients (<c>fixed_generated.rs</c>), and <see cref="EmitVectors"/>
 /// produces known-answer vectors computed by calling the real <see cref="FixedQ4816"/> at generation time
@@ -33,6 +33,7 @@ public static class FixedQ4816RustPort {
     // Random or the wall clock, so the sweep below is exactly reproducible.
     private const ulong LcgMultiplier = 6364136223846793005UL;
     private const ulong LcgSeed = 0x9E3779B97F4A7C15UL;
+    private const int SmoothstepSweepCount = 1000;
     private const int VectorTargetCount = 2000;
 
     private static ulong AdvanceState(ulong state) => unchecked(((state * LcgMultiplier) + LcgIncrement));
@@ -294,6 +295,67 @@ public static class FixedQ4816RustPort {
             testName: "pow_vectors"
         );
     }
+    // Every branch of FixedQ4816.Smoothstep: equal edges either side of the step, both orientations, values at,
+    // inside and beyond each edge, edges at the carrier extremes (whose difference needs 65 bits), the true ties
+    // (ratio o/64 for odd o) and one raw either side of them; then a sweep of full-range edges with a value placed
+    // inside them, and of bounded edges with a free value. Appended after every other table, so the sweeps above
+    // draw exactly the states they did before smoothstep joined.
+    private static string EmitSmoothstepVectors(ref ulong state) {
+        var rows = new List<(long A, long B, long C, long Expected)>();
+        var notable = NotableRawValues();
+
+        void Add(long edge0, long edge1, long value) =>
+            rows.Add(item: (edge0, edge1, value, FixedQ4816.Smoothstep(
+                edge0: new FixedQ4816(Value: edge0),
+                edge1: new FixedQ4816(Value: edge1),
+                value: new FixedQ4816(Value: value)
+            ).Value));
+
+        foreach (var edge0 in notable) {
+            foreach (var edge1 in notable) {
+                Add(edge0: edge0, edge1: edge1, value: edge0);
+                Add(edge0: edge0, edge1: edge1, value: edge1);
+                Add(edge0: edge0, edge1: edge1, value: unchecked((long)((((Int128)edge0) + edge1) >> 1)));
+            }
+        }
+
+        for (var odd = 1L; (odd < 64L); odd += 2L) {
+            foreach (var unit in ((long[])[1L, 3L, 1000003L, ((1L << 40) + 7L)])) {
+                foreach (var nudge in ((long[])[-1L, 0L, 1L])) {
+                    Add(edge0: 0L, edge1: (64L * unit), value: ((odd * unit) + nudge));
+                    Add(edge0: (64L * unit), edge1: 0L, value: ((odd * unit) + nudge));
+                }
+            }
+        }
+
+        var bound = (64L * FixedQ4816.One.Value);
+
+        // The structured rows above already pass the shared target, so the sweep takes a fixed count of its own.
+        for (var draw = 0; (draw < SmoothstepSweepCount); draw++) {
+            var edge0 = NextFullRangeRaw(state: ref state);
+            var edge1 = (((draw % 2) == 0)
+                ? NextFullRangeRaw(state: ref state)
+                : NextBoundedRaw(
+                    bound: bound,
+                    state: ref state
+                )
+            );
+            var fraction = unchecked((ulong)NextFullRangeRaw(state: ref state));
+            var inside = ((long)(edge0 + ((((Int128)(((Int128)edge1) - edge0)) * ((Int128)(fraction >> 1))) >> 63)));
+
+            Add(edge0: edge0, edge1: edge1, value: inside);
+        }
+
+        return FormatTernaryVectors(
+            arrayName: "SMOOTHSTEP_VECTORS",
+            functionName: "smoothstep",
+            paramA: "edge0",
+            paramB: "edge1",
+            paramC: "value",
+            rows: rows,
+            testName: "smoothstep_vectors"
+        );
+    }
     private static string EmitSinCosVectors(ref ulong state) {
         var angles = new List<long>(collection: NotableRawValues());
         var quarterTurnRaw = FixedQ4816.FromDouble(value: (Math.PI / 2.0)).Value;
@@ -365,6 +427,38 @@ public static class FixedQ4816RustPort {
         foreach (var (a, b, expected) in rows) {
             sb.Append(value: "    (").Append(value: a.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ", ")
                 .Append(value: b.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ", ")
+                .Append(value: expected.ToString(provider: CultureInfo.InvariantCulture)).Append(value: "),\n");
+        }
+
+        sb.Append(value: "];\n\n");
+        return sb.ToString();
+    }
+    private static string FormatTernaryVectors(
+        string functionName,
+        string arrayName,
+        string testName,
+        IReadOnlyList<(long A, long B, long C, long Expected)> rows,
+        string paramA,
+        string paramB,
+        string paramC
+    ) {
+        var sb = new StringBuilder();
+
+        sb.Append(value: "#[test]\n");
+        sb.Append(value: "fn ").Append(value: testName).Append(value: "() {\n");
+        sb.Append(value: "    for &(").Append(value: paramA).Append(value: ", ").Append(value: paramB).Append(value: ", ").Append(value: paramC)
+            .Append(value: ", expected) in ").Append(value: arrayName).Append(value: ".iter() {\n");
+        sb.Append(value: "        assert_eq!(").Append(value: functionName).Append(value: '(').Append(value: paramA).Append(value: ", ").Append(value: paramB)
+            .Append(value: ", ").Append(value: paramC).Append(value: "), expected, \"").Append(value: functionName).Append(value: "({").Append(value: paramA)
+            .Append(value: "}, {").Append(value: paramB).Append(value: "}, {").Append(value: paramC).Append(value: "}) => {expected}\");\n");
+        sb.Append(value: "    }\n");
+        sb.Append(value: "}\n\n");
+        sb.Append(value: "const ").Append(value: arrayName).Append(value: ": &[(i64, i64, i64, i64)] = &[\n");
+
+        foreach (var (a, b, c, expected) in rows) {
+            sb.Append(value: "    (").Append(value: a.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ", ")
+                .Append(value: b.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ", ")
+                .Append(value: c.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ", ")
                 .Append(value: expected.ToString(provider: CultureInfo.InvariantCulture)).Append(value: "),\n");
         }
 
@@ -468,9 +562,9 @@ public static class FixedQ4816RustPort {
 //! dotnet run --project src/Puck.Cli -c Release -- wasm-stdlib
 //! ```
 //!
-//! A bit-exact Rust port of `FixedQ4816`'s six algorithm-pinned transcendentals
-//! (`src/Puck.Maths/FixedPoint/FixedQ4816.cs`'s `Atan2`, `Sin`/`Cos` (via `SinCos`), `Exp2`, `Log2`, and
-//! `Pow`) — the table-plus-polynomial recipe `fixed.rs`'s module doc calls "specified only by a
+//! A bit-exact Rust port of `FixedQ4816`'s seven algorithm-pinned functions
+//! (`src/Puck.Maths/FixedPoint/FixedQ4816.cs`'s `Atan2`, `Sin`/`Cos` (via `SinCos`), `Exp2`, `Log2`, `Pow`,
+//! and `Smoothstep`) — the table-plus-polynomial and exact-integer recipes `fixed.rs`'s module doc calls "specified only by a
 //! particular algorithm", not a closed-form spec. The 128-entry interval tables and the polynomial
 //! coefficients below are read from the live `FixedQ4816` type by the tools verb named above, never
 //! transcribed by hand — see `fixed_vectors.rs` for the known-answer proof that this port still agrees
@@ -478,7 +572,7 @@ public static class FixedQ4816RustPort {
 //! output; if the host's algorithm ever changes, regenerating both files is how the port catches up.
 //!
 //! Every function here is guest code now: there is no host round-trip and no WASM import. `fixed.rs`
-//! re-exports these six under its own public names, so an addon author's call sites never change.
+//! re-exports these seven under its own public names, so an addon author's call sites never change.
 
 use crate::fixed::{FRACTION_BITS, ONE, ZERO};
 
@@ -1266,11 +1360,61 @@ pub fn pow(x: i64, y: i64) -> i64 {
         i64::MAX
     }
 }
+
+/// The Hermite smoothstep of `value` between `edge0` and `edge1` — ported from `FixedQ4816.Smoothstep`: the
+/// ratio floored once to Q62 from full-width differences, its cubic `3r^2*2^62 - 2r^3` formed exactly at Q186
+/// as a high and a low word, then rounded once to Q16 with ties to even. Equal edges are the step.
+#[must_use]
+pub fn smoothstep(edge0: i64, edge1: i64, value: i64) -> i64 {
+    const SHIFT: u32 = 186 - 16 - 64;
+
+    if edge0 == edge1 {
+        return if value < edge0 { ZERO } else { ONE };
+    }
+
+    let mut numerator = (value as i128) - (edge0 as i128);
+    let mut denominator = (edge1 as i128) - (edge0 as i128);
+
+    if denominator < 0 {
+        numerator = -numerator;
+        denominator = -denominator;
+    }
+
+    if numerator <= 0 {
+        return ZERO;
+    }
+
+    if numerator >= denominator {
+        return ONE;
+    }
+
+    let ratio = (((numerator as u128) << 62) / (denominator as u128)) as u64;
+    let square = (ratio as u128) * (ratio as u128);
+    let cube_low = ((square as u64) as u128) * (ratio as u128);
+    let cube_high = (((square >> 64) as u64) as u128) * (ratio as u128) + (cube_low >> 64);
+    let cube_low_word = cube_low as u64;
+    let tripled = square * 3;
+    let term_high = tripled >> 2;
+    let term_low = ((tripled & 3) as u64) << 62;
+    let doubled_high = (cube_high << 1) | u128::from(cube_low_word >> 63);
+    let doubled_low = cube_low_word << 1;
+    let curve_low = term_low.wrapping_sub(doubled_low);
+    let curve_high = term_high - doubled_high - u128::from(term_low < doubled_low);
+    let mut quotient = curve_high >> SHIFT;
+    let discarded = curve_high & ((1u128 << SHIFT) - 1);
+    let half = 1u128 << (SHIFT - 1);
+
+    if discarded > half || (discarded == half && (curve_low != 0 || (quotient & 1) != 0)) {
+        quotient += 1;
+    }
+
+    quotient as i64
+}
 """);
 
         return sb.ToString();
     }
-    /// <summary>Emits the complete text of <c>fixed_vectors.rs</c>: known-answer vectors for the six ported
+    /// <summary>Emits the complete text of <c>fixed_vectors.rs</c>: known-answer vectors for the seven ported
     /// functions, computed by calling the real <see cref="FixedQ4816"/> at generation time.</summary>
     public static string EmitVectors() {
         var state = LcgSeed;
@@ -1295,7 +1439,7 @@ pub fn pow(x: i64, y: i64) -> i64 {
 //! sweep from a fixed-constant LCG seeded by a literal — never `Random`, never the wall clock, so an
 //! unchanged host produces byte-identical vectors on every run.
 
-use crate::fixed_generated::{atan2, cos, exp2, log2, pow, sin};
+use crate::fixed_generated::{atan2, cos, exp2, log2, pow, sin, smoothstep};
 
 """);
 
@@ -1304,6 +1448,7 @@ use crate::fixed_generated::{atan2, cos, exp2, log2, pow, sin};
         sb.Append(value: EmitExp2Vectors(state: ref state));
         sb.Append(value: EmitLog2Vectors(state: ref state));
         sb.Append(value: EmitPowVectors(state: ref state));
+        sb.Append(value: EmitSmoothstepVectors(state: ref state));
 
         return sb.ToString();
     }

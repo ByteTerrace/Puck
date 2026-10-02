@@ -229,7 +229,7 @@ public sealed class WorldAudioMixerTests {
     );
     private static FixedQ4816 Q(long units) => FixedQ4816.FromRawBits(value: (units * 65536L));
     private static FixedQ4816 QRaw(long raw) => FixedQ4816.FromRawBits(value: raw);
-    private static short[] RenderCullScenario(bool withEmitter, long distance, IAudioBlockSource source) {
+    private static short[] RenderCullScenario(bool withEmitter, long distance, IAudioBlockSource source, long scale = 1L) {
         var mixer = new AudioMixer();
 
         mixer.SetSource(
@@ -251,12 +251,12 @@ public sealed class WorldAudioMixerTests {
                     Id: 7,
                     Kind: AudioEmitterKind.Point,
                     Position: new FixedVector3(
-                        X: Q(units: distance),
+                        X: Q(units: (distance * scale)),
                         Y: FixedQ4816.Zero,
                         Z: FixedQ4816.Zero
                     ),
-                    MinRadius: Q(units: 1),
-                    MaxRadius: Q(units: 4),
+                    MinRadius: Q(units: scale),
+                    MaxRadius: Q(units: (4L * scale)),
                     Curve: AudioAttenuationCurve.Smoothstep,
                     FadeFrames: 0,
                     GainQ16: UnityQ16,
@@ -458,6 +458,32 @@ public sealed class WorldAudioMixerTests {
         Assert.Equal(
             expected: 3,
             actual: counter.Pulls
+        );
+    }
+    [Fact]
+    public void SmoothstepAttenuationDependsOnlyOnTheRadiusRatioAtAnyScale() {
+        // The curve reads only (max² − d²)/(max² − min²), and whole-unit squares are exact, so the same scene scaled
+        // 100 000× (an outer radius of 400 000 units, far past the ~46 341-unit radius where a raw Q16 squared
+        // difference shifted by sixteen leaves a long) must render the same PCM bit for bit.
+        var unit = RenderCullScenario(
+            distance: 2,
+            source: new ConstSource(value: 16384),
+            withEmitter: true
+        );
+        var wide = RenderCullScenario(
+            distance: 2,
+            scale: 100_000L,
+            source: new ConstSource(value: 16384),
+            withEmitter: true
+        );
+
+        Assert.NotEqual(
+            expected: 0,
+            actual: unit[(((2 * Frames) * 2) + 101)]
+        );
+        Assert.Equal(
+            actual: wide,
+            expected: unit
         );
     }
     [Fact]

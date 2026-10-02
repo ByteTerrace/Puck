@@ -1901,5 +1901,56 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "scalar.smoothstep-correctly-rounded",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Smoothstep"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Smoothstep at edges drawn over the whole raw carrier in both orientations \u2014 including pairs at the two extremes, whose difference needs 65 signed bits \u2014 at a value drawn over the whole carrier (so the clamps are reached) and again at a value placed inside the edges at a drawn fraction, so the interior is swept whatever the edges\u0027 distance apart; and, per draw, at a true tie, t = o/64 for an odd o, in both orientations",
+        "Against": "Oracles.Smoothstep: the exact rational N\u00B2(3D \u2212 2N)/D\u00B3 for N = value \u2212 edge0 and D = edge1 \u2212 edge0, in BigInteger, scaled by 2\u00B9\u2076 and rounded ONCE, ties to even, by Oracles.RoundRationalTiesToEven. A different route from the subject, which floors the ratio to Q62 before an exact cubic: the oracle never quantizes the ratio. BIT-EXACT outside a band of 2\u207B\u2074\u2074 ULP about each rounding midpoint, inside which either neighbour is accepted; the subject\u0027s documented bound beyond the half ULP is 1.5\u00B72\u207B\u2074\u2076 ULP, below that band. True ties are exact on both sides, so the tie leg is bit-exact and pins the ties-to-even rule",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the curve is monotone in the value: at the interior value and its two raw neighbours the results never reverse the edges\u0027 direction (non-decreasing for edge0 \u003C edge1, non-increasing for edge0 \u003E edge1, the step at equal edges included). ENVELOPE: neighbouring raws only; the oracle agreement leg carries order over wider gaps, since two correctly rounded values of a monotone curve are themselves ordered",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.smoothstep-edges",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Smoothstep"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Smoothstep at six edge pairs in both orientations, the carrier extremes MinValue/MaxValue among them, and at five equal-edge steps",
+        "Against": "exact hand-derived expectations from the definition: Zero at edge0 and one raw beyond it, One at edge1 and one raw beyond it, exactly One/2 at the midpoint of an even span (t = 1/2 gives t\u00B2(3 \u2212 2t) = 1/2), and at equal edges the step value \u003C edge0 ? Zero : One",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

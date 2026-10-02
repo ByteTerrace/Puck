@@ -569,6 +569,16 @@ internal static partial class LawRegistry {
             id: "scalar.pow-envelope",
             width: 1
         ),
+        SweptCase(
+            claim: Subjects.FixedSmoothstepCorrectlyRounded,
+            domain: ScalarSmoothstep,
+            id: "scalar.smoothstep-correctly-rounded",
+            width: 2
+        ),
+        ClaimCase(
+            claim: Subjects.FixedSmoothstepEdges,
+            id: "scalar.smoothstep-edges"
+        ),
 
     ];
     private static LawCase[] FixedQ1648Cases() => [

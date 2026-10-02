@@ -864,11 +864,12 @@ public sealed class FixedFieldContactSolver(
         // sample is still on the approached exterior, so its measured normal resolves the same top face the body
         // actually reached instead of extracting through an arbitrary nearer side.
         var delta = (position - previousPosition);
-        var distance = delta.Length;
         var stepLength = SmallestSweepRadius(volumes: volumes);
 
+        // IsWithin answers exactly what delta.Length <= stepLength would, without the square root; the length is
+        // formed only for a move long enough to need its steps counted.
         if (
-            (distance <= stepLength) ||
+            delta.IsWithin(radius: stepLength) ||
             (stepLength <= FixedQ4816.Zero)
         ) {
             return Resolve(
@@ -880,6 +881,7 @@ public sealed class FixedFieldContactSolver(
             );
         }
 
+        var distance = delta.Length;
         var steps = Math.Max(
             val1: 2,
             val2: checked((int)(((distance.Value + stepLength.Value) - 1L) / stepLength.Value))

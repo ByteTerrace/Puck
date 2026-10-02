@@ -1400,6 +1400,81 @@ public readonly partial record struct FixedQ4816(long Value)
             from: from,
             to: to
         );
+    /// <summary>Returns the Hermite smoothstep of <paramref name="value"/> between two edges: <c>t²(3 − 2t)</c> for
+    /// <c>t = (value − edge0)/(edge1 − edge0)</c> clamped to <c>[0, 1]</c>.</summary>
+    /// <param name="edge0">The edge where the result is <see cref="Zero"/>.</param>
+    /// <param name="edge1">The edge where the result is <see cref="One"/>; it may lie below <paramref name="edge0"/>,
+    /// which reverses the curve.</param>
+    /// <param name="value">The value to map.</param>
+    /// <returns><see cref="Zero"/> at and beyond <paramref name="edge0"/>, <see cref="One"/> at and beyond
+    /// <paramref name="edge1"/>, and in between the curve rounded to nearest, a true tie to even. Equal edges make
+    /// the step <c>value &lt; edge0 ? 0 : 1</c>.</returns>
+    /// <remarks>Exact over every pair of edges, whatever their distance apart: the two differences are taken at full
+    /// width, so none can wrap. The ratio is floored once to Q62 and the cubic of that Q62 ratio is formed exactly,
+    /// then rounded once to Q16, so the result is within half a ULP plus <c>1.5·2⁻⁴⁶</c> of the true curve and
+    /// monotone in <paramref name="value"/> by construction: each step (the floored ratio, the exact cubic, which
+    /// increases on <c>[0, 1]</c>, and the rounding) preserves order. A true tie occurs only at ratios that are odd
+    /// multiples of <c>1/64</c>, which the Q62 ratio holds exactly, so those go to even. Pure integer arithmetic;
+    /// bit-identical across machines.</remarks>
+    public static FixedQ4816 Smoothstep(FixedQ4816 edge0, FixedQ4816 edge1, FixedQ4816 value) {
+        if (edge0.Value == edge1.Value) {
+            return ((value.Value < edge0.Value)
+                ? Zero
+                : One
+            );
+        }
+
+        // t = (value − edge0)/(edge1 − edge0) with both differences exact in Int128 (65 signed bits at most), the
+        // denominator's sign folded into the numerator so the ratio reads as magnitudes.
+        var numerator = (((Int128)value.Value) - edge0.Value);
+        var denominator = (((Int128)edge1.Value) - edge0.Value);
+
+        if (denominator < Int128.Zero) {
+            numerator = -numerator;
+            denominator = -denominator;
+        }
+
+        if (numerator <= Int128.Zero) {
+            return Zero;
+        }
+
+        if (numerator >= denominator) {
+            return One;
+        }
+
+        // 0 < t < 1, so the numerator is below the denominator, itself below 2⁶⁴: shifted by 62 it fits UInt128.
+        var ratio = ((ulong)((((UInt128)numerator) << 62) / ((UInt128)denominator)));
+
+        // S = 3·r²·2⁶² − 2·r³ for the Q62 ratio r, exactly, as a 192-bit high word and low word: the curve at Q186.
+        var square = (((UInt128)ratio) * ratio);
+        var cubeLow = (((UInt128)((ulong)square)) * ratio);
+        var cubeHigh = ((((UInt128)((ulong)(square >> 64))) * ratio) + (cubeLow >> 64));
+        var cubeLowWord = ((ulong)cubeLow);
+        var tripled = (square * 3U);
+        var termHigh = (tripled >> 2);
+        var termLow = (((ulong)(tripled & 3U)) << 62);
+        var doubledHigh = (cubeHigh << 1) | (cubeLowWord >> 63);
+        var doubledLow = (cubeLowWord << 1);
+        var curveLow = (termLow - doubledLow);
+        var curveHigh = ((termHigh - doubledHigh) - ((termLow < doubledLow)
+            ? UInt128.One
+            : UInt128.Zero));
+
+        // Q186 → Q16: shift the high word by 106, the low word only sticky. Ties to even.
+        const int Shift = ((186 - 16) - 64);
+        var quotient = (curveHigh >> Shift);
+        var discarded = curveHigh & ((UInt128.One << Shift) - UInt128.One);
+        var half = (UInt128.One << (Shift - 1));
+
+        if (
+            (discarded > half) ||
+            ((discarded == half) && ((curveLow != 0UL) || ((quotient & UInt128.One) != UInt128.Zero)))
+        ) {
+            ++quotient;
+        }
+
+        return new(Value: ((long)quotient));
+    }
     /// <summary>Returns the greater of two values.</summary>
     /// <param name="x">The first value to compare.</param>
     /// <param name="y">The second value to compare.</param>
