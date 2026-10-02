@@ -367,7 +367,7 @@ pipelines and retires the old ones. A failed load or pipeline build keeps the
 previous kernels, and so do kernels that do not read this host's interface.
 `SdfWorldPipelines.PrepareReload` reflects each changed kernel and holds it to
 its interface's layout (`SdfKernelSet.InterfaceMismatch`), whose pass block
-carries the instruction set's stamp (`SdfIsaHlsl.Stamp`): a kernel compiled
+carries the instruction set's stamp (`SdfWorldInterfaces.Stamp`): a kernel compiled
 against another instruction set, or binding anything where the host does not
 place it, refuses the reload. Reflecting DXIL needs the `dxcompiler.dll` beside
 the `dxc` on the path.
@@ -454,7 +454,7 @@ are ignored build outputs; never commit them. When a `.hlsl` source is
 deleted, `ValidateShaderBytecodeSources` removes the bytecode and sidecars the
 build wrote for it and prints one line per file. Bytecode without a same-stem
 source that the build did not write (no sidecar recording its bytes) fails the
-build and stays in place. `ValidateShaderBytecodeFresh` fails the build on
+build and stays in place. `CollectShaderBytecode` fails the build on
 bytecode stale against its source or its sidecar. The recipe is
 `build/Shaders.targets` (`Puck.Shaders`).
 
@@ -471,11 +471,14 @@ the [parity README](../../tests/Puck.Parity/README.md) has the recipe. GPU
 kernel behavior outside the parity stations is not verified by any machine
 check.
 The kernels read the instruction set from
-`Assets/Shaders/Sdf/isa/sdf-isa.hlsli`, which `SdfIsaHlsl` generates from
-`Puck.SignedDistance`: every opcode, shape,
+`Assets/Shaders/Sdf/isa/sdf-isa.hlsli`, which `SdfIsaHlsl` (in
+`Puck.SdfVm.Model`) generates from `Puck.SignedDistance`: every opcode, shape,
 blend, lift, noise, polar-axis and wallpaper enum, and the packed-layout
-constants. It is checked in and never edited by hand. After changing any of
-those C# members, run `puck shaders generate` and rebuild this project;
+constants. It is checked in and never edited by hand. This project references
+`Puck.Shaders.Generator` as a build-only reference, so building it writes every
+declaration the model has changed before its kernels compile
+([generated declarations](../../docs/reference/shaders.md#generated-declarations));
+`puck shaders generate` writes the same files by hand, and
 `puck shaders generate --check` exits 1 naming the file when it has drifted,
 and CI runs it. The [`rendering` skill](../../.claude/skills/rendering/SKILL.md)
 carries the C#↔HLSL sync-pair contracts that are still written on both sides

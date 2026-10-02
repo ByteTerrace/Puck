@@ -508,8 +508,8 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
                     bufferSize: bakeBlock.SizeBytes,
                     descriptorSetHandle: bakeSet
                 );
-                WriteInterfaceBuffer(buffer: requestBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfWorldInterfaces.BakeRequest, set: bakeSet);
-                WriteInterfaceBuffer(buffer: m_brickPoolBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfWorldInterfaces.BakePool, set: bakeSet);
+                WriteInterfaceBuffer(buffer: requestBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfKernelInterfaces.BakeRequest, set: bakeSet);
+                WriteInterfaceBuffer(buffer: m_brickPoolBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfKernelInterfaces.BakePool, set: bakeSet);
             }
         }
 
@@ -521,10 +521,10 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     }
 
     // Writes a buffer at an interface member's binding, as the kind its member declares and at its element's stride, the
-    // structured view the kernel's generated declaration reads on Direct3D 12.
-    // Writes a buffer at a resource of an interface whose group layouts the set was allocated against.
+    // structured view the kernel's generated declaration reads on Direct3D 12. The set was allocated against the
+    // interface's group layouts.
     internal void WriteInterfaceBuffer(nint set, ShaderInterfaceLayout layout, string member, IGpuBuffer buffer) {
-        var resource = SdfWorldInterfaces.ResourceOf(layout: layout, member: member);
+        var resource = SdfKernelInterfaces.ResourceOf(layout: layout, member: member);
 
         m_bindings.WriteBuffer(
             binding: resource.Binding,

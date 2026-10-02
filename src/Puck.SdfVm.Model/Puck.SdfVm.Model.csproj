@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+        <RootNamespace>Puck.SdfVm</RootNamespace>
+    </PropertyGroup>
+    <!--
+        The model the SDF engine's kernel declarations are generated from: the instruction set's HLSL declaration
+        (SdfIsaHlsl), the visibility record's shared words (SdfVisibility), the kernels' pass interfaces for any
+        instruction-set stamp (SdfKernelInterfaces), and ShaderDeclarations, the one list of every HLSL declaration the
+        C# model owns and the generator `puck shaders generate` and the kernel builds run. It compiles no shader, so a
+        kernel project can always generate its declarations before its kernels compile.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.Shaders.Model/Puck.Shaders.Model.csproj" />
+        <ProjectReference Include="../Puck.SignedDistance/Puck.SignedDistance.csproj" />
+    </ItemGroup>
+</Project>

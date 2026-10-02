@@ -2772,7 +2772,7 @@ Phase 3, the groups, follows phase 2:
     `SdfFrameBufferPlanLawTests` held too until P14-6 deleted that plan).
 20. Done: the SDF engine is on groups. Its kernels read
     `sdf-world.interface.hlsli` and `sdf-bricks.interface.hlsli`,
-    generated from `SdfWorldInterfaces` and owned by `puck shaders generate`,
+    generated from `SdfKernelInterfaces` and owned by `puck shaders generate`,
     and the pass-pipeline cache creates every pipeline from its interface's
     layout, which the kernels bind by member name. Every per-view dispatch bound
     the ring slot's frame set and its view's views set until P14-6 gave each
@@ -4360,7 +4360,7 @@ item 2 landed.
     because the build refuses bytecode stale against its sources and every
     include, the generated `sdf-isa.hlsli` among them, and `puck shaders
     generate --check` refuses that file stale against the C# model. The
-    instruction set's fingerprint (`SdfIsaHlsl.Fingerprint`) hashes the include,
+    instruction set's fingerprint (`SdfIsaFingerprint.Value`) hashes the include,
     which generates every lane enum, header lane accessor and vector count the
     kernels read, and the model's described encoding (`SdfEncodingProbe`: where
     the builder and packer put every field, bitfield and table entry, found by

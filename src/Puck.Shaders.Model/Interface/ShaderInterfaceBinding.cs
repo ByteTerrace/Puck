@@ -45,6 +45,10 @@ public sealed record ShaderInterfaceBinding(
     uint ElementStride = 0,
     uint Count = 1
 ) {
+    /// <summary>The prefix of the name a bytecode reader gives a variable the module carries no debug name for: followed
+    /// by the variable's result id, such as <c>%12</c>.</summary>
+    public const string UnnamedPrefix = "%";
+
     /// <inheritdoc/>
     /// <remarks>Compares <see cref="Members"/> element by element rather than by reference.</remarks>
     public bool Equals(ShaderInterfaceBinding? other) =>
@@ -80,10 +84,13 @@ public sealed record ShaderInterfaceBinding(
         $"{Name} set {Set} binding {Binding} {(Pushed ? "pushed " : "")}{Kind}{((Count == 1) ? "" : $"[{Count}]")}{((ElementStride == 0) ? "" : $" stride {ElementStride}")}{((Members.Count == 0)
             ? ""
             : $" [{string.Join(separator: ", ", values: Members.Select(selector: static member => $"{member.Name}@{member.Offset}:{member.Type.Spelling()}{((member.Length == 0) ? "" : $"[{member.Length}]")}"))}]")}";
-
-    // A typed buffer (Buffer<T> or RWBuffer<T>; a SPIR-V image of Dim Buffer) is a texel buffer, which Vulkan binds as a
-    // uniform or storage texel buffer rather than a storage buffer. No binding kind carries one, so both readers refuse
-    // it by name rather than report it as a buffer kind a layout would plan as a storage buffer.
-    internal static InvalidDataException TypedBuffer(string name, string reader) =>
+    /// <summary>Returns the refusal both bytecode readers raise for a typed buffer (<c>Buffer&lt;T&gt;</c> or
+    /// <c>RWBuffer&lt;T&gt;</c>; a SPIR-V image of <c>Dim Buffer</c>): a texel buffer, which Vulkan binds as a uniform or
+    /// storage texel buffer rather than a storage buffer. No binding kind carries one, so a reader refuses it by name
+    /// rather than report it as a buffer kind a layout would plan as a storage buffer.</summary>
+    /// <param name="name">The binding's name.</param>
+    /// <param name="reader">The reader, as the message names it.</param>
+    /// <returns>The refusal.</returns>
+    public static InvalidDataException TypedBuffer(string name, string reader) =>
         new(message: $"{reader} binding '{name}' is a typed buffer (Buffer<T> or RWBuffer<T>), which no binding kind carries; declare a StructuredBuffer or a ByteAddressBuffer.");
 }

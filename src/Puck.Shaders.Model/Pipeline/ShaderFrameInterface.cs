@@ -31,7 +31,7 @@ public static class ShaderFrameInterface {
     /// (<c>uint</c>).</summary>
     public const string Frame = "frame";
     /// <summary>The frame member holding the rate <see cref="Tick"/> counts in, in ticks a second: the rate the graph
-    /// requests (<see cref="RenderGraphDefinition.TickRate"/>), or <see cref="EngineTickRate"/> (<c>uint</c>).</summary>
+    /// requests (<c>RenderGraphDefinition.TickRate</c>), or <see cref="EngineTickRate"/> (<c>uint</c>).</summary>
     public const string TickRate = "tickRate";
     /// <summary>The engine's tick rate, <c>EngineTicks.PerSecond</c> ticks a second: the rate a graph that requests none
     /// reads its tick at.</summary>

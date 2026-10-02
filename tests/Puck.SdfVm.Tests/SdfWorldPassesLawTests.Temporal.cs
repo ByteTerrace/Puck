@@ -320,7 +320,7 @@ public sealed partial class SdfWorldPassesLawTests {
         public bool PreviousValid() => (BitConverter.ToSingle(value: Block(), startIndex: (Offset(member: SdfWorldPackage.PreviousView) + (3 * sizeof(float)))) != 0f);
         public uint HistorySurfaceBytes() => ((uint)m_gpu.Memory(bufferHandle: m_gpu.BufferAt(
             set: m_gpu.BoundSet(group: 3),
-            binding: SdfWorldInterfaces.BindingOf(layout: SdfWorldInterfaces.ResolveParameters.Layout, member: SdfWorldPackage.HistorySurfaceWritten))).Length);
+            binding: SdfKernelInterfaces.BindingOf(layout: SdfWorldInterfaces.ResolveParameters.Layout, member: SdfWorldPackage.HistorySurfaceWritten))).Length);
         public void Dispose() {
             Runtime.Dispose();
             m_feed?.Dispose();

@@ -19,6 +19,9 @@
         <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
         <ProjectReference Include="../Puck.Input/Puck.Input.csproj" />
         <ProjectReference Include="../Puck.Shaders/Puck.Shaders.csproj" />
+        <!-- Build-only: its build writes the declarations these kernels include that the C# model owns, before they
+             compile (build/Shaders.targets compiles kernels after ResolveProjectReferences). -->
+        <ProjectReference Include="../Puck.Shaders.Generator/Puck.Shaders.Generator.csproj" PrivateAssets="all" Private="false" ReferenceOutputAssembly="false" />
         <ProjectReference Include="../Puck.Text/Puck.Text.csproj" />
     </ItemGroup>
     <ItemGroup>

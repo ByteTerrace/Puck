@@ -2,10 +2,18 @@
 
 Keep authoritative sources in Git. Shader bytecode (`.spv`, `.dxil`) and its
 `.hash` sidecars are ignored local outputs; DXC generates them through
-`Shaders.targets`, with the options `ShaderRecipe.props` holds for each stage;
+`Shaders.targets`, with the options `ShaderRecipe.targets` holds for each stage;
 `puck shaders generate` writes that file from `ShaderCompiler.StepsOf`, the
 recipe the runtime shader compiler runs. CI packages the bytecode, so players
 do not need a compiler.
+
+Kernel projects build their declaration generator before compiling shaders.
+The generator reconciles on every build and leaves equal files untouched.
+CI runs `puck shaders generate --check` with its candidate CLI before the
+solution build; because a build may already have reconciled the tree, the check
+also refuses a generated file whose staged copy differs from the model's.
+Packing with `--no-build` collects built bytecode and refuses missing kernels;
+it compiles none.
 Missing outputs, including sidecars, invalidate the incremental compile target.
 
 `WorldAssets.targets`, imported by the game, hands every `.puck` source and

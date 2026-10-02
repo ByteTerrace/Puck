@@ -35,9 +35,9 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
             foreach (var (kernels, reason) in ((ReadOnlySpan<(SdfKernelSet, string)>)[
                 (changed.With(
                     bytecode: SpirvEdits.Renamed(
-                        from: ("passGroup" + SdfIsaHlsl.Stamp),
+                        from: ("passGroup" + SdfWorldInterfaces.Stamp),
                         module: changed[SdfKernel.Beam].Span,
-                        to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.Fingerprint ^ 1U))
+                        to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value ^ 1U))
                     ),
                     kernel: SdfKernel.Beam
                 ), "stamped"),
@@ -175,7 +175,7 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
     // A cull-args kernel that reads this host's world interface and runs one statement, on its fifth line.
     private static string CullArgsSource(string body) =>
         $$"""
-        #include "{{RepositoryPaths.Resolve(relativePath: SdfWorldInterfaces.KernelDirectory).Replace(newChar: '/', oldChar: '\\')}}/isa/sdf-world.interface.hlsli"
+        #include "{{RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory).Replace(newChar: '/', oldChar: '\\')}}/isa/sdf-world.interface.hlsli"
 
         [numthreads(1, 1, 1)]
         void CSMain() {

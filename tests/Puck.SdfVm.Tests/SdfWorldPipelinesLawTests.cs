@@ -80,9 +80,9 @@ public sealed class SdfWorldPipelinesLawTests {
         var changed = SdfTestPipelines.Kernels(beam: 2);
         var foreign = changed.With(
             bytecode: SpirvEdits.Renamed(
-                from: ("passGroup" + SdfIsaHlsl.Stamp),
+                from: ("passGroup" + SdfWorldInterfaces.Stamp),
                 module: changed[SdfKernel.Beam].Span,
-                to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.Fingerprint ^ 1U))
+                to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value ^ 1U))
             ),
             kernel: SdfKernel.Beam
         );

@@ -180,9 +180,9 @@ public static class SdfMeshRegion {
     /// <summary>The bytes of one draw's record.</summary>
     public const int DrawBytes = (DrawWords * sizeof(uint));
     /// <summary>The most draws one region holds: the mesh pass pushes a draw's index in the bits below
-    /// <see cref="SdfWorldInterfaces.MeshViewShift"/>, and writes a covered pixel's draw plus one as a float, which holds
+    /// <see cref="SdfKernelInterfaces.MeshViewShift"/>, and writes a covered pixel's draw plus one as a float, which holds
     /// 2^24 exactly.</summary>
-    public const int MaxDraws = (1 << SdfWorldInterfaces.MeshViewShift);
+    public const int MaxDraws = (1 << SdfKernelInterfaces.MeshViewShift);
     /// <summary>The bytes of one index.</summary>
     public const int IndexBytes = sizeof(uint);
     /// <summary>The words of one vertex: its position, its normal and its texture coordinate, as floats.</summary>
