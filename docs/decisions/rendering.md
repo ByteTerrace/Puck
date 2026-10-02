@@ -569,6 +569,81 @@ Linux.** The import interface uses what Vulkan external memory and external
 semaphores define, which is also what PipeWire DMA-BUF and V4L2 need. Adding a
 Linux producer should never mean changing the contract.
 
+
+## Global illumination
+
+These decisions shape [P6-GI](../plans/rendering.md#p6-gi-global-illumination-from-the-field),
+the global illumination slices of P6.
+
+**Indirect light is a world-space cache traced through the field, and every
+view of a world reads it.** The constraint that decides the technique is where
+the cost lands. A secondary ray in the SDF engine evaluates the whole
+interpreter per sample under a mask far looser than the primary march's, so a
+technique that marches per pixel spends the frame's most expensive work again,
+and a technique that runs per view multiplies it by the seats, camera views,
+mirrors and portal windows of a world. A lattice of probes in world space, placed
+where the field says surfaces are and traced through the field, puts the cost
+on the world and on its changes: a still world converges and stands, a panning
+camera pays only for the bricks it newly demands, and four seats pay one trace.
+It also makes indirect light a property of the world rather than of a view, so a
+mirror and the main view agree.
+
+**A probe stores the hits of its rays, not a blend of what they saw.** Classic
+irradiance probes blend each update's radiance into the last with a hysteresis,
+so a lighting change re-marches every probe and converges over many frames, a
+moving light trails, and a converged cache is never quite still. Storing each
+ray's hit (distance, normal, material) makes the cache relightable: a light's
+colour, a sky change, an emission or a screen's image re-shades the stored hits
+and marches nothing, which is exactly P18-6's lighting-visible class, and only
+geometry re-traces. With no hysteresis there is nothing to ghost, and a
+converged cache is a function of the world and its lights, so a capture of it is
+reproducible from a cold start. The price is the hits' memory, about a kilobyte
+a probe at `medium`.
+
+**Shadowed lights at a hit read the probes' visibility below `high`.** Marching
+a shadow ray from every stored hit for every shadowed light costs about a hundred
+times the probes' count of marches, which a turning sun would pay continuously.
+Marching from each probe instead, and interpolating to the hits, blurs a bounce
+source's shadow edge by the spacing, which indirect light tolerates because it
+is low-frequency; `high` marches the hits themselves. A light-space visibility
+map rendered from the field is the follow-up if the counted rows show the probe
+visibility dominating a moving-sun workload, since it would also serve the
+atmosphere's light shafts.
+
+**Considered and set aside.**
+
+- **Screen-space indirect light with a field fallback.** It is per view and
+  view-dependent: a mirror, a portal window and the main view would light the
+  same wall differently, it is recomputed whenever the camera moves, so a
+  converged view never stands, and its fallback marches the field per pixel,
+  which is the cost the cache exists to avoid. The near field at `high` keeps
+  its one good idea, shading a short field ray's hit from the view's resolved
+  history when the hit is on screen.
+- **Radiance cascades.** In screen space they are per view and per frame, with
+  every interval a field march, so nested views and split screen multiply them.
+  In world space, a dense volume of short-interval probes costs memory and
+  updates in proportion to volume rather than surface area, and re-traces every
+  frame. The cache keeps their interval-merging idea between its levels: a fine
+  level's ray that reaches its reach continues as the coarser level's radiance.
+- **Cone tracing over a prefiltered volume.** The field gives a cone's occlusion
+  for free but holds no radiance, so cone tracing needs the scene voxelized
+  into a radiance volume on every change: a second, discretized representation,
+  which [the global voxel representation's rejection](../rendering/sdf/reference/negative-results-and-rejections.md#global-voxel-representation)
+  already rules out as a core representation.
+- **Per-pixel path tracing with reservoir reuse.** Several field-marched rays a
+  pixel a frame, per view, is beyond the floor device and stands nothing still.
+- **Indirect light baked into prototype bakes or lightmaps.** A bake is per
+  prototype and static, while lights key on clocks, worlds are edited live and a
+  bounce depends on the neighbours a placement has, not on the prototype.
+
+**Off is the image without it.** Every rendering layer carries an off-switch
+that leaves a capture as it was, so the views pass takes today's code unchanged
+when indirect light is off, the cache's instance does not exist when no view
+reads it, and the parity world pins it off. Global illumination enters
+`puck parity` through capture rows that turn it on for one capture, cold, and
+compare the state hash with the same tick's capture without it, which shows the
+cache never reaches simulation state.
+
 ---
 
 [Decisions](README.md) · [The programme](../plans/rendering.md)

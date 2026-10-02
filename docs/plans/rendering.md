@@ -2164,7 +2164,8 @@ passes without P4 or an importer.
 ### P6 — Representation experiments
 
 **Owns:** animation, lighting, and representation experiments after P4, each
-individually scoped.
+individually scoped, and global illumination as a programme of its own inside
+the package.
 
 **Delivers:** representations chosen by editing needs, silhouette, repetition,
 animation, and measured cost, never "all environments are SDFs". Five
@@ -2176,12 +2177,15 @@ experiments are in scope:
 - capsule or ellipsoid proxies on a character's bones for approximate shadows
   and ambient occlusion that never silently become the contact surface;
 - glossy reflections marched through the field, one bounce;
-- short-range soft global illumination gathered from the field.
+- global illumination gathered from the field, planned in full below as
+  [P6-GI](#p6-gi-global-illumination-from-the-field).
 
-The last two start once P14-5 has put the SDF passes on their declared
-interfaces, and stay off the critical path. Each lands with a counted-cost
-report, the deterministic counters P14's ceilings use, and a quality-tier
-switch that turns it off, so a floor-tier world pays nothing for it.
+The reflection experiment starts once P14-5 has put the SDF passes on their
+declared interfaces, which has landed, and stays off the critical path. Each
+experiment lands with a counted-cost report, the deterministic counters P14's
+ceilings use, and a quality-tier switch that turns it off, so a floor-tier
+world pays nothing for it. Global illumination is held to the same rule, slice
+by slice.
 
 Distance-field particle collision, destructible fields, mesh import, skinning,
 foliage, and hair stay out until a scene shows the need. When one returns,
@@ -2201,6 +2205,721 @@ the correctness reference.
 its measured cost before becoming a default. The reflection and global
 illumination experiments each show their counted-cost report and a capture with
 their tier switch off matching the capture without them.
+
+#### P6-GI, global illumination from the field
+
+Light that leaves one surface and lands on another: the sunlit floor that warms
+the underside of a table, the red wall that tints the corner beside it, the
+open doorway that lights a dark room, and the portal whose destination spills
+its light into the room it opens from. The reasoning behind the technique, and
+the alternatives it was chosen over, are in
+[the decisions register](../decisions/rendering.md#global-illumination).
+
+**Starts from:** indirect light as the code holds it.
+
+- **Ambient is unoccluded beyond a hand's width.** The hemisphere light kind
+  (`SDF_LIGHT_HEMISPHERE`, a floor plus a gradient on the normal's height),
+  which P18-9 replaces with the sky's second-order spherical harmonics, lights
+  every surface as if nothing stood between it and the sky. The only occlusion
+  on it is `calcAO`'s normal ladder (`surface/sdf-occlusion.hlsli`): three field
+  evaluations along the normal out to 0.13 world units, one at the fleet tier,
+  paid by the `ambient` pass for every lit pixel and applied to the ambient fill
+  only. A room with one window reads as bright as a terrace.
+- **No light reaches one surface from another.** A directional light lights
+  what faces it, under the shadow stage's visibility for the one shadow light
+  and under ambient occlusion for every other light; a point light is never
+  occluded. Nothing a light reaches passes any of it on.
+- **The bounce is painted.** A palette's `bounce` colour
+  (`SdfMaterial.Bounce`) adds `albedo × bounce × (1 − n·key) × ao` on the side
+  the key light misses: a warm fill an artist places by hand. Only the Moth
+  authors it.
+- **Screens light the room, views do not.** A bound screen is an area light
+  (`SdfLightScreen` in `shade/sdf-light.hlsli`) whose colour the host computes
+  on the CPU (`ISdfScreenSources.Light`): a producer's feed light, a machine's
+  `EmittedLight`, or a capture fill's. A screen showing a view, a portal's
+  window among them, lights nothing, because "a view films an already-lit world"
+  (`WorldScreenBinder.Light`).
+- **Meshes are shaded neutral.** A mesh pixel's surface carries its bake's
+  occlusion texel or one, and no shadow march.
+- **Secondary rays cost more than primary ones.** The primary march reads a
+  per-tile instance mask the beam built for coherent camera rays; the ambient
+  and shadow passes build a mask per 8×8 group around a cone or a box and
+  evaluate the whole interpreter per sample. A design that marches the field
+  per pixel for indirect light multiplies the most expensive work the frame
+  already does.
+- **What a world shares is already shared.** One `SdfWorldResidency` serves
+  every view of a world (the seats, every camera view, every routed window onto
+  a live local endpoint), and the brick pool is a residency-owned buffer that
+  `sdf.bricks` publishes to every view through a buffer edge. P18 plans one
+  `sky.environment` instance per world that every view of it reads.
+
+**Owns:** indirect diffuse light for every SDF and mesh surface: the cache
+that holds it, the passes that trace, light and integrate it, the term the
+views pass applies, its document surface, its levers, debug views and
+explanation, its counted rows and ceilings, and the light that crosses a portal
+into the world it opens from.
+
+**Target shape.** Each residency owns a **radiance cache**: a sparse lattice of
+probes in world space, placed against the field and traced through it, which
+every view of that world reads and none of them pays for. A probe stores what
+its rays hit, not what they saw, so the cache relights without marching: a
+light changing colour re-shades the stored hits, and only geometry moving
+re-traces. A world whose geometry and lights are still converges and then
+costs nothing.
+
+```text
+upload → sky.environment → indirect (classify → trace → visibility → shade)
+       → each view: mask → beam → cull-args → mesh → primary → surface → ambient → shadow
+                    → views (applies the cache) → resolve → sky → composite
+```
+
+`indirect` is an instance of its own per residency, as `sky.environment` is
+per world, ordered before the views that read it by a buffer edge, as
+`sdf.bricks`'s brick pool reaches them today. It exists only while some view
+of its residency has indirect light on; with none it is absent from the graph,
+so it records nothing and holds no memory. Its passes:
+
+- **`classify`** evaluates the field once at each probe of a newly allocated or
+  geometry-dirtied brick and decides its state: **dormant** when the field
+  distance proves no surface lies within the probe's cells, which costs nothing
+  further; **relocated** when it sits inside or against geometry and can move
+  out along the gradient by less than half a spacing; **inactive** when it
+  cannot; **active** otherwise.
+- **`trace`** marches one stratum of a probe's rays: one 64-lane workgroup per
+  probe and stratum, every lane a ray from the same origin. Because the rays
+  share an origin, the group's instance mask is the instances whose bound meets
+  the ball of the level's reach around the probe, built cooperatively over the
+  instance grid as the shadow gather builds its cone's, and the masked march
+  equals the flat field within that reach to the bit. A ray accepts a hit
+  where the field falls below its cone's radius at that distance (the ray's
+  share of the sphere, about 0.18 radians at 128 rays), so far hits stop early,
+  and caps its steps. At a hit it reads the gradient through `mapGradCore`
+  (one evaluation) and the winning material, and stores a hit record: the
+  distance as a half, the normal as an 8-bit octahedral pair, the material
+  (a screen's index among them), and flags. A ray that reaches the level's
+  reach without a hit stores a continuation.
+- **`visibility`** marches, from each active probe, the soft-shadow estimate
+  toward each shadowed light (`softShadowVisibility`'s bounded-cost march, at
+  the direct shadow's reach), and stores one 8-bit visibility per shadow slot.
+  At `high` it also marches lit-facing hits themselves, one visibility per hit
+  and slot.
+- **`shade`** turns a probe's stored hits into light. Each hit's outgoing light
+  is the diffuse term the views pass would shade it with: every light walked
+  through `sdfLightResponse` with its diffuse term kept and its specular and
+  rim dropped, the shadowed lights under the visibility interpolated from the
+  probes around the hit (or the hit's own at `high`), the material's emission,
+  a screen's emission, and the cache's own irradiance at the hit from the
+  previous update (the next bounce). A continuation reads the next coarser
+  level's radiance at the ray's end point in its direction; the coarsest
+  level's misses read the sky. The pass bins the hits into the probe's
+  radiance texels, convolves them into its irradiance texels, writes the mean
+  and mean square of the hit distances as its visibility moments, and copies
+  every map's border.
+- **The views pass applies the cache** where a lit surface shades: it finds the
+  finest level holding the point, weights the eight probes of the point's cell
+  by trilinear position, by facing and by the moments' Chebyshev test against
+  the point's distance, renormalizes over the probes that are active and
+  traced, and adds the irradiance to the diffuse radiance the material shades
+  by. It evaluates the field nowhere. Where every probe of the cell is
+  untraced it reads the next coarser level, and past the coarsest it shades as
+  it would with indirect light off.
+
+**The artist's model.** Global illumination is a typed section with three kinds
+of layer, each counted, each with the lowest tier it runs at, and each an
+off-switch: the **levels** of the cache, the **sources** that feed it and the
+**apply** that puts it on a surface. An unauthored world gets the default look,
+which is data in `WorldRenderDefaults` and in a shipped `.puck` module beside
+`quality.puck`, as P18's sky presets are:
+
+```puck
+render {
+  indirect {
+    levels [
+      { name: "near",  spacing: 0.5m, reach: 3m, radius: 12m, tier: high }
+      { name: "room",  spacing: 1.5m, reach: 9m, radius: 36m, tier: medium }
+      { name: "world", spacing: 4.5m, reach: 64m, tier: medium }   // no radius: every brick near geometry
+    ]
+    sources {
+      lights: 1        // light bounced off what the lights reach
+      emission: 1      // emissive materials
+      screens: 1       // screens, and portals onto other worlds
+      sky: 1           // the sky through the cache, in place of unoccluded sky ambient
+      feedback: 1      // light re-entering the cache: 0 keeps one bounce, 1 is physical
+    }
+    apply { intensity: 1, tint: "#FFFFFF", contact: 1 }   // contact: today's AO on the indirect term
+    bodies: receive    // simulated bodies receive indirect light; `cast` also traces them
+  }
+}
+```
+
+A palette entry gains `bleed`, a colour multiplying its albedo in the light it
+sends into the cache (default white), and `receive`, a gain on the indirect
+light it takes (default one); a near-black costume can glow-receive, a
+saturated floor can bleed less. A light gains `bounce`, the share of it that
+bounces (default one): a stage key light can light without bouncing, a lantern
+can bounce more than it lights. A placement gains `indirect: cast | receive |
+off`, which overrides the section's `bodies` for its instances through an
+instance flag beside the shadow-participation flags
+(`field/sdf-instance-flags.hlsli`). Every gain and colour is a bindable value,
+so it keys on a clock as every presentation value does after P18-3; a level's
+spacing, reach, radius and tier, the count of levels and their order are
+structure and are never keyed, because changing one reallocates the cache.
+
+The palette's `bounce` is renamed `fill`, which is what it is, and every
+authored use (the Moth's) migrates in the same change. A fill is the floor
+tier's stand-in for indirect light: it is applied exactly as today while a
+view has indirect light off, and not at all while it is on, so the painted
+bounce and the computed one are never added together.
+
+**Decisions.**
+
+- **A world-space cache traced through the field, shared by every view.** The
+  cost of indirect light is paid per world and per change, never per view and
+  per frame. Four seats, every camera view, a mirror and a routed portal window
+  read one cache, and a camera that pans over a still world costs nothing but
+  the bricks it newly demands. Indirect light is a property of the world, not
+  of a view of it, so a mirror, a portal window and the main view agree on how
+  bright a wall is. The alternatives, and why each was set aside, are in
+  [the decisions register](../decisions/rendering.md#global-illumination).
+- **Levels with continuation.** A level is a lattice of one spacing. Fine
+  levels trace short rays and dense probes near the views, coarse levels long
+  rays over everything near geometry. A ray that reaches its level's reach
+  without a hit continues as the next coarser level's radiance at its end
+  point, the interval-merging idea of radiance cascades applied between probe
+  lattices, so fine levels never march across a valley. The coarsest level's
+  misses read the sky. Each level allocates bricks of 4×4×4 probes from a pool
+  of its own size, demanded within `radius` of each view's camera, or
+  everywhere near geometry with no radius, and only where an instance bound
+  meets the brick's box widened by a cell. The host keeps each level's brick
+  table as a region (a brick coordinate to a pool slot), so allocation is
+  deterministic and costs no readback; a level whose demand exceeds its pool
+  keeps the bricks nearest a camera and counts the rest refused, and their
+  surfaces read the coarser level.
+- **Probes are placed against the field.** The field says exactly where the
+  surfaces are, so a probe that no surface could use is never traced. A probe
+  whose field distance, read in the march's clamped units (`stepScale`
+  applied, so it never overstates the distance to a surface), is at least its
+  spacing times √3 has no surface in any of its eight cells, and is dormant.
+  The de-scaled distance the shading walks compare against world lengths is
+  not conservative and is never used for this. A probe inside or against geometry moves along the gradient, and
+  one that cannot get clear is inactive and drops out of every cell's weights.
+  This is what keeps the cache sparse: surfaces are two-dimensional, so a level
+  holds probes in proportion to the surface area within its radius, not the
+  volume.
+- **A probe stores hits, so the cache relights without marching.** Each probe
+  has fixed strata of 64 directions, a spherical Fibonacci set rotated by a
+  rotation derived from the probe's key through an integer hash, the same on
+  the CPU and both backends, never from a clock or a random stream. Its stored
+  hits are a function of the geometry alone, and its radiance a function of
+  those hits and the current lights. A light changing colour or intensity, a
+  material's colour, an emission, a screen's image or the sky re-shades the
+  stored hits and marches nothing; a shadowed light turning re-marches the
+  probes' visibility and re-shades; only moved geometry re-traces. There is no
+  hysteresis and no blending of old radiance into new, so the cache cannot
+  ghost: after any change it holds exactly what its stored hits say under the
+  current light. Bounce feedback is an iteration, each shade reading the
+  previous one's irradiance at its hits, and stops once no probe's irradiance
+  changes by a display code, the rule P18-9 holds `sky.environment` to, with
+  the skipped updates counted.
+- **Direct light at a hit goes through the one light interface.** The shade
+  pass builds a surface at the hit with ambient occlusion one and calls
+  `sdfLightResponse` for each light, so a new light kind or a new body light
+  reaches indirect light with no change here, and `SdfLightInterfaceLawTests`
+  keeps holding that no kernel branches on a kind elsewhere. A light's diffuse
+  term is scaled by its `bounce`, the hit's albedo by its `bleed`. Shadowed
+  lights take a visibility: at `medium` the probes' visibility toward each
+  shadow slot, interpolated to the hit, which is blurred by the spacing and
+  marches once per probe instead of once per hit; at `high` the hit's own,
+  marched for lit-facing hits. Unshadowed lights stay unshadowed, as in the
+  direct path. A hit's diffuse light uses the material's base albedo:
+  weathering, insets and paint stops are not resolved at hits.
+- **What it gathers, layer by layer.**
+  - *Lights:* every light kind's diffuse term at each hit, through the one
+    interface; the floor-tier `fill` is never a source.
+  - *Emission:* `albedo × emissive` at a hit, the view's own `selfEmission`
+    term, times `bleed`.
+  - *Screens and portals:* a hit on a screen's face reads that screen's
+    emission, a 4×4 grid of its image's averages, at the hit's place on the
+    face. A screen showing another world (a session, a routed window, an
+    infinity view) emits; a screen showing a camera view of its own world does
+    not, since that light is already in the world.
+  - *Sky:* the coarsest level's misses read `sky.environment`'s map in the
+    ray's direction, so with the sky source on, the cache holds sky light
+    occluded by the world, and the views pass applies it in place of the
+    unoccluded harmonic ambient. With the sky source off the view keeps the
+    harmonic ambient and the cache holds bounce alone, so nothing is counted
+    twice. A lighting-visible sky `view` layer reaches the cache through the
+    same map, so another world's sky can light this one.
+  - *Feedback:* the cache's own irradiance at each hit, scaled by `feedback`.
+- **Indirect light is normalized as ambient light is.** A probe's irradiance
+  texel is the cosine-weighted mean of the radiance arriving around its
+  direction, so a surface surrounded by an environment of uniform colour c
+  receives c, exactly as an ambient light of colour c gives it today. The
+  shading stays display-referred and consistent with the direct path; a closed
+  room of albedo ρ lit by emission e converges to e / (1 − ρ), which the
+  furnace canary checks.
+- **Occlusion is layered by scale.** The cache's visibility moments carry
+  occlusion at its spacing, and its sky term carries the world's occlusion of
+  the sky. Below the finest spacing, `calcAO`'s contact ladder stays, scaled by
+  `apply.contact` and applied to the indirect term only, never to direct
+  light. The ambient pass is not deleted: at `low` it is today's ambient
+  occlusion, and above it the contact term on the cache. Mesh pixels, which
+  shade neutral today, receive indirect light and its occlusion through the
+  same lookup, since the lookup reads only a position and a normal.
+- **Bodies receive and do not cast at `medium`.** A simulated body moves every
+  tick; re-tracing every probe it can reach each time would spend the trace
+  budget on characters while the world waits. At `medium` the trace mask
+  leaves out instances on dynamic transform slots, so a character is lit by
+  the cache and its direct shadow and contact occlusion still ground it, but
+  it bounces nothing. At `high`, `bodies: cast` traces them, and a moved body
+  dirties every probe whose reach ball meets its bound's previous or current
+  sphere. A placement's `indirect` overrides either way.
+- **Changes fall in P18-6's classes.** The cache's revision joins the
+  lighting-visible signature of `views`, so a view re-shades while the cache
+  converges and stands once it has:
+
+  | Change | The cache | A view |
+  |---|---|---|
+  | Visual-only (stars, clouds, fog, a camera-only layer) | stands | `sky` and `composite` |
+  | Lighting-visible (a light's colour or intensity, a keyed material colour or emission, a screen's image, a lighting-visible sky value) | `shade` for the probes it reaches | `views` onward |
+  | Shadow direction (a shadowed light turning past a stated fraction of its penumbra since the visibility was marched, P18-13's light-motion rule) | `visibility`, then `shade` | `shadow` and `views` onward |
+  | Geometry (a program upload, a carve, a moved casting body) | `classify` and `trace` for the probes whose reach ball meets the changed bounds, then `shade` | every pass |
+  | Camera | new bricks only | every pass |
+
+  A positional light dirties only the probes within its influence radius,
+  where its falloff exceeds a display code. A program upload that changes only
+  materials leaves the geometry key unchanged and is lighting-visible.
+- **History holds no indirect light of its own.** The cache is the indirect
+  light's history, and it neither reprojects nor blends. With P15's
+  reconstruction on, a re-shaded view enters the resolve as any lighting change
+  does, through its rectification, so a converging cache is a few frames of
+  smoothly changing low-frequency light and writes no reactivity.
+- **Screens cross the capture gate once.** A screen's emission is one GPU
+  reduction per bound screen, made from the image the views already sample
+  under the screen's lease, so its taint is the screen's. The direct screen
+  light and the cache read the same reduction, and the CPU colour
+  (`ISdfScreenSources.Light`) goes. The screen term at a probe is kept out of
+  the feedback and recomputed whenever its screen's emission moves, for the
+  probes whose hits name that screen, so on a capture frame a filled screen's
+  light leaves the cache at once and no private image survives in it.
+- **Each world's cache is its own, and nested views are budgeted by what they
+  show.** A session residency, an infinity view (P18-11) and a routed scene's
+  endpoint each own a cache when a view of theirs has indirect light on, under
+  that view's quality. At nesting depth one a cache runs its coarsest level
+  only, with a trace budget of at most a quarter of the root's, scaled by the
+  portal's share of the display footprint the graph already computes, so a
+  portal the viewer walks up to warms toward the root's budget before it is
+  crossed. At depth two and beyond it is off and the view shades as with
+  indirect light off. A seat's follow in place keeps the destination's cache:
+  its finer levels are demanded from the crossing frame and read the coarsest
+  level until they converge, so a crossing never shows a black room.
+- **Off is exact.** With indirect light off for a view, the views pass takes
+  the branch that is today's code unchanged, on a uniform pass-block flag, and
+  with it off for every view of a residency the `indirect` instance does not
+  exist. A capture with the tier switch off is therefore the capture without
+  global illumination, byte for byte, on both backends, and the parity world's
+  levers pin it off.
+- **The schedule is the host's and is deterministic.** Each frame the host
+  computes, from the views' cameras, the instance bounds, the moved set
+  (`SdfMovedTransforms`), the change class and the tier's budget, an ordered
+  update list: unallocated demand first, coarsest level first, nearest camera
+  first, then dirty probes by class, then the strata a converging probe still
+  lacks. The list is a region the passes read; the dispatch sizes come from
+  it, so the scheduled counts are `Deterministic` and equal on both backends.
+  What the kernels do inside a dispatch (a dormant probe's skipped rays, a
+  hit's steps) is `PerBackendDeterministic`, like every march. While the world
+  is not ready, or a capture holds the clock, the budget is four times the
+  tier's and counted apart, so a capture never waits on a converging cache
+  longer than it must.
+- **The cache is a cache.** As the brick pool is, it is derived from the
+  analytic program, session-transient, never written to a document, a replay or
+  a content-addressed store, never read by the simulation, and rebuilt from
+  scratch on a reload. Deleting it reproduces the image with indirect light
+  off.
+
+**Tiers and budgets.** The RTX 2060 is the floor device and records every
+ceiling; `low` is the floor tier, where indirect light is off and every row is
+a required zero. P18 and P15 settle their own rows beside these (G9).
+
+| | `low` | `medium` | `high` |
+|---|---|---|---|
+| Indirect light | off | on | on |
+| Levels (default look) | none | `room` (1.5 m), `world` (4.5 m) | `near` (0.5 m), `room`, `world` |
+| Probe pool | 0 | 192 + 64 bricks, 16,384 probes | 256 + 192 + 64 bricks, 32,768 probes |
+| Rays per probe | — | 128 (2 strata) | 256 (4 strata) |
+| Trace budget a frame | 0 | 128 probe strata, 8,192 rays | 512 probe strata, 32,768 rays |
+| Steps a ray | — | 48, plus one gradient evaluation at a hit | 48, plus one |
+| Visibility | — | per probe, 4,096 marches a frame a slot | per hit, 16,384 marches a frame a slot |
+| Shade budget a frame | 0 | 4,096 probes, 524,288 hits | 8,192 probes, 2,097,152 hits |
+| Bodies | — | receive | cast |
+| Near field (G8) | — | off | on |
+| Device-local bytes | 0 | 38,010,880 | 143,130,624 |
+
+A probe's bytes are its stored hits (8 bytes a hit at `medium`, 12 at `high`
+with four 8-bit slot visibilities) and 1,296 bytes of maps: 6×6 irradiance and
+radiance texels with a one-texel border, as half-float RGBA (512 bytes each),
+the 8×8 moments as half-float pairs (256), and 16 bytes of state (its
+relocation, its class, the strata traced and four probe visibilities).
+
+**Counted rows.** Every indirect pass counts through the node's kernel
+counters, as every SDF pass does since P15-1, and each row carries its level
+as the detail label P18 adds to the ledger:
+
+- `gpu.march.steps` under `indirect$classify`, `indirect$trace` (the gradient
+  evaluation at a hit counts as a step) and `indirect$visibility`, and
+  `gpu.texels.written` under `indirect$shade`, per level;
+- `gpu.indirect.hits`, the hits `shade` lit, and `gpu.indirect.samples`, the
+  cache lookups `views` made, both `PerBackendDeterministic` kernel kinds;
+- in an `indirect` `WorkCounterSet` on the host, all `Deterministic`:
+  `indirect.rays.scheduled`, `indirect.probes.scheduled` by reason
+  (`demand`, `geometry`, `light`, `shadow`, `screen`, `converge`),
+  `indirect.bricks.allocated`, `.evicted` and `.refused` per level, and
+  `indirect.shade.skipped`, the updates the display-code rule skipped.
+
+The ceilings file records at the floor device, at `medium`, a ceiling per row
+and a required zero wherever no work is allowed: every indirect row at `low`;
+every `indirect$trace` and `indirect$classify` row on a lighting-visible,
+shadow-direction or visual-only frame; every `indirect$visibility` row on a
+lighting-visible or visual-only frame; every indirect row on a frame of a
+converged still world; and `gpu.indirect.samples` wherever `views` does not run.
+
+**Build sequence.** Each slice lands alone, in order unless its dependencies
+say otherwise, with its counted rows, its laws and canaries, and any parity
+re-record explained in the same change.
+
+1. **G1, the reference and the cache's layout, on the CPU.** Starts now: it
+   touches no file an in-flight lane touches and changes no frame.
+   - Delivers, in a new `src/Puck.SignedDistance/Illumination` folder:
+     - **The reference.** An irradiance estimator over a program that every
+       later device law holds the GPU to: stratified, seeded low-discrepancy
+       sampling of the cosine hemisphere at a point, rays cast through
+       `SdfFieldEvaluator.Raycast` (the one CPU march; no second interpreter,
+       as the bake rule requires), hit normals from `TryFieldGradient`,
+       albedo and emission from the program's material rows, a stated number
+       of bounces, and the direct light at a hit and the sky in a miss's
+       direction as functions its caller supplies, so it carries no light
+       record of its own. It accumulates in scalar double arithmetic in a
+       written order and normalizes as the cache does.
+     - **The lattice.** Levels, bricks and keys (a level and a brick
+       coordinate, and back), a probe's world position, the per-probe
+       direction strata and their rotation from the key, the octahedral texel
+       layouts of the irradiance, radiance and moments maps with the border
+       rule, and the classification and relocation rule as a pure function of
+       a field sampler.
+     - **The schedule.** Demand per level from camera positions and instance
+       bounds, allocation into fixed pools with eviction farthest-first and
+       then oldest, the dirty rules (a geometry change by its bounds' previous
+       and current spheres against each probe's reach ball, a positional light
+       by its influence radius, a shadowed light by its turn against its
+       penumbra), the priority order, the budget, and the ordered update list,
+       as pure functions of plain inputs.
+   - Touches: only the new folder and `tests/Puck.SignedDistance.Tests` with
+     its README's list of laws.
+   - Done when: `IrradianceReferenceLawTests` hold a closed spherical shell of
+     albedo ρ with uniform emission e to `e·(1 − ρ^(n+1)) / (1 − ρ)` at n
+     bounces (red leg: a bounce dropped), a floor under a constant sky to the
+     sky's colour, and a floor beside a tall, wide emissive wall to half the
+     wall's radiance (red leg: rays that pass through geometry), each within
+     a stated tolerance at a stated sample count; `IrradianceLatticeLawTests`
+     hold keys and positions round-trip, the direction strata to pinned values
+     and a stated cosine-weighted discrepancy bound, the border copies, and the
+     classification sound on fixtures (red leg: a dormant threshold of one
+     spacing instead of √3 spacings drops a probe a crease's cell needs);
+     `IrradianceScheduleLawTests` hold the budget never exceeded, the same
+     inputs to the same list whatever order the bounds arrive in, a pan with no
+     new bricks and a converged still world to empty lists, two cameras
+     sharing a brick to one allocation, and eviction never taking a demanded
+     brick nearer a camera than one it keeps; nothing outside the tests
+     references the folder.
+   - Counted-cost gate: no GPU row moves. The schedule laws state the per-frame
+     update counts G2's ceilings start from.
+2. **G2, the cache traced.** After P18-4 and P18-5 reach the features head,
+   since it extends the package declarations and the World group they move.
+   - Delivers: the `indirect` package and its one instance per residency,
+     composed while some view of the residency has indirect light on;
+     `SdfWorldTables.Indirect.cs`, the residency-owned pools and brick tables,
+     published as buffer outputs a view reads through a buffer edge; the host
+     schedule from G1 writing its update list and brick tables as regions;
+     `classify` and `trace` as two `SdfKernel` members; one instance-grid
+     walker over a query shape (a cone, a ball, a box) shared by
+     `collectInstanceGridMask`, the shadow gather and the trace, in place of
+     the hand-kept near-clone the shadow gather's comment asks to keep in
+     step; an epoch reset of the whole cache on every program upload, which G4
+     narrows; the `world.indirect off|medium|high` lever and `quality.puck`'s
+     `indirect` row, off at every tier in this slice; and the debug views
+     `indirect-probes` (each probe drawn as a small sphere coloured by its
+     class) and `indirect-hits` (the stored hit distances and normals). Nothing
+     is lit and nothing is applied: with the lever on, only those debug views
+     change.
+   - Touches: `SdfWorldPackage` (a partial file for the package, its members
+     and its buffer edge), `RenderGraphPackages`, `SdfKernel`, `passes/` and a
+     new `indirect/` kernel module directory, the shared grid walk in `march/`
+     and `surface/sdf-shadow-gather.hlsli`, `SdfWorldTables`, `SdfWorldResidency`,
+     `DebugViewModes` and `debug/sdf-debug-views.hlsli`, `WorldSessionLevers`,
+     `WorldRenderLeverCommandModule`, `quality.puck`, `SdfPassPlanLawTests`,
+     `tests/Puck.Counters`.
+   - Done when: `SdfIndirectTraceDeviceLawTests` hold the stored hit distances
+     and normals on fixture worlds to G1's raycasts within a stated tolerance
+     on both backends (red leg: a mask that drops an instance inside the reach
+     misses its hits); `SdfIndirectGatherLawTests` hold the ball-masked march
+     equal to the flat field within the reach (red leg: a ball one spacing
+     short); a device law holds `classify` to G1's rule on fixtures;
+     `SdfPassPlanLawTests` plan the instance, its buffer edge and its barriers;
+     an `indirect-cadence` canary reads scheduled rays for exactly the frames
+     the cache needs to converge and zero after, and zero on a camera pan with
+     no new bricks (red leg: a schedule that re-traces the probes a camera
+     sees); parity is unchanged; `puck counters --check` holds every indirect
+     row's required zero in every recorded workload.
+   - Counted-cost gate: at `medium` at most 128 probe strata a frame, 8,192
+     rays and 401,408 trace steps; at most 64 classification evaluations a new
+     brick; zero on a converged still world and on a pan with no new bricks;
+     the device-local bytes by the formula above; every row zero with the
+     lever off.
+3. **G3, bounce from lights, emission and screens.** After G2.
+   - Delivers: `visibility` (each probe's visibility toward the one shadow
+     light until P18-7 hands it slots) and `shade` with continuation and
+     feedback; the views apply on one uniform branch, `fill` not applied while
+     it is on; the `render.indirect` section with its levels, its `lights`,
+     `emission`, `screens` and `feedback` sources and its apply, the
+     `bodies` policy, validator, vocabulary rows, generated schema and the
+     default look; palette `bleed` and `receive` and the `bounce` to `fill`
+     rename with the Moth migrated; a light's `bounce` in the light record;
+     screens' emission from the existing screen-light colour until G6 replaces
+     it; the `indirect` debug view (indirect light alone over white albedo);
+     a `captures` row's `indirect: on`, which turns indirect light on for the
+     captured instance's view for that capture only, starts its cache cold at
+     the armed tick, holds the clock until the cache has converged, and serves;
+     and readiness naming a converging cache when a capture's hold runs out.
+   - Touches: `indirect/` and `passes/`, `shade/sdf-light-stage.hlsli` (the
+     apply), `shade/sdf-light.hlsli` (compiled into `shade` as well as
+     `views`), `SdfMaterial` and `SdfProgram.Materials.cs`, the light record,
+     `WorldRenderDefaults`, `WorldDefinitionValidator`,
+     `src/Puck.World.Transpiler/Vocabulary/`, `moth.puck`, `WorldCaptureRow`,
+     `WorldCaptureScheduler`, `tests/Puck.Parity`, `tests/Puck.World.Canaries`.
+   - Done when: a `gi-furnace` canary holds the inside of a closed room of
+     albedo ρ under an emissive ceiling to `e / (1 − ρ)` within a stated
+     tolerance with `feedback: 1`, and to the one-bounce value with
+     `feedback: 0` (red leg: each world checked against the other's value);
+     a `gi-bleed` canary reads the floor beside a red wall redder than the
+     floor across the room (red leg: the wall's `bleed` black); a device law
+     holds probe irradiance to G1's reference at the probes' positions within
+     a stated tolerance (red leg: a π left in the normalization); an
+     `indirect-off` canary holds a world authoring the section with the lever
+     off equal, pixel for pixel on both backends, to the world without it
+     (red leg: `fill` also skipped while off); `SdfLightInterfaceLawTests`
+     still pass; parity holds every existing station unchanged, and its new
+     `indirect: on` stations hold under their own tile contract with a
+     `stateHash` equal to the same tick's station with indirect light off,
+     which shows the cache never reaches state.
+   - Counted-cost gate: at `medium` at most 4,096 probes and 524,288 hits
+     shaded a frame, at most 4,096 visibility marches a frame a slot, at most
+     one cache lookup a lit render pixel and no field evaluation in the apply;
+     every row zero at `low`.
+4. **G4, change classes and standing.** After G3 and P18-6; slots after
+   P18-7.
+   - Delivers: the regional dirty rules in place of G2's epoch reset; the
+     cache's revision in `views`' lighting-visible signature; the
+     display-code stop for feedback; positional lights by influence radius;
+     the shadow-direction rule; `bodies: cast` and the placement `indirect`
+     field through the instance flag; and, with P18-7, a probe visibility per
+     shadow slot (four 8-bit slots in the probe's state, the fade slot marched
+     while its fade runs).
+   - Touches: the schedule's host wiring in `SdfWorldResidency`,
+     `SdfWorldTables.Cadence.cs`, `SdfWorldPasses`, `field/sdf-instance-flags.hlsli`,
+     `CreationStampEmitter` and the placement records, `tests/Puck.Counters`.
+   - Done when: a law over the fake device drives one change of each class
+     over a still camera and holds each frame to exactly its class's indirect
+     passes; an `indirect-moving` canary removes a wall by a row edit and
+     reads the room relit within its strata's frames with no trace of the
+     wall's old bounce (red leg: dirty by the new bounds only keeps the old);
+     an `indirect-day` canary keys a light's colour and reads zero march steps
+     under every indirect pass and the march group while the room's indirect
+     light follows (red leg: a re-trace on a colour change); an
+     `indirect-orbit` canary re-marches visibility only when the sun has
+     turned past the threshold; an `indirect-body` canary at `high` dirties
+     only probes within a moving body's reach, counted by reason.
+   - Counted-cost gate: per class, against G3's rows: zero trace and classify
+     on lighting-visible and shadow-direction frames, zero visibility on
+     lighting-visible ones, zero everything on a converged still world, and a
+     moved body's dirty probes within its reach ball.
+5. **G5, the sky through the cache.** After G3 and P18-9.
+   - Delivers: the coarsest level's misses reading `sky.environment`'s map;
+     the `sky` source, which when on replaces the harmonic ambient at the
+     views pass and at hits with the cache; a sky change reaching the cache as
+     a lighting-visible change; a lighting-visible sky `view` layer lighting
+     the world through the map.
+   - Done when: a law holds the cache of a world with no geometry under a
+     constant sky to its harmonic ambient within a stated tolerance (red leg:
+     a miss read without its cosine weight); an `indirect-sky` canary reads a
+     room with one window darker inside than its harmonic ambient alone, and a
+     terrace beside it within tolerance of it (red leg: the sky source off);
+     parity's `indirect: on` stations re-recorded, explained.
+   - Counted-cost gate: a sky change marches nothing in the cache; `shade`
+     only for a change larger than a display code.
+6. **G6, portals, screens and other worlds.** After G3; the infinity-view
+   part after P18-11.
+   - Delivers: the screen emission reduction for every bound screen, which the
+     direct screen light and the cache both read, and the deletion of
+     `ISdfScreenSources.Light` and its implementations' rendering readers;
+     emission from screens that show another world, none from camera views of
+     the same world; the screen term recomputed outside the feedback; a cache
+     per session, routed and infinity residency at its view's quality with the
+     nested budgets by depth and footprint; and the follow in place keeping the
+     destination's cache.
+   - Touches: `SdfWorldResidency.BindScreens`, `SdfWorldTables.ScreenContent.cs`,
+     `WorldScreenBinder`, `WorldSessionSceneEmitter`, `WorldRoutedScene`,
+     `WorldViewInstances`, `WorldCaptureGate`.
+   - Done when: an `indirect-portal` canary reads the floor before a portal
+     onto a red-lit destination tinted red (red leg: the portal's `screens`
+     source at zero); a capture law holds a world whose screen shows a filled
+     external source to a capture that carries none of the source's light
+     (red leg: the screen term kept inside the feedback); a law holds the
+     nested budgets by depth and footprint; `portal-walk` crosses with indirect
+     light on and its crossing frame reads the destination's coarsest level
+     (red leg: a cache dropped on crossing shades the frame as indirect off).
+   - Counted-cost gate: the reduction's texels a bound screen a frame its image
+     changed; each nested cache's rows under its own instance and within its
+     budget; zero at depth two.
+7. **G7, asking why a surface is lit.** After G3 and the editor's E2, E4, E5
+   and E6.
+   - Delivers: `world.explain`'s indirect line, which reads the cached value at
+     the pointer's hit through the shared GPU pick and runs G1's reference at
+     that point for comparison, and names the level, the probes active,
+     inside geometry and untraced, each source's share, and the document field
+     that changes the answer; `world.lighting`'s echo of each cache (levels,
+     bricks by state, probes by class, convergence, the frame's scheduled rays);
+     the cache's bytes and pools in `world.budget`; the inspector's indirect
+     rows; the `indirect-bricks` debug view (each surface coloured by the level
+     and brick it reads and how converged it is); and the `world.indirect-freeze`
+     and `world.indirect-reset` levers.
+   - Done when: `WorldExplainLawTests` gain planted indirect reasons (a black
+     `bleed` on the wall that lights a dark floor, a cell whose probes are all
+     inside geometry), each with a red leg; the inspector's text equals the
+     echo; a frozen cache records no indirect row after one frame.
+   - Counted-cost gate: inspection adds no indirect row; freeze reads zeros.
+8. **G8, the near field at `high`.** After G3; P15-5 has landed.
+   - Delivers: per-pixel field rays shorter than the finest spacing (one ray
+     for every four render pixels a frame, interleaved by the jitter index,
+     1 m reach, 12 steps), a miss continuing into the finest level; a hit lit
+     from the view's resolved history where it reprojects there with a
+     matching identity, and from the cache otherwise; accumulated through
+     P15's history; its own lever and quality row.
+   - Done when: an `indirect-near` canary reads a small coloured object's
+     bleed onto the surface beside it, finer than the finest spacing, with the
+     near field on and not off, the converged result within a stated
+     tolerance of G1's reference; `temporal-ghosting` and
+     `temporal-disocclusion` hold with it on.
+   - Counted-cost gate: at most one near-field ray for every four render pixels
+     and 12 steps a ray; zero below `high`.
+9. **G9, the tier defaults.** The lead's call from the counted rows, beside
+   P15-8 and P18-14.
+   - Delivers: the indirect legs of the counters workload recorded at each
+     tier on the RTX 2060 and the RTX 4070, and `quality.puck`'s `indirect`
+     rows as decided.
+   - Done when: the chosen defaults' ceilings are recorded and
+     `puck counters --check` passes on the RTX 2060.
+
+**Expected counted costs.** Estimates derived from the code, to be replaced by
+the rows G2 and G3 record. At `medium` on the RTX 2060 the views render at three
+quarters of 1920 by 1080, P = 1,166,400 pixels, and with h = 0.6 of them hitting
+about 700,000 are lit.
+
+- **Today's ambient occlusion** at that extent evaluates the field three times
+  for each lit pixel, about 2,100,000 evaluations a frame on every frame `ambient`
+  runs.
+- **The apply** evaluates the field nowhere: at most one cache lookup (one to
+  eight brick-table reads and sixteen texel reads) for each lit pixel, about
+  700,000.
+- **The worst trace frame** at `medium` makes 8,192 rays of at most 49
+  evaluations, 401,408, under a fifth of the ambient occlusion's, and only on
+  frames with something to trace.
+- **A still, converged world** traces, marches, shades and integrates nothing.
+- **A camera pan** traces only the bricks it newly demands: at the `room`
+  level, a brick is 6 m on a side, so walking at 5 m a second demands about one
+  new slab of bricks a second.
+- **A keyed light colour or a moving sky** marches nothing. A full re-shade at
+  `medium` is 16,384 probes in four frames at the budget, and the feedback
+  settles within four re-shades at the default albedos, so a lighting change
+  settles within sixteen frames, each of which re-runs `views` alone.
+- **An orbiting sun** re-marches 16,384 probe visibilities of at most 12 steps,
+  196,608 steps, in four frames, each time it has turned past the threshold.
+- **A cold cache** at `medium` traces the `world` level's first stratum
+  (4,096 probes) in 32 frames and every first stratum in 128; while a capture
+  holds the clock or the world is not yet ready the budget is four times
+  larger. Until a probe is traced, its cells read the coarser level, and past
+  the coarsest they shade as indirect light off.
+- **Split screen** costs one trace and one shade per world however many seats
+  look at it; each seat pays only its apply.
+- **Memory** at `medium` is 38,010,880 device-local bytes a residency with
+  indirect light on, beside the 66 MB of history a reconstructing view holds,
+  and nothing host-visible but the brick tables and the update list.
+
+**Sequencing with other lanes.**
+
+- **P18.** G1 needs nothing. G2 waits for P18-4's World-group tables and P18-5's
+  package layout to reach the features head, because it adds to the same
+  declarations. G3 reads the light record P18-4 generates, and walks today's one
+  shadow light; P18-7's slots reach the probe visibility in G4, which also
+  needs P18-6's change classes and signatures. G5 needs P18-9's
+  `sky.environment`; until then the sky source is absent and a view keeps its
+  ambient, with the cache holding bounce alone. G6's infinity views follow
+  P18-11. P18-13's light-motion rule is the shadow-direction rule here, one
+  rule with two readers. The hemisphere light kind is lit at hits through the
+  one interface while it exists, and P18-9's deletion reaches the cache with no
+  change of its own.
+- **P15.** The cache has no history of its own to reconcile with P15's;
+  re-shaded views enter the resolve as lighting changes. G8 reads P15-5's
+  history. G9 is decided beside P15-8.
+- **P6's reflection experiment** reads the radiance maps as its far field: a
+  glossy ray that leaves its reach reads the cache's radiance in its direction,
+  as a fine level's continuation does.
+- **P18-10's atmosphere** may read the cache's irradiance at a medium's sample
+  for its ambient in-scatter, so fog in a dark room is dark; that reader is
+  P18-10's to add.
+- **The editor.** G7 follows E2, E4, E5 and E6 and adds only the indirect
+  rows to each.
+- **The portal flagship.** G6 makes a portal a light source in the room it
+  opens from and keeps a crossing lit; it adds no portal mechanism of its own.
+
+**Open decisions for the owner.** Each is a matter of taste the counted rows
+cannot settle.
+
+- **Whether an unauthored world gets indirect light at `medium`.** The default
+  look makes every world bounce light from the tier where it turns on; the
+  alternative is to light only worlds that author `render.indirect`. The plan
+  assumes the default look applies, since a floor tier at `low` already costs
+  nothing.
+- **Whether bodies cast at `medium`.** Receive-only bodies keep the trace
+  budget on the world, at the price of a character in a red coat bleeding no
+  red onto the wall beside it until `high` or an authored `indirect: cast`.
+- **The `room` level's spacing.** At 1.5 m a wall thinner than about a quarter
+  of the spacing can leak light from a lit side into a dark room, which the
+  probes' moments and relocation reduce but do not remove; a finer `medium`
+  costs probes in proportion to the surface area within its radius.
+- **Whether `fill` survives under indirect light.** The plan makes it the
+  floor tier's stand-in only; an artist who wants a painted warm fill on top of
+  computed bounce would keep it additive.
+
+**Open decision for the lead.**
+
+- **The tier defaults (G9).** Record, at 1920 by 1080 on the RTX 2060, every
+  indirect row for the `indirect-cadence`, `indirect-day`, `indirect-orbit` and
+  a pan leg at `medium` and `high`, with bodies receiving and casting, and
+  choose `quality.puck`'s `indirect` rows beside P15-8 and P18-14.
+
+**Check:** every slice's own check above, and together: a world authored with
+`render.indirect` shows light bounced from its lights, its emissive surfaces,
+its screens, its sky and through its portals, from `.puck` and in the running
+World on both backends; a converged still world spends nothing on indirect
+light, and a lighting change marches nothing; a capture with indirect light off
+is the capture without it, byte for byte; the counted-cost ceilings at the
+floor device hold every indirect row and its required zeros, re-recorded only
+in the change that explains the move and never from wall-clock or GPU timing.
+
+**Depends on:** P14 for the pass package; P15-1 for the counted steps, texels
+and ceilings; P11's graph instances and buffer edges for the shared instance;
+P18-4, P18-5, P18-6, P18-7, P18-9 and P18-11 as the sequencing above states;
+P15-5 for G8; and E2, E4, E5 and E6 for G7.
 
 ### P7 — The binding contract and the adapter memory profile
 
@@ -6281,6 +7000,14 @@ and infinity-view routing and quality levers remain to be implemented. Its shado
 amortization (P18-13) follows P15-5, its editor surface (P18-12) follows the
 editor's E5, E10 and E11, and its floor defaults (P18-14) are best decided
 beside P15-8.
+
+**Global illumination.** P6-GI's first slice, the CPU reference and the
+cache's layout (G1), depends on nothing and can start at once. The cache itself
+(G2) follows P18-4 and P18-5 onto the features head, its lighting (G3) follows
+it, its change classes (G4) follow P18-6 and take P18-7's shadow slots, its sky
+(G5) follows P18-9, its portals (G6) follow G3 and, for infinity views,
+P18-11, its explanation (G7) follows the editor's E2, E4, E5 and E6, and its
+tier defaults (G9) are decided beside P15-8 and P18-14.
 
 ## Deferred to the end
 

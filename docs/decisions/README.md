@@ -31,7 +31,9 @@ contracts belong in the subsystem guides; proposed changes belong in
   and [the frame graph and nesting](rendering.md#the-frame-graph-and-nesting):
   the graph as a document, views as graph instances, sources by transport and
   content class, hit-to-source mapping, temporal reconstruction, HDR output,
-  and assets derived from SDFs.
+  and assets derived from SDFs; and
+  [global illumination](rendering.md#global-illumination): a world-space cache
+  traced through the field and shared by every view of a world.
 - [Worlds and federation](../architecture/worlds.md): authority, admission,
   transfers, and the relationships between worlds.
 

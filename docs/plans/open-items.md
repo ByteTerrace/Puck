@@ -120,6 +120,15 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] P4 shared opaque visibility (every build step, P4-0 to P4-2e and the visibility record's names, landed; the mesh canaries hold every scene the check names, the full-size resize included, and no reader of the retired layouts remains; the measured cost is held with P14's counted-cost ceilings).
 - [x] P5 reproducible authoring and packaged dependencies.
 - [ ] P6 representation experiments.
+  - [ ] P6-GI G1: the CPU irradiance reference over `SdfFieldEvaluator`, the cache's lattice, strata, texel layouts and probe classification, and its host schedule, as pure functions held by laws.
+  - [ ] P6-GI G2: the `indirect` instance per residency, traced through the field with a ball-masked group march into stored hits, one shared instance-grid walker, and its debug views, off at every tier.
+  - [ ] P6-GI G3: bounce from lights, emission and screens through the one light interface, the views apply, `render.indirect`, palette `bleed` and `receive`, `bounce` renamed `fill`, a light's `bounce`, and parity's `indirect: on` capture rows.
+  - [ ] P6-GI G4: regional invalidation by P18-6's change classes, standing once converged, bodies that cast at `high`, and P18-7's shadow slots in the probes' visibility.
+  - [ ] P6-GI G5: the sky through the cache from `sky.environment`, in place of unoccluded harmonic ambient.
+  - [ ] P6-GI G6: one GPU emission reduction per bound screen, portals onto other worlds as light sources, per-world caches with nested budgets, and a lit crossing.
+  - [ ] P6-GI G7: `world.explain`'s indirect line against the CPU reference, the echo, budget and inspector rows, and the bricks debug view.
+  - [ ] P6-GI G8: the near field at `high`, short field rays lit from the resolved history or the cache.
+  - [ ] P6-GI G9: the indirect tier defaults, decided from the counted rows beside P15-8 and P18-14.
 - [x] P7 the binding contract and the adapter memory profile, with the one-day spike as its gate (every P7b step landed; the gate's Linux bytecode leg is deferred to the end).
 - [x] P8 the shader package, the pass interface and its generated declarations, the echo pass, and HLSL as the one source language.
 - [x] P9 the state mirror and presentation time, against [the presentation view's](runtime-and-delivery.md#the-presentation-view) state interface.
