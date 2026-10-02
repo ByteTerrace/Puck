@@ -10,9 +10,14 @@ internal sealed class GitScratchCheckout : IDisposable {
     private readonly TemporaryDirectory m_directory = new(prefix: "puck-git-law-");
 
     /// <summary>Initializes a new instance of the <see cref="GitScratchCheckout"/> class: an empty repository on
-    /// branch <c>main</c>.</summary>
+    /// branch <c>main</c> that git never maintains on its own.</summary>
     public GitScratchCheckout() {
         _ = Git("init", "--quiet", "--initial-branch=main");
+        // A commit otherwise starts `git maintenance run --auto --detach`, which on recent git prunes worktree
+        // registrations and repacks in the background: it changes what a law observes by git version and races the
+        // directory's teardown.
+        _ = Git("config", "maintenance.auto", "false");
+        _ = Git("config", "gc.auto", "0");
     }
 
     /// <summary>Gets the checkout's absolute root.</summary>
