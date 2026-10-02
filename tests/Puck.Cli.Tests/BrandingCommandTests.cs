@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -189,20 +190,18 @@ public sealed class BrandingCommandTests {
         var outside = Directory.CreateTempSubdirectory(prefix: "puck-branding-outside-");
 
         try {
-            try {
-                Directory.CreateSymbolicLink(
-                    path: Path.Combine(
-                        path1: fixture.Root,
-                        path2: "link"
-                    ),
-                    pathToTarget: outside.FullName
-                );
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
-                Assert.Skip(reason: $"symbolic links are unavailable: {exception.Message}");
-                return;
-            }
+            var link = Path.Combine(
+                path1: fixture.Root,
+                path2: "link"
+            );
 
-            AssertRefusesWithoutChangingCopy(fixture: fixture);
+            DirectoryLinks.Create(link: link, target: outside.FullName);
+
+            try {
+                AssertRefusesWithoutChangingCopy(fixture: fixture);
+            } finally {
+                DirectoryLinks.Remove(link: link);
+            }
         } finally {
             outside.Delete(recursive: true);
         }

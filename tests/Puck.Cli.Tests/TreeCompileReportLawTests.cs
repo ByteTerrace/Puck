@@ -32,7 +32,7 @@ public sealed class TreeCompileReportLawTests {
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
-    public void PackageCleanupRefusesLinkedStoresAndPackages(bool linkPackage) {
+    public void PackageCleanupRefusesALinkedPackageAndCleansAStoreReachedThroughALink(bool linkPackage) {
         using var directory = new TemporaryDirectory();
         var source = directory.WriteText(name: "worlds/field.puck", text: World);
         const string Key = "0123456789abcdef";
@@ -41,13 +41,7 @@ public sealed class TreeCompileReportLawTests {
         var target = directory.PathOf(name: (linkPackage ? $"outside/{Key}" : "outside"));
 
         Directory.CreateDirectory(path: Path.GetDirectoryName(path: link)!);
-
-        try {
-            Directory.CreateSymbolicLink(path: link, pathToTarget: target);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
-            Assert.Skip(reason: $"symbolic links are unavailable: {exception.Message}");
-            return;
-        }
+        DirectoryLinks.Create(link: link, target: target);
 
         try {
             var (exitCode, log) = ConsoleCapture.Run(run: () => PuckRootCommand.Invoke(args: [
@@ -55,14 +49,19 @@ public sealed class TreeCompileReportLawTests {
                 "--output", directory.PathOf(name: "out"), source,
             ]));
 
-            Assert.True(condition: (exitCode != 0), userMessage: log);
-            Assert.Contains(actualString: log, expectedSubstring: "SHADERPKG_OUTPUT");
-            Assert.Equal(actual: File.ReadAllText(path: sentinel), expected: "keep this file");
+            if (linkPackage) {
+                // A package inside the store that links out of it is never removed through.
+                Assert.True(condition: (exitCode != 0), userMessage: log);
+                Assert.Contains(actualString: log, expectedSubstring: "SHADERPKG_OUTPUT");
+                Assert.Equal(actual: File.ReadAllText(path: sentinel), expected: "keep this file");
+            } else {
+                // The store itself may be a link: it is wherever the link leads, and its unnamed package is removed there.
+                Assert.True(condition: (exitCode == 0), userMessage: log);
+                Assert.False(condition: Directory.Exists(path: Path.GetDirectoryName(path: sentinel)!));
+            }
             Assert.True(condition: ((File.GetAttributes(path: link) & FileAttributes.ReparsePoint) != 0));
         } finally {
-            if (new DirectoryInfo(path: link).LinkTarget is not null) {
-                Directory.Delete(path: link);
-            }
+            DirectoryLinks.Remove(link: link);
         }
     }
     [Fact]

@@ -82,8 +82,10 @@ public sealed partial class ShaderPackager {
     /// <para>A package is written beside its directory and moved into place whole, its manifest written last: the manifest
     /// is the package's commit record. A store directory holding files but no manifest is never a package; a partial
     /// removal (a clean or rebuild that stopped part way) can leave it behind, and the store removes it before writing
-    /// the package in its place. A linked package directory, store, or ancestor is refused before anything is
-    /// removed or written through it.</para></summary>
+    /// the package in its place. Recovery, publication and removal of one package hold its lock
+    /// (<see cref="LockPackageAsync"/>), so one writer never removes what another has just published. A package
+    /// directory reached through a link inside the store is refused before anything is removed or written through it
+    /// (<see cref="RequireUnlinkedStorePath"/>).</para></summary>
     /// <param name="source">The graph document or one-off shader source.</param>
     /// <param name="name">The instance name, which names a one-off shader's pipeline and its one pass.</param>
     /// <param name="cancellationToken">The token that cancels the build.</param>
@@ -109,45 +111,86 @@ public sealed partial class ShaderPackager {
         );
 
         try {
-            RequireUnlinkedStorePath(package: package);
+            RequireUnlinkedStorePath(
+                package: package,
+                store: store
+            );
         } catch (Exception exception) when (IsSourceRefusal(exception: exception)) {
             return (Refusal(exception: exception), package);
         }
 
-        if (IsCommitted(package: package)) {
-            var kept = await LoadAsync(
+        // Recovery, publication and removal of one package hold its lock, so no other writer removes or replaces it
+        // between this writer's look at it and its write.
+        using (await LockPackageAsync(
+            cancellationToken: cancellationToken,
+            package: package
+        ).ConfigureAwait(continueOnCapturedContext: false)) {
+            if (IsCommitted(package: package)) {
+                var kept = await LoadAsync(
+                    cancellationToken: cancellationToken,
+                    package: package
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                if (
+                    (kept.Manifest is not null) &&
+                    string.Equals(
+                        a: KeyOf(manifest: kept.Manifest),
+                        b: key,
+                        comparisonType: StringComparison.Ordinal
+                    )
+                ) {
+                    return (kept, package);
+                }
+            }
+
+            if (Directory.Exists(path: package) && !IsCommitted(package: package)) {
+                m_removingAbandoned?.Invoke(obj: package);
+                Directory.Delete(
+                    path: package,
+                    recursive: true
+                );
+            }
+
+            var built = await BuildAsync(
                 cancellationToken: cancellationToken,
-                package: package
+                name: name,
+                output: package,
+                source: source
             ).ConfigureAwait(continueOnCapturedContext: false);
 
-            if (
-                (kept.Manifest is not null) &&
-                string.Equals(
-                    a: KeyOf(manifest: kept.Manifest),
-                    b: key,
-                    comparisonType: StringComparison.Ordinal
-                )
-            ) {
-                return (kept, package);
+            return (built, package);
+        }
+    }
+    /// <summary>Takes a store package's lock: the file beside its directory, named for it with <c>.lock</c>, opened with
+    /// no sharing, which the operating system releases with the handle however its holder ends. Every writer that
+    /// recovers, publishes or removes the package holds it, and another holder is waited for.</summary>
+    /// <param name="package">The package directory's full path (<see cref="StorePathOf"/>).</param>
+    /// <param name="cancellationToken">The token that cancels the wait.</param>
+    /// <returns>The held lock, released when disposed.</returns>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled while another
+    /// holder held the lock.</exception>
+    public static async Task<IDisposable> LockPackageAsync(string package, CancellationToken cancellationToken = default) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: package);
+
+        var path = (Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: package)) + ".lock");
+
+        Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
+
+        while (true) {
+            try {
+                return new FileStream(
+                    access: FileAccess.ReadWrite,
+                    mode: FileMode.OpenOrCreate,
+                    path: path,
+                    share: FileShare.None
+                );
+            } catch (IOException) {
+                await Task.Delay(
+                    cancellationToken: cancellationToken,
+                    delay: TimeSpan.FromMilliseconds(value: 50)
+                ).ConfigureAwait(continueOnCapturedContext: false);
             }
         }
-
-        // A directory reached through a link is not the store's to remove.
-        if (Directory.Exists(path: package) && !IsCommitted(package: package)) {
-            Directory.Delete(
-                path: package,
-                recursive: true
-            );
-        }
-
-        var built = await BuildAsync(
-            cancellationToken: cancellationToken,
-            name: name,
-            output: package,
-            source: source
-        ).ConfigureAwait(continueOnCapturedContext: false);
-
-        return (built, package);
     }
 
     // Whether a store directory holds a published package: its manifest, the commit record a publication writes last.
@@ -156,25 +199,54 @@ public sealed partial class ShaderPackager {
         path2: ShaderPackageManifest.FileName
     ));
 
-    /// <summary>Refuses a store path whose directory or an ancestor is a link or junction.</summary>
-    /// <param name="package">The store or package directory's full path.</param>
-    /// <exception cref="ShaderClosureRefusedException">The path traverses a linked directory.</exception>
+    /// <summary>Refuses a package path that reaches through a link or junction below its store: the package directory,
+    /// and every directory between it and the store. The store and its ancestors may be links (a redirected profile, a
+    /// junctioned build tree, a platform's linked temporary root): the store is wherever its path leads, and only a link
+    /// inside it could lead a removal or write out of it.</summary>
+    /// <param name="store">The store directory's full path.</param>
+    /// <param name="package">The package directory's full path, inside <paramref name="store"/>.</param>
+    /// <exception cref="ShaderClosureRefusedException"><paramref name="package"/> is not inside
+    /// <paramref name="store"/>, or a directory below the store on its path is a link.</exception>
     /// <exception cref="IOException">An existing directory's attributes cannot be read.</exception>
     /// <exception cref="UnauthorizedAccessException">An existing directory's attributes cannot be read.</exception>
-    public static void RequireUnlinkedStorePath(string package) {
-        for (DirectoryInfo? directory = new(path: package); (directory is not null); directory = directory.Parent) {
+    public static void RequireUnlinkedStorePath(string store, string package) {
+        var root = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: store));
+        var below = Path.GetRelativePath(
+            path: Path.GetFullPath(path: package),
+            relativeTo: root
+        );
+
+        if (
+            (below == ".") ||
+            Path.IsPathRooted(path: below) ||
+            below.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Contains(value: "..")
+        ) {
+            throw new ShaderClosureRefusedException(
+                code: ShaderClosureRefusedException.PackageOutput,
+                message: $"'{package}' is not a package directory inside the store '{root}'."
+            );
+        }
+
+        var directory = root;
+
+        foreach (var segment in below.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) {
+            directory = Path.Combine(
+                path1: directory,
+                path2: segment
+            );
+
             FileAttributes attributes;
 
             try {
-                attributes = File.GetAttributes(path: directory.FullName);
+                attributes = File.GetAttributes(path: directory);
             } catch (Exception exception) when ((exception is FileNotFoundException or DirectoryNotFoundException)) {
-                continue;
+                return;
             }
 
             if ((attributes & FileAttributes.ReparsePoint) != 0) {
                 throw new ShaderClosureRefusedException(
                     code: ShaderClosureRefusedException.PackageOutput,
-                    message: $"'{directory.FullName}' is a linked directory; the store cannot replace packages through it."
+                    message: $"'{directory}' is a linked directory inside the store '{root}'; the store cannot remove or replace a package through it."
                 );
             }
         }

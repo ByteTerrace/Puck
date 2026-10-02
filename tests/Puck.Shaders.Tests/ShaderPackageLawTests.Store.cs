@@ -1,3 +1,5 @@
+using Puck.Testing;
+
 namespace Puck.Shaders.Tests;
 
 /// <summary>Laws for a build's package store: a source loads from the package keyed by its closure, interfaces and
@@ -138,14 +140,11 @@ public sealed partial class ShaderPackageLawTests {
             expectedSubstring: ShaderClosureRefusedException.PackageAbsent
         );
     }
-    [InlineData("package")]
-    [InlineData("store")]
-    [InlineData("ancestor")]
-    [Theory]
-    public async Task A_store_refuses_linked_directories_without_removing_or_writing_through_them(string linked) {
+    [Fact]
+    public async Task A_store_refuses_a_linked_package_directory_without_removing_or_writing_through_it() {
         using var fixture = new Fixture(name: "transitive");
         var outside = fixture.Output(name: "outside");
-        var store = fixture.Output(name: ((linked == "ancestor") ? "link/store" : "store"));
+        var store = fixture.Output(name: "store");
         var runner = new PackageRunner();
         var packager = new ShaderPackager(
             compiler: fixture.Compiler(runner: runner, toolchain: Toolchain(fixture: fixture)),
@@ -157,42 +156,112 @@ public sealed partial class ShaderPackageLawTests {
             key: packager.KeyOf(name: "graph", source: source),
             store: store
         );
-        var link = linked switch {
-            "package" => package,
-            "store" => store,
-            _ => fixture.Output(name: "link"),
-        };
-        var targetPackage = linked switch {
-            "package" => outside,
-            "store" => Path.Combine(path1: outside, path2: Path.GetFileName(path: package)),
-            _ => Path.Combine(path1: outside, path2: "store", path3: Path.GetFileName(path: package)),
-        };
-        var sentinel = Path.Combine(path1: targetPackage, path2: "foreign.hlsl");
+        var sentinel = Path.Combine(path1: outside, path2: "foreign.hlsl");
 
-        Directory.CreateDirectory(path: targetPackage);
-        Directory.CreateDirectory(path: Path.GetDirectoryName(path: link)!);
+        // A package directory with no manifest, reached through a link that leads out of the store: recovery would
+        // remove whatever the link leads to.
+        Directory.CreateDirectory(path: outside);
+        Directory.CreateDirectory(path: store);
         File.WriteAllText(contents: "keep this file", path: sentinel);
-
-        try {
-            Directory.CreateSymbolicLink(path: link, pathToTarget: outside);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
-            Assert.Skip(reason: $"symbolic links are unavailable: {exception.Message}");
-            return;
-        }
+        DirectoryLinks.Create(link: package, target: outside);
 
         try {
             var (result, _) = await packager.StoreAsync(cancellationToken: Token, name: "graph", source: source);
 
             AssertRefused(code: ShaderClosureRefusedException.PackageOutput, result: result);
             Assert.Equal(actual: File.ReadAllText(path: sentinel), expected: "keep this file");
-            Assert.True(condition: ((File.GetAttributes(path: link) & FileAttributes.ReparsePoint) != 0));
+            Assert.True(condition: ((File.GetAttributes(path: package) & FileAttributes.ReparsePoint) != 0));
             Assert.Equal(actual: runner.CompileRuns, expected: 0);
-            Assert.False(condition: File.Exists(path: Path.Combine(path1: targetPackage, path2: ShaderPackageManifest.FileName)));
+            Assert.False(condition: File.Exists(path: Path.Combine(path1: outside, path2: ShaderPackageManifest.FileName)));
         } finally {
-            if (new DirectoryInfo(path: link).LinkTarget is not null) {
-                Directory.Delete(path: link);
-            }
+            DirectoryLinks.Remove(link: package);
         }
+    }
+    [InlineData("store")]
+    [InlineData("ancestor")]
+    [Theory]
+    public async Task A_store_reached_through_a_link_publishes_its_package_inside_it(string linked) {
+        using var fixture = new Fixture(name: "transitive");
+        var outside = fixture.Output(name: "outside");
+        var store = fixture.Output(name: ((linked == "ancestor") ? "link/store" : "store"));
+        var link = ((linked == "ancestor") ? fixture.Output(name: "link") : store);
+        var packager = new ShaderPackager(
+            compiler: fixture.Compiler(runner: new PackageRunner(), toolchain: Toolchain(fixture: fixture)),
+            reflectDxil: false,
+            store: store
+        );
+        var source = fixture.PathOf(logicalPath: "transitive.graph.json");
+        var name = Path.GetFileName(path: ShaderPackager.StorePathOf(key: packager.KeyOf(name: "graph", source: source), store: store));
+        var reached = ((linked == "ancestor") ? Path.Combine(path1: outside, path2: "store", path3: name) : Path.Combine(path1: outside, path2: name));
+
+        // The store, or a directory above it, is a link (a redirected profile, a junctioned build tree, a platform's
+        // linked temporary root), and the store already holds the package's directory with no manifest: the store is
+        // wherever the link leads, so its abandoned publication is recovered there.
+        Directory.CreateDirectory(path: reached);
+        File.WriteAllText(contents: "abandoned", path: Path.Combine(path1: reached, path2: "partial.hlsl"));
+        Directory.CreateDirectory(path: Path.GetDirectoryName(path: link)!);
+        DirectoryLinks.Create(link: link, target: outside);
+
+        try {
+            var (result, _) = await packager.StoreAsync(cancellationToken: Token, name: "graph", source: source);
+
+            Assert.True(condition: (result.Status == ShaderPipelineLoadStatus.Compiled), userMessage: result.Message);
+            Assert.True(condition: File.Exists(path: Path.Combine(path1: reached, path2: ShaderPackageManifest.FileName)));
+            Assert.False(condition: File.Exists(path: Path.Combine(path1: reached, path2: "partial.hlsl")));
+            Assert.True(condition: ((File.GetAttributes(path: link) & FileAttributes.ReparsePoint) != 0));
+        } finally {
+            DirectoryLinks.Remove(link: link);
+        }
+    }
+    [Fact]
+    public async Task A_writer_recovering_an_abandoned_package_never_removes_one_another_writer_published() {
+        using var fixture = new Fixture(name: "transitive");
+
+        var (_, toolchain, source, package) = await StrandedPackage(fixture: fixture);
+        var store = Path.GetDirectoryName(path: package)!;
+        // Writer A finds the package directory with no manifest. While it is about to remove it, writer B runs whole,
+        // and then A loses its compiler, so whatever A removes it cannot rebuild.
+        var paused = 0;
+        var other = ((Task<(ShaderPackageResult Result, string Package)>?)null);
+        var aToolchain = fixture.Output(name: "toolchain-a");
+
+        Directory.CreateDirectory(path: aToolchain);
+        foreach (var tool in ((string[])["dxc", "dxc.exe"])) {
+            File.WriteAllBytes(bytes: [], path: Path.Combine(path1: aToolchain, path2: tool));
+        }
+
+        var writerB = new ShaderPackager(
+            compiler: fixture.Compiler(runner: new PackageRunner(), toolchain: toolchain),
+            reflectDxil: false,
+            store: store
+        );
+        var writerA = new ShaderPackager(
+            compiler: fixture.Compiler(runner: new PackageRunner(), toolchain: aToolchain),
+            reflectDxil: false,
+            removingAbandoned: abandoned => {
+                if (Interlocked.Exchange(location1: ref paused, value: 1) != 0) {
+                    return;
+                }
+
+                other = Task.Run(cancellationToken: Token, function: () => writerB.StoreAsync(cancellationToken: Token, name: "graph", source: source));
+                // An unguarded writer B publishes within this wait; one waiting for A's lock cannot.
+                _ = Task.WhenAny(task1: other, task2: Task.Delay(cancellationToken: Token, delay: TimeSpan.FromSeconds(value: 3))).GetAwaiter().GetResult();
+                DeleteCompiler(toolchain: aToolchain);
+            },
+            store: store
+        );
+
+        _ = await writerA.StoreAsync(cancellationToken: Token, name: "graph", source: source);
+
+        Assert.NotNull(@object: other);
+
+        var (published, _) = await other!;
+
+        Assert.True(condition: (published.Status == ShaderPipelineLoadStatus.Compiled), userMessage: published.Message);
+        Assert.Equal(
+            actual: ShaderPackager.KeyOf(manifest: ShaderPackager.Open(package: package)),
+            expected: writerB.KeyOf(name: "graph", source: source)
+        );
     }
 
     // A store holding a published package whose manifest, the commit record a publication writes last, is gone: what a

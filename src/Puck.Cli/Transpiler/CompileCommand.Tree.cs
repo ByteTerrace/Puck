@@ -234,6 +234,7 @@ internal static partial class CompileCommand {
         );
         var packager = new ShaderPackager(
             compiler: new ShaderCompiler(cacheDirectory: PackageCommand.DefaultCacheDirectory),
+            removingAbandoned: static package => Console.WriteLine(value: $"Removing '{package}': it holds no {ShaderPackageManifest.FileName}, so a publication or a clean stopped part way through it."),
             store: store
         );
         var packages = new Dictionary<string, string>(comparer: PuckPaths.Comparer);
@@ -324,25 +325,28 @@ internal static partial class CompileCommand {
             return 0;
         }
 
-        try {
-            ShaderPackager.RequireUnlinkedStorePath(package: store);
-        } catch (Exception exception) when ((exception is ShaderClosureRefusedException or IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"error: the package store '{store}' cannot be cleaned: {exception.Message}");
-
-            return 2;
-        }
-
-        // Staging and replacement siblings belong to their writer, which can still be publishing another tree's run.
+        // Staging and replacement siblings belong to their writer, which can still be publishing another tree's run. The
+        // store itself may be reached through a link; a package inside it may not.
         foreach (var stale in Directory.EnumerateDirectories(path: store).Where(predicate: package =>
             (ShaderPackager.IsStorePackageName(name: Path.GetFileName(path: package)) &&
             !packages.ContainsKey(key: Path.GetFullPath(path: package)))
         ).ToArray()) {
             try {
-                ShaderPackager.RequireUnlinkedStorePath(package: stale);
-                Directory.Delete(
-                    path: stale,
-                    recursive: true
+                ShaderPackager.RequireUnlinkedStorePath(
+                    package: stale,
+                    store: store
                 );
+
+                // Removal holds the package's lock, as recovery and publication do, so it never removes a package
+                // another writer is publishing.
+                using (ShaderPackager.LockPackageAsync(package: stale).GetAwaiter().GetResult()) {
+                    if (Directory.Exists(path: stale)) {
+                        Directory.Delete(
+                            path: stale,
+                            recursive: true
+                        );
+                    }
+                }
             } catch (Exception exception) when ((exception is ShaderClosureRefusedException or IOException or UnauthorizedAccessException)) {
                 Console.Error.WriteLine(value: $"error: the package '{stale}' has no pipeline in the tree naming it and could not be removed: {exception.Message}");
 

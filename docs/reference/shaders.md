@@ -2319,14 +2319,22 @@ manifest written last: the manifest is its commit record. A clean or rebuild
 that stops part way can leave a store directory with files and no manifest.
 It is never loaded as a package (a load treats it as a miss) and the next store
 removes it and writes the package in its place, so no interrupted build wedges
-a later one. `puck shaders package`
-still refuses an output holding files and no manifest, since a directory a
-person names is not the store's to remove.
-The store refuses a linked package directory, store directory, or ancestor
-before removing anything or writing through it.
-The tree's package cleanup removes only directories named by package keys;
-staging and replacement siblings belong to the writer publishing them and
-remain for that writer to clean up.
+a later one. `puck shaders package` still refuses an output holding files and
+no manifest, since a directory a person names is not the store's to remove.
+
+Every writer that recovers, publishes or removes a package holds that
+package's lock, the file beside its directory named `<key>.lock`, which the
+operating system releases with the writer's handle however it ends. One writer
+therefore never removes a package another has just published between looking
+at it and removing it, and two writers of one key build it once.
+
+The store may be a link, or lie below one (a redirected profile, a junctioned
+build tree, a platform's linked temporary root): it is wherever its path leads.
+A link inside the store, at a package's directory, could lead a removal or a
+write out of it, so the store refuses such a package before touching it
+(`SHADERPKG_OUTPUT`). The tree's package cleanup removes only directories named
+by package keys; staging and replacement siblings belong to the writer
+publishing them and remain for that writer to clean up.
 
 The World's packager is given the store, so `LoadSource` computes a source row's
 key the same way, without compiling, and loads the stored package with that
