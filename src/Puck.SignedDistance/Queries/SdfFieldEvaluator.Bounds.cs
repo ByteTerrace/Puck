@@ -22,6 +22,9 @@ public sealed partial class SdfFieldEvaluator {
     // A sine or cosine: SinCos answers inside [−1, 1] for every angle.
     private static readonly FixedInterval UnitRange = new(lower: -FixedQ4816.One, upper: FixedQ4816.One);
 
+    // The raws by which a fixed-point rotation can miss its exact linear image (see RotateBoundsByInverseQuaternion).
+    private const long LinearRotationSlackRaws = 4L;
+
     // The frame's half-width in raws (see Frame), found once at construction.
     private readonly long m_frameRaw;
 
@@ -37,8 +40,29 @@ public sealed partial class SdfFieldEvaluator {
     /// <remarks>The interval is certified, not estimated: its lower endpoint is at or below the least point answer in the
     /// box and its upper at or above the greatest. It is a conservative hull, so it widens with the box, and a rotation
     /// or a fold that reuses a coordinate widens it further; a smaller box answers tighter.</remarks>
-    public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance) {
+    public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance) =>
+        TryDistanceBounds(
+            distance: out distance,
+            instructionsWalked: out _,
+            lower: lower,
+            upper: upper
+        );
+    /// <summary>Encloses every distance <see cref="TryDistance"/> answers at a point of the box, and counts the work: the
+    /// instructions the walk visited, after the instance cull skipped every instance the box cannot reach.</summary>
+    /// <param name="lower">The box's least corner.</param>
+    /// <param name="upper">The box's greatest corner, at or above <paramref name="lower"/> on every axis.</param>
+    /// <param name="distance">The enclosing interval on success; zero on failure.</param>
+    /// <param name="instructionsWalked">The instructions the walk visited; zero on failure.</param>
+    /// <returns><see langword="false"/> when the program has no shape or a corner leaves the evaluator's frame.</returns>
+    /// <exception cref="ArgumentException"><paramref name="lower"/> exceeds <paramref name="upper"/> on an
+    /// axis.</exception>
+    /// <remarks>The cull is <see cref="TryDistance"/>'s own (<c>CanCullInstance</c>), asked of the box: a hard-union
+    /// instance whose bound sphere lies at or beyond the running interval's upper end from every point of the box can
+    /// only offer a candidate no point's running answer would take, so skipping it leaves every point answer inside
+    /// the interval. It rests on the same sphere containment the point cull's exactness rests on.</remarks>
+    public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance, out int instructionsWalked) {
         distance = FixedInterval.FromPoint(value: FixedQ4816.Zero);
+        instructionsWalked = 0;
 
         if (
             !m_hasShape ||
@@ -57,11 +81,14 @@ public sealed partial class SdfFieldEvaluator {
             return false;
         }
 
-        distance = BoundsOver(world: new IntervalVector3(
-            X: new FixedInterval(lower: lowerPoint.X, upper: upperPoint.X),
-            Y: new FixedInterval(lower: lowerPoint.Y, upper: upperPoint.Y),
-            Z: new FixedInterval(lower: lowerPoint.Z, upper: upperPoint.Z)
-        ));
+        distance = BoundsOver(
+            instructionsWalked: out instructionsWalked,
+            world: new IntervalVector3(
+                X: new FixedInterval(lower: lowerPoint.X, upper: upperPoint.X),
+                Y: new FixedInterval(lower: lowerPoint.Y, upper: upperPoint.Y),
+                Z: new FixedInterval(lower: lowerPoint.Z, upper: upperPoint.Z)
+            )
+        );
 
         return true;
     }
@@ -104,7 +131,7 @@ public sealed partial class SdfFieldEvaluator {
             var radius = Math.Min(val1: (1L << middle), val2: ceiling);
             var side = new FixedInterval(lower: FixedQ4816.FromRawBits(value: -radius), upper: FixedQ4816.FromRawBits(value: radius));
 
-            if (!evaluator.BoundsOver(world: new IntervalVector3(X: side, Y: side, Z: side)).IsUnbounded) {
+            if (!evaluator.BoundsOver(instructionsWalked: out _, world: new IntervalVector3(X: side, Y: side, Z: side)).IsUnbounded) {
                 frame = radius;
                 low = (middle + 1);
             } else {
@@ -118,16 +145,36 @@ public sealed partial class SdfFieldEvaluator {
         ((raw < 0L)
             ? (0UL - unchecked((ulong)raw))
             : ((ulong)raw));
-    // The bounds over a box whose every point the frame holds.
-    private FixedInterval BoundsOver(IntervalVector3 world) {
+    // The bounds over a box whose every point the frame holds, and the instructions the walk visited.
+    private FixedInterval BoundsOver(IntervalVector3 world, out int instructionsWalked) {
         var local = world;
         var distanceScale = Point(value: FixedQ4816.One);
         var result = FixedInterval.FromPoint(value: FarDistance);
         var saved = FixedInterval.FromPoint(value: FarDistance);
 
-        // The instance cull is exact by construction (a culled instance changes no answer), so the bounds walk every
-        // instruction and need no cull of their own.
-        foreach (var instruction in m_instructions) {
+        var cullIndex = 0;
+        var walked = 0;
+
+        for (var index = 0; (index < m_instructions.Length); index++) {
+            if (
+                (cullIndex < m_cullBounds.Length) &&
+                (m_cullBounds[cullIndex].First == index)
+            ) {
+                var bound = m_cullBounds[cullIndex];
+
+                cullIndex++;
+
+                if (CanCullInstance(bound: bound, box: world, resultUpper: result.Upper)) {
+                    index = (bound.End - 1);
+
+                    continue;
+                }
+            }
+
+            var instruction = m_instructions[index];
+
+            ++walked;
+
             switch (instruction.Op) {
                 case SdfOp.ResetPoint: {
                         local = world;
@@ -241,7 +288,27 @@ public sealed partial class SdfFieldEvaluator {
             }
         }
 
+        instructionsWalked = walked;
+
         return result;
+    }
+    // The box form of CanCullInstance: the least distance from any point of the box to the bound's centre is the length
+    // of the gap between them, taken by the same exact-square, once-rounded length the point cull takes of a longer
+    // vector, so it never exceeds what the point cull would read at a point of the box. The frame keeps each gap's
+    // subtraction inside the carrier (FindFrame caps it by the farthest centre).
+    private static bool CanCullInstance(CullBound bound, IntervalVector3 box, FixedQ4816 resultUpper) {
+        static FixedQ4816 Gap(FixedInterval axis, FixedQ4816 centre) => FixedQ4816.Max(
+            x: FixedQ4816.Max(x: (centre - axis.Upper), y: (axis.Lower - centre)),
+            y: FixedQ4816.Zero
+        );
+
+        var gap = new FixedVector3(
+            X: Gap(axis: box.X, centre: bound.CenterX),
+            Y: Gap(axis: box.Y, centre: bound.CenterY),
+            Z: Gap(axis: box.Z, centre: bound.CenterZ)
+        );
+
+        return ((gap.Length - bound.Radius) >= resultUpper);
     }
 
     /// <summary>Gets the ops the bounds interpreter has an inclusion rule for. Every op the point interpreter accepts
@@ -311,12 +378,51 @@ public sealed partial class SdfFieldEvaluator {
         var dx = ((uy * tz) - (uz * ty));
         var dy = ((uz * tx) - (ux * tz));
         var dz = ((ux * ty) - (uy * tx));
-
-        return new(
+        var stepwise = new IntervalVector3(
             X: ((p.X + dx) + dx),
             Y: ((p.Y + dy) + dy),
             Z: ((p.Z + dz) + dz)
         );
+
+        // The step-by-step enclosure reuses each coordinate several times, so a rotation as plain as a half turn
+        // triples a box's width. The exact expression is linear in p, p + 2u×(u×p + w·p) = M·p with
+        // M = (1 − 2|u|²)·I + 2·u·uᵀ + 2w·[u]×, so its enclosure as M·p reads each coordinate once per axis. The point
+        // code rounds each of t and d to the nearest raw, so its answer lies within 0.5 + 2·0.5 raws of the exact d and
+        // twice that of the exact result for |u| ≤ 1: three raws, widened to four. Both enclosures hold the point
+        // answer, so their intersection does, and it is never looser than the step-by-step one.
+        var two = Point(value: Two);
+        var usq = (((ux * ux) + (uy * uy)) + (uz * uz));
+        var diagonal = (Point(value: FixedQ4816.One) - (two * usq));
+        var m00 = (diagonal + (two * (ux * ux)));
+        var m11 = (diagonal + (two * (uy * uy)));
+        var m22 = (diagonal + (two * (uz * uz)));
+        var m01 = (two * ((ux * uy) - (w * uz)));
+        var m02 = (two * ((ux * uz) + (w * uy)));
+        var m10 = (two * ((uy * ux) + (w * uz)));
+        var m12 = (two * ((uy * uz) - (w * ux)));
+        var m20 = (two * ((uz * ux) - (w * uy)));
+        var m21 = (two * ((uz * uy) + (w * ux)));
+        var slack = new FixedInterval(lower: FixedQ4816.FromRawBits(value: -LinearRotationSlackRaws), upper: FixedQ4816.FromRawBits(value: LinearRotationSlackRaws));
+
+        return new(
+            X: Intersect(first: stepwise.X, second: ((((m00 * p.X) + (m01 * p.Y)) + (m02 * p.Z)) + slack)),
+            Y: Intersect(first: stepwise.Y, second: ((((m10 * p.X) + (m11 * p.Y)) + (m12 * p.Z)) + slack)),
+            Z: Intersect(first: stepwise.Z, second: ((((m20 * p.X) + (m21 * p.Y)) + (m22 * p.Z)) + slack))
+        );
+    }
+    // Two enclosures of one value meet; an unbounded one, or an empty meet no point answer could produce, defers to the
+    // other.
+    private static FixedInterval Intersect(FixedInterval first, FixedInterval second) {
+        if (second.IsUnbounded) {
+            return first;
+        }
+
+        var lower = FixedQ4816.Max(x: first.Lower, y: second.Lower);
+        var upper = FixedQ4816.Min(x: first.Upper, y: second.Upper);
+
+        return ((lower <= upper)
+            ? new FixedInterval(lower: lower, upper: upper)
+            : first);
     }
     private static FixedInterval PopFieldBounds(FixedInterval candidate, FixedInterval saved, CompiledInstruction instruction) {
         var isStairs = (instruction.Blend is ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction));
@@ -483,21 +589,21 @@ public sealed partial class SdfFieldEvaluator {
             SdfShapeType.Vesica => VesicaBounds(p: p, r: instruction.Data0X, d: instruction.Data0Y, b: instruction.Data0Z),
             SdfShapeType.RoundedRectangle => (LiftedBounds(
                 p: p,
-                profile: point2D => RoundedRectangle2DBounds(p: point2D, halfWidth: instruction.Data0X, halfHeight: instruction.Data0Y, cornerRadius: instruction.Data0Z),
+                instruction: instruction,
                 liftAmount: instruction.Data0W,
                 lift: instruction.Data1Y,
                 capChamfer: instruction.Data1Z
             ) - Point(value: instruction.Data1W)),
             SdfShapeType.Trapezoid => (LiftedBounds(
                 p: p,
-                profile: point2D => Trapezoid2DBounds(p: point2D, r1: instruction.Data0X, r2: instruction.Data0Y, halfHeight: instruction.Data0Z),
+                instruction: instruction,
                 liftAmount: instruction.Data0W,
                 lift: instruction.Data1Y,
                 capChamfer: instruction.Data1Z
             ) - Point(value: instruction.Data1W)),
             SdfShapeType.ChamferedRectangle => (LiftedBounds(
                 p: p,
-                profile: point2D => ChamferBox2DBounds(p: point2D, halfWidth: instruction.Data0X, halfHeight: instruction.Data0Y, chamfer: instruction.Data0Z),
+                instruction: instruction,
                 liftAmount: instruction.Data0W,
                 lift: instruction.Data1Y,
                 capChamfer: instruction.Data0Z
@@ -506,7 +612,7 @@ public sealed partial class SdfFieldEvaluator {
             SdfShapeType.Sweep => SweepBounds(p: p, curve: (instruction.SweepCurve ?? throw new UnreachableException(message: "Compile always attaches a SweepCurve to a Sweep instruction.")), twist: instruction.Data0Z, strandOffset: instruction.Data0W),
             SdfShapeType.ConvexPolygon => (LiftedBounds(
                 p: p,
-                profile: point2D => ConvexPolygon2DBounds(p: point2D, vertices: (instruction.ConvexPolygonVertices ?? [])),
+                instruction: instruction,
                 liftAmount: instruction.Data0W,
                 lift: instruction.Data1Y,
                 capChamfer: instruction.Data1Z
@@ -695,13 +801,22 @@ public sealed partial class SdfFieldEvaluator {
                 : FixedInterval.Union(first: cap, second: body)));
     }
     // ProjectLiftPoint and ApplyLift: an extruded profile (lift above one half) or a revolved one.
-    private static FixedInterval LiftedBounds(IntervalVector3 p, Func<IntervalVector2, FixedInterval> profile, FixedQ4816 liftAmount, FixedQ4816 lift, FixedQ4816 capChamfer) {
+    // The profile is chosen by a switch on the instruction's shape rather than a delegate, so a bounds walk, which a
+    // moving body's certified sweep runs every tick, allocates nothing.
+    private static FixedInterval LiftedBounds(IntervalVector3 p, CompiledInstruction instruction, FixedQ4816 liftAmount, FixedQ4816 lift, FixedQ4816 capChamfer) {
         if (lift > Half) {
-            return ExtrudeChamfer2DBounds(distance2D: profile(arg: new(X: p.X, Y: p.Y)), z: p.Z, halfDepth: liftAmount, c: capChamfer);
+            return ExtrudeChamfer2DBounds(distance2D: ProfileBounds(instruction: instruction, p: new(X: p.X, Y: p.Y)), z: p.Z, halfDepth: liftAmount, c: capChamfer);
         }
 
-        return profile(arg: new(X: (FixedInterval.Magnitude(x: p.X, y: p.Z) - Point(value: liftAmount)), Y: p.Y));
+        return ProfileBounds(instruction: instruction, p: new(X: (FixedInterval.Magnitude(x: p.X, y: p.Z) - Point(value: liftAmount)), Y: p.Y));
     }
+    private static FixedInterval ProfileBounds(CompiledInstruction instruction, IntervalVector2 p) => ((SdfShapeType)instruction.Shape) switch {
+        SdfShapeType.RoundedRectangle => RoundedRectangle2DBounds(p: p, halfWidth: instruction.Data0X, halfHeight: instruction.Data0Y, cornerRadius: instruction.Data0Z),
+        SdfShapeType.Trapezoid => Trapezoid2DBounds(p: p, r1: instruction.Data0X, r2: instruction.Data0Y, halfHeight: instruction.Data0Z),
+        SdfShapeType.ChamferedRectangle => ChamferBox2DBounds(p: p, halfWidth: instruction.Data0X, halfHeight: instruction.Data0Y, chamfer: instruction.Data0Z),
+        SdfShapeType.ConvexPolygon => ConvexPolygon2DBounds(p: p, vertices: (instruction.ConvexPolygonVertices ?? [])),
+        _ => throw new NotSupportedException(message: $"The bounds interpreter has no profile for shape {((SdfShapeType)instruction.Shape)}."),
+    };
     private static FixedInterval Extrude2DBounds(FixedInterval distance2D, FixedInterval z, FixedQ4816 halfDepth) {
         var wy = (FixedInterval.Abs(value: z) - Point(value: halfDepth));
         var zero = Point(value: FixedQ4816.Zero);

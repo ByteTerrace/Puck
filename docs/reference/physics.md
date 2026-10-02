@@ -184,6 +184,39 @@ that field through `Puck.Maths`'s `IFieldEvaluator` and `IWorldQuery`. That is
 why neither this library nor a distance-field library needs to reference the
 other.
 
+`FixedFieldContactSolver.ResolveSweep` proves a moving body's travel before it
+solves contact at the endpoint, so a body never passes through geometry,
+however fast it moves, however thin the geometry, and however close to it the
+step starts. It sweeps every core sphere of every collider volume through
+`Puck.Maths`'s `ICertifiedSweepQuery`, a certified conservative advancement:
+- a sphere or box sweeps its centre at half its least radius;
+- a capsule sweeps one core sphere per piece of its segment, one more piece
+  than the segment's length in radii, so the pieces cover the whole core;
+- the least fraction any core proves is the body's, and the body moves that far;
+- the endpoint solve then runs unchanged, so a body that would have crossed a
+  face stops on it and resolves against the face it reached.
+
+Each sweep takes an explicit bounds-query budget
+(`DefaultSweepBoundsQueryBudget`, 64) and the contact skin as its contact
+tolerance, so a body pressed against a wall spends a handful of queries a tick.
+A sweep that runs out of budget, reaches a box the field cannot bound (one past
+its frame), or is refused outright keeps only the ground it proved: a body never
+moves through space no sweep proved clear. A solver built with no sweep, for a
+field with no geometry, resolves at the endpoint alone. `FixedContactSweepWork`
+counts the sweeps, their bounds queries, and how many ended in contact or
+exhausted, as the deterministic `physics.sweep` work source; the World registers
+its `Process` ledger, and a law hands its solver a ledger of its own.
+
+A step-sampling sweep has two tunnelling classes the certified sweep closes. A
+field that overstates its distance (a gradient above one) lets a sample-trusting
+step jump a surface. A body that starts within its radius of a thin wall and
+moves less than its radius is only resolved at its endpoint, already past the
+wall. A step long enough that its fraction rounds to the Q16 grid also jumps a
+thin wall between samples. `CertifiedContactSweepLawTests` holds each with a
+radius stepper as its red leg, along with the budget's prefix property, the
+frame, the capsule core, and the lattice's bounds; the `thin-wall-sweep` canary
+holds it in the running World.
+
 `FixedSurfaceQuery` is the nearest-surface-point primitive over the same
 collider vocabulary—the analytic anchor query climbing (surface attach) and
 grappling (tether anchor selection) both resolve against, distinct from
@@ -424,9 +457,11 @@ slab a bare inside test would refuse. `IsInsideMedium`/`IsSegmentInsideMedium`
 give navigation's medium domain the same free-surface reach as a point test,
 proven over a swept clearance box rather than sample points alone.
 
-`FieldLatticeSolid` (an `IFieldEvaluator`) turns a lattice's height columns
-into a contact field—exact within two cells of a column, a conservative
-lower bound beyond—and `UnionField` composes it with another field
+`FieldLatticeSolid` (an `IFieldEvaluator` and an `IFieldBounds`) turns a
+lattice's height columns into a contact field—exact within two cells of a
+column, a conservative lower bound beyond—and encloses its answers over a box
+by the nearest column within reach, so a certified sweep proves a body clear of
+it. `UnionField` composes it with another field
 (a world's authored solids) by nearest distance, so a glacier or a filled pond
 is real geometry a body's contact resolve reaches through the ordinary field
 seam. `Checkpoint`/`Capture`/`Restore`/`AppendStateHash` and the delta stream

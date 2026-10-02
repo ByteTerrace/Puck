@@ -800,7 +800,10 @@ packed words, the cell size, and the contact reach, a `SetCollision` edit that
 keeps the cell size keeps the grid, and kit and bodies-row edits rebuild the
 field because the band derives from them (a whole-row upsert of the scale row
 itself takes effect at the next solid rebuild). `world.collision.status` echoes the
-cell size, corner extent, baked corner count, band, and hash. The analytic provider emits exact isotropically
+cell size, corner extent, baked corner count, band, and hash. The field provider proves each
+moving body's step clear before its contact solve, by a certified sweep over the exact program's
+bounds together with those of any field lattice's solid columns (`FixedFieldContactSolver.ResolveSweep`,
+counted as the `physics.sweep` work source). The analytic provider emits exact isotropically
 scaled spheres and world-axis bounds for other finite placement primitives;
 rotated, rounded, non-box, smoothed, and boolean-carved geometry is therefore
 conservative there. A solid row participates in simulation, which is why

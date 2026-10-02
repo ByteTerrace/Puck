@@ -50,7 +50,7 @@ public sealed class SdfCertifiedQueryLawTests {
             radius: FixedQ4816.One,
             sweep: out var sweep
         ));
-        Assert.Equal(expected: SdfCertifiedSweepOutcome.Contact, actual: sweep.Outcome);
+        Assert.Equal(expected: CertifiedSweepOutcome.Contact, actual: sweep.Outcome);
         Assert.True(condition: sweep.Reached.TryDelta(delta: out var reached, origin: FixedPosition.Zero));
         // Both planes have the same zero set, y = 0, despite the bevel's larger field gradient.
         Assert.True(condition: (reached.Y > FixedQ4816.One));
@@ -72,7 +72,7 @@ public sealed class SdfCertifiedQueryLawTests {
             radius: FixedQ4816.Zero,
             sweep: out var sweep
         ));
-        Assert.NotEqual(expected: SdfCertifiedSweepOutcome.Clear, actual: sweep.Outcome);
+        Assert.NotEqual(expected: CertifiedSweepOutcome.Clear, actual: sweep.Outcome);
         Assert.True(condition: (sweep.Fraction < FixedQ4816.One));
         Assert.True(condition: sweep.Reached.TryDelta(delta: out var reached, origin: FixedPosition.Zero));
         Assert.InRange(actual: reached.X.Value, low: start.X.Value, high: (long.MaxValue - 1L));
@@ -103,7 +103,7 @@ public sealed class SdfCertifiedQueryLawTests {
             var reached = reachedPoint.X;
             var face = FixedQ4816.FromDouble(value: (-WallHalfThickness - Radius));
 
-            Assert.Equal(expected: SdfCertifiedSweepOutcome.Contact, actual: sweep.Outcome);
+            Assert.Equal(expected: CertifiedSweepOutcome.Contact, actual: sweep.Outcome);
             Assert.True(condition: (reached <= face), userMessage: $"speed {speed}, lane {lane}: the sphere's centre reached {reached}, past the wall's face at {face}");
             // Progress: the sweep stops close to contact, not at its start.
             Assert.True(
@@ -148,7 +148,7 @@ public sealed class SdfCertifiedQueryLawTests {
             var displacement = Fixed(value: new Vector3(x: Next(random: random, scale: 6f), y: Next(random: random, scale: 3f), z: Next(random: random, scale: 6f)));
 
             Assert.True(condition: evaluator.TryCertifiedSweep(boundsQueryBudget: SweepBudget, displacement: displacement, origin: FixedPosition.FromLocal(local: start), radius: radius, sweep: out var sweep));
-            if ((sweep.Outcome == SdfCertifiedSweepOutcome.Contact) && (sweep.Reached == FixedPosition.FromLocal(local: start))) {
+            if ((sweep.Outcome == CertifiedSweepOutcome.Contact) && (sweep.Reached == FixedPosition.FromLocal(local: start))) {
                 Assert.Equal(expected: FixedQ4816.Zero, actual: sweep.Fraction);
                 continue;
             }
@@ -237,7 +237,7 @@ public sealed class SdfCertifiedQueryLawTests {
 
             // A smaller budget runs a prefix of the larger one: within budget it proves the same verdict at the same
             // cost, and past it it stops at exactly its budget, undecided.
-            foreach (var budget in ((int[])[1, 2, 3, 7, 16, 64])) {
+            foreach (var budget in ((int[])[1, 2, 3, 7, 16, 32])) {
                 Assert.True(condition: evaluator.TryCertifiedLineOfSight(boundsQueryBudget: budget, from: from, sight: out var limited, to: to));
 
                 if (unlimited.BoundsQueries <= budget) {
@@ -248,8 +248,8 @@ public sealed class SdfCertifiedQueryLawTests {
             }
         }
 
-        // The fixture reaches past a handful of queries, so the prefix legs are not all trivial.
-        Assert.True(condition: (deepest > 64), userMessage: $"the deepest line of sight spent only {deepest} queries");
+        // The fixture reaches past the largest budget, so every prefix leg cuts at least one trial.
+        Assert.True(condition: (deepest > 32), userMessage: $"the deepest line of sight spent only {deepest} queries");
     }
     [Fact]
     public void AGrazingLineOfSightStaysUnderTheCeiling() {
@@ -278,7 +278,7 @@ public sealed class SdfCertifiedQueryLawTests {
         var radius = FixedQ4816.FromDouble(value: Radius);
 
         Assert.True(condition: evaluator.TryCertifiedSweep(boundsQueryBudget: int.MaxValue, displacement: displacement, origin: origin, radius: radius, sweep: out var full));
-        Assert.Equal(expected: SdfCertifiedSweepOutcome.Contact, actual: full.Outcome);
+        Assert.Equal(expected: CertifiedSweepOutcome.Contact, actual: full.Outcome);
 
         var previous = FixedQ4816.Zero;
 
@@ -291,13 +291,35 @@ public sealed class SdfCertifiedQueryLawTests {
             } else {
                 // A cut-short sweep reports the budget spent and keeps only ground it proved, never more than a longer
                 // budget proves.
-                Assert.Equal(expected: SdfCertifiedSweepOutcome.Exhausted, actual: limited.Outcome);
+                Assert.Equal(expected: CertifiedSweepOutcome.Exhausted, actual: limited.Outcome);
                 Assert.Equal(expected: budget, actual: limited.BoundsQueries);
                 Assert.True(condition: (limited.Fraction >= previous));
                 Assert.True(condition: (limited.Fraction <= full.Fraction));
                 previous = limited.Fraction;
             }
         }
+    }
+    [Fact]
+    public void ASweepWithAContactToleranceStopsOnceItsProvedClearanceIsThatSmall() {
+        var evaluator = ThinWall();
+        var origin = FixedPosition.FromLocal(local: Fixed(value: new Vector3(x: -0.6f, y: 0.1f, z: 0f)));
+        var displacement = Fixed(value: new Vector3(x: 1000f, y: 0f, z: 0f));
+        var radius = FixedQ4816.FromDouble(value: Radius);
+        var tolerance = FixedQ4816.FromDouble(value: 0.01);
+
+        Assert.True(condition: evaluator.TryCertifiedSweep(boundsQueryBudget: int.MaxValue, contactTolerance: FixedQ4816.Zero, displacement: displacement, origin: origin, radius: radius, sweep: out var exact));
+        Assert.True(condition: evaluator.TryCertifiedSweep(boundsQueryBudget: SweepBudget, contactTolerance: tolerance, displacement: displacement, origin: origin, radius: radius, sweep: out var tolerant));
+        Assert.Equal(expected: CertifiedSweepOutcome.Contact, actual: tolerant.Outcome);
+        Assert.True(condition: (tolerant.Fraction <= exact.Fraction));
+
+        // Conservative advancement nears a face ever more slowly; the tolerance ends the approach in a few queries
+        // instead of the many the last sliver costs.
+        Assert.True(condition: ((tolerant.BoundsQueries * 2) < exact.BoundsQueries), userMessage: $"the tolerant sweep spent {tolerant.BoundsQueries} queries, the exact one {exact.BoundsQueries}");
+        Assert.True(condition: evaluator.TryDistance(distance: out var distance, material: out _, position: tolerant.Reached));
+
+        var clearance = (distance - radius);
+
+        Assert.True(condition: ((clearance > FixedQ4816.Zero) && (clearance <= (tolerance + FixedQ4816.FromDouble(value: 0.001)))), userMessage: $"the sweep stopped {clearance} clear of the face");
     }
 
     private static SdfFieldEvaluator ThinWall() {

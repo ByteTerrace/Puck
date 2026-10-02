@@ -1941,7 +1941,10 @@ per source, sorted by name: the source's dotted name, then a `<kind> <value>`
 line per kind it counts. The boot server registers its own sources:
 `state.arena` and `state.search`, whose totals carry across a definition
 rebuild (`world.reload`, `world.load`, `world.reset`) that replaces the arena
-and search behind them, so a reading never goes down, and `state.rules`. A
+and search behind them, so a reading never goes down, and `state.rules`. Every
+authoritative shape registers `physics.sweep`: the certified sweeps that prove
+each moving body's travel, the bounds queries they spend, and how many ended in
+contact or exhausted their budget. A
 rendering shape adds the shader compiler's `shaders.compiler` (requests, cache
 hits and each native tool's runs) and the process's SDF kernel loads,
 `shaders.sdf-kernels` (loads and the bytecode bytes they read); each backend adds its

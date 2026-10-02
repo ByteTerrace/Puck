@@ -19,6 +19,11 @@ namespace Puck.Physics;
 /// </remarks>
 /// <param name="field">The scalar field the solve measures against.</param>
 /// <param name="query">The sweeping surface the capsule core trace uses.</param>
+/// <param name="sweep">The certified sweep that proves how far a moving body may travel before the endpoint solve
+/// runs, or <see langword="null"/> when the field holds no geometry for a body to cross.</param>
+/// <param name="sweepBoundsQueryBudget">The most bounds queries one core sphere's certified sweep may spend, at least
+/// one.</param>
+/// <param name="sweepWork">The ledger the certified sweeps count their work into.</param>
 /// <param name="contactSkin">The signed skin kept between a body and every surface.</param>
 /// <param name="groundedThreshold">The <c>cos(maxSlope)</c> a contact normal's up-alignment must clear to ground.</param>
 /// <param name="gradientProbe">The finite-difference step the up axis is sampled with.</param>
@@ -31,10 +36,18 @@ public sealed class FixedFieldContactSolver(
     FixedQ4816 groundedThreshold,
     FixedQ4816 gradientProbe,
     int maxIterations,
-    bool gradientUp
+    bool gradientUp,
+    ICertifiedSweepQuery? sweep,
+    int sweepBoundsQueryBudget,
+    FixedContactSweepWork sweepWork
 ) : IContactField {
-    private static readonly FixedQ4816 CoreInset = FixedQ4816.FromDouble(value: 0.002);
+    /// <summary>The bounds queries a host's solver lets one core sphere's certified sweep spend: enough for an
+    /// ordinary tick's motion along a floor in steps of the core's clearance, so a sweep that runs out has met
+    /// geometry its budget cannot resolve, and the body stops at the ground it proved.</summary>
+    public const int DefaultSweepBoundsQueryBudget = 64;
 
+    private static readonly FixedQ4816 CoreInset = FixedQ4816.FromDouble(value: 0.002);
+    private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
     private readonly IFieldEvaluator m_field = field;
     private readonly FixedQ4816 m_gradientProbe = gradientProbe;
     private readonly bool m_gradientUp = gradientUp;
@@ -45,6 +58,11 @@ public sealed class FixedFieldContactSolver(
     );
     private readonly IWorldQuery m_query = query;
     private readonly FixedQ4816 m_skin = contactSkin;
+    private readonly ICertifiedSweepQuery? m_sweep = sweep;
+    private readonly int m_sweepBudget = ((sweepBoundsQueryBudget >= 1)
+        ? sweepBoundsQueryBudget
+        : throw new ArgumentOutOfRangeException(paramName: nameof(sweepBoundsQueryBudget), message: "A certified sweep needs a budget of at least one bounds query."));
+    private readonly FixedContactSweepWork m_sweepWork = (sweepWork ?? throw new ArgumentNullException(paramName: nameof(sweepWork)));
 
     /// <summary>Gets a value indicating whether the up axis is derived from the field gradient.</summary>
     public bool GradientUp => m_gradientUp;
@@ -653,32 +671,109 @@ public sealed class FixedFieldContactSolver(
 
         return true;
     }
-    private static FixedQ4816 SmallestSweepRadius(ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-        var smallest = FixedQ4816.MaxValue;
+    // Sweeps one core sphere — its centre the body-local offset from the body's foot point — along the step, and
+    // lowers the least proved displacement when it proves less of the step than every core before it. A sweep the field
+    // refuses (its origin outside the field's frame) proves nothing, so the body keeps its start, the only ground proved.
+    private void SweepCore(ICertifiedSweepQuery certified, in FixedVector3 previousPosition, in FixedVector3 delta, FixedVector3 offset, FixedQ4816 radius, ref FixedQ4816 least, ref FixedVector3 reached) {
+        var start = (previousPosition + offset);
+
+        // The contact skin is the tolerance: within it the endpoint solve already holds a body off the surface, so a
+        // sweep need not prove the last sliver of approach.
+        if (!certified.TryCertifiedSweep(
+            boundsQueryBudget: m_sweepBudget,
+            contactTolerance: m_skin,
+            displacement: delta,
+            origin: FixedPosition.FromLocal(local: start),
+            radius: radius,
+            sweep: out var sweep
+        )) {
+            m_sweepWork.Count(boundsQueries: 0, contact: false, exhausted: true);
+            least = FixedQ4816.Zero;
+            reached = FixedVector3.Zero;
+
+            return;
+        }
+
+        m_sweepWork.Count(
+            boundsQueries: sweep.BoundsQueries,
+            contact: (sweep.Outcome == CertifiedSweepOutcome.Contact),
+            exhausted: (sweep.Outcome == CertifiedSweepOutcome.Exhausted)
+        );
+
+        if (
+            (sweep.Outcome == CertifiedSweepOutcome.Clear) ||
+            (sweep.Fraction >= least) ||
+            !sweep.Reached.TryDelta(
+                delta: out var centre,
+                origin: FixedPosition.Zero
+            )
+        ) {
+            return;
+        }
+
+        least = sweep.Fraction;
+        reached = (centre - start);
+    }
+    // Sweeps every core sphere of every volume: a sphere or box volume's centre, and a capsule's core segment covered by
+    // spheres spaced closer than their radius. Each core sphere's radius is half the volume's least radius, so a body
+    // resting against a surface keeps half its radius of clearance and its sweep never stalls there. Returns the
+    // displacement every core is proved clear along: the whole step when every sweep cleared it, else the least proved
+    // one. Every core moves by the same displacement and the sweeps form each step's box the same way from a point
+    // start, so the least one's reached displacement lies inside every other core's proved boxes.
+    private bool TrySweepCores(ICertifiedSweepQuery certified, in FixedVector3 previousPosition, in FixedVector3 delta, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, out FixedVector3 reached) {
+        var least = FixedQ4816.One;
+
+        reached = delta;
 
         foreach (ref readonly var volume in volumes) {
-            var radius = ((volume.Kind == FixedBodyColliderKind.Box)
-                ? FixedQ4816.Min(
-                    x: volume.HalfExtents.X,
-                    y: FixedQ4816.Min(
-                        x: volume.HalfExtents.Y,
-                        y: volume.HalfExtents.Z
-                    )
-                )
-                : volume.Radius
-            );
+            var lowerOffset = orientation.Rotate(vector: volume.Center);
 
-            if (
-                (radius > FixedQ4816.Zero) &&
-                (radius < smallest)
-            ) {
-                smallest = radius;
+            switch (volume.Kind) {
+                case FixedBodyColliderKind.Sphere:
+                    SweepCore(certified: certified, delta: in delta, least: ref least, offset: lowerOffset, previousPosition: in previousPosition, radius: (volume.Radius / Two), reached: ref reached);
+                    break;
+                case FixedBodyColliderKind.Box:
+                    SweepCore(
+                        certified: certified,
+                        delta: in delta,
+                        least: ref least,
+                        offset: lowerOffset,
+                        previousPosition: in previousPosition,
+                        radius: (FixedQ4816.Min(x: volume.HalfExtents.X, y: FixedQ4816.Min(x: volume.HalfExtents.Y, y: volume.HalfExtents.Z)) / Two),
+                        reached: ref reached
+                    );
+                    break;
+                case FixedBodyColliderKind.Capsule: {
+                        var core = (orientation.Rotate(vector: volume.Endpoint) - lowerOffset);
+                        var radius = (volume.Radius / Two);
+                        // One more piece than the core's length in radii keeps every piece's half-length below the
+                        // core sphere's radius by a margin no rounding of the piece centres reaches, so the pieces cover
+                        // the whole core however long it is; a longer capsule pays for its length in sweeps.
+                        var pieces = ((volume.Radius.Value > 0L)
+                            ? checked((int)((((core.Length.Value + volume.Radius.Value) - 1L) / volume.Radius.Value) + 1L))
+                            : 1);
+                        var denominator = FixedQ4816.FromInteger(value: (2L * pieces));
+
+                        for (var piece = 0; (piece < pieces); piece++) {
+                            SweepCore(
+                                certified: certified,
+                                delta: in delta,
+                                least: ref least,
+                                offset: (lowerOffset + (core * (FixedQ4816.FromInteger(value: ((2L * piece) + 1L)) / denominator))),
+                                previousPosition: in previousPosition,
+                                radius: radius,
+                                reached: ref reached
+                            );
+                        }
+
+                        break;
+                    }
+                default:
+                    throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}.");
             }
         }
-        return ((smallest == FixedQ4816.MaxValue)
-            ? FixedQ4816.Zero
-            : smallest
-        );
+
+        return (least < FixedQ4816.One);
     }
     // Computes the would-be ordinary push for a sphere center already confirmed not embedded (distance >= 0, sampled
     // by the caller) without applying it to position/velocity/grounded: the caller samples the other center at the
@@ -859,55 +954,26 @@ public sealed class FixedFieldContactSolver(
     /// <inheritdoc/>
     public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
         in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
-        // An endpoint inside a thin floor has an ambiguous nearest gradient; near an edge it can point sideways or
-        // downward. Walk the deterministic segment until the ordinary endpoint solver first reports contact. That
-        // sample is still on the approached exterior, so its measured normal resolves the same top face the body
-        // actually reached instead of extracting through an arbitrary nearer side.
+        // Prove how far the body may move before solving at its endpoint: every core sphere of every volume is swept
+        // by certified conservative advancement, so no core crosses a surface between two samples however fast the
+        // step, and a body that would have tunneled stops at the face it approached, still on its exterior, where the
+        // ordinary solve's measured normal resolves the face the body actually reached. A sweep that runs out of its
+        // budget keeps only the ground it proved, so the body never moves through space it did not prove clear.
         var delta = (position - previousPosition);
-        var distance = delta.Length;
-        var stepLength = SmallestSweepRadius(volumes: volumes);
 
         if (
-            (distance <= stepLength) ||
-            (stepLength <= FixedQ4816.Zero)
+            (delta != FixedVector3.Zero) &&
+            (m_sweep is { } certified) &&
+            TrySweepCores(
+                certified: certified,
+                delta: in delta,
+                orientation: in orientation,
+                previousPosition: in previousPosition,
+                reached: out var reached,
+                volumes: volumes
+            )
         ) {
-            return Resolve(
-                orientation: in orientation,
-                position: ref position,
-                up: in up,
-                velocity: ref velocity,
-                volumes: volumes
-            );
-        }
-
-        var steps = Math.Max(
-            val1: 2,
-            val2: checked((int)(((distance.Value + stepLength.Value) - 1L) / stepLength.Value))
-        );
-        var denominator = FixedQ4816.FromInteger(value: steps);
-        var originalVelocity = velocity;
-
-        for (var step = 1; (step <= steps); step++) {
-            var proposed = (previousPosition + (delta * (FixedQ4816.FromInteger(value: step) / denominator)));
-            var candidate = proposed;
-            var candidateVelocity = originalVelocity;
-            var resolution = Resolve(
-                orientation: in orientation,
-                position: ref candidate,
-                up: in up,
-                velocity: ref candidateVelocity,
-                volumes: volumes
-            );
-
-            if (
-                resolution.Grounded ||
-                (resolution.ObstructionNormal != FixedVector3.Zero) ||
-                (candidate != proposed)
-            ) {
-                position = candidate;
-                velocity = candidateVelocity;
-                return resolution;
-            }
+            position = (previousPosition + reached);
         }
 
         return Resolve(

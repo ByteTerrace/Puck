@@ -225,19 +225,36 @@ Every point answer therefore lies inside its box's bounds, or both refuse. Every
 instruction joins the proof, so adding an instruction to a program can only
 shrink its frame.
 
+A bounds query pays only for what its box can reach. The walk skips a hard-union
+instance whose bound sphere lies, from every point of the box, at or beyond the
+running interval's upper end: the box form of `TryDistance`'s own instance cull,
+resting on the same sphere containment. A box near one object of many walks a
+fraction of the program, and the overload taking `instructionsWalked` reports
+the instructions it visited. A rotation reads each coordinate once per axis:
+the exact rotation is linear in the point, so its enclosure is that matrix over
+the box, widened by the four raws the point code's two rounded stages can miss
+it by, and met with the step-by-step enclosure. A half turn, which the creation
+emitter writes, then bounds a box as tightly as the unrotated program bounds the
+box's image, where the step-by-step enclosure alone triples its width.
+
 Two certified queries are built on it:
 - **`TryCertifiedSweep`** moves a sphere along a displacement by conservative
-  advancement. Each step is the certified clearance divided by the program's
-  Lipschitz bound, and the step's whole segment is then proved clear by one
-  bounds query over its box expanded by the radius, with a positive lower field
-  bound throughout. The centre's field alone cannot prove a sphere clear when
-  the field's gradient exceeds one. A sphere swept this way never passes through a
-  surface, however thin the surface or however long the step. A step that only
+  advancement. Each step is the certified clearance times the field's step
+  scale (the inverse of its Lipschitz bound), and the step's whole segment is
+  then proved clear by one bounds query over its box expanded by the radius,
+  with a positive lower field bound throughout. The centre's field alone cannot
+  prove a sphere clear when the field's gradient exceeds one. A sphere swept
+  this way never passes through a surface, however thin the surface or however
+  long the step. A step that only
   samples the field at its ends tunnels through such a surface.
   If the initial sphere cannot be proved clear, the result is `Contact` at zero
   travel with the original centre. A box whose bounds are unbounded (it reaches
   past the frame) proves nothing, so the sweep stops `Exhausted` there, never
   `Clear` and never `Contact`.
+  A positive contact tolerance ends the sweep in `Contact` once the proved
+  clearance is that small. Conservative advancement nears a face ever more
+  slowly, so without one a body pressed against a wall spends its whole budget
+  on the last sliver every tick.
 - **`TryCertifiedLineOfSight`** splits a segment into boxes until each is proved
   clear, or a point of it is proved inside. Anything it cannot prove within its
   budget is `Undecided`, and so is a segment reaching past the frame.
@@ -251,11 +268,24 @@ sight also has a ceiling whatever its budget,
 on the Q16 grid of its own length, so no piece lies deeper than sixteen
 halvings, and each costs at most two queries.
 
+The sweep is written once, as `CertifiedFieldSweep`, over the `IFieldBounds`
+seam in `Puck.Maths`: a step scale and a bounds query over a box.
+`SdfFieldEvaluator` implements it, and so can any field that encloses its own
+answers over a box. `FieldBoundsUnion` encloses the lesser of two fields and
+refuses a box either part refuses, so a body is swept clear of a program and a
+field lattice at once. The seam's `ICertifiedSweepQuery`, `CertifiedSweep` and
+`CertifiedSweepOutcome` are what a consumer, such as the physics contact solver,
+reads.
+
 `SdfFieldBoundsLawTests` sweeps every op, shape and blend's point answers
 through boxes against the bounds, and holds the bounds interpreter's rule sets
 to the point interpreter's. `SdfCertifiedQueryLawTests` holds the sweep to a
 thin wall at speeds up to 100,000 units a step, with the fixed-step stepper as
-the red leg. `SdfFieldOverflowLawTests` sweeps programs whose constants and
+the red leg, and holds a contact tolerance to ending the approach in a few
+queries just off the face. `SdfBoundsTightnessLawTests` holds a half turn's
+bounds to the unrotated program's over the box's image, and the box cull to
+walking under half of a twelve-object row while still enclosing every point
+answer. `SdfFieldOverflowLawTests` sweeps programs whose constants and
 positions reach the carrier's ends, and holds every point answer inside its
 bounds or both refusing.
 

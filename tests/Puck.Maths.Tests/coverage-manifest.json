@@ -1412,6 +1412,51 @@
       "State": "covered"
     },
     {
+      "Id": "Puck.Maths.CertifiedSweep..ctor(Puck.Maths.FixedQ4816,Puck.Maths.FixedPosition,Puck.Maths.CertifiedSweepOutcome,System.Int32)",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweep.BoundsQueries",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweep.Fraction",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweep.Outcome",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweep.Reached",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweepOutcome.Clear",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweepOutcome.Contact",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweepOutcome.Exhausted",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.CertifiedSweepOutcome.value__",
+      "Reason": "The compiler-generated enum storage field, not authored API.",
+      "State": "waived"
+    },
+    {
       "CoveredBy": [
         "presented.homology-torsion-and-betti"
       ],
@@ -11300,6 +11345,11 @@
       "State": "covered"
     },
     {
+      "Id": "Puck.Maths.ICertifiedSweepQuery.TryCertifiedSweep(Puck.Maths.FixedPosition,Puck.Maths.FixedVector3,Puck.Maths.FixedQ4816,System.Int32,Puck.Maths.FixedQ4816,Puck.Maths.CertifiedSweep&)",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own.",
+      "State": "waived"
+    },
+    {
       "CoveredBy": [
         "presented.material-fused-identities"
       ],
@@ -11347,6 +11397,16 @@
     {
       "Id": "Puck.Maths.IDrawGenerator.NextUInt32(System.UInt32,System.UInt32)",
       "Reason": "A generic-dispatch shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. Each implementer's own concrete member is a separate reflected member under its own declaring type, gated by that type's sampling.* laws.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IFieldBounds.StepScale",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own.",
+      "State": "waived"
+    },
+    {
+      "Id": "Puck.Maths.IFieldBounds.TryDistanceBounds(Puck.Maths.FixedPosition,Puck.Maths.FixedPosition,Puck.Maths.FixedInterval&)",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own.",
       "State": "waived"
     },
     {

@@ -128,6 +128,8 @@ public static class WorldBootComposition {
         // The boot's own work counts, which every boot shape does before the first tick; a counters report reads
         // every registered work source.
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldBootWork.Process);
+        // The certified body sweeps every authoritative shape runs: what proving a moving body's travel costs.
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.Physics.FixedContactSweepWork.Process);
 
         // The owned-world catalog (files under the state root; the storage.* verbs sync it to the per-user cloud
         // container): loaded once at startup, malformed documents refused by name — the roster and the settings verbs

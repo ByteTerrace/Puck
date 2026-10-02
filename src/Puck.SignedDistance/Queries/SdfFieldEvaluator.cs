@@ -166,9 +166,9 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
     /// <inheritdoc/>
     public FieldEvaluatorCapabilities Capabilities => new(WarpFree: true);
+    /// <summary>Gets a value indicating whether the compiled stream declares any shape: without one, every query answers nothing.</summary>
+    public bool HasShape => m_hasShape;
 
-    // Whether the compiled stream declares any shape — the march's "nothing to answer" branch.
-    internal bool HasShape => m_hasShape;
     // The exact march's sample budget, the budget a banded march spends on its exact samples.
     internal int MarchIterations => m_marchIterations;
 
@@ -188,8 +188,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         }
     }
 
-    // The program's step scale (1/L) in fixed point, floored so it stays a lower-bound multiplier.
-    internal FixedQ4816 StepScale => m_stepScale;
     // The program's Lipschitz bound L in fixed point, rounded up from the floored step scale so L * StepScale never
     // reads below one; the largest representable value when the step scale floored to zero.
     internal FixedQ4816 LipschitzBound {

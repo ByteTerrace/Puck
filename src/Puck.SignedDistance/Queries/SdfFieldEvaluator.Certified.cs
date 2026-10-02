@@ -2,31 +2,6 @@ using Puck.Maths;
 
 namespace Puck.SignedDistance.Queries;
 
-/// <summary>How a certified sweep ended.</summary>
-public enum SdfCertifiedSweepOutcome {
-    /// <summary>The whole displacement is certified clear.</summary>
-    Clear = 0,
-    /// <summary>The sphere's next box cannot be proved clear: a surface may lie within one more step, or the box may
-    /// leave the evaluator's frame.</summary>
-    Contact = 1,
-    /// <summary>The sweep could not certify further: the caller's bounds-query budget ran out, or a box's bounds were
-    /// unbounded (it left the evaluator's frame, where answers are refused). The fraction reached is still certified
-    /// clear.</summary>
-    Exhausted = 2,
-}
-/// <summary>A certified sweep's answer: how far along the displacement the sphere is proved clear, and why it
-/// stopped.</summary>
-/// <param name="Fraction">The fraction of the displacement, in <c>[0, 1]</c> and floored to the Q16 grid, along which
-/// every point of the moving sphere is proved to keep the field above zero. A zero fraction can also mean the initial
-/// sphere cannot be proved clear.</param>
-/// <param name="Reached">A representable centre at the end of the certified travel, itself proved clear after a positive
-/// advance; at zero travel it is the unmodified origin. The sweep
-/// carries its fraction at 2⁻³² of the displacement, finer than <paramref name="Fraction"/>, so this is where a
-/// fast body may be placed.</param>
-/// <param name="Outcome">Why the sweep stopped.</param>
-/// <param name="BoundsQueries">The bounds queries the sweep spent, each one walk of the program over one box: never
-/// more than the caller's budget.</param>
-public readonly record struct SdfCertifiedSweep(FixedQ4816 Fraction, FixedPosition Reached, SdfCertifiedSweepOutcome Outcome, int BoundsQueries);
 /// <summary>A certified line of sight's verdict.</summary>
 public enum SdfCertifiedVisibility {
     /// <summary>Every point of the segment is proved outside the solid.</summary>
@@ -46,17 +21,19 @@ public readonly record struct SdfCertifiedSight(SdfCertifiedVisibility Visibilit
 // THE CERTIFIED QUERIES, built on TryDistanceBounds. Each answers about the exact segment between its endpoints, never a
 // sampled approximation of it: a segment's bounding box is formed with outward rounding, so it holds every real point
 // of the segment, and the box's interval bounds the field there.
-public sealed partial class SdfFieldEvaluator {
+public sealed partial class SdfFieldEvaluator : IFieldBounds, ICertifiedSweepQuery {
     /// <summary>The most bounds queries <see cref="TryCertifiedLineOfSight"/> can spend on one segment, whatever its
     /// budget: the segment splits on the Q16 grid of its own length, so a piece one raw long is never split and no
     /// piece lies deeper than sixteen halvings. That bounds the pieces examined by 2¹⁷ − 1, and each costs at most two
     /// queries, its box and its midpoint's.</summary>
     public const int CertifiedLineOfSightMaximumBoundsQueries = (2 * ((1 << (FixedQ4816.FractionBitCount + 1)) - 1));
 
-    /// <summary>Advances a sphere along a displacement by conservative advancement, certifying every step: the step
-    /// is the certified clearance at the current point divided by the program's Lipschitz bound, and each step's whole
-    /// segment is then proved clear by one bounds query over its box expanded by the sphere's radius, halving the step
-    /// until the proof holds.</summary>
+    /// <summary>Gets the factor a clearance is multiplied by to propose a step that stays clear: the reciprocal of the
+    /// program's Lipschitz bound, conservatively rounded down.</summary>
+    public FixedQ4816 StepScale => m_stepScale;
+
+    /// <summary>Advances a sphere along a displacement by conservative advancement over this program's certified bounds
+    /// (<see cref="CertifiedFieldSweep.TrySweep"/>).</summary>
     /// <param name="origin">The sphere's centre at the start.</param>
     /// <param name="displacement">The whole motion; the answer is a fraction of it.</param>
     /// <param name="radius">The sphere's radius, at least zero.</param>
@@ -69,112 +46,36 @@ public sealed partial class SdfFieldEvaluator {
     /// <exception cref="NotSupportedException">The program holds an instruction with no inclusion rule.</exception>
     /// <remarks>Certified means proved, not estimated: every point of the swept sphere up to the returned fraction keeps
     /// both the exact field and every fixed-point answer above zero after a positive advance, however fast the motion,
-    /// so a thin wall is never crossed between two samples. An initial sphere that cannot be proved clear returns
-    /// Contact at zero travel. The Lipschitz bound only proposes a step; the bounds query proves it, so the answer
-    /// does not rest on the bound being exact for the program's quantized constants.</remarks>
-    public bool TryCertifiedSweep(FixedPosition origin, FixedVector3 displacement, FixedQ4816 radius, int boundsQueryBudget, out SdfCertifiedSweep sweep) {
+    /// so a thin wall is never crossed between two samples.</remarks>
+    public bool TryCertifiedSweep(FixedPosition origin, FixedVector3 displacement, FixedQ4816 radius, int boundsQueryBudget, out CertifiedSweep sweep) =>
+        TryCertifiedSweep(
+            boundsQueryBudget: boundsQueryBudget,
+            contactTolerance: FixedQ4816.Zero,
+            displacement: displacement,
+            origin: origin,
+            radius: radius,
+            sweep: out sweep
+        );
+    /// <inheritdoc/>
+    public bool TryCertifiedSweep(FixedPosition origin, FixedVector3 displacement, FixedQ4816 radius, int boundsQueryBudget, FixedQ4816 contactTolerance, out CertifiedSweep sweep) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: radius, other: FixedQ4816.Zero);
         ArgumentOutOfRangeException.ThrowIfLessThan(value: boundsQueryBudget, other: 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(value: contactTolerance, other: FixedQ4816.Zero);
 
         sweep = default;
 
-        if (!m_hasShape || !origin.TryDelta(delta: out var start, origin: FixedPosition.Zero)) {
-            return false;
-        }
-
-        if (!FixedDirectedRounding.TryCeilingMagnitude(
-            result: out var lengthRaw,
-            x: displacement.X.Value,
-            y: displacement.Y.Value,
-            z: displacement.Z.Value
-        )) {
-            lengthRaw = long.MaxValue;
-        }
-
-        // The fraction runs at Q32 of the displacement, so a step of one unit of it moves a long sweep a sliver.
-        const int FractionBits = 32;
-        const long Whole = (1L << FractionBits);
-        var fraction = 0L;
-        var queries = 0;
-        var outcome = SdfCertifiedSweepOutcome.Exhausted;
-
-        while (true) {
-            if (fraction >= Whole) {
-                outcome = SdfCertifiedSweepOutcome.Clear;
-                break;
-            }
-
-            if (queries >= boundsQueryBudget) {
-                break;
-            }
-
-            var here = SweepBounds(displacement: displacement, from: fraction, radius: radius, start: start, to: fraction);
-            var clearance = here.Lower;
-
-            ++queries;
-
-            // An unbounded box proves nothing: the sweep stops undecided rather than reading its endpoints as a clearance.
-            if (here.IsUnbounded) {
-                break;
-            }
-
-            if (clearance <= FixedQ4816.Zero) {
-                outcome = SdfCertifiedSweepOutcome.Contact;
-                break;
-            }
-
-            // The Lipschitz ball's radius, floored, as a fraction of the displacement's length rounded up.
-            var reach = ((((Int128)clearance.Value) * m_stepScale.Value) >> FixedQ4816.FractionBitCount);
-            var proposed = ((lengthRaw == 0L)
-                ? Whole
-                : (long)Int128.Min(x: Whole, y: ((reach << FractionBits) / lengthRaw)));
-            var next = Math.Min(val1: Whole, val2: (fraction + Math.Max(val1: proposed, val2: 1L)));
-            var proved = false;
-
-            // Prove the whole segment; halve the step until it holds, while the budget lasts.
-            while (queries < boundsQueryBudget) {
-                ++queries;
-
-                var proof = SweepBounds(displacement: displacement, from: fraction, radius: radius, start: start, to: next);
-
-                if (!proof.IsUnbounded && (proof.Lower > FixedQ4816.Zero)) {
-                    proved = true;
-                    break;
-                }
-
-                var half = ((next - fraction) >> 1);
-
-                // A step that cannot shrink further ends in contact only when its box proved a surface may be near; an
-                // unbounded box proved nothing, so the sweep stops undecided.
-                if (half == 0L) {
-                    if (!proof.IsUnbounded) {
-                        outcome = SdfCertifiedSweepOutcome.Contact;
-                    }
-
-                    break;
-                }
-
-                next = (fraction + half);
-            }
-
-            if (!proved) {
-                break;
-            }
-
-            fraction = next;
-        }
-
-        // The point box at the reached fraction lies inside the last certified segment's box, so any corner of it is
-        // proved clear.
-        var reached = SweepPoint(displacement: displacement, fraction: fraction, start: start);
-
-        sweep = new(
-            Fraction: FixedQ4816.FromRawBits(value: (fraction >> (FractionBits - FixedQ4816.FractionBitCount))),
-            Reached: FixedPosition.FromLocal(local: reached),
-            Outcome: outcome,
-            BoundsQueries: queries
+        return (
+            m_hasShape &&
+            CertifiedFieldSweep.TrySweep(
+                boundsQueryBudget: boundsQueryBudget,
+                contactTolerance: contactTolerance,
+                displacement: displacement,
+                field: this,
+                origin: origin,
+                radius: radius,
+                sweep: out sweep
+            )
         );
-        return true;
     }
     /// <summary>Decides whether the segment between two points stays outside the solid, by proof: the segment is split
     /// into boxes until each box's bounds are above zero (clear) or a point of it is proved inside (blocked).</summary>
@@ -252,40 +153,6 @@ public sealed partial class SdfFieldEvaluator {
         return true;
     }
 
-    // The bounds over the box of start + displacement·t for t in [from, to], fractions at Q32 (read as Q16 values scaled
-    // by 2¹⁶, then divided back out with outward rounding).
-    private FixedInterval SweepBounds(FixedVector3 start, FixedVector3 displacement, FixedQ4816 radius, long from, long to) {
-        var box = SweepBox(displacement: displacement, from: from, start: start, to: to);
-        var extent = new FixedInterval(lower: -radius, upper: radius);
-
-        box = new(X: (box.X + extent), Y: (box.Y + extent), Z: (box.Z + extent));
-
-        var outsideFrame = (box.X.IsUnbounded || box.Y.IsUnbounded || box.Z.IsUnbounded);
-
-        // Charge one program walk even when the box's unbounded ends prevent certification.
-        return ((TryDistanceBounds(
-            distance: out var bounds,
-            lower: FixedPosition.FromLocal(local: new FixedVector3(X: box.X.Lower, Y: box.Y.Lower, Z: box.Z.Lower)),
-            upper: FixedPosition.FromLocal(local: new FixedVector3(X: box.X.Upper, Y: box.Y.Upper, Z: box.Z.Upper))
-        ) && !outsideFrame)
-            ? bounds
-            : FixedInterval.Entire);
-    }
-    private static FixedVector3 SweepPoint(FixedVector3 start, FixedVector3 displacement, long fraction) {
-        var box = SweepBox(displacement: displacement, from: fraction, start: start, to: fraction);
-
-        return new(X: box.X.Lower, Y: box.Y.Lower, Z: box.Z.Lower);
-    }
-    private static IntervalVector3 SweepBox(FixedVector3 start, FixedVector3 displacement, long from, long to) {
-        var t = new FixedInterval(lower: FixedQ4816.FromRawBits(value: from), upper: FixedQ4816.FromRawBits(value: to));
-        var scale = FixedInterval.FromPoint(value: FixedQ4816.FromInteger(value: (1L << FixedQ4816.FractionBitCount)));
-
-        return new(
-            X: (FixedInterval.FromPoint(value: start.X) + ((FixedInterval.FromPoint(value: displacement.X) * t) / scale)),
-            Y: (FixedInterval.FromPoint(value: start.Y) + ((FixedInterval.FromPoint(value: displacement.Y) * t) / scale)),
-            Z: (FixedInterval.FromPoint(value: start.Z) + ((FixedInterval.FromPoint(value: displacement.Z) * t) / scale))
-        );
-    }
     // Endpoint interpolation avoids narrowing a difference that can exceed the carrier even when both ends fit.
     // Each coordinate is affine, so the hull of its two endpoint enclosures holds the whole subsegment.
     private FixedInterval SegmentBounds(FixedVector3 start, FixedVector3 end, long from, long to) {

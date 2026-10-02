@@ -74,7 +74,7 @@ public sealed class SdfFieldOverflowLawTests {
             radius: FixedQ4816.Zero,
             sweep: out var sweep
         ));
-        Assert.Equal(expected: SdfCertifiedSweepOutcome.Exhausted, actual: sweep.Outcome);
+        Assert.Equal(expected: CertifiedSweepOutcome.Exhausted, actual: sweep.Outcome);
         Assert.Equal(expected: FixedQ4816.Zero, actual: sweep.Fraction);
     }
     [Fact]
@@ -111,7 +111,7 @@ public sealed class SdfFieldOverflowLawTests {
             radius: FixedQ4816.Zero,
             sweep: out var sweep
         ));
-        Assert.Equal(expected: SdfCertifiedSweepOutcome.Exhausted, actual: sweep.Outcome);
+        Assert.Equal(expected: CertifiedSweepOutcome.Exhausted, actual: sweep.Outcome);
         Assert.Equal(expected: FixedQ4816.Zero, actual: sweep.Fraction);
     }
     public static TheoryData<string> ShrinkCases() {
@@ -226,7 +226,7 @@ public sealed class SdfFieldOverflowLawTests {
             radius: FixedQ4816.One,
             sweep: out var sweep
         ));
-        Assert.Equal(expected: SdfCertifiedSweepOutcome.Exhausted, actual: sweep.Outcome);
+        Assert.Equal(expected: CertifiedSweepOutcome.Exhausted, actual: sweep.Outcome);
         Assert.True(condition: sweep.Reached.TryDelta(delta: out var reached, origin: FixedPosition.Zero));
         Assert.True(condition: (reached.X <= frame), userMessage: $"the sweep reached {reached.X}, past the frame {frame}");
         Assert.True(condition: evaluator.TryDistance(distance: out _, material: out _, position: sweep.Reached), userMessage: "the sweep reached a centre the point evaluator refuses");

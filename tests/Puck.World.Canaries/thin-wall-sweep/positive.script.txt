@@ -1,0 +1,15 @@
+# Positive leg — a thin wall 0.02 m thick, its near face at z = -99.99, under the field contact provider.
+# First, extreme speed: the kit flies at 3000 m/s, 50 m a tick, so the body's step straddles the wall entirely.
+world.wait 10
+body.where 0
+body.fly 1 0 0 0 0 0 0.5
+world.wait 60
+body.where 0
+# Then a body already inside its own radius of the wall: posed 0.24 m before the face and, on that same tick,
+# moving 0.3 m a tick, less than its radius. The fly is queued before the pose so the first step moves from the
+# posed point.
+body.fly 0.006 0 0 0 0 0 1
+body.pose 0 0 -99.75 0 0 0
+world.wait 90
+body.where 0
+world.wait 5
