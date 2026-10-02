@@ -405,8 +405,10 @@ that row's delivered neighbour snapshot tick advanced. It is what makes the
 `linkEstablished`/`linkDropped` event family and the `$link:<adjacencyName>`
 rule channel replay-faithful.
 
-- Both halves of a transfer replay, as this process taped them. The departure
-  replays through `WorldReplayEntry.Transfer`'s `DepartedSlots`. The arrival
+- Both halves of a transfer replay, as this process taped them. Each departure,
+  and each rollback of one, replays through `WorldReplayEntry.Departure` at the
+  position its authority operation took; `WorldReplayEntry.Transfer` is the
+  settlement's narration and the pairing key. The arrival
   replays through `WorldReplayEntry.Arrival`: `WorldServer.ArrivalTap` reports
   each commit that landed a traveler, with its `WorldArrivalOutcome` (each
   landed generation, and whether it rolled back), and the re-drive calls

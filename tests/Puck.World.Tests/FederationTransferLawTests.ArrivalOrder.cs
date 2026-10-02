@@ -273,7 +273,7 @@ public sealed partial class FederationTransferLawTests {
         Commit(fixture.Server, request);
         var departure = fixture.Server.Population.EnsureMobility(index: 0, authority: fixture.Server.AuthorityIdentity);
 
-        Assert.True(condition: fixture.Server.Population.TryDetachSeatForTransfer(profile: out _, slot: 0));
+        Assert.NotNull(@object: fixture.Server.ExecuteAuthorityOperation(operation: () => fixture.Server.DetachForTransfer(slot: 0, transferId: 122)));
         Commit(onward.Server, request with { TransferId = 122, Members = [request.Members[0] with { Mobility = departure }] });
         tape.NoteTransfer(departedSlots: [0], destinationName: "onward", generationId: 0, outcome: "committed:1/1",
             scopeKey: "seat", target: "onward", targetRemote: false, transferId: 122);

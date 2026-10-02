@@ -82,13 +82,15 @@ surface.
   `Read` refuses a mismatch loudly (`ReplayRefusal.ShapeMismatch`, naming
   found vs expected) — there is NO tolerant reader, no version negotiation,
   no legacy branch. That is the contract: never write one.
-- The declared `replay.tape` refusal catalog has eleven members: shape
+- The declared `replay.tape` refusal catalog has twelve members: shape
   mismatch, rate mismatch, three addon-receipt mismatches, rebuild content
   mismatch, rebuild source unavailable, a rate-zero tape carrying recorded
   ticks, a tampered transfer content signature, a recorded mutation
   outcome disagreeing with what the replay's own apply pipeline produced, and a
   recorded arrival the shadow's own escrow does not reproduce: its body indices,
-  each traveler's generation, or its rollback (`ArrivalRefused`).
+  each traveler's generation, or its rollback (`ArrivalRefused`), and a
+  recorded departure or its rollback the shadow's own population does not
+  reproduce (`DepartureRefused`).
   `ScreenOpContentMismatch`
   is emitted by `WorldMachineHost` as a named screen-op refusal, not a
   `ReplayRefusal` enum member.
@@ -138,11 +140,17 @@ actor)` (6), `Session(request)` (7), `Designation(designation, actor)` (8),
 `Mutation(mutation, actor, outcome)` (11), `Undo(count, actor)` (12),
 `Composition(composition, actor)` (13), `Query(query, actor)` (14),
 `LinkDelivery(adjacencyName)` (15), the session events (16–18),
-`Arrival(sourceAuthority, transferId, encoded, outcome)` (19), and
-`FederatedIntents(held)` (20). `Transfer` is the source's settled crossing: its
-target authority, whether that target is remote, and the slots that departed,
-which a re-drive detaches; it is taped for every source row, before an emptied
-source is reaped. The
+`Arrival(sourceAuthority, transferId, encoded, outcome)` (19),
+`FederatedIntents(held)` (20), and `Departure(transferId, slot, restored)` (21).
+`Departure` is one source body a crossing detached, or restored in a rollback,
+taped by `WorldServer.DepartureTap` inside the authority operation that did it,
+so it keeps the decision's own position however long the crossing then stays in
+doubt and whatever arrives meanwhile; the re-drive detaches and restores through
+the same `WorldServer.DetachForTransfer` and `RestoreDetachedForTransfer`.
+`Transfer` is the source's settled crossing: its target authority, whether that
+target is remote, and the slots whose departure it made final, as narration and
+for pairing; a re-drive changes nothing at it. It is taped for every source row,
+before an emptied source is reaped. The
 peer events
 carry generation-bearing identities and
 the grants minted/revoked through the ordinary server doors. The

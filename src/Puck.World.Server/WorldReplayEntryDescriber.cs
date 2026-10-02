@@ -165,6 +165,7 @@ public static class WorldReplayEntryDescriber {
             values: transfer.DepartedSlots
         )}]",
             WorldReplayEntry.Arrival arrival => DescribeArrival(arrival: arrival),
+            WorldReplayEntry.Departure departure => $"{(departure.Restored ? "restore" : "departure")} #{departure.TransferId} body:{departure.Slot}",
             WorldReplayEntry.FederatedIntents federated => $"federated [{string.Join(
             separator: ",",
             values: federated.Held.Select(selector: static held => $"body:{held.Index}")

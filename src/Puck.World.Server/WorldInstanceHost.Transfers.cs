@@ -541,6 +541,7 @@ public sealed partial class WorldInstanceHost {
 
             if (!TryDetachAndCaptureMember(
                 source: source,
+                transferId: transfer.TransferId,
                 sourceSlot: sourceSlot,
                 sourceName: transfer.SourceInstance,
                 actingPrincipal: memberPrincipal,
@@ -738,7 +739,8 @@ public sealed partial class WorldInstanceHost {
                 !RestoreDetachedMembers(
                 commits: commitMembers,
                 members: landed,
-                source: source
+                source: source,
+                transferId: transfer.TransferId
             )
             ) {
                 m_inDoubtTransfers.Add(item: rollback);
@@ -1307,78 +1309,40 @@ public sealed partial class WorldInstanceHost {
         WorldSubmissionPayload.Query { Value: WorldQuery.Properties properties } when (properties.BodyIndex is not null) => new WorldSubmissionPayload.Query(Value: properties with { BodyIndex = bodyIndex }),
         _ => payload,
     };
-    private static bool RestoreDetachedMember(WorldInstance source, LandedMember member, WorldTransferCommitMember commit) {
-        return source.Server.ExecuteAuthorityOperation(operation: () => {
-            var restored = ((member.Peer is { } peer)
-                ? source.Server.Population.RestoreDetachedPeer(
-                    peer: in peer,
-                    grantTemplates: member.AdmissionGrants,
-                    profile: member.Profile,
-                    position: member.Position,
-                    yawRadians: member.Yaw,
-                    dynamicState: member.DynamicState,
-                    designations: member.Designations
-                )
-                : source.Server.Population.RestoreDetachedSeat(
-                    slot: member.SourceSlot,
-                    profile: member.Profile,
-                    position: member.Position,
-                    yawRadians: member.Yaw,
-                    dynamicState: member.DynamicState,
-                    designations: member.Designations
-                )
-            );
-
-            if (restored) {
-                // Inactive slots are absent from population checkpoints and can be reused while recovery waits.
-                // Recover the departure turn from the retained commit, undoing only this attempted arrival.
-                source.Server.Population.SetTravelTurn(
-                    slot: member.SourceSlot,
-                    travelTurn: (commit.HasMappedArrival
-                    ? WorldFrameIsometry.AccumulateTurn(
-                        travelTurn: commit.TravelTurn,
-                        departureYaw: commit.YawRadians,
-                        arrivalYaw: member.Yaw
-                    )
-                    : commit.TravelTurn)
-                );
-                // A slot reused during recovery has a new local generation, not the returning individual's
-                // durable identity. Reinstall the captured mobility credential before releasing its memory hold.
-                source.Server.Population.SetMobility(
-                    index: member.SourceSlot,
-                    mobility: member.Mobility
-                );
-                source.Server.Population.SetBodyColor(
-                    slot: member.SourceSlot,
-                    color: member.BodyColor
-                );
-
-                // The restored WorldBody instance postdates the last Install/construction-time resync — the same
-                // reason every other admission door in WorldServer.Admission.cs catches a freshly minted body up
-                // from bodies.scaleRow before it starts stepping at the constructed default (Scale == One).
-                source.Server.Population.SyncBodyScale(definition: source.Server.Definition);
-
-                // A rollback re-installs rows this server itself captured and revoked an instant earlier, so the
-                // restored principal provably holds none of them at this moment and cannot administer its own
-                // restoration. The server administers it, exactly as it administers an admission mint.
-                foreach (var grant in member.SourceGrants) {
-                    source.Server.Grant(
-                        grant: grant,
-                        actor: Principal.Console
-                    );
-                }
-            }
-            return restored;
-        });
-    }
+    private static bool RestoreDetachedMember(WorldInstance source, ulong transferId, LandedMember member, WorldTransferCommitMember commit) => source.Server.ExecuteAuthorityOperation(operation: () => source.Server.RestoreDetachedForTransfer(
+        detached: new WorldDetachedBody(
+            AdmissionGrants: member.AdmissionGrants,
+            BodyColor: member.BodyColor,
+            Designations: member.Designations,
+            DynamicState: member.DynamicState,
+            Peer: member.Peer,
+            Position: member.Position,
+            Profile: member.Profile,
+            Slot: member.SourceSlot,
+            SourceGrants: member.SourceGrants,
+            Yaw: member.Yaw
+        ),
+        mobility: member.Mobility,
+        transferId: transferId,
+        // Inactive slots are absent from population checkpoints and can be reused while recovery waits, so the
+        // departure turn is recovered from the retained commit, undoing only this attempted arrival.
+        travelTurn: (commit.HasMappedArrival
+            ? WorldFrameIsometry.AccumulateTurn(
+                travelTurn: commit.TravelTurn,
+                departureYaw: commit.YawRadians,
+                arrivalYaw: member.Yaw
+            )
+            : commit.TravelTurn)
+    ));
     // Remove successful restores from BOTH lists so checkpoint profile ordinals still match. Failed restores keep
     // their recovery record; no retry may overwrite an occupied source slot.
-    private static bool RestoreDetachedMembers(WorldInstance source, List<LandedMember> members, List<WorldTransferCommitMember> commits) {
+    private static bool RestoreDetachedMembers(WorldInstance source, ulong transferId, List<LandedMember> members, List<WorldTransferCommitMember> commits) {
         for (var index = 0; (index < members.Count);) {
             if (!RestoreDetachedMember(
-                source,
-                members[index],
-                commits[index]
+                commit: commits[index],
+                member: members[index],
+                source: source,
+                transferId: transferId
             )) { index++; continue; }
             members.RemoveAt(index: index);
             commits.RemoveAt(index: index);
@@ -1508,7 +1472,7 @@ public sealed partial class WorldInstanceHost {
     // source out from under a transfer still in flight) — see WorldPopulation.TryDetachSeatForTransfer. The
     // Drive/leave standing re-check here is defensive: ApplyTransfer's own pre-check loop already proved it
     // for every still-active member immediately before this runs, and is never load-bearing on its own.
-    private static bool TryDetachAndCaptureMember(WorldInstance source, int sourceSlot, string sourceName, Principal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
+    private static bool TryDetachAndCaptureMember(WorldInstance source, ulong transferId, int sourceSlot, string sourceName, Principal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
         var captured = source.Server.ExecuteAuthorityOperation(operation: () => {
             var success = TryDetachAndCaptureMemberCore(
                 actingPrincipal: actingPrincipal,
@@ -1523,6 +1487,7 @@ public sealed partial class WorldInstanceHost {
                 sourceGrants: out var capturedSourceGrants,
                 sourceName: sourceName,
                 sourceSlot: sourceSlot,
+                transferId: transferId,
                 yaw: out var capturedYaw
             );
 
@@ -1540,7 +1505,7 @@ public sealed partial class WorldInstanceHost {
         sourceGrants = captured.SourceGrants;
         return captured.Success;
     }
-    private static bool TryDetachAndCaptureMemberCore(WorldInstance source, int sourceSlot, string sourceName, Principal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
+    private static bool TryDetachAndCaptureMemberCore(WorldInstance source, ulong transferId, int sourceSlot, string sourceName, Principal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
         profile = null;
         bodyColor = default;
         position = default;
@@ -1621,30 +1586,10 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
 
-        // Captured before the detach — TryDetachSeatForTransfer discards pose, dynamic state, and
-        // designations entirely (it only ever preserves the seat's Profile), so this is the one moment the
-        // body's exact position/yaw, its perceivable dynamic state (velocity, dash overlay, in-flight timed
-        // presses — see WorldBody.CaptureTransferState), and the seat's own designation register (an
-        // Entry-level fact outside WorldBody's own reach — see WorldPopulation.CaptureDesignations) are all
-        // still readable.
-        position = body.FixedPosition;
-        bodyColor = source.Server.Population.BodyColor(index: sourceSlot);
-        yaw = body.FixedYaw;
-        dynamicState = body.CaptureTransferState();
-        designations = source.Server.Population.CaptureDesignations(slot: sourceSlot);
-        if (source.Server.Population.TryCaptureTransferredEntity(
-            index: sourceSlot,
-            peer: out var capturedPeer
-        )) {
-            peer = capturedPeer;
-            admissionGrants = [.. source.Server.Population.PeerAdmissionInstalledGrantTemplates(bodyIndex: sourceSlot)];
-            sourceGrants = [.. source.Server.GrantRows(principal: capturedPeer.Identity)];
-        }
-
-        if (!source.Server.Population.TryDetachSeatForTransfer(
-            profile: out profile,
-            slot: sourceSlot
-        )) {
+        if (source.Server.DetachForTransfer(
+            slot: sourceSlot,
+            transferId: transferId
+        ) is not { } detached) {
             if (source.Server.Output.HasNarrationSink) {
                 source.Server.Output.Narrate(
                     channel: "world.transfer",
@@ -1655,17 +1600,15 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
 
-        // Dissolving a departing member's rows is administration, symmetric with the admission mint and the
-        // rollback re-grant below: the rows may belong to a peer principal while the member travels under a
-        // different one (an autonomous body travels as World), so the departing principal cannot be assumed to
-        // hold them. The transfer itself was already authorized against the acting principal (AllowsLeave).
-        foreach (var grant in sourceGrants) {
-            source.Server.Revoke(
-                grant: grant,
-                actor: Principal.Console
-            );
-        }
-
+        profile = detached.Profile;
+        bodyColor = detached.BodyColor;
+        position = detached.Position;
+        yaw = detached.Yaw;
+        dynamicState = detached.DynamicState;
+        designations = detached.Designations;
+        peer = detached.Peer;
+        admissionGrants = detached.AdmissionGrants;
+        sourceGrants = detached.SourceGrants;
         return true;
     }
 

@@ -921,6 +921,12 @@ issue from a counter in the target resolver's ordered domain, recorded before th
 pure function of event order. Wall time, UUIDs and discovery order never decide identity. A
 remote-issued id enters the source as a verified foreign value at a named tape boundary.
 
+A departure is taped by its source where the source detached the body, and a rollback where it put
+the body back, each inside the authority operation that decided it. Whatever reaches the source in
+between, a traveler handed straight back into the seat it left included, is taped after the
+departure, and a crossing that stays in doubt for ticks leaves the seat empty on the replay for the
+same ticks. The settlement that follows is narration and the key a set of tapes pairs by.
+
 An arrival is taped by its destination, one entry for each commit that landed at least one
 traveler. The entry carries the reservation, the body indices and the commit, encoded with the same
 leaf the destination's crossing log writes, and the commit's outcome: the generation each traveler

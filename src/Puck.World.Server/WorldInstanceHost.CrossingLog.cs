@@ -300,7 +300,8 @@ public sealed partial class WorldInstanceHost {
         if (RestoreDetachedMembers(
             commits: pending.CommitMembers,
             members: pending.Landed,
-            source: row
+            source: row,
+            transferId: pending.Transfer.TransferId
         )) {
             m_inDoubtTransfers.RemoveAt(index: index);
         }

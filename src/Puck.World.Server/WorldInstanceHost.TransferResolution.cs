@@ -154,9 +154,10 @@ public sealed partial class WorldInstanceHost {
                         pending: pending
                     ) ||
                         !RestoreDetachedMembers(
-                        source,
-                        pending.Landed,
-                        pending.CommitMembers
+                        commits: pending.CommitMembers,
+                        members: pending.Landed,
+                        source: source,
+                        transferId: pending.Transfer.TransferId
                     )
                     ) {
                         index++;

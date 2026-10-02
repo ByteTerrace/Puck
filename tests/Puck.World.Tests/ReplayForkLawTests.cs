@@ -29,7 +29,7 @@ public sealed class ReplayForkLawTests {
         );
 
         Assert.Equal(
-            expected: 8u,
+            expected: 9u,
             actual: BitConverter.ToUInt32(
                 startIndex: sizeof(uint),
                 value: buffer.ToArray()

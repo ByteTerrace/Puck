@@ -940,6 +940,17 @@ public sealed partial class WorldTransferEscrow {
             );
         }
 
+        // An ordinary join can take a reserved seat before commit. Join itself is idempotent over an active seat;
+        // a transfer must refuse it rather than overwrite its occupant or detach it during a later rollback.
+        if (m_server.Population.IsActive(index: slot)) {
+            return new SessionReply(
+                Accepted: false,
+                AssignedIndex: -1,
+                Reason: $"reserved body:{slot} is no longer free",
+                RosterEcho: string.Empty
+            );
+        }
+
         SessionReply reply;
 
         if (arrival.Request.PeerAdmission) {
@@ -1330,9 +1341,10 @@ public sealed partial class WorldTransferEscrow {
     // decision its reservation made against the state of its own moment, which a reland need not share: a grant revoked
     // between reservation and commit refuses a seat at its join, never at a second reservation. What keeps the landing
     // safe is kept: the token is neither committed nor suspended, each traveler's mobility epoch is unleased and
-    // unconsumed, every body index is free and of the kind the cohort lands in, and an arriving peer's verdict comes from
-    // this destination's own admission entries, which commit mints from.
-    private WorldTransferReservationReply RestoreLease(WorldCrossingArrival arrival) {
+    // unconsumed, every body index is of the kind the cohort lands in, and an arriving peer's verdict comes from this
+    // destination's own admission entries. Only the indices that actually landed must be free: a later occupied index
+    // can be the reason the live commit rolled back, and the recorded stop never lands or undoes that occupant.
+    private WorldTransferReservationReply RestoreLease(WorldCrossingArrival arrival, int landings) {
         var key = arrival.Key;
 
         if (m_committed.Contains(item: key)) {
@@ -1383,12 +1395,14 @@ public sealed partial class WorldTransferEscrow {
             : m_server.Population.LocalSeatCount);
         var held = m_leases.Values.SelectMany(selector: static lease => lease.Slots).ToHashSet();
 
-        foreach (var slot in arrival.Slots) {
+        for (var index = 0; (index < arrival.Slots.Count); index++) {
+            var slot = arrival.Slots[index];
+
             if ((slot < first) || (slot >= end)) {
                 return WorldTransferReservationReply.Refused(reason: $"body:{slot} is outside the indices {first}..{(end - 1)} this cohort lands in");
             }
             if (
-                m_server.Population.IsActive(index: slot) ||
+                ((index < landings) && m_server.Population.IsActive(index: slot)) ||
                 !held.Add(item: slot)
             ) {
                 return WorldTransferReservationReply.Refused(reason: $"body:{slot} is occupied or held by another reservation");
@@ -1481,7 +1495,10 @@ public sealed partial class WorldTransferEscrow {
         var request = arrival.Request;
         var reply = (m_leases.ContainsKey(key: arrival.Key)
             ? Reserve(request: request)
-            : RestoreLease(arrival: arrival));
+            : RestoreLease(
+                arrival: arrival,
+                landings: (recorded?.Generations.Count ?? arrival.Members.Count)
+            ));
 
         if (!reply.Accepted) {
             reason = $"transfer {request.TransferId} reservation refused — {reply.Reason}";

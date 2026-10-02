@@ -134,10 +134,9 @@ public abstract record WorldReplayEntry {
     internal sealed record RateLever(bool Paused) : WorldReplayEntry;
     /// <summary>A crossing this authority decided as its source, recorded by
     /// <see cref="Puck.World.WorldReplayTape.NoteTransfer"/> when <c>Puck.World.WorldInstanceHost</c> settles the
-    /// transfer. A re-drive acts on its departure: every slot in <see cref="DepartedSlots"/> leaves the shadow
-    /// population exactly as it left live, so an inactive index stops contributing to the hash on the same tick. The
-    /// arrival is the destination's own fact and rides the destination's tape as a <see cref="Arrival"/>; a set of
-    /// tapes pairs the two by <see cref="Target"/> and <see cref="TransferId"/>.
+    /// transfer. It changes nothing on a re-drive: each body left, and any came back, at its own
+    /// <see cref="Departure"/> entry. The arrival is the destination's own fact and rides the destination's tape as an
+    /// <see cref="Arrival"/>; a set of tapes pairs the two by <see cref="Target"/> and <see cref="TransferId"/>.
     /// <see cref="Outcome"/>, <see cref="DestinationName"/>, <see cref="ScopeKey"/> and <see cref="GenerationId"/> are
     /// narration. The entry sits partly outside the hash's coverage, so
     /// <see cref="WorldReplaySnapshot.ReadTransferEntry"/> recomputes a content signature over every decoded field and
@@ -150,8 +149,8 @@ public abstract record WorldReplayEntry {
     /// <param name="ScopeKey">The resolved scope key, or empty for a console transfer.</param>
     /// <param name="GenerationId">The resolver-issued generation id, or 0 for a console transfer.</param>
     /// <param name="Outcome">A short canonical outcome summary.</param>
-    /// <param name="DepartedSlots">The 0-based body indices this crossing removed from this authority's population;
-    /// empty for a refused or aborted transfer.</param>
+    /// <param name="DepartedSlots">The 0-based body indices whose departure the settlement made final; empty for a
+    /// refused or aborted transfer.</param>
     internal sealed record Transfer(ulong TransferId, string Target, bool TargetRemote, string DestinationName, string ScopeKey, ulong GenerationId, string Outcome, IReadOnlyList<int> DepartedSlots) : WorldReplayEntry;
 
     /// <summary>An arrival a commit decided in this authority as a crossing's destination: the reservation, the
@@ -172,6 +171,15 @@ public abstract record WorldReplayEntry {
     /// <param name="Outcome">What the commit decided: each landed traveler's generation, and whether it rolled back.</param>
     public sealed record Arrival(string SourceAuthority, ulong TransferId, byte[] Encoded, WorldArrivalOutcome Outcome) : WorldReplayEntry;
 
+    /// <summary>One source body a crossing detached or restored (<see cref="WorldServer.DepartureTap"/>), at the
+    /// position among the tick's authority entries where the authority decided it, however long the crossing then
+    /// stayed in doubt. A re-drive detaches the body through the same detach the live crossing used, keeping what the
+    /// shadow captured, and a recorded rollback restores exactly that body; one it cannot reproduce refuses by name
+    /// (<see cref="ReplayRefusal.DepartureRefused"/>).</summary>
+    /// <param name="TransferId">The source-scoped transfer id.</param>
+    /// <param name="Slot">The source body index.</param>
+    /// <param name="Restored">Whether the body came back in a rollback rather than left.</param>
+    internal sealed record Departure(ulong TransferId, int Slot, bool Restored) : WorldReplayEntry;
     /// <summary>The federated device images a recorded step held — the input forwarded and federated travelers drive
     /// this authority's bodies with, which crosses no loopback. Taped at every step that holds any and once as the
     /// set empties; a re-drive replaces the shadow's held images with exactly this set at the same position, and the
@@ -292,10 +300,11 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
     // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
-    // Shape 8 carries the recorded authority and its document paths, the companion tapes of a set, departures by
-    // target authority, every arrival a commit decided with its outcome, and federated input. Refuse earlier tapes at
-    // intake instead of reporting their old shape as a simulation divergence.
-    private const uint ShapeToken = 8u;
+    // Shape 9 carries the recorded authority and its document paths, the companion tapes of a set, each departure and
+    // its rollback where the authority decided it, settlements by target authority, every arrival a commit decided
+    // with its outcome, and federated input. Refuse earlier tapes at intake instead of reporting their old shape as a
+    // simulation divergence.
+    private const uint ShapeToken = 9u;
 
     /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
     /// tapes pairs one authority's departure with another's arrival.</summary>
@@ -525,14 +534,16 @@ public sealed partial class WorldReplaySnapshot {
                     );
 
                     break;
-                case WorldReplayEntry.Transfer transferEvent:
-                    // The departure half: a departed body stops contributing to HashState here exactly as it did
-                    // live. A slot already inactive is a no-op by TryDetachSeatForTransfer's own contract.
-                    foreach (var departedSlot in transferEvent.DepartedSlots) {
-                        _ = population.TryDetachSeatForTransfer(
-                            profile: out _,
-                            slot: departedSlot
-                        );
+                case WorldReplayEntry.Transfer:
+                    // Narration and pairing only: each body left at its own Departure entry.
+                    break;
+                case WorldReplayEntry.Departure departure:
+                    if (server.ExecuteAuthorityOperation(operation: () => server.RedriveDeparture(
+                        restored: departure.Restored,
+                        slot: departure.Slot,
+                        transferId: departure.TransferId
+                    )) is { } departureRefusal) {
+                        throw ReplayRefusal.DepartureRefused.Raise(message: departureRefusal);
                     }
 
                     break;
@@ -833,6 +844,8 @@ public sealed partial class WorldReplaySnapshot {
                 return new WorldReplayEntry.LinkDelivery(Adjacency: reader.ReadString(field: "link delivery adjacency"));
             case 19:
                 return ReadArrivalEntry(reader: ref reader);
+            case 21:
+                return ReadDepartureEntry(reader: ref reader);
             case 20:
                 return new WorldReplayEntry.FederatedIntents(Held: reader.ReadArray(
                     field: "federated intents",
@@ -1037,6 +1050,27 @@ public sealed partial class WorldReplaySnapshot {
             Outcome: outcome,
             SourceAuthority: arrival.Request.SourceAuthority,
             TransferId: arrival.Request.TransferId
+        );
+    }
+    private static WorldReplayEntry ReadDepartureEntry(ref WireReader reader) {
+        var transferId = reader.ReadUInt64();
+        var slot = reader.ReadInt32();
+        var restored = reader.ReadBoolean();
+
+        if (
+            !reader.Failed &&
+            (((uint)slot) >= WorldBodiesLimits.CapacityCeiling)
+        ) {
+            reader.Fail(
+                detail: $"departure of transfer {transferId} names body:{slot}, outside 0..{(WorldBodiesLimits.CapacityCeiling - 1)}",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return new WorldReplayEntry.Departure(
+            Restored: restored,
+            Slot: slot,
+            TransferId: transferId
         );
     }
     private static void RelandArrival(WorldServer server, WorldReplayEntry.Arrival arrival) {
@@ -1358,6 +1392,13 @@ public sealed partial class WorldReplaySnapshot {
                     writeItem: static (w, generation) => w.WriteInt32(value: generation)
                 );
                 writer.WriteBoolean(value: arrival.Outcome.RolledBack);
+
+                break;
+            case WorldReplayEntry.Departure departure:
+                writer.WriteByte(value: 21);
+                writer.WriteUInt64(value: departure.TransferId);
+                writer.WriteInt32(value: departure.Slot);
+                writer.WriteBoolean(value: departure.Restored);
 
                 break;
             case WorldReplayEntry.FederatedIntents federated:

@@ -231,6 +231,7 @@ public sealed partial class WorldReplayTape {
         m_liveServer.ScreenOpTap = null;
         m_liveServer.ServerEventTap = null;
         m_liveServer.ArrivalTap = null;
+        m_liveServer.DepartureTap = null;
         m_liveServer.FederatedIntentTap = null;
     }
     // Read straight off the live handle in the simulation's own fixed-point currency — never through the float
@@ -749,6 +750,11 @@ public sealed partial class WorldReplayTape {
             Actor: actor,
             ContentHash: contentHash,
             Value: op
+        ));
+        m_liveServer.DepartureTap = (transferId, slot, restored) => m_currentAuthority.Add(item: new WorldReplayEntry.Departure(
+            Restored: restored,
+            Slot: slot,
+            TransferId: transferId
         ));
         m_liveServer.ArrivalTap = (arrival, outcome) => m_currentAuthority.Add(item: new WorldReplayEntry.Arrival(
             Encoded: WorldAuthorityCheckpointCodec.EncodeCrossingArrival(arrival: arrival),
