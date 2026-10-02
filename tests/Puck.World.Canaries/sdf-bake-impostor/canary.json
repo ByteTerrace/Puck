@@ -51,6 +51,11 @@
         "outcome": "accepted"
       },
       {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
         "verb": "world.counters",
         "occurrence": 1,
         "outcome": "accepted"
@@ -67,12 +72,17 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 4,
+        "occurrence": 5,
         "outcome": "accepted"
       },
       {
         "verb": "world.screenshot",
         "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
         "outcome": "accepted"
       },
       {
@@ -82,12 +92,12 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 5,
+        "occurrence": 7,
         "outcome": "accepted"
       },
       {
         "verb": "world.wait",
-        "occurrence": 6,
+        "occurrence": 8,
         "outcome": "accepted"
       },
       {
@@ -97,7 +107,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 7,
+        "occurrence": 9,
         "outcome": "accepted"
       }
     ],

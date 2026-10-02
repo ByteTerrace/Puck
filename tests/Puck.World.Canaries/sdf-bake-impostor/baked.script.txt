@@ -11,15 +11,18 @@ world.wait bakes 600
 world.debug-view visibility
 world.wait 30
 world.screenshot {run}/kind.png
+# A capture lands on a later composed frame; it is written before the debug view changes, or it shows the next view.
+world.wait captures 30
 world.counters sdf.mesh.lod
 world.counters sdf.bakes
 # The same card, colored by the material it names: each box of the prototype has its own.
 world.debug-view material-id
 world.wait 30
 world.screenshot {run}/card.png
+world.wait captures 30
 # The field names the true material of every pixel; the card must name the same ones.
 world.bakes off
 world.wait bakes 600
 world.wait 30
 world.screenshot {run}/field.png
-world.wait 10
+world.wait captures 30
