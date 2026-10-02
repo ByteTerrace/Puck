@@ -1,3 +1,4 @@
+using Puck.Abstractions.Machines;
 using Puck.Commands;
 using Puck.Audio.Simulation;
 using Puck.Networking;
@@ -359,12 +360,54 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
     // ---- server section ----
 
+    // A base origin names a loaded file only relative to the world's document directory, the root the restoring host
+    // supplies, so a decoded file path is forward-slashed, not rooted, and never climbs out of that root. A store origin
+    // resolves against nothing and is decoded as it was written.
+    private static WorldBaseOrigin ReadBaseOrigin(ref WireReader reader) {
+        var kind = reader.ReadByte();
+        var source = WorldWireCodec.ReadRebuildOrigin(field: "server base origin", reader: ref reader);
+        var depth = reader.ReadInt32();
+        var loaded = (kind is ((byte)WorldBaseOriginKind.Load) or ((byte)WorldBaseOriginKind.Reload));
+
+        if (
+            !reader.Failed &&
+            ((kind > ((byte)WorldBaseOriginKind.JournalHorizon)) ||
+            (loaded != (source is not null)) ||
+            ((source is WorldRebuildOrigin.File { Path: var path }) && ((path.Length == 0) || !WorldCheckpointPaths.IsRelativeUnderRoot(path: path))) ||
+            (depth < 0))
+        ) {
+            reader.Fail(
+                detail: $"server base origin (kind {kind}, '{source}', depth {depth}) is not a loaded file named under its root or a store",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return new WorldBaseOrigin(
+            Depth: depth,
+            Kind: ((WorldBaseOriginKind)kind),
+            Source: source
+        );
+    }
     private static byte[] EncodeServer(WorldServerCheckpoint section) {
         var writer = new WireWriter();
 
         writer.WriteBlock(value: section.DefinitionJson);
-        writer.WriteBlock(value: section.BaseDefinitionJson);
-        writer.WriteString(value: section.BaseOrigin);
+
+        // A base byte-identical to the live document — every activation with no journaled edit — is written once.
+        var baseIsDefinition = section.BaseDefinitionJson.AsSpan().SequenceEqual(other: section.DefinitionJson);
+
+        writer.WriteBoolean(value: baseIsDefinition);
+
+        if (!baseIsDefinition) {
+            writer.WriteBlock(value: section.BaseDefinitionJson);
+        }
+
+        writer.WriteByte(value: ((byte)section.BaseOrigin.Kind));
+        WorldWireCodec.WriteRebuildOrigin(
+            origin: section.BaseOrigin.Source,
+            writer: writer
+        );
+        writer.WriteInt32(value: section.BaseOrigin.Depth);
         writer.WriteArray(
             items: section.ArenaKeys,
             writeItem: WriteArenaKey
@@ -449,6 +492,20 @@ public static partial class WorldAuthorityCheckpointCodec {
             value: section.MusicDirectorLastEmbellishmentTick,
             writeValue: static (w, v) => w.WriteUInt64(value: v)
         );
+        writer.WriteArray(
+            items: section.MachineBindings,
+            writeItem: static (w, entry) => {
+                w.WriteString(value: entry.Machine);
+                w.WriteString(value: entry.Binding);
+                w.WriteUInt64(value: entry.State.Generation);
+                w.WriteByte(value: ((byte)entry.State.Status));
+                w.WriteOptional(
+                    value: entry.State.LastValue,
+                    writeValue: static (v, value) => v.WriteInt64(value: value)
+                );
+                w.WriteNullableString(value: entry.State.Reason);
+            }
+        );
 
         return writer.ToArray();
     }
@@ -473,14 +530,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             );
         }
 
-        var baseDefinitionJson = reader.ReadBlock(
-            field: "server base definition",
-            maxBytes: MaxSectionBytes
-        );
-        var baseOrigin = reader.ReadString(
-            field: "server base origin",
-            maxBytes: MaxStringBytes
-        );
+        var baseDefinitionJson = (reader.ReadBoolean()
+            ? definitionJson
+            : reader.ReadBlock(
+                field: "server base definition",
+                maxBytes: MaxSectionBytes
+            ));
+
+        var baseOrigin = ReadBaseOrigin(reader: ref reader);
         var arenaKeys = reader.ReadArray(
             field: "server arena keys",
             maximum: StateCapacity.MaxCellKeys,
@@ -617,6 +674,59 @@ public static partial class WorldAuthorityCheckpointCodec {
         var musicDirectorLastEmbellishmentTick = reader.ReadOptional(
             readValue: static (ref WireReader r) => r.ReadUInt64()
         );
+        var machineBindings = reader.ReadArray(
+            field: "server machine bindings",
+            readItem: static (ref WireReader r) => {
+                var machine = r.ReadRequiredString(
+                    field: "machine binding machine",
+                    maxBytes: MaxStringBytes
+                );
+                var binding = r.ReadRequiredString(
+                    field: "machine binding name",
+                    maxBytes: MaxStringBytes
+                );
+                var generation = r.ReadUInt64();
+                var status = ((MachineAccessStatus)r.ReadByte());
+
+                if (!Enum.IsDefined(value: status)) {
+                    r.Fail(
+                        detail: "machine binding status is unknown",
+                        refusal: WireRefusal.EnumValueUnknown
+                    );
+                }
+
+                var lastValue = r.ReadOptional(
+                    readValue: static (ref WireReader v) => v.ReadInt64()
+                );
+                var reason = r.ReadNullableString(
+                    field: "machine binding reason",
+                    maxBytes: MaxStringBytes
+                );
+
+                return new WorldMachineBindingEntry(
+                    Binding: binding,
+                    Machine: machine,
+                    State: new WorldMachineBindingState(
+                        Generation: generation,
+                        LastValue: lastValue,
+                        Reason: reason,
+                        Status: status
+                    )
+                );
+            },
+            maximum: MaxCollectionCount
+        );
+
+        // One encoding per memo: strictly ascending by machine, then binding, so equal servers write equal bytes and a
+        // repeated binding cannot name two outcomes.
+        for (var index = 1; (!reader.Failed && (index < machineBindings.Length)); index++) {
+            if (WorldServer.CompareBindingOrder(left: machineBindings[(index - 1)], right: machineBindings[index]) >= 0) {
+                reader.Fail(
+                    detail: $"server machine binding '{machineBindings[index].Machine}.{machineBindings[index].Binding}' is out of binding order",
+                    refusal: WireRefusal.PayloadMalformed
+                );
+            }
+        }
 
         if (!reader.TryFinish(failure: out var failure)) {
             section = null!;
@@ -638,6 +748,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             LastCompletedTick: lastCompletedTick,
             LastDocumentReceipt: lastDocumentReceipt,
             LastStepTicks: lastStepTicks,
+            MachineBindings: machineBindings,
             MusicClockElapsedTicks: musicClockElapsedTicks,
             MusicDirectorArmed: musicDirectorArmed,
             MusicDirectorCurrentSegmentId: musicDirectorCurrentSegmentId,

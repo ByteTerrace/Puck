@@ -28,7 +28,9 @@ public interface IWorldMachineCheckpointHost {
     /// <summary>Captures each runtime after all its accepted steps have completed.</summary>
     /// <returns>The complete machine inventory and its runtime images.</returns>
     WorldMachineHostCheckpoint CaptureCheckpoint();
-    /// <summary>Restores exactly the declared machine inventory before its first simulation step.</summary>
+    /// <summary>Restores exactly the declared machine inventory: before its first simulation step, for a restored
+    /// activation, or over running machines, for a history seek rewinding them. Each runtime restores behind the
+    /// steps it already accepted, so a rewind never races one still in flight.</summary>
     /// <param name="checkpoint">The captured host and runtime state.</param>
     void RestoreCheckpoint(WorldMachineHostCheckpoint checkpoint);
 }

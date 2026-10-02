@@ -106,7 +106,7 @@ public sealed class ReloadDrawnReferenceLawTests {
                 Definition: admission.Definition,
                 Force: false,
                 Kind: WorldRebuildKind.Reload,
-                PathHint: path
+                Origin: new WorldRebuildOrigin.File(Path: path)
             ),
             verb: Verb
         );
@@ -164,7 +164,7 @@ public sealed class ReloadDrawnReferenceLawTests {
                     Definition: undrawn,
                     Force: false,
                     Kind: WorldRebuildKind.Reload,
-                    PathHint: path
+                    Origin: new WorldRebuildOrigin.File(Path: path)
                 ),
                 verb: Verb
             ))],

@@ -302,6 +302,14 @@ public enum HudBindingKind : byte {
     /// <summary>The live active-population count.</summary>
     PopulationActive,
 
+    /// <summary>The boot world's in-session history cursor (<c>history.cursor</c>): the tick the world sits at, with a
+    /// gauge fraction for where that tick lies between the oldest recorded tick and the newest.</summary>
+    HistoryCursor,
+
+    /// <summary>The boot world's in-session history window (<c>history.window</c>): the oldest and newest recorded
+    /// ticks, with a gauge fraction for the bytes held against the budget.</summary>
+    HistoryWindow,
+
     /// <summary>A named <c>state</c> row's live value, or one of its cells — see <see cref="HudBinding.StateName"/>/
     /// <see cref="HudBinding.StateCellKey"/>. The binding shape is closed vocabulary: <c>state.&lt;row&gt;</c> binds
     /// the row's own slot cell, and <c>state.&lt;row&gt;.&lt;key&gt;</c> binds one named cell — unambiguous because
@@ -329,6 +337,7 @@ public readonly record struct HudBinding(HudBindingKind Kind, int SeatIndex, str
 /// <summary>
 /// The closed v1 HUD binding vocabulary: <c>world.tick</c>, <c>world.fps</c>, <c>seat.&lt;n&gt;.position.{x,y,z}</c>
 /// (1-based seat index, <c>1..</c><see cref="WorldBodiesLimits.LocalSeatCount"/>), <c>population.active</c>,
+/// <c>history.cursor</c>, <c>history.window</c>,
 /// <c>state.&lt;row&gt;</c>, and <c>state.&lt;row&gt;.&lt;key&gt;</c> (see <see cref="HudBindingKind.StateNamed"/>) —
 /// either <c>state.*</c> form may carry a trailing <c>.$target</c> facet (see <see cref="HudBinding.Target"/>).
 /// A token outside this set refuses by name — the same parse both <see cref="WorldDefinitionValidator"/> (load-time)
@@ -336,6 +345,8 @@ public readonly record struct HudBinding(HudBindingKind Kind, int SeatIndex, str
 /// silently treat as unbound.
 /// </summary>
 public static class HudBindingVocabulary {
+    private const string HistoryCursorToken = "history.cursor";
+    private const string HistoryWindowToken = "history.window";
     private const string PopulationActiveToken = "population.active";
     private const string PositionXSuffix = ".position.x";
     private const string PositionYSuffix = ".position.y";
@@ -388,6 +399,32 @@ public static class HudBindingVocabulary {
         )) {
             binding = new HudBinding(
                 Kind: HudBindingKind.WorldFps,
+                SeatIndex: 0
+            );
+
+            return true;
+        }
+
+        if (string.Equals(
+            a: token,
+            b: HistoryCursorToken,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            binding = new HudBinding(
+                Kind: HudBindingKind.HistoryCursor,
+                SeatIndex: 0
+            );
+
+            return true;
+        }
+
+        if (string.Equals(
+            a: token,
+            b: HistoryWindowToken,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            binding = new HudBinding(
+                Kind: HudBindingKind.HistoryWindow,
                 SeatIndex: 0
             );
 

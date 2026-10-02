@@ -36,10 +36,10 @@ public sealed partial class PipelineOverrideLawTests {
                 Definition: candidate,
                 Force: true,
                 Kind: WorldRebuildKind.Load,
-                PathHint: Path.Combine(
+                Origin: new WorldRebuildOrigin.File(Path: Path.Combine(
                     path1: m_directory.RootPath,
                     path2: "loaded.world.json"
-                )
+                ))
             )
         );
         fixture.Step();
@@ -142,7 +142,7 @@ public sealed partial class PipelineOverrideLawTests {
                 Definition: candidate,
                 Force: true,
                 Kind: WorldRebuildKind.Load,
-                PathHint: pathHint
+                Origin: new WorldRebuildOrigin.File(Path: pathHint)
             )
         );
         fixture.Step();

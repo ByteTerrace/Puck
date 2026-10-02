@@ -990,8 +990,9 @@ of `player.bind` and `player.bindings` documents the console surface.
 
 `WorldHud.cs` holds the `hud` section: panels of elements, each element bound
 to a value through `HudBindingVocabulary`—a closed vocabulary (`world.tick`,
-`world.fps`, `seat.<n>.position.*`, `population.active`, `state.<row>`,
-`state.<row>.<key>`), refused by name outside it—and each panel carrying its
+`world.fps`, `seat.<n>.position.*`, `population.active`, `history.cursor`,
+`history.window`, `state.<row>`, `state.<row>.<key>`), refused by name outside
+it—and each panel carrying its
 draw band (`WorldHudLayer`: under, over, or replace) as a document property.
 `state.<row>` binds the row's own SLOT cell (unchanged); `state.<row>.<key>`
 binds one named cell in ANY row shape, with a gauge's fraction still read from

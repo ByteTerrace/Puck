@@ -34,6 +34,8 @@ public sealed class WorldOwnedWorlds {
     private readonly WorldOutputHub? m_narrationHub;
     private readonly List<WorldOwnedWorldRefusal> m_refused = [];
     private readonly WorldDefinition m_template;
+    // The hosting world's document directory: the root a seeded owned document's assets resolve under.
+    private readonly string? m_worldDirectory;
 
     private WorldDocumentSubmissionReceipt? m_lastReceipt;
     private long m_revision = 1;
@@ -60,6 +62,7 @@ public sealed class WorldOwnedWorlds {
         m_catalogFingerprint = catalogFingerprint;
         m_template = IdentityBase(fallback: template);
         m_directory = directory;
+        m_worldDirectory = template.DocumentDirectory;
         MachineId = machineId;
         Defaults = template.PlayerDefaults;
         Directory.CreateDirectory(path: directory);
@@ -713,11 +716,93 @@ public sealed class WorldOwnedWorlds {
         );
     }
 
-    /// <summary>Captures every identity's owned document and the mutation counter.</summary>
-    public WorldOwnedWorldsCheckpoint Capture() => new(
-        IdentityDocumentsJson: [.. m_identities.Select(selector: identity => WorldDefinitionSerialization.Serialize(definition: identity.Document!))],
-        Revision: m_revision
-    );
+    /// <summary>Captures every identity's owned document and the mutation counter. Each document's asset directory is
+    /// named relative to this catalog's directory or the hosting world's, whichever holds it most closely, so the
+    /// checkpoint names no machine-local path.</summary>
+    /// <param name="checkpoint">The captured section, on success.</param>
+    /// <param name="reason">Why the capture was refused, on failure: a document whose assets lie under neither root.</param>
+    /// <returns><see langword="true"/> when every document's directory could be named.</returns>
+    public bool TryCapture(out WorldOwnedWorldsCheckpoint? checkpoint, out string reason) {
+        var documents = new WorldOwnedDocumentCheckpoint[m_identities.Count];
+
+        for (var index = 0; (index < documents.Length); index++) {
+            var document = m_identities[index].Document!;
+            var anchor = WorldOwnedDocumentAnchor.None;
+            string? relative = null;
+
+            if (document.DocumentDirectory is { } directory) {
+                var underCatalog = WorldCheckpointPaths.RelativeUnder(path: directory, root: m_directory);
+                var underWorld = ((m_worldDirectory is { } world)
+                    ? WorldCheckpointPaths.RelativeUnder(path: directory, root: world)
+                    : null);
+
+                // The closer root wins: a catalog kept inside the world's directory names its own documents itself.
+                (anchor, relative) = ((underCatalog, underWorld) switch {
+                    ( { } c, { } w) => ((c.Length <= w.Length) ? (WorldOwnedDocumentAnchor.Catalog, c) : (WorldOwnedDocumentAnchor.World, w)),
+                    ( { } c, null) => (WorldOwnedDocumentAnchor.Catalog, c),
+                    (null, { } w) => (WorldOwnedDocumentAnchor.World, w),
+                    _ => (WorldOwnedDocumentAnchor.None, null),
+                });
+
+                if (anchor == WorldOwnedDocumentAnchor.None) {
+                    checkpoint = null;
+                    reason = $"owned world '{m_identities[index].Id}' resolves its assets in a directory under neither the owned-world catalog nor the hosting world's directory, so a durable checkpoint cannot name it";
+
+                    return false;
+                }
+            }
+
+            documents[index] = new WorldOwnedDocumentCheckpoint(
+                Anchor: anchor,
+                DefinitionJson: WorldDefinitionSerialization.Serialize(definition: document),
+                RelativeDirectory: relative
+            );
+        }
+
+        checkpoint = new WorldOwnedWorldsCheckpoint(
+            Documents: documents,
+            Revision: m_revision
+        );
+        reason = string.Empty;
+
+        return true;
+    }
+
+    // The asset directory a checkpointed document resolves to under this catalog's roots, or the reason it cannot.
+    private bool TryResolve(WorldOwnedDocumentCheckpoint document, out string? directory, out string reason) {
+        directory = null;
+        reason = string.Empty;
+
+        if (document.Anchor == WorldOwnedDocumentAnchor.None) {
+            return true;
+        }
+
+        var root = ((document.Anchor == WorldOwnedDocumentAnchor.Catalog)
+            ? m_directory
+            : m_worldDirectory);
+
+        if (root is null) {
+            reason = "it resolves its assets under the hosting world's directory, and the restoring world has none";
+
+            return false;
+        }
+
+        var resolved = WorldCheckpointPaths.Resolve(
+            relative: (document.RelativeDirectory ?? string.Empty),
+            root: root
+        );
+
+        if (!Directory.Exists(path: resolved)) {
+            reason = $"its assets resolve to '{resolved}', which does not exist here";
+
+            return false;
+        }
+
+        directory = resolved;
+
+        return true;
+    }
+
     /// <summary>Creates and persists one owned world. <paramref name="name"/> is a <see cref="SafeName"/>, so
     /// what is left to refuse here is a name carrying either <see cref="GeneratedName"/> joiner, which the id's
     /// directory spellings could not keep apart from a generated name, and a collision, in either of the two places
@@ -931,17 +1016,47 @@ public sealed class WorldOwnedWorlds {
         Save(identity: incoming);
         return true;
     }
-    /// <summary>Restores every identity from a previously captured checkpoint. The identity list is replaced
-    /// wholesale — this never merges onto whatever the directory load already seeded.</summary>
-    public void Restore(WorldOwnedWorldsCheckpoint checkpoint) {
+    /// <summary>Refuses, before anything is restored, a checkpoint whose owned documents' asset directories do not
+    /// resolve under this catalog's roots.</summary>
+    /// <param name="checkpoint">The captured section.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="checkpoint"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">A document's asset directory does not resolve here; the message
+    /// names the document.</exception>
+    public void ValidateCheckpoint(WorldOwnedWorldsCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
+        for (var index = 0; (index < checkpoint.Documents.Count); index++) {
+            if (!TryResolve(
+                directory: out _,
+                document: checkpoint.Documents[index],
+                reason: out var reason
+            )) {
+                throw new InvalidOperationException(message: $"the checkpoint's owned world #{index} cannot be restored: {reason}");
+            }
+        }
+    }
+    /// <summary>Restores every identity from a previously captured checkpoint, each document resolving its assets
+    /// under this catalog's roots. The identity list is replaced wholesale — this never merges onto whatever the
+    /// directory load already seeded.</summary>
+    /// <param name="checkpoint">The captured section.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="checkpoint"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">A document's asset directory does not resolve here.</exception>
+    public void Restore(WorldOwnedWorldsCheckpoint checkpoint) {
+        ValidateCheckpoint(checkpoint: checkpoint);
         m_identities.Clear();
 
-        foreach (var json in checkpoint.IdentityDocumentsJson) {
+        foreach (var document in checkpoint.Documents) {
+            _ = TryResolve(
+                directory: out var directory,
+                document: document,
+                reason: out _
+            );
             m_identities.Add(item: new WorldIdentity(
                 defaults: Defaults,
-                document: WorldDefinitionSerialization.Deserialize(utf8Json: json)
+                document: WorldDefinitionSerialization.Deserialize(
+                    documentDirectory: directory,
+                    utf8Json: document.DefinitionJson
+                )
             ));
         }
 

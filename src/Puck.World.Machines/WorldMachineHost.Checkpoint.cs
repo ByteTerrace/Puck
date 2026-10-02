@@ -37,7 +37,6 @@ public sealed partial class WorldMachineHost : IWorldMachineCheckpointHost {
         ArgumentNullException.ThrowIfNull(checkpoint);
         RequireCheckpointInventory();
         if (
-            AnyEverPumped ||
             (checkpoint.Instances is null) ||
             (checkpoint.Instances.Count != m_instances.Count) ||
             (checkpoint.NextGeneration == 0) ||
@@ -45,7 +44,7 @@ public sealed partial class WorldMachineHost : IWorldMachineCheckpointHost {
             (checkpoint.Instances.Select(selector: row => row.Generation).Distinct().Count() != checkpoint.Instances.Count) ||
             (checkpoint.Instances.Select(selector: row => row.Name).Distinct(comparer: StringComparer.Ordinal).Count() != checkpoint.Instances.Count)
         ) {
-            throw new InvalidDataException(message: "machine checkpoint has invalid inventory, generations, or restore timing");
+            throw new InvalidDataException(message: "machine checkpoint has invalid inventory or generations");
         }
         foreach (var row in checkpoint.Instances) {
             if (

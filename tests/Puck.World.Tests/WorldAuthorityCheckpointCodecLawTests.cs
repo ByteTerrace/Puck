@@ -201,6 +201,26 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
             fixture.Server.Arena.Rewind(mark: mark);
         }
     }
+    // A base byte-identical to the live document is written once and decodes as the same bytes; one byte of
+    // difference costs the whole second copy.
+    [Fact]
+    public void ABaseIdenticalToTheLiveDocumentIsEncodedOnce() {
+        var checkpoint = CapturedCheckpoint();
+        var definition = checkpoint.Server.DefinitionJson;
+
+        Assert.Equal(expected: definition, actual: checkpoint.Server.BaseDefinitionJson);
+
+        var once = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+        var distinct = WorldAuthorityCheckpointCodec.Encode(checkpoint: (checkpoint with {
+            Server = (checkpoint.Server with { BaseDefinitionJson = [.. definition, ((byte)' ')] }),
+        }));
+
+        Assert.True(condition: ((distinct.Length - once.Length) > definition.Length));
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: once, checkpoint: out var decoded, reason: out var reason), userMessage: reason);
+        Assert.Equal(expected: definition, actual: decoded!.Server.BaseDefinitionJson);
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: distinct, checkpoint: out decoded, reason: out reason), userMessage: reason);
+        Assert.Equal(expected: (definition.Length + 1), actual: decoded!.Server.BaseDefinitionJson.Length);
+    }
     [Fact]
     public void RestoreRetainsAnOrphanArenaKeyLedgerAfterRuleRelayout() {
         var definition = Fixtures.BuildDocument() with {

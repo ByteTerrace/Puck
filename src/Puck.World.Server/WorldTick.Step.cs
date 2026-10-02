@@ -200,6 +200,18 @@ public sealed partial class WorldTick {
 
         return applied;
     }
+    /// <summary>Delivers a timeline a history seek restored without stepping it: the whole definition, then the
+    /// completed tick's snapshot, so a paused world shows the state it was moved to.</summary>
+    internal void PresentRestoredTimeline() {
+        lock (Host.AuthorityGate) {
+            Host.Document.PendingDefinitionDelivery = true;
+            Host.Document.DeliverPending();
+            EmitSnapshot(
+                stepTicks: m_lastStepTicks,
+                tick: m_lastCompletedTick
+            );
+        }
+    }
 
     // Build and deliver the tick's snapshot to every typed-lane subscriber. Skipped with no subscriber attached.
     private void EmitSnapshot(ulong tick, ulong stepTicks) {

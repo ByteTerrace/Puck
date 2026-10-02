@@ -145,7 +145,7 @@ public sealed class ReplayRateStampLawTests {
                 Definition: null,
                 Force: false,
                 Kind: WorldRebuildKind.Load,
-                PathHint: path
+                Origin: new WorldRebuildOrigin.File(Path: path)
             ),
             principal: Principal.Console
         );
@@ -218,7 +218,7 @@ public sealed class ReplayRateStampLawTests {
                 Definition: null,
                 Force: false,
                 Kind: WorldRebuildKind.Load,
-                PathHint: path
+                Origin: new WorldRebuildOrigin.File(Path: path)
             ),
             principal: Principal.Console
         );

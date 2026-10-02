@@ -42,7 +42,7 @@ public sealed class AddonPrepareGateLawTests {
                 Definition: candidate,
                 Force: true,
                 Kind: WorldRebuildKind.Load,
-                PathHint: "addon-no-host-rebuild-probe.world.json"
+                Origin: new WorldRebuildOrigin.File(Path: "addon-no-host-rebuild-probe.world.json")
             ),
             principal: Principal.Console
         );
