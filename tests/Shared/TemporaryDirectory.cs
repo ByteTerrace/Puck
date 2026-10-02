@@ -2,14 +2,23 @@ namespace Puck.Testing;
 
 /// <summary>A directory under the temporary root that one law owns: created on construction, under a name no other
 /// directory takes, and torn down on dispose in a fixed order so that a host's background work never races the delete.
-/// Disposal first disposes everything the law gave to <see cref="Own"/> (last registered first, so a host goes before
-/// the services it was composed over), then deletes it, retrying while a
-/// handle closes under a bound shared with every other wait on the thread pool (<see cref="TestLiveness.Bound"/>).
-/// Each try compares the directory's files with the previous try's, so a file that grew, appeared or changed after the
-/// owners were disposed is seen even while it is held open. A directory that cannot be deleted, or that something wrote
-/// to after its owners were disposed, fails the law naming the paths involved, so a worker a host returned from disposal without joining
-/// is reported by the file it wrote instead of by an intermittent delete failure. Names are relative to
-/// <see cref="RootPath"/> and may be forward-slashed; a write creates any subdirectory its name names.</summary>
+/// <para>
+/// The contract is explicit shutdown, not observation. Everything the law gave to <see cref="Own"/> is disposed last
+/// registered first, awaiting <see cref="IAsyncDisposable.DisposeAsync"/> when the owner has one and calling
+/// <see cref="IDisposable.Dispose"/> otherwise, and an owner that runs background workers returns from that disposal
+/// only after every worker has joined (a host awaits its services' <c>DisposeAsync</c>; a service with a
+/// <c>Completion</c> exposes it through <c>DisposeAsync</c>). The whole teardown, owners and delete, is bounded by
+/// <paramref name="teardownBound"/>; an owner that does not return in time fails the law by its type name and nothing
+/// under the directory is deleted.
+/// </para>
+/// <para>
+/// Once the owners have returned the directory is deleted, retrying while a handle closes. The files' sizes and last
+/// write times are compared between tries as a secondary signal: a file that is new or changed after the owners
+/// returned fails the law by name. That check sees only a write that lands before the delete succeeds, and a file a
+/// worker holds exclusively shows its change only once it is released, so it is a net under the contract and proves
+/// nothing about a worker that has already finished. Names are relative to <see cref="RootPath"/> and may be forward-slashed; a write
+/// creates any subdirectory its name names.
+/// </para></summary>
 /// <param name="prefix">The temp-directory name prefix — kept distinct per caller so a directory that survives an
 /// aborted run (a killed process, a debugger break) still names which law left it behind.</param>
 /// <param name="teardownBound">The bound on the entire teardown, including owner disposal; laws can supply a short
@@ -45,32 +54,34 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-", TimeSpan?
 
         return !Directory.Exists(path: path);
     }
-    // Every file under the directory with the length and last write time a handle on it reports, relative to the
-    // root. A file that cannot be opened to read its length (one a worker holds exclusively) is recorded as locked.
+    // Every file under the directory with its size and last write time, relative to the root. A handle on the file
+    // reports them as they are now; where a worker holds the file exclusively no handle can be opened, and the
+    // directory entry's size and time stand in, which agree with the handle's while the file is unchanged.
     private Dictionary<string, (long Length, long Written)> Snapshot() {
         var files = new Dictionary<string, (long Length, long Written)>();
 
         try {
-            foreach (var file in Directory.EnumerateFiles(
-                path: RootPath,
+            foreach (var file in new DirectoryInfo(path: RootPath).EnumerateFiles(
                 searchOption: SearchOption.AllDirectories,
                 searchPattern: "*"
             )) {
+                var key = Path.GetRelativePath(path: file.FullName, relativeTo: RootPath);
+
                 try {
                     using var stream = new FileStream(
                         access: FileAccess.Read,
                         mode: FileMode.Open,
-                        path: file,
+                        path: file.FullName,
                         share: FileShare.ReadWrite | FileShare.Delete
                     );
 
-                    files[Path.GetRelativePath(path: file, relativeTo: RootPath)] = (stream.Length, File.GetLastWriteTimeUtc(fileHandle: stream.SafeFileHandle).Ticks);
+                    files[key] = (stream.Length, File.GetLastWriteTimeUtc(fileHandle: stream.SafeFileHandle).Ticks);
                 } catch (Exception error) when ((error is (IOException or UnauthorizedAccessException))) {
-                    files[Path.GetRelativePath(path: file, relativeTo: RootPath)] = (-1L, -1L);
+                    files[key] = (file.Length, file.LastWriteTimeUtc.Ticks);
                 }
             }
-        } catch (DirectoryNotFoundException) {
-            // The directory went away while it was read; there is nothing left to compare.
+        } catch (Exception error) when ((error is (DirectoryNotFoundException or FileNotFoundException))) {
+            // The directory or a file went away while it was read; there is nothing left to compare.
         }
 
         return files;
@@ -99,7 +110,11 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-", TimeSpan?
             cancellationToken.ThrowIfCancellationRequested();
             Volatile.Write(location: ref m_teardownStep, value: $"disposing {m_owned[index].GetType().FullName}");
             try {
-                m_owned[index].Dispose();
+                if (m_owned[index] is IAsyncDisposable asynchronous) {
+                    asynchronous.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                } else {
+                    m_owned[index].Dispose();
+                }
             } catch (Exception error) {
                 failures.Add(item: error);
             }

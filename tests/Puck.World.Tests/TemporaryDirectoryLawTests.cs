@@ -11,6 +11,9 @@ namespace Puck.World.Tests;
 public sealed class TemporaryDirectoryLawTests {
     private const string Late = "late.bin";
 
+    // Long enough that a loaded machine starts the teardown worker and reaches its first step well inside it.
+    private static readonly TimeSpan TeardownBound = TimeSpan.FromSeconds(value: 3);
+
     // An owner whose disposal returns at once and leaves a worker running: the worker holds a file open and releases it
     // after a while, writing to it meanwhile when asked to, the way a background build that was cancelled but not joined
     // does.
@@ -28,6 +31,17 @@ public sealed class TemporaryDirectoryLawTests {
 
             held.Dispose();
         });
+    }
+    // An owner whose disposal is asynchronous: it finishes after a delay, and only then has it released its marker.
+    private sealed class AsynchronousOwner(string marker) : IAsyncDisposable, IDisposable {
+        public string Observed { get; private set; } = "never disposed";
+        public bool SynchronousDisposalCalled { get; private set; }
+
+        public void Dispose() => SynchronousDisposalCalled = true;
+        public async ValueTask DisposeAsync() {
+            await Task.Delay(delay: TimeSpan.FromMilliseconds(value: 200));
+            Observed = $"finished:{File.Exists(path: marker)}";
+        }
     }
     private sealed class Recorder(List<string> order, string name, string marker) : IDisposable {
         public void Dispose() => order.Add(item: $"{name}:{File.Exists(path: marker)}");
@@ -48,7 +62,7 @@ public sealed class TemporaryDirectoryLawTests {
     [InlineData(true)]
     [Theory]
     public async Task ABlockingOwnerCannotHangTeardownOrLetItDeleteItsFiles(bool nested) {
-        var state = new TemporaryDirectory(prefix: "puck-fixture-blocked-", teardownBound: TimeSpan.FromMilliseconds(value: 200));
+        var state = new TemporaryDirectory(prefix: "puck-fixture-blocked-", teardownBound: TeardownBound);
         var order = new List<string>();
         var marker = state.WriteText(name: "marker.txt", text: "x");
 
@@ -70,8 +84,8 @@ public sealed class TemporaryDirectoryLawTests {
         );
 
         try {
-            Assert.True(condition: owner.Entered.Wait(cancellationToken: TestContext.Current.CancellationToken, timeout: TimeSpan.FromSeconds(value: 2)), userMessage: "the blocking owner was not reached");
-            var finished = await Task.WhenAny(task1: teardown, task2: Task.Delay(cancellationToken: TestContext.Current.CancellationToken, delay: TimeSpan.FromSeconds(value: 2)));
+            Assert.True(condition: owner.Entered.Wait(cancellationToken: TestContext.Current.CancellationToken, timeout: TestLiveness.Bound), userMessage: "the blocking owner was not reached");
+            var finished = await Task.WhenAny(task1: teardown, task2: Task.Delay(cancellationToken: TestContext.Current.CancellationToken, delay: TestLiveness.Bound));
 
             Assert.Same(actual: finished, expected: teardown);
             var failure = Assert.IsType<TimeoutException>(@object: await teardown);
@@ -81,7 +95,7 @@ public sealed class TemporaryDirectoryLawTests {
             Assert.Empty(collection: order);
         } finally {
             owner.Release.Set();
-            Assert.True(condition: owner.Returned.Wait(cancellationToken: TestContext.Current.CancellationToken, timeout: TimeSpan.FromSeconds(value: 2)));
+            Assert.True(condition: owner.Returned.Wait(cancellationToken: TestContext.Current.CancellationToken, timeout: TestLiveness.Bound));
             _ = await teardown;
             if ((child is not null) && Directory.Exists(path: child.RootPath)) {
                 Directory.Delete(path: child.RootPath, recursive: true);
@@ -92,17 +106,17 @@ public sealed class TemporaryDirectoryLawTests {
         }
     }
 
-    private static FileStream Hold(TemporaryDirectory state) => new(
+    private static FileStream Hold(TemporaryDirectory state, FileShare share = FileShare.Read) => new(
         access: FileAccess.Write,
         mode: FileMode.Create,
         path: state.PathOf(name: Late),
-        share: FileShare.Read
+        share: share
     );
 
     [Fact]
     public async Task ADeleteThatNeverSucceedsNamesItsLastErrorAndRemainingFile() {
         Assert.SkipUnless(condition: OperatingSystem.IsWindows(), reason: "an open handle blocks a delete only where the file system refuses it.");
-        var state = new TemporaryDirectory(prefix: "puck-fixture-never-delete-", teardownBound: TimeSpan.FromMilliseconds(value: 200));
+        var state = new TemporaryDirectory(prefix: "puck-fixture-never-delete-", teardownBound: TeardownBound);
         using var held = Hold(state: state);
         var expected = Assert.Throws<IOException>(testCode: () => Directory.Delete(path: state.RootPath, recursive: true));
         var teardown = Task.Factory.StartNew(
@@ -113,7 +127,7 @@ public sealed class TemporaryDirectoryLawTests {
         );
 
         try {
-            var finished = await Task.WhenAny(task1: teardown, task2: Task.Delay(cancellationToken: TestContext.Current.CancellationToken, delay: TimeSpan.FromSeconds(value: 2)));
+            var finished = await Task.WhenAny(task1: teardown, task2: Task.Delay(cancellationToken: TestContext.Current.CancellationToken, delay: TestLiveness.Bound));
 
             Assert.Same(actual: finished, expected: teardown);
             var failure = Assert.IsType<TimeoutException>(@object: await teardown);
@@ -127,6 +141,29 @@ public sealed class TemporaryDirectoryLawTests {
                 Directory.Delete(path: state.RootPath, recursive: true);
             }
         }
+    }
+    [Fact]
+    public void AnOwnerWithAnAsynchronousDisposalIsAwaitedBeforeAnythingIsDeleted() {
+        var state = new TemporaryDirectory(prefix: "puck-fixture-async-");
+        var marker = state.WriteText(name: "marker.txt", text: "x");
+        var owner = new AsynchronousOwner(marker: marker);
+
+        _ = state.Own(owner: owner);
+        state.Dispose();
+
+        Assert.Equal(actual: owner.Observed, expected: "finished:True");
+        Assert.False(condition: owner.SynchronousDisposalCalled);
+        Assert.False(condition: Directory.Exists(path: state.RootPath));
+    }
+    [Fact]
+    public void AFileHeldExclusivelyAndNeverWrittenIsNotAccusedOfBeingWritten() {
+        Assert.SkipUnless(condition: OperatingSystem.IsWindows(), reason: "an open handle blocks a delete only where the file system refuses it.");
+        var state = new TemporaryDirectory(prefix: "puck-fixture-exclusive-");
+
+        _ = state.Own(owner: new Straggler(held: Hold(share: FileShare.None, state: state), writes: false));
+        state.Dispose();
+
+        Assert.False(condition: Directory.Exists(path: state.RootPath));
     }
     [Fact]
     public void OwnersAreDisposedLastRegisteredFirstAndBeforeAnythingIsDeleted() {

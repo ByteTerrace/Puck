@@ -520,6 +520,25 @@ meant to establish.
   with blocking collections (`ConcurrentGarbageCollection` in
   `Directory.Build.targets`). Setting `DOTNET_gcConcurrent=1` brings the false
   failures back, so don't set it when you run these suites.
+- A host, service or object that runs background workers returns from its
+  disposal only after every worker has joined: it exposes `DisposeAsync`, or a
+  `Completion` task that completes after the last worker returns and that
+  `DisposeAsync` awaits, and a law holds a worker inside its owner and fails if
+  disposal or `Completion` returns first. A host awaits its services'
+  `DisposeAsync`, so a service that stops without waiting hides from every
+  teardown above it. `LocalControlServer.Dispose` only begins the stop, because
+  its caller may be the pump its sessions wait for; `Completion` and
+  `DisposeAsync` are the wait.
+- A law that gives a host a state directory hands both to the shared
+  `TemporaryDirectory` (`tests/Shared`): `Own(host)` registers the owner, and
+  disposing the directory disposes its owners last registered first, awaiting
+  `DisposeAsync` when there is one, then deletes, retrying while a handle closes.
+  One bound (`teardownBound`, `TestLiveness.Bound` by default) covers owners and
+  delete, and an owner that does not return fails the law by its type name with
+  nothing deleted. The files' sizes and last write times are compared between
+  delete tries as a secondary net; it sees only a write that lands before the
+  delete succeeds, so shutdown is established by the owner's contract and never
+  by watching the directory.
 - XML documentation is a compile-time dependency. With warnings treated as
   errors, an unresolved member reference produces CS1574; verify documentation
   changes with the compiler when they affect member references.
