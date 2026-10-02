@@ -9,9 +9,6 @@ namespace Puck.GamingBricks.Transpiler;
 /// <summary>The <c>puck.cartridge.v1</c> answers to the questions generic value lowering cannot settle for
 /// itself.</summary>
 public sealed class CartridgeVocabulary : IDocumentVocabulary {
-    /// <summary>The document's schema string.</summary>
-    public const string Schema = "puck.cartridge.v1";
-
     // Positional spellings for the call-form actions, so `map(r, c, tile)` reads as well as the fully named form.
     private static readonly Dictionary<string, string[]> CallArguments = new(comparer: StringComparer.Ordinal) {
         ["blend"] = ["surface", "weight"],

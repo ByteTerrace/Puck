@@ -68,6 +68,7 @@ namespace Puck.Commands;
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     RespectRequiredConstructorParameters = true,
     UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+    NewLine = "\n",
     WriteIndented = true
 )]
 public sealed partial class BindingProfileJsonContext : JsonSerializerContext {

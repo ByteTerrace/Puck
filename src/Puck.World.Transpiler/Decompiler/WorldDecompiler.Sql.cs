@@ -289,7 +289,7 @@ public static partial class WorldDecompiler {
                 var sqlBlockText = sbCandidate.ToString();
 
                 var candidateDoc = (string.IsNullOrWhiteSpace(value: nativeText)
-                    ? $"schema: \"{WorldDocumentVocabulary.Schema}\"\n\n{sqlBlockText}"
+                    ? $"schema: \"{WorldDefinition.SchemaVersion}\"\n\n{sqlBlockText}"
                     : $"{nativeText.TrimEnd()}\n\n{sqlBlockText}");
 
                 var diagnostics = new DiagnosticBag();

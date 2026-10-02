@@ -1,7 +1,7 @@
 using System.Text;
 using Puck.Abstractions.Documents;
 using Puck.Cli.Transpiler;
-using Puck.GamingBricks.Transpiler;
+using Puck.GamingBricks.Forge;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Parsing;
@@ -24,7 +24,7 @@ public sealed class FormatProjectionLawTests {
         // compiled text is each emitted document under its world's name, in the compiler's own order.
         if (!(PuckParser.TryReadDocumentSchema(schema: out var schema, source: source) && string.Equals(
             a: schema,
-            b: CartridgeVocabulary.Schema,
+            b: CartridgeDocument.SchemaId,
             comparisonType: StringComparison.Ordinal
         ))) {
             var compilation = WorldCompiler.Compile(

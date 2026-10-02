@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.GamingBricks.Forge;
 using Puck.GamingBricks.Transpiler;
 
 namespace Puck.Cli.Transpiler;
@@ -10,7 +11,7 @@ internal static class DecompileCartridge {
     /// <returns><see langword="true"/> when its schema names a cartridge.</returns>
     internal static bool Handles(JsonObject document) => string.Equals(
         a: document["schema"]?.GetValue<string>(),
-        b: CartridgeVocabulary.Schema,
+        b: CartridgeDocument.SchemaId,
         comparisonType: StringComparison.Ordinal
     );
     /// <summary>Writes the cartridge out as source.</summary>
