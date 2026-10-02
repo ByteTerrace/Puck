@@ -373,6 +373,9 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // cannot stall the march: a step of up to 0.1% of the local radius may cross the boundary, an overestimate window far
 // below visible scale (a shell band is ~w/2 of the radius). Host-contracted literal.
 #define SDF_LOGSPHERE_GAP_FLOOR 1.0e-3
+// Floors the wallpaper LOD switch's step gap (relative to the fold's LOD distance) so a sample landing exactly ON the
+// switch cannot stall the march: a step of up to 0.01% of the LOD distance may cross it. Host-contracted literal.
+#define SDF_WALLPAPER_LOD_GAP_FLOOR 1.0e-4
 // SDF_FLARE_MIN_SCALE floors SDF_OP_AXIAL_PROFILE's scale profile s(t) so an authored amount/bulge combination that
 // drives it non-positive still yields a finite warp rather than a divide-by-zero or a sign flip.
 // SDF_LANE_ERODE_RAGGED_AMOUNT is SDF_OP_LANE_ERODE's ragged-front noise weight: how far the noise sample (centered,

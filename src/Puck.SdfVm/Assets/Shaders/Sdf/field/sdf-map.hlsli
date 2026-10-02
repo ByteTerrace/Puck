@@ -825,7 +825,16 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     int axisB = ((plane == SDF_PLANE_XY) ? 1 : 2);
                     // The symmetry LOD is PER SAMPLE (not per ray): every map() consumer — beam cone-march, pixel march,
                     // the normal probe, the shadow marches — samples the identical field, so cull and march can never disagree.
-                    bool lodSimplify = ((data1.z > 0.0) && (distance(worldPosition, sdfLodOrigin) > data1.z));
+                    float lodRadius = distance(worldPosition, sdfLodOrigin);
+                    bool lodSimplify = ((data1.z > 0.0) && (lodRadius > data1.z));
+
+                    // LOD-SAFE STEP BOUND (see sdfMapStepBound): across the LOD sphere the field switches between the
+                    // mirrored and the simplified lattice, so a value measured on one side says nothing about a copy
+                    // that exists only on the other. A step therefore stops at the switch, the world-space gap from
+                    // this sample to it; the floor keeps a sample on the switch from stalling the march.
+                    if (data1.z > 0.0) {
+                        walkStepBound = min(walkStepBound, max(abs(lodRadius - data1.z), (data1.z * SDF_WALLPAPER_LOD_GAP_FLOOR)));
+                    }
                     float2 cellIndex;
                     float2 folded = sdfWallpaperFoldCell(float2(localPosition[axisA], localPosition[axisB]), group, data0.xy, data0.zw, data1.xy, lodSimplify, cellIndex);
 

@@ -102,6 +102,13 @@ boundary between samples. A local Lipschitz factor alone cannot prove that a
 raw step is safe across the discontinuity. The marcher therefore uses
 fold-safe bounds where required.
 
+A wallpaper fold's symmetry LOD (`lodDistance`) is a discontinuity of its own:
+past a sphere of that radius around the camera the fold drops its mirrors, so a
+copy can stand where the mirrored lattice has none. Every march step stops at
+that sphere (the step bound `map()` publishes), so a step measured on one side
+never jumps through a copy that exists only on the other
+(`SdfMarchLodDeviceLawTests`).
+
 Plain repetition is exact only when the prototype fits within its centered
 cell. Cell jitter also requires conservative spacing; containment does not
 guarantee that the folded cell contains the nearest displaced copy.
