@@ -1420,7 +1420,7 @@ while material identity stays uncompressed with majority mips. The encoders writ
 bytes on every machine and each has an exact decoder as its test oracle.
 Dual contouring won the extraction: it strays from the field about half as far
 as surface nets did, for about a tenth more evaluations over a whole bake, and
-surface nets is deleted. A bake is keyed by the creation pin, `SdfBaker.Version`
+surface nets is deleted. A bake is keyed by the creation pin, `DerivationFingerprint.Bake`
 and the tier. `WorldBakeStore` is the one cache: a compiled world's `BAKE`
 chunk fills it, so a released world bakes nothing on the device, and a
 presentation's `WorldBakeSchedule` bakes each missing prototype on the thread
@@ -1433,6 +1433,15 @@ worlds, so a creation several worlds share is baked and shipped once. A bake is
 the same bytes on every machine: the baker reads the field in fixed point,
 writes floats only from correctly rounded scalar arithmetic, and encodes sRGB
 against exact thresholds.
+
+`puck derivations` follows the bake producer's transitive source dependencies
+across assemblies and hashes their canonical C# tokens into that fingerprint.
+The checked-in constant makes a reached maths or texture-codec edit invalidate
+every bake key when it is regenerated; `puck derivations --check` refuses a
+stale constant. The compiled-world `BAKE` chunk and pack entries take their
+integer version from the fingerprint's first eight hexadecimal digits.
+Further derivation-key slices cover the other compiled-world chunk versions,
+shader packages, `GpuPipelineCacheStore` content keys, and kernel sets.
 
 Both backends put a bake's textures on the GPU as they are stored.
 `GpuPixelFormat` names BC4, BC5, BC6H and BC7, sampled only, and the one image
@@ -5105,8 +5114,8 @@ whether it is sRGB or linear. The Steam Deck supports all three formats. One
 pixel-format vocabulary, `GpuPixelFormat`, names the baker's stored formats, the
 GPU's images and the presented surfaces, with no conversion between them.
 
-Each bake is keyed by the prototype's content hash, the baker version, and the
-quality tier, and one cache is filled in two ways. A build ships each bake once
+Each bake is keyed by the prototype's content hash, the bake derivation's code
+fingerprint, and the quality tier, and one cache is filled in two ways. A build ships each bake once
 in a bake pack, and a compiled world's chunk names the keys it needs from it, so
 a released world bakes nothing on a player's device. On a cache miss, which happens during live authoring or for a world
 that has not been compiled, the CPU baker runs in the background on the thread

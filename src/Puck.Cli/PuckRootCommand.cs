@@ -125,6 +125,7 @@ internal static class PuckRootCommand {
             CreationCommand.Create(),
             DecompileCommand.Create(),
             DeclarationsCommand.Create(),
+            DerivationsCommand.Create(),
             DocsCommand.Create(),
             EmbedCommand.Create(),
             FirmwareCommand.Create(),

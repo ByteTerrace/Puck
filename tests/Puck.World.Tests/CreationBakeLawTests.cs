@@ -9,15 +9,15 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: a creation's bake is keyed by its pin, the baker's version and the tier, and one key is one set
-/// of bytes. One cache (<see cref="WorldBakeStore"/>) is filled two ways: a compiled world's <c>BAKE</c> chunk names the
+/// CONTRACT UNDER TEST: a creation's bake is keyed by its pin, the bake derivation's fingerprint and the tier, and one
+/// key is one set of bytes. One cache (<see cref="WorldBakeStore"/>) is filled two ways: a compiled world's <c>BAKE</c> chunk names the
 /// keys it needs and the bake pack (<see cref="WorldBakePack"/>) that ships them, so a boot from it holds every bake the
 /// pack carries, byte for byte what a fresh bake makes, and bakes nothing, counted through the <c>sdf.bakes</c> source;
 /// and on a miss, a key the pack lacks or a pack that is gone, the presentation's <see cref="WorldBakeSchedule"/> bakes
 /// in the background only the prototypes the cache lacks, keeps them under the cache's directory, and reports each
 /// ready. A boot that finds no compiled world holding <c>BAKE</c> leaves it out rather than baking on its critical path.
-/// The chunk's version is the baker's, and the pack of this world's bakes is pinned to it. Bakes never reach simulation
-/// state.
+/// The chunk's version comes from the fingerprint, and the pack of this world's bakes is pinned. Bakes never reach
+/// simulation state.
 /// </summary>
 [Collection(name: DocumentCompositionCollection.Name)]
 public sealed class CreationBakeLawTests {
@@ -29,10 +29,8 @@ public sealed class CreationBakeLawTests {
             { "id": "glint", "document": { "schema": "puck.creation.v1", "name": "glint", "palette": [{ "color": "#FFFFFF", "emissive": 0, "specular": 0, "roughness": 0 }], "shapes": [{ "id": 0, "name": "glint", "type": "Sphere", "position": [0, 0.2, 0], "rotation": [0, 0, 0, 1], "scale": [0.2, 0.2, 0.2], "material": 0, "blend": "Union", "detail": true }] } }
         ],
         """;
-    // The bake pack of this file's world at the baker's current version. A change to what the baker produces moves
-    // SdfBaker.Version and re-records this pin.
-    private const uint PinnedVersion = 8;
-    private const string PinnedProduct = "sha256-64/6a1e8b98746b3c14";
+    // The bake pack of this file's world. Regenerating DerivationFingerprint.Bake re-records this pin.
+    private const string PinnedProduct = "sha256-64/ff4453db96d066a5";
 
     private static readonly TimeSpan Patience = TimeSpan.FromMinutes(minutes: 2);
 
@@ -124,6 +122,8 @@ public sealed class CreationBakeLawTests {
         schedule.Read(kind: WorldBakeSchedule.Baked),
         schedule.Read(kind: WorldBakeSchedule.Refused)
     );
+    private static string AnotherFingerprint(string fingerprint) =>
+        (((fingerprint[0] == '0') ? '1' : '0') + fingerprint[1..]);
 
     [Fact]
     public void BakingOneCreationTwiceGivesOneKeyAndTheSameBytes() {
@@ -150,17 +150,50 @@ public sealed class CreationBakeLawTests {
         _ = Assert.Throws<InvalidDataException>(testCode: () => CreationBakeCodec.Decode(bake: out _, content: swapped, refusal: out _));
     }
     [Fact]
-    public void TheKeyMovesWithTheCreationTheBakerAndTheTier() {
+    public void TheKeyMovesWithTheCreationTheFingerprintAndTheTier() {
         var key = WorldBakeStore.RequestsOf(definition: Definition(), quality: SdfBakeQuality.Standard)[0].Key;
         ContentPin[] moved = [
             (key with { CreationPin = WorldBakeStore.RequestsOf(definition: Definition(), quality: SdfBakeQuality.Standard)[1].Key.CreationPin }).Pin,
-            (key with { BakerVersion = (key.BakerVersion + 1) }).Pin,
+            (key with { Fingerprint = AnotherFingerprint(fingerprint: key.Fingerprint) }).Pin,
             (key with { Quality = SdfBakeQuality.Preview }).Pin,
         ];
 
-        Assert.Equal(expected: SdfBaker.Version, actual: key.BakerVersion);
+        Assert.Equal(expected: DerivationFingerprint.Bake, actual: key.Fingerprint);
         Assert.All(collection: moved, action: pin => Assert.NotEqual(expected: key.Pin, actual: pin));
         Assert.Equal(expected: moved.Length, actual: moved.Distinct().Count());
+    }
+    [Fact]
+    public void AChangedFingerprintMissesTheOldStoreAndRebakesWhileTheSameFingerprintIsHeld() {
+        using var directory = new TemporaryDirectory();
+        var definition = Definition();
+
+        definition = definition with { CreationsRaw = [definition.Creations[0]] };
+
+        var request = Assert.Single(collection: WorldBakeStore.RequestsOf(definition: definition, quality: SdfBakeQuality.Preview));
+        var previous = request with { Key = request.Key with { Fingerprint = AnotherFingerprint(fingerprint: request.Key.Fingerprint) } };
+        var path = directory.PathOf(name: "bakes");
+        var oldStore = new WorldBakeStore(directory: path);
+
+        Assert.True(condition: oldStore.Keep(
+            key: previous.Key.Pin,
+            outcome: WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: previous, work: out _)
+        ));
+
+        var currentStore = new WorldBakeStore(directory: path);
+
+        Assert.True(condition: currentStore.TryGet(key: previous.Key.Pin, outcome: out _));
+        Assert.False(condition: currentStore.TryGet(key: request.Key.Pin, outcome: out _));
+
+        using (var changed = new WorldBakeSchedule(quality: SdfBakeQuality.Preview, store: currentStore)) {
+            Drain(definition: definition, schedule: changed);
+            Assert.Equal(expected: (0L, 1L), actual: (changed.Read(kind: WorldBakeSchedule.Held), changed.Read(kind: WorldBakeSchedule.Baked)));
+            Assert.Equal(expected: WorldBakeState.Ready, actual: changed.StateOf(prototypeId: request.PrototypeId));
+        }
+
+        using var unchanged = new WorldBakeSchedule(quality: SdfBakeQuality.Preview, store: new WorldBakeStore(directory: path));
+
+        Drain(definition: definition, schedule: unchanged);
+        Assert.Equal(expected: (1L, 0L), actual: (unchanged.Read(kind: WorldBakeSchedule.Held), unchanged.Read(kind: WorldBakeSchedule.Baked)));
     }
     [Fact]
     public void AMissingBakeIsScheduledInTheBackgroundKeptAndReportedReady() {
@@ -440,14 +473,14 @@ public sealed class CreationBakeLawTests {
         );
     }
     [Fact]
-    public void TheChunkNamesOnlyKeysItsVersionIsTheBakersAndItsPackIsPinnedToIt() {
+    public void TheChunkNamesOnlyKeysItsVersionComesFromTheFingerprintAndItsPackIsPinned() {
         using var directory = new TemporaryDirectory();
         var path = WriteWorld(directory: directory);
         var chunk = new WorldBakeChunk(store: null);
         var pack = CompileWithPack(path: path);
         var product = AssetContentHash.Compute(content: pack);
 
-        Assert.Equal(expected: SdfBaker.Version, actual: chunk.Version);
+        Assert.Equal(expected: DerivationFingerprint.BakeChunkVersion, actual: chunk.Version);
         Assert.False(condition: chunk.DerivesOnBoot);
         Assert.True(condition: CompiledWorld.TryDecode(container: out var container, content: File.ReadAllBytes(path: CompiledWorld.Beside(documentPath: path)), header: out _, reason: out var reason), userMessage: reason);
         Assert.True(condition: container.TryFind(chunk: out var stored, code: chunk.Code));
@@ -469,10 +502,9 @@ public sealed class CreationBakeLawTests {
         Assert.True(condition: WorldBakePack.TryDecode(content: pack, pack: out var decoded, reason: out reason), userMessage: reason);
         Assert.Equal(expected: keys.Count, actual: decoded.Count);
         Assert.True(
-            condition: ((chunk.Version != PinnedVersion) || (product.ToString() == PinnedProduct)),
-            userMessage: $"the pack of this world's bakes at version {PinnedVersion} is {product}, pinned as {PinnedProduct}: a change to what the baker produces moves SdfBaker.Version and re-records this pin."
+            condition: (product.ToString() == PinnedProduct),
+            userMessage: $"the pack of this world's bakes at fingerprint {DerivationFingerprint.Bake} is {product}, pinned as {PinnedProduct}; re-record the product pin after regenerating the fingerprint."
         );
-        Assert.True(condition: (chunk.Version == PinnedVersion), userMessage: $"BAKE is at version {chunk.Version}; re-record its pin at that version.");
     }
     [Fact]
     public void APackIsOneCanonicalFileAndRefusesWhatItCannotAccountFor() {

@@ -21,7 +21,7 @@ namespace Puck.World.Authoring;
 /// level count is its tile's (<see cref="TextureMipChain.LevelCount"/>), so a decoder refuses any other. Counts and
 /// dimensions are the canonical variable-length integers of
 /// <see cref="CanonicalBinaryWriterExtensions"/>. A change to this layout is a change to what a bake produces, so it
-/// moves <see cref="SdfBaker.Version"/>.
+/// moves <see cref="DerivationFingerprint.Bake"/> when <c>puck derivations</c> regenerates it.
 /// </summary>
 public static class CreationBakeCodec {
     private const int MaximumDimension = (1 << 16);
@@ -31,6 +31,7 @@ public static class CreationBakeCodec {
     /// <param name="bake">The bake.</param>
     /// <returns>The bytes.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="bake"/> is <see langword="null"/>.</exception>
+    [Derivation(name: "bake")]
     public static byte[] Encode(SdfBake bake) {
         ArgumentNullException.ThrowIfNull(argument: bake);
 
@@ -97,6 +98,7 @@ public static class CreationBakeCodec {
     /// <param name="reason">Why the creation has no bake.</param>
     /// <returns>The bytes.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reason"/> is <see langword="null"/>.</exception>
+    [Derivation(name: "bake")]
     public static byte[] EncodeRefusal(string reason) {
         ArgumentNullException.ThrowIfNull(argument: reason);
 
