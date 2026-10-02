@@ -100,6 +100,30 @@ public sealed partial class RenderGraphCadenceLawTests {
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (7, 7));
     }
     [Fact]
+    public void AForwardedHistoryWriterCannotStandWhenItsSuccessorResumes() {
+        var gpu = new FakePipelineGpu();
+        var model = new Model();
+        var graph = Graph(preserve: false);
+
+        graph = graph with { Resources = graph.Resources.Select(resource => resource.Name switch {
+            "a" => resource with { Retained = false, Initialization = ShaderPipelineInitialization.Zero },
+            "b" => resource with { History = true },
+            _ => resource,
+        }).ToArray() };
+        using var node = Node(gpu, model, graph);
+
+        node.ProduceUntilInstalled();
+        foreach (var buffer in gpu.CreatedObjects.Where(item => ((item.Kind == "buffer") && (item.Bytes == 16)))) {
+            model.Contents.TryAdd(buffer.Handle, default);
+        }
+        model.InactiveShade = true;
+        node.ProduceFrame(context: default);
+        model.InactiveShade = false;
+        node.ProduceFrame(context: default);
+        Assert.Equal((10, 20), model.Samples[^1]);
+        Assert.Equal((3, 2), (model.Writes, model.Shades));
+    }
+    [Fact]
     public void AForcedSignatureAndAnInactivePassAreDistinctFromStanding() {
         var model = new Model();
         using var node = Node(new FakePipelineGpu(), model);
@@ -140,7 +164,6 @@ public sealed partial class RenderGraphCadenceLawTests {
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (2, 2));
     }
     [InlineData("zero")]
-    [InlineData("history")]
     [InlineData("external")]
     [Theory]
     public void InputsWithoutARetainedContentVersionAlwaysExecute(string kind) {
@@ -155,6 +178,17 @@ public sealed partial class RenderGraphCadenceLawTests {
         node.ProduceUntilInstalled();
         for (var frame = 0; (frame < 5); frame++) { node.ProduceFrame(context: default); }
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (6, 6));
+    }
+    [Fact]
+    public void APreviousHistoryReadDoesNotDemandAnotherRetainedWrite() {
+        var model = new Model();
+        var input = new ShaderPipelineResource(Name: "source", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: 16,
+            History: true, Initialization: ShaderPipelineInitialization.Zero);
+        using var node = Node(new FakePipelineGpu(), model, input: input, previous: true);
+
+        node.ProduceUntilInstalled();
+        for (var frame = 0; frame < 5; frame++) { node.ProduceFrame(context: default); }
+        Assert.Equal((1, 1), (model.Writes, model.Shades));
     }
     [InlineData(false)]
     [InlineData(true)]

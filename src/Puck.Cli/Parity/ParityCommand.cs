@@ -13,7 +13,7 @@ namespace Puck.Cli.Parity;
 /// <see cref="ParityCompareCommand"/> — the content-gate / exact-state-hash / per-tile-pixel comparator — under the
 /// contract versioned beside the world (<c>tests/Puck.Parity/parity.contract.json</c>). Because both backends
 /// capture the same simulation ticks, the pair observes one moment by construction rather than by fence.</summary>
-internal static class ParityCommand {
+internal static partial class ParityCommand {
     private const string ContractPath = "tests/Puck.Parity/parity.contract.json";
     private const string ScratchPrefix = "puck-parity-";
     private const string SdfDocumentPath = "tests/Puck.Parity/parity.sdf.json";
@@ -141,7 +141,7 @@ internal static class ParityCommand {
 
         try {
             return ShipWorld(artifact: artifact, repositoryRoot: repositoryRoot, runDirectory: runDirectory, suiteClock: suiteClock, world: out world);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException or JsonException)) {
             Console.Error.WriteLine(value: $"ERROR: the parity tree could not ship: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
 
             return false;
@@ -152,6 +152,8 @@ internal static class ParityCommand {
             path1: repositoryRoot,
             path2: Path.GetDirectoryName(path: WorldPath)!
         );
+
+        tree = StageTemporalTree(runDirectory: runDirectory, tree: tree);
         var output = Path.Combine(
             path1: runDirectory,
             path2: "world"
@@ -283,11 +285,13 @@ internal static class ParityCommand {
             return CliExit.Refused;
         }
 
+        var scheduleDirectory = Path.Combine(path1: runDirectory, path2: $"schedule-{backend}");
+
         // The parity world drives no seats and reads no input, so no controller-clearing guard is needed; the script
-        // only turns the bakes off when asked (a world carrying its bakes draws them), composes the world's companion SDF
+        // pins ordinary presentation levers off, optionally turns bakes off, composes the world's companion SDF
         // document and waits past the last tick its captures rows schedule.
         // It closes by reading the bake counts, which the leg is then held to (BakeRefusal).
-        var script = $"{(bakes ? string.Empty : "world.bakes off\n")}world.sdf.load \"{Path.Combine(
+        var script = $"world.temporal off\nworld.upscale-sharpness 0\n{(bakes ? string.Empty : "world.bakes off\n")}world.sdf.load \"{Path.Combine(
             path1: Path.GetDirectoryName(path: shippedWorld)!,
             path2: Path.GetFileName(path: SdfDocumentPath)
         ).Replace(
@@ -295,7 +299,7 @@ internal static class ParityCommand {
             oldChar: '\\'
         )}\"\nworld.wait {waitTick}\nworld.counters sdf.bakes\n";
         var leg = WorldOffscreenLeg.Run(
-            arguments: ["--capture-dir", captureDirectory],
+            arguments: ["--capture-dir", captureDirectory, "--schedule-dir", scheduleDirectory],
             artifact: artifact,
             backend: backend,
             budget: SuiteBudget,
@@ -315,6 +319,10 @@ internal static class ParityCommand {
 
         if (leg != CliExit.Success) {
             return leg;
+        }
+        if (TemporalScheduleRefusal(scheduleDirectory: scheduleDirectory, worldPath: shippedWorld) is { } temporalRefusal) {
+            Console.Error.WriteLine(value: $"ERROR: the {backend} leg: {temporalRefusal}.");
+            return CliExit.Failed;
         }
         if (BakeRefusal(bakes: bakes, stdout: (process?.Stdout ?? string.Empty)) is { } refusal) {
             Console.Error.WriteLine(value: $"ERROR: the {backend} leg: {refusal}.");

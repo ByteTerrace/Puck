@@ -1,0 +1,232 @@
+{
+  "id": "temporal-ghosting",
+  "title": "Temporal body motion leaves no trail behind its analytic sphere",
+  "binding": "A creation look is a radius0.6 sphere centered one metre above its body. A fixed128x128 camera at(0,1,8), field of view0.9, looks through its silhouette near the view centre; the conservative central4x4 box remains inside the radius0.6 sphere after the capsule settles above the ground. The scheduled body pose moves three metres sideways, more than40 output pixels and five8-pixel tiles, without cutting this camera or changing the program. The first two captured moved frames compare that vacated interior against the same native spatial camera at tick90. RGB max3 and mean0.5 codes bound residual history. The before capture must differ, proving an occluder occupied the analytic mask. The control delays the move until after both revealed captures, so those same pixel bounds fail. The revealed region is the background behind the sphere.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/temporal-ghosting/fixture.puck",
+    "script": "capture.script.txt",
+    "runSchedule": true,
+    "commands": [
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.ao",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.shadows",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.upscale-sharpness",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageComparison",
+        "name": "revealed-interior-matches-spatial-at-71",
+        "capture": "state/captures/revealed~71.png",
+        "reference": "state/captures/spatial~90.png",
+        "referenceScale": 1,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.484375,
+          0.484375,
+          0.515625,
+          0.515625
+        ],
+        "maxErrorCodes": 3,
+        "meanErrorCodes": 0.5,
+        "holds": true
+      },
+      {
+        "type": "imageComparison",
+        "name": "revealed-interior-matches-spatial-at-72",
+        "capture": "state/captures/revealed~72.png",
+        "reference": "state/captures/spatial~90.png",
+        "referenceScale": 1,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.484375,
+          0.484375,
+          0.515625,
+          0.515625
+        ],
+        "maxErrorCodes": 3,
+        "meanErrorCodes": 0.5,
+        "holds": true
+      },
+      {
+        "type": "imageComparison",
+        "name": "old-analytic-silhouette-was-present",
+        "capture": "state/captures/before~60.png",
+        "reference": "state/captures/spatial~90.png",
+        "referenceScale": 1,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.484375,
+          0.484375,
+          0.515625,
+          0.515625
+        ],
+        "maxErrorCodes": 3,
+        "meanErrorCodes": 0.5,
+        "holds": false
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/temporal-ghosting/discriminating.puck",
+    "script": "capture.script.txt",
+    "runSchedule": true,
+    "commands": [
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.ao",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.shadows",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.upscale-sharpness",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageComparison",
+        "name": "revealed-interior-matches-spatial-at-71",
+        "capture": "state/captures/revealed~71.png",
+        "reference": "state/captures/spatial~90.png",
+        "referenceScale": 1,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.484375,
+          0.484375,
+          0.515625,
+          0.515625
+        ],
+        "maxErrorCodes": 3,
+        "meanErrorCodes": 0.5,
+        "holds": false
+      },
+      {
+        "type": "imageComparison",
+        "name": "revealed-interior-matches-spatial-at-72",
+        "capture": "state/captures/revealed~72.png",
+        "reference": "state/captures/spatial~90.png",
+        "referenceScale": 1,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.484375,
+          0.484375,
+          0.515625,
+          0.515625
+        ],
+        "maxErrorCodes": 3,
+        "meanErrorCodes": 0.5,
+        "holds": false
+      },
+      {
+        "type": "imageComparison",
+        "name": "old-analytic-silhouette-was-present",
+        "capture": "state/captures/before~60.png",
+        "reference": "state/captures/spatial~90.png",
+        "referenceScale": 1,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.484375,
+          0.484375,
+          0.515625,
+          0.515625
+        ],
+        "maxErrorCodes": 3,
+        "meanErrorCodes": 0.5,
+        "holds": false
+      }
+    ]
+  }
+}

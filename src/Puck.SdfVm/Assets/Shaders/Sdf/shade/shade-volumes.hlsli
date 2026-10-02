@@ -187,6 +187,9 @@ float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float n
             }
         }
         if (selected == SdfVolumeCount) break;
+#ifdef SDF_TEMPORAL_VIEWS
+        sdfReactivity = 1.0;
+#endif
         SdfVolumeData v = sdfLoadVolume(selected);
         float3 localOrigin = sdfVolumeLocalPoint(v, rayOrigin);
         float3 localDirection = sdfVolumeLocalDirection(v, rayDirection);

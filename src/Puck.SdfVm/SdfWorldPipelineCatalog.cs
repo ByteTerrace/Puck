@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -14,6 +15,17 @@ namespace Puck.SdfVm;
 public sealed class SdfWorldPipelineCatalog(GpuRegionCopyPass regionCopy, SdfMeshRasterPass meshRaster) {
     private readonly Dictionary<string, SdfKernelSet> m_deployed = new(comparer: StringComparer.Ordinal);
     private readonly Lock m_deployedGate = new();
+
+    /// <summary>Gets the Vulkan bytecode payload resident in the immutable deployed catalogue, counted once per
+    /// composition rather than once per view. Array headers and reference metadata are excluded.</summary>
+    public static WorkKind VulkanResidentBytes { get; } = new(name: "shaders.sdf-kernels.resident-vulkan-bytes", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
+    /// <summary>Gets the Direct3D 12 bytecode payload resident in the immutable deployed catalogue, with the same
+    /// ownership and exclusions as <see cref="VulkanResidentBytes"/>.</summary>
+    public static WorkKind DirectXResidentBytes { get; } = new(name: "shaders.sdf-kernels.resident-directx-bytes", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
+    /// <summary>Gets the catalogue's resident bytecode counts. The catalogue retains each backend's set for its
+    /// lifetime, so these totals never decrease. Loading another view changes neither count; reload snapshots and GPU
+    /// pipelines are separate owners and are not included.</summary>
+    public WorkCounterSet Work { get; } = new(name: "shaders.sdf-catalogue", kinds: [VulkanResidentBytes, DirectXResidentBytes]);
 
     /// <summary>Gets the composition's region copy, one pipeline a device in the pass pipelines, which a residency's table
     /// upload and mesh region record with.</summary>
@@ -46,6 +58,12 @@ public sealed class SdfWorldPipelineCatalog(GpuRegionCopyPass regionCopy, SdfMes
                     key: bytecodeExtension,
                     value: kernels
                 );
+                var kind = bytecodeExtension switch {
+                    ".spv" => VulkanResidentBytes,
+                    ".dxil" => DirectXResidentBytes,
+                    _ => null,
+                };
+                if (kind is not null) { Work.Add(kind: kind, amount: kernels.ResidentBytecodeBytes); }
             }
 
             return kernels;

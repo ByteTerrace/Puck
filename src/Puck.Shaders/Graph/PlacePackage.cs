@@ -11,7 +11,8 @@ namespace Puck.Shaders;
 /// <param name="Top">The rect's top edge, as a fraction of the output's height.</param>
 /// <param name="Width">The rect's width, as a fraction of the output's width.</param>
 /// <param name="Height">The rect's height, as a fraction of the output's height.</param>
-/// <param name="Sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
+/// <param name="Sharpness">The resize blend from 0 (bilinear) to 1 (clamped Catmull-Rom); at equal extent,
+/// 0 copies exactly and positive values apply contrast-adaptive sharpening.</param>
 /// <param name="Uncovered">Whether some of the output lies outside every rect the host shows this frame, so those
 /// pixels owe the letterbox. A pass whose config sets <see cref="RenderGraphPackageCatalog.PlaceLetterbox"/> and whose
 /// source is not shown then writes the letterbox color everywhere, so pixels no later pass covers show it rather than

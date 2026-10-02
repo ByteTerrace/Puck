@@ -109,8 +109,9 @@ public sealed record ShaderPipelineDimensions(
 /// the identifier its source reads it by. Where it binds follows from the pass's interface
 /// (<see cref="ShaderPipelinePassPorts"/>), never from the document.</summary>
 /// <param name="Name">The version name.</param>
-/// <param name="PreviousFrame">Reads the contents the previous frame left rather than this frame's. Only a pass input
-/// sets it, and only for a version declared <see cref="ShaderPipelineResource.History"/>.</param>
+/// <param name="PreviousFrame">Reads the last successfully submitted contents from before this submission. A standing
+/// writer leaves them unchanged. Only a pass input sets it, and only for a version declared
+/// <see cref="ShaderPipelineResource.History"/>.</param>
 /// <param name="As">The HLSL identifier the pass's source reads the port by, or <see langword="null"/> for the
 /// version's name in camel case (<see cref="ShaderPipelinePassPorts.Identifier"/>). A source that several passes bind to
 /// differently named versions names each port the same way with it.</param>
@@ -129,8 +130,9 @@ public sealed record ResourceReference(
 /// <param name="Kind">Image, buffer, or depth resource.</param>
 /// <param name="Format">The backend-neutral format spelling. Required for images and depth resources.</param>
 /// <param name="Dimensions">Image dimensions; omitted for buffers.</param>
-/// <param name="History">Retains this version's contents into the next frame, where a pass input reads them with
-/// <see cref="ResourceReference.PreviousFrame"/>. Only the last version of a forwarding chain can be history, because a
+/// <param name="History">Retains this version's last successful write, which a later submission reads with
+/// <see cref="ResourceReference.PreviousFrame"/>. The ring advances only when a writer submits successfully.
+/// Only the last version of a forwarding chain can be history, because a
 /// forward would overwrite what is retained.</param>
 /// <param name="Initialization">How the first frame obtains valid contents. Only a version that forwards nothing
 /// declares it; a forwarded version's contents come from its predecessor.</param>

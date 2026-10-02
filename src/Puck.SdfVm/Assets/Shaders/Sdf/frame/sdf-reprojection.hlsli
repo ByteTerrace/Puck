@@ -41,26 +41,26 @@ bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint
 // Pixel positions use continuous render coordinates, with the first pixel center at (0.5, 0.5), and positive Y down.
 // The returned ray parameter is Euclidean distance along the preceding camera's normalized ray. A cut or a point
 // behind that camera has no correspondence. The caller decides whether the position lies inside its history image.
-bool sdfReprojection(uint record, float3 currentPoint, out float2 previousPixel, out float previousT) {
+// Project a relative vector with the previous jittered lens. A background direction uses a zero near plane.
+bool sdfProjectPrevious(float3 relative, float nearPlane, out float2 previousPixel, out float previousT) {
     previousPixel = float2(0.0, 0.0);
     previousT = 0.0;
-    if (passGroup.previousView[0].w == 0.0) {
-        return false;
-    }
-    float3 previousPoint;
-    if (!sdfPreviousPoint(record, sdfLoadVisibility(record), currentPoint, previousPoint)) {
-        return false;
-    }
-    float3 relative = (previousPoint - passGroup.previousView[0].xyz);
+    if (passGroup.previousView[0].w == 0.0) return false;
     float forward = dot(relative, passGroup.previousView[3].xyz);
-    if (forward <= max(passGroup.previousView[5].x, 0.0)) {
-        return false;
-    }
+    if (forward <= max(nearPlane, 0.0)) return false;
     float2 tangent = (float2(dot(relative, passGroup.previousView[1].xyz), dot(relative, passGroup.previousView[2].xyz)) / forward);
     float2 ndc = ((tangent - passGroup.previousView[5].yz) /
         (float2(passGroup.previousView[2].w, 1.0) * passGroup.previousView[1].w));
     previousPixel = ((ndc * float2(0.5, -0.5) + 0.5) * passGroup.previousView[4].xy);
     previousT = length(relative);
     return true;
+}
+bool sdfReprojection(uint record, float3 currentPoint, out float2 previousPixel, out float previousT) {
+    previousPixel = float2(0.0, 0.0);
+    previousT = 0.0;
+    if (passGroup.previousView[0].w == 0.0) return false;
+    float3 previousPoint;
+    if (!sdfPreviousPoint(record, sdfLoadVisibility(record), currentPoint, previousPoint)) return false;
+    return sdfProjectPrevious(previousPoint - passGroup.previousView[0].xyz, passGroup.previousView[5].x, previousPixel, previousT);
 }
 #endif

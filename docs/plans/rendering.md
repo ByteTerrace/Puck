@@ -4791,6 +4791,19 @@ counted rows recorded in the same change.
    - Counted-cost gate: with reconstruction on, the resolve's dispatch, its
      texels, the history's barriers and its device-local bytes; a still view's
      rendered frames stop after one period (`world.cadence on`).
+   - The selected backend eagerly loads one complete immutable kernel catalogue,
+     shared by every view on the device. Optional variants acquire GPU pipelines
+     only when enabled. Separate per-backend resident-byte rows count the
+     catalogue payload once, alongside cumulative loader bytes; two-view laws
+     prove the same set and arrays are shared. This policy follows the measured
+     bytecode delta for the same workload with reconstruction off, while native
+     off dispatch, allocation and texel counts remain unchanged. The measured
+     deltas belong to the landing commit's evidence.
+   - Local graph history advances only when a writer submits successfully.
+     Unrelated sky submissions retain the last lit sample; failure before
+     submission rolls back the pending cursor, while a callback failure after
+     submission preserves the committed write. Previous-history reads do not
+     demand writes. Inter-instance previous-frame screen-feed demand is unchanged.
 6. **P15-6, dynamic resolution.** The render extent moves inside its ceiling
    each frame.
    - Delivers: one controller that sets each view's per-frame render extent

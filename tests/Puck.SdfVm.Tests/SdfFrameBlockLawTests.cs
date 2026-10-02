@@ -96,6 +96,27 @@ public sealed class SdfFrameBlockLawTests {
     }
 
     [Fact]
+    public void TemporalInterfacesRetainTheCommonWriterOffsetsAndPreviousJitter() {
+        foreach (var member in SdfWorldPackage.Values) {
+            Assert.Equal(expected: SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member.Name),
+                actual: SdfWorldInterfaces.TemporalViewsParameters.BlockOffsetOf(member: member.Name));
+            Assert.Equal(expected: SdfWorldInterfaces.ResolveParameters.BlockOffsetOf(member: member.Name),
+                actual: SdfWorldInterfaces.TemporalResolveParameters.BlockOffsetOf(member: member.Name));
+        }
+        var block = new byte[SdfFrameBlock.SizeBytes];
+
+        SdfFrameBlock.WritePreviousView(block: block, valid: true, view: new SdfReprojectionView(
+            Camera: Frame().Views[0].Camera, Jitter: new Vector2(x: 0.25f, y: -0.375f), Width: 91, Height: 53));
+        var offset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.PreviousView));
+
+        Assert.Equal(expected: 91f, actual: BitConverter.ToSingle(startIndex: (offset + (16 * 4)), value: block));
+        Assert.Equal(expected: 53f, actual: BitConverter.ToSingle(startIndex: (offset + (17 * 4)), value: block));
+        Assert.Equal(expected: 0.25f, actual: BitConverter.ToSingle(startIndex: (offset + (18 * 4)), value: block));
+        Assert.Equal(expected: -0.375f, actual: BitConverter.ToSingle(startIndex: (offset + (19 * 4)), value: block));
+        SdfFrameBlock.WritePreviousView(block: block, valid: false, view: default);
+        Assert.DoesNotContain(collection: block, filter: static value => (value != 0));
+    }
+    [Fact]
     public void EveryDeclaredValueIsWrittenWhereItsDeclarationReadsIt() {
         var frame = Frame();
         var environment = new float[SdfEnvironment.LaneCount];

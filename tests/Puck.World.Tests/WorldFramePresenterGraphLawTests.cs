@@ -187,6 +187,25 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
     // A camera view is a view of the world's own frame. The dress hands the binder its own views once they are latched,
     // and the binder films each camera view into the frame after them, so the world's residency renders it. The
     // presentation places only its own views, so a filmed view never becomes a pane.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CameraHistoryUsesItsAuthoredResidencySettingInsteadOfTheViewerLever(bool authored) {
+        using var host = WorldBootHarness.Compose(edit: definition => WithScreen(definition: definition) with {
+            RenderRaw = definition.Render with { Temporal = authored },
+        }, presentation: WorldHostPresentation.Offscreen, stateDirectory: m_stateDirectory, world: World).Build();
+        using var render = WorldRenderRoot.Build(sp: host.Services, overlay: null);
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var settings = host.Services.GetRequiredService<WorldRenderSettings>();
+
+        settings.Temporal = !authored;
+        for (ulong frame = 0; (frame < 3); frame++) { Present(index: frame, presenter: presenter); }
+        var dressed = presenter.CaptureFrame(deltaSeconds: 0f, height: Display, interpolationAlpha: 1f, width: Display);
+
+        Assert.True(condition: (dressed.Views.Count > 1));
+        Assert.Equal(expected: !authored, actual: dressed.Views[0].Temporal);
+        Assert.All(collection: dressed.Views.Skip(count: 1), action: view => Assert.Equal(expected: authored, actual: view.Temporal));
+    }
     [Fact]
     public void TheDressFilmsCameraViewsIntoTheFrameAfterItsOwnViews() {
         var builder = WorldBootHarness.Compose(

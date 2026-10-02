@@ -699,6 +699,23 @@ internal static partial class CanaryCommand {
     private static (bool Passed, bool InfrastructureFailed, string? Unsupported) ReportProof(CanaryProof proof, CanaryLegRun positive, CanaryLegRun discriminating) {
         var manifest = proof.Manifest;
 
+        // A paired capture is evaluated only after both processes have exited. Paths come from these runs, never
+        // from manifest-authored directories, and ordinary legs keep their completed evaluation unchanged.
+        if (positive.Assertions.Deferred != 0) {
+            positive = positive with {
+                Assertions = CanaryAssertions.Evaluate(leg: positive.Leg,
+                primaryTranscript: positive.Transcript, otherLeg: discriminating.Transcript,
+                authorityEndpoint: positive.AuthorityEndpoint, authorityTranscripts: positive.AuthorityTranscripts),
+            };
+        }
+        if (discriminating.Assertions.Deferred != 0) {
+            discriminating = discriminating with {
+                Assertions = CanaryAssertions.Evaluate(leg: discriminating.Leg,
+                primaryTranscript: discriminating.Transcript, otherLeg: positive.Transcript,
+                authorityEndpoint: discriminating.AuthorityEndpoint, authorityTranscripts: discriminating.AuthorityTranscripts),
+            };
+        }
+
         ReportLeg(
             id: proof.Label,
             result: positive
@@ -718,6 +735,7 @@ internal static partial class CanaryCommand {
             authorityEndpoint: discriminating.AuthorityEndpoint,
             authorityTranscripts: discriminating.AuthorityTranscripts,
             leg: manifest.Positive,
+            otherLeg: positive.Transcript,
             primaryTranscript: discriminating.Transcript
         );
         var turnedRed = !positiveOnDiscriminating.Passed;
@@ -1183,6 +1201,7 @@ internal static partial class CanaryCommand {
         }
 
         var assertions = CanaryAssertions.Evaluate(
+            deferPairedCaptures: true,
             authorityEndpoint: federationEndpoint,
             leg: leg,
             primaryTranscript: transcript

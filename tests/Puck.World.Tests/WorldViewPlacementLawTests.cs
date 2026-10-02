@@ -185,6 +185,22 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         );
         Assert.True(condition: PlacementOf(view: 0).Shown);
     }
+    [Fact]
+    public void ASharpenedLoneViewUsesItsExistingPlacePassAndZeroRestoresTheFastPath() {
+        foreach (var sharpness in new[] { 1f, 0f, 0.5f }) {
+            m_host.BeginFrame(views: Views);
+            m_host.PlaceViews(
+                panesCover: false,
+                rendered: static _ => true,
+                sharpness: sharpness,
+                views: [View(region: Whole)]
+            );
+            Assert.Equal(expected: (sharpness > 0f), actual: PlacementOf(view: 0).Shown);
+            Assert.False(condition: PlacementOf(view: 0).Uncovered);
+            Assert.Equal(expected: sharpness, actual: PlacementOf(view: 0).Sharpness);
+            Assert.Equal(expected: m_viewPasses.Count, actual: m_host.Synthesized!.ViewPasses.Count);
+        }
+    }
     // A filmic tonemap is the view's place pass, so a lone whole-display view is shown once rendered rather than stood in
     // for, or the world would reach the display untonemapped. Until shown it owes the letterbox, so a source that
     // completes later in the frame cannot reach the display through the untonemapped base.

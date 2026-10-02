@@ -102,6 +102,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                     m_work.StandPass(pass: index);
                     continue;
                 }
+                PrepareHistoryWrites(pass: pass);
                 m_work.EnterPass(pass: index);
                 BeginTiming(command: command, pass: index, slot: slot);
                 Record(

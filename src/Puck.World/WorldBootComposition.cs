@@ -1058,7 +1058,8 @@ public static class WorldBootComposition {
     }
     /// <summary>Registers the shader compiler every presentation shape's pipelines compile through, under the state
     /// root's <c>pipelines</c> cache with the document's toolchain, and the shader work sources a counters report reads:
-    /// the compiler's <c>shaders.compiler</c> counts, the process's kernel-set and shader-set manifest load counts, and
+    /// the compiler's <c>shaders.compiler</c> counts, the process's kernel-set and shader-set manifest load counts,
+    /// the shared catalogue's resident bytecode payload, and
     /// the pass pipelines every graph node, package pass, region copy and SDF residency leases with its
     /// <c>gpu.pass-pipelines</c> counts.</summary>
     /// <param name="services">The service collection a presentation shape composes.</param>
@@ -1069,6 +1070,7 @@ public static class WorldBootComposition {
         ));
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<ShaderCompiler>().Work);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: SdfKernelSet.LoadWork);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<SdfWorldPipelineCatalog>().Work);
         services.TryAddSingleton<GpuPassPipelineCache>();
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<GpuPassPipelineCache>().Work);
     }

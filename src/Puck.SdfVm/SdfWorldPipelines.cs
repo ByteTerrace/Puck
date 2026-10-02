@@ -23,12 +23,16 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldPipelines : IDisposable {
     // Optional pass builds join this table off-thread; reload preparation and publication share the same gate.
     private readonly Lock m_gate = new();
+    private readonly GpuPassPipelineCache m_cache;
+    private readonly IGpuDeviceContext m_device;
     private readonly Slot?[] m_slots;
 
     private bool m_disposed;
     private SdfKernelSet m_kernels;
 
-    private SdfWorldPipelines(SdfKernelSet kernels, bool includesBrickPipelines, Slot?[] slots) {
+    private SdfWorldPipelines(SdfKernelSet kernels, bool includesBrickPipelines, Slot?[] slots, GpuPassPipelineCache cache, IGpuDeviceContext device) {
+        m_cache = cache;
+        m_device = device;
         m_kernels = kernels;
         m_slots = slots;
         IncludesBrickPipelines = includesBrickPipelines;
@@ -88,6 +92,8 @@ public sealed partial class SdfWorldPipelines : IDisposable {
         }
 
         return new SdfWorldPipelines(
+            cache: cache,
+            device: device,
             includesBrickPipelines: includeBrickPipelines,
             kernels: kernels,
             slots: slots
@@ -186,12 +192,14 @@ public sealed partial class SdfWorldPipelines : IDisposable {
     /// <exception cref="InvalidOperationException">A changed kernel does not read this host's interface, naming every such
     /// kernel and why, or it is a DXIL container no <c>dxcompiler.dll</c> can reflect: the reload is refused and the set
     /// keeps its kernels.</exception>
+    /// <exception cref="ArgumentException">The cache or device is not the one the set was acquired from.</exception>
     /// <exception cref="InvalidDataException">A changed kernel's bytes are not bytecode the reflector reads.</exception>
     public SdfWorldPipelineReload PrepareReload(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfKernelSet kernels, ShaderBytecodeReflector reflector) {
         ArgumentNullException.ThrowIfNull(argument: cache);
         ArgumentNullException.ThrowIfNull(argument: device);
         ArgumentNullException.ThrowIfNull(argument: kernels);
         ArgumentNullException.ThrowIfNull(argument: reflector);
+        RequireOwnership(cache: cache, device: device);
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -206,7 +214,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
                 var slot = m_slots[index];
                 var kernel = ((SdfKernel)index);
 
-                if ((slot is null) && (kernel != SdfKernel.Resolve)) {
+                if ((slot is null) && !SdfKernelSet.IsOptional(kernel: kernel)) {
                     continue;
                 }
                 var bytecode = kernels[kernel];

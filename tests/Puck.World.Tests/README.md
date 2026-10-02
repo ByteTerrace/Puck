@@ -31,6 +31,12 @@ on and fails on any `[d3d12-debug]` line, so the law runs alone in
 `HeadlessVulkanDevice` and `DirectXTestDevices`. `SharedFenceLawTests` orders a
 Direct3D 11 writer and a Direct3D 12 or Vulkan reader by a shared fence alone.
 
+`SdfFieldDeviceLawTests` also pins two exact sphere inputs through the scalar and
+analytic-gradient VM walks. The squared components, ordered sum, square root and
+radius subtraction have independently derived binary32 reference words. This
+checks a diagnosed reduction-order hazard; it does not claim that all presentation
+math is bit-identical across devices. The rendered parity stations cover its image effect.
+
 `SeamCrossingOrchestrationLawTests` exercises authored adjacency hysteresis through
 the real instance host: a body inside the deadband retains its authority, and one
 beyond it transfers within a bounded number of ticks. `AuthoredAdjacencyHysteresisLawTests`

@@ -32,7 +32,12 @@ public sealed class SdfKernelSet {
         }
 
         m_bytecode = [.. bytecode];
+        foreach (var kernel in m_bytecode) { ResidentBytecodeBytes = checked(ResidentBytecodeBytes + kernel.Length); }
     }
+
+    /// <summary>Gets the immutable bytecode payload held by this set, excluding array headers and reference-table
+    /// metadata. A deployed set owns one loaded byte array per kernel; views share the same set and arrays.</summary>
+    public long ResidentBytecodeBytes { get; }
 
     /// <summary>Gets every kernel, in pipeline order.</summary>
     public static IReadOnlyList<SdfKernel> Kernels { get; } = Enum.GetValues<SdfKernel>();
@@ -89,11 +94,17 @@ public sealed class SdfKernelSet {
         SdfKernel.Sky => "sdf-sky",
         SdfKernel.BrickBake => "sdf-brick-bake",
         SdfKernel.Resolve => "sdf-resolve",
+        SdfKernel.TemporalViews => "sdf-world-temporal-views",
+        SdfKernel.TemporalViewsCore => "sdf-world-temporal-views-core",
+        SdfKernel.TemporalViewsFolds => "sdf-world-temporal-views-folds",
+        SdfKernel.TemporalResolve => "sdf-temporal-resolve",
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(kernel), actualValue: kernel, message: "Not an SDF kernel."),
     };
     /// <summary>Returns the layout of the interface a kernel reads: the brick baker's
     /// (<see cref="SdfWorldInterfaces.BrickBakeLayout"/>), reconstruction's
-    /// (<see cref="SdfWorldInterfaces.ResolveParameters"/>), or every native per-view dispatch's
+    /// (<see cref="SdfWorldInterfaces.ResolveParameters"/>), temporal shading and reconstruction's
+    /// (<see cref="SdfWorldInterfaces.TemporalViewsParameters"/>, <see cref="SdfWorldInterfaces.TemporalResolveParameters"/>),
+    /// or every native per-view dispatch's
     /// (<see cref="SdfWorldInterfaces.WorldLayout"/>), each stamped with this host's instruction set.</summary>
     /// <param name="kernel">The kernel.</param>
     /// <returns>The layout.</returns>
@@ -101,8 +112,14 @@ public sealed class SdfKernelSet {
         kernel switch {
             SdfKernel.BrickBake => SdfWorldInterfaces.BrickBakeLayout,
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,
+            SdfKernel.TemporalResolve => SdfWorldInterfaces.TemporalResolveParameters.Layout,
+            SdfKernel.TemporalViews or SdfKernel.TemporalViewsCore or SdfKernel.TemporalViewsFolds => SdfWorldInterfaces.TemporalViewsParameters.Layout,
             _ => SdfWorldInterfaces.WorldLayout,
         };
+    /// <summary>Whether a kernel is acquired only when a view installs its optional fragment.</summary>
+    /// <param name="kernel">The kernel.</param>
+    /// <returns>Whether the native pipeline set omits it.</returns>
+    public static bool IsOptional(SdfKernel kernel) => (kernel is SdfKernel.Resolve or SdfKernel.TemporalResolve or SdfKernel.TemporalViews or SdfKernel.TemporalViewsCore or SdfKernel.TemporalViewsFolds);
     /// <summary>Returns why a kernel's compiled bytecode reads something other than this host's interface, or
     /// <see langword="null"/> when it reads that interface: <see cref="ShaderInterfaceLayout.Mismatch"/> against
     /// <see cref="LayoutOf"/>, which refuses a kernel whose pass block carries another instruction set's stamp or none, and

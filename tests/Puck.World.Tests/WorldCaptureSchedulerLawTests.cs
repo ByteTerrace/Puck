@@ -172,6 +172,16 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
         public Run(string directory, bool honoursFrames, bool serves, bool losesDevice = false, string? secondInstance = null, bool rendersWorld = true, int? secondScreen = null, IWorldCaptureSources? sources = null) {
             m_row = HostRow.Build(
                 definition: (Fixtures.BuildDocument() with {
+                    CamerasRaw = ((secondInstance == "reference") ? [new WorldCamera(
+                        Name: "reference",
+                        Rig: new WorldCameraProgram(
+                            Name: "reference-rig",
+                            Version: WorldCameraProgram.CurrentVersion,
+                            Operations: [new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 0.9f))]
+                        ),
+                        RenderWidth: 320U,
+                        RenderHeight: 240U
+                    )] : []),
                     Captures = new WorldCapturesSection(
                         Directory: directory,
                         Rows: [
@@ -420,8 +430,10 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
             );
         }
     }
-    [Fact]
-    public void ARowNamingAnInstanceIsCapturedFromThatInstanceAndOneTheGraphLacksIsRefusedByName() {
+    [InlineData(WorldViewGraphs.WorldInstance)]
+    [InlineData("reference")]
+    [Theory]
+    public void ARowNamingAnInstanceIsCapturedFromThatInstanceAndOneTheGraphLacksIsRefusedByName(string missingInstance) {
         using (var run = new Run(
             directory: m_directory.RootPath,
             honoursFrames: true,
@@ -449,13 +461,13 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
             directory: m_directory.RootPath,
             honoursFrames: true,
             rendersWorld: false,
-            secondInstance: WorldViewGraphs.WorldInstance,
+            secondInstance: missingInstance,
             serves: true
         );
 
         unknown.BurstThenDrain();
         Assert.Equal(
-            expected: ["first:10::", "second:30:failed:the render graph cannot capture instance 'world' (The render graph has no instance 'world'.)"],
+            expected: ["first:10::", $"second:30:failed:the render graph cannot capture instance '{missingInstance}' (The render graph has no instance '{missingInstance}'.)"],
             actual: ReadManifest(directory: m_directory.RootPath).Select(selector: static entry => $"{entry.GetProperty(propertyName: "station").GetString()}:{entry.GetProperty(propertyName: "tick").GetUInt64()}:{(entry.TryGetProperty(propertyName: "refusal", value: out var refusal) ? refusal.GetString() : string.Empty)}:{(entry.TryGetProperty(propertyName: "detail", value: out var detail) ? detail.GetString() : string.Empty)}")
         );
         Assert.Empty(collection: unknown.WorldTarget.Served);

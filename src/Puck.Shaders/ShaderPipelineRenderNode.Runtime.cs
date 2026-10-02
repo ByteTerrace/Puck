@@ -21,6 +21,9 @@ public sealed partial class ShaderPipelineRenderNode {
         public readonly ShaderPipelineResource Spec;
         public readonly int Count;
         public readonly CadenceVersion[] Cadence;
+        // A history ring advances only when this storage's writer submits successfully.
+        public int HistoryLatest;
+        public bool HistoryWriting;
         // Per instance: whether it holds contents (cleared, written by a pass, or carried with them), and the unplanned
         // state a host event left it in, if any (see ShaderPipelineRenderNode.Tracker.cs).
         public readonly bool[] Initialized;
@@ -43,7 +46,8 @@ public sealed partial class ShaderPipelineRenderNode {
             Storage = storage;
             Spec = storage.Declaration;
             Count = count;
-            Cadence = (storage.Declaration.Retained ? storage.Versions.Select(selector: static name => new CadenceVersion(name: name)).ToArray() : []);
+            HistoryLatest = (count - 1);
+            Cadence = ((storage.Declaration.Retained || storage.History) ? storage.Versions.Select(selector: static name => new CadenceVersion(name: name)).ToArray() : []);
             Initialized = new bool[count];
             HasOverride = new bool[count];
             Override = new ShaderPipelineAccessState[count];

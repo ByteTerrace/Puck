@@ -186,6 +186,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     /// an <c>sdf.world</c> instance's does when its residency is replaced.</summary>
     private sealed class ViewPackage : IRenderGraphPackageFactory, IShaderPipelineStorageCounter {
         private int m_builds;
+        private int m_sample;
 
         public ManualResetEventSlim? BuildGate { get; set; }
         public int Builds => Volatile.Read(location: ref m_builds);
@@ -193,6 +194,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public int Lost { get; private set; }
         public List<string> Parts { get; } = [];
         public long Revision { get; set; }
+        public List<int> Samples { get; } = [];
+        public bool SamplesReads { get; init; }
         public bool Unchanged { get; set; }
 
         public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
@@ -217,12 +220,16 @@ public sealed partial class RenderGraphRuntimeLawTests {
         );
         public bool IsUnchanged(string instance, in FrameContext context) => Unchanged;
         public void OnDeviceLost() => Lost++;
-        public void BeginConvergence(string instance, FrameCaptureRequest request) => Convergence.Add(item: request);
+        public void BeginConvergence(string instance, FrameCaptureRequest request) {
+            Convergence.Add(item: request);
+            m_sample = 0;
+        }
 
         private sealed class Recorder(ViewPackage owner, string part) : IRenderGraphPackageRecorder {
             public void Dispose() { }
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
                 owner.Parts.Add(item: part);
+                if (part == SdfWorldPackage.NativeFragment.Passes[0].Name) { owner.Samples.Add(item: owner.m_sample++); }
 
                 return RenderGraphPackageOutcome.Drew;
             }

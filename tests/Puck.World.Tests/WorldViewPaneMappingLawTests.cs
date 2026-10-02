@@ -55,6 +55,7 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
 
     // The render.tonemap each frame composes the root with.
     private WorldTonemap? m_tonemap;
+    private float m_sharpness;
     private long m_frame;
     private RenderGraphHistory? m_history;
 
@@ -106,7 +107,7 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
         m_host.PlaceViews(
             panesCover: false,
             rendered: static _ => true,
-            sharpness: 0f,
+            sharpness: m_sharpness,
             views: m_views
         );
 
@@ -279,6 +280,12 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
 
         // Under a filmic tonemap the lone view is shown, so its place pass tonemaps it, yet the display still shows the
         // world itself: it publishes no pane, and a point on it picks none, as without a tonemap.
+        m_sharpness = 1f;
+        Frame(pane: null);
+        Frame(pane: null);
+        Assert.Empty(collection: m_host.Panes);
+        Assert.Null(@object: Picked(x: 8.5, y: 8.5));
+        m_sharpness = 0f;
         m_tonemap = WorldTonemap.Filmic;
         Frame(pane: null);
         Frame(pane: null);

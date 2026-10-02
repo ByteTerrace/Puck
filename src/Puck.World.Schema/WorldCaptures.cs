@@ -13,10 +13,9 @@ namespace Puck.World;
 public sealed record WorldCapturePaletteEntry(int Material, string Color);
 /// <summary>
 /// One tick-scheduled capture station: a stable name, the exact engine ticks it arms a composed-frame capture at,
-/// and the palette its per-pixel census sorts against. A station carries no camera reference of its own — what the
-/// composed frame shows at a given tick is the document's own doing (a <c>state</c> row plus <c>rules</c> driving a
-/// camera program's <c>select</c> op; see <c>docs</c>/<c>views.md</c>), so two backends that step the identical
-/// document capture the identical moment by construction, and this row only says WHEN to look, never AT WHAT.
+/// and the palette its per-pixel census sorts against. What the selected render instance shows at a given tick is
+/// the document's own doing (for example a <c>state</c> row and <c>rules</c> driving a camera program's
+/// <c>select</c> op), so two backends stepping the identical document capture the identical moment.
 /// </summary>
 /// <param name="Station">The stable name — the manifest's <c>station</c> field and the first part of the capture's
 /// generated name (<see cref="CaptureName"/>, <c>&lt;station&gt;~&lt;tick&gt;</c>). A <see cref="CellName"/>:
@@ -28,7 +27,9 @@ public sealed record WorldCapturePaletteEntry(int Material, string Color);
 /// indices.</param>
 /// <param name="Instance">The render-graph instance whose output the station captures, or <see langword="null"/> (the
 /// default) for the root, the frame the display shows. <see cref="WorldViewGraphs.WorldInstance"/> captures the SDF
-/// world before any <c>views.post</c> pass or the overlay is drawn over it.</param>
+/// world before any <c>views.post</c> pass or the overlay is drawn over it. A non-seat-relative camera may be named
+/// when a screen, HUD frame or export already demands its view; a capture does not register demand. A camera without
+/// a live instance is refused by name at capture time.</param>
 /// <param name="Screen">The index of the screen whose source the station captures, before any screen shows it: the
 /// source instance the screen reads, which a machine output, a producer or a probe source is. Mutually exclusive with
 /// <paramref name="Instance"/>; <see langword="null"/> (the default) captures by instance.</param>

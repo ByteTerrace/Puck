@@ -52,6 +52,10 @@
         "renderScale": {
           "$ref": "#/$defs/WorldRenderScaleTier",
           "description": "The render-scale tier the preset selects."
+        },
+        "temporal": {
+          "description": "Whether the preset enables temporal reconstruction. Defaults off.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false,

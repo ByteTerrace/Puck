@@ -6,6 +6,11 @@ deterministic follower helpers in `Puck.SdfVm`.
 These tests exercise CPU-side contracts and packed data; GPU parity and live
 world rendering use the rendering workflow.
 
+`SdfCatalogueMemoryLawTests` load a set with only the selected backend's files
+present, then hold two view pipeline sets to one catalogue and the same byte
+arrays. Resident payload is counted once per backend and survives the release
+of either view, matching the composition's catalogue lifetime.
+
 ## Verification
 
 ```powershell

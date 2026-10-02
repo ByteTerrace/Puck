@@ -3,6 +3,20 @@
 
 // Full-scene and independent whole-part queries share this marcher, and the primary stage runs it.
 #include "sdf-pixel.hlsli"
+#if defined(SDF_PRIMARY_PASS) && defined(SDF_MARCH_SEED)
+#include "sdf-march-seed.hlsli"
+// One proposal belongs to this pixel's complete trace, including every independently marched part.
+static SdfMarchSeed sdfPrimarySeed = (SdfMarchSeed)0;
+static bool sdfPrimarySeedPending = false;
+static float sdfPrimarySeedStart = 0.0;
+
+void sdfPreparePrimarySeed(float start, float projectedDistance, float pixelFootprint, float marchBound) {
+    sdfPrimarySeedStart = start;
+    sdfPrimarySeedPending = sdfProgramLayout.hasFiniteStepScale &&
+        sdfPrepareMarchSeed(start, projectedDistance, pixelFootprint, sdfPrimarySeed) &&
+        sdfPrimarySeed.candidate < marchBound;
+}
+#endif
 // One ray's primary march: what the primary pass stores into its pixel's visibility record's V, C and L rows.
 struct SdfPrimaryMarch {
     float traveled;
@@ -42,6 +56,9 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
     float firstExit, float secondEntry, float farBound, float farDistance, uint instanceMaskBase,
     float pixelFootprint, uint4 part, bool localPart) {
     float traveled = max(marchStart, 0.0);
+#if defined(SDF_PRIMARY_PASS) && defined(SDF_MARCH_SEED)
+    if (sdfPrimarySeedPending) traveled = sdfPrimarySeed.midpoint;
+#endif
     bool hitSurface = false;
     int material = 0;
     float4 hitLanes = 0.0;
@@ -78,10 +95,37 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
 
     [loop]
     for (marchStep = 0; (marchStep < MaxSteps); marchStep++) {
+#if defined(SDF_PRIMARY_PASS) && defined(SDF_MARCH_SEED)
+        bool provingSeed = sdfPrimarySeedPending;
+        bool previousOmitParts = sdfPrimaryOmitParts;
+        bool previousLocalPart = localPart;
+        uint previousMask = instanceMaskBase;
+        if (provingSeed) {
+            // The proof ball belongs to the complete current field, before any part or tile-mask omission.
+            sdfPrimaryOmitParts = false;
+            localPart = false;
+            instanceMaskBase = SDF_INSTANCE_MASK_ALL;
+        }
+#endif
         SdfHit hit = sdfPrimarySample(rayOrigin + (rayDirection * traveled), instanceMaskBase, part, localPart);
 
-        sdfEvalCount += 1.0; // one primary-march sample
+        sdfEvalCount += 1.0; // every primary query, including the optional seed proof
         sdfWorkSteps += 1u;
+#if defined(SDF_PRIMARY_PASS) && defined(SDF_MARCH_SEED)
+        sdfPrimaryOmitParts = previousOmitParts;
+        localPart = previousLocalPart;
+        instanceMaskBase = previousMask;
+        if (provingSeed) {
+            sdfPrimarySeedPending = false;
+            if (sdfMarchSeedClears(sdfPrimarySeed, min(hit.distance, sdfMapStepBound))) {
+                sdfPrimarySeedStart = sdfPrimarySeed.candidate;
+            }
+            traveled = sdfPrimarySeedStart;
+            // The proof is counted work, but it spends none of the original march/refinement budget.
+            marchStep--;
+            continue;
+        }
+#endif
 
         // FOLD-SAFE split: STEP (sizing, unbounding spheres, the slope EMA) on min(value, sdfMapStepBound) —
         // the sound marchable field near a fold boundary — but TERMINATE on the raw value (exact in the owning
@@ -319,6 +363,9 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
     sdfPrimaryOmitParts = true;
     SdfPrimarySurface best = sdfTracePrimarySurface(rayOrigin, rayDirection, marchStart, firstExit, secondEntry,
         farBound, farDistance, instanceMaskBase, pixelFootprint, uint4(0u, 0u, 0u, 0u), false);
+#if defined(SDF_PRIMARY_PASS) && defined(SDF_MARCH_SEED)
+    marchStart = max(marchStart, sdfPrimarySeedStart);
+#endif
 
     // Enumerate candidates once per ray. Each local march evaluates a complete ordered part field,
     // including its cuts and smooth blends; an individual leaf never replaces its CSG parent.

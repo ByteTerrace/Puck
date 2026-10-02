@@ -41,6 +41,12 @@ conservative unversioned inputs, singleton output-selection refusals, and the
 existing planner's last-access barriers. Recovery distinguishes unsubmitted
 initialization and staged copies from already submitted writes. Its checkpoint
 storage is counted; steady standing allocates no objects.
+`RenderGraphHistoryLawTests` keep the last lit history across sky-only
+submissions and blend from it on the next write. They cover image and buffer
+publication, failure before and after submission, device loss, compatible
+reload, graphics attachments, and unchanged GPU object and dispatch counts.
+The forwarding control in `RenderGraphCadenceLawTests` prevents a resumed
+successor from reading a predecessor out of an unwritten ring instance.
 `ShaderInterfaceLawTests` pin the pass interface's layout, document and
 generated include. `ShaderInterfaceSpikeTests` build the variant passes under
 `Assets/Interfaces/` with DXC. They hold the SPIR-V and DXIL readers to the

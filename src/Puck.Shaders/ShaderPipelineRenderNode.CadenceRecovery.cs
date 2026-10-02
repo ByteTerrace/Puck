@@ -4,7 +4,7 @@ using Puck.Abstractions.Gpu;
 namespace Puck.Shaders;
 
 public sealed partial class ShaderPipelineRenderNode {
-    // These are checkpoints of the existing tracker, not a second state planner. Only retained graphs allocate them.
+    // These checkpoint the existing tracker for retained and history storage; they do not plan a second set of states.
     private readonly record struct CadenceResourceCheckpoint(RuntimeResource Resource, int Instance,
         bool Initialized, bool HasOverride, bool OverridePlanned, ShaderPipelineAccessState Override, PackageAlias Alias);
     private readonly record struct CadenceVersionCheckpoint(CadenceVersion Version, long Generation, bool Valid);
@@ -17,13 +17,14 @@ public sealed partial class ShaderPipelineRenderNode {
 
     /// <summary>Gets installed cadence state and array payload bytes, including failure-recovery checkpoints.
     /// Struct arrays use their runtime element size. Excludes managed headers and borrowed resource/name objects;
-    /// zero for a graph without retained storage.</summary>
+    /// includes the per-history write cursor and is zero for a graph without retained or history storage.</summary>
     public ulong CadenceCpuBytes {
         get {
             var bytes = checked(((((ulong)m_cadenceResources.Length) * ((ulong)Unsafe.SizeOf<CadenceResourceCheckpoint>())) +
                 (((ulong)m_cadenceVersions.Length) * ((ulong)Unsafe.SizeOf<CadenceVersionCheckpoint>()))));
 
             foreach (var resource in m_resources) {
+                if (resource.History) { bytes += sizeof(int) + sizeof(bool); }
                 bytes += checked((((ulong)resource.Cadence.Length) * ((ulong)(((IntPtr.Size * 2) + sizeof(long)) + sizeof(bool)))));
             }
             foreach (var pass in m_passes) {
@@ -70,7 +71,14 @@ public sealed partial class ShaderPipelineRenderNode {
             m_cadenceVersions[index] = checkpoint with { Generation = checkpoint.Version.Generation, Valid = checkpoint.Version.Valid };
         }
     }
-    private void CommitCadenceFrame() => m_cadenceRecording = false;
+    private void CommitCadenceFrame() {
+        foreach (var resource in m_resources) {
+            if (!resource.HistoryWriting) { continue; }
+            resource.HistoryLatest = ((resource.HistoryLatest + 1) % resource.Count);
+            resource.HistoryWriting = false;
+        }
+        m_cadenceRecording = false;
+    }
     private void AbortCadenceFrame() {
         if (!m_cadenceRecording) { return; }
         m_cadenceRecording = false;
@@ -83,6 +91,7 @@ public sealed partial class ShaderPipelineRenderNode {
             resource.OverridePlanned[instance] = checkpoint.OverridePlanned;
             resource.Override[instance] = checkpoint.Override;
             resource.Alias = checkpoint.Alias;
+            resource.HistoryWriting = false;
         }
         foreach (var checkpoint in m_cadenceVersions) {
             checkpoint.Version.Generation = checkpoint.Generation;

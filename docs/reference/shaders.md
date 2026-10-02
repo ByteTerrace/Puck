@@ -322,9 +322,19 @@ offers:
 | `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a native fragment (`SdfWorldPackage.NativeFragment`): sky, mask, beam, cull arguments, mesh, then primary, surface, ambient, shadow and views dispatched indirectly from the cull arguments, over transient counted scratch. Those five are stages over the per-pixel visibility record: primary alone reads the mesh target and writes the record, surface, ambient and shadow add to it, and views shades it, every light answering through one interface and the stage adding each light's summed rim and specular totals once. The ambient and shadow passes skip a frame whose levers turn ambient occlusion or soft shadows off. The screens it shows are the instance's reads, not ports. |
 | `sdf.bricks` | no input, one buffer output written by compute | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
 | `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
-| `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes the letterbox color outside the rect instead of the base, 0 by default), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source), `sharpness` and `tonemap` (1 puts the reconstructed source through the filmic curve inside the rect, never the base or the letterbox color, 0 by default); a host that places panes per frame (`IRenderGraphPlacements`) overrides the rect and sharpness, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
+| `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: at equal extent, an exact copy at sharpness 0 or contrast-adaptive sharpening above 0; otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes the letterbox color outside the rect instead of the base, 0 by default), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source), `sharpness` and `tonemap` (1 puts the reconstructed source through the filmic curve inside the rect, never the base or the letterbox color, 0 by default); a host that places panes per frame (`IRenderGraphPlacements`) overrides the rect and sharpness, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
 | `sdf.film-grain` | one fragment-sampled image input, one color-attachment image output | Film grain over the input: the engine's [post-process package](#post-process-packages), a per-pixel integer-hashed offset keyed on the engine tick. Its stages, `fullscreen.vert` and `sdf-film-grain.frag` in `Assets/Shaders/Sdf/passes`, compile at build, and `PostProcessPackage` records it. |
 | `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` | one raw buffer input read by compute, one image output written by compute | An uploaded source's region (`ImageSourceUploadLayout`) converted by the shipped kernel of that name in `src/Puck.Shaders/Assets/Shaders/Sources` into RGBA8, or half-float linear light for `source-transfer`. `SourceConversionPackage` records them; the runtime runs one in the graph it makes for each uploaded source instance, its region bound as a host buffer port (`ShaderPipelineRenderNode.BindRegion`). |
+
+At equal extent, ordinary placement sharpens from the center and its four axial
+neighbors. It adds the center-minus-neighbor-average detail, multiplied by
+`sharpness / (1 + contrast)`, where contrast is the largest channel range divided
+by the largest local channel maximum, clamped to 0..1. Every channel is clamped
+to the five taps' range, so flat colors remain exact and edges cannot ring.
+Sharpness 0 reads only the center. This adds no declared pass; enabling it for a
+lone view that previously bypassed Place executes that existing pass and writes
+its output pixels. Comparison modes keep their own unsharpened sampling.
+
 
 The `place` package also displays held/current comparisons. Its `compareMode`
 config is 0 for ordinary placement, 1 for a wipe, 2 for a split, or 3 for the
@@ -496,18 +506,24 @@ of its outputs on; the SDF mesh pass skips every frame that draws no mesh.
 
 A recorder can instead return a non-null `IRenderGraphPackageRecorder.Signature`
 for its prepared package inputs. The node leaves the pass standing only when
-that signature, its extent, its graph inputs' last writes and its retained
-outputs all remain valid. Its later consumers then read the last retained
-result. Null forces execution. The signature covers borrowed regions, view
+that signature, its extent, its graph inputs' last writes and its retained or
+single-writer history outputs all remain valid. Its later consumers then read
+the last successful result. Null forces execution. The signature covers borrowed regions, view
 state and unbound inputs; their existing preparation keeps its own counting
-and queue ordering. Graph-bound external, history or rotating inputs force
-execution because this path has no persistent content identity for them.
+and queue ordering. Graph-bound external and ordinary rotating inputs force
+execution because this path has no persistent content identity for them. A
+current history input depends on the last successful write. A previous-history
+input supplies an older sample when the recorder requests work; reading it
+does not itself demand another write. Forwarding chains that end in history
+remain ineligible to stand: a resumed successor must receive its predecessor
+in the same newly written ring instance.
 The node also invalidates a standing result when its config bytes change.
 
 Standing records neither pass work nor pass barriers. It uses the same planned
 state override as skipping, so the next actual access starts from the last
 actual access. First install, reset, replacement, resize and device loss require
-new writes. Before recording a retained graph, the node checkpoints its existing
+new writes. Before recording a graph with retained or history storage, the node
+checkpoints its existing
 resource tracker and content identities. A failure before submission restores
 that state and rearms the failed slot's staged region copies. Previously
 submitted contents remain valid; an exception after a successful submission
@@ -1335,11 +1351,18 @@ sampling reader's transition to shader-readable included. `samples` defaults to
 one, and any other count is refused (`SHADERPIPE_UNSUPPORTED_SAMPLES`) until
 multisampling is executable on both backends.
 
-A pass input names a version; `previousFrame: true` reads the contents the
-previous frame left. Only a version declared `history` can be read that way,
+A pass input names a version; `previousFrame: true` reads the last successfully
+submitted contents from before this submission. Only a version declared
+`history` can be read that way,
 only the last version of a chain can be history, and the chain's first version
 must declare an `initialization`, so the first frame never samples undefined
-memory. Current-frame connections must be acyclic, and a cycle is reported
+memory. Each history ring advances only when a pass writes its storage and
+that submission succeeds. Unrelated passes and standing writers leave its
+last-written instance in place; a recording or submission failure leaves the
+cursor unchanged. Publication and exports select the last written instance.
+This local storage rule does not change inter-instance `previousFrame` edges: a
+visible screen feed still demands its producer under the ordinary scheduler.
+Current-frame connections must be acyclic, and a cycle is reported
 (`SHADERPIPE_CYCLE`) as the chain of passes that forms it rather than as one
 offending name; that includes a pass that must both precede an overwrite, by
 sampling the consumed version, and follow it, by reading what the overwrite
@@ -1780,8 +1803,9 @@ These durations are observational and never choose quality or establish parity.
 `pipeline.inspect` includes timestamp readback and CPU sample payload bytes.
 Both inspection and the live budget include `cadence-cpu-bytes`: installed
 content identities, dependency arrays and the existing resource tracker's
-failure-recovery checkpoints. Graphs without retained storage allocate none;
-retained graphs allocate these arrays at installation and reuse them each frame.
+failure-recovery checkpoints, plus each history cursor and pending-write flag.
+Graphs without retained or history storage allocate none; other graphs
+allocate these arrays at installation and reuse them each frame.
 Its region-memory rows separately count installed host-written regions by GPU
 memory kind, CPU shadows, and writer/row/upload scratch. Empty overlay output
 still owns those buffers. Logical payload counts exclude backend padding and

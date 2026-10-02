@@ -7,9 +7,12 @@ public sealed partial class SdfWorldPasses {
     /// <inheritdoc/>
     public IShaderPipelineRenderExtent? RenderExtentOf(string instance) => Refresh(instance: instance);
     /// <inheritdoc/>
-    public RenderGraphPackageFragment? FragmentOf(string instance) => (Refresh(instance: instance).RequiresResolve
-        ? SdfWorldPackage.Fragment
-        : SdfWorldPackage.NativeFragment);
+    public RenderGraphPackageFragment? FragmentOf(string instance) {
+        var entry = Refresh(instance: instance);
+
+        return (entry.TemporalEnabled ? SdfWorldPackage.TemporalFragment
+            : (entry.RequiresResolve ? SdfWorldPackage.Fragment : SdfWorldPackage.NativeFragment));
+    }
 
     private sealed partial class Entry {
         private SdfViewSnapshot Snapshot {
@@ -26,7 +29,11 @@ public sealed partial class SdfWorldPasses {
         public double RenderedScale { get; set; }
         public float CurrentSharpness => (RequiresResolve ? Snapshot.UpscaleSharpness : 0f);
         public float RenderedSharpness { get; set; }
-        public bool RequiresResolve => ((Ceiling < 1d) || (Snapshot.ResolvedRenderScale > 0f));
+        public bool TemporalEnabled => Snapshot.Temporal;
+        public bool RenderedTemporal { get; set; }
+        public long CurrentCut => Snapshot.CutRevision;
+        public long RenderedCut { get; set; }
+        public bool RequiresResolve => (TemporalEnabled || (Ceiling < 1d) || (Snapshot.ResolvedRenderScale > 0f));
 
         long IShaderPipelineRenderExtent.Revision => BitConverter.DoubleToInt64Bits(value: Ceiling);
 

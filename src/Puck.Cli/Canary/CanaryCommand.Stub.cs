@@ -354,6 +354,7 @@ internal static partial class CanaryCommand {
 
         return new CanaryLegRun(
             Assertions: CanaryAssertions.Evaluate(
+                deferPairedCaptures: true,
                 leg: leg,
                 primaryTranscript: transcript
             ),

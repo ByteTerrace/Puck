@@ -30,4 +30,12 @@ public enum SdfKernel {
     BrickBake,
     /// <summary>Full-output reconstruction, whose pipeline is acquired only by reduced or variable views.</summary>
     Resolve,
+    /// <summary>Temporal shading with a separate reactivity output, full ISA.</summary>
+    TemporalViews,
+    /// <summary>Temporal shading with only core operations.</summary>
+    TemporalViewsCore,
+    /// <summary>Temporal shading with folds and simple exotic operations.</summary>
+    TemporalViewsFolds,
+    /// <summary>Output reconstruction with motion, history rejection and rectification.</summary>
+    TemporalResolve,
 }

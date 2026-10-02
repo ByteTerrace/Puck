@@ -39,6 +39,7 @@ public sealed class WorldRenderSettings {
     private ShadowMaskMode m_shadowMask;
     private float m_shadowReach;
     private float m_upscaleSharpness;
+    private bool m_temporal;
 
     /// <summary>Initializes a new instance of the <see cref="WorldRenderSettings"/> class from the world definition's
     /// render-lever boot defaults (<see cref="WorldRenderDefaults"/>), copied into the live, mutable settings the
@@ -56,6 +57,7 @@ public sealed class WorldRenderSettings {
         AmbientOcclusion = defaults.AmbientOcclusion;
         RenderScale = WorldRenderScaleTiers.Scale(tier: defaults.RenderScale);
         UpscaleSharpness = defaults.UpscaleSharpness;
+        Temporal = defaults.Temporal;
         FarBound = true;
         CadenceGate = true;
 
@@ -127,6 +129,10 @@ public sealed class WorldRenderSettings {
     /// lanes, so no rebuild.</summary>
     public float ShadowReach { get => m_shadowReach; set { m_shadowReach = value; m_revision++; } }
     /// <summary>The continuous reduced-resolution reconstruction blend: 0 is bilinear, 1 is clamped Catmull-Rom, and
-    /// intermediate values blend between them. Native render scale ignores it.</summary>
+    /// intermediate values blend between them. The final placement uses the same value for contrast-adaptive sharpening
+    /// at equal extent; 0 preserves the native copy or bypass.</summary>
     public float UpscaleSharpness { get => m_upscaleSharpness; set { m_upscaleSharpness = value; m_revision++; } }
+    /// <summary>Whether the world's own views accumulate per-instance temporal history. A toggle selects the matching
+    /// graph fragment and begins a new history epoch; <c>world.temporal</c> changes it live. Defaults off.</summary>
+    public bool Temporal { get => m_temporal; set { m_temporal = value; m_revision++; } }
 }

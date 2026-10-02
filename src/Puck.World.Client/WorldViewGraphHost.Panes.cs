@@ -91,9 +91,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
                 val2: synthesized.Producers.Count
             );
 
-            // A lone whole-display view shown only for its tonemap publishes nothing, as the view the root stands for
+            // A lone whole-display view shown only for tonemapping or sharpness publishes nothing, as the view the root stands for
             // does: the display shows the world itself either way.
-            for (var view = (m_loneTonemapped ? 1 : 0); (view < views); view++) {
+            for (var view = (m_loneFiltered ? 1 : 0); (view < views); view++) {
                 PublishPane(
                     instance: synthesized.Producers[view].Name,
                     latest: latest,

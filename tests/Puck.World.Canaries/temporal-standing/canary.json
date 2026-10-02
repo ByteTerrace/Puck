@@ -1,0 +1,304 @@
+{
+  "id": "temporal-standing",
+  "title": "A converged temporal view stops rendering while cadence is enabled",
+  "binding": "A screen-free offscreen world renders its 128x128 output from the shared Quarter tier, whose quantized grid is 72x72. After engine readiness and thirty settle ticks, two counter reads thirty ticks apart must retain the world submission. The control turns only cadence off and must advance that same submission. Both legs require a nonempty primary grid and Views to write exactly twice its texels: one color plus one separate temporal reactivity value per primary pixel. Spatial reconstruction writes color alone and therefore fails this activation claim. The sky row independently pins the actual 5184-texel grid.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/temporal-standing/fixture.puck",
+    "script": "on.script.txt",
+    "commands": [
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.ao",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.shadows",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.upscale-sharpness",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "quarter-grid-writes-72-squared-sky-texels",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "march.steps=0 texels.written=5184 copies.buffer-bytes=0",
+        "present": true
+      },
+      {
+        "type": "response",
+        "name": "settled-first",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "world-first",
+            "field": "submission",
+            "line": "node world work"
+          },
+          {
+            "name": "primary-texels",
+            "field": "texels.written",
+            "line": "work sdf.world$primary executed:"
+          },
+          {
+            "name": "views-texels",
+            "field": "texels.written",
+            "line": "work sdf.world$views executed:"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "settled-second",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "world-second",
+            "field": "submission",
+            "line": "node world work"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "converged-view-stops-rendering",
+        "operator": "equal",
+        "left": {
+          "value": "world-first"
+        },
+        "right": {
+          "value": "world-second"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "primary-grid-is-nonempty",
+        "operator": "greater",
+        "left": {
+          "value": "primary-texels"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "temporal-shading-writes-one-reactivity-texel-per-color-texel",
+        "operator": "equal",
+        "left": {
+          "minus": "primary-texels",
+          "value": "views-texels"
+        },
+        "right": {
+          "value": "primary-texels"
+        }
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/temporal-standing/fixture.puck",
+    "script": "off.script.txt",
+    "commands": [
+      {
+        "verb": "world.temporal",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.render-scale",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.ao",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.shadows",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.upscale-sharpness",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "quarter-grid-writes-72-squared-sky-texels",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "march.steps=0 texels.written=5184 copies.buffer-bytes=0",
+        "present": true
+      },
+      {
+        "type": "response",
+        "name": "settled-first",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "world-first",
+            "field": "submission",
+            "line": "node world work"
+          },
+          {
+            "name": "primary-texels",
+            "field": "texels.written",
+            "line": "work sdf.world$primary executed:"
+          },
+          {
+            "name": "views-texels",
+            "field": "texels.written",
+            "line": "work sdf.world$views executed:"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "settled-second",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 2,
+        "count": 2,
+        "extract": [
+          {
+            "name": "world-second",
+            "field": "submission",
+            "line": "node world work"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "converged-view-stops-rendering",
+        "operator": "notEqual",
+        "left": {
+          "value": "world-first"
+        },
+        "right": {
+          "value": "world-second"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "primary-grid-is-nonempty",
+        "operator": "greater",
+        "left": {
+          "value": "primary-texels"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "relation",
+        "name": "temporal-shading-writes-one-reactivity-texel-per-color-texel",
+        "operator": "equal",
+        "left": {
+          "minus": "primary-texels",
+          "value": "views-texels"
+        },
+        "right": {
+          "value": "primary-texels"
+        }
+      }
+    ]
+  }
+}

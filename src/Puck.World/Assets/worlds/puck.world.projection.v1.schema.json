@@ -143,7 +143,7 @@
           "title": "WorldRenderScaleTier"
         },
         "upscaleSharpness": {
-          "description": "The boot reduced-resolution reconstruction blend (0 bilinear .. 1 Catmull-Rom).",
+          "description": "The boot reconstruction blend (0 bilinear .. 1 Catmull-Rom), also the equal-extent placement sharpening strength; 0 copies exactly.",
           "type": "number",
           "default": 0
         },
@@ -178,6 +178,10 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
+            },
+            "temporal": {
+              "description": "Whether the preset enables temporal reconstruction. Defaults off.",
+              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -215,6 +219,10 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
+            },
+            "temporal": {
+              "description": "Whether the preset enables temporal reconstruction. Defaults off.",
+              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -252,6 +260,10 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
+            },
+            "temporal": {
+              "description": "Whether the preset enables temporal reconstruction. Defaults off.",
+              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -1400,6 +1412,10 @@
             "null"
           ],
           "default": null
+        },
+        "temporal": {
+          "description": "Whether this world\u0027s views accumulate temporal reconstruction history. Absent is off.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false,

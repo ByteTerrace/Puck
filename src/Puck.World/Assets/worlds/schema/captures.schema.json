@@ -8,7 +8,7 @@
       "description": "The scheduled stations. Station names are unique ignoring case, since each names capture files; capacity MaxRows.",
       "type": "array",
       "items": {
-        "description": "One tick-scheduled capture station: a stable name, the exact engine ticks it arms a composed-frame capture at, and the palette its per-pixel census sorts against. A station carries no camera reference of its own \u2014 what the composed frame shows at a given tick is the document\u0027s own doing (a state row plus rules driving a camera program\u0027s select op; see docs/views.md), so two backends that step the identical document capture the identical moment by construction, and this row only says WHEN to look, never AT WHAT.",
+        "description": "One tick-scheduled capture station: a stable name, the exact engine ticks it arms a composed-frame capture at, and the palette its per-pixel census sorts against. What the selected render instance shows at a given tick is the document\u0027s own doing (for example a state row and rules driving a camera program\u0027s select op), so two backends stepping the identical document capture the identical moment.",
         "type": [
           "object",
           "null"
@@ -54,7 +54,7 @@
             }
           },
           "instance": {
-            "description": "The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any views.post pass or the overlay is drawn over it.",
+            "description": "The render-graph instance whose output the station captures, or null (the default) for the root, the frame the display shows. WorldInstance captures the SDF world before any views.post pass or the overlay is drawn over it. A non-seat-relative camera may be named when a screen, HUD frame or export already demands its view; a capture does not register demand. A camera without a live instance is refused by name at capture time.",
             "type": [
               "string",
               "null"

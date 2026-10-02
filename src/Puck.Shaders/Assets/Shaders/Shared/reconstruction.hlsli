@@ -19,12 +19,8 @@ float4 puckReconstructionTap(Texture2D<float4> image, int2 pixel, uint2 sourceDi
 
     return image.Load(int3((p + sourceOrigin), 0));
 }
-float4 puckReconstructRegion(Texture2D<float4> image, uint2 pixel, uint2 rectDims, uint2 sourceDims, uint2 sourceOrigin, float sharpness) {
-    if (all(sourceDims == rectDims)) {
-        return image.Load(int3((pixel + sourceOrigin), 0));
-    }
-
-    float2 sourcePos = ((((float2(pixel) + 0.5) * float2(sourceDims)) / float2(rectDims)) - 0.5);
+// Fractional source coordinates let temporal reconstruction remove ray jitter with the same filter.
+float4 puckReconstructRegionAt(Texture2D<float4> image, float2 sourcePos, uint2 sourceDims, uint2 sourceOrigin, float sharpness) {
     float2 clamped = clamp(sourcePos, float2(0.0, 0.0), (float2(sourceDims) - 1.0));
     int2 origin = int2(clamped);
     float2 f = (clamped - float2(origin));
@@ -70,6 +66,16 @@ float4 puckReconstructRegion(Texture2D<float4> image, uint2 pixel, uint2 rectDim
     return lerp(bilinear, clamp(cubic, neighborhoodMin, neighborhoodMax), sharpness);
 }
 
+float4 puckReconstructRegion(Texture2D<float4> image, uint2 pixel, uint2 rectDims, uint2 sourceDims, uint2 sourceOrigin, float sharpness) {
+    if (all(sourceDims == rectDims)) {
+        return image.Load(int3((pixel + sourceOrigin), 0));
+    }
+    float2 sourcePos = ((((float2(pixel) + 0.5) * float2(sourceDims)) / float2(rectDims)) - 0.5);
+    return puckReconstructRegionAt(image, sourcePos, sourceDims, sourceOrigin, sharpness);
+}
+float4 puckReconstructAt(Texture2D<float4> image, float2 sourcePos, uint2 sourceDims, float sharpness) {
+    return puckReconstructRegionAt(image, sourcePos, sourceDims, uint2(0, 0), sharpness);
+}
 float4 puckReconstruct(Texture2D<float4> image, uint2 pixel, uint2 rectDims, uint2 sourceDims, float sharpness) {
     return puckReconstructRegion(image, pixel, rectDims, sourceDims, uint2(0, 0), sharpness);
 }
