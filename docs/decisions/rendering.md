@@ -618,11 +618,18 @@ light.
 
 **Every launch is certified, every hit is absolute.** A ray, a feedback lookup
 and a receiver start from a point joined to the surface by overlapping clear
-balls stepped out from the accept threshold, so a thin slab inside a fixed
-offset cannot be stepped over; a view's receivers take that point free from
-their own primary march's approach. A hit is accepted only within an absolute
-distance of a surface: a threshold that grows with travel stops grazing rays on
-empty space, and a clamped distance cannot bound the error it introduces. A
+balls: a descent from the first sample down to one fixed-point tick of the
+surface, then a chain stepped out to the launch height, so a thin slab inside a
+fixed offset cannot be stepped over, even one thinner than the accept
+threshold. Where the descent cannot close, the launch is conservative and the
+receiver reads dark, never sky; only a solid within one tick of the surface,
+which the format cannot hold, goes unseen. Neither march demands that the field
+grow away from a surface, which Lipschitz continuity does not promise and a
+conservative gauge does not do. A view's receivers take the launched point free
+from their own primary march's approach. A hit is accepted only within an
+absolute distance of a zero the field brackets: a threshold that grows with
+travel stops grazing rays on empty space, and a small clamped distance is only
+a lower bound, which a conservative gauge reads far from any surface. A
 grazing ray that runs out of steps is unresolved and is excluded from its
 probe's mean, an error bounded by its cosine share.
 

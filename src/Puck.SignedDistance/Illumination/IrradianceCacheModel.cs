@@ -535,12 +535,16 @@ public sealed class IrradianceCacheModel {
 
         var mask = IrradianceCells.ReadableCorners(corners: corners, field: m_field, partition: partition, point: point);
 
-        if (proofs is null) {
-            proofs = [];
-            m_proofs[slot] = proofs;
+        // A failed attempt establishes no reachable corner; it cannot rule out nearby receivers.
+        if (mask > 0) {
+            if (proofs is null) {
+                proofs = [];
+                m_proofs[slot] = proofs;
+            }
+
+            proofs.Add(item: new Proof(Anchor: point, Clearance: clearance, Mask: mask));
         }
 
-        proofs.Add(item: new Proof(Anchor: point, Clearance: clearance, Mask: mask));
         ProofsIssued++;
 
         return mask;

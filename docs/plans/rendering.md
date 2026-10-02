@@ -2270,8 +2270,10 @@ promises and states a measured bound for everything else:
 
 1. **No light through sealed geometry.** A receiver reads only probes its own
    point is joined to by straight segments the field proves clear, and every
-   ray launches from a point the field proves clear of its own surface. A
-   receiver that cannot be proven reads no light, never unproven light.
+   ray launches from a point the field proves joined to its own surface by
+   free space, down to one fixed-point tick (2⁻¹⁶ m), the field's position
+   resolution, below which the format holds no geometry. A receiver that
+   cannot be proven reads no light, never unproven light.
 2. **Energy is conserved.** Every reconstruction step (a probe's mean over its
    rays, the trilinear weights of a cell, a continuation's weights, a light
    view's lookup) is a normalized convex combination, gains are bounded at one,
@@ -2283,14 +2285,14 @@ exceeded, held against `IrradianceReference`:
 
 | Property | Bound | Law |
 |---|---|---|
-| Sealed geometry | Exact: 0 (below 10⁻¹²) inside sealed rooms with 0.05 m planar and curved walls, a sealed pocket inside one cell, a slab inside a receiver's launch interval | `IrradianceVisibilityLawTests`, `IrradianceProofLawTests`, `IrradianceLatticeLawTests.ALaunchNeverStepsOverAThinSlab` |
+| Sealed geometry | Exact: 0 (below 10⁻¹²) inside sealed rooms with 0.05 m planar and curved walls, a sealed pocket inside one cell, a slab inside a receiver's launch interval, a slab 0.00005 to 0.00015 thick wholly beneath a launch's first sample | `IrradianceVisibilityLawTests`, `IrradianceProofLawTests`, `IrradianceLatticeLawTests.ALaunchNeverStepsOverAThinSlab`, `IrradianceAdversarialLawTests.ALaunchCannotJumpASlabBeforeItsFirstSample` |
 | Energy | Exact: the furnace series to 10⁻⁹ at ρ = 0, 0.5 or 0.6 and 1, on one level and on two with continuation, with unresolved grazing rays present, and unchanged by sweep order or splitting | `IrradianceFeedbackLawTests`, `IrradianceBoundLawTests.EnergyIsConserved*` |
-| Hit position | Within 0.001 of a surface, whatever the travel; a grazing ray marches on or ends unresolved | `IrradianceLatticeLawTests.AHitIsAcceptedOnlyWithinTheSurfaceEpsilon` |
+| Hit position | Within 0.001 of a zero the field brackets, whatever the travel and however conservative the gauge; a grazing ray marches on or ends unresolved | `IrradianceLatticeLawTests.AHitIsAcceptedOnlyWithinTheSurfaceEpsilon`, `IrradianceAdversarialLawTests.ALowerBoundFieldDoesNotProveAHitWithinTheSurfaceEpsilon` |
 | Interpolation within a cell (angular parallax, light round a small occluder, overshoot beside an opening) | Under a table within 0.05 of the reference; beside a doorway within 0.06, against an exterior of 1; a small object under an off-axis emissive plate within 0.13, against the plate's 1, at the 1.5 m spacing | `IrradianceVisibilityLawTests`, `IrradianceBoundLawTests.InterpolationAtTheRoomSpacingStaysWithinItsBound` |
 | Continuation merging | Within 0.03 of the reference against an emitter of 1, at the test layout (0.5 into 2) and at `medium`'s (1.5 into 4.5); the nearest ray by direction exceeds it | `IrradianceBoundLawTests.ContinuationMergingStaysWithinItsBound` |
-| Light-view sampling | Never lit where the reference is shadowed by a caster farther than the bias; shadowed where the reference is lit only within two texels of the exact shadow | `IrradianceBoundLawTests.ALightViewNeverLightsAShadowedReceiverAndWidensShadowsByAtMostTwoTexels` |
-| Grazing (unresolved) rays | Excluded from their probe's mean: error at most their cosine share times the radiance range, plus 0.03 of quadrature; share 0.029, under a ceiling of 0.1 on the open-floor fixture | `IrradianceBoundLawTests.AProbeEstimatesAroundItsUnresolvedRaysWithinTheirShare` |
-| Proof allowance | At most the allowance a frame; an unproven receiver reads zero that frame and its proven value once proven | `IrradianceProofLawTests.AFrameIssuesAtMostItsAllowanceAndTheRestDarken` |
+| Light-view sampling | Never lit where the reference is shadowed by a caster farther than the bias; shadowed where the reference is lit only within two texels of the exact shadow; a lookup outside the swept depth or on an unresolved texel marches its own shadow ray | `IrradianceBoundLawTests.ALightViewNeverLightsAShadowedReceiverAndWidensShadowsByAtMostTwoTexels`, `IrradianceAdversarialLawTests.ALightViewDoesNotAnswerBeyondItsSweptDepth`, `IrradianceAdversarialLawTests.AnUnresolvedLightViewTexelRequiresItsOwnShadowRay` |
+| Grazing (unresolved) rays | Excluded from their probe's mean: error at most their cosine share times the radiance range, plus 0.03 of quadrature, against a fully resolved reference and the analytic open-floor answer of 0.5; share 0.029, under a ceiling of 0.1 on the open-floor fixture | `IrradianceBoundLawTests.AProbeEstimatesAroundItsUnresolvedRaysWithinTheirShare` |
+| Proof allowance | At most the allowance a frame; an unproven receiver reads zero that frame and its proven value once proven; a failed proof is never cached, so it darkens no neighbour | `IrradianceProofLawTests.AFrameIssuesAtMostItsAllowanceAndTheRestDarken`, `IrradianceAdversarialLawTests.AFailedProofCannotSuppressANearbyProvableReceiver` |
 
 Each law's red leg is a mutation of the model that the law shows failing; the
 landing commit lists them.
@@ -2341,9 +2343,11 @@ so it records nothing and holds no memory. Its parts:
   ball around the probe, built cooperatively over the instance grid as the
   shadow gather builds its cone's; a masked step is clipped at the ball's
   boundary, and beyond it the ray marches the full field, so no excluded
-  occluder is jumped. A ray accepts a hit only where the clamped distance falls
-  to an absolute 0.001 (`IrradianceAcceptance`); a ray grazing a surface keeps
-  marching. Past its reach it seeks support (the continuation rule below). Its
+  occluder is jumped. A ray accepts a hit only within an absolute 0.001 of a
+  zero the field brackets (`IrradianceAcceptance`): a small clamped distance is
+  a lower bound, which a conservative gauge reads far from any surface, so a
+  candidate is accepted only where the field's sign changes within 0.001 along
+  the gradient; a ray grazing a surface keeps marching. Past its reach it seeks support (the continuation rule below). Its
   64-step budget covers the whole ray, support-seeking and the support's proof
   included; a ray whose budget ends first is **unresolved** and carries no
   light, never sky and never an invented surface. At a hit it reads the
@@ -2365,7 +2369,8 @@ so it records nothing and holds no memory. Its parts:
   generations. A hit's visibility toward the light is its texel's comparison
   with a slope-scaled bias, `r (1 + sin θ) / cos θ` plus 0.002, r the
   half-diagonal and θ the hit's angle to the light; a hit outside both regions
-  marches its own shadow ray from a counted, budgeted allowance. Point and spot
+  marches its own shadow ray from a counted, budgeted allowance, as does a hit
+  beyond the view's swept depth and one whose texel's sweep did not finish. Point and spot
   lights are unshadowed, as in the direct path, and need no view.
 - **`shade`** turns a probe's stored hits into light, evaluating the field
   nowhere. Each hit's outgoing light is the diffuse term the views pass would
@@ -2393,20 +2398,30 @@ so it records nothing and holds no memory. Its parts:
 
 **The launch rule.** A ray, a hit's feedback lookup or a receiver starts from a
 point the field proves joined to its surface point by free space. From the
-surface point p with normal n, samples step outward from the accept threshold
-(0.001), each at the end of the previous sample's clear ball, and each must
-read a clamped distance of at least `(1 − κ) σ s` at height s (κ = 0.25, σ the
-program's step scale), so the balls overlap from below the accept threshold to
-the launch height. A sample that reads less has another surface inside the
+surface point p with normal n, the interval below the first sample, at the
+accept threshold (0.001), is certified first by a descent: each next sample
+sits at the bottom of the previous sample's clear ball, until a ball reaches
+within one fixed-point tick of p. The descent closes geometrically at the rate
+the field's gauge grows off the surface, within a budget of 64 samples over
+the program's step scale σ. A sample with no positive clearance, or a spent
+budget, means geometry lies beneath the first sample that the field cannot rule
+out, so the launch fails and the receiver reads no light: a slab thinner than
+the accept threshold is resolved and blocks, never stepped over. Only a solid
+wholly within one tick of p goes unseen, and the format holds no geometry that
+thin. Samples then step outward from the first sample, each at the end of the
+previous sample's clear ball, and each must read a positive clamped distance,
+so the balls overlap to the launch height. Lipschitz continuity bounds how fast
+the field changes, not how fast it grows, so neither march demands a minimum
+clearance at a height; a conservative gauge reads small but positive and still
+launches. A sample with no positive clearance has another surface inside the
 interval; the launch stops at the last certified sample, short of that
-surface, and a receiver with no certified sample reads no light. The launched
-point carries a lower bound on its clearance. On the CPU this is
+surface. The launched point carries a lower bound on its clearance. On the CPU this is
 `IrradianceCells.Launch`; once Puck.Maths' interval evaluation over the
 instruction set (M4) exists, one interval evaluation over the segment
 certifies the same interval in a single query. A view's receiver needs no
 launch samples of its own: its primary march already sphere-traced toward p,
-so the march's last sample with a clearance of at least `(1 − κ) σ b` within
-half a spacing of p is a launched point the camera ray joins to p, and the
+so the march's last sample with a positive clearance within half a spacing of
+p is a launched point the camera ray joins to p, and the
 primary records its distance and clearance in the visibility record's reserved
 L words. A mesh pixel, or a march whose approach was too grazing to leave such
 a sample, launches along its normal from the counted fallback allowance.
@@ -2856,11 +2871,13 @@ re-record explained in the same change.
        direction strata and their exact orientations; the octahedral layouts
        and border rule; classification and relocation on the clamped distance;
        the cell partition and its plane order; the certified launch; receiver
-       proofs with their world-space cache, two-ball reuse and per-frame
-       allowance; absolute acceptance and unresolved rays, excluded from a
+       proofs with their world-space cache (successful proofs only), two-ball
+       reuse and per-frame allowance; absolute acceptance against a bracketed
+       zero and unresolved rays, excluded from a
        probe's mean; support-seeking continuation with the beyond-the-end test
        and hit reprojection; the light view's swept-sphere depth map and its
-       slope-scaled comparison; and the finite two-generation solve. Segments
+       slope-scaled comparison, with shadow rays beyond its swept depth and
+       under unresolved texels; and the finite two-generation solve. Segments
        are cast end to end with `Raycast`, never `LineOfSight`, whose 0.05 skin
        would miss a wall that close to a corner. The model reads a probe's
        irradiance as the cosine-weighted mean of its resolved rays' radiance, the

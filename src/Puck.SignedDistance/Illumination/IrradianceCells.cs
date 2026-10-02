@@ -41,7 +41,7 @@ public sealed record IrradianceCellPartition(int[] Components, int ComponentCoun
 /// <summary>
 /// The rules that place probes against the field and partition the cells between them, and the rule a receiver chooses
 /// the corners it reads by. Each rule decides through exact field queries, so a sealed surface between a receiver and a
-/// corner is never crossed.
+/// corner is never crossed; <see cref="Launch"/> states the one-tick resolution beneath that.
 /// </summary>
 public static class IrradianceCells {
     /// <summary>The farthest a probe moves when it relocates, as a fraction of its spacing.</summary>
@@ -52,13 +52,11 @@ public static class IrradianceCells {
     public const double ReceiverBias = 0.05;
     /// <summary>The tolerance, as a fraction of the spacing, a separating plane fits its surface points within.</summary>
     public const double PlaneTolerance = 0.1;
-    /// <summary>The height, in world units, of a launch's first certified sample: the accept threshold, so what lies
-    /// below it is the surface itself at the march's resolution.</summary>
+    /// <summary>The height, in world units, of a launch's first sample. The interval below it is certified by a
+    /// descent toward the surface before the launch steps outward.</summary>
     public const double LaunchStart = IrradianceAcceptance.SurfaceEpsilon;
-    /// <summary>The share of a launch sample's expected clamped clearance (its height times the program's step scale)
-    /// it may fall short by and still be certified.</summary>
-    public const double LaunchSlack = 0.25;
 
+    private const int DescentSteps = 64;
     private const int LaunchSteps = 32;
     private const int RelocationSteps = 4;
 
@@ -246,21 +244,30 @@ public static class IrradianceCells {
 
         return 0;
     }
-    /// <summary>Launches a point off a surface along its normal with a certificate that the whole interval it crosses
-    /// is free: samples step outward from <see cref="LaunchStart"/>, each the end of the previous sample's clear ball,
-    /// and each must read a clamped distance of at least <c>(1 − LaunchSlack)</c> times its height times the program's
-    /// step scale, so the balls overlap from below the accept threshold up to the launch. A sample that reads
-    /// less has another surface nearer than the normal's clear interval allows; the launch stops at the last certified
-    /// sample, before that surface, and never steps across it.</summary>
+    /// <summary>Launches a point off a surface along its normal with a chain of overlapping clear balls from the
+    /// surface to the launch. The interval below <see cref="LaunchStart"/> is certified first, by a descent: from the
+    /// first sample each next sample sits at the bottom of the previous sample's clear ball, until a ball reaches
+    /// within <see cref="IrradianceField.Resolution"/> of the surface. A descent that meets a sample with no positive
+    /// clearance, or spends its budget first, has found geometry it cannot rule out beneath the first sample, so the
+    /// launch fails and the receiver reads no light: a solid thinner than the accept threshold blocks it rather than
+    /// being stepped over. Only a solid lying wholly within one tick of the surface goes unseen, and that is below
+    /// the format. Samples then step outward from <see cref="LaunchStart"/>, each the end of the previous sample's
+    /// clear ball, and each must read a positive clamped distance. Lipschitz continuity supplies an upper rate of
+    /// change, not a minimum clearance at a height, so neither march assumes the field grows away from a surface. A
+    /// sample with no positive clearance stops the outward march at the last certified sample.</summary>
     /// <param name="field">The field.</param>
     /// <param name="surface">The surface point, in world units.</param>
     /// <param name="normal">The surface's unit normal, facing the side the point launches into.</param>
     /// <param name="height">The height, in world units, the launch aims for.</param>
-    /// <returns>The launched point and a lower bound on its clearance, or <see langword="null"/> when not even the
-    /// first sample is certified, so a surface lies within the accept threshold's order of the point and the receiver
-    /// reads no light.</returns>
+    /// <returns>The launched point and a lower bound on its clearance, or <see langword="null"/> when the descent
+    /// cannot certify the interval below the first sample or the first sample has no positive clearance, so geometry
+    /// the field cannot rule out lies within the accept threshold of the point and the receiver reads no light.</returns>
     public static IrradianceLaunch? Launch(IrradianceField field, Double3 surface, Double3 normal, double height) {
         ArgumentNullException.ThrowIfNull(argument: field);
+
+        if (!CertifiesDescent(field: field, normal: normal, surface: surface)) {
+            return null;
+        }
 
         var target = Math.Max(val1: height, val2: LaunchStart);
         var travel = LaunchStart;
@@ -269,7 +276,7 @@ public static class IrradianceCells {
         for (var step = 0; (step < LaunchSteps); step++) {
             var point = (surface + (normal * travel));
 
-            if (!field.TryClampedDistance(distance: out var distance, material: out _, point: point) || (distance < (((1.0 - LaunchSlack) * field.StepScale) * travel))) {
+            if (!field.TryClampedDistance(distance: out var distance, material: out _, point: point) || (distance <= 0.0)) {
                 return last;
             }
 
@@ -287,6 +294,27 @@ public static class IrradianceCells {
         return last;
     }
 
+    // The descent converges geometrically at the rate the field's gauge grows off the surface, so its budget scales
+    // with the program's step scale the way the evaluator's march budget does.
+    private static bool CertifiesDescent(IrradianceField field, Double3 surface, Double3 normal) {
+        var floor = IrradianceField.Resolution;
+        var steps = ((int)Math.Ceiling(a: (DescentSteps / field.StepScale)));
+        var height = LaunchStart;
+
+        for (var step = 0; (step < steps); step++) {
+            if (!field.TryClampedDistance(distance: out var distance, material: out _, point: (surface + (normal * height))) || (distance <= 0.0)) {
+                return false;
+            }
+
+            height -= distance;
+
+            if (height <= floor) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     private static int MaskOf(int component, IrradianceCellPartition partition) {
         var mask = 0;
 

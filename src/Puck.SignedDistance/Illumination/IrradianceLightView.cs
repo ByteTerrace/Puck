@@ -15,6 +15,7 @@ public sealed class IrradianceLightView {
     private readonly Double3 m_up;
     private readonly Double3 m_toward;
     private readonly int m_resolution;
+    private readonly double m_distance;
     private readonly double[] m_depth;
 
     /// <summary>Initializes a new instance of the <see cref="IrradianceLightView"/> class and renders it.</summary>
@@ -33,6 +34,7 @@ public sealed class IrradianceLightView {
 
         m_toward = towardLight.Normalize();
         m_resolution = resolution;
+        m_distance = distance;
         TexelSize = ((2.0 * halfWidth) / resolution);
         SweepRadius = ((sweepRadius >= 0.0) ? sweepRadius : (TexelSize * Math.Sqrt(d: 0.5)));
 
@@ -59,7 +61,7 @@ public sealed class IrradianceLightView {
         double CountUnresolved() {
             Unresolved++;
 
-            return 0.0;
+            return double.NaN;
         }
     }
 
@@ -67,7 +69,7 @@ public sealed class IrradianceLightView {
     public double TexelSize { get; }
     /// <summary>Gets the swept sphere's radius, in world units.</summary>
     public double SweepRadius { get; }
-    /// <summary>Gets the count of texels whose sweep could not finish; each reads as shadowed everywhere beneath it.</summary>
+    /// <summary>Gets the count of texels whose sweep could not finish; their receivers require a shadow ray.</summary>
     public int Unresolved { get; private set; }
 
     /// <summary>Returns whether a receiver sees the light, by its texel's depth and a bias of
@@ -78,7 +80,7 @@ public sealed class IrradianceLightView {
     /// <param name="point">The receiver's surface point, in world units.</param>
     /// <param name="normal">The receiver's unit normal.</param>
     /// <returns>Whether it is lit; <see langword="false"/> when it faces away; <see langword="null"/> when it lies
-    /// outside the view, where the receiver marches its own shadow ray.</returns>
+    /// outside the swept volume or its texel is unresolved, where the receiver marches its own shadow ray.</returns>
     public bool? Lit(Double3 point, Double3 normal) {
         var cosine = Double3.Dot(a: normal, b: m_toward);
 
@@ -96,10 +98,16 @@ public sealed class IrradianceLightView {
         }
 
         var travel = -Double3.Dot(a: offset, b: m_toward);
+        var depth = m_depth[((row * m_resolution) + column)];
+
+        if ((travel < 0.0) || (travel > (2.0 * m_distance)) || double.IsNaN(d: depth)) {
+            return null;
+        }
+
         var sine = Math.Sqrt(d: Math.Max(val1: 0.0, val2: (1.0 - (cosine * cosine))));
         var bias = (((SweepRadius * (1.0 + sine)) / cosine) + Bias);
 
-        return (travel <= (m_depth[((row * m_resolution) + column)] + bias));
+        return (travel <= (depth + bias));
     }
 
     private const double Bias = 0.002;

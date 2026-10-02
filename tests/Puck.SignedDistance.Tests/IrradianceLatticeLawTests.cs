@@ -90,8 +90,8 @@ public sealed class IrradianceLatticeLawTests {
     [Fact]
     public void AHitIsAcceptedOnlyWithinTheSurfaceEpsilon() {
         // A sample 0.1 from a wall is never a hit, however far the ray has come: acceptance has no travel term.
-        Assert.False(condition: IrradianceAcceptance.Accepts(clampedDistance: 0.1));
-        Assert.True(condition: IrradianceAcceptance.Accepts(clampedDistance: 0.0009));
+        Assert.False(condition: IrradianceAcceptance.Accepts(surfaceDistanceUpperBound: 0.1));
+        Assert.True(condition: IrradianceAcceptance.Accepts(surfaceDistanceUpperBound: 0.0009));
 
         // And a real ray grazing 0.1 above a 200-unit wall stores no hit: it marches on and, its step budget spent long
         // before the wall ends, is unresolved.
@@ -126,7 +126,9 @@ public sealed class IrradianceLatticeLawTests {
         var up = new Double3(X: 0.0, Y: 1.0, Z: 0.0);
         var surfaces = IrradianceScenes.Uniform(albedo: 0.0, emission: 0.0, sky: 1.0);
 
-        Assert.Null(@object: IrradianceCells.Launch(field: field, height: 0.075, normal: up, surface: Double3.Zero));
+        var stopped = IrradianceCells.Launch(field: field, height: 0.075, normal: up, surface: Double3.Zero);
+
+        Assert.True(condition: ((stopped is null) || (stopped.Value.Point.Y < 0.0012)));
         Assert.Equal(expected: 0.0, actual: new IrradianceReference(exitDistance: 50.0, field: field, surfaces: surfaces).Estimate(bounces: 0, normal: up, paths: 64, point: Double3.Zero).Irradiance.X);
 
         // Beside the slab the launch is certified to its full height, with its clearance bound.

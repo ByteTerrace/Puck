@@ -26,6 +26,8 @@ public readonly record struct IrradianceRay(IrradianceRayKind Kind, double Dista
 /// as clear.
 /// </summary>
 public sealed class IrradianceField {
+    private const int CandidateSteps = 32;
+
     private readonly SdfFieldEvaluator m_evaluator;
 
     /// <summary>Initializes a new instance of the <see cref="IrradianceField"/> class over a program.</summary>
@@ -38,9 +40,12 @@ public sealed class IrradianceField {
         m_evaluator = new SdfFieldEvaluator(program: program);
     }
 
-    /// <summary>Gets the program's step scale, the clamp that makes its field 1-Lipschitz: a clamped distance reads
-    /// at most this share of the true distance along a clear line.</summary>
+    /// <summary>Gets the program's conservative reciprocal Lipschitz bound: multiplying the field by this scale
+    /// gives a distance lower bound. It imposes no minimum rate of growth away from a surface.</summary>
     public double StepScale => ((double)m_evaluator.StepScale);
+    /// <summary>Gets the field's position resolution, in world units: one fixed-point tick. A solid thinner than this
+    /// along a line is below the format, and the evaluator's own march does not resolve it either.</summary>
+    public static double Resolution => ((double)FixedQ4816.Epsilon);
     /// <summary>Gets the count of rays and segments cast through the field since construction.</summary>
     public long Casts { get; private set; }
     /// <summary>Gets the count of point distance and gradient queries since construction.</summary>
@@ -109,30 +114,54 @@ public sealed class IrradianceField {
         Casts++;
 
         var unit = direction.Normalize();
+        var point = origin;
+        var travelled = 0.0;
 
-        if (!m_evaluator.Raycast(
-            dir: ToVector(value: unit),
-            hit: out var hit,
-            maxDist: FixedQ4816.FromDouble(value: maxDistance),
-            origin: ToPosition(point: origin)
-        )) {
-            return new IrradianceRay(
-                Distance: maxDistance,
-                Kind: IrradianceRayKind.Miss,
-                Material: 0,
-                Point: (origin + (unit * maxDistance))
-            );
+        for (var candidate = 0; (candidate < CandidateSteps); candidate++) {
+            if (!m_evaluator.Raycast(
+                dir: ToVector(value: unit),
+                hit: out var hit,
+                maxDist: FixedQ4816.FromDouble(value: (maxDistance - travelled)),
+                origin: ToPosition(point: point)
+            )) {
+                return new IrradianceRay(Distance: maxDistance, Kind: IrradianceRayKind.Miss, Material: 0, Point: (origin + (unit * maxDistance)));
+            }
+
+            travelled += ((double)hit.Distance);
+            var sample = FromPosition(position: hit.Point);
+
+            if (hit.Distance > FixedQ4816.Zero) {
+                point = sample;
+            }
+
+            if (hit.Confidence != WorldQueryConfidence.Exact) {
+                break;
+            }
+
+            if (BracketsSurface(point: sample, radius: IrradianceAcceptance.SurfaceEpsilon)) {
+                return new IrradianceRay(Distance: travelled, Kind: IrradianceRayKind.Hit, Material: hit.Material, Point: sample);
+            }
+
+            // The shared march's raw-field hit is only a candidate for illumination. A positive clamped value still
+            // certifies a safe advance; a grazing ray whose candidates never approach a zero remains unresolved.
+            if (!TryClampedDistance(distance: out var advance, material: out _, point: sample) || (travelled >= maxDistance)) {
+                break;
+            }
+
+            // Keep sub-tick progress between candidates; reassigning the rounded sample on a zero-distance hit would
+            // pin a shallow ray to one fixed-point height forever. Inset the sample's ball by the rounding offset.
+            advance -= (sample - point).Length;
+
+            if (advance <= 0.0) {
+                break;
+            }
+
+            advance = Math.Min(val1: advance, val2: (maxDistance - travelled));
+            point += (unit * advance);
+            travelled += advance;
         }
 
-        var distance = ((double)hit.Distance);
-        var point = (hit.Point - FixedPosition.Zero);
-
-        return new IrradianceRay(
-            Distance: distance,
-            Kind: ((hit.Confidence == WorldQueryConfidence.Exact) ? IrradianceRayKind.Hit : IrradianceRayKind.Unresolved),
-            Material: hit.Material,
-            Point: new Double3(X: ((double)point.X), Y: ((double)point.Y), Z: ((double)point.Z))
-        );
+        return new IrradianceRay(Distance: travelled, Kind: IrradianceRayKind.Unresolved, Material: 0, Point: point);
     }
     /// <summary>Sweeps a sphere along a ray through the field and returns how far its centre travelled before the sphere
     /// first touched a surface: a ray that stops on anything within <paramref name="radius"/> of its line.</summary>
@@ -157,12 +186,13 @@ public sealed class IrradianceField {
         }
 
         var distance = ((double)hit.Distance);
+        var point = FromPosition(position: hit.Point);
 
         return new IrradianceRay(
             Distance: distance,
-            Kind: ((hit.Confidence == WorldQueryConfidence.Exact) ? IrradianceRayKind.Hit : IrradianceRayKind.Unresolved),
+            Kind: (((hit.Confidence == WorldQueryConfidence.Exact) && BracketsSurface(point: point, radius: (radius + IrradianceAcceptance.SurfaceEpsilon))) ? IrradianceRayKind.Hit : IrradianceRayKind.Unresolved),
             Material: hit.Material,
-            Point: (origin + (unit * distance))
+            Point: point
         );
     }
     /// <summary>Tests whether the straight segment between two points crosses no surface. The whole segment is
@@ -186,6 +216,49 @@ public sealed class IrradianceField {
         ).Kind == IrradianceRayKind.Miss);
     }
 
+    // Opposite signs at two points certify a zero between them, whereas a small positive value alone is only a
+    // distance lower bound. Snap the witness to the evaluator's coordinates and measure that actual segment. The
+    // two-tick inset leaves room for rounding the witness without exceeding the requested radius.
+    private bool BracketsSurface(Double3 point, double radius) {
+        Samples++;
+
+        if (!m_evaluator.TryDistance(distance: out var distance, material: out _, position: ToPosition(point: point))) {
+            return false;
+        }
+
+        if (!TryGradient(gradient: out var normal, point: point)) {
+            return false;
+        }
+
+        var reach = Math.Max(val1: 0.0, val2: (radius - (2.0 * ((double)FixedQ4816.Epsilon))));
+        var witness = FromPosition(position: ToPosition(point: (point + (normal * ((distance >= FixedQ4816.Zero) ? -reach : reach)))));
+
+        Samples++;
+
+        if (((witness - point).Length > radius) ||
+            !m_evaluator.TryDistance(distance: out var other, material: out _, position: ToPosition(point: witness))) {
+            return false;
+        }
+
+        if (distance != FixedQ4816.Zero) {
+            return ((distance > FixedQ4816.Zero) ? (other < FixedQ4816.Zero) : (other > FixedQ4816.Zero));
+        }
+
+        // A quantized zero can cover more than the accept radius in an eccentric gauge. Require strict signs on
+        // both sides, so a wide zero plateau cannot be mistaken for a nearby surface either.
+        var outward = FromPosition(position: ToPosition(point: (point + (normal * reach))));
+
+        Samples++;
+
+        return ((other < FixedQ4816.Zero) && ((outward - point).Length <= radius) &&
+            m_evaluator.TryDistance(distance: out var outside, material: out _, position: ToPosition(point: outward)) &&
+            (outside > FixedQ4816.Zero));
+    }
+    private static Double3 FromPosition(FixedPosition position) {
+        var delta = (position - FixedPosition.Zero);
+
+        return new Double3(X: ((double)delta.X), Y: ((double)delta.Y), Z: ((double)delta.Z));
+    }
     private static FixedPosition ToPosition(Double3 point) => FixedPosition.FromLocal(local: ToVector(value: point));
     private static FixedVector3 ToVector(Double3 value) => new(
         X: FixedQ4816.FromDouble(value: value.X),
