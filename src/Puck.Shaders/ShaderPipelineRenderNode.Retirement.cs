@@ -186,6 +186,36 @@ public sealed partial class ShaderPipelineRenderNode {
             ));
         }
     }
+    // Holds a published image another instance owns (a package that drew nothing stands for it) under a lease of the
+    // node's own while it is the image the node publishes: however the owner
+    // retires, a capture the node serves from it without rendering reads a live image.
+    private void HoldPublication(in Surface surface) {
+        if (
+            (m_publishedBinding is null) ||
+            (m_images is null) ||
+            (surface.ImageHandle == 0)
+        ) {
+            return;
+        }
+
+        foreach (var held in m_held) {
+            if (held.Handle == surface.ImageHandle) {
+                return;
+            }
+        }
+
+        if (m_images.TryLease(
+            imageHandle: surface.ImageHandle,
+            lease: out var lease
+        )) {
+            m_held.Add(item: new HeldImage(
+                Bytes: 0UL,
+                Handle: surface.ImageHandle,
+                Image: new HeldBindingRetirement(lease: lease),
+                Leased: true
+            ));
+        }
+    }
     // Makes a surface the published one. The surface it displaces stays published as the one before it; a held image
     // that is now neither retires once every reader that could still sample it has submitted.
     private void Publish(Surface surface) {
@@ -196,15 +226,29 @@ public sealed partial class ShaderPipelineRenderNode {
         m_lastSurface = surface;
         // A render publishes, and a reset owes its own initialization frame, so neither is still missing a lost image.
         m_publicationLost = false;
+        HoldPublication(surface: in surface);
 
         for (var index = (m_held.Count - 1); (index >= 0); index--) {
             var held = m_held[index];
 
-            if (IsPublished(imageHandle: held.Handle)) {
+            // Readers resolve another instance's image to its owner and lease it there, so the node holds that image only
+            // while it is the one the node publishes now, which a capture it serves without rendering reads.
+            if (held.Leased
+                ? (held.Handle == m_lastSurface.ImageHandle)
+                : IsPublished(imageHandle: held.Handle)) {
                 continue;
             }
 
             m_held.RemoveAt(index: index);
+
+            if (held.Leased) {
+                // Every submission that reads this image holds its own lease, including this node's. Dropping the
+                // publication needs no future submission, which a paused node may never make.
+                held.Image.Dispose();
+
+                continue;
+            }
+
             m_retired.Add(item: new RetiredGraph(
                 afterSubmission: (m_submissions + RetirementLag),
                 bytes: held.Bytes,
@@ -260,6 +304,43 @@ public sealed partial class ShaderPipelineRenderNode {
         } else {
             retired.Dispose(node: this);
         }
+    }
+
+    /// <summary>Gets whether the node holds anything of a graph: an installed or building graph's objects, its frame slots'
+    /// command buffers and fences, a preview, a readback or objects waiting to retire. A node that has never been demanded,
+    /// or whose graph <see cref="ReleaseUnnamed"/> released, holds none.</summary>
+    internal bool HoldsGraphObjects {
+        get {
+            foreach (var slot in m_slots) {
+                if (
+                    (slot.Fence is not null) ||
+                    (slot.Commands is not null)
+                ) {
+                    return true;
+                }
+            }
+
+            return (
+                m_build.IsPending ||
+                (m_preview is not null) ||
+                (m_readback is not null) ||
+                (m_encoder is not null) ||
+                (m_passes.Length != 0) ||
+                (m_resources.Length != 0) ||
+                (m_retired.Count != 0) ||
+                (m_held.Count != 0)
+            );
+        }
+    }
+
+    /// <summary>Releases the graph of a node nothing names any more: its targets, history, buffers, descriptor sets, frame
+    /// slots, preview and readback, and any build in flight. The host calls it only once the device has finished every
+    /// submission that may read them, the node's own and its consumers'. The node keeps its installed pipeline, the regions
+    /// and bindings its host gave it, and its region-copy pipeline, and rebuilds at the extent it is demanded at the next
+    /// time it renders, with fresh history, as after a device loss. A capture armed on it is left armed.</summary>
+    internal void ReleaseUnnamed() {
+        CancelBuilds();
+        ReleaseGraph();
     }
 
     /// <summary>Gets how many submissions the node has made.</summary>
@@ -340,7 +421,8 @@ public sealed partial class ShaderPipelineRenderNode {
     }
 
     // An image behind a published surface, taken out of the objects that replaced it.
-    private readonly record struct HeldImage(nint Handle, IDisposable Image, ulong Bytes);
+    // Leased marks an image another instance owns that the node publishes, held under the node's lease on it.
+    private readonly record struct HeldImage(nint Handle, IDisposable Image, ulong Bytes, bool Leased = false);
     // Objects replaced by an install or a selection, or a held image no longer published, waiting for the submission
     // that retires them: the fence of the node's latest submission when they were replaced, or, for an image, the
     // fence of the submission made RetirementLag submissions after it stopped being published.

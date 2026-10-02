@@ -1381,7 +1381,28 @@ output layout, the one its consumer's descriptor is written with, and hands a
 host's image back in the host's own. The output may be read only by later
 package passes, which `ShaderPipelineRenderNode.StandingOf` hands the input it
 stands for, so a chain of stand-ins resolves to its first input
-(`RenderGraphRuntimeLawTests.Chain`); any other reader refuses the stand-in. An
+(`RenderGraphRuntimeLawTests.Chain`); any other reader refuses the stand-in.
+Across instances the runtime never keeps such an image as the instance's own: an
+output standing for a producer's (`PublishedBinding`) resolves on every read to
+that producer's newest output (`RenderGraphRuntime.Standing.cs`), so it follows
+the producer at the producer's cadence and never names an image the producer
+released, replaced or retired; one that resolves to nothing is rerendered when
+shown, and a frame releasing its producer is scheduled again so it does that
+frame (`RenderGraphRuntimeLawTests.Standing`, whose fake device records every
+command naming a released image in `FakePipelineGpu.UsesAfterRelease`). A new
+reader of an instance output reads it through `OutputAt` or `LatestOf`, never
+`m_current` directly, and binds it under `LeaseOf`'s lease: every node image is
+one of the runtime's `GpuImageLeases` (`RenderGraphRuntime.Leases.cs`), disposed
+only once its owner dropped it and every reader's lease retired, so a reader
+never needs to know whose image it is (`RenderGraphRuntimeLawTests.ImageLeases`,
+whose fake queue finishes submissions in order through
+`FakePipelineGpu.CompletedThrough` and flags an image disposed under a pending
+reader). A lease retires once; a second retirement throws. A node never stands
+for its own image (`OwnImageInput`), so feedback draws rather than closing a
+loop of standing outputs, and a capture a node serves without rendering while it
+publishes another instance's image reads a copy of that frame's image
+(`ShaderPipelineRenderNode.CapturePin.cs`): a lease pins lifetime, never
+pixels, and a node's slot ring cannot rotate past an image. An
 external producer's output declares the layout its own submissions leave the
 image in (`RenderGraphExternalOutput.Layout`); a declared layout the producer
 does not leave it in shows only as Vulkan validation errors, since the

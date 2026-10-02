@@ -143,8 +143,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.False(condition: frames.Next().IsEmpty);
     }
     // A kept root presents its installed graph while its replacement builds, and that graph still samples the output of
-    // a producer the reconfiguration removed: the removed producer is held, never disposed under the root's frames,
-    // until the root installs a graph that no longer reads it, and then the hold is released and it is disposed once.
+    // a producer the reconfiguration removed: the producer retires at once, but the image the root bound is held under a
+    // lease, never disposed under the root's frames, until the root installs a graph that no longer reads it, and then
+    // the hold is released and the image is disposed once.
     [Fact]
     public void ARemovedProducerAKeptRootStillReadsIsHeldUntilTheRootsReplacementInstalls() {
         var gpu = new FakePipelineGpu();
@@ -203,7 +204,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                     );
                     Assert.Equal(
                         actual: runtime.RetiredProducers,
-                        expected: 1
+                        expected: 0
                     );
                 }
             } finally {

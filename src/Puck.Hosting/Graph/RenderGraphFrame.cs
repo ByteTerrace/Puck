@@ -45,7 +45,9 @@ public readonly record struct RenderGraphSourceState(string Instance, ImageSourc
 /// <see langword="null"/> for none. A source with no entry is not rendered.</param>
 /// <param name="Rerender">The instances the frame renders again whatever their refresh and the pass-pixel budget,
 /// whenever it demands them, or <see langword="null"/> for none: a capture frame's tainted instances, whose latest output
-/// read external content the capture gate did not fill, so no capture reads an image a slower instance rendered from it.
+/// read external content the capture gate did not fill, so no capture reads an image a slower instance rendered from it,
+/// and an instance whose latest output stood for an image its producer no longer keeps, so it renders over the
+/// producer's stand-in rather than showing nothing.
 /// A source is never named, since it renders at its producer's cadence and its consumers resolve its image as they
 /// bind it.</param>
 /// <param name="Unchanged">The instances whose host declares that nothing they render from has changed since their
@@ -53,6 +55,11 @@ public readonly record struct RenderGraphSourceState(string Instance, ImageSourc
 /// inputs are byte-identical to its last rendered frame's. Such an instance is not due by its refresh; it renders only
 /// when it never has, when <paramref name="Rerender"/> names it, or when the extent it is demanded at moves, since a new
 /// image holds nothing. A source is never named, since its producer declares its own cadence.</param>
+/// <param name="Named">The instances the host still names, whether or not it shows them this frame, or
+/// <see langword="null"/>, which names every instance: a view a screen or a HUD frame is bound to, parked or not. The
+/// roots, and whatever a named instance shows or reads at any extent, are named with them. An instance the display does
+/// not reach this frame but something names is <see cref="RenderGraphInstanceStatus.Unread"/> and keeps what it has; one
+/// nothing names is <see cref="RenderGraphInstanceStatus.Unnamed"/>.</param>
 public readonly record struct RenderGraphFrame(
     long Index,
     int DisplayWidth,
@@ -64,7 +71,8 @@ public readonly record struct RenderGraphFrame(
     long Tick = 0,
     IReadOnlyList<RenderGraphSourceState>? Sources = null,
     IReadOnlyList<string>? Rerender = null,
-    IReadOnlyList<string>? Unchanged = null
+    IReadOnlyList<string>? Unchanged = null,
+    IReadOnlyList<string>? Named = null
 ) {
     /// <summary>Optional current-grid pass pricing, independent of the output extent used by consumers.</summary>
     public IRenderGraphPassCosts? Costs { get; init; }

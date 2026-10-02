@@ -4388,6 +4388,48 @@ item 2 landed.
     stamp, on both backends. The parity world boots with soft shadows at
     `High` and ambient occlusion on, so every SDF station passes through the
     shadow and ambient stages under the cross-backend pixel gate.
+14. Per-tile segment pruning. A `tape` pass in `sdf.world`, between `beam`
+    and `primary`, proves which masked segments cannot decide any ray of a
+    tile and leaves them out of the march.
+    - Delivers: for each 16-pixel tile, the pass walks the tile's masked
+      segments over four to eight depth slabs, from the beam's entry to the far
+      bound. It evaluates each `ShapeBlend` once at the slab ball's centre,
+      bounded by the world-space ball's radius times a certified Lipschitz
+      bound for that candidate, including its transforms and domain warps.
+      The interpreter's `distanceScale` alone is not that bound: a scale also
+      changes the coordinates at which the shape is evaluated. A candidate
+      without a finite certified bound stays live. The bound and P15-7's ball
+      test share the same function. The pass tracks which side
+      each union, smooth union, intersection and subtraction chooses over the
+      ball. It writes a per-tile bitmask of live segments with summary words,
+      which `mapCore` and `mapGradCore` read through the existing
+      instance-mask walk. Every pass counts the shapes it evaluates, beside
+      `gpu.march.steps`. The pass is off for a program under about thirty
+      masked instructions per tile, where pruning saves under 10%.
+    - Evidence: a CPU study of interval pruning over the render programs, on
+      the counters camera at 1440x810 with 16-pixel tiles, against today's
+      mask with its sphere and rigid-leaf skips. Instructions pruned beyond
+      the instance mask: counters 5.9%, the parity world's vocabulary station
+      9.5%, the Nexus 84.1%, the courtyard 83.0%. Shape evaluations per march
+      sample fall 2.3%, 9.1%, 71.4% and 84.7%. Every pruned tape matched the
+      full walk bit for bit over 1.79 million march samples.
+    - Done when: on the Nexus and courtyard workloads at the floor tier,
+      primary's shape evaluations fall by at least 60% (the study predicts 71%
+      to 85%), the tape pass's own evaluations stay under 25% of those it
+      saves, `gpu.march.steps` is unchanged, and parity passes.
+    - Follows P15-5 and P15-7.
+15. Winner-only gradients. `mapGradCore` takes a hit's gradient from the
+    shape that decides its value, rather than walking every shape's gradient,
+    wherever one shape decides it: a hard blend, or a smooth blend outside its
+    radius. Inside a smooth blend's band it keeps every shape the blend weighs.
+    - Evidence: on the Nexus a hit's gradient walk costs 71.6 shape
+      evaluations, where the deciding shapes alone cost 6.0.
+    - Done when: on the same Nexus camera, extent and hit samples, the count
+      of analytic shape-gradient evaluations equals the count of shapes with
+      nonzero blend weight in a reference full walk. The shapes-evaluated
+      count (step 14), including work to find the winners, must also be lower
+      than with this optimization off. `SdfFieldDeviceLawTests` holds the
+      gradients, and parity passes.
 
 **Decisions.** P4's visibility record is the surface sample record staged
 shading reads. P7b moves the SDF push blocks and binding constants onto groups;
@@ -4411,6 +4453,17 @@ matrix row is green when host leases and instance reads serve it. With no
 composite, N split-screen seats render as N instances' passes rather than one
 dispatch whose Z dimension is N; counters on the RTX 2060 measure that cost, and
 layered views return only if the counts call for them.
+
+**Not adopted.** The interval-pruning study also weighed these, and none is
+planned:
+
+- An interval-culled octree in the baker: it saves 20.9% of a bake's sign
+  evaluations, 0.5% of the whole bake's.
+- A compiled or SIMD CPU evaluator: the CPU evaluator answers fixed-point
+  queries and bakes, a different domain from the GPU march the study prices.
+- An interpreter rebuilt on the studied design: step 14 takes its pruning as a
+  pass in front of the existing interpreter, whose instruction set, kernel
+  variants and device law already stand.
 
 **Depends on:** P2, P8, P11, P12, P4 for the visibility record, and P7b: at
 most four group layouts, separate sampler tables, the world group at a fixed
@@ -5119,6 +5172,15 @@ Bakes are presentation only: contact and queries keep reading the SDF field.
 The parity world ships its bakes, so captures never depend on a local bake.
 Which representation a placement uses follows P6's rule that representations
 are chosen by measured cost.
+
+**Open experiment.** A CPU experiment compares manifold dual contouring with
+`SdfDualContouring`'s one vertex per cell. One vertex per cell leaves 19 of 93
+baked prototypes with non-manifold edges, every mesh still closed (the Nexus
+kart ramp 33, the kart bank wall 30, the granary anchor 27, the hex tiles 8
+each), and pinches a plate about one cell thick (84 non-manifold edges at one
+cell, none at 0.4, 0.7, or 1.3 to 3 cells). The experiment is done when it
+reports each extractor's non-manifold edges, silhouette error and cost over the
+same prototypes, so the mesh choice above rests on the counts.
 
 **Check:** baking one prototype twice produces the same key and, on one
 device, the same bytes; editing one prototype rebakes only that prototype; a
@@ -6281,11 +6343,12 @@ block (P14-7), and P14-8's kernels as pass-pipeline cache entries, one command
 list per instance per frame slot, the conditional mesh pass, and the world tables
 bound through the group-1 set P17's texture draw added for the bake atlases, one
 per upload ring slot, the float working targets (P14-10), staged shading (P14-11)
-and the final sweep (P14-13): every P14 step has landed, and its counted-cost
-ceilings land as P15-1. P15 and P16 both follow P14: P15 also needs P4, and
-P16's display output landed with P14-10's float working targets and its HDR
-desktop capture after it; only the HDR-display checks remain, deferred to the
-end.
+and the final sweep (P14-13): steps 1 to 13 have landed, and the counted-cost
+ceilings land as P15-1. Per-tile segment pruning (P14-14) follows P15-5 and
+P15-7; winner-only gradients (P14-15) follow P14-14's shapes-evaluated count.
+P15 and P16 both follow P14: P15 also needs P4, and P16's display output landed
+with P14-10's float working targets and its HDR desktop capture after it; only
+the HDR-display checks remain, deferred to the end.
 P17's CPU half, the bakes and their texture codecs, has landed, and so have
 their block-compressed upload and sampling check on both backends and the one
 pixel-format vocabulary, `GpuPixelFormat`. A ready bake's mesh draws in place
@@ -6302,9 +6365,9 @@ and a bound member and an overridden member compose by the rule
 [the decisions register](../decisions/rendering.md) states.
 
 The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13, P14-2 and P14-5 have
-landed, and so has every other P14 step, so the longest remaining chain is
-P15's, P15-1 to P15-8. A bake's textures (P17) come before P6's choice between
-a bake and the field.
+landed, and so have P14's other first thirteen steps, so the longest remaining
+chain is P15's, P15-1 to P15-8, with P14-14's pruning after P15-5 and P15-7. A
+bake's textures (P17) come before P6's choice between a bake and the field.
 
 **The sky.** P18 follows P14. Its baseline (P18-1) needs P15-1's counted march
 steps and ceilings; its clocks, keys, sky block, passes and cadence (P18-2 to

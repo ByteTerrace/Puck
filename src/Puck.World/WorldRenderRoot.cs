@@ -263,6 +263,7 @@ internal static class WorldRenderRoot {
             // The host rewrites its footprint and root lists in place, so the node reads those lists rather than the copy
             // its constructor takes.
             Footprints = host.Footprints,
+            Named = host.Named,
             // The binder's GPU holdings (camera feeds, capture fills, the views' residencies) and the world's residency are
             // created before the device context, so the container would dispose them after it; the root's teardown releases
             // them, after the runtime's passes gave back their holds, while the device is alive.

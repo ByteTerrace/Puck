@@ -101,6 +101,30 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.True(condition: rig.Stood());
         Assert.True(condition: rig.PreviousValid());
     }
+    [Fact]
+    public void RebuildingAnUnnamedViewDiscardsItsPreviousCameraEvenWhenItsEpochAndPosesStayStill() {
+        using var rig = new TemporalRig(views: 1, cadence: true);
+
+        rig.Selected.DebugMode = DebugViewModes.Motion;
+        rig.Produce();
+        rig.Produce();
+        Assert.True(condition: rig.PreviousValid());
+        var revision = rig.Passes.CounterOf(instance: "world")!.Revision;
+
+        rig.Produce(named: false);
+        Assert.Equal(expected: 0UL, actual: rig.Runtime.Node(instance: 0).OwnedBytes);
+        Assert.False(condition: rig.Passes.HasRenderedResolvedView(instance: "world"));
+        TestLiveness.Until(step: () => {
+            rig.Produce();
+            return !rig.Stood();
+        }, reason: () => "The released view never rendered again.");
+
+        Assert.Equal(expected: revision, actual: rig.Passes.CounterOf(instance: "world")!.Revision);
+        Assert.False(condition: rig.PreviousValid());
+        Assert.Equal(expected: 0U, actual: rig.HistoryFrames());
+        rig.Produce();
+        Assert.True(condition: rig.PreviousValid());
+    }
     // A temporal view's resolve pipeline is leased into the residency it crosses to, so its passes follow in place, with
     // no rebuild and so no frame held of the departed world, and its history restarts at the pixel center.
     [Fact]
@@ -297,11 +321,11 @@ public sealed partial class SdfWorldPassesLawTests {
         }
         public ShaderPipelineRenderNode World => Runtime.Node(instance: Runtime.Instances.IndexOf(name: "world"));
 
-        public void Produce() {
+        public void Produce(bool named = true) {
             m_rendered = World.FrameCounter;
             var scheduled = new RenderGraphFrame(DisplayHeight: ((int)OutputExtent), DisplayHertz: 60, DisplayWidth: ((int)OutputExtent),
                 Footprints: ((m_feed is null) ? [] : [new RenderGraphFootprint(Consumer: "world", Height: 1.0, Producer: "feed", Width: 1.0)]),
-                Index: m_index, Roots: (Parked ? [] : [new RenderGraphRoot(Height: 1, Instance: "world", Width: 1)]), Tick: m_index++);
+                Index: m_index, Named: (named ? ["world"] : []), Roots: ((named && !Parked) ? [new RenderGraphRoot(Height: 1, Instance: "world", Width: 1)] : []), Tick: m_index++);
 
             var context = m_context with { TargetHeight = OutputExtent, TargetWidth = OutputExtent };
 

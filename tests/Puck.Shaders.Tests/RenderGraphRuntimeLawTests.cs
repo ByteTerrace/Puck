@@ -281,6 +281,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
     private sealed class Counter {
         public int Created;
         public int Disposed;
+        // Whether a record told it may not stand in draws instead of drawing nothing, as a shipped package does.
+        public bool DrawsWhenRefused;
         public uint Height;
         public nint InputImage;
         public GpuImageLayout InputLayout;
@@ -320,12 +322,16 @@ public sealed partial class RenderGraphRuntimeLawTests {
             counter.OutputImage = recording.Outputs[0].Image.ImageHandle;
             counter.PassRecords[pass] = (counter.InputImage, counter.OutputImage, recording.MayStandIn);
 
-            return (counter.PassOutcomes.TryGetValue(
+            var outcome = (counter.PassOutcomes.TryGetValue(
                 key: pass,
-                value: out var outcome
+                value: out var passOutcome
             )
-                ? outcome
+                ? passOutcome
                 : counter.Outcome);
+
+            return ((counter.DrawsWhenRefused && !recording.MayStandIn)
+                ? RenderGraphPackageOutcome.Drew
+                : outcome);
         }
     }
     /// <summary>Describes each frame to a runtime over the same roots and footprints, counting frame indices.</summary>
