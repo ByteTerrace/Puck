@@ -163,6 +163,7 @@ A finding recorded nowhere was not left deliberately; it was dropped.
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | The incidental fix touched emulator code — it owes the Humble and Advanced Post batteries that skill routes. |
 | [`puck-world`](../puck-world/SKILL.md) | The finding touches world data, server substrate, replay, session behavior, or the greenfield game surface. Consult its current verification routing. |
 | [`content-search`](../content-search/SKILL.md) / [`symbol-analysis`](../symbol-analysis/SKILL.md) | Finding every referrer of the thing you fixed — text by search, C# semantics by the compiler. |
+| [`verification`](../verification/SKILL.md) | Proving the change and its fixes: the gate route, red legs, ledgers checked with `--check`, GPU legs. |
 
 Do not hard-code that engine work has no gate. Route through `puck-world` and
 inspect the current test projects and verification guidance: settled substrate

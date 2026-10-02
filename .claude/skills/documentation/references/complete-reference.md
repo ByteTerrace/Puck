@@ -385,7 +385,8 @@ document under `docs/` that names the skill.
 
 - **The engine manual starts at `docs/README.md`.** Its overview, getting-started
   guide and topic pages help developers and agents learn and navigate the engine.
-  Manual topics own library usage and detailed human contracts; package READMEs
+  The manual explains current behavior and limitations without requiring a
+  source investigation first. Manual topics own library usage and detailed human contracts; package READMEs
   identify their component and link to those topics. XML comments own member
   contracts. Existing specialized source references retain their ownership until
   migrated; never copy them into a competing manual page.

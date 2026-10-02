@@ -56,3 +56,4 @@ rules, mutation procedure, or deliberate-correction rules.
 | [`content-search`](../content-search/SKILL.md) | Finding law ids, declarations, member names, or textual patterns across the suite. |
 | [`symbol-analysis`](../symbol-analysis/SKILL.md) | Resolving semantic C# references, overloads, implementers, or rename and deletion safety. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | Verifying a Maths change that reaches emulator code and its dedicated batteries. |
+| [`verification`](../verification/SKILL.md) | The gates beyond the law suite, the CLI copy, and what a finished lane proves. |
