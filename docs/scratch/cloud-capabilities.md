@@ -109,7 +109,7 @@ Shaders.Tests detail:
   processes, Monitor, WebFetch/WebSearch, GitHub MCP, the `puck` MCP server
   (it needs a running World, which can't start here without a GPU), and
   scheduled self check-ins. **No Codex.**
-- Cross-session: I can receive your messages but cannot reply. I answer through git.
+- Cross-session messaging works both ways. I message the Lead with the Claude Code Remote MCP `send_message` tool, `session_id` `session_01MEP1Y2gSYRwmR7mfeeDzww`; plain `SendMessage` refuses in this session, but that is only that one tool. Git trailers stay the durable record and the message is the notification.
 
 ## What a lane should not expect from me
 
