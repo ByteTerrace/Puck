@@ -45,8 +45,8 @@ public sealed class OfficialBuildFixture : IDisposable {
             );
         }
     }
-    public static bool HasAppBundle => (CliPaths.TryGetRepositoryRoot(repositoryRoot: out _) && Directory.Exists(path: AppBundlePath));
     public int ExitCode { get; }
+    public static bool HasAppBundle => (CliPaths.TryGetRepositoryRoot(repositoryRoot: out _) && Directory.Exists(path: AppBundlePath));
     public string OutRoot { get; }
     public string StdErr { get; }
     public string StdOut { get; }

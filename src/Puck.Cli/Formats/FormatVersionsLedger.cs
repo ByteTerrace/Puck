@@ -173,46 +173,46 @@ internal static partial class FormatVersionsLedger {
         private readonly IReadOnlyDictionary<string, string> m_files;
         private readonly Dictionary<string, SyntaxTree> m_trees;
 
-        private readonly Dictionary<string, string> m_hashes = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, string> m_fragments = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> m_hashes = new(comparer: StringComparer.Ordinal);
+        private readonly Dictionary<string, string> m_fragments = new(comparer: StringComparer.Ordinal);
 
         private CSharpCompilation? m_compilation;
 
         public Shapes(IReadOnlyDictionary<string, string> files) {
             m_files = files;
             m_trees = files.ToDictionary(pair => pair.Key, pair => ((SyntaxTree)CSharpSyntaxTree.ParseText(
-                text: pair.Value, path: pair.Key, options: CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview))), StringComparer.Ordinal);
+                text: pair.Value, path: pair.Key, options: CSharpParseOptions.Default.WithLanguageVersion(version: LanguageVersion.Preview))), StringComparer.Ordinal);
         }
 
         private SemanticModel Model(SyntaxTree tree) {
             m_compilation ??= CSharpCompilation.Create(
                 assemblyName: "FormatShapes",
-                syntaxTrees: m_trees.Values.Append(CSharpSyntaxTree.ParseText("global using System; global using System.Collections.Generic; global using System.IO; global using System.Linq; global using System.Threading; global using System.Threading.Tasks;", CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview))),
-                references: ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
-                    .Select(path => MetadataReference.CreateFromFile(path)),
+                syntaxTrees: m_trees.Values.Append(element: CSharpSyntaxTree.ParseText("global using System; global using System.Collections.Generic; global using System.IO; global using System.Linq; global using System.Threading; global using System.Threading.Tasks;", CSharpParseOptions.Default.WithLanguageVersion(version: LanguageVersion.Preview))),
+                references: ((string)AppContext.GetData(name: "TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
+                    .Select(selector: path => MetadataReference.CreateFromFile(path)),
                 options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));
             return m_compilation.GetSemanticModel(tree);
         }
 
         public string Of(string source) {
-            if (m_hashes.TryGetValue(source, out var hash)) { return hash; }
+            if (m_hashes.TryGetValue(key: source, value: out var hash)) { return hash; }
             var builder = new StringBuilder();
 
-            foreach (var path in Sources(source)) {
-                builder.Append(Fragment(path)).Append('\u0001');
+            foreach (var path in Sources(source: source)) {
+                builder.Append(value: Fragment(path: path)).Append(value: '\u0001');
             }
-            hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())))[..16].ToLowerInvariant();
+            hash = Convert.ToHexString(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: builder.ToString())))[..16].ToLowerInvariant();
             m_hashes[source] = hash;
             return hash;
         }
 
         private IEnumerable<string> Sources(string source) {
-            var sources = ShapeSources(m_files, source).ToHashSet(StringComparer.Ordinal);
-            var pending = new Queue<string>(sources);
+            var sources = ShapeSources(files: m_files, source: source).ToHashSet(comparer: StringComparer.Ordinal);
+            var pending = new Queue<string>(collection: sources);
 
-            while (pending.TryDequeue(out var path)) {
+            while (pending.TryDequeue(result: out var path)) {
                 var tree = m_trees[path];
-                var model = Model(tree);
+                var model = Model(tree: tree);
 
                 foreach (var node in tree.GetRoot().DescendantNodes()) {
                     var type = node switch {
@@ -223,39 +223,39 @@ internal static partial class FormatVersionsLedger {
                         _ => null,
                     };
 
-                    if (type is not null) { AddType(model.GetTypeInfo(type).Type); }
+                    if (type is not null) { AddType(type: model.GetTypeInfo(type).Type); }
                 }
             }
-            return sources.Order(StringComparer.Ordinal);
+            return sources.Order(comparer: StringComparer.Ordinal);
 
             void AddType(ITypeSymbol? type) {
-                if (type is IArrayTypeSymbol array) { AddType(array.ElementType); }
+                if (type is IArrayTypeSymbol array) { AddType(type: array.ElementType); }
                 if (type is not INamedTypeSymbol named) { return; }
-                foreach (var argument in named.TypeArguments) { AddType(argument); }
+                foreach (var argument in named.TypeArguments) { AddType(type: argument); }
                 foreach (var declaration in named.OriginalDefinition.DeclaringSyntaxReferences) {
                     var path = declaration.SyntaxTree.FilePath;
 
-                    if (m_trees.ContainsKey(path) && sources.Add(path)) { pending.Enqueue(path); }
+                    if (m_trees.ContainsKey(key: path) && sources.Add(item: path)) { pending.Enqueue(item: path); }
                 }
             }
         }
         private string Fragment(string path) {
-            if (m_fragments.TryGetValue(path, out var fragment)) { return fragment; }
+            if (m_fragments.TryGetValue(key: path, value: out var fragment)) { return fragment; }
             var builder = new StringBuilder();
             var tree = m_trees[path];
-            var root = new NullPatternRewriter(Model(tree)).Visit(tree.GetRoot())!;
+            var root = new NullPatternRewriter(model: Model(tree: tree)).Visit(node: tree.GetRoot())!;
             // Run the existing syntactic normalizers on a trivia-free copy. A comment cannot decide whether a
             // declaration or initializer is sorted in the fingerprint.
             root = root.ReplaceTokens(root.DescendantTokens(), static (token, _) => token.WithoutTrivia()).NormalizeWhitespace();
-            foreach (var pass in FormatPasses.All.Where(pass => (pass.Default && pass.Syntactic))) {
-                root = pass.Apply(root);
-                root = CSharpSyntaxTree.ParseText(root.ToFullString(), CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview)).GetRoot();
+            foreach (var pass in FormatPasses.All.Where(predicate: pass => (pass.Default && pass.Syntactic))) {
+                root = pass.Apply(node: root);
+                root = CSharpSyntaxTree.ParseText(root.ToFullString(), CSharpParseOptions.Default.WithLanguageVersion(version: LanguageVersion.Preview)).GetRoot();
             }
-            var canonicalTree = CSharpSyntaxTree.ParseText(root.ToFullString(), CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview), path);
+            var canonicalTree = CSharpSyntaxTree.ParseText(root.ToFullString(), CSharpParseOptions.Default.WithLanguageVersion(version: LanguageVersion.Preview), path);
 
-            _ = Model(tree);
-            var model = m_compilation!.ReplaceSyntaxTree(tree, canonicalTree).GetSemanticModel(canonicalTree);
-            var names = new Dictionary<ISymbol, string>(SymbolEqualityComparer.Default);
+            _ = Model(tree: tree);
+            var model = m_compilation!.ReplaceSyntaxTree(newTree: canonicalTree, oldTree: tree).GetSemanticModel(canonicalTree);
+            var names = new Dictionary<ISymbol, string>(comparer: SymbolEqualityComparer.Default);
 
             foreach (var node in canonicalTree.GetRoot().DescendantNodes()) {
                 if ((node is ParameterSyntax) && (node.Parent?.Parent is RecordDeclarationSyntax)) { continue; }
@@ -263,7 +263,7 @@ internal static partial class FormatVersionsLedger {
                     && (model.GetDeclaredSymbol(node) is ILocalSymbol or IParameterSymbol)) {
                     var symbol = model.GetDeclaredSymbol(node)!;
 
-                    names.TryAdd(symbol, $"local{names.Count.ToString(CultureInfo.InvariantCulture)}");
+                    names.TryAdd(key: symbol, value: $"local{names.Count.ToString(provider: CultureInfo.InvariantCulture)}");
                 }
             }
             AppendShape(canonicalTree.GetRoot(), builder, model, names);
@@ -276,24 +276,24 @@ internal static partial class FormatVersionsLedger {
     private static void AppendShape(SyntaxNode node, StringBuilder builder, SemanticModel model, IReadOnlyDictionary<ISymbol, string> names) {
         if ((node is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } })
             && (model.GetConstantValue(node) is { HasValue: true, Value: string nameOf })) {
-            builder.Append("nameof:").Append(nameOf.Length.ToString(CultureInfo.InvariantCulture)).Append(':');
-            AppendText(nameOf, builder);
+            builder.Append(value: "nameof:").Append(value: nameOf.Length.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ':');
+            AppendText(builder: builder, text: nameOf);
             return;
         }
         if (node is ParenthesizedExpressionSyntax parentheses) {
             AppendShape(parentheses.Expression, builder, model, names);
             return;
         }
-        builder.Append(node.RawKind.ToString(CultureInfo.InvariantCulture)).Append('{');
-        if ((node is ArgumentListSyntax list) && (ArgumentBindings(list, model) is { } bindings)) {
+        builder.Append(value: node.RawKind.ToString(provider: CultureInfo.InvariantCulture)).Append(value: '{');
+        if ((node is ArgumentListSyntax list) && (ArgumentBindings(list: list, model: model) is { } bindings)) {
             var arguments = bindings.AsEnumerable();
 
-            if (!arguments.Any(binding => ExpressionSafety.HasSideEffect(binding.Argument.Expression, model))) {
-                arguments = arguments.OrderBy(binding => binding.Ordinal);
+            if (!arguments.Any(predicate: binding => ExpressionSafety.HasSideEffect(expression: binding.Argument.Expression, model: model))) {
+                arguments = arguments.OrderBy(keySelector: binding => binding.Ordinal);
             }
             foreach (var (argument, ordinal) in arguments) {
-                builder.Append(ordinal.ToString(CultureInfo.InvariantCulture)).Append(':');
-                builder.Append(argument.RefKindKeyword.ValueText).Append(':');
+                builder.Append(value: ordinal.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ':');
+                builder.Append(value: argument.RefKindKeyword.ValueText).Append(value: ':');
                 AppendShape(argument.Expression, builder, model, names);
             }
         } else {
@@ -303,25 +303,25 @@ internal static partial class FormatVersionsLedger {
                 } else {
                     var token = child.AsToken();
 
-                    if (token.IsKind(SyntaxKind.CommaToken)) { continue; }
+                    if (token.IsKind(kind: SyntaxKind.CommaToken)) { continue; }
                     var text = token.ValueText;
 
-                    if (token.IsKind(SyntaxKind.IdentifierToken)) {
+                    if (token.IsKind(kind: SyntaxKind.IdentifierToken)) {
                         var symbol = (model.GetDeclaredSymbol(node) ?? model.GetSymbolInfo(node).Symbol);
 
-                        if ((symbol is not null) && names.TryGetValue(symbol, out var name)) { text = name; }
+                        if ((symbol is not null) && names.TryGetValue(key: symbol, value: out var name)) { text = name; }
                     }
-                    builder.Append(token.RawKind.ToString(CultureInfo.InvariantCulture)).Append(':')
-                        .Append(text.Length.ToString(CultureInfo.InvariantCulture)).Append(':');
-                    AppendText(text, builder);
-                    builder.Append(';');
+                    builder.Append(value: token.RawKind.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ':')
+                        .Append(value: text.Length.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ':');
+                    AppendText(builder: builder, text: text);
+                    builder.Append(value: ';');
                 }
             }
         }
-        builder.Append('}');
+        builder.Append(value: '}');
     }
     private static void AppendText(string text, StringBuilder builder) {
-        foreach (var character in text) { builder.Append(((int)character).ToString("x4", CultureInfo.InvariantCulture)); }
+        foreach (var character in text) { builder.Append(value: ((int)character).ToString(format: "x4", provider: CultureInfo.InvariantCulture)); }
     }
     private static IReadOnlyList<(ArgumentSyntax Argument, int Ordinal)>? ArgumentBindings(ArgumentListSyntax list, SemanticModel model) {
         if (model.GetSymbolInfo(list.Parent!).Symbol is not IMethodSymbol method) { return null; }
@@ -330,11 +330,11 @@ internal static partial class FormatVersionsLedger {
         for (var index = 0; (index < list.Arguments.Count); index++) {
             var argument = list.Arguments[index];
             var parameter = ((argument.NameColon is { } name)
-                ? method.Parameters.FirstOrDefault(parameter => (parameter.Name == name.Name.Identifier.ValueText))
-                : method.Parameters.ElementAtOrDefault(index));
+                ? method.Parameters.FirstOrDefault(predicate: parameter => (parameter.Name == name.Name.Identifier.ValueText))
+                : method.Parameters.ElementAtOrDefault(index: index));
 
             if ((parameter is null) || parameter.IsParams) { return null; }
-            bindings.Add((argument, parameter.Ordinal));
+            bindings.Add(item: (argument, parameter.Ordinal));
         }
         return bindings;
     }
@@ -358,22 +358,22 @@ internal static partial class FormatVersionsLedger {
                 comparisonType: StringComparison.Ordinal,
                 value: $"{stem}."
             ))
-        ) || IsShapeDependency(source, path))).Order(comparer: StringComparer.Ordinal);
+        ) || IsShapeDependency(path: path, source: source))).Order(comparer: StringComparer.Ordinal);
     }
     private static bool IsShapeDependency(string source, string path) {
         var sharedWorldLeaves = (path is "src/Puck.World.Protocol/Protocol/WorldWireCodec.cs" or "src/Puck.World.Protocol/Protocol/WorldWireTags.cs" or "src/Puck.Networking/WireCodec.cs");
 
         if (source is "src/Puck.World.Protocol/Protocol/WorldProtocol.cs") {
-            return (sharedWorldLeaves || path.StartsWith("src/Puck.World.Protocol/Protocol/WorldSubmissionCodec", StringComparison.Ordinal)
+            return (sharedWorldLeaves || path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.World.Protocol/Protocol/WorldSubmissionCodec")
                 || (path is "src/Puck.World.Protocol/Protocol/WorldFrameCodec.cs" or "src/Puck.World.Protocol/Codecs/WorldPeerWireFormat.cs"));
         }
         if (source is "src/Puck.World.Server/WorldReplaySnapshot.cs" or "src/Puck.World.Server/WorldFederationCodec.cs"
             or "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs" or "src/Puck.World.Protocol/Codecs/WorldAuthorityStoreWireCodec.cs") {
-            return (sharedWorldLeaves || path.StartsWith("src/Puck.World.Protocol/Protocol/WorldSubmissionCodec", StringComparison.Ordinal));
+            return (sharedWorldLeaves || path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.World.Protocol/Protocol/WorldSubmissionCodec"));
         }
         if (source is "src/Puck.HumbleGamingBrick/MachineSnapshot.cs" or "src/Puck.AdvancedGamingBrick/AgbMachineSnapshot.cs"
             or "src/Puck.HumbleGamingDeck/HgdMachineSnapshot.cs") {
-            return (path.StartsWith(DirectoryOf(source), StringComparison.Ordinal)
+            return (path.StartsWith(DirectoryOf(path: source), StringComparison.Ordinal)
                 || (path is "src/Puck.Machines/StateWriter.cs" or "src/Puck.Machines/StateReader.cs" or "src/Puck.Machines/SnapshotImage.cs"
                     or "src/Puck.Machines/SnapshotSection.cs"));
         }
@@ -498,7 +498,7 @@ internal static partial class FormatVersionsLedger {
             foreach (var member in root.GetProperty(propertyName: "formats").EnumerateObject()) {
                 if (
                     (member.Value.ValueKind != JsonValueKind.Object) ||
-                    !member.Value.EnumerateObject().Select(item => item.Name).Order(StringComparer.Ordinal).SequenceEqual(["shape", "source", "token"]) ||
+                    !member.Value.EnumerateObject().Select(selector: item => item.Name).Order(comparer: StringComparer.Ordinal).SequenceEqual(second: ["shape", "source", "token"]) ||
                     member.Value.EnumerateObject().Any(predicate: static item => (item.Value.ValueKind != JsonValueKind.String))
                 ) {
                     error = $"'{member.Name}' must be an object of exactly the string members shape, source and token";
@@ -508,7 +508,7 @@ internal static partial class FormatVersionsLedger {
 
                 parsed.Add(item: new FormatEntry(
                     Id: member.Name,
-                    Shape: member.Value.GetProperty("shape").GetString()!,
+                    Shape: member.Value.GetProperty(propertyName: "shape").GetString()!,
                     Source: member.Value.GetProperty(propertyName: "source").GetString()!,
                     Token: member.Value.GetProperty(propertyName: "token").GetString()!
                 ));
