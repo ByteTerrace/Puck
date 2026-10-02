@@ -119,6 +119,16 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] P4 shared opaque visibility (every build step, P4-0 to P4-2e and the visibility record's names, landed; the mesh canaries hold every scene the check names, the full-size resize included, and no reader of the retired layouts remains; the measured cost is held with P14's counted-cost ceilings).
 - [x] P5 reproducible authoring and packaged dependencies.
 - [ ] P6 representation experiments.
+  - [x] P6-GI G1: the CPU irradiance reference over `SdfFieldEvaluator` and a CPU model of the cache's transport (lattice, field-partitioned cells, certified launches, world-space receiver proofs with a per-frame allowance, absolute acceptance, support-seeking continuation with hit reprojection, the light view, the finite two-generation solve) and its schedule, holding the two guarantees (no light through sealed geometry, energy conserved) exactly and every other error to a numbered bound.
+  - [ ] P6-GI G2: the `indirect` instance per residency, classified and partitioned by exact field traces and traced with a ball-masked group march into stored hits with their launches and feedback proofs, one shared instance-grid walker, and its debug views, off at every tier.
+  - [ ] P6-GI G3: the light view, one depth-only camera view per residency cycling its shadow slots' regions, whose texel-wide acceptance never lights a shadowed hit.
+  - [ ] P6-GI G4: bounce from lights and emission through the one light interface, the views apply with cached proofs and the primary march's launch, `render.indirect`, palette `bleed` and `receive`, `bounce` renamed `fill`, a light's `bounce`, parity's `indirect: on` rows, and indirect light on by default at `medium` and `high`.
+  - [ ] P6-GI G5: hit-path, shadow-path, proof and radiance invalidation by P18-6's change classes, P18-7's slots and fades in the light view, and bodies that cast at `high`.
+  - [ ] P6-GI G6: the sky through the cache from `sky.environment`, in place of unoccluded harmonic ambient.
+  - [ ] P6-GI G7: one GPU emission reduction per bound screen, portals onto other worlds as light sources in finite closure-wide iterations, per-world caches with nested budgets, and a lit crossing.
+  - [ ] P6-GI G8: `world.explain`'s indirect line against the CPU reference, the echo, budget and inspector rows, and the freeze and reset levers.
+  - [ ] P6-GI G9: the near field at `high`, short field rays that replace the cache's near interval, lit by explicit diffuse shading at their hits.
+  - [ ] P6-GI G10: the indirect tier defaults and the counted comparison with the simpler alternatives, decided beside P15-8 and P18-14.
 - [x] P7 the binding contract and the adapter memory profile, with the one-day spike as its gate (every P7b step landed; the gate's Linux bytecode leg is deferred to the end).
 - [x] P8 the shader package, the pass interface and its generated declarations, the echo pass, and HLSL as the one source language.
 - [x] P9 the state mirror and presentation time, against [the presentation view's](runtime-and-delivery.md#the-presentation-view) state interface.
