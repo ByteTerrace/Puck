@@ -10,28 +10,51 @@ public sealed partial class WorldBody {
     /// before <see cref="Puck.World.Server.WorldPopulation.TryDetachSeatForTransfer"/> discards this body object, so
     /// the abort/restore path has something to reapply if the transfer unwinds. See <see cref="WorldBodyTransferState"/>'s own
     /// remarks for the complete field-by-field classification.</summary>
-    public WorldBodyTransferState CaptureTransferState() {
-        var laneLatch = new ulong[ActionLaneCount];
-        var laneFactHeld = new ulong[ActionLaneCount];
-        var laneRecency = new ulong[]?[ActionLaneCount];
+    public WorldBodyTransferState CaptureTransferState() => TransferState(alias: false);
+
+    /// <summary>Reads this body's <see cref="WorldBodyTransferState"/> as a view for immediate encoding: its arrays are
+    /// the body's own live storage, and the ones that need assembling are scratch the body reuses, so the read
+    /// allocates nothing once the scratch has grown to this body's shape. The view is valid only until the body next
+    /// changes or is viewed again; anything kept takes <see cref="CaptureTransferState"/>.</summary>
+    /// <returns>The view.</returns>
+    internal WorldBodyTransferState ViewTransferState() => TransferState(alias: true);
+
+    // The one statement of what the transfer state holds. A capture copies every array; a view aliases the live
+    // arrays and assembles the rest into the body's scratch.
+    private WorldBodyTransferState TransferState(bool alias) {
+        var laneLatch = Scratch(alias: alias, length: ActionLaneCount, scratch: ref m_viewLaneLatch);
+        var laneFactHeld = Scratch(alias: alias, length: ActionLaneCount, scratch: ref m_viewLaneFactHeld);
+        var laneRecency = Scratch(alias: alias, length: ActionLaneCount, scratch: ref m_viewLaneRecency);
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             laneLatch[lane] = m_laneActions[lane].Latch;
             laneFactHeld[lane] = m_laneActions[lane].FactHeld;
             laneRecency[lane] = ((m_laneActions[lane].Recency is { } recency)
-                ? [.. recency]
+                ? Own(alias: alias, live: recency)
                 : null
             );
         }
 
-        var tapeIntents = new PlayerIntent[m_tapeCount];
-        var tapeRemainingTicks = new ulong[m_tapeCount];
+        var actionState = Scratch(alias: alias, length: m_actionStateDefinitions.Length, scratch: ref m_viewActionState);
+
+        ReadActionState(image: actionState);
+
+        List<PlayerIntent> tapeIntents;
+        List<ulong> tapeRemainingTicks;
+
+        if (alias) {
+            (tapeIntents = (m_viewTapeIntents ??= [])).Clear();
+            (tapeRemainingTicks = (m_viewTapeRemainingTicks ??= [])).Clear();
+        } else {
+            tapeIntents = new List<PlayerIntent>(capacity: m_tapeCount);
+            tapeRemainingTicks = new List<ulong>(capacity: m_tapeCount);
+        }
 
         for (var offset = 0; (offset < m_tapeCount); offset++) {
             var segment = m_tape[((m_tapeHead + offset) % m_tape.Length)];
 
-            tapeIntents[offset] = segment.Intent;
-            tapeRemainingTicks[offset] = segment.RemainingTicks;
+            tapeIntents.Add(item: segment.Intent);
+            tapeRemainingTicks.Add(item: segment.RemainingTicks);
         }
 
         return new(
@@ -41,17 +64,17 @@ public sealed partial class WorldBody {
             DrivePitch: m_drivePitch,
             OverlayVelocity: m_overlayVelocity,
             OverlayRemainingTicks: m_overlayRemaining,
-            ChannelTimerTicks: [.. m_laneTimers],
-            ChannelTimerValues: [.. m_channelTimerValues],
+            ChannelTimerTicks: Own(alias: alias, live: m_laneTimers),
+            ChannelTimerValues: Own(alias: alias, live: m_channelTimerValues),
             BodyMotionProgramName: m_bodyMotionProgram.Name,
             Source: m_source,
-            PreviousChannelBit: [.. m_previousChannelBit],
+            PreviousChannelBit: Own(alias: alias, live: m_previousChannelBit),
             HeldChannelImage: (m_hasTransferHeldChannels
             ? m_transferHeldChannels
             : m_channelReadHeld),
-            PendingDefaultChannelPress: [.. m_pendingDefaultChannelPress],
-            PendingDefaultChannelValue: [.. m_pendingDefaultChannelValue],
-            MotionRecency: [.. m_motionRecency],
+            PendingDefaultChannelPress: Own(alias: alias, live: m_pendingDefaultChannelPress),
+            PendingDefaultChannelValue: Own(alias: alias, live: m_pendingDefaultChannelValue),
+            MotionRecency: Own(alias: alias, live: m_motionRecency),
             PlanarRampRemainder: m_planarRampAccumulator.Remainder,
             DriveLongRemainder: m_driveLongAccumulator.Remainder,
             DriveLatRemainder: m_driveLatAccumulator.Remainder,
@@ -73,20 +96,37 @@ public sealed partial class WorldBody {
             LaneLatch: laneLatch,
             LaneFactHeld: laneFactHeld,
             LaneRecency: laneRecency,
-            ActionState: CaptureActionState(),
-            ActionStateDirty: [.. m_actionStateDirty],
-            ActionStateDirtyKind: [.. m_actionStateDirtyKind],
-            ActionStateDirtyOperand: [.. m_actionStateDirtyOperand],
-            DurableInputPresent: [.. m_durableInputPresent],
-            DurableInputValues: [.. m_durableInputValues],
-            DurableInputTimers: [.. m_durableInputTimers],
-            DurableInputWriters: [.. m_durableInputWriters],
+            ActionState: actionState,
+            ActionStateDirty: Own(alias: alias, live: m_actionStateDirty),
+            ActionStateDirtyKind: Own(alias: alias, live: m_actionStateDirtyKind),
+            ActionStateDirtyOperand: Own(alias: alias, live: m_actionStateDirtyOperand),
+            DurableInputPresent: Own(alias: alias, live: m_durableInputPresent),
+            DurableInputValues: Own(alias: alias, live: m_durableInputValues),
+            DurableInputTimers: Own(alias: alias, live: m_durableInputTimers),
+            DurableInputWriters: Own(alias: alias, live: m_durableInputWriters),
             DurableInputTick: m_durableInputTick,
             TapeIntents: tapeIntents,
             TapeRemainingTicks: tapeRemainingTicks,
             PendingContinuum: m_pendingContinuum
         );
     }
+    // A view's array is the live one; a capture's is its own copy.
+    private static T[] Own<T>(bool alias, T[] live) => (alias
+        ? live
+        : [.. live]);
+    // An assembled array of exactly length elements: the body's reused scratch for a view (grown only when this
+    // body's shape changes), a fresh array for a capture.
+    private static T[] Scratch<T>(bool alias, int length, ref T[]? scratch) {
+        if (!alias) {
+            return new T[length];
+        }
+        if ((scratch is null) || (scratch.Length != length)) {
+            scratch = new T[length];
+        }
+
+        return scratch;
+    }
+
     /// <summary>Installs an adjacency arrival's already-evaluated motion segment and resolves it through this
     /// authority's own contact field. No input, action, timer, gravity, or motion-program operation is evaluated.</summary>
     public void ApplyContinuumTrajectory(in WorldContinuumTrajectory trajectory, int entityIndex, ulong destinationCompletedEngineTick) {
@@ -237,6 +277,13 @@ public sealed partial class WorldBody {
     public long[] CaptureActionState() {
         var image = new long[m_actionStateDefinitions.Length];
 
+        ReadActionState(image: image);
+
+        return image;
+    }
+
+    // Reads the register file into image, one raw value per slot of the kit's compiled definitions.
+    private void ReadActionState(long[] image) {
         for (var slot = 0; (slot < image.Length); slot++) {
             image[slot] = ((m_stateLane is { } lane)
                 ? lane.Read(
@@ -246,9 +293,8 @@ public sealed partial class WorldBody {
                 : 0L
             );
         }
-
-        return image;
     }
+
     /// <summary>Writes a previously captured lane image back into this body's slot lanes.</summary>
     /// <param name="image">The lane image, parallel to the kit's compiled definitions.</param>
     public void RestoreActionState(IReadOnlyList<long> image) {

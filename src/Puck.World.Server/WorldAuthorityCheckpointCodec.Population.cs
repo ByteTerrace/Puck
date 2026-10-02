@@ -20,18 +20,33 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
 
-    /// <summary>Folds population continuation through the checkpoint's field codecs, excluding rendered appearance.</summary>
+    /// <summary>Folds the simulation continuation of captured population entries through the checkpoint's field codecs,
+    /// excluding rendered appearance: the bytes <see cref="WorldPopulation.AppendContinuationHash"/> folds from the live
+    /// slots the entries were captured from.</summary>
     /// <param name="hash">The hash to fold into.</param>
     /// <param name="entries">The entries, in slot order.</param>
-    internal static void AppendPopulationEntries(ref Fnv1aHash hash, IReadOnlyList<WorldPopulationEntryCheckpoint> entries) {
+    /// <exception cref="ArgumentNullException"><paramref name="entries"/> is <see langword="null"/>.</exception>
+    public static void AppendPopulationEntries(ref Fnv1aHash hash, IReadOnlyList<WorldPopulationEntryCheckpoint> entries) {
+        ArgumentNullException.ThrowIfNull(argument: entries);
+
         var writer = new WireWriter();
 
         writer.WriteArray(
             items: entries,
-            writeItem: static (w, entry) => WritePopulationEntry(entry: entry, includeAppearance: false, writer: w)
+            writeItem: WriteContinuationEntry
         );
         hash.Add(values: writer.WrittenSpan);
     }
+
+    /// <summary>Writes one entry's simulation continuation: its checkpoint encoding without the rendered
+    /// appearance.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="entry">The entry.</param>
+    internal static void WriteContinuationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry) => WritePopulationEntry(
+        entry: entry,
+        includeAppearance: false,
+        writer: writer
+    );
 
     private static void WritePopulationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry) =>
         WritePopulationEntry(entry: entry, includeAppearance: true, writer: writer);

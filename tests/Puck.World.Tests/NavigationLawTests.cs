@@ -490,7 +490,7 @@ public sealed partial class NavigationLawTests {
         var route = Assert.IsType<WorldPopulationNavigationCheckpoint>(@object: fixture.Server.Population.Capture().Entries.Single(predicate: row => (row.Index == 0)).Navigation);
 
         Assert.True(
-            condition: (route.Path.Length > 4),
+            condition: (route.Path.Count > 4),
             userMessage: $"the route crossed the direct four-cell lane: {string.Join(
                 separator: ',',
                 values: route.Path

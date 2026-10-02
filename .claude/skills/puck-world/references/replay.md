@@ -299,10 +299,9 @@ named components (`WorldStateHashComposition.Authoritative`): poses, everything
 the state arena stores, the host-owned field cells, the state section's own
 declaration, the declared topologies, rule/interaction latches, rule-group
 progress, decision runtime, board enforcement, body action state, every body's
-simulation continuation (the checkpoint's field codecs, excluding rendered
-color and rig, which allocates, so
-the scope is taken while a replay records or verifies and on request, never by
-an ordinary tick), cached
+simulation continuation (the checkpoint's field codecs over a view of each
+live slot, excluding rendered color and rig; it allocates nothing, so the scope
+is taken on every tick a replay records or a history captures), cached
 navigation and shared destination-tree/scheduler/pending-request state,
 flock perception/cadence/sample state (including the cached result of state
 affinity expressions), slot generations, and previous positions. Affinity programs

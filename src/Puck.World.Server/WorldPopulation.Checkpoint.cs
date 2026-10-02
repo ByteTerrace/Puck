@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Networking;
 using Puck.Physics.Navigation;
 using Puck.World.Protocol;
 
@@ -7,17 +8,47 @@ namespace Puck.World.Server;
 public sealed partial class WorldPopulation {
     /// <summary>Folds every active slot's simulation continuation through the checkpoint's field codecs, excluding
     /// rendered color and rig, so state the pose hash does not read (a velocity, an integration remainder, a channel
-    /// timer) still separates two runs. Called where <see cref="Capture"/> may be, between a
-    /// completed step and the next. Encoding the simulation fields allocates; the authoritative hash
-    /// that folds it is taken while a replay records or verifies and when a console or attestation asks, never by an
-    /// ordinary tick.</summary>
+    /// timer) still separates two runs. Called where <see cref="Capture"/> may be, between a completed step and the
+    /// next; the authoritative hash takes it on every tick a replay records or a history captures. Each entry is a
+    /// view of the slot's live state encoded into a writer the population reuses, so the fold allocates nothing once
+    /// that scratch has grown to the population's shape, and it folds exactly the bytes
+    /// <see cref="WorldAuthorityCheckpointCodec.AppendPopulationEntries"/> folds for the entries <see cref="Capture"/>
+    /// returns.</summary>
     /// <param name="hash">The hash to fold into.</param>
-    internal void AppendContinuationHash(ref Fnv1aHash hash) =>
-        WorldAuthorityCheckpointCodec.AppendPopulationEntries(
-            entries: CaptureEntries(),
-            hash: ref hash
-        );
+    /// <exception cref="InvalidOperationException">A pending-output list is non-empty.</exception>
+    public void AppendContinuationHash(ref Fnv1aHash hash) {
+        RequireCapturePoint();
 
+        var writer = (m_continuationWriter ??= new WireWriter());
+        var count = 0;
+
+        for (var index = 0; (index < Capacity); index++) {
+            if (m_entries[index] is { Active: true, Body: not null }) {
+                count++;
+            }
+        }
+
+        writer.Reset();
+        writer.WriteArrayCount(count: count);
+
+        for (var index = 0; (index < Capacity); index++) {
+            var entry = m_entries[index];
+
+            if (entry is { Active: true, Body: { } body }) {
+                WorldAuthorityCheckpointCodec.WriteContinuationEntry(
+                    entry: EntryCheckpoint(
+                        alias: true,
+                        body: body,
+                        entry: entry,
+                        index: index
+                    ),
+                    writer: writer
+                );
+            }
+        }
+
+        hash.Add(values: writer.WrittenSpan);
+    }
     /// <summary>Captures every active slot's simulation state. Asserts the per-tick pending-output lists are empty —
     /// guaranteed by <see cref="WorldServer.TryCaptureCheckpoint"/>'s capture point sitting between a completed
     /// <c>Step</c> and the next, never inside one.</summary>
@@ -34,6 +65,26 @@ public sealed partial class WorldPopulation {
 
     // Every active slot's checkpoint entry, in slot order: the part of a population checkpoint a body owns.
     private List<WorldPopulationEntryCheckpoint> CaptureEntries() {
+        RequireCapturePoint();
+
+        var entries = new List<WorldPopulationEntryCheckpoint>(capacity: Capacity);
+
+        for (var index = 0; (index < Capacity); index++) {
+            var entry = m_entries[index];
+
+            if (entry is { Active: true, Body: { } body }) {
+                entries.Add(item: EntryCheckpoint(
+                    alias: false,
+                    body: body,
+                    entry: entry,
+                    index: index
+                ));
+            }
+        }
+
+        return entries;
+    }
+    private void RequireCapturePoint() {
         if (
             (m_effectOutputs.Count != 0) ||
             (m_designationOutputs.Count != 0) ||
@@ -42,109 +93,126 @@ public sealed partial class WorldPopulation {
         ) {
             throw new InvalidOperationException(message: "a population checkpoint requires every pending-output list to be empty — capture only between a completed Step and the next StepInstances.");
         }
+    }
+    // The one statement of what a slot's checkpoint entry holds. A capture copies every collection; a view aliases
+    // the slot's live collections and assembles the rest into the population's scratch, valid until the next view.
+    private WorldPopulationEntryCheckpoint EntryCheckpoint(int index, Entry entry, WorldBody body, bool alias) {
+        List<(WorldCapability, GrantSubject)> revokedKeys;
 
-        var entries = new List<WorldPopulationEntryCheckpoint>(capacity: Capacity);
-
-        for (var index = 0; (index < Capacity); index++) {
-            var entry = m_entries[index];
-
-            if (
-                !entry.Active ||
-                (entry.Body is not { } body)
-            ) {
-                continue;
-            }
-
-            var revokedKeys = new List<(WorldCapability, GrantSubject)>(capacity: entry.AdmissionRevokedKeys.Count);
-
-            foreach (var key in entry.AdmissionRevokedKeys) {
-                revokedKeys.Add(item: (key.Capability, key.Subject));
-            }
-            revokedKeys.Sort(comparison: static (left, right) => {
-                var capability = Comparer<WorldCapability>.Default.Compare(x: left.Item1, y: right.Item1);
-
-                return ((capability != 0) ? capability : WorldGrants.CompareSubjects(a: left.Item2, b: right.Item2));
-            });
-
-            var residue = body.CaptureIntegrationResidue();
-            var contactFieldObservationCurrent = (residue.LastContactFieldVersion == ContactFieldVersion);
-
-            residue = residue with {
-                // Contact-field versions are process-local rebuild counters. A population checkpoint retains only
-                // equality with the current field, using canonical representatives so capture/restore/capture is
-                // byte-stable even when reconstruction assigns a different counter.
-                ContactFieldObservationCurrent = contactFieldObservationCurrent,
-                LastContactFieldVersion = (contactFieldObservationCurrent ? 0UL : 1UL),
-            };
-
-            entries.Add(item: new WorldPopulationEntryCheckpoint(
-                Index: index,
-                KitIndex: entry.KitIndex,
-                BodyColor: entry.BodyColor,
-                CatalogRig: entry.CatalogRig,
-                Designations: [.. entry.Designations],
-                Generation: entry.Generation,
-                IsAuthorityTransferred: entry.IsAuthorityTransferred,
-                IsRemoteHuman: entry.IsRemoteHuman,
-                Mobility: entry.Mobility,
-                MobilityGeneration: entry.MobilityGeneration,
-                Parked: entry.Parked,
-                ParkedUntilTick: entry.ParkedUntilTick,
-                PlacementId: entry.PlacementId,
-                SpawnPosition: entry.SpawnPosition,
-                SpawnYaw: entry.SpawnYaw,
-                AdmissionInstalledGrantTemplates: [.. entry.AdmissionInstalledGrantTemplates],
-                AdmissionRevokedKeys: revokedKeys,
-                IdentityDomain: entry.IdentityDomain,
-                IdentitySubject: entry.IdentitySubject,
-                ProducerAcquiredTarget: entry.ProducerState.AcquiredTarget,
-                ProducerActivityPhase: entry.ProducerState.ActivityPhase,
-                ProducerActivityRate: entry.ProducerState.ActivityRate,
-                ProducerPhase: entry.ProducerState.Phase,
-                ProducerPreferredAltitude: entry.ProducerState.PreferredAltitude,
-                ProducerWeaveFrequency: entry.ProducerState.WeaveFrequency,
-                ProducerCurveArcRaw: entry.ProducerState.CurveArcRaw,
-                ProducerActiveName: entry.ProducerState.ActiveProducerName,
-                ProducerActiveCurveIndex: entry.ProducerState.ActiveProducerCurveIndex,
-                Flock: new WorldPopulationFlockCheckpoint(
-                    Desired: entry.ProducerState.FlockDesired,
-                    Generation: entry.ProducerState.FlockGeneration,
-                    RemainingTicks: entry.ProducerState.FlockRemainingTicks,
-                    SampleOrdinal: entry.ProducerState.FlockSampleOrdinal,
-                    Seeded: entry.ProducerState.FlockSeeded,
-                    Target: entry.ProducerState.FlockTarget
-                ),
-                Autonomy: new WorldPopulationAutonomyCheckpoint(
-                    MotionElapsedTicks: entry.AutonomyState.MotionElapsedTicks,
-                    MotionPeriodTicks: entry.AutonomyState.MotionPeriodTicks,
-                    MotionRemainingTicks: entry.AutonomyState.MotionRemainingTicks,
-                    SteeringElapsedTicks: entry.AutonomyState.SteeringElapsedTicks,
-                    SteeringIntent: entry.AutonomyState.SteeringIntent,
-                    SteeringPeriodTicks: entry.AutonomyState.SteeringPeriodTicks,
-                    SteeringRemainingTicks: entry.AutonomyState.SteeringRemainingTicks,
-                    SteeringSeeded: entry.AutonomyState.SteeringSeeded
-                ),
-                Position: body.FixedPosition,
-                Yaw: body.FixedYaw,
-                DynamicState: body.CaptureTransferState(),
-                Residue: residue,
-                Profile: body.Profile?.Project(),
-                Navigation: new WorldPopulationNavigationCheckpoint(
-                    ActiveProducerDomainIndex: entry.ProducerState.ActiveProducerNavigationDomainIndex,
-                    DomainIndex: entry.NavigationState.DomainIndex,
-                    GoalCell: entry.NavigationState.GoalCell,
-                    Waypoint: entry.NavigationState.Waypoint,
-                    ExpandedLast: entry.NavigationState.ExpandedLast,
-                    Status: entry.NavigationState.Status,
-                    Path: [.. entry.NavigationState.Path.AsSpan(
-                            start: 0,
-                            length: entry.NavigationState.PathLength
-                        )]
-                )
-            ));
+        if (alias) {
+            (revokedKeys = (m_viewRevokedKeys ??= [])).Clear();
+        } else {
+            revokedKeys = new List<(WorldCapability, GrantSubject)>(capacity: entry.AdmissionRevokedKeys.Count);
         }
 
-        return entries;
+        foreach (var key in entry.AdmissionRevokedKeys) {
+            revokedKeys.Add(item: (key.Capability, key.Subject));
+        }
+        revokedKeys.Sort(comparison: static (left, right) => {
+            var capability = Comparer<WorldCapability>.Default.Compare(x: left.Item1, y: right.Item1);
+
+            return ((capability != 0) ? capability : WorldGrants.CompareSubjects(a: left.Item2, b: right.Item2));
+        });
+
+        var residue = body.CaptureIntegrationResidue();
+        var contactFieldObservationCurrent = (residue.LastContactFieldVersion == ContactFieldVersion);
+
+        residue = residue with {
+            // Contact-field versions are process-local rebuild counters. A population checkpoint retains only
+            // equality with the current field, using canonical representatives so capture/restore/capture is
+            // byte-stable even when reconstruction assigns a different counter.
+            ContactFieldObservationCurrent = contactFieldObservationCurrent,
+            LastContactFieldVersion = (contactFieldObservationCurrent ? 0UL : 1UL),
+        };
+
+        return new WorldPopulationEntryCheckpoint(
+            Index: index,
+            KitIndex: entry.KitIndex,
+            BodyColor: entry.BodyColor,
+            CatalogRig: entry.CatalogRig,
+            Designations: (alias
+                ? entry.Designations
+                : [.. entry.Designations]),
+            Generation: entry.Generation,
+            IsAuthorityTransferred: entry.IsAuthorityTransferred,
+            IsRemoteHuman: entry.IsRemoteHuman,
+            Mobility: entry.Mobility,
+            MobilityGeneration: entry.MobilityGeneration,
+            Parked: entry.Parked,
+            ParkedUntilTick: entry.ParkedUntilTick,
+            PlacementId: entry.PlacementId,
+            SpawnPosition: entry.SpawnPosition,
+            SpawnYaw: entry.SpawnYaw,
+            AdmissionInstalledGrantTemplates: (alias
+                ? entry.AdmissionInstalledGrantTemplates
+                : [.. entry.AdmissionInstalledGrantTemplates]),
+            AdmissionRevokedKeys: revokedKeys,
+            IdentityDomain: entry.IdentityDomain,
+            IdentitySubject: entry.IdentitySubject,
+            ProducerAcquiredTarget: entry.ProducerState.AcquiredTarget,
+            ProducerActivityPhase: entry.ProducerState.ActivityPhase,
+            ProducerActivityRate: entry.ProducerState.ActivityRate,
+            ProducerPhase: entry.ProducerState.Phase,
+            ProducerPreferredAltitude: entry.ProducerState.PreferredAltitude,
+            ProducerWeaveFrequency: entry.ProducerState.WeaveFrequency,
+            ProducerCurveArcRaw: entry.ProducerState.CurveArcRaw,
+            ProducerActiveName: entry.ProducerState.ActiveProducerName,
+            ProducerActiveCurveIndex: entry.ProducerState.ActiveProducerCurveIndex,
+            Flock: new WorldPopulationFlockCheckpoint(
+                Desired: entry.ProducerState.FlockDesired,
+                Generation: entry.ProducerState.FlockGeneration,
+                RemainingTicks: entry.ProducerState.FlockRemainingTicks,
+                SampleOrdinal: entry.ProducerState.FlockSampleOrdinal,
+                Seeded: entry.ProducerState.FlockSeeded,
+                Target: entry.ProducerState.FlockTarget
+            ),
+            Autonomy: new WorldPopulationAutonomyCheckpoint(
+                MotionElapsedTicks: entry.AutonomyState.MotionElapsedTicks,
+                MotionPeriodTicks: entry.AutonomyState.MotionPeriodTicks,
+                MotionRemainingTicks: entry.AutonomyState.MotionRemainingTicks,
+                SteeringElapsedTicks: entry.AutonomyState.SteeringElapsedTicks,
+                SteeringIntent: entry.AutonomyState.SteeringIntent,
+                SteeringPeriodTicks: entry.AutonomyState.SteeringPeriodTicks,
+                SteeringRemainingTicks: entry.AutonomyState.SteeringRemainingTicks,
+                SteeringSeeded: entry.AutonomyState.SteeringSeeded
+            ),
+            Position: body.FixedPosition,
+            Yaw: body.FixedYaw,
+            DynamicState: (alias
+                ? body.ViewTransferState()
+                : body.CaptureTransferState()),
+            Residue: residue,
+            Profile: body.Profile?.Project(),
+            Navigation: new WorldPopulationNavigationCheckpoint(
+                ActiveProducerDomainIndex: entry.ProducerState.ActiveProducerNavigationDomainIndex,
+                DomainIndex: entry.NavigationState.DomainIndex,
+                GoalCell: entry.NavigationState.GoalCell,
+                Waypoint: entry.NavigationState.Waypoint,
+                ExpandedLast: entry.NavigationState.ExpandedLast,
+                Status: entry.NavigationState.Status,
+                Path: NavigationPath(alias: alias, state: entry.NavigationState)
+            )
+        );
+    }
+    // A route's cached path: the population's reused scratch for a view, a copy for a capture.
+    private IReadOnlyList<int> NavigationPath(bool alias, BodyNavigationState state) {
+        var path = state.Path.AsSpan(
+            length: state.PathLength,
+            start: 0
+        );
+
+        if (!alias) {
+            return path.ToArray();
+        }
+
+        var scratch = (m_viewPath ??= []);
+
+        scratch.Clear();
+        foreach (var node in path) {
+            scratch.Add(item: node);
+        }
+
+        return scratch;
     }
 
     /// <summary>Restores every entity-table slot from a previously captured checkpoint. Every slot is cleared first —
@@ -307,9 +375,13 @@ public sealed partial class WorldPopulation {
                 entry.NavigationState.Waypoint = navigation.Waypoint;
                 entry.NavigationState.ExpandedLast = navigation.ExpandedLast;
                 entry.NavigationState.Status = navigation.Status;
-                entry.NavigationState.PathLength = navigation.Path.Length;
-                if (navigation.Path.Length != 0) {
-                    navigation.Path.AsSpan().CopyTo(destination: entry.NavigationState.WritablePath());
+                entry.NavigationState.PathLength = navigation.Path.Count;
+                if (navigation.Path.Count != 0) {
+                    var path = entry.NavigationState.WritablePath();
+
+                    for (var node = 0; (node < navigation.Path.Count); node++) {
+                        path[node] = navigation.Path[node];
+                    }
                 }
                 if (navigation.DomainIndex >= 0) {
                     // Even a failed search retains its domain, goal, and status. The source baked that domain
@@ -546,13 +618,13 @@ public sealed partial class WorldPopulation {
         ) {
             throw new InvalidOperationException(message: $"population checkpoint navigation domain {state.DomainIndex} lies outside the compiled domain table.");
         }
-        if (state.Path.Length > WorldNavigationCapacity.MaxPathNodes) {
-            throw new InvalidOperationException(message: $"population checkpoint navigation path carries {state.Path.Length} nodes; the maximum is {WorldNavigationCapacity.MaxPathNodes}.");
+        if (state.Path.Count > WorldNavigationCapacity.MaxPathNodes) {
+            throw new InvalidOperationException(message: $"population checkpoint navigation path carries {state.Path.Count} nodes; the maximum is {WorldNavigationCapacity.MaxPathNodes}.");
         }
         if (state.DomainIndex < 0) {
             if (
                 (state.GoalCell != -1) ||
-                (state.Path.Length != 0) ||
+                (state.Path.Count != 0) ||
                 (state.Waypoint != 0) ||
                 (state.ExpandedLast != 0)
             ) {
@@ -590,16 +662,16 @@ public sealed partial class WorldPopulation {
         ) {
             throw new InvalidOperationException(message: $"population checkpoint navigation expansion count {state.ExpandedLast} exceeds domain '{domain.Name}' budget {domain.Tuning.MaxExpandedNodes}.");
         }
-        if (state.Path.Length > domain.Tuning.MaxPathNodes) {
-            throw new InvalidOperationException(message: $"population checkpoint navigation path carries {state.Path.Length} nodes; domain '{domain.Name}' permits {domain.Tuning.MaxPathNodes}.");
+        if (state.Path.Count > domain.Tuning.MaxPathNodes) {
+            throw new InvalidOperationException(message: $"population checkpoint navigation path carries {state.Path.Count} nodes; domain '{domain.Name}' permits {domain.Tuning.MaxPathNodes}.");
         }
         if (
             (state.Waypoint < 0) ||
-            (state.Waypoint > state.Path.Length)
+            (state.Waypoint > state.Path.Count)
         ) {
-            throw new InvalidOperationException(message: $"population checkpoint navigation waypoint {state.Waypoint} lies outside its {state.Path.Length}-node path.");
+            throw new InvalidOperationException(message: $"population checkpoint navigation waypoint {state.Waypoint} lies outside its {state.Path.Count}-node path.");
         }
-        if (state.Path.Length == 0) {
+        if (state.Path.Count == 0) {
             if (state.Status is not (NavigationStatus.Unreachable or NavigationStatus.SearchLimit or NavigationStatus.PathLimit or NavigationStatus.Pending or NavigationStatus.CapacityLimited)) {
                 throw new InvalidOperationException(message: $"population checkpoint navigation status '{state.Status}' requires a stored path.");
             }
@@ -611,13 +683,13 @@ public sealed partial class WorldPopulation {
                 throw new InvalidOperationException(message: $"population checkpoint stored path cannot carry status '{state.Status}'.");
             }
         }
-        for (var index = 0; (index < state.Path.Length); index++) {
+        for (var index = 0; (index < state.Path.Count); index++) {
             if (((uint)state.Path[index]) >= ((uint)domain.CellCount)) {
                 throw new InvalidOperationException(message: $"population checkpoint navigation path node {state.Path[index]} at index {index} lies outside domain '{domain.Name}'.");
             }
         }
         if (
-            (state.Path.Length != 0) &&
+            (state.Path.Count != 0) &&
             (state.Path[^1] != state.GoalCell)
         ) {
             throw new InvalidOperationException(message: $"population checkpoint navigation path ends at {state.Path[^1]}, not goal {state.GoalCell}.");

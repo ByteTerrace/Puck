@@ -15,14 +15,14 @@ namespace Puck.World.Tests;
 /// <c>WorldPopulation.TryEndCarry</c> refuses a release whose left-behind pose overlaps that same geometry.</summary>
 [Collection(name: ConsoleRedirectionCollection.Name)]
 public sealed class WorldCarryTangibilityLawTests {
-    private const int CarrierIndex = 0;
-    private const int BallIndex = WorldBodiesLimits.LocalSeatCount;
+    internal const int CarrierIndex = 0;
+    internal const int BallIndex = WorldBodiesLimits.LocalSeatCount;
 
     // A carrier (Carry facet only) and a rigid "ball" target, plus — unlike WorldCarryCommandLawTests' own fixture —
     // a solid field requirement and a wall placement the ball's own witness-sweep can actually collide with. The
     // carrier starts at the origin; its own carry offset (0, 1, -0.6) is what the ball rides at with no wall in the
     // way, so a wall placed further along -Z is what the sweep is exercised against.
-    private static WorldDefinition WallCarryDocument(bool includeWall, bool rigidCarrier = false, bool includeOtherBody = false) {
+    internal static WorldDefinition WallCarryDocument(bool includeWall, bool rigidCarrier = false, bool includeOtherBody = false) {
         var source = Fixtures.BuildDocument();
         var carrierKit = source.Kits[0] with {
             Carry = new WorldCarry(
@@ -200,6 +200,7 @@ public sealed class WorldCarryTangibilityLawTests {
             ],
         };
     }
+
     private static WorldFixture JoinedCarrier(WorldDefinition definition) {
         var fixture = Fixtures.FreshServer(definition: definition);
 
