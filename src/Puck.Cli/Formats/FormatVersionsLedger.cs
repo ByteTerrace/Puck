@@ -42,6 +42,7 @@ internal static partial class FormatVersionsLedger {
         "AbiVersion",
         "CompilerVersion",
         "CurrentVersion",
+        "Format",
         "FormatVersion",
         "JournalMagic",
         "JournalVersion",
@@ -49,9 +50,11 @@ internal static partial class FormatVersionsLedger {
         "PackMagic",
         "PackVersion",
         "ProtocolKey",
+        "Revision",
         "ShapeToken",
         "SupportedFormat",
         "SupportedVersion",
+        "TokenAlgorithm",
         "Version",
         "WireKey",
         "WireProtocolKey",
@@ -59,7 +62,6 @@ internal static partial class FormatVersionsLedger {
 
     [GeneratedRegex(pattern: @"^puck\.[a-z0-9]+([.-][a-z0-9]+)*\.v[0-9]+\z", options: RegexOptions.CultureInvariant)]
     private static partial Regex SchemaToken();
-
     private static bool IsTokenField(MemberDeclarationSyntax member) {
         var modifiers = member.Modifiers.Select(selector: static modifier => modifier.Text).ToHashSet(comparer: StringComparer.Ordinal);
 
@@ -100,8 +102,8 @@ internal static partial class FormatVersionsLedger {
         );
         var bytes = new List<byte>();
 
-        for (var rest = number; rest != 0; rest >>= 8) {
-            bytes.Add(item: (byte)(rest & 0xFF));
+        for (var rest = number; (rest != 0); rest >>= 8) {
+            bytes.Add(item: ((byte)(rest & 0xFF)));
         }
 
         return (((bytes.Count >= 4) && bytes.All(predicate: static item => ((item >= 0x20) && (item <= 0x7E))))
@@ -268,7 +270,7 @@ internal static partial class FormatVersionsLedger {
 
         builder.Append(value: $"{{\n    \"format\": {Format.ToString(provider: CultureInfo.InvariantCulture)},\n    \"formats\": {{\n");
 
-        for (var index = 0; index < entries.Count; index++) {
+        for (var index = 0; (index < entries.Count); index++) {
             var entry = entries[index];
 
             builder.Append(value: $"        {Quote(text: entry.Id)}: {{\n");
@@ -288,10 +290,12 @@ internal static partial class FormatVersionsLedger {
 
         return builder.ToString();
     }
+
     private static string Quote(string text) => JsonSerializer.Serialize(
         options: new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping },
         value: text
     );
+
     /// <summary>Parses a recorded ledger strictly.</summary>
     /// <param name="json">The ledger text.</param>
     /// <param name="entries">The recorded formats, or empty.</param>
@@ -347,7 +351,7 @@ internal static partial class FormatVersionsLedger {
             error = string.Empty;
 
             return true;
-        } catch (Exception exception) when (exception is JsonException or InvalidOperationException) {
+        } catch (Exception exception) when ((exception is JsonException or InvalidOperationException)) {
             error = exception.Message;
 
             return false;

@@ -49,6 +49,7 @@ internal static class CanaryCeilingsCommand {
 
         return true;
     }
+
     private static int Run(bool check) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;

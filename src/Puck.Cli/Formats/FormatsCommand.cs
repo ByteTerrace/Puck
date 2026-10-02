@@ -47,6 +47,7 @@ internal static class FormatsCommand {
 
         return files;
     }
+
     private static int Run(bool check) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;

@@ -123,8 +123,8 @@ public sealed class CanaryCeilingsLedgerLawTests {
             expectedSubstring: "merge: plans a 15990-second leg budget against 16000 recorded (a fall)"
         );
         Assert.Equal(
-            actual: 4,
-            expected: Check(
+            expected: 4,
+            actual: Check(
                 planned: new CanaryCeilingsLedger(
                     Automatic: new CanaryCeiling(
                         LegBudgetSeconds: 1,
@@ -209,6 +209,7 @@ public sealed class CanaryCeilingsLedgerLawTests {
             ledger: Base,
             seconds: 30
         );
+
         var (conflicts, merged) = LedgerMergeProbe.Merge(
             baseText: Base.Render(),
             ours: each.Render(),
@@ -221,8 +222,8 @@ public sealed class CanaryCeilingsLedgerLawTests {
         );
 
         Assert.Equal(
-            actual: 0,
-            expected: conflicts
+            actual: conflicts,
+            expected: 0
         );
         Assert.True(condition: CanaryCeilingsLedger.TryParse(
             error: out _,
@@ -230,8 +231,8 @@ public sealed class CanaryCeilingsLedgerLawTests {
             ledger: out var mergedLedger
         ));
         Assert.Equal(
-            actual: 2,
-            expected: mergedLedger!.Check(
+            expected: 2,
+            actual: mergedLedger!.Check(
                 ledgerText: merged,
                 planned: combined
             ).Count

@@ -556,7 +556,8 @@ meant to establish.
 - A strictly versioned format token (a wire key, checkpoint or journal
   version, replay shape token, baker version, magic, or `puck.<name>.vN`
   schema) is recorded in `FormatVersions.json`. Bump the constant, then run
-  `puck formats`; `puck formats --check` fails on any disagreement. A codec
+  `puck formats` after `puck format` (formatting moves the recorded digest);
+  `puck formats --check` fails on any disagreement. A codec
   edited without a bump moves the recorded digest and fails the check, so the
   author decides whether the token should move, and two lanes that bump one
   format conflict in the ledger instead of colliding at run time.

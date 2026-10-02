@@ -61,26 +61,26 @@ public sealed class FormatVersionsLedgerLawTests {
         var entries = FormatVersionsLedger.Discover(files: Sources());
 
         Assert.Equal(
-            actual: ["DemoCodec.Magic", "DemoCodec.SchemaVersion", "DemoCodec.WireKey"],
-            expected: entries.Select(selector: static entry => entry.Id)
+            expected: ["DemoCodec.Magic", "DemoCodec.SchemaVersion", "DemoCodec.WireKey"],
+            actual: entries.Select(selector: static entry => entry.Id)
         );
         Assert.Equal(
-            actual: "PUCKFED5",
-            expected: Entry(
+            expected: "PUCKFED5",
+            actual: Entry(
                 entries: entries,
                 id: "DemoCodec.WireKey"
             ).Token
         );
         Assert.Equal(
-            actual: "DEMO",
-            expected: Entry(
+            expected: "DEMO",
+            actual: Entry(
                 entries: entries,
                 id: "DemoCodec.Magic"
             ).Token
         );
         Assert.Equal(
-            actual: "puck.demo.document.v2",
-            expected: Entry(
+            expected: "puck.demo.document.v2",
+            actual: Entry(
                 entries: entries,
                 id: "DemoCodec.SchemaVersion"
             ).Token
@@ -95,8 +95,8 @@ public sealed class FormatVersionsLedgerLawTests {
         ).Shape);
         Assert.All(
             action: static entry => Assert.Equal(
-                actual: CodecPath,
-                expected: entry.Source
+                actual: entry.Source,
+                expected: CodecPath
             ),
             collection: entries
         );
@@ -151,7 +151,7 @@ public sealed class FormatVersionsLedgerLawTests {
 
         Assert.Contains(
             collection: problems,
-            filter: static problem => (problem.StartsWith(value: "bumped: 'DemoCodec.WireKey'", comparisonType: StringComparison.Ordinal) && problem.Contains(value: "declares PUCKFED6 but the ledger records PUCKFED5", comparisonType: StringComparison.Ordinal))
+            filter: static problem => (problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "bumped: 'DemoCodec.WireKey'") && problem.Contains(comparisonType: StringComparison.Ordinal, value: "declares PUCKFED6 but the ledger records PUCKFED5"))
         );
     }
     [Fact]
@@ -162,8 +162,8 @@ public sealed class FormatVersionsLedgerLawTests {
         );
 
         Assert.Equal(
-            actual: ["reshaped: the source of 'DemoCodec.Magic'", "reshaped: the source of 'DemoCodec.WireKey'"],
-            expected: problems.Select(selector: static problem => problem[..problem.IndexOf(
+            expected: ["reshaped: the source of 'DemoCodec.Magic'", "reshaped: the source of 'DemoCodec.WireKey'"],
+            actual: problems.Select(selector: static problem => problem[..problem.IndexOf(
                 comparisonType: StringComparison.Ordinal,
                 value: " (src")]).Order(comparer: StringComparer.Ordinal)
         );
@@ -212,13 +212,13 @@ public sealed class FormatVersionsLedgerLawTests {
                 current: moved,
                 recordedFrom: Sources()
             ),
-            filter: static problem => problem.StartsWith(
+            filter: static problem => (problem.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: "moved:"
             ) || problem.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: "reshaped:"
-            )
+            ))
         );
     }
     [Fact]
@@ -269,7 +269,7 @@ public sealed class FormatVersionsLedgerLawTests {
             recordedText: text
         ));
 
-        foreach (var id in new[] { "SdfBaker.Version", "WorldAuthorityCheckpointCodec.SupportedVersion", "WorldFederationCodec.WireKey", "WorldProtocol.WireProtocolKey", "PeerWireProtocol.ProtocolKey", "WorldReplaySnapshot.ShapeToken" }) {
+        foreach (var id in new[] { "SdfBaker.Version", "WorldAuthorityCheckpointCodec.SupportedVersion", "WorldFederationCodec.WireKey", "WorldProtocol.WireProtocolKey", "PeerWireProtocol.ProtocolKey", "WorldReplaySnapshot.ShapeToken", "LocalEndpointCapability.Revision", "RatchetLedger.Format" }) {
             Assert.Contains(
                 collection: current,
                 filter: entry => (entry.Id == id)
@@ -287,6 +287,7 @@ public sealed class FormatVersionsLedgerLawTests {
             body: "return 3;",
             key: "0x364445464B435550UL"
         ));
+
         var (conflicts, merged) = LedgerMergeProbe.Merge(
             baseText: baseText,
             ours: ours,
@@ -313,8 +314,8 @@ public sealed class FormatVersionsLedgerLawTests {
         );
 
         Assert.Equal(
-            actual: 0,
-            expected: tokenOnly
+            actual: tokenOnly,
+            expected: 0
         );
     }
 }

@@ -1,3 +1,5 @@
+using Xunit;
+
 namespace Puck.Cli.Tests;
 
 /// <summary>Merges three versions of a ledger the way git does when it merges two branches, so a law can show a

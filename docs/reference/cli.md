@@ -2885,8 +2885,9 @@ whose initializer is one of two things:
 
 - a named document schema, a string of the form `puck.<name>.v<N>` such as `puck.world.definition.v1`;
 - a literal under one of the recognized token member names (`WireKey`, `WireProtocolKey`, `ProtocolKey`,
-  `ShapeToken`, `SupportedVersion`, `CurrentVersion`, `FormatVersion`, `SupportedFormat`, `Version`, `Magic`,
-  `JournalMagic`, `JournalVersion`, `PackMagic`, `PackVersion`, `CompilerVersion`, `AbiVersion`). A numeric
+  `Revision`, `ShapeToken`, `SupportedVersion`, `CurrentVersion`, `Format`, `FormatVersion`, `SupportedFormat`,
+  `Version`, `Magic`, `JournalMagic`, `JournalVersion`, `PackMagic`, `PackVersion`, `CompilerVersion`,
+  `AbiVersion`, `TokenAlgorithm`). A numeric
   token whose bytes are a four- to eight-character printable code is spelled as that text, so the key
   `0x354445464B435550` is recorded as `PUCKFED5`.
 
@@ -2902,6 +2903,12 @@ differently, so their digest lines differ and conflict. A lane that edits a code
 `--check` with a `reshaped` finding until the author reruns `puck formats`, which is the moment to decide whether
 the encoding changed and the token should too. A document schema carries no digest, because its declaring file
 gains fields under the same version as an ordinary edit.
+
+The digest counts every token the formatter can add, such as the parentheses and argument names
+[`puck format`](#puck-formatthe-one-formatter) inserts, because dropping them would let two different expressions
+digest alike. Format a changed codec before recording it: `puck format` over the lane's files, then `puck formats`.
+A codec that reaches CI unformatted is rewritten by the automatic format commit, and that rewrite moves its digest
+and fails the check.
 
 CI runs `puck formats --check` in the `ledgers` job of `verify.yml`.
 

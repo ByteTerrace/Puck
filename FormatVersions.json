@@ -47,6 +47,11 @@
             "source": "src/Puck.Cli/Branding/BrandingCommand.cs",
             "token": "puck.branding.v1"
         },
+        "CanaryCeilingsLedger.Format": {
+            "shape": "813f660d5c010758",
+            "source": "src/Puck.Cli/Canary/CanaryCeilingsLedger.cs",
+            "token": "1"
+        },
         "CartridgeCostProfile.Advanced": {
             "source": "src/Puck.GamingBricks.Forge/CartridgeCostProfile.cs",
             "token": "puck.cartridge.agb.v1"
@@ -104,6 +109,11 @@
             "source": "src/Puck.World.Transpiler/Embeddings/EmbeddingLock.cs",
             "token": "1"
         },
+        "FormatVersionsLedger.Format": {
+            "shape": "8b3a2e7334674ce6",
+            "source": "src/Puck.Cli/Formats/FormatVersionsLedger.cs",
+            "token": "1"
+        },
         "GamingBrickContentPolicies.PuckCartridgeFormat": {
             "source": "src/Puck.Machines/GamingBrickContentPolicies.cs",
             "token": "puck.cartridge.v1"
@@ -112,6 +122,11 @@
             "shape": "f08d1b6a12586bd7",
             "source": "src/Puck.HumbleGamingDeck/HgdMachineSnapshot.cs",
             "token": "5"
+        },
+        "LocalEndpointCapability.Revision": {
+            "shape": "732514f5d8026ed8",
+            "source": "src/Puck.Networking/LocalEndpointCapability.cs",
+            "token": "1"
         },
         "MachineIdentity.CurrentVersion": {
             "shape": "715077bb224477b1",
@@ -170,6 +185,11 @@
             "source": "src/Puck.Machines/QueuedMachineCheckpoint.cs",
             "token": "puck.queued-machine.v4"
         },
+        "RatchetLedger.Format": {
+            "shape": "57a2e0a6cf1c476d",
+            "source": "src/Puck.Analyzers/RatchetLedger.cs",
+            "token": "1"
+        },
         "RecordingDocument.SchemaVersion": {
             "source": "src/Puck.Recording/Document/RecordingDocument.cs",
             "token": "puck.recording.configuration.v1"
@@ -216,6 +236,11 @@
             "shape": "63172e6dc06d59d6",
             "source": "src/Puck.Analyzers/VerifiedCodeManifest.cs",
             "token": "1"
+        },
+        "VerifiedCodeManifest.TokenAlgorithm": {
+            "shape": "63172e6dc06d59d6",
+            "source": "src/Puck.Analyzers/VerifiedCodeManifest.cs",
+            "token": "csharp-tokens-v1"
         },
         "WorldArtifactKey.Schema": {
             "source": "src/Puck.Cli/WorldArtifactKey.cs",
