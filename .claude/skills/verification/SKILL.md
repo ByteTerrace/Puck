@@ -86,6 +86,13 @@ changing canary cost, a baseline whose movement the change explains. Review the 
 and commit it in the same change. A ledger rewritten during verification hides
 the drift the check exists to report.
 
+A recording verb that exits nonzero has not recorded, whatever file it wrote:
+`puck counters --record` exits 1 when a deterministic count differs between
+backends, and the ceilings it wrote then accommodate both readings. Do not
+commit that ledger. Read the differences and the exit status, find the cause of
+the disagreement and fix it, and record again only after the backends agree and
+the exit status is 0.
+
 ## Choose what to run
 
 - Use the lane's real base: `puck affected --since $(git merge-base HEAD
