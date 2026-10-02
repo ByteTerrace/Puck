@@ -132,6 +132,28 @@ public sealed class SdfWorldResidencyViewsRefusalLawTests {
         );
     }
     [Fact]
+    public void ARefusedViewsKernelIsTheResidencysRefusalAndAReadyOneIsNot() {
+        using var rig = new Rig();
+
+        rig.ProduceUntilReady();
+        Assert.Null(@object: rig.Residency.Refusal);
+
+        // A trapezoid selects the full ISA, also refused: the instance's refusal names the kernel and its failure, the one
+        // channel SdfWorldPasses.RefusalOf reports, so a host steps on rather than waiting on a kernel nothing retries.
+        rig.Source.Frame = Rig.Frame(program: Trapezoid(), cameraZ: -8f) with { ProgramChanged = true };
+
+        for (var frame = 0; (frame < Frames); frame++) {
+            _ = rig.Residency.Produce(context: in rig.Context);
+            _ = rig.Residency.WaitPipelineBuilds(cancellationToken: CancellationToken.None);
+        }
+
+        Assert.False(condition: rig.Residency.IsReady);
+        Assert.Contains(
+            actualString: rig.Residency.Refusal,
+            expectedSubstring: "the views kernel its program selects, 'sdf-world-views', was refused and is built again on a kernel reload or a device loss: injected failure creating sdf-world-views"
+        );
+    }
+    [Fact]
     public void ARefusedViewsKernelIsNeverBuiltAgainByAFrame() {
         using var rig = new Rig();
 
@@ -200,6 +222,7 @@ public sealed class SdfWorldResidencyViewsRefusalLawTests {
             }
 
             rig.ProduceUntilReady();
+            Assert.Null(@object: rig.Residency.Refusal);
             Assert.Same(
                 actual: rig.Residency.Frame!.Program,
                 expected: trapezoid.Program

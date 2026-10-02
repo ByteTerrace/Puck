@@ -69,7 +69,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
     /// <inheritdoc/>
     /// <remarks>The refusal of the residency the instance's view renders from (<see cref="SdfWorldResidency.Refusal"/>):
-    /// its tables' build, refused by name, which only a change to what the tables are built from retries.</remarks>
+    /// its tables' build or the views kernel its program selects, refused by name, which only a change to what they are
+    /// built from retries.</remarks>
     public string? RefusalOf(string instance) {
         lock (m_gate) {
             return ((m_entries.TryGetValue(

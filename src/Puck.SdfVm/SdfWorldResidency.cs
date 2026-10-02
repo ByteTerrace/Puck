@@ -216,13 +216,26 @@ public sealed partial class SdfWorldResidency : IDisposable {
                     ? $"residency '{Name}' holds its frame: the views kernel its program selects, '{SdfKernelSet.StemOf(kernel: views)}', was refused and is built again on a kernel reload or a device loss: {refusal.Message}"
                     : $"residency '{Name}' holds its frame until the views kernel its program selects, '{SdfKernelSet.StemOf(kernel: views)}', is built: {m_pipelines.Describe()}")
                 : m_pipelines.Describe())));
-    /// <summary>Gets why the residency cannot build its tables until something they are built from changes (the device,
-    /// the kernels, its options or a reload), naming the refused build, or <see langword="null"/> while it is ready or its
-    /// build is still in progress. A refusal is never waited out: <see cref="SdfWorldPasses"/> reports it as its
-    /// instances' refusal (<see cref="SdfWorldPasses.RefusalOf"/>).</summary>
-    public string? Refusal => ((!IsReady && (m_pipelines.Refusal is { } refusal))
-        ? $"residency '{Name}': {m_pipelines.Describe()}"
-        : null);
+    /// <summary>Gets why the residency cannot become ready until something it is built from changes, or
+    /// <see langword="null"/> while it is ready or what it waits on is still building: the refused build of its tables
+    /// (the device, the kernels, its options or a reload retries it) or the refused views kernel its program selects (a
+    /// kernel reload or a device loss builds it again), naming the failure. A refusal is never waited out:
+    /// <see cref="SdfWorldPasses"/> reports it as its instances' refusal (<see cref="SdfWorldPasses.RefusalOf"/>), the one
+    /// channel a host reads, while <see cref="NotReadyReason"/> describes the wait.</summary>
+    public string? Refusal {
+        get {
+            if (IsReady) {
+                return null;
+            }
+            if (m_pipelines.Refusal is not null) {
+                return $"residency '{Name}': {m_pipelines.Describe()}";
+            }
+
+            return (((m_tables is { } tables) && (m_viewsWaiting is { } views) && (tables.ViewsRefusal(kernel: views) is { } refusal))
+                ? $"residency '{Name}': the views kernel its program selects, '{SdfKernelSet.StemOf(kernel: views)}', was refused and is built again on a kernel reload or a device loss: {refusal.Message}"
+                : null);
+        }
+    }
     /// <summary>Gets the GPU work the residency's uploads recorded (<see cref="SdfWorldTables.Work"/>); submission
     /// identities keep increasing across a device-loss rebuild.</summary>
     public IGpuWorkSource Work => m_work;
