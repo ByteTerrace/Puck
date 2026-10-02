@@ -174,8 +174,12 @@ and runs at any time.
 A detector that waits for the GPU to go idle by matching process command lines
 excludes the matching shell (`powershell`, `pwsh` or `bash`). The query's own
 command line contains the strings it searches for; without this exclusion it
-waits on itself forever. Run such a detector once by hand on an idle machine
-before trusting it.
+waits on itself forever. A search that always reports exactly one match is
+suspect, not proof of a busy GPU: exclude the search's own process by process
+id, or use a pattern that cannot match its own command line (a bracketed first
+letter), then confirm whether a real process remains. Never skip or postpone a
+granted GPU leg because of a match that was the search itself. Run such a
+detector once by hand on an idle machine before trusting it.
 
 On Windows, stopping a background task can kill a wrapper shell and leave the
 script's own bash running. Before relaunching a GPU script, find every instance
