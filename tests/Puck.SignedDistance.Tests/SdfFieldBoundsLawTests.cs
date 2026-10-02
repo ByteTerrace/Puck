@@ -81,15 +81,25 @@ public sealed class SdfFieldBoundsLawTests {
     }
     [Fact]
     public void EveryInterpretedOpHasAnInclusionRule() {
+        var exercised = Programs.Values.SelectMany(selector: build => build().Instructions).Select(selector: instruction => instruction.Op).ToHashSet();
+
         foreach (var op in Enum.GetValues<SdfOp>()) {
             Assert.True(
                 condition: (SdfFieldEvaluator.IsSupportedOp(op: op) == SdfFieldEvaluator.BoundedOps.Contains(value: op)),
                 userMessage: $"op {op}: the point interpreter {(SdfFieldEvaluator.IsSupportedOp(op: op) ? "accepts" : "refuses")} it but the bounds interpreter {(SdfFieldEvaluator.BoundedOps.Contains(value: op) ? "has" : "has no")} inclusion rule for it"
             );
+
+            if (SdfFieldEvaluator.IsSupportedOp(op: op)) {
+                Assert.Contains(collection: exercised, expected: op);
+            }
         }
     }
     [Fact]
     public void EveryInterpretedShapeHasAnInclusionRuleOrANamedRefusal() {
+        var exercised = Programs.Values.SelectMany(selector: build => build().Instructions)
+            .Where(predicate: instruction => ((instruction.Op == SdfOp.ShapeBlend) && !instruction.Detail))
+            .Select(selector: instruction => ((SdfShapeType)instruction.Shape)).ToHashSet();
+
         foreach (var shape in Enum.GetValues<SdfShapeType>()) {
             var bounded = SdfFieldEvaluator.BoundedShapes.ContainsKey(key: shape);
             var refused = SdfFieldEvaluator.UnboundedShapes.ContainsKey(key: shape);
@@ -99,13 +109,85 @@ public sealed class SdfFieldBoundsLawTests {
                 condition: (SdfFieldEvaluator.IsSupportedShape(shape: shape) == (bounded || refused)),
                 userMessage: $"shape {shape}: the point interpreter {(SdfFieldEvaluator.IsSupportedShape(shape: shape) ? "accepts" : "refuses")} it, and the bounds interpreter {(bounded ? "bounds" : (refused ? "refuses" : "does not name"))} it"
             );
+
+            if (bounded) {
+                Assert.Contains(collection: exercised, expected: shape);
+            }
         }
 
-        // Every blend reaches the sweep, so a blend without its own arm (which would fall through to a union) is caught
-        // by its case's answers.
         foreach (var blend in Enum.GetValues<SdfBlendOp>()) {
             Assert.True(condition: Programs.ContainsKey(key: $"blend {blend}"), userMessage: $"blend {blend} has no case in the sweep");
         }
+    }
+    [Fact]
+    public void MorphBoundsEncloseTheExactWeightAtSurfaceContact() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.Plane(material: material, normal: Vector3.UnitY, offset: 1f)
+            .PushFieldMorph(from: -1f, laneIndex: 0, to: 2f)
+            .Plane(material: material, normal: Vector3.UnitY, offset: -2f).PopField();
+
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
+
+        Assert.True(condition: evaluator.TryDistanceBounds(distance: out var bounds, lower: FixedPosition.Zero, upper: FixedPosition.Zero));
+        // The exact weight is 1/3, so (1 - 1/3) * 1 + (1/3) * -2 is zero.
+        Assert.True(condition: bounds.Contains(value: FixedQ4816.Zero));
+        Assert.True(condition: evaluator.TryCertifiedLineOfSight(boundsQueryBudget: 64, from: FixedPosition.Zero, sight: out var sight, to: FixedPosition.Zero));
+        Assert.NotEqual(expected: SdfCertifiedVisibility.Clear, actual: sight.Visibility);
+    }
+    [Fact]
+    public void StairsBoundsEncloseTheExactThird() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.Plane(material: material, normal: Vector3.UnitY, offset: 0f)
+            .PushFieldStairs(radius: 1f, steps: 3)
+            .Plane(material: material, normal: Vector3.UnitY, offset: 0f).PopField();
+
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
+
+        Assert.True(condition: evaluator.TryDistanceBounds(distance: out var bounds, lower: FixedPosition.Zero, upper: FixedPosition.Zero));
+        // With both input fields zero, radius one and three steps, the exact field is -1/3.
+        Assert.True(condition: ((((Int128)bounds.Lower.Value) * 3) <= -FixedQ4816.One.Value));
+        Assert.True(condition: ((((Int128)bounds.Upper.Value) * 3) >= -FixedQ4816.One.Value));
+    }
+    [Fact]
+    public void CellBoundsEncloseTheUnroundedFeaturePosition() {
+        var builder = new SdfProgramBuilder();
+
+        _ = builder.Plane(material: builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)), normal: Vector3.UnitY, offset: 0f)
+            .CellDisplace(amplitude: 1f, frequency: 1f, mode: SdfCellMode.F1, randomness: 0.25f, seed: 7u);
+
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
+        var position = FixedPosition.FromLocal(local: new FixedVector3(
+            X: FixedQ4816.FromRawBits(value: 28222L),
+            Y: FixedQ4816.FromRawBits(value: 35997L),
+            Z: FixedQ4816.FromRawBits(value: 35425L)
+        ));
+        var hash = Pcg3dLatticeNoise.Pcg3d(x: 7u, y: 7u ^ 0x9E3779B9u, z: 7u ^ 0x85EBCA77u);
+
+        Assert.Equal(actual: ((hash.X >> 16), (hash.Y >> 16), (hash.Z >> 16)), expected: (14585u, 45685u, 43396u));
+        Assert.True(condition: evaluator.TryDistanceBounds(distance: out var bounds, lower: position, upper: position));
+        // The nearest feature is (28222.25, 35997.25, 35425) raws: the field is 3229 + sqrt(2)/4 raws.
+        Assert.True(condition: (bounds.Lower.Value <= 3229L));
+        Assert.True(condition: (bounds.Upper.Value >= 3230L));
+    }
+    [Fact]
+    public void ScaleBoundsEncloseTheUnroundedProduct() {
+        var builder = new SdfProgramBuilder();
+        var scale = (1f + (1f / 65536f));
+
+        _ = builder.Scale(scale: new Vector3(value: scale)).Scale(scale: new Vector3(value: scale))
+            .Sphere(material: builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)), radius: 1f);
+
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
+
+        Assert.True(condition: evaluator.TryDistanceBounds(distance: out var bounds, lower: FixedPosition.Zero, upper: FixedPosition.Zero));
+        var numerator = -(((Int128)65537) * 65537);
+
+        Assert.True(condition: ((((Int128)bounds.Lower.Value) * 65536) <= numerator));
+        Assert.True(condition: ((((Int128)bounds.Upper.Value) * 65536) >= numerator));
     }
     [Fact]
     public void AShapeWithoutAnInclusionRuleIsRefusedByName() {
@@ -193,7 +275,13 @@ public sealed class SdfFieldBoundsLawTests {
 
         Shape(name: "op PushField PopField", emit: (b, m) => b.Sphere(material: m, radius: 0.7f).PushField(compose: SdfBlendOp.SmoothUnion, smooth: 0.3f).ResetPoint().Translate(offset: Vector3.UnitX).Box(halfExtents: new Vector3(x: 0.4f, y: 0.4f, z: 0.4f), material: m, round: 0f).PopField());
 
-        foreach (var blend in Enum.GetValues<SdfBlendOp>()) {
+        foreach (var blend in ((SdfBlendOp[])[
+            SdfBlendOp.Union, SdfBlendOp.SmoothUnion, SdfBlendOp.Subtraction, SdfBlendOp.Intersection,
+            SdfBlendOp.Xor, SdfBlendOp.SmoothIntersection, SdfBlendOp.SmoothSubtraction,
+            SdfBlendOp.ChamferUnion, SdfBlendOp.ChamferIntersection, SdfBlendOp.ChamferSubtraction,
+            SdfBlendOp.GrooveUnion, SdfBlendOp.PipeUnion, SdfBlendOp.Morph,
+            SdfBlendOp.GrooveSubtraction, SdfBlendOp.PipeSubtraction, SdfBlendOp.StairsUnion, SdfBlendOp.StairsSubtraction,
+        ])) {
             Shape(name: $"blend {blend}", emit: (b, m) => {
                 _ = b.Sphere(material: m, radius: 0.9f);
 

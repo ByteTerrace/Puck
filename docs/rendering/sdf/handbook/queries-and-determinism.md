@@ -198,12 +198,26 @@ Two certified queries are built on it:
 - **`TryCertifiedSweep`** moves a sphere along a displacement by conservative
   advancement. Each step is the certified clearance divided by the program's
   Lipschitz bound, and the step's whole segment is then proved clear by one
-  bounds query over its box. A sphere swept this way never passes through a
+  bounds query over its box expanded by the radius, with a positive lower field
+  bound throughout. The centre's field alone cannot prove a sphere clear when
+  the field's gradient exceeds one. A sphere swept this way never passes through a
   surface, however thin the surface or however long the step. A step that only
   samples the field at its ends tunnels through such a surface.
+  If the initial sphere cannot be proved clear, the result is `Contact` at zero
+  travel with the original centre. A box leaving the evaluator's representable
+  frame cannot certify an advance.
 - **`TryCertifiedLineOfSight`** splits a segment into boxes until each is proved
   clear, or a point of it is proved inside. Anything it cannot prove within its
   budget is `Undecided`.
+
+Both take a bounds-query budget and report the queries they spent, each one
+walk of the program over one box, so a caller counts its cost. A run under a
+smaller budget is a prefix of the run under a larger one. A cut-short sweep keeps
+the ground it proved, and a cut-short line of sight is `Undecided`. A line of
+sight also has a ceiling whatever its budget,
+`CertifiedLineOfSightMaximumBoundsQueries` (2·(2¹⁷ − 1)). The segment splits
+on the Q16 grid of its own length, so no piece lies deeper than sixteen
+halvings, and each costs at most two queries.
 
 `SdfFieldBoundsLawTests` sweeps every op, shape and blend's point answers
 through boxes against the bounds, and holds the bounds interpreter's rule sets
