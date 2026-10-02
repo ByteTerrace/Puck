@@ -17,7 +17,7 @@
             "token": "6"
         },
         "AssetChunk.Version": {
-            "shape": "bdb150ba07ab2f8f",
+            "shape": "63b832ecd24c3461",
             "source": "src/Puck.World.Schema/CompiledWorldChunks.cs",
             "token": "1"
         },
@@ -87,7 +87,7 @@
             "token": "puck.creation.v1"
         },
         "DefinitionChunk.Version": {
-            "shape": "bdb150ba07ab2f8f",
+            "shape": "63b832ecd24c3461",
             "source": "src/Puck.World.Schema/CompiledWorldChunks.cs",
             "token": "2"
         },
@@ -157,12 +157,12 @@
             "token": "puck.probe.manifest.v1"
         },
         "ProbeTrackDocument.SchemaVersion": {
-            "shape": "8bafb1e2f8bf5819",
+            "shape": "4fbe1893f209b6c7",
             "source": "src/Puck.Platform/Probes/ProbeTrack.cs",
             "token": "puck.probe.track.v1"
         },
         "QualificationReport.SchemaVersion": {
-            "shape": "005ea925e4f2a18d",
+            "shape": "68ca9f6d854d30dd",
             "source": "src/Puck.Cli/Qualification/QualificationReport.cs",
             "token": "puck.qualification.report.v1"
         },
@@ -187,7 +187,7 @@
             "token": "puck.release.manifest.v1"
         },
         "ReleaseProfile.SchemaVersion": {
-            "shape": "4498684e0029b0f0",
+            "shape": "45ac368bd249977f",
             "source": "src/Puck.Cli/Qualification/ReleaseProfile.cs",
             "token": "puck.release.profile.v1"
         },
@@ -257,12 +257,12 @@
             "token": "16"
         },
         "WorldAuthorityReceiptSnapshot.CurrentSchema": {
-            "shape": "5c328d90f0ca66d1",
+            "shape": "6141d1795e22e8b8",
             "source": "src/Puck.World.Server/WorldAuthorityReceiptSnapshot.cs",
             "token": "puck.world.receipts.v1"
         },
         "WorldAuthorityRecoveryRootCodec.Schema": {
-            "shape": "0f29b233bb0d3521",
+            "shape": "94bd241e8ae29158",
             "source": "src/Puck.World.Server/WorldAuthorityRecoveryRoot.cs",
             "token": "puck.authority.recovery-root.v1"
         },
@@ -292,7 +292,7 @@
             "token": "puck.camera.program.v1"
         },
         "WorldCaptureManifest.SchemaId": {
-            "shape": "57d035308dc2510a",
+            "shape": "cb7c3b9f90bf4d96",
             "source": "src/Puck.World.Console/WorldCaptureScheduler.cs",
             "token": "puck.parity.manifest.v1"
         },
@@ -302,7 +302,7 @@
             "token": "PUCKWCC3"
         },
         "WorldCounterpartAttestation.SchemaVersion": {
-            "shape": "c00ef1b714119498",
+            "shape": "a7b583654d3ce2a0",
             "source": "src/Puck.World.Schema/WorldCounterpartAttestation.cs",
             "token": "puck.world.counterpart-attestation.v1"
         },
@@ -317,7 +317,7 @@
             "token": "puck.counters.report.v1"
         },
         "WorldDefinition.SchemaVersion": {
-            "shape": "c00ef1b714119498",
+            "shape": "a7b583654d3ce2a0",
             "source": "src/Puck.World.Schema/WorldDefinition.cs",
             "token": "puck.world.definition.v1"
         },
@@ -327,12 +327,12 @@
             "token": "puck.world.extensions.v1"
         },
         "WorldFederationCodec.WireKey": {
-            "shape": "a789a83747af0f58",
+            "shape": "7877d13dabed5f28",
             "source": "src/Puck.World.Server/WorldFederationCodec.cs",
             "token": "PUCKFED5"
         },
         "WorldProjectionDocument.SchemaVersion": {
-            "shape": "c00ef1b714119498",
+            "shape": "a7b583654d3ce2a0",
             "source": "src/Puck.World.Schema/WorldProjection.cs",
             "token": "puck.world.projection.v1"
         },
@@ -352,7 +352,7 @@
             "token": "puck.world.qualification-exercise.v1"
         },
         "WorldReleaseFixtureArchive.Schema": {
-            "shape": "398603b676d3f114",
+            "shape": "fe36cdb4e2b7ca32",
             "source": "src/Puck.World.Server/WorldReleaseFixtureArchive.cs",
             "token": "puck.world.release-fixture.v1"
         },
@@ -382,12 +382,12 @@
             "token": "puck.world.rewind.closed-group.v1"
         },
         "WorldReplaySnapshot.Magic": {
-            "shape": "dc84a328d990f8f3",
+            "shape": "441fad123e105cec",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "WLRP"
         },
         "WorldReplaySnapshot.ShapeToken": {
-            "shape": "dc84a328d990f8f3",
+            "shape": "441fad123e105cec",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "5"
         },
