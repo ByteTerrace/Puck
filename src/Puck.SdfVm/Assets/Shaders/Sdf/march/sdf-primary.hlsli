@@ -41,7 +41,7 @@ SdfHit sdfPrimarySample(float3 position, uint mask, uint4 part, bool localPart) 
 
 SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, float marchStart,
     float firstExit, float secondEntry, float farBound, float farDistance, uint instanceMaskBase,
-    float pixelFootprint, uint4 part, bool localPart) {
+    float pixelFootprint, uint4 part, bool localPart, bool resolveOnly) {
     float traveled = max(marchStart, 0.0);
     bool hitSurface = false;
     int material = 0;
@@ -77,12 +77,31 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
     float stepLength = 0.0;
     int refineSteps = 0;
 
+    // Whether the next pass is the exhaustion arm's (see below the loop body), which only resolves its sample. A
+    // resolveOnly march is that pass alone, at marchStart: the attributes of a depth another march chose.
+    bool resolving = resolveOnly;
+
+    marchStep = 0;
+
     [loop]
-    for (marchStep = 0; (marchStep < MaxSteps); marchStep++) {
+    while (true) {
         SdfHit hit = sdfPrimarySample(rayOrigin + (rayDirection * traveled), instanceMaskBase, part, localPart);
 
-        sdfEvalCount += 1.0; // one primary-march sample
+        sdfEvalCount += 1.0; // one primary-march sample, or the exhaustion arm's one extra evaluation
         sdfWorkSteps += 1u;
+
+        if (resolving) {
+            hitSurface = true;
+            material = hit.material;
+            hitLanes = hit.lanes;
+            hitInstanceIndex = hit.instanceIndex;
+            hitFrameSlot = hit.frameSlot;
+            materialBlendWeight = sdfMaterialBlendWeight;
+            materialBlendOther = sdfMaterialBlendOther;
+            terminalRadius = hit.distance;
+            terminalHitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
+            break;
+        }
 
         // FOLD-SAFE split: TERMINATE on the raw value (exact in the owning cell; a wall never invents a phantom
         // boundary hit), but STEP through sdfMarchAdvance, which never carries the value across a fold wall. The
@@ -263,44 +282,37 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
         }
 
         // F1 FAR-FIELD EXIT: past the tile's beam-proven far bound no ray in the tile can produce a hit the fine
-        // march would ACCEPT (coneMarchFarBound proved it against the footprint-inflated threshold), so the ray
-        // renders skyColor whether it exits here or marches on — OUTPUT-IDENTICAL, only fewer steps. farBound =
+        // march would ACCEPT (the beam's far phase proved it against the footprint-inflated threshold), so the ray
+        // renders the sky whether it exits here or marches on — OUTPUT-IDENTICAL, only fewer steps. farBound =
         // the far distance (no bound proven, or the A/B lever pushed it out of reach) makes this a no-op past the
         // far plane the far-distance break already handles. Both exits are reached only on a validated step (the
         // plain-step fallback above) or a cone-proven teleport landing.
-        if (traveled >= farBound) {
-            break;
+        bool exited = ((traveled >= farBound) || (traveled > farDistance));
+
+        if (!exited) {
+            marchStep++;
+
+            if (marchStep < MaxSteps) {
+                continue;
+            }
         }
 
-        if (traveled > farDistance) {
-            break;
+        // THE EXHAUSTION ARM — the ONE accept rule, re-applied to the closest approach. A ray that ended its budget
+        // (the step cap, or a far exit) without the in-loop arm accepting a sample, but whose closest approach DID
+        // satisfy fieldDistance < max(SurfaceEpsilon, footprint * t) (candidateMargin < 0 — only an overshoot-skipped
+        // sample can be in that state, see the candidate's declaration), is a hit at that sample: re-evaluate the
+        // field there (one extra eval on this rare path, so the loop carries no per-sample material/blend capture) and
+        // shade with its material and normal exactly as the in-loop arm would have. The re-evaluation is one more
+        // pass of this loop's sample (resolving), so the march inlines the interpreter once. A ray whose closest
+        // approach never satisfied the rule stays a miss — there is no second, looser threshold here. Adjacent pixels
+        // along an edge therefore resolve by the same rule whichever arm ends them.
+        if (candidateMargin < 0.0) {
+            traveled = candidateT;
+            resolving = true;
+            continue;
         }
-    }
 
-    // THE EXHAUSTION ARM — the ONE accept rule, re-applied to the closest approach. A ray that ended its budget
-    // (the step cap, or a far exit) without the in-loop arm accepting a sample, but whose closest approach DID
-    // satisfy fieldDistance < max(SurfaceEpsilon, footprint * t) (candidateMargin < 0 — only an overshoot-skipped
-    // sample can be in that state, see the candidate's declaration), is a hit at that sample: re-evaluate the
-    // field there (one extra eval on this rare path, so the loop carries no per-sample material/blend capture) and
-    // shade with its material and normal exactly as the in-loop arm would have. A ray whose closest approach never
-    // satisfied the rule stays a miss — there is no second, looser threshold here. Adjacent pixels along an edge
-    // therefore resolve by the same rule whichever arm ends them.
-    if (!hitSurface && (candidateMargin < 0.0)) {
-        traveled = candidateT;
-
-        SdfHit candidate = sdfPrimarySample(rayOrigin + (rayDirection * traveled), instanceMaskBase, part, localPart);
-
-        sdfEvalCount += 1.0;
-        sdfWorkSteps += 1u;
-        hitSurface = true;
-        material = candidate.material;
-        hitLanes = candidate.lanes;
-        hitInstanceIndex = candidate.instanceIndex;
-        hitFrameSlot = candidate.frameSlot;
-        materialBlendWeight = sdfMaterialBlendWeight;
-        materialBlendOther = sdfMaterialBlendOther;
-        terminalRadius = candidate.distance;
-        terminalHitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
+        break;
     }
 
     SdfPrimaryMarch result;
@@ -332,7 +344,7 @@ SdfPrimarySurface sdfTracePrimarySurface(float3 rayOrigin, float3 rayDirection, 
     float firstExit, float secondEntry, float farBound, float farDistance, uint instanceMaskBase,
     float pixelFootprint, uint4 part, bool localPart) {
     SdfPrimaryMarch hit = sdfTracePrimaryField(rayOrigin, rayDirection, marchStart, firstExit, secondEntry,
-        farBound, farDistance, instanceMaskBase, pixelFootprint, part, localPart);
+        farBound, farDistance, instanceMaskBase, pixelFootprint, part, localPart, false);
     SdfPrimarySurface surface;
     surface.traveled = hit.traveled;
     surface.radius = hit.radius;
@@ -349,73 +361,96 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
 #if defined(SDF_PRIMARY_PASS) && !defined(SDF_VM_DISABLE_PART_PROGRAMS)
     independent = sdfCanTracePartsIndependently();
 #endif
-    if (!independent) {
-        return sdfTracePrimaryField(rayOrigin, rayDirection, marchStart, firstExit, secondEntry,
-            farBound, farDistance, instanceMaskBase, pixelFootprint, uint4(0u, 0u, 0u, 0u), false);
-    }
-    sdfPrimaryOmitParts = true;
-    SdfPrimarySurface best = sdfTracePrimarySurface(rayOrigin, rayDirection, marchStart, firstExit, secondEntry,
-        farBound, farDistance, instanceMaskBase, pixelFootprint, uint4(0u, 0u, 0u, 0u), false);
+    SdfPrimaryMarch result = (SdfPrimaryMarch)0;
+    SdfPrimarySurface best = (SdfPrimarySurface)0;
 
-    // Enumerate candidates once per ray. Each local march evaluates a complete ordered part field,
-    // including its cuts and smooth blends; an individual leaf never replaces its CSG parent.
-    uint word = 0xFFFFFFFFu, bits = 0u, first, last, index;
-    sdfNextVisibleInstanceRange(instanceMaskBase, sdfProgramLayout.instanceOffset, sdfProgramLayout.instanceCount,
-        word, bits, first, last, index);
+    // Two passes of ONE march call, so the kernel inlines the march's interpreter once for all of them. The first is the
+    // full-scene march, or, when the parts trace independently, the march of everything but the parts, followed by the
+    // part candidates; the second, taken only when the independent marches found a hit, resolves its attributes in
+    // original union order at the selected point, including ties and material seams (independent sampling can choose a
+    // different accepted point from the full-scene march), as a resolveOnly march at that depth.
     [loop]
-    while (first != SDF_SEGMENT_NONE) {
-        uint4 part = sdfWords[sdfProgramLayout.partProgramOffset + 1u + index];
-        bool ready = (part.z & 0x7FFFFFFFu) != 0u;
-#ifndef SDF_DYNAMIC_TRANSFORMS
-        ready = ready && (part.z & 0x80000000u) == 0u;
-#endif
-        if (ready) {
-            float limit = min(farBound, farDistance);
-            if (best.found) {
-                limit = min(limit, best.traveled);
-            }
-            float entry = marchStart;
-#ifdef SDF_PART_RAY_BOUNDS
-            bool intersects = sdfPartRayInterval(index, rayOrigin, rayDirection, entry, limit);
-#else
-            bool intersects = true;
-#endif
-            if (intersects && entry <= limit) {
-                SdfPrimarySurface candidate = sdfTracePrimarySurface(rayOrigin, rayDirection, entry, firstExit,
-                    secondEntry, limit, farDistance, instanceMaskBase, pixelFootprint, part, true);
-                if (candidate.found && (!best.found || candidate.traveled < best.traveled)) {
-                    best = candidate;
-                }
-            }
+    for (uint pass = 0u; (pass < 2u); pass++) {
+        bool resolve = (pass == 1u);
+
+        sdfPrimaryOmitParts = (independent && !resolve);
+
+        SdfPrimaryMarch march = sdfTracePrimaryField(rayOrigin, rayDirection, (resolve ? best.traveled : marchStart),
+            firstExit, secondEntry, farBound, farDistance, instanceMaskBase, pixelFootprint, uint4(0u, 0u, 0u, 0u), false,
+            resolve);
+
+        if (resolve) {
+            result.radius = march.radius;
+            result.threshold = march.threshold;
+            result.material = march.material;
+            result.lanes = march.lanes;
+            result.instanceIndex = march.instanceIndex;
+            result.frameSlot = march.frameSlot;
+            result.blendWeight = march.blendWeight;
+            result.blendOther = march.blendOther;
+            break;
         }
+        if (!independent) {
+            return march;
+        }
+
+        best.traveled = march.traveled;
+        best.radius = march.radius;
+        best.threshold = march.threshold;
+        best.steps = march.steps;
+        best.found = march.found;
+
+        // Enumerate candidates once per ray. Each local march evaluates a complete ordered part field,
+        // including its cuts and smooth blends; an individual leaf never replaces its CSG parent.
+        uint word = 0xFFFFFFFFu, bits = 0u, first, last, index;
         sdfNextVisibleInstanceRange(instanceMaskBase, sdfProgramLayout.instanceOffset, sdfProgramLayout.instanceCount,
             word, bits, first, last, index);
+        [loop]
+        while (first != SDF_SEGMENT_NONE) {
+            uint4 part = sdfWords[sdfProgramLayout.partProgramOffset + 1u + index];
+            bool ready = (part.z & 0x7FFFFFFFu) != 0u;
+    #ifndef SDF_DYNAMIC_TRANSFORMS
+            ready = ready && (part.z & 0x80000000u) == 0u;
+    #endif
+            if (ready) {
+                float limit = min(farBound, farDistance);
+                if (best.found) {
+                    limit = min(limit, best.traveled);
+                }
+                float entry = marchStart;
+    #ifdef SDF_PART_RAY_BOUNDS
+                bool intersects = sdfPartRayInterval(index, rayOrigin, rayDirection, entry, limit);
+    #else
+                bool intersects = true;
+    #endif
+                if (intersects && entry <= limit) {
+                    SdfPrimarySurface candidate = sdfTracePrimarySurface(rayOrigin, rayDirection, entry, firstExit,
+                        secondEntry, limit, farDistance, instanceMaskBase, pixelFootprint, part, true);
+                    if (candidate.found && (!best.found || candidate.traveled < best.traveled)) {
+                        best = candidate;
+                    }
+                }
+            }
+            sdfNextVisibleInstanceRange(instanceMaskBase, sdfProgramLayout.instanceOffset, sdfProgramLayout.instanceCount,
+                word, bits, first, last, index);
+        }
+        sdfPrimaryOmitParts = false;
+
+        result.traveled = best.traveled;
+        result.radius = best.radius;
+        result.threshold = best.threshold;
+        result.steps = best.steps;
+        result.found = best.found;
+        result.instanceIndex = -1;
+        result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
+
+        if (!best.found) {
+            break;
+        }
     }
+
     sdfPrimaryOmitParts = false;
 
-    SdfPrimaryMarch result = (SdfPrimaryMarch)0;
-    result.traveled = best.traveled;
-    result.radius = best.radius;
-    result.threshold = best.threshold;
-    result.steps = best.steps;
-    result.found = best.found;
-    result.instanceIndex = -1;
-    result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
-    if (best.found) {
-        // Resolve attributes in original union order at the selected point, including ties and material seams.
-        // Independent sampling can choose a different accepted point from the full-scene march.
-        SdfHit resolved = mapMasked(rayOrigin + rayDirection * best.traveled, instanceMaskBase);
-        sdfEvalCount += 1.0;
-        sdfWorkSteps += 1u;
-        result.radius = resolved.distance;
-        result.threshold = max(SurfaceEpsilon, pixelFootprint * best.traveled);
-        result.material = resolved.material;
-        result.lanes = resolved.lanes;
-        result.instanceIndex = resolved.instanceIndex;
-        result.frameSlot = resolved.frameSlot;
-        result.blendWeight = sdfMaterialBlendWeight;
-        result.blendOther = sdfMaterialBlendOther;
-    }
     return result;
 }
 
@@ -474,6 +509,11 @@ void sdfPrimaryStage(SdfPixel p) {
         hitSurface = true;
         traveled = meshHit.t;
         material = sdfMeshMaterial(meshHit.draw, meshHit.triangleIndex);
+        // The visibility record owns the winning material for picking and shading alike. A card's two geometric
+        // triangles carry no palette entry; its unfiltered material plane supplies that entry at the traced hit.
+        if (sdfMeshIsImpostor(meshHit.draw)) {
+            material += sdfImpostorSurfaceAt(meshHit.draw, p.rayOrigin, p.rayDirection, traveled, p.pixelFootprint).material;
+        }
         hitInstanceIndex = -1;
         hitFrameSlot = SDF_TRANSFORM_SLOT_NONE;
         materialBlendWeight = 0.0;

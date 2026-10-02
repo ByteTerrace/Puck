@@ -12,7 +12,9 @@
 // step can jump PAST a surface before the sample reads a hit (the overshoot). Two full marches per pixel is the
 // documented debug cost — the overshoot case gates the primary march OFF, so a pixel runs this twice and the production
 // marcher zero times.
-float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStart, float firstExit, float secondEntry, float farDistance, uint instanceMaskBase, float pixelFootprint, float stepMultiplier) {
+// With sampleOnce it returns the distance of its first sample, at marchStart, uncounted: the slice view's one read of the
+// field, which runs through this same loop so the views kernel inlines the interpreter once for every debug field read.
+float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStart, float firstExit, float secondEntry, float farDistance, uint instanceMaskBase, float pixelFootprint, float stepMultiplier, bool sampleOnce) {
     if (marchStart < 0.0) {
         return farDistance; // a beam-culled tile — nothing to march; both marches agree at the far plane
     }
@@ -22,6 +24,11 @@ float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStar
     [loop]
     for (int step = 0; (step < MaxSteps); step++) {
         float radius = mapDistanceMasked(rayOrigin + (rayDirection * traveled), instanceMaskBase);
+
+        if (sampleOnce) {
+            return radius;
+        }
+
         sdfWorkSteps += 1u;
         float hitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
 

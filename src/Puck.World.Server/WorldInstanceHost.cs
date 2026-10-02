@@ -651,6 +651,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
                 try {
                     _ = WorldServerStepShell.Step(
+                        // An instance steps on its own accumulator, banking the boot pump's delta at its own rate, so
+                        // its time is elapsed engine time whatever the boot world's host steps per frame.
+                        pacing: HostPacing.WallClock,
                         context: in context,
                         publishTick: instance.PublishTick,
                         server: instance.Server,

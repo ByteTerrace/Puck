@@ -35,7 +35,7 @@ remnant `exp(−fogDensity·far)` at the far plane. Renderer contract:
 (`WorldTonemap` {`none`, `filmic`}, optional) are also read off the LIVE
 definition every frame, alongside `lighting`/`sky`; a `tonemap` change
 recomposes the synthesized root graph. `environment`
-carries `softboxes[]` (≤ `SdfEnvironment.MaxSoftboxes` 4 of `direction`,
+carries `softboxes[]` (≤ `SdfSky.MaxSoftboxes` 4 of `direction`,
 `size` [w, h], `color`?, `weight`?, `blur`?) and `horizon` ({`low`?, `high`?})
 — analytic studio reflections a GGX specular lobe catches; absent (or an
 all-default section) contributes exactly 0, byte-identical to a world that
@@ -46,11 +46,12 @@ reconstructs it, so the letterbox color, a pane (display-referred, its shader's
 own tonemap included) and the HUD are never tonemapped, and nothing is
 tonemapped while a debug view is on.
 Read back with `world.lighting`.
-Renderer contract: `rendering` skill sync pairs, the `SdfEnvironment` rows;
-the tonemap is the root graph's view place passes, not an environment row.
+Renderer contract: `rendering` skill sync pairs, the sky block and its
+softbox table; the tonemap is the root graph's view place passes, not a sky
+record.
 
 `lighting` (`WorldRenderLighting`, optional) carries `lights[]` (at most
-`SdfEnvironment.MaxLights` 8, in slot order, each optionally `name`d) and
+`SdfLights.MaxLights` 8, in slot order, each optionally `name`d) and
 `curvature`. Every value may be keyed on a `timeline` clock, and the section may
 be keyed whole (`clock`, `keys`): each key a partial record addressing a light
 by its `name`, of its own kind, stating values only (a light's `name` and
@@ -76,7 +77,7 @@ kind is refused by name): its position then rides that placement's — or, with
 frame instead of the authored `position`, so the light follows the placement.
 Resolved in `WorldFramePresenter` (`WorldStampPool.TryShapeTransformSlot`),
 fresh every produced frame. Renderer contract: `rendering` skill sync pairs, the
-`SdfEnvironment` rows.
+lights table.
 
 `WorldRenderLight.Occluder` uses ordinary light rows to attenuate nearby
 surface illumination. It declares `position`, positive `radius`,

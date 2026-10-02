@@ -145,7 +145,7 @@ yet" never waits forever, and a refused frame names its reason.
 **How the code holds it.** `IRenderRoot.ProduceFrame` returns a `Surface` and no
 outcome. Readiness is reported beside the frame instead: capture service and
 `UnservedCaptureReasonOf` (§2, §3), and `SdfWorldResidency.NotReadyReason`. The
-offscreen host paces by `OffscreenFrameInterval` and `FixedStepPump.Advance`,
+offscreen host paces by `HostPacing.OneTickPerFrame` and `FixedStepPump.TryStep`,
 and holds a tick only at an armed capture.
 
 **Laws.** `WorldCaptureHoldLawTests` and `SdfPipelineBuildLivenessLawTests`

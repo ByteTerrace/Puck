@@ -26,6 +26,7 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
     /// <returns>The producer, which owns the feed.</returns>
     public IRenderGraphExternalProducer Adapt(WorldImageSourceOpening opening) => new WorldImageFeedProducer(
         fill: m_fillImage,
+        fillRender: m_fills.RenderOf,
         gate: m_captureGate,
         opening: opening
     );

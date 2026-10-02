@@ -16,7 +16,7 @@ namespace Puck.World.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: offscreen, the fixed-step pump never advances past an armed capture's tick until that capture
 /// is served or refused. The harness is the offscreen host without a GPU: the real <see cref="FixedStepPump"/> holding
-/// its clock, stepping a real <see cref="WorldServer"/> whose <see cref="WorldCaptureScheduler"/> is published after
+/// its clock and taking at most one step an iteration (<see cref="FixedStepPump.TryStep"/>), stepping a real <see cref="WorldServer"/> whose <see cref="WorldCaptureScheduler"/> is published after
 /// every step, and a real <see cref="SdfWorldResidency"/> whose view a render graph renders over <c>FakeGpuDevice</c>, producing
 /// one graph frame after every pump call. The residency's pipeline factory blocks every creation on a gate the law holds, which is how a cold driver shader
 /// cache behaves: the view presents nothing and serves no capture until the gate opens and its build installs. The
@@ -44,6 +44,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         }
         public void SettleOwedFrames() => scheduler.Drain();
         public void Step(in FixedStepContext context, in CommandSnapshot commands) => _ = WorldServerStepShell.Step(
+            pacing: HostPacing.OneTickPerFrame,
             context: in context,
             publishTick: _ => scheduler.PublishTick(tick: (server.NextInputTick - 1UL)),
             server: server,
@@ -82,12 +83,15 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         private readonly ManualResetEventSlim m_entered = new(initialState: false);
         private readonly ManualResetEventSlim m_gate = new(initialState: false);
 
+        private readonly bool m_holdsClock;
         private readonly FixedStepPump m_pump;
         private readonly InputRouter m_router;
         private readonly HostRow m_row;
         private readonly ulong m_stepTicks;
 
         public Run(string directory, bool holdsClock) {
+            m_holdsClock = holdsClock;
+
             var gpu = new FakeGpuDevice() {
                 BeforeComputePipeline = _ => {
                     m_entered.Set();
@@ -209,14 +213,23 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             m_gate.Dispose();
             m_entered.Dispose();
         }
-        // One offscreen host iteration: host time through the pump (one step's worth unless given), then one produced
-        // graph frame.
+        // One host iteration: host time (one step's worth unless given) through the pump, as the offscreen host takes it
+        // (one step at most) when the pump holds its clock and as a wall-clock host does (every step the time covers)
+        // when it does not, then one produced graph frame.
         public void Iterate(ulong? hostTicks = null) {
-            _ = m_pump.Advance(
-                deltaTicks: (hostTicks ?? m_stepTicks),
-                maxFrameTicks: ulong.MaxValue,
-                stepTicks: m_stepTicks
-            );
+            if (m_holdsClock) {
+                _ = m_pump.TryStep(
+                    intervalTicks: (hostTicks ?? m_stepTicks),
+                    stepTicks: m_stepTicks
+                );
+            } else {
+                _ = m_pump.Advance(
+                    deltaTicks: (hostTicks ?? m_stepTicks),
+                    maxFrameTicks: ulong.MaxValue,
+                    stepTicks: m_stepTicks
+                );
+            }
+
             _ = View.Produce(context: in m_context);
 
             foreach (var request in Target.Requests) {
@@ -420,8 +433,8 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         Assert.False(condition: run.View.IsReady);
         Assert.Equal(
             expected: [
-                "first:10:Unserved:the engine's pipeline set is building (0 of 11 pipelines created; waiting on sdf-beam, sdf-instance-cull, sdf-cull-args, sdf-world-primary, sdf-world-surface, sdf-world-ambient, sdf-world-shadow, sdf-world-views, sdf-world-views-core, sdf-world-views-folds, sdf-sky) (the host held its clock at tick 10 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
-                "second:30:Unserved:the engine's pipeline set is building (0 of 11 pipelines created; waiting on sdf-beam, sdf-instance-cull, sdf-cull-args, sdf-world-primary, sdf-world-surface, sdf-world-ambient, sdf-world-shadow, sdf-world-views, sdf-world-views-core, sdf-world-views-folds, sdf-sky) (the host held its clock at tick 30 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
+                "first:10:Unserved:the engine's pipeline set is building (0 of 12 pipelines created; waiting on sdf-beam, sdf-instance-cull, sdf-cull-args, sdf-world-primary, sdf-world-surface, sdf-world-ambient, sdf-world-shadow, sdf-world-views, sdf-world-views-core, sdf-world-views-folds, sdf-sky-runs, sdf-composite) (the host held its clock at tick 10 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
+                "second:30:Unserved:the engine's pipeline set is building (0 of 12 pipelines created; waiting on sdf-beam, sdf-instance-cull, sdf-cull-args, sdf-world-primary, sdf-world-surface, sdf-world-ambient, sdf-world-shadow, sdf-world-views, sdf-world-views-core, sdf-world-views-folds, sdf-sky-runs, sdf-composite) (the host held its clock at tick 30 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
             ],
             actual: run.Scheduler.Entries.Select(selector: static entry => $"{entry.Station}:{entry.Tick}:{entry.Refusal}:{entry.Detail}")
         );
@@ -473,7 +486,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         var entry = Assert.Single(collection: run.Scheduler.Entries);
 
         Assert.Equal(
-            expected: (WorldCaptureRefusal.Unserved, "the run ended before any frame served it (last completed tick 10); the engine's pipeline set is building (0 of 11 pipelines created; waiting on sdf-beam, sdf-instance-cull, sdf-cull-args, sdf-world-primary, sdf-world-surface, sdf-world-ambient, sdf-world-shadow, sdf-world-views, sdf-world-views-core, sdf-world-views-folds, sdf-sky)"),
+            expected: (WorldCaptureRefusal.Unserved, "the run ended before any frame served it (last completed tick 10); the engine's pipeline set is building (0 of 12 pipelines created; waiting on sdf-beam, sdf-instance-cull, sdf-cull-args, sdf-world-primary, sdf-world-surface, sdf-world-ambient, sdf-world-shadow, sdf-world-views, sdf-world-views-core, sdf-world-views-folds, sdf-sky-runs, sdf-composite)"),
             actual: (entry.Refusal!.Value, entry.Detail!)
         );
         run.AssertNothingReachedDisposal();

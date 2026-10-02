@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Hosting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 
@@ -146,7 +147,7 @@ public sealed class WorldTestPatternProducer : IWorldImageProducer {
         public Vector3 Light { get; private set; }
 
         public void Dispose() { }
-        public bool TryWrite(long tick, GpuRegion region) {
+        public FrameRender Write(long tick, GpuRegion region) {
             ArgumentNullException.ThrowIfNull(argument: region);
 
             Render(
@@ -171,7 +172,7 @@ public sealed class WorldTestPatternProducer : IWorldImageProducer {
                 ))
             );
 
-            return true;
+            return FrameRender.Rendered;
         }
         public bool TryWriteReference(Span<byte> rgba, out ImageSourceStamp stamp) {
             stamp = m_stamp;

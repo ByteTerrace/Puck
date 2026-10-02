@@ -4,13 +4,19 @@
     {
       "id": 1,
       "prompt": "Write the brief for a Codex review-and-fix pass over a lane's three commits that change capture readback in the render-graph runtime.",
-      "expected_output": "Writes a self-contained brief to a lane-named file: a one-sentence frame naming the domains, the review worktree path and branch with edit-only and don't-commit, an exact commit range with each commit listed and its message to be read, the contract in the code's own names with decisions already taken, a hunt list per area drawing on rendering's runtime-contracts reference (pinned or copied pixels, leases, completion, epochs), the evidence already gathered, and the verbatim rules and instructions blocks including compiling what it changed and the end-list format.",
+      "expected_output": "Writes a self-contained brief to a lane-named file: a one-sentence frame naming the domains, the review worktree path (the author's clean worktree or a detached tree at its head under .claude/worktrees/<name>, with no branch created for the pass) and branch or detached head plus the author's receiving branch, with edit-only and don't-commit; an exact commit range with each commit listed and its message to be read; the contract in the code's own names with decisions already taken; a hunt list per area drawing on rendering's runtime-contracts reference (pinned or copied pixels, leases, completion, epochs); the evidence already gathered; and the verbatim rules and instructions blocks including compiling what it changed and the end-list format. Pauses other edits and commits on the author's branch until landing.",
       "files": []
     },
     {
       "id": 2,
-      "prompt": "The review pass finished with four fixes and one open finding, uncommitted. How do you land it?",
-      "expected_output": "Checks each finding against current files, commits the pass unbuilt as a WIP on the review branch, has a Claude agent build the touched projects and the solution, prove each new law red with its fix withheld and green with it, run the reached suites and check forms, and settle the open finding; replaces the WIP with area: sentence commits carrying the evidence and no Co-Authored-By trailer; then briefs a smaller second review over the fix diff alone.",
+      "prompt": "The Codex review pass over a Claude-written lane finished with four fixes and one open finding, uncommitted. How do you land it?",
+      "expected_output": "Checks each finding against current files and records the round and fix range; commits the pass unbuilt as a local WIP; has a Claude agent with fixes enabled build the touched projects and the solution, prove each new law red with its fix withheld and green with it, run the reached suites and check forms, settle the open finding, and review round 1's fix diff alone for blockers as round 2. For doc-only fixes, uses documentation checks without laws or builds except for XML changes. Sends remaining round 2 blockers to the lead for a ruling before further repairs; verifies those repairs without a third review round. Replaces only unpublished pass commits with area: sentence commits carrying the evidence and no Co-Authored-By trailer; lands a detached pass with git merge --ff-only from the clean author's worktree, stopping on divergence without resetting or rebasing. Keeps WIPs and verification repairs unpublished, merges the current integration tip, runs final required checks, takes granted GPU legs or reports them owed, and pushes the working branch fast-forward only after its gates pass.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "A Codex-written lane needs its review. Who reviews it, and when does the loop end?",
+      "expected_output": "A Claude agent (Sonnet or Opus) runs round 1 over the lane with fixes enabled. A Claude verifier checks its fixes so verification repairs stay Claude-written. If round 1 makes blocker fixes, including documentation fixes, the companion's Codex task --write pass runs round 2 over round 1's fix diff alone. The loop ends when a pass reports no blockers, and after round 2 at the latest; non-blocking findings and their fixes never trigger another review. An unchanged pass skips WIP creation and fix verification; unresolved blockers go to the lead. The lead rules on what round 2 still raises (a scoped fix, an open item, or a dismissal with its reason); subsequent verification runs no fresh hunt or third review round.",
       "files": []
     }
   ]

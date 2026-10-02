@@ -1,8 +1,8 @@
 // GPU-driven cull args: a single-WORKGROUP parallel reduction over the beam prepass's per-tile cull buffer. It computes
 // the bounding box of SURVIVING (non-empty) tiles of the one view its dispatch set renders and writes (a) the Stage-1 "views" INDIRECT
 // dispatch group counts and (b) the bbox group origin. The views dispatch then covers ONLY that bbox — the all-empty
-// margins (e.g. the sky above the scene) are never dispatched, and the sky pre-pass alone has written every
-// remaining empty tile. A frame with mesh draws covers the whole grid instead: a mesh pixel needs its record whatever
+// margins (e.g. the sky above the scene) are never dispatched, and every pixel outside the box reads as uncovered to
+// the sky and composite passes. A frame with mesh draws covers the whole grid instead: a mesh pixel needs its record whatever
 // the beam proved about its tile. Dispatched (1,1,1) AFTER the beam prepass (a compute->compute barrier orders the
 // cull-buffer read); its args output feeds the indirect Stage-1 dispatch (a draw-indirect barrier) and its bounds
 // output the Stage-1 kernel (a shader-read barrier). Generic: it operates only on the cull buffer, not on any scene.

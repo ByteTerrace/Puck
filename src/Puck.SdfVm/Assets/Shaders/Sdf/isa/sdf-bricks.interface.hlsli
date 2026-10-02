@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-bricks' (sha256/afaae671d82e3c99e1e2724a635daa94bc20f1701688132728666fe31db434ea). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-bricks' (sha256/96e7e2fdfdf5ee48f1632db250ce4802fbd3315eb7067f9f4e5635b4c8565014). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_BRICKS
 #define PUCK_SHADER_INTERFACE_SDF_BRICKS
 
@@ -28,8 +28,8 @@ struct SdfBricksFrame {
 struct SdfBricksPass {
     [[vk::offset(0)]] uint2 extent;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfBricksPass> passGroupIsaB44A79EE : register(b0, space3);
-#define passGroup passGroupIsaB44A79EE
+[[vk::binding(0, 3)]] ConstantBuffer<SdfBricksPass> passGroupIsa2245F7D2 : register(b0, space3);
+#define passGroup passGroupIsa2245F7D2
 [[vk::binding(1, 3)]] StructuredBuffer<float4> bakeRequest : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<float> brickPool : register(u2, space3);
 
@@ -42,6 +42,8 @@ struct SdfBricksPushedIndex {
 // This interface declares no work counters, so its passes count nothing: the counting functions a kernel calls
 // are declared empty, and a kernel written for a counting package compiles here unchanged.
 void puckCountWork(uint steps, uint texels) {
+}
+void puckCountSky(uint evaluations) {
 }
 void puckCountFragmentWork(uint steps, uint texels) {
 }

@@ -1,15 +1,15 @@
-// The one light interface: every light the light stage walks, an environment light (frame/sdf-lights.hlsli) or a bound
-// screen's area light, is one SdfLight, and sdfLightResponse answers what it adds at a shaded surface. The stage folds the
+// The one light interface: every light the light stage walks, a light of the lights table (sdfLights) or a bound
+// screen's area light, is one SdfLightSource, and sdfLightResponse answers what it adds at a shaded surface. The stage folds the
 // responses in the lights' order: the diffuse terms into the radiance the material shade lights by, the rim and specular
 // terms after the shade, and the attenuations into one factor on the reflected light.
 #ifndef SHADE_SDF_LIGHT_HLSLI
 #define SHADE_SDF_LIGHT_HLSLI
 #ifdef SDF_VIEWS_PASS
 
-// A bound screen's area light, outside the generated SDF_LIGHT_* kinds, which name the environment's.
+// A bound screen's area light, outside the generated SDF_LIGHT_* kinds, which name the lights table's.
 static const uint SdfLightScreen = 0x100u;
 
-struct SdfLight {
+struct SdfLightSource {
     uint kind;
     float3 color;
     // A screen's glow strength (its screen-light row's alpha).
@@ -25,7 +25,7 @@ struct SdfLight {
 };
 
 // The surface a light answers at: its point, lit normal and camera ray, its material, its ambient occlusion (a wrapped
-// material's already relaxed toward 1), the key light's shadow visibility, and the environment's scales.
+// material's already relaxed toward 1) and the key light's shadow visibility.
 struct SdfShadeSurface {
     float3 position;
     float3 normal;
@@ -33,8 +33,6 @@ struct SdfShadeSurface {
     SdfMaterialData material;
     float ambientOcclusion;
     float keyVisibility;
-    float sunScale;
-    float ambientScale;
 };
 
 // What one light adds at a surface: its diffuse term, its specular lobe and its rim brighten, and the factor it scales
@@ -46,10 +44,10 @@ struct SdfLightResponse {
     float attenuation;
 };
 
-// The lights the stage walks: the environment's, then one slot per screen up to the highest bound one while screen
+// The lights the stage walks: the lights table's, then one slot per screen up to the highest bound one while screen
 // lights are on.
 uint sdfLightCount() {
-    uint count = worldLightCount();
+    uint count = passGroup.lightCount;
 #ifdef SDF_SCREEN_SOURCES
     if (!worldScreenLightsDisabled()) {
         count += screenLightLoopBound();
@@ -58,28 +56,28 @@ uint sdfLightCount() {
     return count;
 }
 // The light at `index` of the walk, or false for a screen slot whose source is not bound this frame.
-bool sdfLightAt(uint index, out SdfLight light) {
-    light = (SdfLight)0;
+bool sdfLightAt(uint index, out SdfLightSource light) {
+    light = (SdfLightSource)0;
 
-    uint environmentCount = worldLightCount();
+    uint tableCount = passGroup.lightCount;
 
-    if (index < environmentCount) {
-        SdfEnvLight environment = worldLight(index);
+    if (index < tableCount) {
+        SdfLight record = sdfLights[index];
 
-        light.kind = environment.kind;
-        light.color = environment.color;
-        light.weight = environment.weight;
-        light.position = (((environment.kind == SDF_LIGHT_POINT) || (environment.kind == SDF_LIGHT_OCCLUDER))
-            ? worldPointLightPosition(environment)
-            : environment.direction);
-        light.param = environment.param;
-        light.key = ((int)index == worldShadowLightIndex());
+        light.kind = record.Kind;
+        light.color = record.Color;
+        light.weight = record.Weight;
+        light.position = (((record.Kind == SDF_LIGHT_POINT) || (record.Kind == SDF_LIGHT_OCCLUDER))
+            ? worldPointLightPosition(record)
+            : record.Direction);
+        light.param = record.Param;
+        light.key = ((int)index == passGroup.shadowLight);
 
         return true;
     }
 
 #ifdef SDF_SCREEN_SOURCES
-    uint screenIndex = (index - environmentCount);
+    uint screenIndex = (index - tableCount);
 
     if (!screenSourceBound(screenIndex)) {
         return false;
@@ -101,15 +99,14 @@ bool sdfLightAt(uint index, out SdfLight light) {
 }
 // What `light` adds at `surface`:
 // - a directional its wrapped Lambert term under the key light's visibility when it is the shadow light and under ambient
-//   occlusion otherwise, scaled by the sun scale;
-// - a hemisphere its floor plus its gradient along the normal's height under ambient occlusion, scaled by the ambient
-//   scale;
+//   occlusion otherwise;
+// - a hemisphere its floor plus its gradient along the normal's height under ambient occlusion;
 // - a point its wrapped Lambert term and its own GGX lobe under an inverse-square falloff and ambient occlusion;
 // - a rim its view-dependent silhouette brighten;
 // - an occluder a Gaussian dimming of reflected light, facing the surface;
 // - a screen its glow toward what sits in front of its face, under an inverse-square falloff.
 // A wrap of 0 reduces each wrapped term to max(n.l, 0).
-SdfLightResponse sdfLightResponse(SdfLight light, SdfShadeSurface surface) {
+SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface) {
     SdfLightResponse response;
 
     response.diffuse = float3(0.0, 0.0, 0.0);
@@ -123,11 +120,11 @@ SdfLightResponse sdfLightResponse(SdfLight light, SdfShadeSurface surface) {
         float lambert = sdfWrapDiffuse(dot(normal, light.position), surface.material.wrap);
         float occlusion = (light.key ? surface.keyVisibility : surface.ambientOcclusion);
 
-        response.diffuse = (light.color * (((light.weight * lambert) * occlusion) * surface.sunScale));
+        response.diffuse = (light.color * ((light.weight * lambert) * occlusion));
     } else if (light.kind == SDF_LIGHT_HEMISPHERE) {
         float ambient = (light.weight + (light.param * normal.y));
 
-        response.diffuse = (light.color * ((ambient * surface.ambientScale) * surface.ambientOcclusion));
+        response.diffuse = (light.color * (ambient * surface.ambientOcclusion));
     } else if (light.kind == SDF_LIGHT_POINT) {
         float3 toLight = (light.position - surface.position);
         float pointDistance = length(toLight);

@@ -61,7 +61,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         // state, in the other order.
         var brickPool = (brickPoolVoxelCapacity > 0);
         var copyPool = GpuRegionCopyPool.SizesOf(
-            regionCount: (brickPool ? 10 : 9),
+            regionCount: (brickPool ? 14 : 13),
             slotCount: SdfWorldTables.FrameRingSize
         );
 
@@ -282,8 +282,8 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     }
 
     // The first upload of single-view tables, and a still one after it: the tables' first two submissions. The fake's default memory profile stages every region, so the first upload copies all
-    // nine host-written tables (program, dynamic transforms, instance grid, screen surfaces, screen lights, volumes, decals,
-    // screen mappings and the one-record mesh region) behind one barrier ordering the earlier views' reads of their
+    // thirteen host-written tables (program, dynamic transforms, instance grid, screen surfaces, screen lights, volumes,
+    // decals, screen mappings, the one-record mesh region, the lights and the sky's block, stops and softboxes) behind one barrier ordering the earlier views' reads of their
     // destinations before the copies write them, each binding the copy pipeline and its set with no push constants, then
     // transitions each copied buffer for its readers; the still upload repeats the first's inputs, so it owes no copy and
     // binds nothing. The fillers pass runs on the first upload alone, the fillers' first transitions and clears, and the
@@ -293,14 +293,14 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     // run-table entry. The previous-transform table is seeded device-to-device behind four buffer barriers, adding one
     // counted copy and no host-visible bytes. This fixture has no mesh draws to seed.
     private const string FirstUpload =
-        "work submission=1 revision=1\nwork fillers executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=4 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=2 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0\nwork bricks skipped\nwork upload executed: dispatches=9 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=13 binds.pipeline=9 binds.descriptor-set=9 push-constants=0 descriptor-writes=0 uploads.host-visible=837716 clears=0 copies=1 march.steps=0 texels.written=0 copies.buffer-bytes=48\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=36 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0\n";
+        "work submission=1 revision=1\nwork fillers executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=4 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=2 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0\nwork bricks skipped\nwork upload executed: dispatches=13 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=1 barriers.buffer=17 binds.pipeline=13 binds.descriptor-set=13 push-constants=0 descriptor-writes=0 uploads.host-visible=838668 clears=0 copies=1 march.steps=0 texels.written=0 copies.buffer-bytes=48 sky.evaluations=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=52 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0\n";
     // A still upload that writes one queued 2x2x2 brick: the bricks pass binds the copy pipeline and the brick staging's
     // set and dispatches its copy between the pool's two barriers, and counts the staging's host writes, the eight voxels
     // behind their header and one run-table entry.
     private const string BrickUpload =
-        "work submission=3 revision=1\nwork fillers skipped\nwork bricks executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=2 binds.pipeline=1 binds.descriptor-set=1 push-constants=0 descriptor-writes=0 uploads.host-visible=56 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0\n";
+        "work submission=3 revision=1\nwork fillers skipped\nwork bricks executed: dispatches=1 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=2 binds.pipeline=1 binds.descriptor-set=1 push-constants=0 descriptor-writes=0 uploads.host-visible=56 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0\n";
     private const string StillUpload =
-        "work submission=2 revision=1\nwork fillers skipped\nwork bricks skipped\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0\n";
+        "work submission=2 revision=1\nwork fillers skipped\nwork bricks skipped\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0\n";
 
     private sealed class Rig : IDisposable {
         public Rig(GpuWorkLedger? ledger = null, int brickPoolVoxelCapacity = 0) {
@@ -319,6 +319,10 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                 ledger: owned
             );
             MeshRaster = SdfTestPipelines.MeshRaster(
+                device: gpu,
+                ledger: owned
+            );
+            ImpostorRaster = SdfTestPipelines.ImpostorRaster(
                 device: gpu,
                 ledger: owned
             );
@@ -343,6 +347,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                     WorkLedger: owned
                 ),
                 pipelines: Pipelines,
+                impostorRaster: ImpostorRaster,
                 meshRaster: MeshRaster,
                 regionCopy: RegionCopy.Compute!
             );
@@ -372,6 +377,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         public SdfWorldTables Engine { get; }
         public SdfFrame Frame { get; }
         public FakeGpuDevice Gpu { get; }
+        public GpuPassPipeline ImpostorRaster { get; }
         public GpuPassPipeline MeshRaster { get; }
         public SdfWorldPipelines Pipelines { get; }
         public GpuPassPipeline RegionCopy { get; }
@@ -381,6 +387,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             Pipelines.Dispose();
             RegionCopy.Dispose();
             MeshRaster.Dispose();
+            ImpostorRaster.Dispose();
         }
         // Prepares a reload of the rig's pipelines and installs it, as a residency does across two produced frames.
         public int Reload(SdfKernelSet kernels) {

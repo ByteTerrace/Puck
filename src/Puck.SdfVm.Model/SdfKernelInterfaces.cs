@@ -1,4 +1,5 @@
 using Puck.Shaders;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -14,11 +15,14 @@ namespace Puck.SdfVm;
 /// every value in ordinal name order, so a graph document whose config names the same values reads the same block.</para>
 /// <para><see cref="ResolveParameters"/> serves the optional output reconstruction pass with its own resource bindings
 /// and the same frame values. Its common values copy by declared member offsets; the native pass block stays unchanged.</para>
-/// <para><see cref="World"/> serves the native per-view dispatches: sky, mask, beam, cull-args, primary, surface, ambient,
-/// shadow and the three views variants. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>): its
-/// World group is the residency's tables (<see cref="SdfWorldPackage.Tables"/>), one set per upload ring slot that every
-/// pass of every view binds, and its pass group one set per frame slot and pass, whose block holds the view's render
-/// extent and the frame's values.</para>
+/// <para><see cref="SkyParameters"/> serves the sky's field runs and the composite, with their own resource bindings and the
+/// same frame values, copied by declared member offsets as the resolve's are.</para>
+/// <para><see cref="World"/> serves the native per-view dispatches: mask, beam, cull-args, primary, surface, ambient,
+/// shadow and the three views variants. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>)
+/// and the lights and sky tables (<see cref="LightAndSkyTables"/>): its World group is the residency's tables
+/// (<see cref="SdfWorldPackage.Tables"/> and those), one set per upload ring slot that every pass of every view binds,
+/// and its pass group one set per frame slot and pass, whose block holds the view's render extent and the frame's
+/// values.</para>
 /// <para><see cref="BrickBake"/> serves the carve-bake baker, the <c>sdf.bricks</c> pass: it binds the ring slot's frame
 /// set and one pass set per brick slot binding that slot's request buffer and the brick pool, whose block's extent is one
 /// slice as one row, the voxels one bake dispatch writes at most, with the slice ordinal pushed per dispatch.</para>
@@ -28,8 +32,8 @@ namespace Puck.SdfVm;
 /// included. The interfaces are declared for any stamp: <c>puck shaders generate</c> declares them for the model's own
 /// instruction set, and the engine for the one its build recorded (<c>SdfWorldInterfaces</c> in <c>Puck.SdfVm</c>).</para>
 /// <para><see cref="Mesh"/> serves the mesh pass's graphics pipeline: one pass set per
-/// frame slot binding the pass block the world interface lays out and the mesh region, with the view and the draw pushed
-/// per draw call.</para>
+/// frame slot binding the pass block the world interface lays out, the mesh region and the impostor depth atlas, with the
+/// view and the draw pushed per draw call.</para>
 /// </summary>
 public sealed class SdfKernelInterfaces {
     /// <summary>The <see cref="BrickBake"/> request buffer: a three-row header, then the carves.</summary>
@@ -42,6 +46,17 @@ public sealed class SdfKernelInterfaces {
     /// <summary>The directory, repository-relative, the kernels' module tree lives in: the generated interface includes
     /// in its <c>isa</c> directory and the pass entry points in <c>passes</c>.</summary>
     public const string KernelDirectory = "src/Puck.SdfVm/Assets/Shaders/Sdf";
+    /// <summary>The lights table: <see cref="SdfLights.MaxLights"/> <see cref="SdfLight"/> records, read by the shadow
+    /// and views passes.</summary>
+    public const string Lights = "sdfLights";
+    /// <summary>The sky block: one <see cref="SdfSkyBlock"/> record, read by the sky and composite passes.</summary>
+    public const string Sky = "sdfSky";
+    /// <summary>The sky gradient's stops: <see cref="SdfSky.MaxStops"/> <see cref="SdfSkyStop"/> records, read by the sky
+    /// and views passes.</summary>
+    public const string SkyStops = "sdfSkyStops";
+    /// <summary>The studio reflection's softboxes: <see cref="SdfSky.MaxSoftboxes"/> <see cref="SdfSoftbox"/> records, read
+    /// by the views pass.</summary>
+    public const string Softboxes = "sdfSoftboxes";
 
     /// <summary>Initializes a new instance of the <see cref="SdfKernelInterfaces"/> class.</summary>
     /// <param name="stamp">The instruction set's stamp (<see cref="SdfIsaHlsl.StampOf"/>).</param>
@@ -53,12 +68,20 @@ public sealed class SdfKernelInterfaces {
         WorldParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
             package: RenderGraphPackageCatalog.SdfWorld,
-            members: SdfWorldPackage.Members
+            members: [.. SdfWorldPackage.Members, .. LightAndSkyTables]
         ).Stamped(stamp: stamp);
+        // The resolve pass binds the residency's World set, so its World group is the world interface's, the lights
+        // and sky tables included.
         ResolveParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
-            members: SdfWorldPackage.ResolveMembers,
+            members: [.. SdfWorldPackage.ResolveMembers, .. LightAndSkyTables],
             package: "sdf-resolve"
+        ).Stamped(stamp: stamp);
+        // The sky and composite passes bind the residency's World set too, the sky's block and stops among its tables.
+        SkyParameters = ShaderPipelineParameterLayout.ForPackage(
+            config: null,
+            members: [.. SdfWorldPackage.SkyMembers, .. LightAndSkyTables],
+            package: "sdf-sky"
         ).Stamped(stamp: stamp);
         BrickBakeParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
@@ -76,6 +99,11 @@ public sealed class SdfKernelInterfaces {
                     member.IsBlockMember
                 )),
                 Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshRegion),
+                ShaderInterfaceMember.SampledImage(
+                    group: ShaderInterfaceGroup.Pass,
+                    name: SdfWorldPackage.ImpostorDepth,
+                    type: ShaderValueType.Float4
+                ),
                 ShaderWorkCounters.BufferMember,
             ],
             name: "sdf-mesh",
@@ -87,9 +115,20 @@ public sealed class SdfKernelInterfaces {
             (IncludePath(shaderInterface: BrickBake), BrickBake),
             (IncludePath(shaderInterface: Mesh), Mesh),
             (IncludePath(shaderInterface: ResolveParameters.Interface), ResolveParameters.Interface),
+            (IncludePath(shaderInterface: SkyParameters.Interface), SkyParameters.Interface),
         ];
     }
 
+    /// <summary>Gets the World-group tables <see cref="World"/> adds to the <c>sdf.world</c> package's members: the lights
+    /// table and the sky's block and tables, each a structured buffer of a record whose declaration is generated from
+    /// its C# type (<see cref="ShaderInterfaceStructure.From{T}"/>). The residency writes each as a region of its
+    /// tables, and a kernel binds one only when it reads it.</summary>
+    public static IReadOnlyList<ShaderInterfaceMember> LightAndSkyTables { get; } = [
+        ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Lights, structure: ShaderInterfaceStructure.From<SdfLight>()),
+        ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Sky, structure: ShaderInterfaceStructure.From<SdfSkyBlock>()),
+        ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: SkyStops, structure: ShaderInterfaceStructure.From<SdfSkyStop>()),
+        ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Softboxes, structure: ShaderInterfaceStructure.From<SdfSoftbox>()),
+    ];
     /// <summary>Gets the instruction set's stamp the interfaces carry.</summary>
     public string Stamp { get; }
     /// <summary>Gets the frame data of every per-view SDF dispatch: the standard frame group, the World group of the
@@ -99,6 +138,9 @@ public sealed class SdfKernelInterfaces {
     public ShaderPipelineParameterLayout WorldParameters { get; }
     /// <summary>Gets the reconstruction pass's interface, with the same frame values as the traversal passes.</summary>
     public ShaderPipelineParameterLayout ResolveParameters { get; }
+    /// <summary>Gets the interface the sky and composite passes read, with the same frame values as the traversal passes
+    /// (<see cref="SdfWorldPackage.SkyMembers"/>).</summary>
+    public ShaderPipelineParameterLayout SkyParameters { get; }
     /// <summary>Gets the interface every per-view SDF dispatch reads.</summary>
     public ShaderInterface World => WorldParameters.Interface;
     /// <summary>Gets the frame data of the carve-bake baker, the <c>sdf.bricks</c> pass: the standard frame group, and a
@@ -110,7 +152,8 @@ public sealed class SdfKernelInterfaces {
     public ShaderInterface BrickBake => BrickBakeParameters.Interface;
     /// <summary>Gets the interface the mesh pass draws with: the pass block <see cref="World"/> declares, member for member
     /// at the same offsets, so the mesh pass binds the block its node writes for it, then the mesh region and the work
-    /// counters its fragments count the texels they write into (<see cref="ShaderWorkCounters"/>); and the index
+    /// counters its fragments count the texels they write into (<see cref="ShaderWorkCounters"/>), and the impostor depth atlas
+    /// (<see cref="SdfWorldPackage.ImpostorDepth"/>) an impostor card's fragments find their surface in; and the index
     /// each draw call pushes, whose bits from <see cref="MeshViewShift"/> up name the view and whose bits below it name
     /// the draw (<see cref="MeshPushedIndex"/>).</summary>
     public ShaderInterface Mesh { get; }

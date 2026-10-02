@@ -97,7 +97,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The bakes a static rebuild draws in place of their fields (null for a presentation that bakes nothing), and the
     // lookup the rebuild asks, made once so a rebuild allocates no delegate.
     private readonly WorldBakeSchedule? m_bakes;
-    private readonly Func<string, SdfMesh?> m_bakedMeshFor;
+    private readonly Func<string, WorldBakedDraw?> m_bakedFor;
     // MeshDraws: the static draws each static rebuild replaces, then the pool's.
     private readonly WorldSceneMeshDraws m_meshDraws;
 
@@ -241,7 +241,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 meshDraws: meshDraws,
                 colors: m_bakedColors,
                 palettes: m_palettes,
-                bakedMeshFor: m_bakedMeshFor,
+                bakedFor: m_bakedFor,
                 picks: m_picks
             );
             m_meshDraws.Static = meshDraws;
@@ -830,16 +830,16 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         destination[(WorldClient.RevisionComponentCount + 4)] = m_continuum.PresentationRevision;
     }
 
-    // A prototype's baked mesh when the presentation draws its bakes and this one is ready; the schedule counts the
-    // switch.
-    private SdfMesh? BakedMeshFor(string prototypeId) => ((
+    // A prototype's baked mesh and impostor when the presentation draws its bakes and this one is ready; the schedule counts
+    // the switch.
+    private WorldBakedDraw? BakedFor(string prototypeId) => ((
         m_settings.DrawsBakes(schedule: m_bakes) &&
         (m_bakes is not null) &&
-        m_bakes.TryGetMesh(
-            mesh: out var mesh,
+        m_bakes.TryGetDraw(
+            draw: out var draw,
             prototypeId: prototypeId
         ))
-        ? mesh
+        ? draw
         : null);
 
     /// <summary>Initializes a new instance of the <see cref="WorldSceneEmitter"/> class over the boot definition,
@@ -875,7 +875,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_text = text;
         m_audio = audio;
         m_bakes = bakes;
-        m_bakedMeshFor = BakedMeshFor;
+        m_bakedFor = BakedFor;
 
         var definition = client.Definition;
 

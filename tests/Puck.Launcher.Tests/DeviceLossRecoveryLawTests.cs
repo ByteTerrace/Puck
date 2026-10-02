@@ -365,7 +365,7 @@ public sealed class DeviceLossRecoveryLawTests {
             log.Add(item: "release");
             m_slot.RefuseForDeviceLoss();
         }
-        public Surface ProduceFrame(in FrameContext context) => default;
+        public RootFrame ProduceFrame(in FrameContext context) => default;
     }
     // An offscreen render root whose first frame loses the device with a capture armed; every later frame is produced.
     private sealed class LosingRoot : IRenderRoot {
@@ -391,7 +391,7 @@ public sealed class DeviceLossRecoveryLawTests {
             m_log.Add(item: "release");
             m_slot.RefuseForDeviceLoss();
         }
-        public Surface ProduceFrame(in FrameContext context) {
+        public RootFrame ProduceFrame(in FrameContext context) {
             if (!m_lost) {
                 m_lost = true;
 

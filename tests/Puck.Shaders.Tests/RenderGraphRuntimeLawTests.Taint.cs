@@ -433,7 +433,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             m_fill = null;
         }
         public void OnDeviceLost() => Dispose();
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+        public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             m_camera ??= Create(
                 height: height,
                 width: width
@@ -443,7 +443,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 width: 1U
             );
 
-            return true;
+            return FrameRender.Rendered;
         }
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new NotSupportedException(message: "The fake camera is captured through the instance that shows it."));
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {

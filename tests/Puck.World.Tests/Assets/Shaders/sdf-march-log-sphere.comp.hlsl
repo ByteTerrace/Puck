@@ -38,7 +38,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     if (mode == SDF_MARCH_PROBE_PRIMARY) {
         SdfPrimaryMarch march = sdfTracePrimaryField(origin.xyz, direction.xyz, inputs.y, origin.w, origin.w, origin.w, origin.w,
-            SDF_INSTANCE_MASK_ALL, direction.w, uint4(0u, 0u, 0u, 0u), false);
+            SDF_INSTANCE_MASK_ALL, direction.w, uint4(0u, 0u, 0u, 0u), false, false);
 
         result = float4(march.traveled, (march.found ? 1.0 : 0.0), (float)march.steps, asfloat(march.material));
     }

@@ -169,6 +169,13 @@ internal sealed partial class WorldScreenBinder {
             );
         }
 
+        public FrameRender Answer => WorldCaptureFrame.Answer(
+            ended: Feed.Ended,
+            fault: Feed.Fault,
+            gpuHandle: (Feed.GpuTargets?.LatestHandle() ?? 0),
+            gpuRoute: Feed.RidesGpu,
+            pixels: Feed.Pixels
+        );
         public ImageSourceDescriptor Descriptor { get; }
         public string? Fault => (Feed.Live
             ? null
@@ -181,13 +188,15 @@ internal sealed partial class WorldScreenBinder {
         public void Dispose() => Feed.Dispose();
         public nint Handle() => Feed.Handle();
         public void NotifyDeviceLost() => Feed.NotifyDeviceLost();
-        public void Publish(in FrameContext context) {
+        public FrameRender Publish(in FrameContext context) {
             if (Feed.ShouldPull()) {
                 m_binder.CaptureWindow(
                     context: in context,
                     feed: Feed
                 );
             }
+
+            return Answer;
         }
     }
 }

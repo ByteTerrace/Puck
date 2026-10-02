@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -8,19 +9,73 @@ public sealed partial class SdfWorldTables {
     private readonly SdfWorldPipelines m_pipelines;
     // The device's mesh pass pipeline and the render pass it draws in, which a view's mesh pass records with.
     private readonly IGpuPipeline m_meshPipeline;
+    // The impostor card pipeline, which draws in the same render pass beside it.
+    private readonly IGpuPipeline m_impostorPipeline;
     private readonly IGpuRenderPass m_meshRenderPass;
 
     // The mesh pass's graphics pipeline.
     internal IGpuPipeline MeshPipeline => m_meshPipeline;
+    // The impostor card pipeline: the mesh pass's layout and render pass, with a fragment stage that searches the impostor's
+    // views for each pixel's surface.
+    internal IGpuPipeline ImpostorPipeline => m_impostorPipeline;
     // The render pass the mesh pass draws in, which a view's framebuffers are created for.
     internal IGpuRenderPass MeshRenderPass => m_meshRenderPass;
     // The views pass's pipeline: the variant UploadProgram selected for the live program (full ISA, core ops or folds;
-    // SdfViewsKernelVariant), all of one layout, so a pass's set binds against whichever it is.
-    internal IGpuComputePipeline ViewsPipeline => m_pipelines.Pipeline(kernel: m_viewsVariant switch {
-        SdfViewsKernelVariant.CoreOps => SdfKernel.ViewsCore,
-        SdfViewsKernelVariant.Folds => SdfKernel.ViewsFolds,
-        _ => SdfKernel.Views,
-    });
+    // SdfViewsKernelVariant), or, while that one builds, a fuller variant that is built, since a fuller variant renders
+    // every program a stripped one does. All are of one layout, so a pass's set binds against whichever it is.
+    internal IGpuComputePipeline ViewsPipeline => m_pipelines.Pipeline(kernel: (BuiltViews(variant: m_viewsVariant) ?? ViewsKernelOf(variant: m_viewsVariant)));
+
+    // The views kernel a program waits on: null when the variant it selects (SdfViewsKernelVariants.Select), or a fuller
+    // one, is built, so its views can render it; otherwise the narrowest of those still building or, when every one was
+    // refused (ViewsRefusal), the selected variant's kernel. A null program asks for the live program's variant.
+    internal SdfKernel? ViewsWaiting(SdfProgram? program) {
+        var variant = ((program is null)
+            ? m_viewsVariant
+            : SdfViewsKernelVariants.Select(program: program).Variant);
+
+        if (BuiltViews(variant: variant) is not null) {
+            return null;
+        }
+
+        foreach (var kernel in ViewsKernelsOf(variant: variant)) {
+            if (m_pipelines.RefusalOf(kernel: kernel) is null) {
+                return kernel;
+            }
+        }
+
+        return ViewsKernelOf(variant: variant);
+    }
+    // Why a views kernel was refused (SdfWorldPipelines.IsBuilt), or null when it was not.
+    internal Exception? ViewsRefusal(SdfKernel kernel) => m_pipelines.RefusalOf(kernel: kernel);
+
+    // The first built views kernel that renders a program selecting the variant: the variant's own, then each fuller one.
+    // A refused kernel is not built, so a fuller one that is renders the program. Every views slot is polled, even
+    // one this program cannot use: a device loss in its background build must reach recovery while another is refused.
+    private SdfKernel? BuiltViews(SdfViewsKernelVariant variant) {
+        SdfKernel? built = null;
+        var candidates = ViewsKernelsOf(variant: variant);
+
+        foreach (var kernel in ViewsForCore) {
+            var ready = m_pipelines.IsBuilt(kernel: kernel);
+
+            if (ready && (built is null) && (Array.IndexOf(array: candidates, value: kernel) >= 0)) {
+                built = kernel;
+            }
+        }
+
+        return built;
+    }
+    private static SdfKernel ViewsKernelOf(SdfViewsKernelVariant variant) => ViewsKernelsOf(variant: variant)[0];
+    // The views kernels that render a program selecting the variant, narrowest first.
+    private static SdfKernel[] ViewsKernelsOf(SdfViewsKernelVariant variant) => variant switch {
+        SdfViewsKernelVariant.CoreOps => ViewsForCore,
+        SdfViewsKernelVariant.Folds => ViewsForFolds,
+        _ => ViewsForFull,
+    };
+
+    private static readonly SdfKernel[] ViewsForCore = [SdfKernel.ViewsCore, SdfKernel.ViewsFolds, SdfKernel.Views];
+    private static readonly SdfKernel[] ViewsForFolds = [SdfKernel.ViewsFolds, SdfKernel.Views];
+    private static readonly SdfKernel[] ViewsForFull = [SdfKernel.Views];
 
     // One of the per-view compute pipelines by its kernel.
     internal IGpuComputePipeline Pipeline(SdfKernel kernel) => m_pipelines.Pipeline(kernel: kernel);
@@ -40,6 +95,7 @@ public sealed partial class SdfWorldTables {
             (
                 Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles.SequenceEqual(second: other.Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles) &&
                 m_meshPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_meshPipeline.GroupLayoutHandles) &&
+                m_impostorPipeline.GroupLayoutHandles.SequenceEqual(second: other.m_impostorPipeline.GroupLayoutHandles) &&
                 ((m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is not { } resolve) ||
                     ((other.m_pipelines.OptionalPipeline(kernel: SdfKernel.Resolve) is { } otherResolve) &&
                         resolve.GroupLayoutHandles.SequenceEqual(second: otherResolve.GroupLayoutHandles))) &&

@@ -352,9 +352,6 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 #define SDF_SQRT_HALF 0.7071067811865476   // sqrt(1/2) — the 45-degree chamfer bevel plane's normalization
 #define SDF_PI        3.141592653589793
 #define SDF_TAU       6.283185307179586    // 2*pi
-// 2^-32, exact. Maps a full-range uint hash to a float in [0, 1] — NOTE the CLOSED upper end: (float)0xFFFFFFFFu
-// rounds UP to 2^32, so the product can be exactly 1.0. Every consumer below is written to tolerate that.
-#define SDF_INV_2POW32 (1.0 / 4294967296.0)
 
 // The "nothing nearer yet" sentinel every accumulator and every unknown shape id starts at. It is deliberately far
 // beyond any authored far distance (render.farDistance is capped at 8192 world units by the world validator) so it

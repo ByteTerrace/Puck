@@ -10,8 +10,8 @@
 // shading site as studioReflection(reflect(rayDirection, normal), roughness) — an absent section (zero softboxes,
 // zero-black horizon) contributes exactly 0, so the reflection term is a no-op addition then.
 float3 worldEnvironmentHorizon(float3 direction) {
-    float3 low = worldEnvRow(SDF_ENV_HORIZON_LOW_ROW).rgb;
-    float3 high = worldEnvRow(SDF_ENV_HORIZON_HIGH_ROW).rgb;
+    float3 low = sdfSky[0].HorizonLow;
+    float3 high = sdfSky[0].HorizonHigh;
 
     return lerp(low, high, saturate((direction.y * 0.5) + 0.5));
 }
@@ -21,18 +21,18 @@ float3 worldEnvironmentHorizon(float3 direction) {
 // direction could otherwise expose.
 float3 worldStudioReflection(float3 direction, float roughness) {
     float3 result = worldEnvironmentHorizon(direction);
-    uint count = worldEnvironmentSoftboxCount();
+    uint count = sdfSky[0].SoftboxCount;
 
     [loop]
     for (uint index = 0u; (index < count); index++) {
-        SdfEnvSoftbox box = worldEnvironmentSoftbox(index);
-        float cosAngle = saturate(dot(direction, box.direction));
+        SdfSoftbox box = sdfSoftboxes[index];
+        float cosAngle = saturate(dot(direction, box.Direction));
         float angle = acos(cosAngle);
-        float radius = max((length(box.size) + max(box.blur, roughness)), 1.0e-3);
+        float radius = max((length(box.Size) + max(box.Blur, roughness)), 1.0e-3);
         float falloff = saturate(1.0 - (angle / radius));
 
         falloff = ((falloff * falloff) * (3.0 - (2.0 * falloff))); // smoothstep shaping
-        result += (box.color * (box.weight * falloff));
+        result += (box.Color * (box.Weight * falloff));
     }
 
     return result;

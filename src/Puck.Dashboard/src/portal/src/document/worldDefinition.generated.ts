@@ -8948,7 +8948,7 @@ export type WorldRenderDefaults = {
    */
   lighting?: WorldRenderLighting | null;
   /**
-   * The procedural sky — a gradient, sun disc, star field, and distance fog. Optional; an absent section renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed.
+   * The procedural sky — a gradient, sun disc, star field, and distance fog. Optional; an absent section renders the default look, the two-stop gradient and fog SdfSky starts from, as data the kernels read like any authored sky.
    */
   sky?: WorldRenderSky | null;
   /**
@@ -8967,7 +8967,7 @@ export type WorldRenderDefaults = {
 
 export type WorldRenderEnvironment = {
   /**
-   * The reflection softboxes, at most SdfEnvironment.MaxSoftboxes. Absent or empty contributes nothing.
+   * The reflection softboxes, at most SdfSky.MaxSoftboxes. Absent or empty contributes nothing.
    */
   softboxes?: (WorldRenderSoftbox | null)[] | null;
   /**
@@ -8988,7 +8988,7 @@ export type WorldRenderHorizon = {
 };
 
 /**
- * One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its lane semantics in SdfEnvironment.
+ * One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its kind in SdfLightKind.
  */
 export type WorldRenderLight = WorldRenderLightDirectional | WorldRenderLightHemisphere | WorldRenderLightRim | WorldRenderLightPoint | WorldRenderLightOccluder | null;
 
@@ -9134,7 +9134,7 @@ export type WorldRenderLightRim = {
 
 export type WorldRenderLighting = {
   /**
-   * The lights, at most SdfEnvironment.MaxLights, in slot order. At most one directional may shadow: the soft-shadow march runs once per lit pixel.
+   * The lights, at most SdfLights.MaxLights, in slot order. At most one directional may shadow: the soft-shadow march runs once per lit pixel.
    */
   lights?: (WorldRenderLight | null)[] | null;
   /**
@@ -9284,7 +9284,7 @@ export type WorldRenderSkyLayerFog = {
 export type WorldRenderSkyLayerGradient = {
   $type?: "gradient";
   /**
-   * Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation.
+   * Two to SdfSky.MaxStops stops, strictly ascending in elevation.
    */
   stops?: (WorldRenderSkyStop | null)[] | null;
   /**

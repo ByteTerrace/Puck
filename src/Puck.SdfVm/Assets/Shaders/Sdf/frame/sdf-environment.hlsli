@@ -1,12 +1,7 @@
-// The frame's environment rows and screen tables: the environment row reader, the screen surfaces' frames, the mapping
-// each screen is drawn from, which screen slots hold a source this frame and which screen hits shade as a screen.
+// The frame's screen tables: the screen surfaces' frames, the mapping each screen is drawn from, which screen slots hold a
+// source this frame and which screen hits shade as a screen.
 #ifndef FRAME_SDF_ENVIRONMENT_HLSLI
 #define FRAME_SDF_ENVIRONMENT_HLSLI
-// The environment: SdfEnvironment's lanes, row for row, in the pass block's environment array, with the host bakes (unit
-// directions, the sun-disc exponent, the twinkle phase, the integrated cloud offsets and spin). The generated
-// SDF_ENV_*_ROW indices place each row, and frame/sdf-lights.hlsli decodes the lanes of each as SdfEnvironment lays them
-// out.
-float4 worldEnvRow(uint row) { return passGroup.environment[row]; }
 
 #ifdef SDF_SCREEN_SOURCES
 // A declared ScreenSlab instance's world-space front-face frame (see Puck.SignedDistance.SdfScreenSurface) — Stage 1 ONLY

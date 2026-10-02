@@ -31,8 +31,8 @@ public sealed class CreationBakeLawTests {
         """;
     // The bake pack of this file's world at the baker's current version. A change to what the baker produces moves
     // SdfBaker.Version and re-records this pin.
-    private const uint PinnedVersion = 8;
-    private const string PinnedProduct = "sha256-64/1fbc54c98d0ce824";
+    private const uint PinnedVersion = 9;
+    private const string PinnedProduct = "sha256-64/ca94fce5dde7986f";
 
     private static readonly TimeSpan Patience = TimeSpan.FromMinutes(minutes: 2);
 
@@ -225,7 +225,8 @@ public sealed class CreationBakeLawTests {
 
     /// <summary>A ready bake draws in place of its field, and the switch is counted once. Before its bake lands, a
     /// placement draws through its field: no mesh draw, and a camera-visible instance. Once the bake is ready it draws
-    /// the baked mesh, with its instance camera-hidden so its field still casts shadows and occludes. A creation whose
+    /// the baked mesh and its impostor's card, with its instance camera-hidden so its field still casts shadows and
+    /// occludes. A creation whose
     /// bake is refused keeps its field, and a later rebuild counts no second switch.</summary>
     [Fact]
     public void AReadyBakeDrawsInPlaceOfItsFieldAndTheSwitchIsCounted() {
@@ -245,7 +246,7 @@ public sealed class CreationBakeLawTests {
             var builder = new Puck.SignedDistance.SdfProgramBuilder();
 
             WorldPlacementStamper.EmitStatic(
-                bakedMeshFor: prototypeId => (schedule.TryGetMesh(mesh: out var mesh, prototypeId: prototypeId) ? mesh : null),
+                bakedFor: prototypeId => (schedule.TryGetDraw(draw: out var baked, prototypeId: prototypeId) ? baked : null),
                 builder: builder,
                 creations: definition.Creations,
                 definition: definition,
@@ -266,7 +267,22 @@ public sealed class CreationBakeLawTests {
         Drain(definition: definition, schedule: schedule);
 
         var ready = Emit();
-        var draw = Assert.Single(collection: ready.Draws);
+        // A ready bake draws two representations of the one placement: its mesh, recorded while it is large on screen, and
+        // its impostor's card, recorded once it is small (the view chooses: SdfMeshLodSelector). Both are bounded by the
+        // impostor's sphere, and the switch is the impostor's view edge.
+        Assert.Equal(expected: 2, actual: ready.Draws.Count);
+
+        var draw = ready.Draws[0];
+        var card = ready.Draws[1];
+
+        Assert.False(condition: draw.Lod!.Value.Far);
+        Assert.Null(@object: draw.Impostor);
+        Assert.True(condition: card.Lod!.Value.Far);
+        Assert.NotNull(@object: card.Impostor);
+        Assert.Same(expected: Puck.SdfVm.SdfMeshCard.Mesh, actual: card.Mesh);
+        Assert.Equal(expected: (card.Impostor!.Center, card.Impostor.Radius, ((float)card.Impostor.ViewTexels)), actual: (draw.Lod!.Value.Center, draw.Lod!.Value.Radius, draw.Lod!.Value.SwitchPixels));
+        Assert.Equal(expected: draw.Material, actual: card.Material);
+        Assert.Equal(expected: draw.ObjectToWorld, actual: card.ObjectToWorld);
 
         Assert.True(condition: (draw.Mesh.TriangleCount > 0));
         // The baked mesh draws its vertex normals and each triangle's palette entry: the block's palette has one.
@@ -325,6 +341,91 @@ public sealed class CreationBakeLawTests {
         Assert.Equal(expected: (3L, 0L, 0L, 0L), actual: Counts(schedule: schedule));
         Assert.Equal(expected: WorldBakeState.Ready, actual: schedule.StateOf(prototypeId: "pip"));
         Assert.Equal(expected: WorldBakeState.Refused, actual: schedule.StateOf(prototypeId: "glint"));
+    }
+    /// <summary>The parity world ships its bakes: compiled beside its companion files, its <c>BAKE</c> chunk names a key for
+    /// every creation it draws and the pack carries each, so a boot from it holds them all, reconciles with nothing
+    /// scheduled and nothing baked, and ships (the leg that <c>puck parity</c> holds the device to).</summary>
+    [Fact]
+    public void TheParityWorldShipsItsBakesAndABootFromItsPackBakesNothing() {
+        using var directory = new TemporaryDirectory();
+
+        foreach (var file in Directory.GetFiles(path: Path.Combine(path1: AuthoredGameFixtures.Root, path2: "tests", path3: "Puck.Parity"))) {
+            File.Copy(
+                destFileName: directory.PathOf(name: Path.GetFileName(path: file)),
+                sourceFileName: file
+            );
+        }
+
+        var path = directory.PathOf(name: "parity.world.json");
+
+        _ = CompileWithPack(path: path);
+
+        var store = new WorldBakeStore();
+        var boot = CompiledWorldLawTests.Boot(cache: new CompiledWorldCache(chunks: Chunks(store: store), directory: directory.PathOf(name: "state/compiled")), path: path);
+        var creations = boot.Admission.Definition.Creations.Count;
+
+        Assert.True(condition: (creations > 0));
+        Assert.Equal(expected: creations, actual: store.HeldCount);
+
+        using var schedule = new WorldBakeSchedule(store: store);
+
+        schedule.Pump(definition: boot.Admission.Definition);
+        Assert.False(condition: schedule.IsBusy);
+        Assert.True(condition: schedule.Ships);
+        Assert.Equal(expected: (((long)creations), 0L, 0L, 0L), actual: Counts(schedule: schedule));
+        Assert.Equal(expected: WorldBakeState.Ready, actual: schedule.StateOf(prototypeId: "vocabRig"));
+    }
+    /// <summary>A bake held under a key that this baker cannot read, such as one a build before the impostor carried its
+    /// material plane kept (a plane in the wrong place, or bytes cut short), never silently suppresses cards: the
+    /// prototype draws through its field, the refusal is counted under <c>sdf.bakes.undecodable</c> once and named on the
+    /// error stream, and no exception reaches the frame thread. The bake's key carries the baker's version, which is how
+    /// such bytes stop matching once the baker moves.</summary>
+    [Fact]
+    public void AHeldBakeThisBakerCannotDecodeDrawsTheFieldAndIsCountedByName() {
+        var definition = Definition();
+        var request = WorldBakeStore.RequestsOf(definition: definition, quality: WorldBakeChunk.Quality).Single(predicate: static request => (request.PrototypeId == "block"));
+        var fresh = WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: request, work: out _);
+
+        Assert.True(condition: CreationBakeCodec.TryDecode(bake: out var bake, content: fresh, refusal: out _));
+
+        // A bake as an older build wrote it: the impostor's slot after the depth holds the emission texture, not the material
+        // plane this baker expects there.
+        byte[][] held = [
+            CreationBakeCodec.Encode(bake: (bake! with { Impostor = (bake.Impostor with { Material = bake.Impostor.Emission }) })),
+            fresh[..^9],
+        ];
+
+        foreach (var bytes in held) {
+            var store = new WorldBakeStore();
+
+            Assert.True(condition: store.Keep(key: request.Key.Pin, outcome: bytes));
+
+            using var schedule = new WorldBakeSchedule(store: store);
+
+            schedule.Pump(definition: definition);
+
+            var asked = schedule.TryGetDraw(draw: out var draw, prototypeId: "block");
+
+            Assert.False(condition: asked);
+            Assert.Null(@object: draw);
+            Assert.Equal(expected: 1L, actual: schedule.Read(kind: WorldBakeSchedule.Undecodable));
+            // Asked again, it is the same refusal and is counted once.
+            Assert.False(condition: schedule.TryGetDraw(draw: out _, prototypeId: "block"));
+            Assert.Equal(expected: 1L, actual: schedule.Read(kind: WorldBakeSchedule.Undecodable));
+            Assert.Equal(expected: 0L, actual: schedule.Read(kind: WorldBakeSchedule.Drawn));
+        }
+
+        // The red leg: a held bake this baker wrote draws, with its impostor.
+        var healthy = new WorldBakeStore();
+
+        Assert.True(condition: healthy.Keep(key: request.Key.Pin, outcome: fresh));
+
+        using var good = new WorldBakeSchedule(store: healthy);
+
+        good.Pump(definition: definition);
+        Assert.True(condition: good.TryGetDraw(draw: out var shown, prototypeId: "block"));
+        Assert.NotNull(@object: shown!.Impostor);
+        Assert.Equal(expected: 0L, actual: good.Read(kind: WorldBakeSchedule.Undecodable));
     }
     [Fact]
     public void ReadinessWaitsForAReconcileAndAnEmptyWorldSettles() {
