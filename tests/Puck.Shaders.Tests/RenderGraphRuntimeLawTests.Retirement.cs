@@ -75,14 +75,16 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var rendered = ((int)(camera.FrameCounter - before));
 
         Assert.True(condition: (rendered > 0));
-        // The kept root still samples the removed camera, which stays alive, held, until the root's replacement installs.
+        // The kept root still samples the removed camera. The camera retires at once, since a graph instance's image binding
+        // holds the image by lease rather than the producer, so nothing holds the node and the renders it completed are
+        // handed over as it goes.
         Assert.True(condition: runtime.TryReconfigure(
             graphs: [Graph(pipeline: ScreensGraph(pool: false))],
             refusal: out var refusal,
             root: "main",
             set: Set(Instance(name: "main"))
         ), userMessage: refusal?.Message);
-        Assert.Equal(expected: 1, actual: runtime.RetiredProducers);
+        Assert.Equal(expected: 0, actual: runtime.RetiredProducers);
 
         var after = new Frames(footprints: [], roots: roots, runtime: runtime);
 
