@@ -168,13 +168,13 @@ public sealed partial class SdfWorldPassesLawTests {
     public void AResizeAllocatesTheHistorySurfaceAtTheNewOutputExtent(uint extent) {
         using var rig = new TemporalRig(views: 1, temporal: true);
 
-        Assert.Equal(expected: ((8 * Extent) * Extent), actual: rig.HistorySurfaceBytes());
+        Assert.Equal(expected: (((SdfWorldPackage.HistorySurfaceWords * sizeof(uint)) * Extent) * Extent), actual: rig.HistorySurfaceBytes());
         rig.OutputExtent = extent;
         TestLiveness.Until(step: () => {
             rig.Produce();
             return ((rig.World.Extent == (extent, extent)) && !rig.World.IsBuildingCandidate);
         }, reason: () => rig.World.LastSwapError?.Message);
-        Assert.Equal(expected: ((8 * extent) * extent), actual: rig.HistorySurfaceBytes());
+        Assert.Equal(expected: (((SdfWorldPackage.HistorySurfaceWords * sizeof(uint)) * extent) * extent), actual: rig.HistorySurfaceBytes());
     }
     [Fact]
     public void ARenderGridDipRendersAFullPeriodBeforeStandingAgain() {
@@ -320,9 +320,19 @@ public sealed partial class SdfWorldPassesLawTests {
             return new Vector2(x: BitConverter.ToSingle(startIndex: jitter, value: block), y: BitConverter.ToSingle(startIndex: (jitter + sizeof(float)), value: block));
         }
         public bool PreviousValid() => (BitConverter.ToSingle(value: Block(), startIndex: (Offset(member: SdfWorldPackage.PreviousView) + (3 * sizeof(float)))) != 0f);
-        public uint HistorySurfaceBytes() => ((uint)m_gpu.Memory(bufferHandle: m_gpu.BufferAt(
-            set: m_gpu.BoundSet(group: 3),
-            binding: SdfKernelInterfaces.BindingOf(layout: SdfWorldInterfaces.ResolveParameters.Layout, member: SdfWorldPackage.HistorySurfaceWritten))).Length);
+        // The bytes of the history surface the resolve of one more frame writes. The resolve's pass set is the third from the
+        // frame's last: the sky and the composite follow it.
+        public uint HistorySurfaceBytes() {
+            m_gpu.SetBinds = [];
+            Produce();
+            var set = m_gpu.SetBinds.Where(predicate: static bind => (bind.Group == ((uint)ShaderInterfaceGroup.Pass))).Select(selector: static bind => bind.Set).Distinct().ToArray()[^3];
+
+            m_gpu.SetBinds = null;
+
+            return ((uint)m_gpu.Memory(bufferHandle: m_gpu.BufferAt(
+                set: set,
+                binding: SdfKernelInterfaces.BindingOf(layout: SdfWorldInterfaces.ResolveParameters.Layout, member: SdfWorldPackage.HistorySurfaceWritten))).Length);
+        }
         public void Dispose() {
             Runtime.Dispose();
             m_feed?.Dispose();
