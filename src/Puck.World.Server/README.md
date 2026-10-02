@@ -832,7 +832,9 @@ full block: the body does not move this tick. `WorldBody.SweepRefusal.cs`
 captures the body's motion state before the step integrates and restores it
 for a walking, rigid, carried or arriving body, so its pose, velocity and
 grounded fact read as they did before, while action triggers, timers and
-followers stand. A carrier is never handed a refused carried body's correction.
+followers stand. A carrier is never handed a refused carried body's correction,
+nor one from a sweep that held its body for want of proof
+(`ContactResolution.Unproved`): only a proven contact corrects a carrier.
 `WorldPopulation.CompleteStep` narrates each transition once on `body.sweep`
 (refused, then recovered), and `body.where` trails `sweep=refused(<reason>)`
 while the refusal holds (absent otherwise).

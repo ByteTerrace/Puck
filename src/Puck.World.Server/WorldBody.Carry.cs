@@ -223,7 +223,12 @@ public sealed partial class WorldBody {
 
             desiredPosition = sweptPosition;
 
-            if (blockCorrection != FixedVector3.Zero) {
+            // A carrier is corrected only by a proven contact: a sweep that held the body for want of proof is no
+            // physical block, and hands the carrier nothing, the same as a refusal.
+            if (
+                (blockCorrection != FixedVector3.Zero) &&
+                !resolution.Unproved
+            ) {
                 // The carried body's OWN position already took the full sweep correction above — it is never left
                 // penetrating. What reaches the CARRIER is bounded to this body's own bounding radius: a legitimate
                 // touch-and-block push is well under an object's own size, while a correction larger than the

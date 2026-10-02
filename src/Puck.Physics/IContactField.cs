@@ -119,4 +119,7 @@ public enum ContactRefusal {
 /// consuming integrator's frame policy decides whether to adopt it.</param>
 /// <param name="Refusal">Why the step was refused, or <see cref="ContactRefusal.None"/> when it was resolved; a refused
 /// step reports no contact.</param>
-public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default, ContactRefusal Refusal = ContactRefusal.None);
+/// <param name="Unproved">Whether the step stopped short of its target where no contact was proved: the sweep that held
+/// it ran out of its bounds-query budget, or reached a box its field could not bound. The body keeps only the ground it
+/// proved, but the shortfall is no physical block, so nothing may treat it as a contact's correction.</param>
+public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default, ContactRefusal Refusal = ContactRefusal.None, bool Unproved = false);

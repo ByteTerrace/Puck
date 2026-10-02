@@ -127,31 +127,46 @@ public sealed class BodySweepRefusalLawTests {
         // The carried ball is posed at the carrier's least x: the step to its carry point, at or past zero beside a
         // carrier near the origin, spans 2⁶³ raws or more, past what the carrier holds, so the ball's sweep is refused.
         // The carrier must not feel it.
-        (FixedVector3 Carrier, ContactRefusal BallRefusal, FixedQ4816 BallX) Walk(bool carrying) {
-            using var fixture = Fixtures.FreshServer(definition: WorldCarryTangibilityLawTests.WallCarryDocument(includeWall: true));
-            var carrier = fixture.JoinSeat();
-            var ball = fixture.Server.Body(index: WorldCarryTangibilityLawTests.BallIndex)!;
-
-            if (carrying) {
-                Assert.True(condition: fixture.Server.Population.TryBeginCarry(carrierIndex: WorldCarryTangibilityLawTests.CarrierIndex, reason: out var reason, targetIndex: WorldCarryTangibilityLawTests.BallIndex), userMessage: reason);
-            }
-
-            ball.Pose(pitchRadians: FixedQ4816.Zero, position: new FixedVector3(X: FixedQ4816.MinValue, Y: FixedQ4816.One, Z: FixedQ4816.Zero), rollRadians: FixedQ4816.Zero, yawRadians: FixedQ4816.Zero);
-            carrier.EnqueueRun(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One), seconds: 1f);
-
-            for (var tick = 0; (tick < 10); tick++) {
-                fixture.Step();
-            }
-
-            return (carrier.FixedPosition, ball.SweepRefusal, ball.FixedPosition.X);
-        }
-
-        var free = Walk(carrying: false);
-        var carried = Walk(carrying: true);
+        var free = CarrierWalk(ballX: FixedQ4816.MinValue, carrying: false);
+        var carried = CarrierWalk(ballX: FixedQ4816.MinValue, carrying: true);
 
         Assert.NotEqual(expected: FixedVector3.Zero, actual: free.Carrier);
         Assert.Equal(actual: carried.Carrier, expected: free.Carrier);
         Assert.Equal(actual: carried.BallRefusal, expected: ContactRefusal.UnrepresentableSweep);
         Assert.Equal(expected: FixedQ4816.MinValue, actual: carried.BallX);
+    }
+    [Fact]
+    public void ACarrierUnderACarriedBodyWhoseSweepProvesNothingStepsAsIfItCarriedNothing() {
+        // A quarter unit inside the carrier's least x, the step to the carry point fits the carrier, so it is not
+        // refused; but its sweep's first box lies past the wall program's frame, so it proves nothing and the ball is
+        // held at its start. Running out of proof is no physical block: a carrier correction comes only from a proven
+        // contact, so the carrier must step as if it carried nothing.
+        var quarterPast = (FixedQ4816.MinValue + Quarter);
+        var free = CarrierWalk(ballX: quarterPast, carrying: false);
+        var carried = CarrierWalk(ballX: quarterPast, carrying: true);
+
+        Assert.Equal(actual: carried.Carrier, expected: free.Carrier);
+        Assert.Equal(actual: carried.BallRefusal, expected: ContactRefusal.None);
+        Assert.Equal(actual: carried.BallX, expected: quarterPast);
+    }
+
+    // A carrier walking forward ten ticks beside the wall program, with the ball posed at the given x and carried or not.
+    private static (FixedVector3 Carrier, ContactRefusal BallRefusal, FixedQ4816 BallX) CarrierWalk(FixedQ4816 ballX, bool carrying) {
+        using var fixture = Fixtures.FreshServer(definition: WorldCarryTangibilityLawTests.WallCarryDocument(includeWall: true));
+        var carrier = fixture.JoinSeat();
+        var ball = fixture.Server.Body(index: WorldCarryTangibilityLawTests.BallIndex)!;
+
+        if (carrying) {
+            Assert.True(condition: fixture.Server.Population.TryBeginCarry(carrierIndex: WorldCarryTangibilityLawTests.CarrierIndex, reason: out var reason, targetIndex: WorldCarryTangibilityLawTests.BallIndex), userMessage: reason);
+        }
+
+        ball.Pose(pitchRadians: FixedQ4816.Zero, position: new FixedVector3(X: ballX, Y: FixedQ4816.One, Z: FixedQ4816.Zero), rollRadians: FixedQ4816.Zero, yawRadians: FixedQ4816.Zero);
+        carrier.EnqueueRun(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One), seconds: 1f);
+
+        for (var tick = 0; (tick < 10); tick++) {
+            fixture.Step();
+        }
+
+        return (carrier.FixedPosition, ball.SweepRefusal, ball.FixedPosition.X);
     }
 }

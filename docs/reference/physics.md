@@ -217,7 +217,10 @@ captures its motion state before the step integrates (the fields
 `WorldBody.SweepRefusal.cs` lists) and restores it, for a walking, rigid,
 carried or arriving body alike, while its action triggers, timers and
 followers stand, since time does pass. A refusal is local to the refused body:
-a carrier under a refused carried body is handed no correction. The population
+a carrier under a refused carried body is handed no correction. A carrier is
+corrected only by a proven contact: a sweep that held its body for want of
+proof (out of budget, or at a box its field could not bound) marks the
+resolution `Unproved`, and hands the carrier nothing either. The population
 narrates each transition once on the `body.sweep` channel, refused and
 recovered, and `body.where` reads `sweep=refused(...)` while the refusal holds.
 A body approaching the carrier's end is ordinarily held a step sooner by its
