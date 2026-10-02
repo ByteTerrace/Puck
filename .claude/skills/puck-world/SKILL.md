@@ -42,7 +42,7 @@ process stdin drives verbs, stdout/stderr echo results, and the on-screen
 console is only a MIRROR of that pipe — nothing that draws (including a HUD
 `replace` panel taking over the whole overlay) can take the control plane
 away. Verify game behavior by RUNNING the game, never by a build gate
-(`CLAUDE.md` rule 3).
+(`AGENTS.md` rule 3).
 
 A world document is authored in `.puck` source, not hand-written JSON.
 `Puck.World.Transpiler` — the `puck.world.definition.v1` vocabulary, a peer of

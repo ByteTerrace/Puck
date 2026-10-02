@@ -324,7 +324,7 @@ offers:
 | `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
 | `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, or, with `sharpen` set, a contrast-adaptive sharpen of the source by `sharpness` there (exact at sharpness 0), otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes the letterbox color outside the rect instead of the base, 0 by default), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source), `sharpen` (0 by default), `sharpness` and `tonemap` (1 puts the reconstructed source through the filmic curve inside the rect, never the base or the letterbox color, 0 by default); a host that places panes per frame (`IRenderGraphPlacements`) overrides the rect, the sharpness and the sharpen switch, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
 | `sdf.film-grain` | one fragment-sampled image input, one color-attachment image output | Film grain over the input: the engine's [post-process package](#post-process-packages), a per-pixel integer-hashed offset keyed on the engine tick. Its stages, `fullscreen.vert` and `sdf-film-grain.frag` in `Assets/Shaders/Sdf/passes`, compile at build, and `PostProcessPackage` records it. |
-| `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` | one raw buffer input read by compute, one image output written by compute | An uploaded source's region (`ImageSourceUploadLayout`) converted by the shipped kernel of that name in `src/Puck.Shaders/Assets/Shaders/Sources` into RGBA8, or half-float linear light for `source-transfer`. `SourceConversionPackage` records them; the runtime runs one in the graph it makes for each uploaded source instance, its region bound as a host buffer port (`ShaderPipelineRenderNode.BindRegion`). |
+| `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` | one raw buffer input read by compute, one image output written by compute | An uploaded source's region (`ImageSourceUploadLayout`) converted by the shipped kernel of that name in `src/Puck.Shaders/Assets/Shaders/Sources` into RGBA8, or half-float working values for `source-transfer`, relative to the paper white the pass block carries. `SourceConversionPackage` records them; the runtime runs one in the graph it makes for each uploaded source instance, its region bound as a host buffer port (`ShaderPipelineRenderNode.BindRegion`). |
 
 The `place` package also displays held/current comparisons. Its `compareMode`
 config is 0 for ordinary placement, 1 for a wipe, 2 for a split, or 3 for the
@@ -1088,15 +1088,30 @@ at binding 2), one thread a pixel in 8×8 groups. A graph names its ports
 | `source-palette.comp.hlsl` | a 256-entry RGBA8 palette and one index byte a pixel | RGBA8 |
 | `source-nv12.comp.hlsl` | NV12 under the header's BT.601, BT.709 or BT.2020 matrix and limited or full range, chroma co-sited and unfiltered | RGBA8, clamped |
 | `source-rgba.comp.hlsl` | RGBA8 or BGRA8 | RGBA8 |
-| `source-transfer.comp.hlsl` | RGBA8 or R10G10B10A2 under an sRGB, linear or PQ transfer function | half-float linear light, 1 at the 203 cd/m² reference white |
+| `source-transfer.comp.hlsl` | RGBA8, R10G10B10A2 or half-float RGBA under an sRGB, linear (scRGB) or PQ transfer function, with BT.709 or BT.2020 primaries | half-float working values: linear light relative to the paper white, in BT.709, on the extended sRGB curve, so 1 is SDR white and nothing above it is clipped |
 
 `ImageSourceConversion` is their CPU reference and names the kernel a format
 needs (`PassOf`). The build compiles all four for both backends. The graph
 runtime dispatches them as catalog packages (`SourceConversionPackage`, which
 the World registers) when it renders an uploaded source instance. The
-`source-conversion` canary runs the palette and NV12 kernels as passes of an
-offscreen pipeline on both backends and holds their output to the CPU
-reference.
+`source-conversion` canary runs all four kernels as passes of an offscreen
+pipeline on both backends, `source-transfer` over an sRGB region and a
+half-float scRGB one, and holds their output to the CPU reference.
+
+Every kernel writes the working space a frame is drawn in: display-referred
+values, 1 at SDR white, which the [display encode](#the-display-encode) shows at
+the host's paper white, with headroom above. An 8-bit sRGB source's codes are
+working values already. `source-transfer` decodes its transfer function to
+linear light relative to the paper white: an sRGB value is relative to SDR
+white, a linear value is scRGB (1 at 80 cd/m²), and a PQ value is its luminance
+over the paper white. It moves BT.2020 primaries to BT.709 and encodes the
+result on the sRGB curve extended past 1 and mirrored below 0, the curve the
+display encode decodes, so a sample of N cd/m² shows at N cd/m² on an HDR
+output, and nothing is clipped or encoded twice before the encode. The paper
+white is a pass-block value every conversion package declares
+(`paperWhiteNits`), which `SourceConversionPackage`'s recorder writes each frame
+from the level its packages were registered with: the host section's
+`paperWhiteNits`.
 
 ## The region copy
 

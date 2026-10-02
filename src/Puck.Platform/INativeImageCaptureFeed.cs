@@ -12,6 +12,12 @@ namespace Puck.Platform;
 public interface INativeImageCaptureFeed : IFrameCaptureSource, IDisposable {
     /// <summary>Gets whether the target or capture session has permanently ended.</summary>
     bool IsEnded { get; }
+    /// <summary>Gets the format and color space of the frames <see cref="IFrameCaptureSource.TryCapture"/> hands out,
+    /// fixed at open by the display the target shows on: B8G8R8A8 sRGB for an SDR display, and half-float scRGB for an HDR
+    /// one, which a consumer converts into its working space rather than clipping. Only an SDR feed takes GPU targets
+    /// (<see cref="AttachGpuTargets"/>). An HDR toggle, a move to a display that differs in it, or unavailable display
+    /// discovery ends the feed; the consumer reopens it to refresh this contract.</summary>
+    DisplayOutput Output { get; }
     /// <summary>Gets whether the live source extent differs from the attached GPU targets' extent, in which case GPU
     /// publishing is paused until <see cref="AttachGpuTargets"/> is called again with matching targets. Always
     /// <see langword="false"/> when no GPU targets are attached.</summary>
@@ -41,5 +47,7 @@ public interface INativeImageCaptureFeed : IFrameCaptureSource, IDisposable {
     /// Thread-safe against the capture callback.</summary>
     /// <param name="targets">The shared targets, sized to the live source extent (<see cref="SourceWidth"/> ×
     /// <see cref="SourceHeight"/>).</param>
+    /// <exception cref="NotSupportedException"><see cref="Output"/> is HDR, whose frames the B8G8R8A8 targets cannot
+    /// hold.</exception>
     void AttachGpuTargets(NativeImageGpuCaptureTargets targets);
 }

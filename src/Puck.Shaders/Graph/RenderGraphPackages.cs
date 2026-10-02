@@ -487,20 +487,27 @@ public sealed class RenderGraphPackageCatalog {
     /// <summary>The name of a conversion package's image in its pass group, its output: the storage image every consumer of
     /// the source reads.</summary>
     public const string SourceImage = "image";
+    /// <summary>The name of a conversion package's pass-block value holding the paper-white level, in cd/m², the luminance
+    /// a working value of one shows at, which its recorder writes every frame (<c>SourceConversionPackage</c>). Only
+    /// <see cref="Puck.Abstractions.Sources.ImageSourceConversion.TransferPass"/> reads it: an 8-bit sRGB source is at
+    /// SDR white already.</summary>
+    public const string SourcePaperWhite = "paperWhiteNits";
 
-    /// <summary>Returns what a conversion package's kernel reads from its pass group beside the extent: the region at
-    /// binding 1, the image it writes at binding 2, and the work counters it counts every texel it writes into, as the
-    /// kernels in <c>Assets/Shaders/Sources</c> declare them.</summary>
+    /// <summary>Returns what a conversion package's kernel reads from its pass group beside the extent: the paper-white
+    /// level (<see cref="SourcePaperWhite"/>), the region at binding 1, the image it writes at binding 2, and the work
+    /// counters it counts every texel it writes into, as the kernels in <c>Assets/Shaders/Sources</c> declare
+    /// them.</summary>
     /// <param name="format">The image's format.</param>
     /// <returns>The members.</returns>
     public static IReadOnlyList<ShaderInterfaceMember> SourceMembers(GpuPixelFormat format) => [
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: SourcePaperWhite, type: ShaderValueType.Float),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: SourceRegion),
         ShaderInterfaceMember.StorageImage(format: format, group: ShaderInterfaceGroup.Pass, name: SourceImage, type: ShaderValueType.Float4),
         .. ShaderWorkCounters.Members,
     ];
     /// <summary>Returns the format of the image a conversion package writes: half-float RGBA for
-    /// <see cref="Puck.Abstractions.Sources.ImageSourceConversion.TransferPass"/>, which writes linear light, and RGBA8
-    /// for every other.</summary>
+    /// <see cref="Puck.Abstractions.Sources.ImageSourceConversion.TransferPass"/>, whose working values keep their
+    /// headroom above SDR white, and RGBA8 for every other.</summary>
     /// <param name="package">The conversion package's id, one of <see cref="SourceConversions"/>.</param>
     /// <returns>The format.</returns>
     public static GpuPixelFormat SourceFormatOf(string package) => (string.Equals(

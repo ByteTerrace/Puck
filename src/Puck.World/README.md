@@ -1437,6 +1437,18 @@ The engine ships four producers, each with its settings record in
 | `camera` | `sensor` (`Color`), `seat`, `profile`, `controls` | imported | external |
 | `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (a staged copy under Vulkan) | external |
 
+A capture selects its format and encoding from its display when it opens. An
+HDR toggle, a move to a display that differs in it, or failed display discovery
+ends the feed, which the consumer reopens with fresh metadata; unknown discovery
+refuses the open. An SDR
+display is captured in B8G8R8A8 sRGB, which a Direct3D 12 host copies into
+shared targets the screen samples and a Vulkan host converts through
+`source-rgba`. An HDR display is captured in half-float scRGB on either host
+and converts on its CPU tier through `source-transfer` into working values at
+the host section's `paperWhiteNits`, so its highlights keep their luminance
+above SDR white. On an SDR output those highlights clip at the display encode,
+as any working value above 1 does.
+
 Every feed carries an `ImageSourceDescriptor` (`Puck.Abstractions.Sources`),
 the one contract for an image entering rendering from outside a pass: its
 producer, transport, extent, pixel format, color encoding, cadence, stamp and
@@ -2043,7 +2055,7 @@ start in engine ticks, and its phase and reading at the authority's tick.
 
 ## Verifying
 
-`Puck.World` is greenfield (`CLAUDE.md` rule 3): verify by RUNNING the game
+`Puck.World` is greenfield (`AGENTS.md` rule 3): verify by RUNNING the game
 and driving stdin verbs—no gate stages, no `--validate` flags, and no
 golden corpus. Byte-identity observations (the canonical save round-trip,
 `git diff` on shipped worlds) are useful evidence but never acceptance
