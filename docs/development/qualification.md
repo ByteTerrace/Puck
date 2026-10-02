@@ -25,7 +25,7 @@ another profile, and `--output` says where the report goes.
 
 A run first checks that the package's entry assembly exists and is in the
 profile's publish mode, then installs a clean copy of the package in the run's
-scratch directory and qualifies that copy. It runs in two halves:
+run directory and qualifies that copy. It runs in two halves:
 
 1. **The functional canaries** the profile names, run on the copy's World
    through `puck canary --world-artifact`. These are every `pipeline-*`
@@ -39,10 +39,13 @@ scratch directory and qualifies that copy. It runs in two halves:
    offscreen presentation and the cell's extent.
 
 Each cell's script, transcripts, state root and captures stay in the run's
-scratch directory beside the report, a `puck.qualification.report.v1`
+run directory beside the report, a `puck.qualification.report.v1`
 document. The report records the package, the profile, and for each cell the
 backend, extent, workload lengths, device and driver, memory profile, peak
 pipeline bytes against the threshold, validation-message count, and verdict.
+A run that passes with `--output` deletes the run directory; any other run
+keeps it and prints `run directory kept: <path>`, so the report and its
+evidence survive (see [the CLI conventions](../reference/cli.md#conventions)).
 
 ## The release profile
 

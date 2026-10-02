@@ -21,7 +21,6 @@
         <Compile Include="../Shared/SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
         <Compile Include="../Shared/TestLiveness.cs" Link="TestLiveness.cs" />
         <Compile Include="../Shared/SpirvEdits.cs" Link="SpirvEdits.cs" />
-        <Compile Include="../Shared/TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
         <Compile Include="../Shared/SdfTestView.cs" Link="SdfTestView.cs" />
         <Compile Include="../Shared/UploadModelGpu.cs" Link="UploadModelGpu.cs" />
     </ItemGroup>

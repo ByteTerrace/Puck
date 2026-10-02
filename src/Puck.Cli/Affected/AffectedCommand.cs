@@ -407,12 +407,17 @@ internal static class AffectedCommand {
         }
 
         if (record) {
-            var scratch = Directory.CreateTempSubdirectory(prefix: "puck-affected-").FullName;
-
-            return (AffectedCoverage.TryRecord(cli: typeof(AffectedCommand).Assembly.Location, error: out var recordError, repositoryRoot: repositoryRoot, scratch: scratch)
+            using var scratch = RunDirectory.Create(prefix: "puck-affected-");
+            var exit = (AffectedCoverage.TryRecord(canaryExit: out var canaryExit, cli: typeof(AffectedCommand).Assembly.Location, error: out var recordError, repositoryRoot: repositoryRoot, scratch: scratch.Path)
                 ? CliExit.Success
                 : CliExit.Refuse(verb: Verb, what: AffectedCommand.CoveragePath, why: recordError)
             );
+
+            // The run directory holds the recording World and the inner canary run's transcript
+            // (AffectedCoverage.CanaryTranscriptName): evidence whenever that run or the recording failed.
+            scratch.Conclude(passed: ((exit == CliExit.Success) && (canaryExit == CliExit.Success)));
+
+            return exit;
         }
 
         if (!TryPlan(changed: out var changed, error: out var error, plan: out var plan, repositoryRoot: repositoryRoot, since: since)) {

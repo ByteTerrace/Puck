@@ -27,7 +27,7 @@ public sealed partial class PipelineOverrideLawTests {
         var before = m_echoes.Count;
 
         // A world.load reads the candidate from a file, so it carries that file's directory.
-        candidate = (candidate with { DocumentDirectory = PuckPaths.Normalize(path: m_directory) });
+        candidate = (candidate with { DocumentDirectory = PuckPaths.Normalize(path: m_directory.RootPath) });
 
         fixture.Server.EnqueueRebuild(
             principal: Principal.Console,
@@ -37,7 +37,7 @@ public sealed partial class PipelineOverrideLawTests {
                 Force: true,
                 Kind: WorldRebuildKind.Load,
                 PathHint: Path.Combine(
-                    path1: m_directory,
+                    path1: m_directory.RootPath,
                     path2: "loaded.world.json"
                 )
             )
@@ -78,7 +78,7 @@ public sealed partial class PipelineOverrideLawTests {
         bool Boot(double exposure, out string reason) {
             using var fixture = Fixtures.FreshServer(definition: WithExposure(definition: Document(), exposure: exposure));
 
-            fixture.Server.PipelineSources = new WorldPipelineSources(documentDirectory: m_directory);
+            fixture.Server.PipelineSources = new WorldPipelineSources(documentDirectory: m_directory.RootPath);
 
             return fixture.Server.TryBindPipelineRows(reason: out reason);
         }
@@ -106,79 +106,71 @@ public sealed partial class PipelineOverrideLawTests {
     [Fact]
     public void AWorldLoadFromAnotherDirectoryBindsAndTheRuntimeResolvesARelativeSourceThere() {
         using var fixture = Server();
-        var otherDirectory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-pipeline-overrides-other-{Guid.NewGuid():N}"
+        using var other = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: "puck-pipeline-overrides-other-"
+        );
+        var otherDirectory = other.RootPath;
+
+        const string RelativeSource = "only-here.graph.json";
+
+        File.Copy(
+            destFileName: Path.Combine(path1: otherDirectory, path2: RelativeSource),
+            sourceFileName: SourcePath
         );
 
-        Directory.CreateDirectory(path: otherDirectory);
+        var candidate = (Document() with {
+            ViewsRaw = (Document().Views with {
+                Graphs = [
+                    new WorldViewGraph(Name: "left", Source: RelativeSource, Overrides: new Dictionary<string, JsonElement> { ["visualize"] = Change(json: "{\"exposure\":4}") }),
+                    new WorldViewGraph(Name: "right", Source: RelativeSource),
+                ],
+            }),
+        });
+        var pathHint = Path.Combine(
+            path1: otherDirectory,
+            path2: "loaded.world.json"
+        );
 
-        try {
-            const string RelativeSource = "only-here.graph.json";
+        // A world.load reads the candidate from a file, so it carries that file's directory.
+        candidate = (candidate with { DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: pathHint) });
 
-            File.Copy(
-                destFileName: Path.Combine(path1: otherDirectory, path2: RelativeSource),
-                sourceFileName: SourcePath
-            );
+        fixture.Server.EnqueueRebuild(
+            principal: Principal.Console,
+            request: new WorldRebuildRequest(
+                ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: candidate)),
+                Definition: candidate,
+                Force: true,
+                Kind: WorldRebuildKind.Load,
+                PathHint: pathHint
+            )
+        );
+        fixture.Step();
 
-            var candidate = (Document() with {
-                ViewsRaw = (Document().Views with {
-                    Graphs = [
-                        new WorldViewGraph(Name: "left", Source: RelativeSource, Overrides: new Dictionary<string, JsonElement> { ["visualize"] = Change(json: "{\"exposure\":4}") }),
-                        new WorldViewGraph(Name: "right", Source: RelativeSource),
-                    ],
-                }),
-            });
-            var pathHint = Path.Combine(
-                path1: otherDirectory,
-                path2: "loaded.world.json"
-            );
+        Assert.False(
+            condition: m_echoes[^1].Rejected,
+            userMessage: m_echoes[^1].Message
+        );
+        Assert.Equal(
+            actual: fixture.Server.PipelineSources!.DocumentDirectory,
+            expected: PuckPaths.Normalize(path: otherDirectory)
+        );
 
-            // A world.load reads the candidate from a file, so it carries that file's directory.
-            candidate = (candidate with { DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: pathHint) });
+        // The rendering host rebases the identical way WorldPostBuildWiring's Rebuild-echo tap does.
+        using var runtime = new WorldViewGraphHost(
+            documentDirectory: m_directory.RootPath,
+            packager: new ShaderPackager(compiler: new ShaderCompiler(
+                cacheDirectory: Path.Combine(path1: m_directory.RootPath, path2: "cache"),
+                toolchainDirectory: Path.Combine(path1: m_directory.RootPath, path2: "no-tools")
+            ))
+        );
 
-            fixture.Server.EnqueueRebuild(
-                principal: Principal.Console,
-                request: new WorldRebuildRequest(
-                    ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: candidate)),
-                    Definition: candidate,
-                    Force: true,
-                    Kind: WorldRebuildKind.Load,
-                    PathHint: pathHint
-                )
-            );
-            fixture.Step();
+        runtime.Rebase(documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: pathHint));
 
-            Assert.False(
-                condition: m_echoes[^1].Rejected,
-                userMessage: m_echoes[^1].Message
-            );
-            Assert.Equal(
-                actual: fixture.Server.PipelineSources!.DocumentDirectory,
-                expected: PuckPaths.Normalize(path: otherDirectory)
-            );
-
-            // The rendering host rebases the identical way WorldPostBuildWiring's Rebuild-echo tap does.
-            using var runtime = new WorldViewGraphHost(
-                documentDirectory: m_directory,
-                packager: new ShaderPackager(compiler: new ShaderCompiler(
-                    cacheDirectory: Path.Combine(path1: m_directory, path2: "cache"),
-                    toolchainDirectory: Path.Combine(path1: m_directory, path2: "no-tools")
-                ))
-            );
-
-            runtime.Rebase(documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: pathHint));
-
-            Assert.Equal(
-                actual: runtime.DocumentDirectory,
-                expected: Path.GetFullPath(path: otherDirectory)
-            );
-        } finally {
-            Directory.Delete(
-                path: otherDirectory,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            actual: runtime.DocumentDirectory,
+            expected: Path.GetFullPath(path: otherDirectory)
+        );
     }
     // The shadow server replay.verify re-drives through reads the recording's pipeline sources, so a recorded commit
     // binds there exactly as it bound live. Without the reader the same tape re-drives the commit to a refusal, which

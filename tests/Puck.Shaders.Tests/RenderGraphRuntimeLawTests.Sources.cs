@@ -175,10 +175,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
 
             FrameCaptureResult CaptureAt(long tick) {
-                var request = new FrameCaptureRequest(path: Path.Combine(
-                    path1: Path.GetTempPath(),
-                    path2: $"{Guid.NewGuid():N}.png"
-                ));
+                var request = CaptureRequest();
 
                 runtime.CaptureTarget(instance: "pattern").RequestCapture(request: request);
                 Produce(

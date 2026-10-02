@@ -26,37 +26,34 @@ public sealed class ControlDeadlineTests {
 
         listener.Start();
         var capability = new LocalEndpointCapability(port: ((IPEndPoint)listener.LocalEndpoint).Port);
-        var path = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-deadline-test-{Guid.NewGuid():N}.json"
+        using var directory = new TemporaryDirectory(prefix: "puck-deadline-test-");
+
+        var path = directory.PathOf(name: "descriptor.json");
+
+        using var file = capability.WriteDescriptor(path: path);
+        var clock = new VirtualClock();
+        var connect = LocalControlClient.ConnectAsync(
+            attachmentPath: path,
+            cancellationToken: Token,
+            clock: clock
+        );
+        // The peer accepts and never speaks, so the handshake waits on nothing but the deadline.
+        using var silent = await listener.AcceptTcpClientAsync(cancellationToken: Token).AsTask().WaitAsync(
+            HangGuard,
+            Token
         );
 
-        try {
-            using var file = capability.WriteDescriptor(path: path);
-            var clock = new VirtualClock();
-            var connect = LocalControlClient.ConnectAsync(
-                attachmentPath: path,
-                cancellationToken: Token,
-                clock: clock
-            );
-            // The peer accepts and never speaks, so the handshake waits on nothing but the deadline.
-            using var silent = await listener.AcceptTcpClientAsync(cancellationToken: Token).AsTask().WaitAsync(
-                HangGuard,
-                Token
-            );
-
-            Assert.False(condition: connect.IsCompleted);
-            await clock.WhenArmedAsync(
-                count: 1,
-                ct: Token,
-                dueTime: HandshakeDeadline
-            );
-            clock.Advance(by: HandshakeDeadline);
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: () => connect.WaitAsync(
-                HangGuard,
-                Token
-            ));
-        } finally { File.Delete(path: path); }
+        Assert.False(condition: connect.IsCompleted);
+        await clock.WhenArmedAsync(
+            count: 1,
+            ct: Token,
+            dueTime: HandshakeDeadline
+        );
+        clock.Advance(by: HandshakeDeadline);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: () => connect.WaitAsync(
+            HangGuard,
+            Token
+        ));
     }
     [Fact]
     public async Task ClientCallDeadlineRunsOnTheClientClockAndClosesTheAttachment() {

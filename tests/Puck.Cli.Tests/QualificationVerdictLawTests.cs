@@ -1,6 +1,7 @@
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Cli.Qualification;
+using Puck.Testing;
 using Puck.World;
 
 using Xunit;
@@ -253,25 +254,21 @@ public sealed class QualificationVerdictLawTests {
     }
     [Fact]
     public void ThePackageCheckTellsReadyToRunFromIlOnly() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-qualify-law-");
+        using var directory = new TemporaryDirectory(prefix: "puck-qualify-law-");
         var publish = new ReleasePublish(Compiler: ReleaseCompilerDiscovery.None, EntryAssembly: "Puck.World.dll", Mode: ReleasePublishMode.ReadyToRun);
-        var entry = Path.Combine(path1: directory.FullName, path2: publish.EntryAssembly);
+        var entry = Path.Combine(path1: directory.RootPath, path2: publish.EntryAssembly);
 
-        try {
-            Assert.False(condition: QualificationPackage.TryVerify(directory: directory.FullName, entry: out _, publish: publish, reason: out var missing));
-            Assert.Contains(actualString: missing, expectedSubstring: "no entry assembly");
+        Assert.False(condition: QualificationPackage.TryVerify(directory: directory.RootPath, entry: out _, publish: publish, reason: out var missing));
+        Assert.Contains(actualString: missing, expectedSubstring: "no entry assembly");
 
-            File.Copy(destFileName: entry, sourceFileName: typeof(QualificationVerdictLawTests).Assembly.Location);
-            Assert.False(condition: QualificationPackage.TryVerify(directory: directory.FullName, entry: out _, publish: publish, reason: out var ilOnly));
-            Assert.Contains(actualString: ilOnly, expectedSubstring: "no ReadyToRun header");
+        File.Copy(destFileName: entry, sourceFileName: typeof(QualificationVerdictLawTests).Assembly.Location);
+        Assert.False(condition: QualificationPackage.TryVerify(directory: directory.RootPath, entry: out _, publish: publish, reason: out var ilOnly));
+        Assert.Contains(actualString: ilOnly, expectedSubstring: "no ReadyToRun header");
 
-            // The shared framework ships precompiled, so its core library carries a ReadyToRun header.
-            File.Copy(destFileName: entry, overwrite: true, sourceFileName: typeof(object).Assembly.Location);
-            Assert.True(condition: QualificationPackage.TryVerify(directory: directory.FullName, entry: out var verified, publish: publish, reason: out var reason), userMessage: reason);
-            Assert.Equal(actual: verified, expected: Path.GetFullPath(path: entry));
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        // The shared framework ships precompiled, so its core library carries a ReadyToRun header.
+        File.Copy(destFileName: entry, overwrite: true, sourceFileName: typeof(object).Assembly.Location);
+        Assert.True(condition: QualificationPackage.TryVerify(directory: directory.RootPath, entry: out var verified, publish: publish, reason: out var reason), userMessage: reason);
+        Assert.Equal(actual: verified, expected: Path.GetFullPath(path: entry));
     }
     [Fact]
     public void TheLegWithholdsTheCompilerAndFlagsOnlyTheListedLayers() {

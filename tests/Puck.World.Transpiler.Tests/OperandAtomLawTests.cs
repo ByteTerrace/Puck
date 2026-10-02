@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.Testing;
 using Puck.Transpiler.Diagnostics;
 using Xunit;
 
@@ -136,29 +137,25 @@ public class OperandAtomLawTests {
     }
     [Fact]
     public void AnImportAliasReachesABindingReadInsideAnAtom() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-atom-import-");
+        using var directory = new TemporaryDirectory(prefix: "puck-atom-import-");
 
-        try {
-            File.WriteAllText(
-                contents: "let index = 1\nmodule bump() {\n    state { world { slot hp = 0\n table deck { a1 = 2 } } }\n    rule \"bump\" {\n        setState(state: hp, expression: deck[$\"a{index}\"])\n    }\n}",
-                path: Path.Combine(path1: directory.FullName, path2: "library.puck")
-            );
+        File.WriteAllText(
+            contents: "let index = 1\nmodule bump() {\n    state { world { slot hp = 0\n table deck { a1 = 2 } } }\n    rule \"bump\" {\n        setState(state: hp, expression: deck[$\"a{index}\"])\n    }\n}",
+            path: Path.Combine(path1: directory.RootPath, path2: "library.puck")
+        );
 
-            var rootPath = Path.Combine(path1: directory.FullName, path2: "root.puck");
+        var rootPath = Path.Combine(path1: directory.RootPath, path2: "root.puck");
 
-            File.WriteAllText(contents: "schema: \"puck.world.definition.v1\"\n\nimport \"library.puck\" as lib\n\nuse lib.bump as first()\n", path: rootPath);
+        File.WriteAllText(contents: "schema: \"puck.world.definition.v1\"\n\nimport \"library.puck\" as lib\n\nuse lib.bump as first()\n", path: rootPath);
 
-            var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
-            Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
-            Assert.Contains(
-                actualString: compilation.RequireJson()["rules"]![0]!["effects"]![0]!["expression"]!.ToJsonString(),
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "\"a1\""
-            );
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
+        Assert.Contains(
+            actualString: compilation.RequireJson()["rules"]![0]!["effects"]![0]!["expression"]!.ToJsonString(),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "\"a1\""
+        );
     }
     [Fact]
     public void AtomMarkersCannotCollideWithBindingsOrComputedNames() {

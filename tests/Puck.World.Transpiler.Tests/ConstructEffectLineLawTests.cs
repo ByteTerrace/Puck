@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Validation;
 using Puck.World.Transpiler.Vocabulary;
@@ -65,39 +66,22 @@ public class ConstructEffectLineLawTests {
     // Every 0-based start line the real language server publishes about the undeclared row. A finding about a name
     // the document does not declare needs a resolvable directory, so the probe is written to a file.
     private static async Task<IReadOnlyList<int>> PublishedLinesAsync(string source, string keyword) {
-        var directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-effect-line-{Guid.NewGuid():N}"
+        using var directory = new TemporaryDirectory(prefix: "puck-effect-line-");
+
+        var path = directory.WriteText(
+            name: $"{keyword}.puck",
+            text: source
         );
 
-        _ = Directory.CreateDirectory(path: directory);
-
-        var path = Path.Combine(
-            path1: directory,
-            path2: $"{keyword}.puck"
-        );
-
-        try {
-            await File.WriteAllTextAsync(
-                contents: source,
-                path: path
-            ).ConfigureAwait(continueOnCapturedContext: true);
-
-            return [.. (await LanguageServerClient.PublishedAsync(
-                text: source,
-                uri: new Uri(uriString: path).AbsoluteUri
-            ).ConfigureAwait(continueOnCapturedContext: true))
-                .Where(predicate: static diagnostic => diagnostic.Message.Contains(
-                    comparisonType: StringComparison.Ordinal,
-                    value: Missing
-                ))
-                .Select(selector: static diagnostic => diagnostic.Line)];
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        return [.. (await LanguageServerClient.PublishedAsync(
+            text: source,
+            uri: new Uri(uriString: path).AbsoluteUri
+        ).ConfigureAwait(continueOnCapturedContext: true))
+            .Where(predicate: static diagnostic => diagnostic.Message.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: Missing
+            ))
+            .Select(selector: static diagnostic => diagnostic.Line)];
     }
 
     public static TheoryData<string> Arms() => new(values: WorldConstructs.Table.Constructs

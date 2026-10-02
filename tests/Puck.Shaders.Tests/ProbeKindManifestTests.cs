@@ -1,8 +1,13 @@
 using System.Text.Json;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
-public sealed class ProbeKindManifestTests {
+public sealed class ProbeKindManifestTests : IDisposable {
+    private readonly TemporaryDirectory m_directory = new(prefix: "puck-sense-manifest-");
+
+    private int m_scratchCount;
+
     private static string IrBlobManifestPath =>
         Path.Combine(
             path1: ProbesDirectory,
@@ -15,8 +20,9 @@ public sealed class ProbeKindManifestTests {
             path3: "Probes"
         );
 
-    private static DirectoryInfo CopySenses() {
-        var scratch = Directory.CreateTempSubdirectory(prefix: "puck-sense-manifest-");
+    private string NewScratch() => Directory.CreateDirectory(path: m_directory.PathOf(name: $"{m_scratchCount++}")).FullName;
+    private string CopySenses() {
+        var scratch = NewScratch();
 
         foreach (var file in Directory.EnumerateFiles(
             path: ProbesDirectory,
@@ -28,7 +34,7 @@ public sealed class ProbeKindManifestTests {
                 path: file
             );
             var destination = Path.Combine(
-                path1: scratch.FullName,
+                path1: scratch,
                 path2: relative
             );
 
@@ -42,10 +48,10 @@ public sealed class ProbeKindManifestTests {
         return scratch;
     }
     private static JsonElement Parse(string json) => JsonDocument.Parse(json: json).RootElement.Clone();
-    private static string WriteMultiSocketManifest(Action<System.Text.Json.Nodes.JsonObject> mutate) {
-        var scratch = Directory.CreateTempSubdirectory(prefix: "puck-sense-manifest-");
+    private string WriteMultiSocketManifest(Action<System.Text.Json.Nodes.JsonObject> mutate) {
+        var scratch = NewScratch();
         var manifestPath = Path.Combine(
-            path1: scratch.FullName,
+            path1: scratch,
             path2: "multi-socket.puck.probe.json"
         );
         var node = System.Text.Json.Nodes.JsonNode.Parse(json: MultiSocketManifestJson)!.AsObject();
@@ -58,10 +64,10 @@ public sealed class ProbeKindManifestTests {
 
         return manifestPath;
     }
-    private static string WriteScratchManifest(Action<System.Text.Json.Nodes.JsonObject> mutate) {
+    private string WriteScratchManifest(Action<System.Text.Json.Nodes.JsonObject> mutate) {
         var scratch = CopySenses();
         var manifestPath = Path.Combine(
-            path1: scratch.FullName,
+            path1: scratch,
             path2: "ir-blob.puck.probe.json"
         );
         var node = System.Text.Json.Nodes.JsonNode.Parse(json: File.ReadAllText(path: manifestPath))!.AsObject();
@@ -75,6 +81,7 @@ public sealed class ProbeKindManifestTests {
         return manifestPath;
     }
 
+    public void Dispose() => m_directory.Dispose();
     [Fact]
     public void Absent_config_binds_every_default() {
         var manifest = ProbeKindManifest.Load(manifestPath: IrBlobManifestPath);
@@ -153,26 +160,22 @@ public sealed class ProbeKindManifestTests {
         var scratch = CopySenses();
 
         Directory.CreateDirectory(path: Path.Combine(
-            path1: scratch.FullName,
+            path1: scratch,
             path2: "nested"
         ));
         File.Copy(
             sourceFileName: Path.Combine(
-                path1: scratch.FullName,
+                path1: scratch,
                 path2: "ir-blob.puck.probe.json"
             ),
             destFileName: Path.Combine(
-                path1: scratch.FullName,
+                path1: scratch,
                 path2: "nested",
                 path3: "ir-blob.puck.probe.json"
             )
         );
 
-        try {
-            Assert.Throws<InvalidDataException>(testCode: () => ProbeKindCatalog.Scan(rootDirectory: scratch.FullName));
-        } finally {
-            scratch.Delete(recursive: true);
-        }
+        Assert.Throws<InvalidDataException>(testCode: () => ProbeKindCatalog.Scan(rootDirectory: scratch));
     }
     [Fact]
     public void Config_schema_emits_types_ranges_and_defaults() {
@@ -236,39 +239,25 @@ public sealed class ProbeKindManifestTests {
     public void Duplicate_channel_name_refuses() {
         var scratch = WriteScratchManifest(mutate: node => node["channels"]![1]!["name"] = "x");
 
-        try {
-            var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
 
-            Assert.Contains(
-                expectedSubstring: "declares channel 'x' twice",
-                actualString: exception.Message,
-                comparisonType: StringComparison.Ordinal
-            );
-        } finally {
-            Directory.Delete(
-                path: Path.GetDirectoryName(path: scratch)!,
-                recursive: true
-            );
-        }
+        Assert.Contains(
+            expectedSubstring: "declares channel 'x' twice",
+            actualString: exception.Message,
+            comparisonType: StringComparison.Ordinal
+        );
     }
     [Fact]
     public void Duplicate_socket_name_refuses() {
         var scratch = WriteMultiSocketManifest(mutate: node => node["inputs"]![2]!["name"] = "color");
 
-        try {
-            var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
 
-            Assert.Contains(
-                expectedSubstring: "declares socket 'color' twice",
-                actualString: exception.Message,
-                comparisonType: StringComparison.Ordinal
-            );
-        } finally {
-            Directory.Delete(
-                path: Path.GetDirectoryName(path: scratch)!,
-                recursive: true
-            );
-        }
+        Assert.Contains(
+            expectedSubstring: "declares socket 'color' twice",
+            actualString: exception.Message,
+            comparisonType: StringComparison.Ordinal
+        );
     }
     [Fact]
     public void Ir_blob_manifest_loads_with_its_channels_and_kernel_source() {
@@ -329,132 +318,93 @@ public sealed class ProbeKindManifestTests {
     public void Kernel_class_without_a_kernel_block_refuses() {
         var scratch = WriteScratchManifest(mutate: node => node.Remove(propertyName: "kernel"));
 
-        try {
-            var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
 
-            Assert.Contains(
-                expectedSubstring: "must declare a 'kernel' block",
-                actualString: exception.Message,
-                comparisonType: StringComparison.Ordinal
-            );
-        } finally {
-            Directory.Delete(
-                path: Path.GetDirectoryName(path: scratch)!,
-                recursive: true
-            );
-        }
+        Assert.Contains(
+            expectedSubstring: "must declare a 'kernel' block",
+            actualString: exception.Message,
+            comparisonType: StringComparison.Ordinal
+        );
     }
     [Fact]
     public void Kernel_source_that_does_not_exist_refuses() {
         var scratch = WriteScratchManifest(mutate: node => node["kernel"]!["source"] = "no-such-file.hlsl");
 
-        try {
-            Assert.Throws<FileNotFoundException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
-        } finally {
-            Directory.Delete(
-                path: Path.GetDirectoryName(path: scratch)!,
-                recursive: true
-            );
-        }
+        Assert.Throws<FileNotFoundException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
     }
     [Fact]
     public void Manifest_named_unlike_its_file_refuses() {
         var scratch = CopySenses();
 
-        try {
-            var renamed = Path.Combine(
-                path1: scratch.FullName,
-                path2: "blob.puck.probe.json"
-            );
+        var renamed = Path.Combine(
+            path1: scratch,
+            path2: "blob.puck.probe.json"
+        );
 
-            File.Move(
-                sourceFileName: Path.Combine(
-                    path1: scratch.FullName,
-                    path2: "ir-blob.puck.probe.json"
-                ),
-                destFileName: renamed
-            );
+        File.Move(
+            sourceFileName: Path.Combine(
+                path1: scratch,
+                path2: "ir-blob.puck.probe.json"
+            ),
+            destFileName: renamed
+        );
 
-            var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: renamed));
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: renamed));
 
-            Assert.Contains(
-                expectedSubstring: "ir-blob.puck.probe.json",
-                actualString: exception.Message,
-                comparisonType: StringComparison.Ordinal
-            );
-        } finally {
-            scratch.Delete(recursive: true);
-        }
+        Assert.Contains(
+            expectedSubstring: "ir-blob.puck.probe.json",
+            actualString: exception.Message,
+            comparisonType: StringComparison.Ordinal
+        );
     }
     [Fact]
     public void Neutral_outside_channel_range_refuses() {
         var scratch = WriteScratchManifest(mutate: node => node["channels"]![0]!["neutral"] = 2);
 
-        try {
-            var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
 
-            Assert.Contains(
-                expectedSubstring: "neutral 2 outside [-1, 1]",
-                actualString: exception.Message,
-                comparisonType: StringComparison.Ordinal
-            );
-        } finally {
-            Directory.Delete(
-                path: Path.GetDirectoryName(path: scratch)!,
-                recursive: true
-            );
-        }
+        Assert.Contains(
+            expectedSubstring: "neutral 2 outside [-1, 1]",
+            actualString: exception.Message,
+            comparisonType: StringComparison.Ordinal
+        );
     }
     [Fact]
     public void Output_of_naming_no_socket_refuses() {
         var scratch = WriteMultiSocketManifest(mutate: node => node["output"]!["of"] = "no-such-socket");
 
-        try {
-            var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
 
-            Assert.Contains(
-                expectedSubstring: "output.of 'no-such-socket' does not name a declared socket",
-                actualString: exception.Message,
-                comparisonType: StringComparison.Ordinal
-            );
-        } finally {
-            Directory.Delete(
-                path: Path.GetDirectoryName(path: scratch)!,
-                recursive: true
-            );
-        }
+        Assert.Contains(
+            expectedSubstring: "output.of 'no-such-socket' does not name a declared socket",
+            actualString: exception.Message,
+            comparisonType: StringComparison.Ordinal
+        );
     }
     [Fact]
     public void StrobePair_and_optional_sockets_round_trip() {
         var scratch = WriteMultiSocketManifest(mutate: static _ => { });
 
-        try {
-            var manifest = ProbeKindManifest.Load(manifestPath: scratch);
+        var manifest = ProbeKindManifest.Load(manifestPath: scratch);
 
-            Assert.Equal(
-                expected: "strobe",
-                actual: manifest.Inputs[1].Name
-            );
-            Assert.Equal(
-                expected: ProbeSocketClass.StrobePair,
-                actual: manifest.Inputs[1].Class
-            );
-            Assert.False(condition: manifest.Inputs[1].Optional);
-            Assert.Equal(
-                expected: "painting",
-                actual: manifest.Inputs[2].Name
-            );
-            Assert.Equal(
-                expected: ProbeSocketClass.Frame,
-                actual: manifest.Inputs[2].Class
-            );
-            Assert.True(condition: manifest.Inputs[2].Optional);
-        } finally {
-            Directory.Delete(
-                path: Path.GetDirectoryName(path: scratch)!,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            expected: "strobe",
+            actual: manifest.Inputs[1].Name
+        );
+        Assert.Equal(
+            expected: ProbeSocketClass.StrobePair,
+            actual: manifest.Inputs[1].Class
+        );
+        Assert.False(condition: manifest.Inputs[1].Optional);
+        Assert.Equal(
+            expected: "painting",
+            actual: manifest.Inputs[2].Name
+        );
+        Assert.Equal(
+            expected: ProbeSocketClass.Frame,
+            actual: manifest.Inputs[2].Class
+        );
+        Assert.True(condition: manifest.Inputs[2].Optional);
     }
     [Fact]
     public void Too_many_channels_refuses() {
@@ -471,109 +421,67 @@ public sealed class ProbeKindManifestTests {
             }
         });
 
-        try {
-            var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
 
-            Assert.Contains(
-                expectedSubstring: $"at most {ProbeKindManifest.MaxChannels}",
-                actualString: exception.Message,
-                comparisonType: StringComparison.Ordinal
-            );
-        } finally {
-            Directory.Delete(
-                path: Path.GetDirectoryName(path: scratch)!,
-                recursive: true
-            );
-        }
+        Assert.Contains(
+            expectedSubstring: $"at most {ProbeKindManifest.MaxChannels}",
+            actualString: exception.Message,
+            comparisonType: StringComparison.Ordinal
+        );
     }
     [Fact]
     public void TriggerSocket_resolves_the_authored_name_or_defaults_to_the_first_socket() {
         var authored = WriteMultiSocketManifest(mutate: node => node["trigger"] = "strobe");
 
-        try {
-            Assert.Equal(
-                expected: 1,
-                actual: ProbeKindManifest.Load(manifestPath: authored).TriggerSocket
-            );
-        } finally {
-            Directory.Delete(
-                path: Path.GetDirectoryName(path: authored)!,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            expected: 1,
+            actual: ProbeKindManifest.Load(manifestPath: authored).TriggerSocket
+        );
 
         var defaulted = WriteMultiSocketManifest(mutate: node => node.Remove(propertyName: "trigger"));
 
-        try {
-            Assert.Equal(
-                expected: 0,
-                actual: ProbeKindManifest.Load(manifestPath: defaulted).TriggerSocket
-            );
-        } finally {
-            Directory.Delete(
-                path: Path.GetDirectoryName(path: defaulted)!,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            expected: 0,
+            actual: ProbeKindManifest.Load(manifestPath: defaulted).TriggerSocket
+        );
     }
     [Fact]
     public void Trigger_naming_no_socket_refuses() {
         var scratch = WriteMultiSocketManifest(mutate: node => node["trigger"] = "no-such-socket");
 
-        try {
-            var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
 
-            Assert.Contains(
-                expectedSubstring: "trigger 'no-such-socket' does not name a declared socket",
-                actualString: exception.Message,
-                comparisonType: StringComparison.Ordinal
-            );
-        } finally {
-            Directory.Delete(
-                path: Path.GetDirectoryName(path: scratch)!,
-                recursive: true
-            );
-        }
+        Assert.Contains(
+            expectedSubstring: "trigger 'no-such-socket' does not name a declared socket",
+            actualString: exception.Message,
+            comparisonType: StringComparison.Ordinal
+        );
     }
     [Fact]
     public void Unrecognized_class_refuses_at_deserialization() {
         var scratch = WriteScratchManifest(mutate: node => node["class"] = "sniff");
 
-        try {
-            var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
 
-            // The strict enum converter refuses the name, and the refusal says where the value sits.
-            Assert.IsType<JsonException>(@object: exception.InnerException);
-            Assert.Contains(
-                expectedSubstring: "$.class",
-                actualString: exception.Message,
-                comparisonType: StringComparison.Ordinal
-            );
-        } finally {
-            Directory.Delete(
-                path: Path.GetDirectoryName(path: scratch)!,
-                recursive: true
-            );
-        }
+        // The strict enum converter refuses the name, and the refusal says where the value sits.
+        Assert.IsType<JsonException>(@object: exception.InnerException);
+        Assert.Contains(
+            expectedSubstring: "$.class",
+            actualString: exception.Message,
+            comparisonType: StringComparison.Ordinal
+        );
     }
     [Fact]
     public void Wrong_schema_tag_refuses() {
         var scratch = WriteScratchManifest(mutate: node => node["$schema"] = "puck.render.graph.v1");
 
-        try {
-            var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => ProbeKindManifest.Load(manifestPath: scratch));
 
-            Assert.Contains(
-                expectedSubstring: "expected 'puck.probe.manifest.v1'",
-                actualString: exception.Message,
-                comparisonType: StringComparison.Ordinal
-            );
-        } finally {
-            Directory.Delete(
-                path: Path.GetDirectoryName(path: scratch)!,
-                recursive: true
-            );
-        }
+        Assert.Contains(
+            expectedSubstring: "expected 'puck.probe.manifest.v1'",
+            actualString: exception.Message,
+            comparisonType: StringComparison.Ordinal
+        );
     }
 
     // A MODEL-class kind (no kernel block, so no HLSL source needs to exist on disk) exercising every socket

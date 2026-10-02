@@ -2,6 +2,7 @@ using Xunit;
 
 using Puck.Assets.Documents;
 using Puck.World.Server;
+using Puck.Testing;
 
 namespace Puck.World.Tests;
 
@@ -342,16 +343,16 @@ public sealed class SearchLawTests {
         var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
         using var restoredMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
 
-        var profilesDirectory = Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName;
+        using var profilesDirectory = new TemporaryDirectory(prefix: "puck-search-tests-");
 
         var (restoredServer, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: "boot",
             machines: restoredMachines,
-            profiles: new WorldOwnedWorlds(directory: profilesDirectory, machineId: Guid.NewGuid(), template: restoredDefinition)
+            profiles: new WorldOwnedWorlds(directory: profilesDirectory.RootPath, machineId: Guid.NewGuid(), template: restoredDefinition)
         );
-        // WorldFixture.Dispose owns this directory — the SAME one profiles above was seeded from, not a second one.
-        using var resumed = new WorldFixture(server: restoredServer, machines: restoredMachines, stateDirectory: profilesDirectory);
+        // The directory the resumed fixture boots over is the SAME one profiles above was seeded from, not a second one.
+        using var resumed = new WorldFixture(server: restoredServer, machines: restoredMachines);
 
         var interruptedFinal = interrupted.SettleSearch();
         var resumedFinal = resumed.SettleSearch();
@@ -561,16 +562,16 @@ public sealed class SearchLawTests {
         var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint.Server.DefinitionJson);
         using var restoredMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
 
-        var profilesDirectory = Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName;
+        using var profilesDirectory = new TemporaryDirectory(prefix: "puck-search-tests-");
 
         var (restoredServer, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: "boot",
             machines: restoredMachines,
-            profiles: new WorldOwnedWorlds(directory: profilesDirectory, machineId: Guid.NewGuid(), template: restoredDefinition)
+            profiles: new WorldOwnedWorlds(directory: profilesDirectory.RootPath, machineId: Guid.NewGuid(), template: restoredDefinition)
         );
-        // WorldFixture.Dispose owns this directory — the SAME one profiles above was seeded from, not a second one.
-        using var resumed = new WorldFixture(server: restoredServer, machines: restoredMachines, stateDirectory: profilesDirectory);
+        // The directory the resumed fixture boots over is the SAME one profiles above was seeded from, not a second one.
+        using var resumed = new WorldFixture(server: restoredServer, machines: restoredMachines);
 
         var interruptedFinal = interrupted.SettleSearch();
         var resumedFinal = resumed.SettleSearch();
@@ -907,16 +908,16 @@ public sealed class SearchLawTests {
         var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
         using var restoredMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
 
-        var profilesDirectory = Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName;
+        using var profilesDirectory = new TemporaryDirectory(prefix: "puck-search-tests-");
 
         var (restoredServer, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: "boot",
             machines: restoredMachines,
-            profiles: new WorldOwnedWorlds(directory: profilesDirectory, machineId: Guid.NewGuid(), template: restoredDefinition)
+            profiles: new WorldOwnedWorlds(directory: profilesDirectory.RootPath, machineId: Guid.NewGuid(), template: restoredDefinition)
         );
-        // WorldFixture.Dispose owns this directory — the SAME one profiles above was seeded from, not a second one.
-        using var resumed = new WorldFixture(server: restoredServer, machines: restoredMachines, stateDirectory: profilesDirectory);
+        // The directory the resumed fixture boots over is the SAME one profiles above was seeded from, not a second one.
+        using var resumed = new WorldFixture(server: restoredServer, machines: restoredMachines);
 
         var interruptedFinal = interrupted.SettleSearch();
         var resumedFinal = resumed.SettleSearch();

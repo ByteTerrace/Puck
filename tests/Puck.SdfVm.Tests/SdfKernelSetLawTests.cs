@@ -30,72 +30,60 @@ public sealed class SdfKernelSetLawTests {
 
     [Fact]
     public void ALoadCountsOnceWithEveryByteItRead() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-test-").FullName;
+        using var scratch = new TemporaryDirectory(prefix: "puck-test-");
+        var directory = scratch.RootPath;
 
-        try {
-            var expected = 0L;
+        var expected = 0L;
 
-            for (var index = 0; (index < Stems.Length); index++) {
-                var bytes = Enumerable.Repeat(count: (index + 1), element: ((byte)index)).ToArray();
+        for (var index = 0; (index < Stems.Length); index++) {
+            var bytes = Enumerable.Repeat(count: (index + 1), element: ((byte)index)).ToArray();
 
-                File.WriteAllBytes(
-                    bytes: bytes,
-                    path: Path.Combine(
-                        path1: directory,
-                        path2: $"{Stems[index]}.comp.spv"
-                    )
-                );
-                expected += bytes.Length;
-            }
-
-            var work = Work();
-            var kernels = SdfKernelSet.Load(
-                bytecodeExtension: ".spv",
-                directory: directory,
-                work: work
+            File.WriteAllBytes(
+                bytes: bytes,
+                path: Path.Combine(
+                    path1: directory,
+                    path2: $"{Stems[index]}.comp.spv"
+                )
             );
-
-            Assert.Equal(expected: 1L, actual: work.Read(kind: SdfKernelSet.Loads));
-            Assert.Equal(expected: expected, actual: work.Read(kind: SdfKernelSet.BytecodeBytes));
-            // Passed through: each kernel is its own file's bytes.
-            Assert.Equal(expected: new byte[] { 0 }, actual: kernels[SdfKernel.Ambient].ToArray());
-            Assert.Equal(expected: Enumerable.Repeat(count: 12, element: ((byte)11)), actual: kernels[SdfKernel.ViewsFolds].ToArray());
-
-            _ = SdfKernelSet.Load(
-                bytecodeExtension: ".spv",
-                directory: directory,
-                work: work
-            );
-
-            Assert.Equal(expected: 2L, actual: work.Read(kind: SdfKernelSet.Loads));
-            Assert.Equal(expected: (2L * expected), actual: work.Read(kind: SdfKernelSet.BytecodeBytes));
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
+            expected += bytes.Length;
         }
+
+        var work = Work();
+        var kernels = SdfKernelSet.Load(
+            bytecodeExtension: ".spv",
+            directory: directory,
+            work: work
+        );
+
+        Assert.Equal(expected: 1L, actual: work.Read(kind: SdfKernelSet.Loads));
+        Assert.Equal(expected: expected, actual: work.Read(kind: SdfKernelSet.BytecodeBytes));
+        // Passed through: each kernel is its own file's bytes.
+        Assert.Equal(expected: new byte[] { 0 }, actual: kernels[SdfKernel.Ambient].ToArray());
+        Assert.Equal(expected: Enumerable.Repeat(count: 12, element: ((byte)11)), actual: kernels[SdfKernel.ViewsFolds].ToArray());
+
+        _ = SdfKernelSet.Load(
+            bytecodeExtension: ".spv",
+            directory: directory,
+            work: work
+        );
+
+        Assert.Equal(expected: 2L, actual: work.Read(kind: SdfKernelSet.Loads));
+        Assert.Equal(expected: (2L * expected), actual: work.Read(kind: SdfKernelSet.BytecodeBytes));
     }
     [Fact]
     public void ALoadThatFindsAKernelMissingStillCountsAsALoad() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-test-").FullName;
+        using var scratch = new TemporaryDirectory(prefix: "puck-test-");
+        var directory = scratch.RootPath;
 
-        try {
-            var work = Work();
+        var work = Work();
 
-            _ = Assert.ThrowsAny<IOException>(testCode: () => SdfKernelSet.Load(
-                bytecodeExtension: ".spv",
-                directory: directory,
-                work: work
-            ));
-            Assert.Equal(expected: 1L, actual: work.Read(kind: SdfKernelSet.Loads));
-            Assert.Equal(expected: 0L, actual: work.Read(kind: SdfKernelSet.BytecodeBytes));
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        _ = Assert.ThrowsAny<IOException>(testCode: () => SdfKernelSet.Load(
+            bytecodeExtension: ".spv",
+            directory: directory,
+            work: work
+        ));
+        Assert.Equal(expected: 1L, actual: work.Read(kind: SdfKernelSet.Loads));
+        Assert.Equal(expected: 0L, actual: work.Read(kind: SdfKernelSet.BytecodeBytes));
     }
     [Fact]
     public void TheProcessSourceIsNamedAndClassified() {

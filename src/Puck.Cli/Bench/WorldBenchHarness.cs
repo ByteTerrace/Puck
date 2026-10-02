@@ -10,9 +10,9 @@ namespace Puck.Cli.Bench;
 // engines, and a scratch-directory WorldOwnedWorlds catalog seeded from the same document.
 internal sealed class WorldBenchServer : IDisposable {
     private readonly WorldMachineHost m_machines;
-    private readonly string m_stateDirectory;
+    private readonly RunDirectory m_stateDirectory;
 
-    private WorldBenchServer(WorldServer server, WorldMachineHost machines, string stateDirectory) {
+    private WorldBenchServer(WorldServer server, WorldMachineHost machines, RunDirectory stateDirectory) {
         Server = server;
         m_machines = machines;
         m_stateDirectory = stateDirectory;
@@ -33,10 +33,14 @@ internal sealed class WorldBenchServer : IDisposable {
                 engines: []
             )
         );
-        var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-bench-world-").FullName;
+        // A benchmark has no verdict to keep evidence for, so its state directory is deleted however the run ends.
+        var stateDirectory = RunDirectory.Create(
+            keepOnFailure: false,
+            prefix: "puck-bench-world-"
+        );
         var profiles = new WorldOwnedWorlds(
             template: definition,
-            directory: stateDirectory,
+            directory: stateDirectory.Path,
             machineId: Guid.NewGuid()
         );
         var server = new WorldServer(
@@ -55,13 +59,6 @@ internal sealed class WorldBenchServer : IDisposable {
     }
     public void Dispose() {
         m_machines.Dispose();
-
-        try {
-            Directory.Delete(
-                path: m_stateDirectory,
-                recursive: true
-            );
-        } catch (IOException) {
-        }
+        m_stateDirectory.Dispose();
     }
 }

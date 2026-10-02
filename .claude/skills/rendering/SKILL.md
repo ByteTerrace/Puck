@@ -218,7 +218,8 @@ These are one-line cautions; the owning pages hold the derivations.
   where a GPU upload also reaches them. An encoder's bytes are pinned by
   `TextureCodecLawTests`, so an encoder change re-records those pins, moves
   `SdfBaker.Version` and regenerates `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json`
-  (`BakeSamplingFixtureLawTests` writes the fresh one to the temporary directory).
+  (`BakeSamplingFixtureLawTests` writes the fresh one into its law directory, which a failing
+  law keeps and names).
   Material identity is never blended or compressed.
 - **A bake reaches the GPU through the one image upload.** `GpuPixelFormat`
   carries `Bc4Unorm`, `Bc5Unorm`, `Bc6hUfloat` and `Bc7Unorm` (sampled only:

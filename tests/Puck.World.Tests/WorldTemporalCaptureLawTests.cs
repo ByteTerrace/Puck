@@ -19,7 +19,7 @@ public sealed class WorldTemporalCaptureLawTests {
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
 
         _ = presenter.CaptureFrame(deltaSeconds: 0.2f, height: 64, interpolationAlpha: 1f, width: 64);
-        var request = new FrameCaptureRequest(path: Path.Combine(path1: Path.GetTempPath(), path2: "temporal-frozen.png"), converge: 8);
+        var request = new FrameCaptureRequest(path: state.PathOf(name: "temporal-frozen.png"), converge: 8);
 
         presenter.BeginConvergence(request: request);
         var first = presenter.CaptureFrame(deltaSeconds: 0.7f, height: 64, interpolationAlpha: 1f, width: 64);

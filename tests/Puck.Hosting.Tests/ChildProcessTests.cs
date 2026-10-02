@@ -69,8 +69,13 @@ public sealed class ChildProcessTests {
     public async Task RunAsync_EndsAtTheDrainGraceOrCancellationWhenAProcessTheChildStartedHoldsItsStreams(bool cancel) {
         var clock = new VirtualClock();
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
+        using var directory = new TemporaryDirectory(prefix: "puck-child-process-");
+
         // The red leg never returns stdout. Keep the inheritor's PID outside the pipe so cleanup still kills it.
-        var pidFile = Path.GetTempFileName();
+        var pidFile = directory.WriteText(
+            name: "inheritor.pid",
+            text: string.Empty
+        );
         var quotedPidFile = pidFile.Replace(oldValue: "'", newValue: (OperatingSystem.IsWindows() ? "''" : "'\"'\"'"), comparisonType: StringComparison.Ordinal);
 
         var (executable, arguments) = (OperatingSystem.IsWindows()
@@ -136,7 +141,6 @@ public sealed class ChildProcessTests {
                     // It has already exited.
                 }
             }
-            File.Delete(path: pidFile);
             await cancellation.CancelAsync();
             try { await run.WaitAsync(timeout: HangGuard, cancellationToken: Token); } catch (OperationCanceledException) { }
         }

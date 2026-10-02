@@ -1,4 +1,5 @@
 using Puck.Cli.Format;
+using Puck.Testing;
 
 using Xunit;
 
@@ -73,7 +74,11 @@ public sealed class FormatWhitespaceScopeTests {
     }
     [Fact]
     public void ARootIsFormattedWithoutReachingASourceItsProjectLinksFromAbove() {
-        var outer = CliScratchDirectories.CreateProject(prefix: "puck-format-whitespace-scope-");
+        using var scratch = new TemporaryDirectory(prefix: "puck-format-whitespace-scope-");
+
+        CliScratchDirectories.PinSdk(directory: scratch.RootPath);
+
+        var outer = scratch.RootPath;
         var root = Path.Combine(
             path1: outer,
             path2: "Project"
@@ -91,58 +96,51 @@ public sealed class FormatWhitespaceScopeTests {
 
         Directory.CreateDirectory(path: Path.GetDirectoryName(path: owned)!);
 
-        try {
-            // The scratch tree sits outside the checkout, so it carries its own line-ending policy.
-            File.WriteAllText(
-                contents: "root = true\n\n[*.cs]\nend_of_line = lf\ninsert_final_newline = true\n",
-                path: Path.Combine(
-                    path1: outer,
-                    path2: ".editorconfig"
-                )
-            );
-            File.WriteAllText(
-                contents: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup><Compile Include=\"../Linked.cs\" Link=\"Linked.cs\" /></ItemGroup></Project>",
-                path: Path.Combine(
-                    path1: root,
-                    path2: "Project.csproj"
-                )
-            );
-            File.WriteAllText(
-                contents: Unformatted,
-                path: linked
-            );
-            File.WriteAllText(
-                contents: Unformatted,
-                path: owned
-            );
+        // The scratch tree sits outside the checkout, so it carries its own line-ending policy.
+        File.WriteAllText(
+            contents: "root = true\n\n[*.cs]\nend_of_line = lf\ninsert_final_newline = true\n",
+            path: Path.Combine(
+                path1: outer,
+                path2: ".editorconfig"
+            )
+        );
+        File.WriteAllText(
+            contents: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup><Compile Include=\"../Linked.cs\" Link=\"Linked.cs\" /></ItemGroup></Project>",
+            path: Path.Combine(
+                path1: root,
+                path2: "Project.csproj"
+            )
+        );
+        File.WriteAllText(
+            contents: Unformatted,
+            path: linked
+        );
+        File.WriteAllText(
+            contents: Unformatted,
+            path: owned
+        );
 
-            Assert.Equal(
-                actual: WhitespacePhase.Run(
-                    rootArgument: root,
-                    check: true
-                ),
-                expected: 1
-            );
-            Assert.Equal(
-                actual: WhitespacePhase.Run(
-                    rootArgument: root,
-                    check: false
-                ),
-                expected: 0
-            );
-            Assert.Equal(
-                actual: File.ReadAllText(path: owned),
-                expected: "internal class Sample { }\n"
-            );
-            Assert.Equal(
-                actual: File.ReadAllText(path: linked),
-                expected: Unformatted
-            );
-        } finally {
-            Directory.Delete(
-                path: outer,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            actual: WhitespacePhase.Run(
+                rootArgument: root,
+                check: true
+            ),
+            expected: 1
+        );
+        Assert.Equal(
+            actual: WhitespacePhase.Run(
+                rootArgument: root,
+                check: false
+            ),
+            expected: 0
+        );
+        Assert.Equal(
+            actual: File.ReadAllText(path: owned),
+            expected: "internal class Sample { }\n"
+        );
+        Assert.Equal(
+            actual: File.ReadAllText(path: linked),
+            expected: Unformatted
+        );
     }
 }

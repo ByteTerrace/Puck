@@ -40,9 +40,10 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
             Slots: [new WorldViewSlot(Instance: Pane)]
         )]
     );
-    private readonly string m_directory = Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: $"puck-world-pane-mapping-{Guid.NewGuid():N}"
+    // The runtime may still hold a file here as it is disposed, so the delete is best-effort.
+    private readonly TemporaryDirectory m_directory = new(
+        bestEffortDelete: true,
+        prefix: "puck-world-pane-mapping-"
     );
 
     private readonly WorldViewGraphHost m_host;
@@ -59,11 +60,10 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
     private RenderGraphHistory? m_history;
 
     public WorldViewPaneMappingLawTests() {
-        Directory.CreateDirectory(path: m_directory);
         m_host = new WorldViewGraphHost(
-            documentDirectory: m_directory,
+            documentDirectory: m_directory.RootPath,
             packager: new ShaderPackager(compiler: new ShaderCompiler(cacheDirectory: Path.Combine(
-                path1: m_directory,
+                path1: m_directory.RootPath,
                 path2: "cache"
             )))
         );
@@ -169,14 +169,7 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
     public void Dispose() {
         m_host.Dispose();
         m_instances.Dispose();
-
-        try {
-            Directory.Delete(
-                path: m_directory,
-                recursive: true
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-        }
+        m_directory.Dispose();
     }
     // A pane publishes nothing until its instance has rendered at an extent; then it publishes its whole image over the
     // slot's rect, named by the instance's handle, and a display point maps to the source pixel under it.

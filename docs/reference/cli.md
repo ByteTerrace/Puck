@@ -58,6 +58,20 @@ whose command no longer breaks its rule, until the row is deleted.
 10. **Startup is cheap.** `puck --help` and `puck <verb> --help` load no Roslyn
     (`Microsoft.CodeAnalysis*`), no MSBuild, no BenchmarkDotNet, and no GPU
     assembly; the law counts the assemblies help loads.
+11. **A run directory outlives only a failure.** A verb that needs scratch space
+    for one run (canary legs and packages, parity, counters, test, qualify,
+    docs citations, affected `--record`, firmware, `compile --check`, the
+    formatter's closure evaluation, the NuGet smoke install) creates a uniquely
+    named `puck-<verb>-…` directory under the temporary directory through one
+    policy, `RunDirectory` (`build/RunDirectory.cs`). A run that passes deletes
+    it. A run that fails, or stops before it reaches a verdict, keeps it and
+    prints `run directory kept: <absolute path>` on standard error, so the
+    evidence survives. The first directory a process creates under a prefix
+    deletes that prefix's directories older than six hours, which is how a
+    killed run's leftovers and old kept evidence go away. A directory that holds
+    no evidence or holds credentials (release staging, the bench state root) is
+    deleted however the run ends. A directory the caller names (`--keep`,
+    `--output`, `--out-dir`) is the caller's and is never deleted.
 
 ## Verbs
 
@@ -208,7 +222,8 @@ Each image uses its lowercase revision name, such as `dmg0.bin` or `cgbd.bin`.
 The AGB command builds the maintained freestanding C and ARM sources with Clang's `armv4t-none-eabi` target
 and links them with the source directory's `firmware.ld`. Supply native compiler and ELF-linker executable paths;
 no shell, downloaded toolchain, or system C library is involved. Object files and the linked candidate live in a
-fresh temporary directory that the command removes after either success or failure. The candidate must be exactly 16 KiB.
+fresh run directory that a successful build deletes and a failed one keeps and names (see
+[Conventions](#conventions)). The candidate must be exactly 16 KiB.
 
 Both commands report SHA-256 hashes. `--verify` rebuilds and compares bytes without creating or repairing the output;
 missing files or different bytes exit 1, and invalid command syntax exits 2. A successful comparison proves reproducible
@@ -729,6 +744,12 @@ carries the recorder), runs the full canary set on it, and maps each leg's
 methods to their source files through the build's portable PDBs. It is a full
 run, so it happens when the owner asks for one; between recordings a new or
 moved source shows up as `unmapped`.
+The recording runs in one run directory that holds the recording World and
+`canary.transcript.txt`, the inner canary run's exit code, standard output and
+standard error. The inner run keeps its legs (`--keep-transcripts`) until the
+recording has read them. When the recording and the inner run both pass, the
+legs and the run directory are deleted; when either fails, all of them are kept
+and named (see [Conventions](#conventions)).
 
 ## `puck canary`—real-World behavioral proofs
 
@@ -912,7 +933,17 @@ puck canary --merge                 run the merge gate: the automatic set plus e
 puck canary --backend <name> ...    run every backend-declaring proof on vulkan or directx only
 puck canary --jobs <n>              run at most n World processes at once (n ≥ 1)
 puck canary --plan                  print a selection's counts and ceiling without building or running
+puck canary --keep-transcripts ...  keep every leg's run directory whatever its verdict
 ```
+
+Each leg runs in its own run directory under the temporary directory, which
+the leg's `canary <id> <leg>: transcripts <path>` line names. A proof that
+holds deletes both legs' directories once its report prints; a proof that fails
+keeps both and names each with a `run directory kept:` line, as does a run that
+stops before every proof reported (see [Conventions](#conventions)). The run's
+shader packages follow the run's verdict the same way. `--keep-transcripts`
+leaves every leg's directory in place for a caller that reads the transcripts
+afterwards and removes them itself, as `puck affected --record` does.
 
 `puck canary --merge` is the merge gate. The automatic set alone skips every
 offscreen GPU proof, because each requires `gpu`; `--merge` runs the union of
@@ -1239,6 +1270,10 @@ puck test <path> --reproduce           rerun every world and require byte-identi
 puck test -h / --help                  this text
 ```
 
+Without `--keep`, the run uses a run directory under the temporary directory
+that a passing run deletes and a failing run keeps and names (see
+[Conventions](#conventions)).
+
 Each collected world owns a numbered directory under `<dir>/worlds`, starting
 at `000000/run1`. Its `state` persistence, `out` exports and manifests, and
 transcripts are isolated even when input files share a basename. Each report
@@ -1380,7 +1415,8 @@ Per capture, these independent verdicts, in order:
 
 Failures write both frames, a per-pixel delta heatmap, and a per-verdict
 summary into the run's `evidence/` directory—a red names its tile and shows
-its pixels. There are no stored baselines: both runs come from the same build,
+its pixels. A run whose captures all hold deletes its run directory; a run
+with a red keeps it and names it (see [Conventions](#conventions)). There are no stored baselines: both runs come from the same build,
 and a reference is computed from the documents the run renders, so a content
 change fails only where it and its reference disagree.
 The runner resolves the `Puck.World` build for the checkout's current sources,
@@ -1464,8 +1500,10 @@ kinds; the collector records them as `pacing`.
 
 The run prints the report's path, then one line for each deterministic count or
 pass state that differs between the two backends, naming its kind, pass and
-node. `--output` names the report file; without it, the report stays in the
-run's scratch directory beside the leg transcripts.
+node. `--output` names the report file, and a passing run then deletes its run
+directory; without it, the report stays in the run directory beside the leg
+transcripts, and the run keeps that directory and names it (see
+[Conventions](#conventions)).
 
 `counters compare` holds each backend's run in the right report to the same
 backend's run in the left. Deterministic and per-backend-deterministic counts
@@ -1535,7 +1573,8 @@ through the same leg machinery as `puck counters`. Each cell is a workload at
 one resolution on one backend, booted from a fresh state root. `--list` checks
 the package and prints the matrix and every cell's script without booting
 anything. The run writes a `puck.qualification.report.v1` report to `--output`
-or its scratch directory.
+or its run directory, which a run without `--output` keeps and names (see
+[Conventions](#conventions)).
 
 [Qualifying a package](../development/qualification.md) owns what the profile
 records, what each cell checks, what each verdict means, and which thresholds

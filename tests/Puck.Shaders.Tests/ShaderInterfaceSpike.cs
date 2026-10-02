@@ -1,5 +1,6 @@
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -222,75 +223,64 @@ internal static class ShaderInterfaceSpike {
             directory: null,
             tool: "dxc"
         ));
-        var root = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: ("puck-shader-interface-" + Guid.NewGuid().ToString(format: "N"))
+        using var directory = new TemporaryDirectory(prefix: "puck-shader-interface-");
+        var root = directory.RootPath;
+
+        var source = Path.Combine(
+            path1: root,
+            path2: sourceFileName
         );
 
-        Directory.CreateDirectory(path: root);
+        await stage(
+            arg1: root,
+            arg2: cancellationToken
+        );
 
-        try {
-            var source = Path.Combine(
-                path1: root,
-                path2: sourceFileName
-            );
+        var include = ("-I" + Path.Combine(
+            path1: AppContext.BaseDirectory,
+            path2: "Assets",
+            path3: "Shaders",
+            path4: "Sdf/field"
+        ));
+        var spirvPath = Path.Combine(
+            path1: root,
+            path2: "out.spv"
+        );
+        var dxilPath = Path.Combine(
+            path1: root,
+            path2: "out.dxil"
+        );
 
-            await stage(
-                arg1: root,
-                arg2: cancellationToken
-            );
+        var steps = ShaderCompiler.StepsOf(
+            entryPoint: entryPoint,
+            stage: profile[..2] switch {
+                "vs" => ShaderStage.Vertex,
+                "ps" => ShaderStage.Fragment,
+                _ => ShaderStage.Compute,
+            }
+        );
 
-            var include = ("-I" + Path.Combine(
-                path1: AppContext.BaseDirectory,
-                path2: "Assets",
-                path3: "Shaders",
-                path4: "Sdf/field"
-            ));
-            var spirvPath = Path.Combine(
-                path1: root,
-                path2: "out.spv"
-            );
-            var dxilPath = Path.Combine(
-                path1: root,
-                path2: "out.dxil"
-            );
+        await RunAsync(
+            arguments: [.. steps[0].Options, include, "-Fo", spirvPath, source],
+            cancellationToken: cancellationToken,
+            dxc: dxc
+        );
+        await RunAsync(
+            arguments: [.. steps[1].Options, include, "-Fo", dxilPath, source],
+            cancellationToken: cancellationToken,
+            dxc: dxc
+        );
 
-            var steps = ShaderCompiler.StepsOf(
-                entryPoint: entryPoint,
-                stage: profile[..2] switch {
-                    "vs" => ShaderStage.Vertex,
-                    "ps" => ShaderStage.Fragment,
-                    _ => ShaderStage.Compute,
-                }
-            );
-
-            await RunAsync(
-                arguments: [.. steps[0].Options, include, "-Fo", spirvPath, source],
+        return new Build(
+            Dxil: await File.ReadAllBytesAsync(
                 cancellationToken: cancellationToken,
-                dxc: dxc
-            );
-            await RunAsync(
-                arguments: [.. steps[1].Options, include, "-Fo", dxilPath, source],
+                path: dxilPath
+            ),
+            Spirv: await File.ReadAllBytesAsync(
                 cancellationToken: cancellationToken,
-                dxc: dxc
-            );
-
-            return new Build(
-                Dxil: await File.ReadAllBytesAsync(
-                    cancellationToken: cancellationToken,
-                    path: dxilPath
-                ),
-                Spirv: await File.ReadAllBytesAsync(
-                    cancellationToken: cancellationToken,
-                    path: spirvPath
-                )
-            );
-        } finally {
-            Directory.Delete(
-                path: root,
-                recursive: true
-            );
-        }
+                path: spirvPath
+            )
+        );
     }
     private static async Task RunAsync(string dxc, IReadOnlyList<string> arguments, CancellationToken cancellationToken) {
         var result = await ChildProcess.RunAsync(

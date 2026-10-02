@@ -12,7 +12,7 @@ namespace Puck.Shaders.Tests;
 /// float history accumulated and converted by two compute passes, then copied by a fullscreen pass — so compute passes,
 /// a fullscreen pass with its render targets, history, and zero initialization are all allocated.
 /// </summary>
-public sealed partial class ShaderPipelineRenderNodeLawTests {
+public sealed partial class ShaderPipelineRenderNodeLawTests : IDisposable {
     private const uint Extent = 32;
     private const uint InFlight = 3;
     // The host's image the backdrop graph copies (Feedback's backdrop), which a law selects to publish it through the
@@ -30,6 +30,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
 
     // Enough frames for every frame slot to have allocated its lazily created command pools and descriptor sets.
     private const int WarmFrames = ((int)(InFlight * 3));
+
+    private readonly TemporaryDirectory m_captures = new(prefix: "puck-render-node-capture-");
+
+    public void Dispose() => m_captures.Dispose();
 
     private static ShaderPipelineResource Image(string name, string format, bool history = false, ShaderPipelineDimensions? dimensions = null) => new(
         Name: name,

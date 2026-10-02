@@ -35,109 +35,116 @@ internal static partial class TestCommand {
             return 2;
         }
 
-        string runDirectory;
-
         if (keep is { }) {
-            runDirectory = Path.GetFullPath(path: keep);
+            var kept = Path.GetFullPath(path: keep);
 
             try {
-                _ = Directory.CreateDirectory(path: runDirectory);
+                _ = Directory.CreateDirectory(path: kept);
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)) {
-                Console.Error.WriteLine(value: $"ERROR: --keep {runDirectory} could not be created: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
-
-                return 2;
-            }
-        } else {
-            CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
-            runDirectory = Directory.CreateTempSubdirectory(prefix: ScratchPrefix).FullName;
-        }
-
-        try {
-            if (!TryCollectWorlds(
-                generatedDirectory: Path.Combine(
-                path1: runDirectory,
-                path2: "generated"
-            ),
-                path: path,
-                reason: out var collectReason,
-                worlds: out var worlds
-            )) {
-                Console.Error.WriteLine(value: $"ERROR: {collectReason}");
+                Console.Error.WriteLine(value: $"ERROR: --keep {kept} could not be created: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
 
                 return 2;
             }
 
-            if (!TryResolveArtifact(
-                artifact: out var artifact,
-                lease: out var lease,
-                repositoryRoot: repositoryRoot,
-                worldArtifact: worldArtifact
-            )) {
-                return 2;
-            }
-
-            using var held = lease;
-
-            var results = new TestWorldRun[worlds.Count];
-            var parallelism = Math.Clamp(
-                value: jobs,
-                min: 1,
-                max: Math.Max(val1: 1, val2: worlds.Count)
-            );
-
-            Parallel.For(
-                fromInclusive: 0,
-                toExclusive: worlds.Count,
-                parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = parallelism },
-                body: index => results[index] = RunWorldCaptured(
-                    artifact: artifact!,
+            try {
+                return RunIn(
+                    jobs: jobs,
+                    path: path,
+                    repositoryRoot: repositoryRoot,
                     reproduce: reproduce,
-                    world: worlds[index],
-                    worldDirectory: Path.Combine(
-                        path1: runDirectory,
-                        path2: "worlds",
-                        path3: index.ToString(format: "D6", provider: CultureInfo.InvariantCulture)
-                    )
-                )
-            );
-
-            foreach (var result in results) {
-                Console.Out.Write(value: result.Output);
-                Console.Error.Write(value: result.Error);
-            }
-
-            if (results.Any(predicate: result => (result.Verdict == 2))) {
-                return 2;
-            }
-
-            var failed = results.Any(predicate: result => (result.Verdict != 0));
-
-            if (failed) {
-                Console.Error.WriteLine(value: "FAIL: one or more worlds did not pass — a failing verdict, or a step whose recorded outcome was not the one it declared.");
-
-                return 1;
-            }
-
-            Console.WriteLine(value: (reproduce
-                ? $"PASS: every verdict in {worlds.Count} test world(s) passed, and each world's two runs exported identical bytes."
-                : $"PASS: every verdict in {worlds.Count} test world(s) passed."
-            ));
-
-            return 0;
-        } finally {
-            if (keep is { }) {
-                Console.WriteLine(value: $"test: generated worlds, transcripts, exports and manifests kept under {runDirectory}");
-            } else {
-                try {
-                    Directory.Delete(
-                        path: runDirectory,
-                        recursive: true
-                    );
-                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                    Console.Error.WriteLine(value: $"test: the run directory {runDirectory} could not be removed: {exception.Message}");
-                }
+                    runDirectory: kept,
+                    worldArtifact: worldArtifact
+                );
+            } finally {
+                Console.WriteLine(value: $"test: generated worlds, transcripts, exports and manifests kept under {kept}");
             }
         }
+
+        using var run = RunDirectory.Create(prefix: ScratchPrefix);
+
+        return run.Conclude(exitCode: RunIn(
+            jobs: jobs,
+            path: path,
+            repositoryRoot: repositoryRoot,
+            reproduce: reproduce,
+            runDirectory: run.Path,
+            worldArtifact: worldArtifact
+        ));
+    }
+    // One run of the verb inside runDirectory: the --keep directory, or a run directory the caller concludes with the
+    // exit code this returns.
+    private static int RunIn(string path, string? worldArtifact, int jobs, bool reproduce, string repositoryRoot, string runDirectory) {
+        if (!TryCollectWorlds(
+            generatedDirectory: Path.Combine(
+            path1: runDirectory,
+            path2: "generated"
+        ),
+            path: path,
+            reason: out var collectReason,
+            worlds: out var worlds
+        )) {
+            Console.Error.WriteLine(value: $"ERROR: {collectReason}");
+
+            return 2;
+        }
+
+        if (!TryResolveArtifact(
+            artifact: out var artifact,
+            lease: out var lease,
+            repositoryRoot: repositoryRoot,
+            worldArtifact: worldArtifact
+        )) {
+            return 2;
+        }
+
+        using var held = lease;
+
+        var results = new TestWorldRun[worlds.Count];
+        var parallelism = Math.Clamp(
+            value: jobs,
+            min: 1,
+            max: Math.Max(val1: 1, val2: worlds.Count)
+        );
+
+        Parallel.For(
+            fromInclusive: 0,
+            toExclusive: worlds.Count,
+            parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = parallelism },
+            body: index => results[index] = RunWorldCaptured(
+                artifact: artifact!,
+                reproduce: reproduce,
+                world: worlds[index],
+                worldDirectory: Path.Combine(
+                    path1: runDirectory,
+                    path2: "worlds",
+                    path3: index.ToString(format: "D6", provider: CultureInfo.InvariantCulture)
+                )
+            )
+        );
+
+        foreach (var result in results) {
+            Console.Out.Write(value: result.Output);
+            Console.Error.Write(value: result.Error);
+        }
+
+        if (results.Any(predicate: result => (result.Verdict == 2))) {
+            return 2;
+        }
+
+        var failed = results.Any(predicate: result => (result.Verdict != 0));
+
+        if (failed) {
+            Console.Error.WriteLine(value: "FAIL: one or more worlds did not pass — a failing verdict, or a step whose recorded outcome was not the one it declared.");
+
+            return 1;
+        }
+
+        Console.WriteLine(value: (reproduce
+            ? $"PASS: every verdict in {worlds.Count} test world(s) passed, and each world's two runs exported identical bytes."
+            : $"PASS: every verdict in {worlds.Count} test world(s) passed."
+        ));
+
+        return 0;
     }
     private static TestWorldRun RunWorldCaptured(string world, string artifact, string worldDirectory, bool reproduce) {
         using var output = new StringWriter(formatProvider: CultureInfo.InvariantCulture);
