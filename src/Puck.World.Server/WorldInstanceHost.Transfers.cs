@@ -1351,7 +1351,7 @@ public sealed partial class WorldInstanceHost {
         WorldSubmissionPayload.Query { Value: WorldQuery.Properties properties } when (properties.BodyIndex is not null) => new WorldSubmissionPayload.Query(Value: properties with { BodyIndex = bodyIndex }),
         _ => payload,
     };
-    private static bool RestoreDetachedMember(WorldInstance source, LandedMember member) {
+    private static bool RestoreDetachedMember(WorldInstance source, LandedMember member, WorldTransferCommitMember commit) {
         return source.Server.ExecuteAuthorityOperation(operation: () => {
             var restored = ((member.Peer is { } peer)
                 ? source.Server.Population.RestoreDetachedPeer(
@@ -1374,6 +1374,18 @@ public sealed partial class WorldInstanceHost {
             );
 
             if (restored) {
+                // Inactive slots are absent from population checkpoints and can be reused while recovery waits.
+                // Recover the departure turn from the retained commit, undoing only this attempted arrival.
+                source.Server.Population.SetTravelTurn(
+                    slot: member.SourceSlot,
+                    travelTurn: (commit.HasMappedArrival
+                    ? WorldFrameIsometry.AccumulateTurn(
+                        travelTurn: commit.TravelTurn,
+                        departureYaw: commit.YawRadians,
+                        arrivalYaw: member.Yaw
+                    )
+                    : commit.TravelTurn)
+                );
                 // A slot reused during recovery has a new local generation, not the returning individual's
                 // durable identity. Reinstall the captured mobility credential before releasing its memory hold.
                 source.Server.Population.SetMobility(
@@ -1409,7 +1421,8 @@ public sealed partial class WorldInstanceHost {
         for (var index = 0; (index < members.Count);) {
             if (!RestoreDetachedMember(
                 source,
-                members[index]
+                members[index],
+                commits[index]
             )) { index++; continue; }
             members.RemoveAt(index: index);
             commits.RemoveAt(index: index);

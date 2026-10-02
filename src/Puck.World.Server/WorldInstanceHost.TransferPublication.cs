@@ -167,6 +167,7 @@ public sealed partial class WorldInstanceHost {
 
                 WorldAuthorityEndpoint endpoint;
                 WorldAuthorityRouteDescription? initialRoute = null;
+                WorldRemoteAuthority? routedAuthority = null;
 
                 if (targetAuthority.Remote is { } remoteTarget) {
                     var routeCredential = new WorldRemoteRouteCredential(
@@ -264,6 +265,7 @@ public sealed partial class WorldInstanceHost {
                             identity: routeName,
                             seed: initialRoute
                         );
+                        routedAuthority = routeAuthority;
                     }
                     endpoint = EndpointFor(
                         identity: routeName,
@@ -315,6 +317,9 @@ public sealed partial class WorldInstanceHost {
                         yawReference: (targetAuthority.Local?.Server.Definition ?? targetAuthority.Remote!.Definition).Views.SeatControl.YawReference
                     );
                 }
+                // A delayed commit acknowledgement can outlive onward crossings. Consume the latest route even if
+                // its one-time observation notification arrived before PublishRoute made this seat follow it.
+                routedAuthority?.RepublishObservedRoute();
             }
 
             // Scoped to the BOOT instance on each side independently, because that is the only instance a
