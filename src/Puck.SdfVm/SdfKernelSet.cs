@@ -86,14 +86,16 @@ public sealed class SdfKernelSet {
         SdfKernel.Views => "sdf-world-views",
         SdfKernel.ViewsCore => "sdf-world-views-core",
         SdfKernel.ViewsFolds => "sdf-world-views-folds",
-        SdfKernel.Sky => "sdf-sky",
+        SdfKernel.Sky => "sdf-sky-runs",
+        SdfKernel.Composite => "sdf-composite",
         SdfKernel.BrickBake => "sdf-brick-bake",
         SdfKernel.Resolve => "sdf-resolve",
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(kernel), actualValue: kernel, message: "Not an SDF kernel."),
     };
     /// <summary>Returns the layout of the interface a kernel reads: the brick baker's
     /// (<see cref="SdfWorldInterfaces.BrickBakeLayout"/>), reconstruction's
-    /// (<see cref="SdfWorldInterfaces.ResolveParameters"/>), or every native per-view dispatch's
+    /// (<see cref="SdfWorldInterfaces.ResolveParameters"/>), the sky's and composite's
+    /// (<see cref="SdfWorldInterfaces.SkyParameters"/>), or every native per-view dispatch's
     /// (<see cref="SdfWorldInterfaces.WorldLayout"/>), each stamped with this host's instruction set.</summary>
     /// <param name="kernel">The kernel.</param>
     /// <returns>The layout.</returns>
@@ -101,6 +103,7 @@ public sealed class SdfKernelSet {
         kernel switch {
             SdfKernel.BrickBake => SdfWorldInterfaces.BrickBakeLayout,
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,
+            SdfKernel.Sky or SdfKernel.Composite => SdfWorldInterfaces.SkyParameters.Layout,
             _ => SdfWorldInterfaces.WorldLayout,
         };
     /// <summary>Returns why a kernel's compiled bytecode reads something other than this host's interface, or

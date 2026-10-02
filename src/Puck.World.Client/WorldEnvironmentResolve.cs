@@ -591,7 +591,6 @@ public sealed class WorldEnvironmentResolve {
                     }
 
                     into.StopCount = count;
-                    block.Enabled |= ((count > 0) ? 1u : 0u);
 
                     break;
                 }
@@ -618,7 +617,6 @@ public sealed class WorldEnvironmentResolve {
                         mirror: mirror,
                         scalar: disc.Intensity
                     );
-                    block.Enabled = 1u;
 
                     break;
                 }
@@ -630,7 +628,6 @@ public sealed class WorldEnvironmentResolve {
                         scalar: stars.Brightness
                     );
                     block.StarSeed = (stars.Seed ?? block.StarSeed);
-                    block.Enabled = 1u;
 
                     if (stars.Twinkle is not { } twinkle) {
                         break;
@@ -716,7 +713,6 @@ public sealed class WorldEnvironmentResolve {
                         modulus: Math.Tau,
                         rate: clouds.Spin
                     ));
-                    block.Enabled = 1u;
 
                     break;
                 }

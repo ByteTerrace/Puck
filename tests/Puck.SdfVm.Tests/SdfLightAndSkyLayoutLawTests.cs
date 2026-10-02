@@ -65,7 +65,6 @@ public sealed class SdfLightAndSkyLayoutLawTests {
 
         ref var block = ref sky.Block;
 
-        block.Enabled = 1u;
         block.FogDensity = 0.004f;
         block.DiscLight = 0;
         block.DiscIntensity = 1.5f;
@@ -116,7 +115,7 @@ public sealed class SdfLightAndSkyLayoutLawTests {
             rows[(row * 4)] = x; rows[((row * 4) + 1)] = y; rows[((row * 4) + 2)] = z; rows[((row * 4) + 3)] = w;
         }
 
-        Row(row: ControlRow, w: block.FogDensity, x: lights.Count, y: lights.ShadowLight, z: block.Enabled);
+        Row(row: ControlRow, w: block.FogDensity, x: lights.Count, y: lights.ShadowLight, z: 0f);
         for (var index = 0; (index < SdfLights.MaxLights); index++) {
             var light = lights[index];
             var direction = ((light.Kind == SdfLightKind.Directional) ? Normalized(direction: light.Direction, fallback: SdfLights.DefaultSunDirection) : light.Direction);
@@ -200,7 +199,6 @@ public sealed class SdfLightAndSkyLayoutLawTests {
         values["sky.clouds.light.direction"] = values["key.direction"];
         values["sky.clouds.light.color"] = ((shadow >= 0) ? Lanes(count: 3, first: 0, row: ((LightsRow + (shadow * RowsPerLight)) + 1)) : [1d, 1d, 1d]);
         values["curvature"] = [.. Lanes(count: 4, first: 0, row: CurvatureRow), .. Lanes(count: 4, first: 0, row: (CurvatureRow + 1))];
-        values["sky.enabled"] = [((Lane(lane: 2, row: ControlRow) > 0.5d) ? 1d : 0d)];
         values["sky.fog"] = [Lane(lane: 3, row: ControlRow)];
 
         var stops = Math.Min(val1: ((uint)Math.Max(val1: (Lane(lane: 0, row: SkyControlRow) + 0.5d), val2: 0d)), val2: ((uint)SdfSky.MaxStops));
@@ -314,7 +312,6 @@ public sealed class SdfLightAndSkyLayoutLawTests {
 
         double[] Sky(string field) => Field(field: field, record: 0, structure: sky, table: bytes.Sky);
 
-        values["sky.enabled"] = Sky(field: nameof(SdfSkyBlock.Enabled));
         values["sky.fog"] = Sky(field: nameof(SdfSkyBlock.FogDensity));
 
         var stops = ((uint)Sky(field: nameof(SdfSkyBlock.StopCount))[0]);

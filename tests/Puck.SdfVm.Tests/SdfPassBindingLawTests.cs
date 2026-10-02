@@ -19,8 +19,8 @@ public sealed class SdfPassBindingLawTests {
     // The kernels each light and sky table is bound by, and no other.
     private static readonly (string Table, SdfKernel[] Readers)[] Readers = [
         (SdfKernelInterfaces.Lights, [SdfKernel.Shadow, .. ViewsKernels]),
-        (SdfKernelInterfaces.Sky, [SdfKernel.Sky, .. ViewsKernels]),
-        (SdfKernelInterfaces.SkyStops, [SdfKernel.Sky, .. ViewsKernels]),
+        (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, .. ViewsKernels]),
+        (SdfKernelInterfaces.SkyStops, [SdfKernel.Sky, SdfKernel.Composite]),
         (SdfKernelInterfaces.Softboxes, ViewsKernels),
     ];
 
@@ -41,13 +41,19 @@ public sealed class SdfPassBindingLawTests {
             collection: tables
         );
     }
-    // Every pass of a view binds the residency's one World set, the resolve pass among them, so the World group its
+    // Every pass of a view binds the residency's one World set, the resolve, sky and composite passes among them, so the World group its
     // pipeline is created from is the world interface's, binding for binding; a group missing a table is a set layout
     // the bound set does not match.
     [Fact]
     public void TheResolvePassLaysOutTheWorldGroupItBinds() =>
         Assert.Equal(
             actual: Group(group: ShaderInterfaceGroup.World, layout: SdfWorldInterfaces.ResolveParameters.Layout).Bindings,
+            expected: Group(group: ShaderInterfaceGroup.World, layout: SdfWorldInterfaces.WorldLayout).Bindings
+        );
+    [Fact]
+    public void TheSkyAndCompositePassesLayOutTheWorldGroupTheyBind() =>
+        Assert.Equal(
+            actual: Group(group: ShaderInterfaceGroup.World, layout: SdfWorldInterfaces.SkyParameters.Layout).Bindings,
             expected: Group(group: ShaderInterfaceGroup.World, layout: SdfWorldInterfaces.WorldLayout).Bindings
         );
     [Fact]

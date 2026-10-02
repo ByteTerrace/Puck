@@ -10,8 +10,9 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>The shipped spatial resolve preserves the analytic step colors, and copies a grid of its output's own
-/// extent exactly. These inputs isolate the resolver from traversal: every binding the spatial path does not read
-/// holds a filler of its kind, while the reduced-world canary exercises its ordinary package recorder.</summary>
+/// extent exactly. These inputs isolate the resolver from traversal: the dispatch box covers the whole grid, every
+/// visibility record is a miss, and every binding the spatial path does not read holds a filler of its kind, while the
+/// reduced-world canary exercises its ordinary package recorder.</summary>
 [SupportedOSPlatform("windows10.0.15063")]
 public sealed class SdfResolveDeviceLawTests {
     private const uint RenderWidth = 16;
@@ -89,7 +90,15 @@ public sealed class SdfResolveDeviceLawTests {
         using var fillerBlock = services.BufferFactory.CreateHostVisible(data: new byte[padded.Length], name: default, usage: GpuBufferUsage.Uniform);
         using var fillerBuffer = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 4096, usage: GpuBufferUsage.Storage);
         using var fillerStorage = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: 1, name: default, usage: GpuImageUsage.Storage, width: 1);
-        using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 16, usage: GpuBufferUsage.Storage);
+        using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)GpuKernelCounters.RowBytes), usage: GpuBufferUsage.Storage);
+        // The dispatch box, in 8x8 groups, over the whole render grid; every record a miss; one distance an output pixel.
+        var box = new byte[16];
+
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: box.AsSpan(start: 8), value: ((RenderWidth + 7) / 8));
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: box.AsSpan(start: 12), value: ((RenderHeight + 7) / 8));
+        using var cullBounds = services.BufferFactory.CreateHostVisible(data: box, name: default, usage: GpuBufferUsage.Storage);
+        using var visibility = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: (((ulong)RenderWidth * RenderHeight) * SdfWorldPackage.VisibilityRecordByteLength), usage: GpuBufferUsage.Storage);
+        using var distance = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: (((ulong)width * height) * sizeof(float)), usage: GpuBufferUsage.Storage);
         using var output = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: height, name: default, usage: GpuImageUsage.Storage, width: width);
         using var upload = services.SurfaceTransferFactory.CreateUpload();
         var sourceView = upload.Upload(pixels: source, format: GpuPixelFormat.R8G8B8A8Unorm, width: RenderWidth, height: RenderHeight);
@@ -106,7 +115,12 @@ public sealed class SdfResolveDeviceLawTests {
                 [Binding(member: SdfWorldPackage.CurrentColor)] = sourceView,
                 [Binding(member: SdfWorldPackage.Output)] = output.ImageViewHandle,
             };
-            var counterBinding = Binding(member: ShaderWorkCounters.Buffer);
+            var buffers = new Dictionary<uint, IGpuBuffer> {
+                [Binding(member: ShaderWorkCounters.Buffer)] = counters,
+                [Binding(member: SdfWorldPackage.CullBounds)] = cullBounds,
+                [Binding(member: SdfWorldPackage.VisibilityRecords)] = visibility,
+                [Binding(member: SdfWorldPackage.SurfaceDistanceWritten)] = distance,
+            };
             var sets = new List<(uint Group, nint Set)>();
 
             foreach (var group in parameters.Layout.Groups) {
@@ -134,7 +148,7 @@ public sealed class SdfResolveDeviceLawTests {
                                 services.Bindings.WriteSampler(descriptorSetHandle: set, binding: binding.Binding, arrayElement: element, samplerHandle: sampler);
                                 break;
                             default:
-                                var storage = ((resolves && (binding.Binding == counterBinding)) ? counters : fillerBuffer);
+                                var storage = ((resolves && buffers.TryGetValue(key: binding.Binding, value: out var bound)) ? bound : fillerBuffer);
 
                                 services.Bindings.WriteBuffer(descriptorSetHandle: set, binding: binding.Binding, bufferHandle: storage.BufferHandle,
                                     bufferSize: storage.SizeBytes, kind: binding.Kind, elementStride: binding.ElementStride);
@@ -158,6 +172,11 @@ public sealed class SdfResolveDeviceLawTests {
             recorder.ClearStorageBuffer(commandBufferHandle: command, bufferHandle: counters.BufferHandle, sizeBytes: counters.SizeBytes);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: counters.BufferHandle,
                 sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer, destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: visibility.BufferHandle,
+                sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe, destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+            recorder.ClearStorageBuffer(commandBufferHandle: command, bufferHandle: visibility.BufferHandle, sizeBytes: visibility.SizeBytes);
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: visibility.BufferHandle,
+                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer, destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
             recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, pipelineHandle: pipeline.Handle);
             foreach (var (group, set) in sets) {
                 recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: set, group: group, pipelineLayoutHandle: pipeline.LayoutHandle);

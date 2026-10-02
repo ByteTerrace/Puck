@@ -69,29 +69,34 @@ never a Vulkan or DirectX type by name.
 
 A frame runs these kernels: `region-copy.comp` (from `Puck.Shaders`: the words each
 staged region of frame data owes, copied into its device-local buffer; see
-[what a frame uploads](../../docs/rendering/sdf/handbook/frame-rendering.md#what-a-frame-uploads)) → `sdf-sky.comp` (a direct, un-culled pass that
-fills every pixel of the view's output with the authored sky, before any tile is culled)
+[what a frame uploads](../../docs/rendering/sdf/handbook/frame-rendering.md#what-a-frame-uploads))
 → `sdf-instance-cull.comp` (the per-tile instance mask) → `sdf-beam.comp`
 (cone march over the tile-masked field) → `sdf-cull-args.comp` → the mesh pass
 (`sdf-mesh.vert`/`.frag`, rasterizing the frame's mesh draws) →
 `sdf-world-primary.comp` (camera traversal) → `sdf-world-surface.comp`
 (normals and curvature) → `sdf-world-ambient.comp` (ambient occlusion) →
 `sdf-world-shadow.comp` (the key light's soft shadow) → the views kernel
-(materials, lighting and diagnostics). The ambient and shadow passes skip a
+(materials, lighting and diagnostics, shading hits only into the lit image,
+premultiplied by coverage) → `sdf-sky-runs.comp` (the sky's field runs, only where
+coverage is below one) → `sdf-composite.comp` (the sky's runs in their authored
+order, the lit image over them by its coverage, the fog and the bounded media,
+into the output). The ambient and shadow passes skip a
 frame whose levers turn them off. The region copies are the
 residency's one upload a frame (`SdfWorldResidency.Submit`); every pass after
 it runs once per view as a pass of the view's `sdf.world` instance, into that
-instance's render grid. Native views use `SdfWorldPackage.NativeFragment` and
-write the output directly. Views whose render-scale ceiling is below native use
-`SdfWorldPackage.Fragment`: its final `sdf-resolve.comp` reconstructs full-output
-color from the render-grid color, which is one transient allocation. The graph
+instance's render grid. Native views use `SdfWorldPackage.NativeFragment`, whose sky and composite read
+the lit image and the visibility records views left. Views whose render-scale
+ceiling is below native use `SdfWorldPackage.Fragment`: its `sdf-resolve.comp`
+reconstructs the lit image and each pixel's surface distance at the output extent
+from the render-grid color, which is one transient allocation, and the sky and
+composite follow it, so the sky is never resampled or kept in history. The graph
 planner decides every barrier. `place` then places the output in its seat rect,
 copying the texels exactly when the output's scheduled extent equals the rect's
 pixels and resampling them otherwise. The residency counts its upload as three
 passes, `fillers`, `bricks` and `upload` (`SdfWorldTables.PassLabels`), in a
 ledger it owns, so counts survive a rebuild of its tables, and each view's node
-counts the view's passes as `sdf.world$sky` through `sdf.world$views`, their
-kernels' march steps and texels written among them. The views
+counts the view's passes as `sdf.world$mask` through `sdf.world$composite`, their
+kernels' march steps, texels written and sky evaluations among them. The views
 kernel ships in three compiled variants
 (`SdfViewsKernelVariant.Full`/`.Folds`/`.CoreOps`). Folds strips heavy operations;
 CoreOps also strips the remaining exotic cases. The program selects the smallest

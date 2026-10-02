@@ -114,6 +114,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             if (context.Part == SdfWorldPackage.Resolve) {
                 return new SdfResolveRecorder(context: context, groups: groups, owner: this, view: view);
             }
+            if ((context.Part == SdfWorldPackage.Parts.Sky) || (context.Part == SdfWorldPackage.Parts.Composite)) {
+                return new SdfSkyRecorder(context: context, groups: groups, owner: this, view: view);
+            }
             return new SdfWorldPassRecorder(
                 context: context,
                 groups: groups,

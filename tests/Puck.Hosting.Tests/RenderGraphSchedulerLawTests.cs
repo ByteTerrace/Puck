@@ -30,8 +30,8 @@ public sealed partial class RenderGraphSchedulerLawTests {
         reads: reads
     );
 
-    // The sdf.world package's pass count (SdfWorldPackage.Fragment in Puck.Shaders), which prices a view of the world.
-    private const int WorldPasses = 9;
+    // The sdf.world package's pass count (SdfWorldPackage.NativeFragment in Puck.Shaders), which prices a view of the world.
+    private const int WorldPasses = 11;
 
     // A view of the world: an instance of the sdf.world package, which renders the package's passes.
     private static RenderGraphInstance World(RenderGraphRead[]? reads = null) => Instance(

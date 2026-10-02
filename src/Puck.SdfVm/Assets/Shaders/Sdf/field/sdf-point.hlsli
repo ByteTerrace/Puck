@@ -330,15 +330,4 @@ int sdfWallpaperCellKey(uint group, float2 cellIndex) {
         : (int)(sdfFloorMod((cellIndex.x + cellIndex.y), 2.0) + 0.5));
 }
 
-// The R2 low-discrepancy lattice: alpha_i = round(2^32 / phi2^i) for the plastic number
-// phi2 = 1.32471795724474602596 (the real root of x^3 = x + 1). The uint multiply wraps mod 2^32, which IS the
-// fractional part of the additive recurrence — so the lattice is exact in fixed point.
-#define SDF_R2_ALPHA1 3242174889u
-#define SDF_R2_ALPHA2 2447445414u
-// The R3 siblings: alpha_i = round(2^32 / phi3^i) for phi3 = 1.2207440846057596 (the real root of x^4 = x + 1).
-// SDF_OP_CELL_JITTER's Blue flavor rotates these three across its axes so the offset components decorrelate.
-#define SDF_R3_ALPHA1 3518319155u
-#define SDF_R3_ALPHA2 2882110345u
-#define SDF_R3_ALPHA3 2360945575u
-
 #endif

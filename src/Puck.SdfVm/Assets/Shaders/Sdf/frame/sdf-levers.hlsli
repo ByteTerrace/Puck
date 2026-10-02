@@ -34,8 +34,8 @@ static const int DebugViewModeOvershoot = 9;
 // folds this mode in alongside the final-image modes instead of skipping straight to a cheap switch-only case.
 static const int DebugViewModeEvals = 10;
 // Mode 11 (visibility) colors each pixel by the kind of its visibility record: background dark blue, SDF green, mesh
-// orange. Like the termination view it shows what the pipeline dispatched, so a tile outside the dispatch box keeps the
-// sky pre-pass's color. KEEP IN SYNC with DebugViewModes.Names in src/Puck.SdfVm/DebugViewModes.cs.
+// orange. Like the termination view it shows what the pipeline dispatched, so a tile outside the dispatch box shows the
+// lit image's nothing, black, since a debug view draws no sky. KEEP IN SYNC with DebugViewModes.Names in src/Puck.SdfVm/DebugViewModes.cs.
 static const int DebugViewModeVisibility = 11;
 // Mode 12 encodes visibility-derived motion in render pixels; its valid-history blue channel distinguishes a cut.
 static const int DebugViewModeMotion = 12;

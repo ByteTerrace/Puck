@@ -12,7 +12,7 @@ namespace Puck.Abstractions.Tests;
 /// builder with room for the text allocates nothing.
 /// </summary>
 public sealed class GpuWorkReportLawTests {
-    private const string Columns = " dispatches={0} dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants={1} descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0";
+    private const string Columns = " dispatches={0} dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants={1} descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0";
 
     [Fact]
     public void ASampleWritesItsSubmissionEveryPassAndTheOutsideRow() {

@@ -1,7 +1,13 @@
-// Bounded flow/cloud volumes. Eleven float4 rows, paired with SdfWorldTables.PackVolumes, which bakes each medium's
-// motion from the frame's presented tick: no pass reads a clock.
+// Bounded flow/cloud volumes (Puck.SignedDistance.SdfVolume, a participating medium, never a distance-field shape):
+// sdfVolumes, eleven float4 rows a volume, paired with SdfWorldTables.PackVolumes, which bakes each medium's motion from
+// the frame's presented tick, so no pass reads a clock. The composite pass alone integrates them, after the surface and
+// the sky, clipped to each pixel's ray distance.
 #ifndef SDF_SHADE_VOLUMES_HLSLI
 #define SDF_SHADE_VOLUMES_HLSLI
+#include "../field/sdf-noise.hlsli"
+#include "../field/sdf-quaternion.hlsli"
+// The table's capacity in volumes. KEEP IN SYNC with SdfWorldTables.PackVolumes / SdfProgramBuilder.MaxVolumes.
+static const uint SdfVolumeCount = 64u;
 struct SdfVolumeData {
     float3 position;
     int dynamicSlot;

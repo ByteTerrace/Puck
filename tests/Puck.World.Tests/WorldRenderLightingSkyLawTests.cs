@@ -131,7 +131,7 @@ public sealed class WorldRenderLightingSkyLawTests {
             expected: SdfLights.DefaultAmbientBase,
             actual: resolved.Lights[1].Weight
         );
-        Assert.Equal(expected: 0u, actual: resolved.Sky.Block.Enabled);
+        Assert.Equal(expected: 2u, actual: resolved.Sky.Block.StopCount);
         Assert.Equal(
             expected: SdfSky.DefaultFogDensity,
             actual: resolved.Sky.Block.FogDensity
@@ -393,7 +393,6 @@ public sealed class WorldRenderLightingSkyLawTests {
         ]);
         var resolved = Resolve(defaults: BaseDefaults() with { Lighting = SunAndSky(), Sky = sky });
 
-        Assert.Equal(expected: 1u, actual: resolved.Sky.Block.Enabled);
         Assert.Equal(
             expected: 3,
             actual: resolved.Sky.StopCount
@@ -436,10 +435,10 @@ public sealed class WorldRenderLightingSkyLawTests {
         );
     }
     [Fact]
-    public void AuthoredSky_FogAlone_LeavesThePinnedGradient() {
+    public void AuthoredSky_FogAlone_KeepsTheDefaultGradient() {
         var resolved = Resolve(defaults: BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: 0.05f)]) });
 
-        Assert.Equal(expected: 0u, actual: resolved.Sky.Block.Enabled);
+        Assert.Equal(expected: 2u, actual: resolved.Sky.Block.StopCount);
         Assert.Equal(
             expected: 0.05f,
             actual: resolved.Sky.Block.FogDensity
@@ -447,11 +446,11 @@ public sealed class WorldRenderLightingSkyLawTests {
     }
     [Fact]
     public void AuthoredSky_StarsAlone_DrawOverThePinnedGradient() {
-        // A drawn layer without an authored gradient enables the sky, and the gradient it draws over is the pinned
-        // two-stop one seeded into every environment — not a zeroed stop table.
+        // A drawn layer without an authored gradient draws over the default look's two-stop gradient, seeded into every
+        // environment, not a zeroed stop table.
         var resolved = Resolve(defaults: BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Stars(Brightness: 1f)]) });
 
-        Assert.Equal(expected: 1u, actual: resolved.Sky.Block.Enabled);
+        Assert.Equal(expected: 2u, actual: resolved.Sky.Block.StopCount);
         Assert.Equal(
             expected: 1f,
             actual: resolved.Sky.Block.StarBrightness

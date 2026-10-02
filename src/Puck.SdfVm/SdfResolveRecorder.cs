@@ -6,8 +6,10 @@ namespace Puck.SdfVm;
 
 // Reconstruction uses the residency's optional reloadable pipeline: native views allocate none of its GPU resources.
 // The pass binds the residency's World set, whose tables sdfReprojection reads, and its pass group: the render-grid
-// color and the output, and, in the temporal fragment, the visibility records, the dispatch box, the reactivity and the
-// history of the preceding frame and of this one. A spatial resolve binds the tables' fillers at the temporal members.
+// color, the visibility records and the dispatch box it reads the grid through, the lit image and the surface distance it
+// writes, and, in the temporal fragment, the reactivity and the history of the preceding frame and of this one. A spatial
+// resolve binds the tables' fillers at the temporal members. The sky and the composite follow it, so it leaves the render
+// to the composite to complete.
 internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
     // Resolve-only values may shift common members. Compile the name-based copies once; native pass blocks retain
     // their established layout, and the one frame writer remains authoritative for common values.
@@ -15,15 +17,19 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         Source: ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: member.Name)),
         Destination: ((int)SdfWorldInterfaces.ResolveParameters.BlockOffsetOf(member: member.Name)),
         Length: checked((int)(member.Type!.Value.SizeBytes() * (member.Length ?? 1)))))];
-    // The temporal fragment's resolve inputs after the render-grid color, by the member each binds at, in port order.
-    private static readonly string[] TemporalInputs = [
+    // The resolve's buffer inputs after the render-grid color in either mode, by the member each binds at, in port order.
+    private static readonly string[] Inputs = [
         SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.CullBounds,
+    ];
+    // The temporal fragment's resolve inputs after those, by the member each binds at, in port order.
+    private static readonly string[] TemporalInputs = [
         SdfWorldPackage.Reactivity,
         SdfWorldPackage.HistoryColor,
         SdfWorldPackage.HistorySurface,
     ];
-    // The temporal fragment's resolve outputs after the output, by the member each binds at, in port order.
+    // The temporal fragment's resolve outputs after the lit image and the surface distance, by the member each binds at,
+    // in port order.
     private static readonly string[] TemporalOutputs = [
         SdfWorldPackage.HistoryColorWritten,
         SdfWorldPackage.HistorySurfaceWritten,
@@ -103,8 +109,6 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
             pipelineLayoutHandle: pipeline.LayoutHandle
         );
         recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: ((recording.Width + 7) / 8), groupCountY: ((recording.Height + 7) / 8), groupCountZ: 1);
-        residency.MarkRendered(view: index);
-        m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
         return RenderGraphPackageOutcome.Drew;
     }
 
@@ -122,9 +126,13 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
 
         bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.CurrentColor), descriptorSetHandle: set, imageViewHandle: recording.Inputs[0].Image.ImageViewHandle);
         bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.Output), descriptorSetHandle: set, imageViewHandle: recording.Outputs[0].Image.ImageViewHandle);
+        tables.WriteInterfaceBuffer(buffer: recording.Outputs[1].Buffer!, layout: SdfWorldInterfaces.ResolveParameters.Layout, member: SdfWorldPackage.SurfaceDistanceWritten, set: set);
+        for (var port = 0; (port < Inputs.Length); port++) {
+            tables.WriteInterfaceBuffer(buffer: recording.Inputs[(port + 1)].Buffer!, layout: SdfWorldInterfaces.ResolveParameters.Layout, member: Inputs[port], set: set);
+        }
         for (var port = 0; (port < TemporalInputs.Length); port++) {
             var member = TemporalInputs[port];
-            var bound = (m_temporal ? recording.Inputs[(port + 1)] : default);
+            var bound = (m_temporal ? recording.Inputs[(port + 1 + Inputs.Length)] : default);
 
             if (member == SdfWorldPackage.HistoryColor) {
                 bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: member), descriptorSetHandle: set,
@@ -135,7 +143,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         }
         for (var port = 0; (port < TemporalOutputs.Length); port++) {
             var member = TemporalOutputs[port];
-            var bound = (m_temporal ? recording.Outputs[(port + 1)] : default);
+            var bound = (m_temporal ? recording.Outputs[(port + 2)] : default);
 
             if (member == SdfWorldPackage.HistoryColorWritten) {
                 bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: member), descriptorSetHandle: set,

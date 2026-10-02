@@ -12,17 +12,19 @@ public sealed partial class SdfPassPlanLawTests {
         Packages: [new RenderGraphPackagePass(Name: Sdf, Package: RenderGraphPackageCatalog.SdfWorld, Outputs: [SdfWorldPackage.Color])]));
 
     // The temporal resolve reads the history the previous frame wrote and writes this frame's, both at the output extent
-    // and one storage a frame slot, beside the output; the reactivity the sky starts and views writes is one transient
-    // render-extent buffer the resolve consumes within the frame.
+    // and one storage a frame slot, beside the lit image and the surface distance; the reactivity views writes is one
+    // transient render-extent buffer the resolve consumes within the frame. The sky never enters the history: the sky
+    // and composite passes follow the resolve.
     [Fact]
     public void TheTemporalResolveReadsLastFramesHistoryAndWritesThisFrames() {
         var plan = TemporalPlan.Pipeline;
 
-        Assert.Equal(expected: Order.Append(element: SdfWorldPackage.Resolve), actual: plan.Passes.Select(selector: static pass => pass.Package!.Part));
+        Assert.Equal(expected: ResolvedOrder, actual: plan.Passes.Select(selector: static pass => pass.Package!.Part));
         var color = Storage(plan: plan, version: SdfWorldPackage.Parts.HistoryColor);
         var surface = Storage(plan: plan, version: SdfWorldPackage.Parts.HistorySurface);
         var reactivity = Storage(plan: plan, version: SdfWorldPackage.Parts.Reactivity);
-        var output = Storage(plan: plan, version: SdfWorldPackage.Color);
+        var lit = Storage(plan: plan, version: SdfWorldPackage.Parts.Lit);
+        var distance = Storage(plan: plan, version: SdfWorldPackage.Parts.SurfaceDistance);
 
         Assert.All(collection: [color, surface], action: static storage => {
             Assert.True(condition: storage.Declaration.History);
@@ -35,36 +37,36 @@ public sealed partial class SdfPassPlanLawTests {
         Assert.True(condition: reactivity.Declaration.Transient);
         Assert.Equal(expected: [ShaderPipelineCountBasis.RenderExtent, ShaderPipelineCountBasis.Viewports], actual: reactivity.Declaration.Count!.Single().Per);
 
-        var resolve = plan.Passes[^1];
+        var resolve = plan.Passes.Single(predicate: static pass => (pass.Package!.Part == SdfWorldPackage.Resolve));
 
         Assert.Equal(
             expected: new[] { color.Index, surface.Index }.Order(),
             actual: resolve.Accesses.Where(predicate: static access => access.PreviousFrame).Select(selector: static access => access.Storage).Order()
         );
         Assert.Equal(
-            expected: new[] { output.Index, color.Index, surface.Index }.Order(),
+            expected: new[] { lit.Index, distance.Index, color.Index, surface.Index }.Order(),
             actual: resolve.Accesses.Where(predicate: static access => (!access.PreviousFrame && access.Use.Access.HasFlag(flag: GpuAccess.ShaderWrite))).Select(selector: static access => access.Storage).Order()
         );
         Assert.Contains(collection: resolve.Accesses, filter: access => ((access.Storage == reactivity.Index) && !access.Use.Writes));
         Assert.Equal(
-            expected: [SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Views],
+            expected: [SdfWorldPackage.Parts.Views],
             actual: plan.Passes.Where(predicate: pass => pass.Accesses.Any(predicate: access => ((access.Storage == reactivity.Index) && access.Use.Writes))).Select(selector: static pass => pass.Package!.Part)
         );
         Assert.Contains(collection: resolve.Parameters.Interface.Members, filter: static member => (member.Name == SdfWorldPackage.HistoryColor));
         Assert.Contains(collection: resolve.Parameters.Interface.Members, filter: static member => (member.Group == ShaderInterfaceGroup.World));
     }
-    // Reconstruction over time adds to the spatial graph at the same ceiling only its history, an output-sized color and
-    // surface of eight bytes a pixel each, once a frame slot, and the reactivity, four bytes a render pixel held once: at
-    // 1920x1080 and half scale over three frame slots, 99,532,800 bytes of history and 2,073,600 of reactivity.
+    // Reconstruction over time adds to the spatial graph at the same ceiling only its history, an output-sized color of
+    // eight bytes a pixel and surface of twelve, once a frame slot, and the reactivity, four bytes a render pixel held
+    // once: at 1920x1080 and half scale over three frame slots, 124,416,000 bytes of history and 2,073,600 of reactivity.
     [Fact]
     public void ATemporalViewAddsOnlyItsHistoryAndReactivityOverTheSpatialGraph() {
         var counts = new ShaderPipelineStorageCounts(Height: 1080, Width: 1920) { InstanceMaskWords = 1, Instances = 5, RenderHeight = 540, RenderWidth = 960, Tiles = 8160, Viewports = 1 };
-        const ulong History = ((1920UL * 1080) * 8);
+        const ulong History = ((1920UL * 1080) * (8 + (4 * SdfWorldPackage.HistorySurfaceWords)));
         const ulong Reactivity = ((960UL * 540) * 4);
 
-        Assert.Equal(actual: (((InFlight * 2) * History) + Reactivity), expected: 101_606_400UL);
+        Assert.Equal(actual: ((InFlight * History) + Reactivity), expected: 126_489_600UL);
         Assert.Equal(
-            expected: (((InFlight * 2) * History) + Reactivity),
+            expected: ((InFlight * History) + Reactivity),
             actual: (PlannedBytes(plan: TemporalPlan, counts: counts) - PlannedBytes(plan: ResolvedPlan, counts: counts))
         );
     }

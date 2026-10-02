@@ -1,9 +1,9 @@
 # SDF frame rendering
 
 One world frame turns an SDF program and opaque meshes into pixels through a
-fixed sequence of compute and graphics passes. Upload and sky filling precede
-culling; the mask pass builds per-tile instance visibility before the beam and primary marches; surface,
-ambient, and view passes finish each view's image. The sequence exposes
+fixed sequence of compute and graphics passes. The upload precedes culling; the mask pass builds per-tile instance
+visibility before the beam and primary marches; surface, ambient, shadow and view passes shade each view's hits, and
+the sky and composite passes finish its image. The sequence exposes
 where the GPU work goes, why mask-first processing keeps beam cost tied to nearby
 instances, how render-scale tiers trade resolution for frame budget, and how
 frames stay in flight without stalling the whole device.
@@ -15,13 +15,13 @@ moving transforms, the screens, lights, volumes and mesh draws — live in one
 **residency** (`SdfWorldResidency`) per frame source, and the frame first
 submits one **upload** that brings those tables up to date. Then every view of
 the scene is an instance of the render graph's `sdf.world` package, and its node
-records the package's ten native passes into its own submission, reading the tables
-the upload wrote. Upload and sky filling precede culling; camera traversal,
-surface evaluation, AO, the key light's shadow and lighting have separate dispatches. The passes finish
-that view's own output image:
+records the package's eleven native passes into its own submission, reading the tables
+the upload wrote. The upload precedes culling; camera traversal, surface evaluation, AO,
+the key light's shadow, lighting, the sky and the composite have separate dispatches. The
+passes finish that view's own output image:
 
 ```text
-   upload → sky → mask → beam → cull-args → mesh → primary → surface → ambient → views
+   upload → mask → beam → cull-args → mesh → primary → surface → ambient → shadow → views → sky → composite
 ```
 
 The render graph plans the view's passes like any other graph: the package
@@ -29,14 +29,15 @@ declares them as a fragment (`SdfWorldPackage.NativeFragment`) that the graph
 compiler splices into the view's graph, and the planner decides every barrier
 between them. `world.counters gpu` reports the upload under the residency
 (`sdf:world` for the world's) and each view's passes under its instance, as
-`sdf.world$sky` through `sdf.world$views`. Here is what the culling and
+`sdf.world$mask` through `sdf.world$composite`. Here is what the culling and
 rendering passes do; [the engine README](../../../../src/Puck.SdfVm/README.md)
 describes the visibility records the four per-pixel passes share: one per pixel
 of each view's render grid, 64 bytes. A view whose render-scale ceiling is below
-native appends the full-output `resolve` pass described under
-[render scale](#render-scale-tiers-trade-resolution-for-frame-time), and a view
-that reconstructs over time appends it at any scale
-([temporal reconstruction](#temporal-reconstruction)).
+native puts the full-output `resolve` pass described under
+[render scale](#render-scale-tiers-trade-resolution-for-frame-time) between views
+and the sky, and a view that reconstructs over time does so at any scale
+([temporal reconstruction](#temporal-reconstruction)). The sky and the composite
+are described under [the sky once, and a composite last](#the-sky-once-and-a-composite-last).
 
 **mask** (`sdf-instance-cull.comp.hlsl`) computes, for every 16×16 screen tile, the
 set of instances that could possibly matter to that tile—a bitmask, one bit per
@@ -101,8 +102,8 @@ the seats the same way it places panes.
 The passes scale with different things. `mask` and `beam` scale with how many
 instances lie near each tile's cone. `primary`, `surface`, `ambient`, and
 `views` scale with on-screen content: how many pixels hit a surface and how
-much of the program each field query walks. `sky` and `cull-args` are
-small. **The four per-pixel passes are the scale lever for
+much of the program each field query walks. `cull-args` is small; `composite`
+scales with the output's pixels and `sky` with the uncovered ones. **The four per-pixel passes are the scale lever for
 on-screen content; `mask`+`beam` is the scale lever for instance count.**
 Moving work between the per-pixel passes can relieve register pressure but
 adds hit-buffer traffic, so compare their sum as well as each label.
@@ -204,6 +205,41 @@ tier a view uses is a host decision, not baked into the content. In `Puck.World`
 `world.render-scale` sets it for every player view and `world.upscale-sharpness`
 sets the reconstruction blend.
 
+## The sky once, and a composite last
+
+Views shades only the pixels a surface covers. It writes the **lit image**: each
+pixel's shaded color premultiplied by its **coverage**, with the coverage in the
+alpha, which is one for a solid hit, the silhouette's share on an edge beside the
+sky, and zero for a miss. In a native view a pixel outside the dispatch box is
+never written, so the passes after views read it as uncovered; in a reduced or
+temporal view the resolve reconstructs the lit image, coverage with color, and
+each pixel's surface distance at the output extent.
+
+The sky's layers compose in their authored order, and the sky is cut into
+**runs** without reordering it: the gradient is a field run, the sun disc and the
+stars a point run, and the clouds a field run over them. Every blend is affine in
+the color beneath it, so a field run is summarized exactly as one per-channel
+scale and offset, and the runs compose as the stack does
+(`SdfSkyRuns`, held by `SkyRunCompositionLawTests`).
+
+- The `sky` pass (`passes/sdf-sky-runs.comp.hlsl`) evaluates the field runs at
+  the output extent, and only where the pixel or one of its eight neighbours is
+  not wholly covered: the gradient's offset, then the clouds' scale and offset,
+  each a half-float image. A covered pixel evaluates no sky, and each pixel
+  evaluated counts one `gpu.sky.evaluations`.
+- The `composite` pass (`passes/sdf-composite.comp.hlsl`) writes the view's
+  color. It fogs the lit image toward the gradient by its ray distance, scaled by
+  its coverage; where the coverage is below one it composes the runs beneath it,
+  the disc and the stars evaluated at the pixel so they stay sharp, and puts the
+  lit image over them by its coverage, so a silhouette blends toward the full sky
+  at its pixel. The bounded media integrate last, clipped to the surface's ray
+  distance or the far distance on a miss.
+
+An unauthored world renders the default look: the two-stop gradient and fog
+`SdfSky` starts from, read like any authored sky. A debug view's lit image is
+its whole picture, so the sky evaluates nothing and the composite passes it
+through.
+
 ## Temporal reconstruction
 
 A view whose quality asks for it (`SdfViewQuality.Temporal`) reconstructs over
@@ -221,16 +257,19 @@ one allocation a frame slot each, that the next frame reads through
 `ResourceReference.PreviousFrame`.
 
 - The **history color** holds, per output pixel, the weighted mean of every sample
-  the pixel has gathered in its RGB and their summed weight in its alpha, capped
-  at one jitter period of full-weight samples.
-- The **history surface** holds two words per output pixel: the ray distance and
-  the visibility identity of the nearest of the render samples the resolve read.
+  the pixel has gathered: the lit color in its RGB and the coverage in its alpha,
+  premultiplied as the lit image is.
+- The **history surface** holds three words per output pixel: the ray distance and
+  the visibility identity of the nearest of the render samples the resolve read,
+  and the samples' summed weight, capped at one jitter period of full-weight
+  samples.
 
-The sky and views passes also write a one-channel **reactivity** buffer at the
-render extent, which only the resolve reads: one where a screen or a bounded
-volume covers the pixel, and, since the material model cannot tell steady
-emission from animated, the share of the pixel's color its material emits.
-Coverage stays in the color's alpha.
+The views pass also writes a one-channel **reactivity** buffer at the render
+extent, which only the resolve reads, inside the dispatch box: one where a screen
+covers the pixel, and, since the material model cannot tell steady emission from
+animated, the share of the pixel's color its material emits. Coverage stays in
+the color's alpha. The sky and the bounded media never enter the history: they
+composite after the resolve.
 
 The temporal resolve takes, for each output pixel, the 3x3 render samples
 nearest its center, each weighted by a Gaussian of its distance in output
@@ -378,7 +417,7 @@ frame's image while the next one renders.
 Performance is judged by code, disassembly, and deterministic work counters —
 never by wall-clock or GPU timestamps. The residency counts the work of its
 upload's passes, and each view's node counts the work each of its passes
-(`sdf.world$sky` through `sdf.world$views`) records, with no arming and no
+(`sdf.world$mask` through `sdf.world$composite`) records, with no arming and no
 effect on the image: dispatches, indirect dispatches, barriers, pipeline and
 descriptor-set binds, push-constant bytes, descriptor writes and host-visible
 upload bytes. The upload has three passes: `fillers`, the fillers' first

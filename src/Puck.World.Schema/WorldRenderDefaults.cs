@@ -95,8 +95,8 @@ public readonly record struct WorldQualityPreset(
 /// optional individually — an absent section, or an absent field within it, resolves to <c>SdfFrame</c>'s pinned
 /// default for that field, so a world renders unchanged until it authors one.</param>
 /// <param name="Sky">The procedural sky — a gradient, sun disc, star field, and distance fog. Optional; an absent
-/// section renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section
-/// existed.</param>
+/// section renders the default look, the two-stop gradient and fog <c>SdfSky</c> starts from, as data the kernels
+/// read like any authored sky.</param>
 /// <param name="Environment">The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe
 /// reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.</param>
 /// <param name="Tonemap">The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs
@@ -328,9 +328,10 @@ public sealed record WorldRenderCurvature(
     BindableScalar? InkHigh = null,
     BindableColor? InkColor = null
 );
-/// <summary>The procedural sky as an ordered stack of layers. Absent is a hard gate: the world renders the pinned
-/// two-stop gradient and fog density, as before this section existed. The layers composite in a fixed order —
-/// gradient, stars, sun disc, clouds — whatever order they are authored in; fog is read every frame on its own. A
+/// <summary>The procedural sky as an ordered stack of layers. Absent is the default look: the two-stop gradient and fog
+/// density <c>SdfSky</c> starts from, which a layer drawn over an unauthored gradient draws over too. The layers
+/// composite in a fixed order, whatever order they are authored in: the gradient, then the sun disc and the stars,
+/// then the clouds over them; fog is read every frame on its own. A
 /// layer kind appears at most once. Every value a layer carries may be keyed on a clock on its own; the section may
 /// instead be keyed whole (<paramref name="Clock"/>, <paramref name="Keys"/>), each key a partial record addressing
 /// layers by name.</summary>

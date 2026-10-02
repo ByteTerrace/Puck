@@ -1,7 +1,12 @@
 // Shared exact-copy, bilinear and clamped Catmull-Rom reconstruction. Loads use the active render grid,
-// which can be smaller than the backing image. Color is premultiplied RGBA; no alpha carries reactivity.
+// which can be smaller than the backing image. Color is premultiplied RGBA; no alpha carries reactivity. A source written
+// only inside part of its grid is reconstructed through the *Within forms, which read every texel outside that box,
+// [current.xy, current.zw), as transparent.
 #ifndef PUCK_RECONSTRUCTION_HLSLI
 #define PUCK_RECONSTRUCTION_HLSLI
+
+// The box every texel of a wholly written source lies in.
+static const uint4 PuckReconstructionAllCurrent = uint4(0u, 0u, 0xFFFFFFFFu, 0xFFFFFFFFu);
 
 float4 puckCatmullRomWeights(float t) {
     float t2 = (t * t);
@@ -14,21 +19,28 @@ float4 puckCatmullRomWeights(float t) {
         ((-0.5 * t2) + (0.5 * t3))
     );
 }
-float4 puckReconstructionTap(Texture2D<float4> image, int2 pixel, uint2 sourceDims, uint2 sourceOrigin) {
+float4 puckReconstructionTapWithin(Texture2D<float4> image, int2 pixel, uint2 sourceDims, uint2 sourceOrigin, uint4 current) {
     uint2 p = (uint2)clamp(pixel, int2(0, 0), (int2(sourceDims) - 1));
+
+    if (any(p < current.xy) || any(p >= current.zw)) {
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
 
     return image.Load(int3((p + sourceOrigin), 0));
 }
+float4 puckReconstructionTap(Texture2D<float4> image, int2 pixel, uint2 sourceDims, uint2 sourceOrigin) {
+    return puckReconstructionTapWithin(image, pixel, sourceDims, sourceOrigin, PuckReconstructionAllCurrent);
+}
 // Reconstructs at a continuous source position in texel units, the first texel's center at zero: bilinear over the four
 // nearest texels at sharpness 0, blending to clamped Catmull-Rom over the sixteen nearest at sharpness 1.
-float4 puckReconstructAt(Texture2D<float4> image, float2 sourcePos, uint2 sourceDims, uint2 sourceOrigin, float sharpness) {
+float4 puckReconstructAtWithin(Texture2D<float4> image, float2 sourcePos, uint2 sourceDims, uint2 sourceOrigin, float sharpness, uint4 current) {
     float2 clamped = clamp(sourcePos, float2(0.0, 0.0), (float2(sourceDims) - 1.0));
     int2 origin = int2(clamped);
     float2 f = (clamped - float2(origin));
-    float4 c00 = puckReconstructionTap(image, (origin + int2(0, 0)), sourceDims, sourceOrigin);
-    float4 c10 = puckReconstructionTap(image, (origin + int2(1, 0)), sourceDims, sourceOrigin);
-    float4 c01 = puckReconstructionTap(image, (origin + int2(0, 1)), sourceDims, sourceOrigin);
-    float4 c11 = puckReconstructionTap(image, (origin + int2(1, 1)), sourceDims, sourceOrigin);
+    float4 c00 = puckReconstructionTapWithin(image, (origin + int2(0, 0)), sourceDims, sourceOrigin, current);
+    float4 c10 = puckReconstructionTapWithin(image, (origin + int2(1, 0)), sourceDims, sourceOrigin, current);
+    float4 c01 = puckReconstructionTapWithin(image, (origin + int2(0, 1)), sourceDims, sourceOrigin, current);
+    float4 c11 = puckReconstructionTapWithin(image, (origin + int2(1, 1)), sourceDims, sourceOrigin, current);
     float4 bilinear = lerp(lerp(c00, c10, f.x), lerp(c01, c11, f.x), f.y);
     sharpness = saturate(sharpness);
 
@@ -41,41 +53,47 @@ float4 puckReconstructAt(Texture2D<float4> image, float2 sourcePos, uint2 source
     float4 wx = puckCatmullRomWeights(f.x);
     float4 wy = puckCatmullRomWeights(f.y);
     float4 row0 =
-        (wx.x * puckReconstructionTap(image, (origin + int2(-1, -1)), sourceDims, sourceOrigin)) +
-        (wx.y * puckReconstructionTap(image, (origin + int2( 0, -1)), sourceDims, sourceOrigin)) +
-        (wx.z * puckReconstructionTap(image, (origin + int2( 1, -1)), sourceDims, sourceOrigin)) +
-        (wx.w * puckReconstructionTap(image, (origin + int2( 2, -1)), sourceDims, sourceOrigin));
+        (wx.x * puckReconstructionTapWithin(image, (origin + int2(-1, -1)), sourceDims, sourceOrigin, current)) +
+        (wx.y * puckReconstructionTapWithin(image, (origin + int2( 0, -1)), sourceDims, sourceOrigin, current)) +
+        (wx.z * puckReconstructionTapWithin(image, (origin + int2( 1, -1)), sourceDims, sourceOrigin, current)) +
+        (wx.w * puckReconstructionTapWithin(image, (origin + int2( 2, -1)), sourceDims, sourceOrigin, current));
     float4 row1 =
-        (wx.x * puckReconstructionTap(image, (origin + int2(-1,  0)), sourceDims, sourceOrigin)) +
+        (wx.x * puckReconstructionTapWithin(image, (origin + int2(-1,  0)), sourceDims, sourceOrigin, current)) +
         (wx.y * c00) +
         (wx.z * c10) +
-        (wx.w * puckReconstructionTap(image, (origin + int2( 2,  0)), sourceDims, sourceOrigin));
+        (wx.w * puckReconstructionTapWithin(image, (origin + int2( 2,  0)), sourceDims, sourceOrigin, current));
     float4 row2 =
-        (wx.x * puckReconstructionTap(image, (origin + int2(-1,  1)), sourceDims, sourceOrigin)) +
+        (wx.x * puckReconstructionTapWithin(image, (origin + int2(-1,  1)), sourceDims, sourceOrigin, current)) +
         (wx.y * c01) +
         (wx.z * c11) +
-        (wx.w * puckReconstructionTap(image, (origin + int2( 2,  1)), sourceDims, sourceOrigin));
+        (wx.w * puckReconstructionTapWithin(image, (origin + int2( 2,  1)), sourceDims, sourceOrigin, current));
     float4 row3 =
-        (wx.x * puckReconstructionTap(image, (origin + int2(-1,  2)), sourceDims, sourceOrigin)) +
-        (wx.y * puckReconstructionTap(image, (origin + int2( 0,  2)), sourceDims, sourceOrigin)) +
-        (wx.z * puckReconstructionTap(image, (origin + int2( 1,  2)), sourceDims, sourceOrigin)) +
-        (wx.w * puckReconstructionTap(image, (origin + int2( 2,  2)), sourceDims, sourceOrigin));
+        (wx.x * puckReconstructionTapWithin(image, (origin + int2(-1,  2)), sourceDims, sourceOrigin, current)) +
+        (wx.y * puckReconstructionTapWithin(image, (origin + int2( 0,  2)), sourceDims, sourceOrigin, current)) +
+        (wx.z * puckReconstructionTapWithin(image, (origin + int2( 1,  2)), sourceDims, sourceOrigin, current)) +
+        (wx.w * puckReconstructionTapWithin(image, (origin + int2( 2,  2)), sourceDims, sourceOrigin, current));
     float4 cubic = ((((wy.x * row0) + (wy.y * row1)) + (wy.z * row2)) + (wy.w * row3));
     float4 neighborhoodMin = min(min(c00, c10), min(c01, c11));
     float4 neighborhoodMax = max(max(c00, c10), max(c01, c11));
 
     return lerp(bilinear, clamp(cubic, neighborhoodMin, neighborhoodMax), sharpness);
 }
+float4 puckReconstructAt(Texture2D<float4> image, float2 sourcePos, uint2 sourceDims, uint2 sourceOrigin, float sharpness) {
+    return puckReconstructAtWithin(image, sourcePos, sourceDims, sourceOrigin, sharpness, PuckReconstructionAllCurrent);
+}
 // Reconstructs a rect's pixel from its source: an exact copy where the rect has the source's extent, otherwise the
 // source resampled at the pixel's center (puckReconstructAt).
-float4 puckReconstructRegion(Texture2D<float4> image, uint2 pixel, uint2 rectDims, uint2 sourceDims, uint2 sourceOrigin, float sharpness) {
+float4 puckReconstructRegionWithin(Texture2D<float4> image, uint2 pixel, uint2 rectDims, uint2 sourceDims, uint2 sourceOrigin, float sharpness, uint4 current) {
     if (all(sourceDims == rectDims)) {
-        return image.Load(int3((pixel + sourceOrigin), 0));
+        return puckReconstructionTapWithin(image, int2(pixel), sourceDims, sourceOrigin, current);
     }
 
     float2 sourcePos = ((((float2(pixel) + 0.5) * float2(sourceDims)) / float2(rectDims)) - 0.5);
 
-    return puckReconstructAt(image, sourcePos, sourceDims, sourceOrigin, sharpness);
+    return puckReconstructAtWithin(image, sourcePos, sourceDims, sourceOrigin, sharpness, current);
+}
+float4 puckReconstructRegion(Texture2D<float4> image, uint2 pixel, uint2 rectDims, uint2 sourceDims, uint2 sourceOrigin, float sharpness) {
+    return puckReconstructRegionWithin(image, pixel, rectDims, sourceDims, sourceOrigin, sharpness, PuckReconstructionAllCurrent);
 }
 
 float4 puckReconstruct(Texture2D<float4> image, uint2 pixel, uint2 rectDims, uint2 sourceDims, float sharpness) {

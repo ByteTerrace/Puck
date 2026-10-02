@@ -114,8 +114,12 @@ register.
   `surface/sdf-shadow.hlsli`, and `sdfViewsStage`
   (`passes/sdf-hit-stages.hlsli`), which reads the record once as a surface
   sample (`SdfSurfaceSample`) and runs `sdfLightStage`
-  (`shade/sdf-light-stage.hlsli`), the volumes and the debug views
-  (`debug/sdf-debug-views.hlsli`). The mesh pass before primary is a graphics
+  (`shade/sdf-light-stage.hlsli`) and the debug views
+  (`debug/sdf-debug-views.hlsli`), shading hits only into the lit image
+  with their coverage. The sky's field runs (`passes/sdf-sky-runs.comp.hlsl`)
+  and the composite (`passes/sdf-composite.comp.hlsl`), which puts the lit
+  image over the sky and integrates the bounded media, run after views (or the
+  resolve) through the sky interface, so no march code reaches them. The mesh pass before primary is a graphics
   pass (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) whose target bounds
   primary's march, and only primary reads it: a mesh pixel's record carries the
   mesh kind, its draw and its triangle, which the later stages read, and the
@@ -1924,9 +1928,10 @@ whether its graph is the temporal fragment and hands it to `TemporalOf`, so the
 epoch's `Enabled` and `Temporal` follow the installed graph, never the request:
 a graph still building never jitters, and the resolve never reads history its
 graph did not write. The history is two fragment history versions at the output
-extent (color with the gathered weight in alpha; the surface's ray distance and
-identity), zero-initialized, so a fresh graph reads nothing; the reactivity
-buffer is the sky's then views' at the render extent. The one resolve kernel
+extent (the lit color and its coverage, premultiplied; the surface's ray
+distance, identity and gathered weight), zero-initialized, so a fresh graph reads
+nothing; the reactivity buffer is views', read only inside the dispatch box. The
+sky and the media composite after the resolve, so history holds none of them. The one resolve kernel
 switches on the pass block's `temporal` and the debug mode; a spatial resolve
 binds the tables' fillers at every temporal member. Its first epoch frame calls
 `puckReconstruct`, the spatial path itself, so a reset frame is the spatial

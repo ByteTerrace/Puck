@@ -26,14 +26,16 @@ public sealed class ShaderWorkCountersLawTests {
         Assert.Contains(expectedSubstring: $"static const uint PuckWorkRowWords = {GpuKernelCounters.RowWords}u;", actualString: generated);
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkStepsWord = 0u;");
         Assert.Contains(actualString: generated, expectedSubstring: $"static const uint PuckWorkTexelsWord = {GpuKernelCounters.CountWords}u;");
+        Assert.Contains(actualString: generated, expectedSubstring: $"static const uint PuckWorkSkyWord = {2 * GpuKernelCounters.CountWords}u;");
         Assert.Contains(actualString: generated, expectedSubstring: "void puckCountWork(uint steps, uint texels) {");
+        Assert.Contains(actualString: generated, expectedSubstring: "void puckCountSky(uint evaluations) {");
         Assert.Contains(actualString: generated, expectedSubstring: "void puckCountFragmentWork(uint steps, uint texels) {");
         Assert.Contains(actualString: generated, expectedSubstring: "bool counting = !IsHelperLane();");
         Assert.Contains(actualString: generated, expectedSubstring: $"RWStructuredBuffer<uint> {ShaderWorkCounters.Buffer}");
         Assert.Contains(actualString: generated, expectedSubstring: $"uint {ShaderWorkCounters.Row};");
         Assert.Equal(
             actual: GpuWork.KernelKinds.ToArray(),
-            expected: [GpuWork.MarchSteps, GpuWork.TexelsWritten]
+            expected: [GpuWork.MarchSteps, GpuWork.TexelsWritten, GpuWork.SkyEvaluations]
         );
     }
     [Fact]
@@ -44,6 +46,7 @@ public sealed class ShaderWorkCountersLawTests {
             ShaderInterfaceHlsl.Generate(shaderInterface: Interface(members: [ShaderWorkCounters.BufferMember])),
         ])) {
             Assert.Contains(actualString: generated, expectedSubstring: "void puckCountWork(uint steps, uint texels) {\n}");
+            Assert.Contains(actualString: generated, expectedSubstring: "void puckCountSky(uint evaluations) {\n}");
             Assert.Contains(actualString: generated, expectedSubstring: "void puckCountFragmentWork(uint steps, uint texels) {\n}");
             Assert.DoesNotContain(actualString: generated, expectedSubstring: "puckAddWork");
             Assert.DoesNotContain(actualString: generated, expectedSubstring: "PuckWorkRowWords");

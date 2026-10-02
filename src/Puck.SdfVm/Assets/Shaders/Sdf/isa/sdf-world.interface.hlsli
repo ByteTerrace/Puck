@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/0b144ccd639af5d323fbf0d1c1252d1defcca4f124a48d9f7d58778285375cb8). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/a4f56fa8d33193af1494cd42e24f839865357e92692297462a4b9d7504c6f010). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -14,14 +14,14 @@ struct SdfLight {
 };
 
 struct SdfSkyBlock {
-    [[vk::offset(0)]] uint Enabled;
-    [[vk::offset(4)]] float FogDensity;
-    [[vk::offset(8)]] uint StopCount;
-    [[vk::offset(12)]] uint SoftboxCount;
+    [[vk::offset(0)]] float FogDensity;
+    [[vk::offset(4)]] uint StopCount;
+    [[vk::offset(8)]] uint SoftboxCount;
+    [[vk::offset(12)]] int DiscLight;
     [[vk::offset(16)]] float3 DiscDirection;
     [[vk::offset(28)]] float DiscIntensity;
     [[vk::offset(32)]] float DiscExponent;
-    [[vk::offset(36)]] int DiscLight;
+    [[vk::offset(36)]] uint _pad36;
     [[vk::offset(40)]] float StarDensity;
     [[vk::offset(44)]] float StarBrightness;
     [[vk::offset(48)]] uint StarSeed;
@@ -103,8 +103,8 @@ struct SdfWorldFrame {
 [[vk::binding(19, 1)]] Texture2D<float4> sdfMeshEmission : register(t19, space1);
 [[vk::binding(20, 1)]] StructuredBuffer<SdfLight> sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2 : register(t20, space1);
 #define sdfLights sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2
-[[vk::binding(21, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutc0ed0ac58f3374cb5cb9598dc3d2b22bbbd50fed7bd9ae30a7a319c2c56eccd4 : register(t21, space1);
-#define sdfSky sdfSkyLayoutc0ed0ac58f3374cb5cb9598dc3d2b22bbbd50fed7bd9ae30a7a319c2c56eccd4
+[[vk::binding(21, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutc21dea5f8b5a7c8005406de8a2810f1fa8c9cd0b443a9e283a9cb686059d22c6 : register(t21, space1);
+#define sdfSky sdfSkyLayoutc21dea5f8b5a7c8005406de8a2810f1fa8c9cd0b443a9e283a9cb686059d22c6
 [[vk::binding(22, 1)]] StructuredBuffer<SdfSkyStop> sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224 : register(t22, space1);
 #define sdfSkyStops sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224
 [[vk::binding(23, 1)]] StructuredBuffer<SdfSoftbox> sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf : register(t23, space1);
@@ -200,11 +200,13 @@ struct SdfWorldPass {
 [[vk::binding(45, 3)]] RWStructuredBuffer<uint> workCounters : register(u45, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
-// back): each counted kind in GpuWork.KernelKinds order, march steps then texels written, as a 64-bit count in
-// two words, low word first. An interface declaring no work counters declares the same two functions empty.
-static const uint PuckWorkRowWords = 4u;
+// back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, then sky evaluations, as a
+// 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
+// empty.
+static const uint PuckWorkRowWords = 6u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
+static const uint PuckWorkSkyWord = 4u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -230,6 +232,14 @@ void puckCountWork(uint steps, uint texels) {
 
         puckAddWork((row + PuckWorkStepsWord), waveSteps);
         puckAddWork((row + PuckWorkTexelsWord), waveTexels);
+    }
+}
+// Adds an invocation's sky evaluations to its pass's row: the wave sums them, and its first active lane adds the sum.
+void puckCountSky(uint evaluations) {
+    uint waveEvaluations = WaveActiveSum(evaluations);
+
+    if (WaveIsFirstLane()) {
+        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkSkyWord), waveEvaluations);
     }
 }
 // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper

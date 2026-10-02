@@ -8940,7 +8940,7 @@ export type WorldRenderDefaults = {
    */
   lighting?: WorldRenderLighting | null;
   /**
-   * The procedural sky — a gradient, sun disc, star field, and distance fog. Optional; an absent section renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed.
+   * The procedural sky — a gradient, sun disc, star field, and distance fog. Optional; an absent section renders the default look, the two-stop gradient and fog SdfSky starts from, as data the kernels read like any authored sky.
    */
   sky?: WorldRenderSky | null;
   /**

@@ -156,7 +156,8 @@ public sealed record SdfFrame(
     /// and hemisphere ambient an unauthored world renders.</summary>
     public SdfLights Lights { get; init; } = SdfLights.Default();
     /// <summary>The sky: its gradient, fog, sun disc, stars, clouds and the studio reflection's softboxes and horizon.
-    /// The default is the pinned two-stop sky an unauthored world renders.</summary>
+    /// The default is the default look an unauthored world renders: the two-stop gradient and the default fog, as
+    /// data.</summary>
     public SdfSky Sky { get; init; } = new();
     /// <summary>The far distance, in world units: the depth at which every camera march ends — the fine march's far
     /// exit, the beam's cone proofs (tile entry, the four-bound gap search, the F1 far bound) and every "nothing

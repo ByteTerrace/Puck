@@ -1,8 +1,12 @@
-// The star field, the cloud layer and the sky gradient, read from the sky block (sdfSky) and its stops (sdfSkyStops).
+// The sky's layers, read from the sky block (sdfSky) and its stops (sdfSkyStops): the gradient, the sun disc, the star
+// field and the cloud layer, grouped into the runs the sky and composite passes evaluate in the authored order: the
+// gradient (a field run), the disc and the stars (a point run), then the clouds (a field run).
 #ifndef SHADE_SDF_SKY_HLSLI
 #define SHADE_SDF_SKY_HLSLI
 // The star field's cell-grid domain is the octahedral sky projection (sdf-octahedral.hlsli).
 #include "../field/sdf-octahedral.hlsli"
+#include "../field/sdf-hash.hlsli"
+#include "../field/sdf-noise.hlsli"
 // The procedural star field: a per-cell PCG3D hash (seed folded in) over the octahedral sky projection picks
 // StarSparsity of the cells to carry a star; two hash channels place the star inside its cell (kept StarInset from
 // the walls so a disc never straddles a cell it is not tested in). A second hash of the first, paid only by the
@@ -158,22 +162,11 @@ float4 sdfCloudLayer(float3 direction, float3 color, float coverage, float softn
 
     return float4(shade, alpha);
 }
-// The sky's GRADIENT alone — what distance fog and the silhouette-edge blend fade toward. The sun disc, stars and
-// clouds are miss-pixel content (skyColor); folding them into fog would let a low sun bleed through a fogged floor.
-float3 skyGradient(float3 direction) {
-    SdfSkyBlock sky = sdfSky[0];
-
-    if (sky.Enabled == 0u) {
-        // The pinned two-stop gradient, UNCHANGED from before render.sky existed: the identical instructions in the
-        // identical order, so a world that never authors render.sky renders bit-identically.
-        float t = clamp((0.5 * (direction.y + 1.0)), 0.0, 1.0);
-
-        return lerp(float3(0.04, 0.05, 0.07), float3(0.10, 0.13, 0.20), t);
-    }
-
-    // The authored stops, ascending in elevation (the validator orders them): piecewise-linear in direction.y,
-    // clamped to the end stops beyond the first and last.
-    uint stops = sky.StopCount;
+// The sky's GRADIENT: the stops, which the default look an unauthored world renders supplies as data like any authored
+// sky's, piecewise-linear in direction.y and clamped to the end stops beyond the first and last (the validator orders
+// them and requires two). It is the sky's lowest field run, and the colour distance fog blends a surface toward.
+float3 sdfSkyGradient(float3 direction) {
+    uint stops = sdfSky[0].StopCount;
     float elevation = direction.y;
     SdfSkyStop previous = sdfSkyStops[0];
 
@@ -196,32 +189,32 @@ float3 skyGradient(float3 direction) {
 
     return previous.Color;
 }
-float3 skyColor(float3 direction) {
-    float3 color = skyGradient(direction);
+// The sky's POINT run, the layers whose features are smaller than a field texel, so the composite evaluates them
+// analytically at each pixel and they stay sharp: the sun disc and the stars, each added to the colour beneath. The disc is
+// a pow(cosAngle, k) highlight about its light's direction, both host-baked (SdfSky.Pack), k from the authored angular
+// radius. Stars read only above the local horizon, where the camera can see them, and only once they have brightness.
+float3 sdfSkyPoints(float3 direction) {
     SdfSkyBlock sky = sdfSky[0];
+    float3 color = float3(0.0, 0.0, 0.0);
 
-    if (sky.Enabled == 0u) {
-        return color;
-    }
-
-    // The sun disc: an additive pow(cosAngle, k) highlight about its light's direction. The direction and k are
-    // host-baked (SdfSky.Pack), k from the authored angular radius, so this pays one pow() rather than deriving the
-    // exponent from an angle per pixel.
     if (sky.DiscLight >= 0) {
-        float cosAngle = dot(direction, sky.DiscDirection);
-
-        color += (sky.DiscIntensity * pow(saturate(cosAngle), sky.DiscExponent)).xxx;
+        color += (sky.DiscIntensity * pow(saturate(dot(direction, sky.DiscDirection)), sky.DiscExponent)).xxx;
     }
-
-    // Stars read only above the local horizon — a night sky under the ground plane is never visible to the camera
-    // and would otherwise tile through geometry for nothing.
-    if (direction.y > 0.0) {
+    if ((direction.y > 0.0) && (sky.StarBrightness > 0.0)) {
         color += sdfStarField(direction, sky.StarDensity, sky.StarBrightness, sky.StarSeed, sky.TwinkleShare, sky.TwinkleDepth, sky.TwinklePhase);
     }
 
-    // Clouds sit over everything above them — the gradient, the sun disc and the stars — by their own coverage mask.
+    return color;
+}
+// The sky's upper FIELD run, the cloud layer over everything beneath it, as the affine map it applies to the colour d
+// beneath: over is a·c + (1 − a)·d, so the run's scale is 1 − a and its offset a·c, per channel. A run summarized this
+// way composes exactly over whatever the runs beneath it left, so the composite applies it after the point run and
+// the stars beneath the clouds are dimmed by them as authored.
+void sdfSkyCloudRun(float3 direction, out float3 scale, out float3 offset) {
+    SdfSkyBlock sky = sdfSky[0];
     float4 clouds = sdfCloudLayer(direction, sky.CloudColor, sky.CloudCoverage, sky.CloudSoftness, sky.CloudScale, sky.CloudSeed, sky.CloudDriftOffset, sky.CloudShearOffset, sky.CloudSpinAngle, sky.CloudCurl, sky.CloudLightDirection, sky.CloudLightColor);
 
-    return lerp(color, clouds.rgb, clouds.a);
+    scale = (1.0 - clouds.a).xxx;
+    offset = (clouds.rgb * clouds.a);
 }
 #endif

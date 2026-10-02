@@ -4125,8 +4125,8 @@ item 2 landed.
    the state mirror, and `FrameCaptureRequest` has no tick source of its own.
 6. Landed, the cutover: every SDF view is a render-graph instance of
    `sdf.world`. Its fragment (`SdfWorldPackage.Fragment`) is what the graph
-   compiler splices in place of the pass naming it, ten passes, `sdf.world$sky`
-   through `sdf.world$views`, planned as `SdfPassPlanLawTests` holds them. The
+   compiler splices in place of the pass naming it, eleven passes, `sdf.world$mask`
+   through `sdf.world$composite`, planned as `SdfPassPlanLawTests` holds them. The
    package records into the instance's command buffer, so Direct3D 12's
    promotion from `COMMON`, the indirect-argument state and the scratch hazards
    are the planner's; the scratch is transient, one allocation per instance
@@ -5089,22 +5089,23 @@ clocks and its duplicates.
   records. The 496-byte pass block holds the light count, shadow-light index
   and curvature shading; the sky and light records are read only by the
   kernels that use them, as P18-4 specifies.
-- **Sky evaluated twice.** `shade/sdf-sky.hlsli` holds the stars, a private 2D
-  lattice noise, the clouds, the gradient and the composite in one file. The
-  `sky` pre-pass (`passes/sdf-sky.comp.hlsl`) evaluates `skyColor` for every
-  pixel, and the views stage (`sdfLightStage`) evaluates it again for every
-  pixel of a live tile, hits included, before it knows whether the pixel hit.
-  A hit then calls `skyGradient` once for fog and once for the silhouette edge.
+- **The sky once, where it is seen** (P18-5). `shade/sdf-sky.hlsli` holds the
+  stars, a private 2D lattice noise, the clouds and the gradient, grouped into
+  the runs they compose in. Views shades hits only, into a lit image with its
+  coverage; the `sky` pass evaluates the field runs only where coverage is below
+  one, and the `composite` pass puts the lit image over the runs and fogs and
+  integrates the bounded media. The fog still blends toward the gradient alone,
+  until the environment map gives it the sky's in-scattered colour.
 - **Re-marched for sky-only changes.** The cadence (`SdfWorldTables.Cadence.cs`)
   hashes the twinkle tick and the pass block, cloud offsets included, so a
   drifting cloud or a twinkling star re-renders every pass of the view. A
   bounded volume forces a render every frame (`ForcesRender`), because volumes
   animate on the presentation time (`sceneTime`, `frame.Time`), which is not the
   tick and is not replayed.
-- **Four gradients over elevation:** the sky's stops; the pinned two-stop
-  gradient written as HLSL literals behind `SkyEnabled`, a branch kept so an
-  unauthored world stays bit-identical; the studio reflection horizon (rows 51
-  and 52); and the hemisphere ambient light.
+- **Three gradients over elevation:** the sky's stops, which an unauthored world
+  reads as the default look's two (P18-5 removed the pinned HLSL gradient and its
+  `SkyEnabled` branch); the studio reflection horizon; and the hemisphere
+  ambient light.
 - **Five spellings of the sun:** `SdfEnvironment.DefaultSunDirection`, the HLSL
   `SdfSunDirection`, `worldSunDirection` (whichever light shadows),
   `SunDiscLightIndex` (the light the disc is drawn about) and the unused
@@ -5793,7 +5794,26 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      the softboxes by `views` alone, and the lights by 2 (`shadow`, `views`).
      `composite` joins the sky's readers in P18-5. A law holds the block size
      and each kernel's table bindings to the generated interface.
-5. **P18-5, the sky once, and a composite last.**
+5. **P18-5, the sky once, and a composite last.** Landed.
+   - Landed: views shades hits only into the lit image (`SdfWorldPackage.Parts.Lit`,
+     premultiplied, coverage in alpha, a miss uncovered); `sky`
+     (`passes/sdf-sky-runs.comp.hlsl`) writes the gradient's offset and the
+     cloud run's scale and offset as half-float images at the output extent where
+     a pixel or a neighbour is not wholly covered; `composite`
+     (`passes/sdf-composite.comp.hlsl`) fogs the lit image toward the gradient by
+     its ray distance, composes the runs beneath it (the disc and stars evaluated
+     at the pixel) by its coverage, and integrates the bounded media. Both read the
+     sky interface (`SdfWorldInterfaces.SkyParameters`) and record through
+     `SdfSkyRecorder`. A native view reads views' lit image and visibility records,
+     current only inside the dispatch box; a reduced or temporal view's resolve
+     writes the lit image and each pixel's surface distance at the output extent,
+     its history holding coverage with color and never the sky. The default look
+     is the two-stop gradient and fog `SdfSky` starts from, as data. The CPU
+     reference for the run composition is `SdfSkyRuns`. `gpu.sky.evaluations` is a
+     kernel-counted kind beside the march steps and texels written; the field
+     runs' texels are the `sky` pass's row, and per-run and per-layer rows wait for
+     the detail labels P18-7 adds. Every hit reads zero sky evaluations
+     (`SdfSkyEvaluationDeviceLawTests`).
    - Delivers: `views` shading hits only into `lit`, premultiplied, with
      coverage in its alpha; `sky` evaluating the sky's field runs where
      coverage is below one, with a one-pixel dilation, into their scale and
@@ -5853,10 +5873,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      retained output to its last write; a `sky-cadence` canary reads zero march
      steps on the sky leg's drift frames.
    - Counted-cost gate, per class, against the baseline P18-1 records: a
-     meshless view at the floor tier runs 7 SDF compute dispatches today (`sky`,
-     `mask`, `beam`, `cull-args`, `primary`, `surface`, `views`; `ambient` and
-     `shadow` skip at `low`, and the mesh pass is a draw that a meshless frame
-     skips), and 9 plus the mesh draw at `high`. A visual-only frame runs 2
+     meshless view at the floor tier runs 9 SDF compute dispatches (`mask`,
+     `beam`, `cull-args`, `primary`, `surface`, `views`, `resolve` at the floor
+     tier's reduced scale, `sky`, `composite`; `ambient` and `shadow` skip at
+     `low`, and the mesh pass is a draw that a meshless frame skips), and adds
+     `ambient`, `shadow` and the mesh draw at `high`. A visual-only frame runs 2
      (`sky`, `composite`). A lighting-visible frame runs 3 (`views`, `sky`,
      `composite`), plus `sky.environment`'s two (the map and its reduction)
      when it re-renders and `resolve` when reconstruction is on. A
@@ -6054,9 +6075,9 @@ the rows P18-1 records. P is a view's render pixels (518,400 for a 1920 by 1080
 view at the floor tier's half scale), h the fraction of them that hit, and L the
 fraction in live tiles, at least h.
 
-- **Sky evaluations.** Today (1 + L) × P per frame: every pixel in the pre-pass
-  and every live-tile pixel again in `views`, hits included. After P18-5, about
-  (1 − h) × P plus the dilated edge. At h = 0.6 and L = 0.75, from 907,200 to
+- **Sky evaluations.** Before P18-5, (1 + L) × P per frame: every pixel in the
+  pre-pass and every live-tile pixel again in `views`, hits included. Since
+  P18-5, about (1 − h) × P plus the dilated edge. At h = 0.6 and L = 0.75, from 907,200 to
   about 210,000, a fall of 77%. A hit reads zero sky evaluations instead of one
   full sky and up to two gradients. A view that hits nothing is unchanged at P.
 - **Visual-only frames** (a drift, a twinkle, a camera-only keyed colour, an

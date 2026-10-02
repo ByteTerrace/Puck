@@ -4,22 +4,22 @@ using System.Runtime.InteropServices;
 namespace Puck.SignedDistance;
 
 /// <summary>
-/// The sky block the sky and views passes read (<c>sdfSky</c>, a World-group structured buffer of one record): the
-/// sky's control, its fog, the sun disc, the stars and their twinkle, the cloud layer and the studio reflection's
+/// The sky block the sky, composite and views passes read (<c>sdfSky</c>, a World-group structured buffer of one
+/// record): the sky's fog, the sun disc, the stars and their twinkle, the cloud layer and the studio reflection's
 /// horizon. Its public fields are the record's layout, whose HLSL declaration <c>puck shaders generate</c> writes from
 /// this type. <see cref="SdfSky"/> holds the authored values and packs this record with its host bakes
 /// (<see cref="SdfSky.Pack"/>): the fields documented as baked are written there and nowhere else.
 /// </summary>
 [StructLayout(LayoutKind.Explicit, Size = 176)]
 public record struct SdfSkyBlock {
-    /// <summary>One when the authored sky replaces the pinned two-stop gradient, zero otherwise.</summary>
-    [FieldOffset(0)] public uint Enabled;
     /// <summary>The exponential distance-fog density.</summary>
-    [FieldOffset(4)] public float FogDensity;
-    /// <summary>The gradient stops the stops table holds, at most <see cref="SdfSky.MaxStops"/>.</summary>
-    [FieldOffset(8)] public uint StopCount;
+    [FieldOffset(0)] public float FogDensity;
+    /// <summary>The gradient stops the stops table holds, at least two and at most <see cref="SdfSky.MaxStops"/>.</summary>
+    [FieldOffset(4)] public uint StopCount;
     /// <summary>The studio-reflection softboxes the softbox table holds, at most <see cref="SdfSky.MaxSoftboxes"/>.</summary>
-    [FieldOffset(12)] public uint SoftboxCount;
+    [FieldOffset(8)] public uint SoftboxCount;
+    /// <summary>The light the sun disc is drawn about, or −1 when no disc is drawn.</summary>
+    [FieldOffset(12)] public int DiscLight;
     /// <summary>Baked: the direction the sun disc is drawn about, its light's packed direction.</summary>
     [FieldOffset(16)] public Vector3 DiscDirection;
     /// <summary>The sun disc's peak additive brightness.</summary>
@@ -27,8 +27,6 @@ public record struct SdfSkyBlock {
     /// <summary>Baked: the <c>pow()</c> exponent that puts the disc's edge, at its authored angular radius r, at half
     /// brightness: k = ln 0.5 / ln cos r.</summary>
     [FieldOffset(32)] public float DiscExponent;
-    /// <summary>The light the sun disc is drawn about, or −1 when no disc is drawn.</summary>
-    [FieldOffset(36)] public int DiscLight;
     /// <summary>The star cell density.</summary>
     [FieldOffset(40)] public float StarDensity;
     /// <summary>The peak star brightness.</summary>
@@ -74,7 +72,7 @@ public record struct SdfSkyBlock {
     /// <summary>The studio-reflection horizon's high (sky-ward) color.</summary>
     [FieldOffset(160)] public Vector3 HorizonHigh;
 }
-/// <summary>One stop of the sky's gradient, a record of the stops table the sky and views passes read
+/// <summary>One stop of the sky's gradient, a record of the stops table the sky and composite passes read
 /// (<c>sdfSkyStops</c>, <see cref="SdfSky.MaxStops"/> records), whose HLSL declaration is generated from this type.</summary>
 /// <param name="Color">The stop's linear RGB color.</param>
 /// <param name="Elevation">The stop's elevation, the direction's height in [−1, 1]; the stops ascend.</param>
@@ -117,7 +115,7 @@ public sealed class SdfSky {
     public const float DefaultCloudScale = 2f;
     /// <summary>The default cloud edge softness.</summary>
     public const float DefaultCloudSoftness = 0.25f;
-    /// <summary>The pinned fog density.</summary>
+    /// <summary>The default look's fog density.</summary>
     public const float DefaultFogDensity = 0.015f;
     /// <summary>The default star cell density.</summary>
     public const float DefaultStarDensity = 48f;
@@ -135,22 +133,23 @@ public sealed class SdfSky {
 
     private SdfSkyBlock m_block;
 
-    /// <summary>Gets the pinned zenith color of the two-stop sky an unauthored world renders.</summary>
+    /// <summary>Gets the zenith color of the default look's two-stop gradient, which an unauthored world renders.</summary>
     public static Vector3 DefaultZenithColor { get; } = new(
         x: 0.10f,
         y: 0.13f,
         z: 0.20f
     );
-    /// <summary>Gets the pinned ground color of the two-stop sky an unauthored world renders.</summary>
+    /// <summary>Gets the ground color of the default look's two-stop gradient, which an unauthored world renders.</summary>
     public static Vector3 DefaultGroundColor { get; } = new(
         x: 0.04f,
         y: 0.05f,
         z: 0.07f
     );
 
-    /// <summary>Initializes a new instance of the <see cref="SdfSky"/> class: the sky disabled with the pinned two-stop
-    /// gradient seeded in its stops (so a layer drawn over an unauthored gradient has one to draw over), the pinned fog,
-    /// no sun disc, and every layer at its defaults with no brightness or coverage.</summary>
+    /// <summary>Initializes a new instance of the <see cref="SdfSky"/> class with the default look an unauthored world
+    /// renders, as data the kernels read like any authored sky: the two-stop gradient from <see cref="DefaultGroundColor"/>
+    /// below to <see cref="DefaultZenithColor"/> above, the default fog, no sun disc, and every other layer at its defaults
+    /// with no brightness or coverage, so it draws nothing.</summary>
     public SdfSky() {
         m_stops[0] = new SdfSkyStop(Color: DefaultGroundColor, Elevation: -1f);
         m_stops[1] = new SdfSkyStop(Color: DefaultZenithColor, Elevation: 1f);

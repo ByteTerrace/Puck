@@ -1,19 +1,22 @@
-// The light stage: shades one pixel from its surface sample (SdfSurfaceSample) into the view's working color, the sky on
-// a miss. It samples a bound screen, re-resolves the material, lights the surface through the one light interface
-// (sdf-light.hlsli), the key light under the soft shadow the shadow stage wrote, and applies the editor grid, the
-// distance fog and the silhouette coverage; the volumes and the debug views follow it.
+// The light stage: shades one pixel's hit from its surface sample (SdfSurfaceSample) into the view's lit color, and
+// nothing on a miss. It samples a bound screen, re-resolves the material, lights the surface through the one light
+// interface (sdf-light.hlsli), the key light under the soft shadow the shadow stage wrote, applies the editor grid, and
+// reports the pixel's coverage: one for a solid hit, less on a silhouette edge against the sky, zero on a miss. The sky,
+// the distance fog and the volumes are the composite's, after this stage; the debug views follow it.
 #ifndef SHADE_SDF_LIGHT_STAGE_HLSLI
 #define SHADE_SDF_LIGHT_STAGE_HLSLI
 #include "sdf-light.hlsli"
 #include "sdf-grid.hlsli"
 #ifdef SDF_VIEWS_PASS
 
-float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
-    float3 color = skyColor(p.rayDirection);
+float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage) {
+    float3 color = float3(0.0, 0.0, 0.0);
 
+    coverage = 0.0;
     if (!s.hit) {
         return color;
     }
+    coverage = 1.0;
 
     float3 surfacePoint = (p.rayOrigin + (p.rayDirection * s.t));
     float3 normal = s.normal;
@@ -200,19 +203,16 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
     }
 
     if (useFinalShading) {
-        // The editor grid tints the lit color before the distance fog, so a far grid still recedes. It reads the
-        // geometric normal, which the soften above never widens.
+        // The editor grid tints the lit color before the composite's distance fog, so a far grid still recedes. It reads
+        // the geometric normal, which the soften above never widens.
         color = sdfApplyGrid(color, surfacePoint, s.normal, p.rayDirection, (p.pixelFootprint * s.t));
 
-        float fog = (1.0 - exp(-sdfSky[0].FogDensity * s.t));
-        color = lerp(color, skyGradient(p.rayDirection), fog);
-
         // The silhouette's sky coverage, from this frame's primary records. The residual ratio stays in the clamped units
-        // of hit acceptance, and the normal gates grazing hits. A geometry-to-geometry edge takes no sky blend, and a mesh
-        // pixel's coverage is zero.
-        float coverage = saturate(s.terminalRadius / s.threshold);
+        // of hit acceptance, and the normal gates grazing hits. A geometry-to-geometry edge stays wholly covered, and a mesh
+        // pixel's residual is zero.
+        float residual = saturate(s.terminalRadius / s.threshold);
         float grazing = (1.0 - saturate(-dot(normal, p.rayDirection)));
-        float edgeWeight = (coverage * grazing);
+        float edgeWeight = (residual * grazing);
         bool adjacentSky = false;
         if (edgeWeight > DisplayCode) {
             uint2 renderDims = worldViewDims(p.view);
@@ -232,8 +232,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
                 }
             }
         }
+        // The sky's share of an edge beside sky is what the hit does not cover: the composite blends the full sky there.
         if (adjacentSky) {
-            color = lerp(color, skyGradient(p.rayDirection), edgeWeight);
+            coverage = (1.0 - edgeWeight);
         }
     }
 
