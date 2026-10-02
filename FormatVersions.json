@@ -152,7 +152,7 @@
             "token": "PUCKPEER"
         },
         "ProbeKindManifest.SchemaTag": {
-            "shape": "1f9adafc59073be5",
+            "shape": "433b35afa2f43678",
             "source": "src/Puck.Shaders/ProbeKindManifest.cs",
             "token": "puck.probe.manifest.v1"
         },
@@ -192,14 +192,14 @@
             "token": "puck.release.profile.v1"
         },
         "RenderGraphSchemas.Graph": {
-            "shape": "b7de350e35234e43",
+            "shape": "c495fab562a4229e",
             "source": "src/Puck.Shaders/Graph/RenderGraphModel.cs",
             "token": "puck.render.graph.v1"
         },
         "SdfBaker.Version": {
-            "shape": "02c658afda3f7d3a",
+            "shape": "4436e12ea2703e2a",
             "source": "src/Puck.SignedDistance/Baking/SdfBaker.cs",
-            "token": "8"
+            "token": "9"
         },
         "SdfDocumentDecoder.Schema": {
             "shape": "762fae7b2ea0564b",
@@ -207,7 +207,7 @@
             "token": "puck.sdf.v1"
         },
         "ShaderCompiler.CompilerVersion": {
-            "shape": "10bf531cf8841447",
+            "shape": "a355a189a892f432",
             "source": "src/Puck.Shaders/ShaderCompiler.cs",
             "token": "puck-shader-compiler-4"
         },
@@ -235,6 +235,11 @@
             "shape": "35feece16a3f486b",
             "source": "src/Puck.Analyzers/VerifiedCodeManifest.cs",
             "token": "csharp-tokens-v1"
+        },
+        "VulkanShaderCapabilities.Magic": {
+            "shape": "d4da3c43916bd9c4",
+            "source": "src/Puck.Vulkan/VulkanShaderCapabilities.cs",
+            "token": "119734787"
         },
         "WasmBinaryFormat.Magic": {
             "shape": "293a4f56b6458d75",
