@@ -1055,8 +1055,9 @@ The store is the `world-builds` subdirectory of the
 A build is keyed by the sources it is made from. The key covers the World
 project, every project it references (including `Puck.Cli` and
 `Puck.Analyzers`, which carry no assembly into it), and every file those
-project files import or link from elsewhere in the checkout. It also covers
-every file directly in the repository root. For these paths, the key hashes
+project files import or link from elsewhere in the checkout, read as MSBuild
+reads them, with a backslash as a directory separator on every platform. It also
+covers every file directly in the repository root. For these paths, the key hashes
 git's object ids in `HEAD` together with the content of every uncommitted,
 staged, or untracked change that `git status` reports. The machine's runtime
 identifier and the build command line are part of the key too. Edits to
