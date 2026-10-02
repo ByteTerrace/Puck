@@ -148,7 +148,16 @@ register.
 - **Every `map*` call site is a full inlined copy of the interpreter.** Keep
   sample loops rolled (`[loop]`) and reuse an existing call site through a loop
   rather than adding one; a new call site costs register pressure in the
-  hottest kernels.
+  hottest kernels and a driver translation on every cold boot. The surface's
+  field probes (the tetrahedron normal and curvature taps, the curvature
+  centre, the soften stencil) share one site, `sdfProbeField` in
+  `surface/sdf-normals.hlsli`, which a kernel calls once with flags for every
+  probe it needs; the debug views' field reads share one loop over
+  `marchOvershootDepth`; the primary march's scene march, its exhaustion arm
+  and the attribute resolve are passes of one `sdfTracePrimaryField` call
+  (`sdfTracePrimary`), and the beam's entry, gap and far searches are phases of
+  one loop (`coneMarchTileBounds`). A new probe joins those, never a call of its
+  own.
 - **Keep control flow uniform around barriers and groupshared gathers.** The
   views wrapper converts its extent test into an `active` flag so inactive
   lanes still reach the barriers.
@@ -610,7 +619,9 @@ These are one-line cautions; the owning pages hold the derivations.
   pass and deployed kernels), so a kernel shared by several residencies on a
   device is created once. A set whose creations fail throws one
   `AggregateException` naming every pipeline that failed, in the set's order
-  (a device loss is thrown alone), and `Describe` counts the pipelines built.
+  (a device loss is thrown alone), except a views variant's failure under
+  `PollRequired`, which is refused per slot (below), and `Describe` counts the
+  pipelines built and names the refused.
   A holder (`SdfWorldPipelineSource`) takes its leases on the frame thread when
   kernels are supplied, or on the pool when it must load them. Every pipeline
   builds on the pool. The holder builds no tables until the set is ready, and keeps the
@@ -644,11 +655,24 @@ These are one-line cautions; the owning pages hold the derivations.
   nothing (`SdfWorldTablesCreationFaultLawTests`,
   `SdfWorldResidencyBuildRefusalLawTests`). A new GPU-owning build joins its
   creations to a scope, or to a null-tolerant release it calls on failure.
+  The views variants are outside that build: the tables need only the one the
+  live program selects, or a fuller one (`SdfWorldTables.ViewsWaiting`), and a
+  captured program whose variant is not built is not uploaded; the residency
+  holds its last packed frame and names the kernel. A views kernel whose
+  creation fails is refused per slot (`SdfWorldPipelines.IsBuilt`, `RefusalOf`),
+  never thrown and never polled again, since a poll after a failure starts a
+  fresh build: the hold names the failure, the error stream reports each slot's
+  refusal once, and every views slot is polled even when the program does not
+  select it, so a device loss in its build reaches recovery. A fuller built
+  variant still renders a narrower program, and only a kernel reload (`PrepareReload` leases a refused
+  slot again even with unchanged bytecode) or a device loss builds it again
+  (`SdfWorldResidencyViewsRefusalLawTests`).
   The last release of a lease cancels an in-flight build inside the cache's gate
   (`BackgroundBuild.Detach`), then waits outside it for only the pipelines
   already in the driver, and disposes the entry. A residency is ready
-  (`SdfWorldResidency.IsReady`) once its set is ready and its tables are
-  built from its first captured frame, and the world is ready
+  (`SdfWorldResidency.IsReady`) once its set is ready, its tables are
+  built from its first captured frame and its program's views kernel is built
+  with no frame held, and the world is ready
   (`WorldRenderProbe.IsReady`) once the world's residency is, the render
   graph's root has rendered over a completed world output, and every instance
   whose node has submitted has a frame completed on the GPU

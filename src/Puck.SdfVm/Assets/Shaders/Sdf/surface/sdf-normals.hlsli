@@ -18,66 +18,102 @@ static const float NormalProbeEpsilon = 0.0006;
 // estimate up; it mirrors the reference study's own clamp lower bound (src/Puck.World/Assets/pipelines/moth.hlsl, clamp(magnitude,.12,1.5)).
 static const float GradientMagnitudeFloor = 0.12;
 
+// The soften layer's wide-stencil probe offset (SdfMaterial.Soften): the same tetrahedron at a much larger epsilon, so
+// fine surface detail (pores, panel seams, wear noise) washes out of the gradient it reads.
+static const float SdfSoftenProbeEpsilon = 0.05;
+
+// The tetrahedron's probe directions, the alternating cube corners k.xyy, k.yyx, k.yxy and k.xxx of k = (1, -1), in the
+// order every tap sum adds them.
+float3 sdfTetrahedronDirection(uint probe) {
+    return float3(((probe == 0u) || (probe == 3u)) ? 1.0 : -1.0, (probe >= 2u) ? 1.0 : -1.0, ((probe & 1u) != 0u) ? 1.0 : -1.0);
+}
+
+// What one sdfProbeField call measured: the gradient taps' direction-weighted sum and plain total, the centre tap, and the
+// soften taps' direction-weighted sum. A probe not asked for reads zero.
+struct SdfFieldProbes {
+    float3 gradientSum;
+    float tapTotal;
+    float center;
+    float3 softenSum;
+};
+
+// Runs any of the surface's field probes through ONE interpreter call site, in this order: the four NormalProbeEpsilon
+// tetrahedron taps, the centre tap at p itself, and the four SdfSoftenProbeEpsilon soften taps. Every map call DXC sees
+// is a whole inlined interpreter, so a kernel that needs several probes asks for them in one call with its flags, never
+// in a call per probe: the loop stays rolled, and each probe's samples and sums are the ones its own loop would take.
+// The caller counts the evaluations it asked for.
+SdfFieldProbes sdfProbeField(float3 p, uint instanceMaskBase, bool gradientTaps, bool centerTap, bool softenTaps) {
+    SdfFieldProbes probes = (SdfFieldProbes)0;
+    uint first = (gradientTaps ? 0u : (centerTap ? 4u : 5u));
+    uint end = (softenTaps ? 9u : (centerTap ? 5u : 4u));
+
+    [loop]
+    for (uint slot = first; (slot < end); slot++) {
+        if ((slot == 4u) && !centerTap) {
+            continue;
+        }
+
+        bool soften = (slot >= 5u);
+        float3 direction = sdfTetrahedronDirection(soften ? (slot - 5u) : slot);
+        float3 at = ((slot == 4u) ? p : (p + (direction * (soften ? SdfSoftenProbeEpsilon : NormalProbeEpsilon))));
+        float distance = mapDistanceMasked(at, instanceMaskBase);
+
+        if (slot < 4u) {
+            probes.gradientSum += (direction * distance);
+            probes.tapTotal += distance;
+        } else if (slot == 4u) {
+            probes.center = distance;
+        } else {
+            probes.softenSum += (direction * distance);
+        }
+    }
+
+    return probes;
+}
+// The curvature the tap probe measured around a center distance. The tetrahedron's four distances minus four times the
+// center recover 2*e^2 times the field Laplacian; de-scaled to world units, concave creases read negative and convex
+// ridges positive.
+float sdfProbeCurvature(SdfFieldProbes probes, float center) {
+    const float e = NormalProbeEpsilon;
+
+    return ((probes.tapTotal - (4.0 * center)) / ((2.0 * e * e) * sdfStepScale()));
+}
 // The 4-tap TETRAHEDRON normal probe, MASKED (world path): estimates the field gradient from 4 samples at the corners
-// of a tetrahedron (offset directions k.xyy/k.yyx/k.yxy/k.xxx = the alternating cube corners) instead of 6 axis-aligned
-// samples. The taps are isotropic — Σ dᵢdᵢᵀ = 4·I and Σ dᵢ = 0 — so weighting each sample by its own direction
-// reconstructs the SAME first-order gradient as the 6-tap central difference, from 4 evaluations instead of 6.
-// Visually identical for lit shading (the O(ε) vs O(ε²) curvature error is sub-LSB at this ε), at 2/3 the cost of the
-// kernel's hottest call. Every tap shares the pixel's tile instance mask — sound because a masked-out instance is
-// exactly as absent from a nearby tap as it is from the hit itself (the beam prepass's tile cone covers the whole
-// tile, taps included at this epsilon). The per-program stepScale is a common factor that cancels under
-// normalize, so the Lipschitz clamp leaves normals untouched.
+// of a tetrahedron (sdfTetrahedronDirection) instead of 6 axis-aligned samples. The taps are isotropic — Σ dᵢdᵢᵀ = 4·I
+// and Σ dᵢ = 0 — so weighting each sample by its own direction reconstructs the SAME first-order gradient as the 6-tap
+// central difference, from 4 evaluations instead of 6. Visually identical for lit shading (the O(ε) vs O(ε²) curvature
+// error is sub-LSB at this ε), at 2/3 the cost of the kernel's hottest call. Every tap shares the pixel's tile instance
+// mask — sound because a masked-out instance is exactly as absent from a nearby tap as it is from the hit itself (the
+// beam prepass's tile cone covers the whole tile, taps included at this epsilon). The per-program stepScale is a common
+// factor that cancels under normalize, so the Lipschitz clamp leaves normals untouched.
+// curvature (out): with withCurvature, sdfProbeCurvature around the center; zero without. The visibility record supplies
+// the center unless Detail shapes can change the shading field; those programs query the current field again, as the
+// same probe's centre tap.
 // gradientMagnitude (out): the secondary-ray gradient-scaling posture (src/Puck.World/Assets/pipelines/moth.hlsl's surfaceGradient) — the
 // tetrahedron sum's own magnitude divided by 4e recovers the RAW field's local gradient magnitude at the hit
 // (BEFORE this normalize), still carrying the taps' own mapDistanceMasked stepScale bake, so it is divided back out
 // by sdfStepScale() to land in the SAME program-stepScale-independent units calculateNormalAnalytic reports (see
 // GradientMagnitudeFloor above). The normal direction itself is unaffected — this is a second, additive return.
-float3 calculateNormal(float3 p, uint instanceMaskBase, out float gradientMagnitude) {
-    const float2 k = float2(1.0, -1.0);
+float3 calculateTapNormal(float3 p, uint instanceMaskBase, bool withCurvature, float primaryCenter, out float curvature, out float gradientMagnitude) {
     const float e = NormalProbeEpsilon;
+    bool centerTap = (withCurvature && !sdfProgramLayout.noDetailShapes);
 
-    sdfEvalCount += 4.0; // four mapDistanceMasked taps below
-    sdfWorkSteps += 4u;
-
-    float3 sum =
-        (k.xyy * mapDistanceMasked(p + (k.xyy * e), instanceMaskBase)) +
-        (k.yyx * mapDistanceMasked(p + (k.yyx * e), instanceMaskBase)) +
-        (k.yxy * mapDistanceMasked(p + (k.yxy * e), instanceMaskBase)) +
-        (k.xxx * mapDistanceMasked(p + (k.xxx * e), instanceMaskBase));
-
-    gradientMagnitude = ((length(sum) / (4.0 * e)) / sdfStepScale());
-
-    return normalize(sum);
-}
-// The tetrahedron's four distances minus four times the center recover 2*e^2 times the field Laplacian.
-// De-scale it to world units: concave creases read negative, convex ridges positive. The visibility record supplies
-// the center unless Detail shapes can change the shading field; those programs query the current field again.
-float3 calculateNormalCurvature(float3 p, uint instanceMaskBase, float primaryCenter, out float curvature, out float gradientMagnitude) {
-    const float e = NormalProbeEpsilon;
     sdfEvalCount += 4.0;
     sdfWorkSteps += 4u;
-    float3 sum = 0.0;
-    float total = 0.0;
-    // Keep one interpreter call site: unrolling duplicates the large VM body and slows the views kernel.
-    [loop]
-    for (uint probe = 0u; probe < 4u; probe++) {
-        float3 direction = float3((probe == 0u || probe == 3u) ? 1.0 : -1.0,
-            probe >= 2u ? 1.0 : -1.0, (probe & 1u) != 0u ? 1.0 : -1.0);
-        float distance = mapDistanceMasked(p + (direction * e), instanceMaskBase);
-        sum += direction * distance;
-        total += distance;
-    }
+
+    SdfFieldProbes probes = sdfProbeField(p, instanceMaskBase, true, centerTap, false);
     float center = primaryCenter;
-    if (!sdfProgramLayout.noDetailShapes) {
-        center = mapDistanceMasked(p, instanceMaskBase);
+
+    if (centerTap) {
+        center = probes.center;
         sdfEvalCount += 1.0;
         sdfWorkSteps += 1u;
     }
-    float stepScale = sdfStepScale();
-    curvature = ((total - (4.0 * center)) / ((2.0 * e * e) * stepScale));
-    gradientMagnitude = ((length(sum) / (4.0 * e)) / stepScale);
 
-    return normalize(sum);
+    curvature = (withCurvature ? sdfProbeCurvature(probes, center) : 0.0);
+    gradientMagnitude = ((length(probes.gradientSum) / (4.0 * e)) / sdfStepScale());
+
+    return normalize(probes.gradientSum);
 }
 // The ANALYTIC surface normal (forward-mode gradient dual): ONE dual field eval at the hit — replacing the four taps —
 // carries the exact world-space field gradient through the transform chain (field/sdf-map-grad.hlsli's mapGradMasked). Immune to

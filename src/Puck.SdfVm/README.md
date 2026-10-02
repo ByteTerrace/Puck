@@ -289,8 +289,25 @@ host with a capture armed: it steps no further tick until the capture is served
 or refused, and a capture refused while the world's residency is not ready names
 its `NotReadyReason`, such as "the engine's pipeline set is building (10 of
 11 pipelines created; waiting on sdf-world-views)" (see [the World guide](../Puck.World/README.md#usage)).
-A residency is `IsReady` once its set is installed and its tables hold its
-first captured frame; the World is ready once the world's residency is and the
+A residency is `IsReady` once its tables are built from every pipeline but the
+views variants, hold its first captured frame, and the views kernel its program
+selects (or a fuller one) is built, so a program that selects the core or folds
+variant never waits for the full ISA's translation. A captured program whose
+views kernel is still building is not uploaded: the residency holds the frame it
+last packed, which keeps rendering, and is not ready, naming the kernel, until
+that kernel is built. The pending frame survives a film gate that captures
+nothing, and `WaitReadyAsync` waits for the hold to release. A newer capture
+replaces the pending frame. A views kernel whose creation fails, other than by a
+device loss, is refused rather than thrown: the residency holds its frame the
+same way, and `NotReadyReason` names the kernel and its failure. The error stream
+reports each slot's refusal once, naming the kernel, the failure, and its recovery.
+Every views slot is polled after the tables are built, including variants the
+program does not select, so a device loss in any of their builds reaches recovery.
+A program whose own variant was refused renders with a fuller variant that is
+built. No frame
+builds a refused kernel again; a kernel reload (`world.shaders.reload`) builds
+it again from the bytecode it was refused with, or from the tree's, and a device
+loss rebuilds every pipeline. The World is ready once the world's residency is and the
 render graph's root has rendered over a completed view, which is the fact
 `world.wait ready` waits on. A host that produces frames on its own thread and
 has nothing to present until the builds finish blocks between frames on
@@ -365,8 +382,8 @@ names its file and line. The issuing text session's later lines wait for the
 request to settle.
 
 `SdfWorldResidency.RequestShaderReload` queues the work. `SdfWorldPipelines.PrepareReload`
-creates replacements for the kernels whose bytecode changed, using the existing
-binding descriptions, off the frame thread. `SdfWorldTables.InstallReload` then
+creates replacements for the kernels whose bytecode changed, and for any refused
+views kernel, using the existing binding descriptions, off the frame thread. `SdfWorldTables.InstallReload` then
 owns the render-thread transaction: it waits for the device to go idle, swaps the
 pipelines and retires the old ones. A failed load or pipeline build keeps the
 previous kernels, and so do kernels that do not read this host's interface.
@@ -379,7 +396,7 @@ the `dxc` on the path.
 Buffers, images, scene programs, animation, and baked bricks remain allocated; only
 the frame-reuse signature is reset, so the next frame renders. A binding or layout
 change still needs a rebuilt host. Unchanged bytecode creates no
-pipeline and causes no GPU drain. Device-loss recovery uses the last
+pipeline and causes no GPU drain, unless its kernel was refused. Device-loss recovery uses the last
 successfully loaded set, and a loss during a reload fails that request. A
 reload replaces pipelines in place, so the residency first takes its set out of
 the cache's sharing; when another residency on the device leases the same set,

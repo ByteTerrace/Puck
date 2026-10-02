@@ -55,7 +55,10 @@ interface: a kernel compiled against another instruction set (its pass block's
 stamp) or binding anything where the host does not place it. Reflecting a DXIL
 kernel needs the `dxcompiler.dll` beside the `dxc` on the path. The
 `sdf-shader-reload` canary holds both outcomes on both backends. Scene buffers, images, baked bricks, and world state
-survive; the cadence signature is invalidated. The last
+survive; the cadence signature is invalidated. A reload also builds again any
+views kernel the residency refused (its creation failed; `NotReadyReason`
+names it), even when the tree leaves its bytecode unchanged: that, or a device
+loss, is the only retry a refused views kernel gets. The last
 successful set survives device-loss recovery. `views.graphs` instances
 (`pipeline.reload`) and `views.post` post-process packages are outside this
 command, and host ABI or

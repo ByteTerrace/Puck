@@ -21,10 +21,10 @@ void sdfResolveSurface(float3 surfacePoint, float3 ray, bool hit, int material, 
     bool needsNormal = hit && (mode == DebugViewModeNormals || (finalMode && !sampledScreen));
     if (needsNormal) {
         sdfDetailShadingActive = true;
-        if (worldCurvatureShadingEnabled())
-            normal = calculateNormalCurvature(surfacePoint, mask, primaryRadius, curvature, gradientMagnitude);
-        else if (worldUseTapNormals())
-            normal = calculateNormal(surfacePoint, mask, gradientMagnitude);
+        // The curvature and tap paths share one probe call, so the kernel inlines the interpreter once for both.
+        bool curvatureShading = worldCurvatureShadingEnabled();
+        if (curvatureShading || worldUseTapNormals())
+            normal = calculateTapNormal(surfacePoint, mask, curvatureShading, primaryRadius, curvature, gradientMagnitude);
         else normal = calculateNormalAnalytic(surfacePoint, mask, gradientMagnitude);
         sdfDetailShadingActive = false;
     }

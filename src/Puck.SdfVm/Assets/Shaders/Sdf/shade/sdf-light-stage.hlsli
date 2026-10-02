@@ -135,15 +135,39 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
             }
 #endif
             applyInset(layerPoint, layerNormal, layerRay, shadeMaterial);
-            if (shadeMaterial.weathering.x > 0.0 && !curvatureShading) {
-                float unusedMagnitude;
-                calculateNormalCurvature(surfacePoint, p.instanceMaskBase, s.terminalRadius, curvature, unusedMagnitude);
+
+            // The weathering's curvature (when the surface stage did not measure it) and the soften's wide-stencil
+            // gradient come from one probe call, so the kernel inlines the interpreter once for both.
+            bool weatheringCurvature = ((shadeMaterial.weathering.x > 0.0) && !curvatureShading);
+            bool softens = !(shadeMaterial.soften <= 0.0);
+            SdfFieldProbes probes = (SdfFieldProbes)0;
+
+            if (weatheringCurvature || softens) {
+                bool centerTap = (weatheringCurvature && !sdfProgramLayout.noDetailShapes);
+
+                probes = sdfProbeField(surfacePoint, p.instanceMaskBase, weatheringCurvature, centerTap, softens);
+
+                if (weatheringCurvature) {
+                    float center = s.terminalRadius;
+
+                    sdfEvalCount += 4.0;
+                    sdfWorkSteps += 4u;
+
+                    if (centerTap) {
+                        center = probes.center;
+                        sdfEvalCount += 1.0;
+                        sdfWorkSteps += 1u;
+                    }
+
+                    curvature = sdfProbeCurvature(probes, center);
+                }
             }
+
             applyWeathering(layerPoint, layerNormal, normal.y, curvature, p.pixelFootprint * s.t, hitLanes, shadeMaterial);
 
             // The shading-normal soften (SdfMaterial.Soften) widens the lit normal toward a wide-stencil field gradient;
             // occlusion and the normal debug view keep the geometric normal.
-            applySoften(normal, surfacePoint, p.instanceMaskBase, shadeMaterial.soften);
+            applySoften(normal, probes.softenSum, shadeMaterial.soften);
 
             // The ambient stage's occlusion, into the ambient fill only (the key light is governed by its soft shadow). A
             // wrapped (skin-like) material relaxes it toward 1; wrap = 0 leaves it as it is.
