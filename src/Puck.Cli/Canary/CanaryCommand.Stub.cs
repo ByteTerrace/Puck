@@ -406,8 +406,8 @@ internal static partial class CanaryCommand {
         );
     }
     // <installDirectory>/Puck.Launcher.Stub.exe reads stub.json/current/versions/ from its own directory
-    // (AppContext.BaseDirectory) — the stub build output is copied here rather than launched from the shared
-    // build path, so nothing this leg does can touch the artifact every other canary and puck landing depend on.
+    // (AppContext.BaseDirectory) — the stub build output is copied here so nothing this leg does can touch the
+    // artifact the other legs in this run share. The build log sits outside that output directory.
     private static void MaterializeStubInstall(string installDirectory, string stubArtifact) {
         Directory.CreateDirectory(path: installDirectory);
         CopyDirectoryFiles(
