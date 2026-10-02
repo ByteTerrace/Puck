@@ -40,7 +40,7 @@ internal static class BundleCommand {
         var release = new JsonObject { ["commit"] = commit, ["channel"] = "stable", ["files"] = files };
 
         File.WriteAllText(
-            contents: (release.ToJsonString(options: new JsonSerializerOptions { WriteIndented = true }) + "\n"),
+            contents: (release.ToJsonString(options: new JsonSerializerOptions { NewLine = "\n", WriteIndented = true }) + "\n"),
             path: Path.Combine(
                 path1: root,
                 path2: "release.json"
