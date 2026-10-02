@@ -2055,7 +2055,7 @@ start in engine ticks, and its phase and reading at the authority's tick.
 
 ## Verifying
 
-`Puck.World` is greenfield (`CLAUDE.md` rule 3): verify by RUNNING the game
+`Puck.World` is greenfield (`AGENTS.md` rule 3): verify by RUNNING the game
 and driving stdin verbs—no gate stages, no `--validate` flags, and no
 golden corpus. Byte-identity observations (the canonical save round-trip,
 `git diff` on shipped worlds) are useful evidence but never acceptance

@@ -39,7 +39,7 @@ public readonly record struct WorldPeerConnectionInfo(int ConnectionId, int Peer
 /// </remarks>
 public sealed class WorldPeerHost : IDisposable {
     /// <summary>The ceiling on concurrent in-flight unauthenticated handshakes (a socket accepted but not yet
-    /// admitted or refused). A safety representation constant, never a document knob (CLAUDE.md core rule 8's
+    /// admitted or refused). A safety representation constant, never a document knob (AGENTS.md core rule 8's
     /// "legitimate constants" carve-out names capacity bounds that size memory or the wire — this sizes the
     /// pre-admission connection table, not a per-world tunable Play/Dive/Kart/Jump would ever want different).
     /// Sized independently of <see cref="WorldBodiesLimits.CapacityCeiling"/> (4096, the admitted population
@@ -52,7 +52,7 @@ public sealed class WorldPeerHost : IDisposable {
 
     /// <summary>Gets the deadline, on the host's clock, for the entire pre-admission handshake (Hello's version check
     /// through the identity door's verify and the tick-thread population admit). This bounds connection lifecycle,
-    /// never simulation state — the wall-clock ban in CLAUDE.md's determinism rule governs the tick, and a socket that
+    /// never simulation state — the wall-clock ban in AGENTS.md's determinism rule governs the tick, and a socket that
     /// never finishes proving who it is has not entered the tick at all
     /// (<see cref="Protocol.WorldAdmissionDoor.TryAdmit"/>'s own <c>now: DateTimeOffset</c> parameter reads the same
     /// admission clock for the identical reason). Without a deadline, a peer that completes Hello but then stalls

@@ -325,7 +325,7 @@ public static class WorldBootComposition {
         // on Windows, the CPU tier) and compositor-owned desktop-window capture. Registered here (not presentation)
         // because WorldScreenBinder's constructor needs them regardless of boot shape — see below. Puck.World
         // references both Puck.Platform.Windows and Puck.Platform.Linux directly (it stays one universal build, per
-        // CLAUDE.md rule 3), so this OperatingSystem.IsWindows() branch is the one composition-time choice between
+        // AGENTS.md rule 3), so this OperatingSystem.IsWindows() branch is the one composition-time choice between
         // them; it is not a falsifier target itself — that property belongs to Puck.Launcher.Linux/.Headless, which
         // touch neither package.
         if (OperatingSystem.IsWindows()) {

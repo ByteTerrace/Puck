@@ -181,7 +181,7 @@ public sealed partial class WorldTick {
             m_tickWrittenCount++;
         }
     }
-    /// <summary>Returns the context-sensitive-button interception's eligibility pass (the RPG A-button, <c>CLAUDE.md</c>'s
+    /// <summary>Returns the context-sensitive-button interception's eligibility pass (the RPG A-button, <c>AGENTS.md</c>'s
     /// overworld intent) — for each active, un-routed local seat, the first (document order) screen that is
     /// engageable and backed by a live booted machine (the real gate is <see cref="CheckScreenEngagePolicy"/>'s
     /// <see cref="IWorldMachineHost.HasMachine"/> check — the authoritative server-side boot signal; the host boots and

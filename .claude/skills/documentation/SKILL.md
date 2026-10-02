@@ -11,7 +11,7 @@ Use the register that matches the audience:
 |---|---|
 | Human-authored READMEs and `docs/`, including a `.puck` source's companion `.md` | Narrative, readable by students |
 | XML comments on code members | Precise API reference |
-| `CLAUDE.md` and `.claude/` material | Operational instructions for agents |
+| `AGENTS.md` and `.claude/` material | Operational instructions for agents |
 
 Legal boilerplate and generated artifacts are outside these registers. Do not
 hand-edit generated Maths registers, generated API output, or other

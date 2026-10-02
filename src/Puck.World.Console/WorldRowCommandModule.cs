@@ -45,7 +45,7 @@ namespace Puck.World;
 public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authority, WorldDeferredVerbEchoes echoes, WorldRowStepWindowGuard? stepGuard = null) : ICommandModule {
     private const string PropertiesNamesPath = "properties.names";
 
-    // The section table — the one thing that legitimately stays as data (CLAUDE.md: a table over these rows is
+    // The section table — the one thing that legitimately stays as data (AGENTS.md: a table over these rows is
     // vocabulary, not logic to duplicate per section). Built once per type: no entry closes over a particular
     // WorldServer — the four sections whose mutation reads live document state (inputHold/views.seatRig/
     // views.seatControl/playerDefaults.seatLook) take it as this delegate's own leading parameter instead, resolved

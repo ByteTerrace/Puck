@@ -16,7 +16,7 @@ namespace Puck.World.Tests;
 /// Fixtures.cs's own remarks), so this suite proves the PRIMITIVE the abort path depends on: detaching a body with
 /// live dynamic state and restoring it reproduces that state exactly, and never reinstates park. The end-to-end
 /// abort-refire behavior (a restored body's stale origin must not re-trigger the portal it just departed) is
-/// verified by RUNNING <c>Puck.World</c> (CLAUDE.md rule 3 — game features are not gated), per the campaign's own
+/// verified by RUNNING <c>Puck.World</c> (AGENTS.md rule 3 — game features are not gated), per the campaign's own
 /// VERIFY section.
 /// </summary>
 public sealed class TransferAbortDynamicStateLawTests {
