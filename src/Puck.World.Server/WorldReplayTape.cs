@@ -716,8 +716,9 @@ public sealed partial class WorldReplayTape {
             }
         };
         m_liveServer.LinkDeliveryTap = adjacency => m_currentAuthority.Add(item: new WorldReplayEntry.LinkDelivery(Adjacency: adjacency));
-        m_liveServer.ArrivalTap = arrival => m_currentAuthority.Add(item: new WorldReplayEntry.Arrival(
+        m_liveServer.ArrivalTap = (arrival, rolledBack) => m_currentAuthority.Add(item: new WorldReplayEntry.Arrival(
             Profile: PinProfile(profile: arrival.Profile),
+            RolledBack: rolledBack,
             Value: (arrival with { Profile = null })
         ));
         m_transport.UndoTap = (count, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Undo(

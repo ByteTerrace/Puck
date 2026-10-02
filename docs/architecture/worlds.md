@@ -858,6 +858,17 @@ issue from a counter in the target resolver's ordered domain, recorded before th
 pure function of event order. Wall time, UUIDs and discovery order never decide identity. A
 remote-issued id enters the source as a verified foreign value at a named tape boundary.
 
+A tape records both halves of a transfer that touches its world. A departure is recorded as the
+seats it removed. An arrival is recorded as the landing the destination's escrow made: the traveler's
+admission, then its profile, appearance, accumulated arrival turn, committed mobility and, for a
+mapped arrival, its pose and motion. A local seat is admitted by its session join; a transferred
+peer or entity is admitted by its own recorded `PeerAdmitted` event, which comes before the arrival
+on the tape. Arrivals are recorded in member order once the commit decides. A commit that rolls back
+records every landing it made with its rollback, because a landing advances its index's generation
+even when it is undone. Re-drive lands and rolls back each arrival through the escrow's own landing
+and rollback, at the arrival's position in its tick, so a recording that spans an arrival verifies
+tick for tick.
+
 Each authority tape records the initial authored rate and every ordered rate write, pause and resume
 that changes which steps occur. Replay drives from the tape's recorded rate history and refuses a
 definition/rate disagreement by name before stepping. A missing or mismatched rate must never fall

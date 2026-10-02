@@ -171,12 +171,16 @@ public abstract record WorldReplayEntry {
     /// what a MATCH proves.</para></summary>
     /// <param name="Adjacency">The authored <c>adjacencies</c> row name that refreshed.</param>
     internal sealed record LinkDelivery(string Adjacency) : WorldReplayEntry;
-    /// <summary>A local seat a committed transfer landed in the recorded world (<see cref="WorldServer.ArrivalTap"/>).
-    /// Re-drive lands it through the same <see cref="WorldTransferEscrow.LandSeat"/> at the same pre-step position, its
-    /// profile re-seated on the pinned rates (<paramref name="Profile"/>) as a recorded seat's is.</summary>
+    /// <summary>A traveler a transfer commit landed in the recorded world (<see cref="WorldServer.ArrivalTap"/>), local
+    /// seat or transferred peer, with whether the commit rolled it back. A peer's admission is its own recorded
+    /// <c>PeerAdmitted</c> entry, which the commit taped ahead of this one. Re-drive lands it through
+    /// <see cref="WorldTransferEscrow.LandArrival"/> at the same pre-step position and, for a rolled-back one, rolls it back
+    /// through <see cref="WorldTransferEscrow.RollBackArrival"/>, so the generation a landing advanced advances again.
+    /// Its profile is re-seated on the pinned rates (<paramref name="Profile"/>) as a recorded seat's is.</summary>
     /// <param name="Value">The arrival, with no profile of its own.</param>
     /// <param name="Profile">The occupant's pinned profile, or <see langword="null"/>.</param>
-    internal sealed record Arrival(WorldSeatArrival Value, WorldReplayProfilePin? Profile) : WorldReplayEntry;
+    /// <param name="RolledBack">Whether the commit that landed it rolled back.</param>
+    internal sealed record Arrival(WorldArrival Value, WorldReplayProfilePin? Profile, bool RolledBack) : WorldReplayEntry;
 }
 /// <summary>One recorded tick's server-facing input — the exact <see cref="IServerLink"/> traffic the live session
 /// applied that tick, captured at the loopback: the synchronous <see cref="Authority"/> stream (commands, grants, and
@@ -479,10 +483,17 @@ public sealed partial class WorldReplaySnapshot {
 
                     break;
                 case WorldReplayEntry.Arrival arrival:
-                    _ = server.TransferEscrow.LandSeat(arrival: Landed(
+                    var landed = Landed(
                         arrival: arrival,
                         defaults: server.Definition.PlayerDefaults
-                    ));
+                    );
+
+                    if (
+                        server.TransferEscrow.LandArrival(arrival: landed).Accepted &&
+                        arrival.RolledBack
+                    ) {
+                        server.TransferEscrow.RollBackArrival(arrival: landed);
+                    }
 
                     break;
                 case WorldReplayEntry.RateLever:

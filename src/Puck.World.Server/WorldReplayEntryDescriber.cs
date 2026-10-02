@@ -163,7 +163,7 @@ public static class WorldReplayEntryDescriber {
             values: transfer.DepartedBootSlots
         )}]",
             WorldReplayEntry.LinkDelivery link => $"link '{link.Adjacency}' delivered",
-            WorldReplayEntry.Arrival arrival => $"seat {(arrival.Value.Slot + 1)} arrived across '{arrival.Value.Border}'",
+            WorldReplayEntry.Arrival arrival => $"body:{arrival.Value.Slot} arrived across '{arrival.Value.Border}'",
             _ => entry.GetType().Name,
         };
     }

@@ -336,10 +336,11 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// projection graph. The one taped link-liveness input — see <see cref="WorldEventFeed"/>'s own remarks. The
     /// replay tape attaches only while armed.</summary>
     public Action<string>? LinkDeliveryTap { get; set; }
-    /// <summary>Observes each local seat a committed transfer landed here (<see cref="WorldTransferEscrow.LandSeat"/>),
-    /// once the whole cohort has landed. The replay tape attaches only while armed, and its re-drive lands the recorded
-    /// arrival through the same <see cref="WorldTransferEscrow.LandSeat"/>.</summary>
-    public Action<WorldSeatArrival>? ArrivalTap { get; set; }
+    /// <summary>Observes each traveler a transfer commit landed here, local seat or transferred peer, in member order
+    /// once the commit decides, with whether it rolled back. The replay tape attaches only while armed, and its re-drive
+    /// lands each recorded arrival through <see cref="WorldTransferEscrow.LandArrival"/> and rolls a rolled-back one back
+    /// through <see cref="WorldTransferEscrow.RollBackArrival"/>.</summary>
+    public Action<WorldArrival, bool>? ArrivalTap { get; set; }
     /// <summary>Gets or sets the injected neighbour resolver <see cref="WorldDefinitionValidator.Validate"/> reads
     /// for a cross-document adjacency proof
     /// — the same "the server calls out, the composition root supplies the capability" shape as <see cref="EchoTap"/>/

@@ -222,9 +222,8 @@ the platform's public-content identity.
 **Delivers:** the wave above. The remainder is one package that waits for the
 forcing world to be played, because every row is a question a played world
 asks: per-viewport user- and group-scoped destination images; a
-destination-clock interpolation ease; multi-authority replay (a destination
-arrival is not taped today, and `replay.verify` reports a remote or
-unavailable target as not verified, never as passing); bounded queues,
+destination-clock interpolation ease; multi-authority replay (`replay.verify`
+reports a remote or unavailable target as not verified, never as passing); bounded queues,
 backpressure, and query redaction on the observation feed; derived-band
 read-back with a long-run remainder-drift demonstration; destination and
 session resolution on the wire, an unembodied session authority carried across

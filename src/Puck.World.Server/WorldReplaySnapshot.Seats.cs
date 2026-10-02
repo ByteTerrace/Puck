@@ -57,7 +57,7 @@ public sealed partial class WorldReplaySnapshot {
     });
     // The arrival a re-drive lands: the recorded one, its profile re-seated on the pinned rates against the embedded
     // definition's player defaults, exactly as SeatRecordedSeats re-seats a recorded seat.
-    private static WorldSeatArrival Landed(WorldReplayEntry.Arrival arrival, WorldPlayerDefaults defaults) => (arrival.Value with {
+    private static WorldArrival Landed(WorldReplayEntry.Arrival arrival, WorldPlayerDefaults defaults) => (arrival.Value with {
         Profile = ((arrival.Profile is { } pin)
         ? WorldIdentity.Pinned(
             defaults: defaults,
@@ -85,9 +85,11 @@ public sealed partial class WorldReplaySnapshot {
             principal: value.Principal,
             writer: writer
         )) {
-            throw new WorldReplayCodecException(message: $"arrival at seat {value.Slot} names principal {value.Principal.Describe()}, which has no wire value.");
+            throw new WorldReplayCodecException(message: $"arrival at body:{value.Slot} names principal {value.Principal.Describe()}, which has no wire value.");
         }
 
+        writer.WriteBoolean(value: value.Peer);
+        writer.WriteBoolean(value: arrival.RolledBack);
         WriteProfilePin(
             pin: arrival.Profile,
             writer: writer
@@ -107,6 +109,8 @@ public sealed partial class WorldReplaySnapshot {
     private static WorldReplayEntry.Arrival ReadArrivalEntry(ref WireReader reader) {
         var slot = reader.ReadInt32();
         var principal = WorldWireCodec.ReadPrincipal(reader: ref reader);
+        var peer = reader.ReadBoolean();
+        var rolledBack = reader.ReadBoolean();
         var profile = ReadProfilePin(reader: ref reader);
         var bodyColor = reader.ReadFiniteVector(field: "arrival body color");
         var catalogRig = reader.ReadByte();
@@ -126,12 +130,14 @@ public sealed partial class WorldReplaySnapshot {
 
         return new WorldReplayEntry.Arrival(
             Profile: profile,
-            Value: new WorldSeatArrival(
+            RolledBack: rolledBack,
+            Value: new WorldArrival(
                 BodyColor: bodyColor,
                 Border: border,
                 CatalogRig: catalogRig,
                 Member: member,
                 Mobility: mobility,
+                Peer: peer,
                 Principal: principal,
                 Profile: null,
                 Slot: slot

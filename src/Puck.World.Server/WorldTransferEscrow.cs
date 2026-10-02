@@ -725,8 +725,7 @@ public sealed partial class WorldTransferEscrow {
             }
         }
 
-        var landed = new List<int>(capacity: members.Count);
-        var arrivals = new List<WorldSeatArrival>(capacity: (lease.Request.PeerAdmission ? 0 : members.Count));
+        var arrivals = new List<WorldArrival>(capacity: members.Count);
 
         for (var index = 0; (index < members.Count); index++) {
             var slot = lease.Slots[index];
@@ -768,20 +767,32 @@ public sealed partial class WorldTransferEscrow {
                         profile: profile,
                         slot: slot
                     );
+                    arrivals.Add(item: new WorldArrival(
+                        BodyColor: reservationMember.BodyColor,
+                        Border: lease.Request.Border,
+                        CatalogRig: reservationMember.CatalogRig,
+                        Member: member,
+                        Mobility: mobility,
+                        Peer: true,
+                        Principal: reservationMember.Principal,
+                        Profile: profile,
+                        Slot: slot
+                    ));
                 }
             } else {
-                var arrival = new WorldSeatArrival(
+                var arrival = new WorldArrival(
                     BodyColor: reservationMember.BodyColor,
                     Border: lease.Request.Border,
                     CatalogRig: reservationMember.CatalogRig,
                     Member: member,
                     Mobility: mobility,
+                    Peer: false,
                     Principal: reservationMember.Principal,
                     Profile: profile,
                     Slot: slot
                 );
 
-                reply = LandSeat(arrival: arrival);
+                reply = LandArrival(arrival: arrival);
 
                 if (reply.Accepted) {
                     arrivals.Add(item: arrival);
@@ -789,24 +800,22 @@ public sealed partial class WorldTransferEscrow {
             }
 
             if (!reply.Accepted) {
-                foreach (var landedSlot in landed) {
-                    if (lease.Request.PeerAdmission) {
-                        m_server.GrantTable.RollbackTransferredEntity(slot: landedSlot);
-                    } else {
-                        _ = m_server.Population.TryDetachSeatForTransfer(
-                            profile: out _,
-                            slot: landedSlot
-                        );
-                    }
-                    _ = m_borderAdmissions.Remove(key: landedSlot);
+                // Every landing this commit made is undone, then reported with its rollback, so a re-drive lands and
+                // rolls back the same travelers: a landing advances its index's generation, which outlives it.
+                foreach (var arrival in arrivals) {
+                    RollBackArrival(arrival: arrival);
+                }
+                foreach (var arrival in arrivals) {
+                    m_server.ArrivalTap?.Invoke(
+                        arg1: arrival,
+                        arg2: true
+                    );
                 }
 
                 reason = $"body:{slot} refused reserved commit — {reply.Reason}";
 
                 return false;
             }
-
-            landed.Add(item: slot);
         }
 
         m_committed.Add(item: key);
@@ -853,27 +862,46 @@ public sealed partial class WorldTransferEscrow {
         m_committedIncarnations[key] = committedIncarnations;
         reason = string.Empty;
 
-        // Reported once the whole cohort has landed, so a recording holds only arrivals that stood.
+        // Reported once the commit stands, in member order.
         foreach (var arrival in arrivals) {
-            m_server.ArrivalTap?.Invoke(obj: arrival);
+            m_server.ArrivalTap?.Invoke(
+                arg1: arrival,
+                arg2: false
+            );
         }
 
         return true;
     }
 
-    /// <summary>Lands one local seat at its reserved slot: joins it under its principal, then writes the occupant the
-    /// commit carried onto it. The one landing a live commit and a replay's re-drive both apply.</summary>
+    /// <summary>Lands one arrival at its reserved index: admits a local seat by its session join, the one a live commit
+    /// makes, then writes the occupant the commit carried onto it. A transferred peer or entity was admitted by its
+    /// <see cref="WorldServerEvent.PeerAdmitted"/> event, which a recording holds ahead of its arrival; it is landed only.
+    /// The landing is the one a live commit applies.</summary>
     /// <param name="arrival">The arrival.</param>
-    /// <returns>The join's verdict; nothing is written onto a refused seat.</returns>
-    public SessionReply LandSeat(WorldSeatArrival arrival) {
+    /// <returns>The admission's verdict; nothing is written onto a refused or unadmitted index.</returns>
+    public SessionReply LandArrival(WorldArrival arrival) {
         ArgumentNullException.ThrowIfNull(argument: arrival);
 
-        var reply = m_server.ApplySession(request: new SessionRequest.Join(
-            IdentityName: null,
-            Principal: arrival.Principal,
-            Slot: arrival.Slot,
-            WireProtocolKey: WorldProtocol.WireProtocolKey
-        ));
+        var reply = (arrival.Peer
+            ? (m_server.Population.IsActive(index: arrival.Slot)
+                ? new SessionReply(
+                    Accepted: true,
+                    AssignedIndex: (arrival.Slot + 1),
+                    Reason: string.Empty,
+                    RosterEcho: string.Empty
+                )
+                : new SessionReply(
+                    Accepted: false,
+                    AssignedIndex: -1,
+                    Reason: $"peer body:{arrival.Slot} was not admitted ahead of its arrival",
+                    RosterEcho: string.Empty
+                ))
+            : m_server.ApplySession(request: new SessionRequest.Join(
+                IdentityName: null,
+                Principal: arrival.Principal,
+                Slot: arrival.Slot,
+                WireProtocolKey: WorldProtocol.WireProtocolKey
+            )));
 
         if (reply.Accepted) {
             Land(
@@ -888,6 +916,24 @@ public sealed partial class WorldTransferEscrow {
         }
 
         return reply;
+    }
+    /// <summary>Undoes one landed arrival of a commit that rolled back: a transferred peer or entity loses the grants
+    /// its admission minted and leaves its index; a local seat leaves its seat. The one rollback a live commit and a
+    /// replay's re-drive both apply.</summary>
+    /// <param name="arrival">The landed arrival.</param>
+    public void RollBackArrival(WorldArrival arrival) {
+        ArgumentNullException.ThrowIfNull(argument: arrival);
+
+        if (arrival.Peer) {
+            m_server.GrantTable.RollbackTransferredEntity(slot: arrival.Slot);
+        } else {
+            _ = m_server.Population.TryDetachSeatForTransfer(
+                profile: out _,
+                slot: arrival.Slot
+            );
+        }
+
+        _ = m_borderAdmissions.Remove(key: arrival.Slot);
     }
 
     // Writes an admitted occupant's carried state onto its slot: the profile, appearance and arrival turn, its committed

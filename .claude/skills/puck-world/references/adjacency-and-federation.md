@@ -332,10 +332,14 @@ says nothing about it:
 - The delivered CONTENT is not taped — neighbour poses, definition revisions,
   and geometry. Cross-authority contact against remote dynamic bodies is
   therefore still outside what a MATCH proves (see the paragraph above).
-- Federated ARRIVAL is not reproduced. A traveller entering this authority from
-  elsewhere has no source population in the shadow world to arrive from; only
-  the DEPARTURE half replays, through `WorldReplayEntry.Transfer`'s
-  `DepartedBootSlots`.
+- Both halves of a transfer replay, but only as this authority saw them. The
+  departure half replays through `WorldReplayEntry.Transfer`'s
+  `DepartedBootSlots`. The arrival half replays through
+  `WorldReplayEntry.Arrival`: `WorldServer.ArrivalTap` reports each landing
+  `WorldTransferEscrow` made, with whether its commit rolled back, and the
+  re-drive applies `WorldTransferEscrow.LandArrival` and `RollBackArrival`, the
+  escrow's own landing and rollback. A peer's admission is its taped
+  `PeerAdmitted` entry. The source authority's simulation is never replayed.
 - Transfer reserve/commit/abort/acknowledge traffic is not taped as protocol —
   `Transfer` records the decided outcome as narration, not a re-executed
   handshake.
