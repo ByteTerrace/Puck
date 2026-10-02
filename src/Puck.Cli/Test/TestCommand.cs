@@ -52,6 +52,9 @@ internal static partial class TestCommand {
             runDirectory = Directory.CreateTempSubdirectory(prefix: ScratchPrefix).FullName;
         }
 
+        // A failed World build's refusal names the log it kept here, so the run directory outlives the run.
+        var keepBuildLog = false;
+
         try {
             if (!TryCollectWorlds(
                 generatedDirectory: Path.Combine(
@@ -71,8 +74,14 @@ internal static partial class TestCommand {
                 artifact: out var artifact,
                 lease: out var lease,
                 repositoryRoot: repositoryRoot,
+                runDirectory: runDirectory,
                 worldArtifact: worldArtifact
             )) {
+                keepBuildLog = File.Exists(path: Path.Combine(
+                    path1: runDirectory,
+                    path2: CliProjectBuild.LogName(project: WorldArtifactClosure.WorldProject)
+                ));
+
                 return 2;
             }
 
@@ -127,6 +136,8 @@ internal static partial class TestCommand {
         } finally {
             if (keep is { }) {
                 Console.WriteLine(value: $"test: generated worlds, transcripts, exports and manifests kept under {runDirectory}");
+            } else if (keepBuildLog) {
+                Console.Error.WriteLine(value: $"test: the run directory {runDirectory} is kept for the World build's output.");
             } else {
                 try {
                     Directory.Delete(
