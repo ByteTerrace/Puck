@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
@@ -334,9 +335,15 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 : outcome);
         }
     }
-    /// <summary>Describes each frame to a runtime over the same roots and footprints, counting frame indices.</summary>
+    /// <summary>Describes each frame to a runtime over the same roots and footprints, counting frame indices. The count is
+    /// the runtime's, shared by every <see cref="Frames"/> over it, so frames keep following one another across a
+    /// reconfiguration, as a host's do.</summary>
     private sealed class Frames(RenderGraphRuntime runtime, IReadOnlyList<RenderGraphRoot> roots, IReadOnlyList<RenderGraphFootprint> footprints) {
-        public long Index { get; private set; }
+        private static readonly ConditionalWeakTable<RenderGraphRuntime, StrongBox<long>> Counts = [];
+
+        private readonly StrongBox<long> m_count = Counts.GetValue(createValueCallback: static _ => new StrongBox<long>(), key: runtime);
+
+        public long Index => m_count.Value;
 
         public Surface Next() {
             var frame = new RenderGraphFrame(
@@ -344,7 +351,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 DisplayHertz: 60,
                 DisplayWidth: Display,
                 Footprints: footprints,
-                Index: Index++,
+                Index: m_count.Value++,
                 Roots: roots
             );
 

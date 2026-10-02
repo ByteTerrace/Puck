@@ -59,18 +59,19 @@ public sealed partial class SdfWorldPassesLawTests {
         _ = request.TryFail(error: new OperationCanceledException());
     }
     // Cadence never keeps a jittered sample: once the converging capture ends, a still view renders once more at the
-    // pixel center and then stands.
+    // pixel center and then stands. The capture asks for one sample more than the law renders, so it is still waiting,
+    // never served, when the law withdraws it.
     [Fact]
     public void AStillViewRendersOnceUnjitteredAfterItsCaptureEndsAndThenStands() {
-        const int Converge = 8;
+        const int Rendered = 8;
         using var rig = new TemporalRig(views: 1, cadence: true);
 
         rig.Produce();
         Assert.True(condition: rig.Stood());
-        var request = new FrameCaptureRequest(converge: Converge, path: "unused-still-temporal-law.png");
+        var request = new FrameCaptureRequest(converge: (Rendered + 1), path: "unused-still-temporal-law.png");
 
         rig.Runtime.RequestCapture(request: request);
-        for (var sample = 0U; (sample < Converge); sample++) {
+        for (var sample = 0U; (sample < Rendered); sample++) {
             rig.Produce();
             Assert.Equal(expected: sample, actual: rig.HistoryFrames());
         }
@@ -81,6 +82,28 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: Vector2.Zero, actual: rig.Jitter());
         rig.Produce();
         Assert.True(condition: rig.Stood());
+    }
+    // A reconfiguration that keeps the view leaves its still output standing: the view rendered once and renders no
+    // more, whatever set the runtime runs around it.
+    [Fact]
+    public void AStillViewKeptByAReconfigurationRendersNoMore() {
+        using var rig = new TemporalRig(views: 1, cadence: true);
+
+        Assert.Equal(expected: 1UL, actual: rig.World.FrameCounter);
+        for (var reconfiguration = 0; (reconfiguration < 3); reconfiguration++) {
+            Assert.True(condition: RenderGraphInstanceSet.TryCreate(instances: [.. rig.Runtime.Instances.Instances], refusal: out _, set: out var set));
+            Assert.True(condition: rig.Runtime.TryReconfigure(graphs: new RenderGraphRuntimeGraph?[set.Instances.Count], refusal: out var refusal, root: "world", set: set), userMessage: refusal?.Message);
+            for (var frame = 0; (frame < 4); frame++) {
+                rig.Produce();
+                Assert.True(condition: rig.Stood(), userMessage: $"reconfiguration {reconfiguration}, frame {frame}");
+            }
+        }
+        Assert.Equal(expected: 1UL, actual: rig.World.FrameCounter);
+
+        var completed = new GpuWorkSample();
+
+        Assert.True(condition: rig.World.TryReadCompleted(sample: completed));
+        Assert.Equal(expected: 1L, actual: completed.Submission);
     }
     // The motion view reads the previous view: turned on over a still scene it renders once with none, once with the
     // stationary previous view, and only then stands.
