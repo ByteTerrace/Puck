@@ -105,7 +105,7 @@ public abstract record SdfCameraOp {
     /// ahead along the curve.</summary>
     /// <param name="Curve">The float twin of the compiled curve to sample.</param>
     /// <param name="Fraction">The curve's arc-length fraction to resolve this frame, wrapped (a closed curve) or
-    /// clamped (an open one) against <see cref="SdfCurvePath.TotalLength"/> before sampling.</param>
+    /// clamped to <c>[0, 1]</c> (an open one) before sampling (see <see cref="SdfCurvePath.SampleFraction"/>).</param>
     public sealed record Path(SdfCurvePath Curve, SdfCameraScalar Fraction) : SdfCameraOp;
     /// <summary>Sets the second-order response reported as <see cref="SdfCameraPose.Dynamics"/>;
     /// <see cref="SdfCameraDynamics.None"/> reports no easing. It never moves the resolved pose — the eased result is
@@ -292,7 +292,7 @@ public static class SdfCameraProgramEvaluator {
 
                     break;
                 case SdfCameraOp.Path pathOp:
-                    var (pathPosition, pathTangentYaw) = pathOp.Curve.Sample(arcLength: (pathOp.Fraction.Resolve(scalars: scalars) * pathOp.Curve.TotalLength));
+                    var (pathPosition, pathTangentYaw) = pathOp.Curve.SampleFraction(fraction: pathOp.Fraction.Resolve(scalars: scalars));
 
                     subject = new SdfAnchor(
                         Orientation: Quaternion.CreateFromYawPitchRoll(

@@ -161,9 +161,15 @@ public readonly record struct CameraSnapshot {
         }
     }
 
+    /// <summary>Gets the narrowest field of view a camera is built with, in radians. Half of it is a normal float, so
+    /// its tangent, the snapshot's <see cref="TanHalfFieldOfView"/>, is a positive normal float that no device flushes
+    /// to zero; a narrower angle lets <see cref="MathF.Tan"/> of its half underflow to zero, which no snapshot admits.</summary>
+    public const float MinFieldOfViewRadians = 1e-6f;
+
     /// <summary>Creates a finite camera snapshot looking from <paramref name="position"/> toward <paramref name="target"/>.</summary>
     /// <exception cref="ArgumentException">A position or target component is not finite.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">The field of view is outside 0..<see cref="MathF.PI"/>, or a viewport dimension is zero.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The field of view is below <see cref="MinFieldOfViewRadians"/> or not
+    /// below <see cref="MathF.PI"/>, or a viewport dimension is zero.</exception>
     public static CameraSnapshot LookAt(Vector3 position, Vector3 target, float fieldOfViewRadians, uint viewportWidth, uint viewportHeight) {
         ValidateFinite(
             value: position,
@@ -176,13 +182,13 @@ public readonly record struct CameraSnapshot {
 
         if (
             !float.IsFinite(f: fieldOfViewRadians) ||
-            (fieldOfViewRadians <= 0f) ||
+            (fieldOfViewRadians < MinFieldOfViewRadians) ||
             (fieldOfViewRadians >= MathF.PI)
         ) {
             throw new ArgumentOutOfRangeException(
                 nameof(fieldOfViewRadians),
                 fieldOfViewRadians,
-                "The field of view must be finite and strictly between zero and pi radians."
+                $"The field of view must be finite, at least {MinFieldOfViewRadians} and below pi radians."
             );
         }
         ArgumentOutOfRangeException.ThrowIfZero(value: viewportWidth);

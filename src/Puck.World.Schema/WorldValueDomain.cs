@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using System.Text.Json;
+using Puck.Abstractions.Cameras;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
 
@@ -122,8 +123,13 @@ public static class WorldValueFields {
     public static WorldValueField OrbitPitch { get; } = new(typeof(WorldCameraProgramOp.Orbit), nameof(WorldCameraProgramOp.Orbit.Pitch), WorldValueDomain.Finite);
     /// <summary>A path op's fraction along its curve.</summary>
     public static WorldValueField PathFraction { get; } = new(typeof(WorldCameraProgramOp.Path), nameof(WorldCameraProgramOp.Path.Fraction), WorldValueDomain.Finite);
-    /// <summary>A field-of-view op's angle, in radians.</summary>
-    public static WorldValueField FieldOfView { get; } = new(typeof(WorldCameraProgramOp.FieldOfView), nameof(WorldCameraProgramOp.FieldOfView.FieldOfViewRadians), WorldValueDomain.Finite);
+    /// <summary>A field-of-view op's angle, in radians, from the narrowest a camera is built with to just under a half
+    /// turn.</summary>
+    public static WorldValueField FieldOfView { get; } = new(typeof(WorldCameraProgramOp.FieldOfView), nameof(WorldCameraProgramOp.FieldOfView.FieldOfViewRadians), new WorldValueDomain(
+        Maximum: MathF.PI,
+        MaximumOpen: true,
+        Minimum: CameraSnapshot.MinFieldOfViewRadians
+    ), Why: "a camera cannot be built outside it");
     /// <summary>A blend op's weight: zero resolves its first program, one its second.</summary>
     public static WorldValueField BlendWeight { get; } = new(typeof(WorldCameraProgramOp.Blend), nameof(WorldCameraProgramOp.Blend.Weight), WorldValueDomain.Unit);
     /// <summary>A select op's key.</summary>

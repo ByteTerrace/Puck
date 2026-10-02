@@ -20,7 +20,7 @@ namespace Puck.World.Tests;
 /// and row once.
 /// </summary>
 public sealed class WorldValueDomainLawTests {
-    private const string Row = "bound";
+    internal const string Row = "bound";
 
     // How a test authors a field into a document and reads back what the presentation made of it.
     // A report names the field where the presentation finds it, which is the document path unless the case says
@@ -98,6 +98,22 @@ public sealed class WorldValueDomainLawTests {
                 anchor: new SdfAnchor(Orientation: Quaternion.Identity, Position: Vector3.Zero),
                 clock: new SdfCameraClock(AuthoritativeTick: 0UL, PresentationSeconds: 0f)
             ).FovRadians - LowFov) / (HighFov - LowFov))
+        ),
+        [WorldValueFields.FieldOfView] = new Case(
+            Author: static s => Fixtures.BuildDocument() with {
+                CamerasRaw = [Camera(name: "probe", rig: Program(name: "probe-rig", operations: new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: s)))],
+            },
+            Path: "cameras[0].rig.operations[0].fieldOfViewRadians",
+            ReportPath: "camera program 'probe-rig'.operations[0].fieldOfViewRadians",
+            Present: static (definition, mirror, domains) => WorldCameraRigCompiler.Compile(
+                definition: definition,
+                domains: domains,
+                mirror: mirror,
+                program: definition.Cameras[0].Rig
+            ).Resolve(
+                anchor: new SdfAnchor(Orientation: Quaternion.Identity, Position: Vector3.Zero),
+                clock: new SdfCameraClock(AuthoritativeTick: 0UL, PresentationSeconds: 0f)
+            ).FovRadians
         ),
         [WorldValueFields.MarkerRingAlpha] = Marker(author: s => new WorldMarkerStyle(ChipAlpha: 0.9f, Size: 12f, RingAlpha: s, RingColor: new BindableColor(Raw: "#9BA3AB")), present: static a => a.Ring, member: "ringAlpha"),
     };
@@ -192,7 +208,7 @@ public sealed class WorldValueDomainLawTests {
         Present: (definition, mirror, domains) => present(arg: WorldMarkerAlphas.Resolve(domains: domains, index: 0, marker: definition.Markers[0], mirror: mirror))
     );
     // The document with the bound row holding a value: the state a load reads, or a live write leaves.
-    private static WorldDefinition WithRow(WorldDefinition definition, double value) => definition.WithWorldState(rows: [
+    internal static WorldDefinition WithRow(WorldDefinition definition, double value) => definition.WithWorldState(rows: [
         .. definition.State.Where(predicate: static row => !string.Equals(a: row.Name.Value, b: Row, comparisonType: StringComparison.Ordinal)),
         new WorldStateRow(
             Name: CellName.Parse(candidate: Row),

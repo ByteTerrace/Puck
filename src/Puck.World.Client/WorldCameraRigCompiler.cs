@@ -177,8 +177,9 @@ public static class WorldCameraRigCompiler {
 
     // One per-frame scalar slot's source: the authored binding whose mirror slot it reads (null for none), or the
     // group-spread widening an offset op's pullback applies. Exactly one arm is live per slot.
-    // A bound or keyed operand, read through the mirror each frame; an angle's keys turn along the shorter arc. A
-    // restricted operand names its field and site, and is mapped into the field's domain as it is read.
+    // A bound or keyed operand, read through the mirror each frame; an angle's keys turn along the shorter arc. Every
+    // operand the document binds or keys names its field (WorldValueFields) and site, and is mapped into the field's
+    // domain as it is read, so no value a row strays to or a key blends to reaches the evaluator outside it.
     private readonly record struct ScalarSource(BindableScalar? Value, float Fallback, float SpreadPullback, bool IsAngle = false, WorldValueField? Field = null, WorldValueSite Site = default);
     // One per-frame subject slot's source — an authored subject other than the program's own reference pose.
     private readonly record struct SubjectSource(WorldCameraSubject Subject);
@@ -234,13 +235,15 @@ public static class WorldCameraRigCompiler {
 
             return null;
         }
-        private SdfCameraScalar Angle(BindableAngle angle, float fallback) {
+        private SdfCameraScalar Angle(BindableAngle angle, float fallback, WorldValueField field, in WorldValueSite site) {
             var scalar = angle.Value;
 
             if ((scalar.State is null) && (scalar.Keys is null)) {
                 return Scalar(
                     fallback: fallback,
-                    scalar: scalar
+                    field: field,
+                    scalar: scalar,
+                    site: site
                 );
             }
 
@@ -248,7 +251,9 @@ public static class WorldCameraRigCompiler {
 
             ScalarSources.Add(item: new ScalarSource(
                 Fallback: fallback,
+                Field: field,
                 IsAngle: true,
+                Site: site,
                 SpreadPullback: 0f,
                 Value: scalar
             ));
@@ -261,7 +266,7 @@ public static class WorldCameraRigCompiler {
         private SdfCameraScalar Scalar(BindableScalar scalar, float fallback, WorldValueField? field = null, WorldValueSite site = default) {
             if ((scalar.State is null) && (scalar.Keys is null)) {
                 return SdfCameraScalar.FromLiteral(value: (((scalar.Literal is { } literal) && float.IsFinite(f: literal))
-                    ? literal
+                    ? (field?.Domain.Clamp(value: literal) ?? literal)
                     : fallback));
             }
 
@@ -309,6 +314,12 @@ public static class WorldCameraRigCompiler {
 
             return slot;
         }
+        // Where an operand sits in the program, which a report names: the program's own name, since a compiled rig
+        // knows its program by name, not where the document declares it.
+        private static WorldValueSite SiteOf(WorldCameraProgram program, int index) => new(
+            Index: index,
+            Section: $"camera program '{program.Name}'.operations"
+        );
         private List<SdfCameraOp> TranslateOperations(WorldCameraProgram program) {
             var authored = program.Operations;
             var operations = new List<SdfCameraOp>(capacity: authored.Count);
@@ -344,12 +355,22 @@ public static class WorldCameraRigCompiler {
                             Distance: SdfCameraScalar.FromLiteral(value: orbit.Distance),
                             Pitch: Angle(
                                 angle: orbit.Pitch,
-                                fallback: 0f
+                                fallback: 0f,
+                                field: WorldValueFields.OrbitPitch,
+                                site: SiteOf(
+                                    index: index,
+                                    program: program
+                                )
                             ),
                             PivotOffset: (orbit.PivotOffset?.Value ?? Vector3.Zero),
                             Yaw: Angle(
                                 angle: orbit.Yaw,
-                                fallback: 0f
+                                fallback: 0f,
+                                field: WorldValueFields.OrbitYaw,
+                                site: SiteOf(
+                                    index: index,
+                                    program: program
+                                )
                             )
                         ));
 
@@ -366,7 +387,12 @@ public static class WorldCameraRigCompiler {
                                 Curve: new SdfCurvePath(compiled: curveRow.Compiled),
                                 Fraction: Scalar(
                                     fallback: 0f,
-                                    scalar: pathOp.Fraction
+                                    field: WorldValueFields.PathFraction,
+                                    scalar: pathOp.Fraction,
+                                    site: SiteOf(
+                                        index: index,
+                                        program: program
+                                    )
                                 )
                             ));
                         }
@@ -400,7 +426,12 @@ public static class WorldCameraRigCompiler {
                     case WorldCameraProgramOp.FieldOfView fov:
                         operations.Add(item: new SdfCameraOp.Fov(FieldOfViewRadians: Scalar(
                             fallback: OrbitRig.DefaultFieldOfViewRadians,
-                            scalar: fov.FieldOfViewRadians
+                            field: WorldValueFields.FieldOfView,
+                            scalar: fov.FieldOfViewRadians,
+                            site: SiteOf(
+                                index: index,
+                                program: program
+                            )
                         )));
 
                         break;
@@ -419,9 +450,9 @@ public static class WorldCameraRigCompiler {
                                     fallback: 0f,
                                     field: WorldValueFields.BlendWeight,
                                     scalar: blend.Weight,
-                                    site: new WorldValueSite(
-                                        Index: index,
-                                        Section: $"camera program '{program.Name}'.operations"
+                                    site: SiteOf(
+                                        index: index,
+                                        program: program
                                     )
                                 )
                             ));
@@ -461,7 +492,12 @@ public static class WorldCameraRigCompiler {
                             DefaultProgram: Translate(program: defaultProgram),
                             Key: Scalar(
                                 fallback: 0f,
-                                scalar: selectOp.Key
+                                field: WorldValueFields.SelectKey,
+                                scalar: selectOp.Key,
+                                site: SiteOf(
+                                    index: index,
+                                    program: program
+                                )
                             )
                         ));
 
@@ -539,26 +575,26 @@ public static class WorldCameraRigCompiler {
                 var source = m_scalarSources[index];
 
                 scalars[index] = ((source.Value is { } value)
-                    ? (source.IsAngle
-                        ? m_mirror.Angle(
-                            angle: new BindableAngle(value: value),
-                            fallback: source.Fallback
-                        )
-                        : ((source.Field is { } field)
-                            ? WorldValueDomainReports.Clamp(
-                                domains: m_domains,
-                                field: field,
-                                scalar: in value,
-                                site: source.Site,
-                                value: m_mirror.Scalar(
+                    ? ((source.Field is { } field)
+                        ? WorldValueDomainReports.Clamp(
+                            domains: m_domains,
+                            field: field,
+                            scalar: in value,
+                            site: source.Site,
+                            value: (source.IsAngle
+                                ? m_mirror.Angle(
+                                    angle: new BindableAngle(value: value),
+                                    fallback: source.Fallback
+                                )
+                                : m_mirror.Scalar(
                                     fallback: source.Fallback,
                                     scalar: in value
-                                )
-                            )
-                            : m_mirror.Scalar(
-                                fallback: source.Fallback,
-                                scalar: in value
-                            )))
+                                ))
+                        )
+                        : m_mirror.Scalar(
+                            fallback: source.Fallback,
+                            scalar: in value
+                        ))
                     : (1f + (source.SpreadPullback * MathF.Max(
                         x: Spread,
                         y: 0f
