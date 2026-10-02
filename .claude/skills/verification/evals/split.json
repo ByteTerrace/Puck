@@ -1,0 +1,11 @@
+{
+  "seed": 4242157166,
+  "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
+  "train": [
+    "c01-lane-handback",
+    "c02-flake-vs-failure"
+  ],
+  "test": [
+    "c03-stale-binaries"
+  ]
+}
