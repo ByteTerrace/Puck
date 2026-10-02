@@ -76,9 +76,10 @@ public static class DerivationsCommand {
         var command = new Command(description: """
             Generate source-provenance keys for bakes and list each transitive source symbol grouped by assembly.
             Loads the solution's bake producer and its full Release project reference graph, rebinding metadata to source. The shared
-            csharp-tokens-v1 token framing hashes declaration ids and syntax in canonical order. Type headers are
+            csharp-tokens-v1 token framing hashes declaration ids, syntax and ordered semantic bindings in canonical order. Type headers are
             separate from member bodies; partial declarations, implicit calls and in-repo virtual/interface dispatch
-            are included. BCL and package symbols are listed as external, with assembly identity, and stop the walk.
+            are included, as are callbacks on reached source types and constructors of concrete generic arguments.
+            Partial type initializers retain their compilation order. BCL and package symbols are listed as external, with assembly identity, and stop the walk.
             The generated fingerprint declaration is excluded from its own reach.
 
             Writes src/Puck.SignedDistance/Baking/DerivationFingerprint.cs. Bake keys use the full SHA-256;

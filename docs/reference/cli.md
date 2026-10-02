@@ -577,12 +577,18 @@ The command writes
 `src/Puck.SignedDistance/Baking/DerivationFingerprint.cs` and lists one reached
 symbol per line, grouped by assembly. It reuses `TokenFingerprint`'s
 `csharp-tokens-v1` framing, ordering assembly-qualified declaration ids and
-partial declaration fragments canonically. Type headers and member bodies are
+partial declaration fragments canonically. Each fragment includes its ordered
+symbol and type bindings, so rebinding aliases changes the hash even when the
+set of reached declarations stays the same. Type headers and member bodies are
 separate: an uncalled sibling method does not move the key. Enum members and
 executable field/property initializers retain their source order because it
-determines implicit values and initialization effects. Constructors,
+determines implicit values and initialization effects. Initializers across partial
+type declarations retain their compilation order. Constructors,
 initializers, implicit conversions and virtual/interface implementations in the
-producer's dependency graph are included. Base constructors and compiler pattern
+producer's dependency graph are included. Reached types also contribute their
+interface implementations and virtual members, including callbacks invoked inside
+external code. Concrete generic arguments contribute their constructors because
+the operation for `new T()` does not name the concrete constructor. Base constructors and compiler pattern
 members for disposal, iteration, awaiting and deconstruction are included
 conservatively because the public operation tree does not expose every lowered
 call. External identities participate in the hash without external bodies.

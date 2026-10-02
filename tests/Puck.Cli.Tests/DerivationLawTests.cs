@@ -60,6 +60,178 @@ public sealed class DerivationLawTests {
     }
 
     [Fact]
+    public void AliasRebindingMovesTheFingerprintEvenWhenTheReachIsUnchanged() {
+        const string Source = """
+            using Left = Fixture.First;
+            using Right = Fixture.Second;
+            namespace Fixture;
+            public static class First { public static int Value() => 7; }
+            public static class Second { public static int Value() => 2; }
+            public static class Producer {
+                [Puck.Derivation("bake")]
+                public static int Bake() => Left.Value() - Right.Value();
+            }
+            """;
+        var original = SingleSource(source: Source);
+        var edited = SingleSource(source: Source.Replace(comparisonType: StringComparison.Ordinal, newValue: "Left = Fixture.Second", oldValue: "Left = Fixture.First")
+            .Replace(comparisonType: StringComparison.Ordinal, newValue: "Right = Fixture.First", oldValue: "Right = Fixture.Second"));
+
+        Assert.Equal(expected: original.Symbols, actual: edited.Symbols);
+        Assert.NotEqual(expected: original.Fingerprint, actual: edited.Fingerprint);
+    }
+    [Fact]
+    public void ExternalCallsReachTheCallbacksOnTheirSourceArguments() {
+        const string Source = """
+            namespace Fixture;
+            public sealed class Comparer : System.Collections.Generic.IEqualityComparer<int> {
+                public bool Equals(int x, int y) => true;
+                public int GetHashCode(int value) => 0;
+            }
+            public static class Producer {
+                [Puck.Derivation("bake")]
+                public static int Bake() {
+                    var values = new System.Collections.Generic.HashSet<int>(new Comparer());
+                    values.Add(1);
+                    values.Add(2);
+                    return values.Count;
+                }
+            }
+            """;
+        var original = SingleSource(source: Source);
+        var edited = SingleSource(source: Source.Replace(comparisonType: StringComparison.Ordinal, newValue: "=> x == y", oldValue: "=> true"));
+
+        Assert.NotEqual(expected: original.Fingerprint, actual: edited.Fingerprint);
+        Assert.Contains(collection: original.Symbols, filter: static symbol => (symbol.Id == "M:Fixture.Comparer.Equals(System.Int32,System.Int32)"));
+    }
+    [Fact]
+    public void ExternalCallsReachTheVirtualOverridesOnTheirSourceArguments() {
+        const string Source = """
+            namespace Fixture;
+            public sealed class Descending : System.Collections.Generic.Comparer<int> {
+                public override int Compare(int x, int y) => y.CompareTo(x);
+            }
+            public static class Producer {
+                [Puck.Derivation("bake")]
+                public static int Bake() {
+                    var values = new System.Collections.Generic.List<int> { 1, 2 };
+
+                    values.Sort(new Descending());
+                    return values[0];
+                }
+            }
+            """;
+        var original = SingleSource(source: Source);
+        var edited = SingleSource(source: Source.Replace(comparisonType: StringComparison.Ordinal, newValue: "=> x.CompareTo(y)", oldValue: "=> y.CompareTo(x)"));
+
+        Assert.NotEqual(expected: original.Fingerprint, actual: edited.Fingerprint);
+        Assert.Contains(collection: original.Symbols, filter: static symbol => (symbol.Id == "M:Fixture.Descending.Compare(System.Int32,System.Int32)"));
+    }
+    [Fact]
+    public void SpellingOnlyEditsDoNotMoveTheFingerprint() {
+        const string Source = """
+            using Left = Fixture.First;
+            using Right = Fixture.Second;
+            using System;
+            using System.Collections.Generic;
+            namespace Fixture;
+            public static class First { public static int Value() => 7; }
+            public static class Second { public static int Value() => 2; }
+            public static class Producer {
+                [Puck.Derivation("bake")]
+                public static int Bake() { var values = new HashSet<int> { Left.Value(), Right.Value() }; return values.Count; }
+            }
+            """;
+        const string Edited = """
+            // A leading comment.
+            using System.Collections.Generic;
+            using Right = Fixture.Second;
+
+            using System;
+            using Left = Fixture.First;
+            namespace Fixture;
+            public static class First { public static int Value() => 7; }
+            public static class Second { public static int Value() => 2; }
+            public static class Producer {
+                [Puck.Derivation("bake")]
+                public static int Bake() {
+                    /* regrouped */
+                    var values = new HashSet<int> {
+                        Left.Value(),
+                        Right.Value()
+                    };
+
+                    return values.Count;
+                }
+            }
+            """;
+        var original = SingleSource(source: Source);
+        var edited = SingleSource(source: Edited);
+
+        Assert.Equal(expected: original.Fingerprint, actual: edited.Fingerprint);
+        Assert.Equal(expected: original.Symbols, actual: edited.Symbols);
+    }
+    [InlineData("Create<Sample>()", "private static int Create<T>() where T : new() { _ = new T(); return Value; }")]
+    [InlineData("Factory<Sample>.Create()", "private static class Factory<T> where T : new() { public static int Create() { _ = new T(); return Value; } }")]
+    [Theory]
+    public void GenericConstructionReachesConcreteConstructors(string expression, string factory) {
+        var source = $$"""
+            namespace Fixture;
+            public sealed class Sample { public Sample() { Producer.Value = 7; } }
+            public static class Producer {
+                public static int Value;
+                {{factory}}
+                [Puck.Derivation("bake")]
+                public static int Bake() => {{expression}};
+            }
+            """;
+        var original = SingleSource(source: source);
+        var edited = SingleSource(source: source.Replace(comparisonType: StringComparison.Ordinal, newValue: "Value = 8", oldValue: "Value = 7"));
+
+        Assert.NotEqual(expected: original.Fingerprint, actual: edited.Fingerprint);
+        Assert.Contains(collection: original.Symbols, filter: static symbol => (symbol.Id == "M:Fixture.Sample.#ctor"));
+    }
+    [Fact]
+    public void GenericLocalConstructionReachesConcreteConstructors() {
+        const string Source = """
+            namespace Fixture;
+            public sealed class Sample { public Sample() { Producer.Value = 7; } }
+            public static class Producer {
+                public static int Value;
+                [Puck.Derivation("bake")]
+                public static int Bake() {
+                    static int Create<T>() where T : new() { _ = new T(); return Value; }
+                    return Create<Sample>();
+                }
+            }
+            """;
+        var original = SingleSource(source: Source);
+        var edited = SingleSource(source: Source.Replace(comparisonType: StringComparison.Ordinal, newValue: "Value = 8", oldValue: "Value = 7"));
+
+        Assert.NotEqual(actual: edited.Fingerprint, expected: original.Fingerprint);
+        Assert.Contains(collection: original.Symbols, filter: static symbol => (symbol.Id == "M:Fixture.Sample.#ctor"));
+    }
+    [Fact]
+    public void PartialInitializerExecutionOrderMovesTheFingerprint() {
+        const string First = """
+            namespace Fixture;
+            public static partial class Producer {
+                private static int s_counter;
+                private static int Next() => ++s_counter;
+                public static int First = Next();
+                [Puck.Derivation("bake")]
+                public static int Bake() => Used;
+            }
+            """;
+        const string Second = """
+            namespace Fixture;
+            public static partial class Producer { public static int Used = Next(); }
+            """;
+        var original = Derive(compilations: [Compile(assemblyName: "Fixture.Bake", sources: [First, Second])]);
+        var reordered = Derive(compilations: [Compile(assemblyName: "Fixture.Bake", sources: [Second, First])]);
+
+        Assert.NotEqual(expected: original.Fingerprint, actual: reordered.Fingerprint);
+    }
+    [Fact]
     public void TransitiveReachMovesForItsMembersButNotAnUncalledSibling() {
         const string Source = """
             namespace Fixture;

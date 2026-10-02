@@ -385,9 +385,10 @@ public static class TokenFingerprint {
     /// <summary>Hashes a source reach with the csharp-tokens-v1 token framing. Declaration identities and partial
     /// fragments are ordered ordinally, independent of source paths, declaration order and traversal order.</summary>
     /// <param name="declarations">Assembly-qualified declaration ids and all their source declarations.</param>
+    /// <param name="bindings">Ordered semantic identities for each fragment, paired with its tokens before canonical sorting.</param>
     /// <param name="cancellationToken">Cancels token enumeration.</param>
     /// <returns>The lowercase SHA-256 fingerprint.</returns>
-    public static string ComputeDeclarations(IEnumerable<KeyValuePair<string, IReadOnlyList<SyntaxNode>>> declarations, CancellationToken cancellationToken = default) {
+    public static string ComputeDeclarations(IEnumerable<KeyValuePair<string, IReadOnlyList<SyntaxNode>>> declarations, IReadOnlyDictionary<SyntaxNode, IReadOnlyList<string>> bindings, CancellationToken cancellationToken = default) {
         using var sha256 = SHA256.Create();
         using var stream = new CryptoStream(mode: CryptoStreamMode.Write, stream: Stream.Null, transform: sha256);
         var ordered = declarations.OrderBy(keySelector: pair => pair.Key, comparer: StringComparer.Ordinal).ToArray();
@@ -402,6 +403,10 @@ public static class TokenFingerprint {
 
                 WriteInt32(stream: bytes, value: tokens.Length);
                 AppendTokens(cancellationToken: cancellationToken, excludedSpan: null, stream: bytes, tokens: tokens);
+                var identities = bindings[node];
+
+                WriteInt32(stream: bytes, value: identities.Count);
+                foreach (var identity in identities) { WriteUtf8(stream: bytes, text: identity); }
                 return bytes.ToArray();
             }).OrderBy(keySelector: bytes => Convert.ToBase64String(inArray: bytes), comparer: StringComparer.Ordinal).ToArray();
 

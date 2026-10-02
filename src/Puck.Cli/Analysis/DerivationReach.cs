@@ -44,7 +44,9 @@ public static class DerivationReach {
         private readonly Queue<ISymbol> m_pending = new();
         private readonly Dictionary<string, DerivationSymbol> m_reach = new(comparer: StringComparer.Ordinal);
         private readonly Dictionary<string, IReadOnlyList<SyntaxNode>> m_declarations = new(comparer: StringComparer.Ordinal);
+        private readonly Dictionary<SyntaxNode, IReadOnlyList<string>> m_bindings = [];
         private readonly Dictionary<SyntaxTree, SemanticModel> m_models = [];
+        private readonly HashSet<ITypeSymbol> m_genericArguments = new(comparer: SymbolEqualityComparer.Default);
         private INamedTypeSymbol[] m_dispatchTypes = [];
 
         private static string Id(ISymbol symbol) => (symbol.GetDocumentationCommentId() ?? symbol.ToDisplayString(format: SymbolDisplayFormat.FullyQualifiedFormat));
@@ -64,7 +66,7 @@ public static class DerivationReach {
             while (m_pending.TryDequeue(result: out var symbol)) {
                 try { Visit(symbol: symbol); } catch (InvalidOperationException exception) { throw new InvalidOperationException(message: $"{exception.Message}; reached from {Key(symbol: symbol)}", innerException: exception); }
             }
-            return new DerivationResult(Name: name, Fingerprint: TokenFingerprint.ComputeDeclarations(declarations: m_declarations),
+            return new DerivationResult(Name: name, Fingerprint: TokenFingerprint.ComputeDeclarations(declarations: m_declarations, bindings: m_bindings),
                 Symbols: m_reach.OrderBy(keySelector: pair => pair.Key, comparer: StringComparer.Ordinal).Select(selector: pair => pair.Value).ToArray());
         }
 
@@ -80,17 +82,18 @@ public static class DerivationReach {
             if (symbol is ILocalSymbol local) { Add(symbol: local.Type); return; }
             if (symbol is IParameterSymbol argument) { Add(symbol: argument.Type); return; }
             if (symbol is IMethodSymbol method) {
+                foreach (var type in method.TypeArguments.Where(predicate: type => (type is not ITypeParameterSymbol))) { AddGenericArgument(type: type); }
                 if (method.MethodKind is MethodKind.LocalFunction or MethodKind.AnonymousFunction) { Add(symbol: method.ContainingSymbol); return; }
                 if (method.AssociatedSymbol is { } associated) { Add(symbol: associated); return; }
-                foreach (var type in method.TypeArguments.Where(predicate: type => (type is not ITypeParameterSymbol))) { Add(symbol: type); }
                 symbol = (method.ReducedFrom ?? method);
             }
             if (symbol is INamedTypeSymbol named) {
                 if (named.TypeKind == TypeKind.Error) { throw new InvalidOperationException(message: $"derivations: unresolved type {named}"); }
                 if (named.ToDisplayString() == FingerprintType) { return; }
-                foreach (var type in named.TypeArguments.Where(predicate: type => (type is not ITypeParameterSymbol))) { Add(symbol: type); }
+                foreach (var type in named.TypeArguments.Where(predicate: type => (type is not ITypeParameterSymbol))) { AddGenericArgument(type: type); }
             }
             if ((symbol.ContainingType?.ToDisplayString() == FingerprintType) || (symbol is INamespaceSymbol)) { return; }
+            Add(symbol: symbol.ContainingType);
             symbol = symbol.OriginalDefinition;
             var assembly = symbol.ContainingAssembly;
 
@@ -114,6 +117,14 @@ public static class DerivationReach {
             m_reach.Add(key: key, value: new DerivationSymbol(Assembly: assembly.Name, Id: Id(symbol: symbol), External: false));
             m_pending.Enqueue(item: symbol);
         }
+        private void AddGenericArgument(ITypeSymbol type) {
+            if (!m_genericArguments.Add(item: type)) { return; }
+            Add(symbol: type);
+            // A new T() in the generic body has no concrete constructor symbol in its operation tree.
+            if ((type is INamedTypeSymbol named) && sources.ContainsKey(key: named.ContainingAssembly.Name)) {
+                foreach (var constructor in named.InstanceConstructors) { Add(symbol: constructor); }
+            }
+        }
         private void Visit(ISymbol symbol) {
             Add(symbol: symbol.ContainingType);
             switch (symbol) {
@@ -121,6 +132,16 @@ public static class DerivationReach {
                     Add(symbol: type.BaseType);
                     foreach (var contract in type.Interfaces) { Add(symbol: contract); }
                     foreach (var constructor in type.StaticConstructors) { Add(symbol: constructor); }
+                    // External code can call back through these contracts (comparers in Dictionary, for example).
+                    foreach (var contract in type.AllInterfaces) {
+                        foreach (var member in contract.GetMembers()) {
+                            var callback = type.FindImplementationForInterfaceMember(interfaceMember: member);
+
+                            if ((callback is not null) && sources.ContainsKey(key: callback.ContainingAssembly.Name)) { Add(symbol: callback); }
+                        }
+                    }
+                    foreach (var member in type.GetMembers().Where(predicate: member => (member.IsVirtual || member.IsOverride))) { Add(symbol: member); }
+                    AddInitializerOrder(type: type);
                     // Roslyn's public operation tree does not expose every lowered call. Keep the
                     // compiler's disposal, iteration, await and deconstruction patterns conservatively.
                     foreach (var member in type.GetMembers().Where(predicate: member => CompilerPatterns.Contains(item: member.Name[(member.Name.LastIndexOf(value: '.') + 1)..]))) { Add(symbol: member); }
@@ -166,6 +187,14 @@ public static class DerivationReach {
             }
             m_declarations.Add(key: Key(symbol: symbol), value: nodes);
             foreach (var declaration in nodes) {
+                var bindings = new List<string>();
+
+                void Bind(ISymbol? target, string role) {
+                    if (target is IAliasSymbol alias) { target = alias.Target; }
+                    if ((target is null) || (target.ToDisplayString() == FingerprintType) || (target.ContainingType?.ToDisplayString() == FingerprintType)) { return; }
+                    bindings.Add(item: $"{role}:{Key(symbol: target)}:{target.ToDisplayString(format: SymbolDisplayFormat.FullyQualifiedFormat)}");
+                }
+                void Depend(ISymbol? target, string role) { Bind(role: role, target: target); Add(symbol: target); }
                 if (!m_models.TryGetValue(key: declaration.SyntaxTree, value: out var model)) {
                     model = sources[symbol.ContainingAssembly.Name].GetSemanticModel(syntaxTree: declaration.SyntaxTree);
                     m_models.Add(key: declaration.SyntaxTree, value: model);
@@ -182,54 +211,84 @@ public static class DerivationReach {
                     foreach (var node in part.DescendantNodesAndSelf()) {
                         if (node is ExpressionSyntax expression) {
                             if (expression is OmittedArraySizeExpressionSyntax or OmittedTypeArgumentSyntax) { continue; }
-                            if (expression is AssignmentExpressionSyntax assignment) { AddDeconstruction(info: model.GetDeconstructionInfo(assignment: assignment)); }
-                            Add(symbol: model.GetSymbolInfo(expression: expression).Symbol);
+                            if (expression is AssignmentExpressionSyntax assignment) { AddDeconstruction(info: model.GetDeconstructionInfo(assignment: assignment), bind: Bind); }
+                            var target = model.GetSymbolInfo(expression: expression).Symbol;
+
+                            Bind(role: "symbol", target: target);
+                            Add(symbol: target);
                             var info = model.GetTypeInfo(expression: expression);
+
+                            Bind(target: info.Type, role: "type");
+                            Bind(target: info.ConvertedType, role: "converted-type");
+                            Bind(target: model.GetConversion(expression: expression).MethodSymbol, role: "conversion");
                             // Contextual syntax such as nameof has no standalone type. Real binding errors
                             // are refused by the declaration diagnostics above.
                             if (info.Type is not IErrorTypeSymbol) { Add(symbol: info.Type); }
                             if (info.ConvertedType is not IErrorTypeSymbol) { Add(symbol: info.ConvertedType); }
                             Add(symbol: model.GetConversion(expression: expression).MethodSymbol);
                         } else if (node is ConstructorInitializerSyntax initializer) {
-                            Add(symbol: model.GetSymbolInfo(constructorInitializer: initializer).Symbol);
+                            Depend(target: model.GetSymbolInfo(constructorInitializer: initializer).Symbol, role: "base-constructor");
                         } else if (node is CommonForEachStatementSyntax loop) {
                             var info = model.GetForEachStatementInfo(forEachStatement: loop);
 
-                            Add(symbol: info.GetEnumeratorMethod);
-                            Add(symbol: info.MoveNextMethod);
-                            Add(symbol: info.CurrentProperty);
-                            Add(symbol: info.DisposeMethod);
-                            Add(symbol: info.ElementConversion.MethodSymbol);
-                            Add(symbol: info.CurrentConversion.MethodSymbol);
-                            if (loop is ForEachVariableStatementSyntax deconstruction) { AddDeconstruction(info: model.GetDeconstructionInfo(@foreach: deconstruction)); }
+                            Depend(target: info.GetEnumeratorMethod, role: "enumerator");
+                            Depend(target: info.MoveNextMethod, role: "move-next");
+                            Depend(target: info.CurrentProperty, role: "current");
+                            Depend(target: info.DisposeMethod, role: "dispose");
+                            Depend(target: info.ElementConversion.MethodSymbol, role: "element-conversion");
+                            Depend(target: info.CurrentConversion.MethodSymbol, role: "current-conversion");
+                            if (loop is ForEachVariableStatementSyntax deconstruction) { AddDeconstruction(info: model.GetDeconstructionInfo(@foreach: deconstruction), bind: Bind); }
                         }
                     }
                     // Implicit calls (collection initializers, conversions, operators and property access) are
                     // compiler operations too; syntax alone need not carry an explicit member name for them.
                     if (model.GetOperation(node: part) is { } operation) {
                         foreach (var child in operation.DescendantsAndSelf()) {
-                            Add(symbol: child.Type);
+                            Depend(target: child.Type, role: "operation-type");
                             switch (child) {
-                                case IInvocationOperation invocation: Add(symbol: invocation.TargetMethod); break;
-                                case IObjectCreationOperation creation: Add(symbol: creation.Constructor); break;
-                                case IWithOperation with: Add(symbol: with.CloneMethod); break;
-                                case IMemberReferenceOperation reference: Add(symbol: reference.Member); break;
-                                case IConversionOperation conversion: Add(symbol: conversion.OperatorMethod); break;
-                                case IBinaryOperation binary: Add(symbol: binary.OperatorMethod); break;
-                                case IUnaryOperation unary: Add(symbol: unary.OperatorMethod); break;
-                                case IIncrementOrDecrementOperation increment: Add(symbol: increment.OperatorMethod); break;
-                                case ICompoundAssignmentOperation assignment: Add(symbol: assignment.OperatorMethod); break;
+                                case IInvocationOperation invocation: Depend(target: invocation.TargetMethod, role: "invoke"); break;
+                                case IObjectCreationOperation creation: Depend(target: creation.Constructor, role: "construct"); break;
+                                case IWithOperation with: Depend(target: with.CloneMethod, role: "clone"); break;
+                                case IMemberReferenceOperation reference: Depend(target: reference.Member, role: "member"); break;
+                                case IConversionOperation conversion: Depend(target: conversion.OperatorMethod, role: "operator-conversion"); break;
+                                case IBinaryOperation binary: Depend(target: binary.OperatorMethod, role: "binary"); break;
+                                case IUnaryOperation unary: Depend(target: unary.OperatorMethod, role: "unary"); break;
+                                case IIncrementOrDecrementOperation increment: Depend(target: increment.OperatorMethod, role: "increment"); break;
+                                case ICompoundAssignmentOperation assignment: Depend(target: assignment.OperatorMethod, role: "compound-assignment"); break;
                             }
                         }
                     }
                 }
+                m_bindings[declaration] = bindings;
             }
         }
-        private void AddDeconstruction(DeconstructionInfo info) {
+        private void AddInitializerOrder(INamedTypeSymbol type) {
+            if (type.DeclaringSyntaxReferences.Length < 2) { return; }
+            var trees = sources[type.ContainingAssembly.Name].SyntaxTrees.Select(selector: (tree, index) => (tree, index))
+                .ToDictionary(elementSelector: pair => pair.index, keySelector: pair => pair.tree);
+            var initializers = type.DeclaringSyntaxReferences.OrderBy(keySelector: reference => trees[reference.SyntaxTree])
+                .ThenBy(keySelector: reference => reference.Span.Start).SelectMany(selector: reference => TokenFingerprint.DeclarationParts(declaration: reference.GetSyntax()))
+                .Where(predicate: part => (part is BaseFieldDeclarationSyntax or PropertyDeclarationSyntax)).ToArray();
+            var identities = new List<string>();
+
+            foreach (var initializer in initializers) {
+                var model = sources[type.ContainingAssembly.Name].GetSemanticModel(syntaxTree: initializer.SyntaxTree);
+
+                if (initializer is BaseFieldDeclarationSyntax field) {
+                    foreach (var variable in field.Declaration.Variables.Where(predicate: variable => (variable.Initializer is not null))) {
+                        identities.Add(item: Key(symbol: model.GetDeclaredSymbol(declaration: variable)!));
+                    }
+                } else { identities.Add(item: Key(symbol: model.GetDeclaredSymbol(declaration: initializer)!)); }
+            }
+            if (identities.Count > 0) { m_declarations.Add(key: $"{Key(symbol: type)}:initializer-order:{string.Join(separator: "|", values: identities)}", value: []); }
+        }
+        private void AddDeconstruction(DeconstructionInfo info, Action<ISymbol?, string> bind) {
+            bind(arg1: info.Method, arg2: "deconstruct");
+            bind(arg1: info.Conversion?.MethodSymbol, arg2: "deconstruct-conversion");
             Add(symbol: info.Method);
             Add(symbol: info.Conversion?.MethodSymbol);
             if (!info.Nested.IsDefault) {
-                foreach (var nested in info.Nested) { AddDeconstruction(info: nested); }
+                foreach (var nested in info.Nested) { AddDeconstruction(bind: bind, info: nested); }
             }
         }
         private void AddDispatch(ISymbol symbol) {
