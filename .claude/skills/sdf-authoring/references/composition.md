@@ -55,7 +55,12 @@ one shape drawn many times, not many shapes.
 | `symmetry` | `normal`, `offset` | expands |
 | `repeat` | `spacing`, `limit`, `origin` | only when `limit` is a whole number inside the copy budget; an absent limit is unbounded and does not expand |
 | `polar` | `count`, `axis`, `mirror`, `materialStride`, `origin` | expands, one rigid copy per sector |
-| `wallpaper` | `group`, `cell`, `limit`, `plane`, `materialStride`, `lodDistance` | **never — render only**; a solid row carrying one is refused by name |
+| `wallpaper` | `group` (a mirror group: PMM, P4M, P3M1 or P6M), `cell`, `limit`, `plane`, `materialStride` | **never — render only**; a solid row carrying one is refused by name |
+
+A wallpaper fold builds only through a group whose every cell wall and in-cell
+seam is a mirror, so its field never reads past the nearest copy; the program
+refuses the other thirteen groups by name. Content may cross the mirrors: the
+field then reads short, which costs march steps but skips nothing.
 
 Mirror a part with a `symmetry` fold, never with a negative scale — negative
 scale components are refused by name because emission reads magnitudes.

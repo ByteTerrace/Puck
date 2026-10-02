@@ -102,28 +102,39 @@ boundary between samples. A local Lipschitz factor alone cannot prove that a
 raw step is safe across the discontinuity. The marcher therefore uses
 fold-safe bounds where required.
 
-Two folds change their field across a sphere, and the march crosses those
-spheres rather than bounding its step at them:
+A wallpaper fold is sound only when its fold is continuous. The fold reduces
+a point to its lattice cell, then applies the group's in-cell isometry, and
+the field reads only that cell's copy. When every cell wall and every in-cell
+seam is a mirror of the group, the fold is built from reflections alone, so it
+never lengthens a distance: for any rendered point q,
+f(p) = d(F(p), S) ≤ |F(p) − F(q)| ≤ |p − q|. The field then never reads past
+the nearest copy. It is exact when the prototype lies in the region the fold
+leaves fixed, and reads short, which slows the march but skips nothing, when
+the prototype crosses a mirror. A fold that jumps, at a translation wall or a
+rotation seam, can read a cell's own copy while a neighbour's lies nearer, so a
+march could step through the neighbour.
 
-- A wallpaper fold's symmetry LOD (`lodDistance`): past a sphere of that
-  radius around the camera the fold drops its mirrors, so a copy can stand
-  where the mirrored lattice has none. Every switch is a sphere about the
-  camera, so the switches of all folds are concentric. Their gaps are in world
-  units, since the switch is measured outside every warp.
-- A log-sphere fold: each shell holds the prototype at its own scale, and the
-  shell boundaries are spheres about the fold's local origin. When every
-  operation before the fold on its chain is a translation, a rotation or a
-  uniform scale, `SdfProgram` writes the origin into the fold's instruction and
-  the boundaries are spheres in world space too. When a warp sits before the
-  fold, the boundaries are bent, and the march knows only the distance to them.
+So a program folds only through a continuous group, and `SdfProgram` refuses
+the others by name when it builds. `SdfWallpaperFold`, the CPU statement of
+the kernels' fold, measures continuity by folding pairs of points across the
+lattice: PMM, P4M, P3M1 and P6M are continuous; P1, P2, PM, PG, CM, PMG, PGG,
+CMM, P4, P4G, P3, P31M and P6 jump. `SdfWallpaperFoldLawTests` holds every
+accepted group to a brute-force distance to its rendered geometry and to a
+sphere-traced ray, and shows the same sweep catching P2.
 
-A field value measured on one side of such a wall says nothing about the other,
-so `map()` publishes the walls around each sample: the LOD shell that holds it,
-the nearest log-sphere shell whose boundaries are world spheres, and the
-distance to every other log-sphere wall. No wall has a floor.
+A log-sphere fold changes its field across spheres: each shell holds the
+prototype at its own scale, and the shell boundaries are spheres about the
+fold's local origin. When every operation before the fold on its chain is a
+translation, a rotation or a uniform scale, `SdfProgram` writes the origin into
+the fold's instruction and the boundaries are spheres in world space too. When
+a warp sits before the fold, the boundaries are bent, and the march knows only
+the distance to them. A field value measured on one side of such a wall says
+nothing about the other, so `map()` publishes the walls around each sample: the
+nearest log-sphere shell whose boundaries are world spheres, and the distance
+to every other log-sphere wall. No wall has a floor.
 
-Every march (primary, the beam's cone, soft shadows and the overshoot view)
-steps through one rule, `sdfMarchAdvance` in `field/sdf-map.hlsli`:
+The fine marches (primary, soft shadows and the overshoot view) step through
+one rule, `sdfMarchAdvance` in `field/sdf-map.hlsli`:
 
 - A step that stays inside every wall's distance is unchanged, so a sample far
   from every wall pays one comparison.
@@ -140,22 +151,19 @@ steps through one rule, `sdfMarchAdvance` in `field/sdf-map.hlsli`:
   there than at a sphere wall.
 - A crossing is one step of the march's budget. A line meets a sphere at most
   twice, every sample of a ray reads the same two intersections, and a crossing
-  lands strictly past its own, so a march crosses each sphere wall at most
-  twice, in and out. A camera ray starts at the switch's center and crosses
-  each switch once. A program with K distinct `lodDistance` values costs at
-  most 2K crossings, and a log-sphere fold two for each shell boundary the ray
-  meets.
+  lands strictly past its own, so a march crosses each shell wall at most
+  twice, in and out: two for each shell boundary the ray meets.
 
-The beam's cone crosses only the LOD switches, which are centred on its apex;
-it keeps the log-sphere walls in its clearance and stops its proof at them. A
-ball proof, such as a reprojected march seed, reads `sdfMapBallClearance`,
-which stops at the nearest wall. Soft shadows still stride through an occluder
-thinner than their minimum stride on either side, but never across a wall. The
-rule is exact up to the float rounding of the wall test itself: a grazing ray
-whose landing rounds back onto the side it left crosses again from there, a
-tolerance further on. `SdfMarchLodDeviceLawTests` holds every march on the
-device, and `SdfMarchLodCrossingLawTests` holds a CPU reference march of the
-rule, over both kinds of wall, to its no-skip property and its crossing bound.
+The beam's cone keeps every log-sphere wall in its clearance and stops its
+proof at them. A ball proof, such as a reprojected march seed, reads
+`sdfMapBallClearance`, which stops at the nearest wall. Soft shadows still
+stride through an occluder thinner than their minimum stride on either side,
+but never across a wall. The rule is exact up to the float rounding of the
+wall test itself: a grazing ray whose landing rounds back onto the side it left
+crosses again from there, a tolerance further on.
+`SdfLogSphereMarchDeviceLawTests` holds the marches on the device, and
+`SdfLogSphereCrossingLawTests` holds a CPU reference march of the rule, over
+both kinds of wall, to its no-skip property and its crossing bound.
 
 Plain repetition is exact only when the prototype fits within its centered
 cell. Cell jitter also requires conservative spacing; containment does not

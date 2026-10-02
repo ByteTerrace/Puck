@@ -13,8 +13,8 @@
 // occlusion test reads the raw clearance in clamped units against the primary
 // march's own accept threshold; the estimate divides a clearance by the world-unit distance travelled, so its
 // clearance is de-scaled first (a clamped clearance would narrow a program's shadows with its stepScale bake).
-// The stride's floor, ShadowStepMin, steps through an occluder thinner than it on either side of a fold wall (a
-// wallpaper LOD switch, a log-sphere shell), but never through the wall itself: sdfMarchAdvance lands a stride that
+// The stride's floor, ShadowStepMin, steps through an occluder thinner than it on either side of a log-sphere shell
+// wall, but never through the wall itself: sdfMarchAdvance lands a stride that
 // reaches a wall just past it, within the occlusion test's own threshold, and the march samples the other side there
 // before striding on.
 // The march takes the shadow-march quality and the key light's penumbra sharpness; softShadowVisibility reads both
@@ -56,7 +56,7 @@ float softShadowVisibilityMarch(float3 surfacePoint, float3 surfaceNormal, float
         bool proven;
         float switchAt;
 
-        traveled = sdfMarchAdvance(origin, lightDirection, traveled, stride, stride, ((0.5 * SurfaceEpsilon) * stepScale), reach, true, proven, switchAt);
+        traveled = sdfMarchAdvance(origin, lightDirection, traveled, stride, stride, ((0.5 * SurfaceEpsilon) * stepScale), reach, proven, switchAt);
 
         if (traveled > reach) {
             break;

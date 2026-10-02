@@ -24,9 +24,6 @@ SdfHit sdfPrimarySample(float3 position, uint mask, uint4 part, bool localPart) 
         sdfMaterialBlendWeight = 0.0;
         sdfMaterialBlendOther = 0;
         sdfMapStepBound = SDF_STEP_BOUND_NONE;
-        sdfMapLodGap = SDF_STEP_BOUND_NONE;
-        sdfMapLodInner = 0.0;
-        sdfMapLodOuter = SDF_STEP_BOUND_NONE;
         sdfMapFoldGap = SDF_STEP_BOUND_NONE;
         SdfHit hit;
         hit.distance = SDF_FAR_DISTANCE;
@@ -171,7 +168,7 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
 
         // The depth this step leaves from (after any retreat above) — the plain-step fallback below re-steps from it.
         float stepFrom = traveled;
-        // A step that crosses an LOD switch lands within this of it, where a surface accepts without refinement.
+        // A step that crosses a fold wall lands within this of it, where a surface accepts without refinement.
         float crossingTolerance = ((0.5 * PrimaryConvergeFraction) * hitThreshold);
         float switchAt;
         bool proven = false;
@@ -187,7 +184,7 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
         }
         else {
             traveled = sdfMarchAdvance(rayOrigin, rayDirection, stepFrom, clearance, stepLength, crossingTolerance,
-                min(farBound, farDistance), true, proven, switchAt);
+                min(farBound, farDistance), proven, switchAt);
         }
 
         // A proven step needs no disjoint-sphere test.
@@ -218,10 +215,10 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
         }
         else {
             traveled = sdfMarchAdvance(rayOrigin, rayDirection, stepFrom, clearance, advance, crossingTolerance,
-                min(farBound, farDistance), true, proven, switchAt);
+                min(farBound, farDistance), proven, switchAt);
         }
 
-        // A proven step (across an LOD switch, or the clearance in its place) needs no disjoint-sphere test, and
+        // A proven step (across a fold wall, or the clearance in its place) needs no disjoint-sphere test, and
         // the relaxation restarts from it, as after a teleport.
         if (proven) {
             previousRadius = 0.0;

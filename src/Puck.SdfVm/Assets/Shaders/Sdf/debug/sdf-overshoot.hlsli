@@ -38,7 +38,7 @@ float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStar
         bool proven;
         float switchAt;
 
-        traveled = sdfMarchAdvance(rayOrigin, rayDirection, traveled, advance, advance, (0.5 * hitThreshold), farDistance, true, proven, switchAt);
+        traveled = sdfMarchAdvance(rayOrigin, rayDirection, traveled, advance, advance, (0.5 * hitThreshold), farDistance, proven, switchAt);
 
         // The four-bound teleport (bound-proven for either march): jump the proven-empty gap once.
         if ((traveled >= firstExit) && (traveled < secondEntry)) {

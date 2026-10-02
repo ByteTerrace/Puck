@@ -892,9 +892,10 @@ public sealed partial class SdfProgramBuilder {
         rate: rate
     );
     /// <summary>Folds the point's in-plane coordinates onto the fundamental cell of a wallpaper symmetry group — the
-    /// shapes that follow repeat under the group's mirrors/rotations across the lattice. Every fold branch is an
-    /// isometry, so distances are preserved; like <see cref="Repeat"/>, content must stay clear of cell boundaries
-    /// (and of the rotation seams of P2/CMM/P4*) unless a mirror of the group protects that edge.</summary>
+    /// shapes that follow repeat under the group's mirrors across the lattice. Only a group whose fold is continuous
+    /// (<see cref="SdfWallpaperFold.IsContinuous"/>: every cell wall and in-cell seam a mirror) builds; the program
+    /// refuses the others by name. Such a fold never lengthens a distance, so its field is exact or reads short, and
+    /// content may cross the mirrors.</summary>
     /// <param name="group">The wallpaper group. P4/P4M/P4G and the hex groups (P3 and up) require a square cell —
     /// quarter-turns and the equilateral hex lattice are only isometries there (hex pitch = <paramref name="cell"/>.X).</param>
     /// <param name="cell">The lattice cell extents in the fold plane.</param>
@@ -903,14 +904,12 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="materialStride">The parity-material stride: the cell key (checker parity for square lattices,
     /// the 3-coloring for hex) times this strides the material id of later shape wins in the chain, so each lattice
     /// cell selects its own row of the palette. 0 (the default) keeps the fold purely geometric.</param>
-    /// <param name="lodDistance">The symmetry-LOD distance threshold: past it the lattice keeps its copy positions
-    /// but skips the in-cell folds (upright copies, cheaper and shimmer-free at range). 0 (the default) = off.</param>
     /// <exception cref="ArgumentException"><paramref name="materialStride"/> is negative.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A <paramref name="cell"/> extent the group reads is not finite and
-    /// positive, <paramref name="limit"/> is not finite and non-negative, <paramref name="lodDistance"/> is not
-    /// finite and non-negative, <paramref name="group"/> is not a defined <see cref="SdfWallpaperGroup"/>, or
+    /// positive, <paramref name="limit"/> is not finite and non-negative, <paramref name="group"/> is not a defined
+    /// <see cref="SdfWallpaperGroup"/>, or
     /// <paramref name="plane"/> is not a defined <see cref="SdfPlane"/>.</exception>
-    public SdfProgramBuilder WallpaperFold(SdfWallpaperGroup group, Vector2 cell, Vector2 limit, SdfPlane plane = SdfPlane.XZ, int materialStride = 0, float lodDistance = 0f) {
+    public SdfProgramBuilder WallpaperFold(SdfWallpaperGroup group, Vector2 cell, Vector2 limit, SdfPlane plane = SdfPlane.XZ, int materialStride = 0) {
         // Mirrors RepeatPolar's stride check — the same Material lane, the same uint cast, and the shader reads it back
         // as `(int)instructionHeader.w`, so a negative stride would recolor shapes DOWNWARD out of the palette.
         if (materialStride < 0) {
@@ -930,9 +929,6 @@ public sealed partial class SdfProgramBuilder {
             paramName: nameof(plane)
         );
 
-        // The reciprocal cell extents are HOST-BAKED (Data0.zw): square lattices read them as 1/cell for the lattice
-        // round; hex lattices (pitch = cell.x) read z = 1/pitch and w = 2/(√3·pitch) — the two divides in the axial
-        // decompose (KEEP IN SYNC with the fold functions in Assets/Shaders/Sdf/field/sdf-point.hlsli).
         var isHex = (group >= SdfWallpaperGroup.P3);
 
         // cell.x is the lattice pitch for EVERY group, so it must be positive. cell.y is the second lattice extent for
@@ -958,44 +954,29 @@ public sealed partial class SdfProgramBuilder {
             );
         }
 
-        // The limit rides the same clamp(round(...), -limit, limit) shape RepeatLimited uses, and lodDistance is
-        // compared as `data1.z > 0.0` with 0 meaning off — a negative threshold has no spelling.
+        // The limit rides the same clamp(round(...), -limit, limit) shape RepeatLimited uses.
         RequireNonNegative(
             value: limit,
             paramName: nameof(limit),
             subject: "A wallpaper repeat-cell limit"
         );
-        RequireNonNegative(
-            value: lodDistance,
-            paramName: nameof(lodDistance),
-            subject: "A wallpaper symmetry-LOD distance"
-        );
 
-        var inverseX = (1f / MathF.Max(
-            x: cell.X,
-            y: 0.0001f
-        ));
-        var inverseY = (isHex
-            ? ((2f / 1.7320508f) * inverseX)
-            : (1f / MathF.Max(
-                x: cell.Y,
-                y: 0.0001f
-            ))
-        );
+        // The reciprocal cell extents are HOST-BAKED (Data0.zw), the values SdfWallpaperFold reads.
+        var inverseCell = SdfWallpaperFold.InverseCell(cell: cell, group: group);
 
         m_instructions.Add(item: new SdfInstruction(
             Blend: ((uint)plane),
             Data0: new Vector4(
-                w: inverseY,
+                w: inverseCell.Y,
                 x: cell.X,
                 y: cell.Y,
-                z: inverseX
+                z: inverseCell.X
             ),
             Data1: new Vector4(
                 w: 0f,
                 x: limit.X,
                 y: limit.Y,
-                z: lodDistance
+                z: 0f
             ),
             Material: ((uint)materialStride),
             Op: SdfOp.WallpaperFold,

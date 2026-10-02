@@ -670,16 +670,15 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     uint plane = SDF_INSTRUCTION_BLEND(instructionHeader);
                     int axisA = ((plane == SDF_PLANE_YZ) ? 1 : 0);
                     int axisB = ((plane == SDF_PLANE_XY) ? 1 : 2);
-                    bool lodSimplify = ((data1.z > 0.0) && (distance(worldPosition, sdfLodOrigin) > data1.z));
                     float2 cellIndex;
                     float2 in2 = float2(localPosition[axisA], localPosition[axisB]);
-                    float2 folded = sdfWallpaperFoldCell(in2, group, data0.xy, data0.zw, data1.xy, lodSimplify, cellIndex);
+                    float2 folded = sdfWallpaperFoldCell(in2, group, data0.xy, data0.zw, data1.xy, cellIndex);
 
                     // The fold is a composed isometry with no single closed-form linear part; recover its in-plane 2x2 by
                     // a shape-local finite difference (both output columns), then transport the Jacobian columns through it.
                     float2 idxScratch;
-                    float2 foldedA = sdfWallpaperFoldCell(in2 + float2(SDF_SHAPE_GRAD_EPSILON, 0.0), group, data0.xy, data0.zw, data1.xy, lodSimplify, idxScratch);
-                    float2 foldedB = sdfWallpaperFoldCell(in2 + float2(0.0, SDF_SHAPE_GRAD_EPSILON), group, data0.xy, data0.zw, data1.xy, lodSimplify, idxScratch);
+                    float2 foldedA = sdfWallpaperFoldCell(in2 + float2(SDF_SHAPE_GRAD_EPSILON, 0.0), group, data0.xy, data0.zw, data1.xy, idxScratch);
+                    float2 foldedB = sdfWallpaperFoldCell(in2 + float2(0.0, SDF_SHAPE_GRAD_EPSILON), group, data0.xy, data0.zw, data1.xy, idxScratch);
                     float2 col0 = ((foldedA - folded) * (1.0 / SDF_SHAPE_GRAD_EPSILON));
                     float2 col1 = ((foldedB - folded) * (1.0 / SDF_SHAPE_GRAD_EPSILON));
                     jx = sdfApplyPlaneJacobian(jx, axisA, axisB, col0, col1);

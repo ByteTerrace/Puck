@@ -494,6 +494,27 @@ public sealed partial class SdfProgram {
             );
         }
     }
+    // A wallpaper fold reads only its own cell's copy, which is the nearest copy everywhere exactly when the fold is
+    // continuous: every cell wall and in-cell seam a mirror (SdfWallpaperFold.IsContinuous). A group whose fold jumps (a
+    // translation wall, a rotation seam) would let a march step through a neighbour's copy, so it is refused here, before
+    // packing, whatever its content.
+    private static void RequireContinuousWallpaper(int index, SdfInstruction instruction, string paramName) {
+        var group = ((SdfWallpaperGroup)instruction.Shape);
+
+        if (!Enum.IsDefined(value: group)) {
+            throw new ArgumentException(
+                message: $"Instruction {index} folds through undeclared wallpaper group {instruction.Shape}.",
+                paramName: paramName
+            );
+        }
+
+        if (!SdfWallpaperFold.IsContinuous(group: group)) {
+            throw new ArgumentException(
+                message: $"Instruction {index} folds through wallpaper group {group}, whose fold jumps at a translation wall or rotation seam: its field reads only the sample's own cell, so a march could step through a neighbouring copy. Fold through a mirror group ({string.Join(separator: ", ", values: Enum.GetValues<SdfWallpaperGroup>().Where(predicate: SdfWallpaperFold.IsContinuous))}).",
+                paramName: paramName
+            );
+        }
+    }
     // The packed format's OWN admission test, run before anything reads a lane. ValidateIsa covers the opcode; these
     // are the other lanes the packing writes straight into GPU words, where an out-of-domain value is not a fault but a
     // silently wrong program: an undeclared shape/blend id falls through the kernel's switch, a material id past the
@@ -533,6 +554,14 @@ public sealed partial class SdfProgram {
                 instruction: instruction,
                 paramName: instructionsParamName
             );
+
+            if (instruction.Op == SdfOp.WallpaperFold) {
+                RequireContinuousWallpaper(
+                    index: index,
+                    instruction: instruction,
+                    paramName: instructionsParamName
+                );
+            }
 
             if (instruction.Op == SdfOp.LaneErode) {
                 RequireLaneErodeLaneIndex(

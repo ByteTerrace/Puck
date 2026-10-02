@@ -1774,7 +1774,6 @@ public static partial class WorldModelShape {
                 M("limit", typeof(global::Puck.Assets.Documents.DocumentVector2), typeof(global::Puck.World.Authoring.ShapeDomainOp.Wallpaper), "Limit", Read | Write),
                 M("plane", typeof(global::System.Nullable<global::Puck.SignedDistance.SdfPlane>), typeof(global::Puck.World.Authoring.ShapeDomainOp.Wallpaper), "Plane", Read | Write),
                 M("materialStride", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.Authoring.ShapeDomainOp.Wallpaper), "MaterialStride", Read | Write),
-                M("lodDistance", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.ShapeDomainOp.Wallpaper), "LodDistance", Read | Write),
             ],
             []),
         T(typeof(global::Puck.World.Authoring.ShapeErodeDocument), true, JsonTypeInfoKind.Object, null,

@@ -72,9 +72,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // Every call publishes a fresh fold-safe step bound (stale bounds from a previous sample would be unsound); the
     // fold cases below tighten walkStepBound and the single return publishes it in clamped units.
     sdfMapStepBound = SDF_STEP_BOUND_NONE;
-    sdfMapLodGap = SDF_STEP_BOUND_NONE;
-    sdfMapLodInner = 0.0;
-    sdfMapLodOuter = SDF_STEP_BOUND_NONE;
     sdfMapFoldGap = SDF_STEP_BOUND_NONE;
     sdfMapFoldCenter = float3(0.0, 0.0, 0.0);
     sdfMapFoldInner = 0.0;
@@ -160,10 +157,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     float3 foldCenter = float3(0.0, 0.0, 0.0);
     float foldInner = 0.0;
     float foldOuter = SDF_STEP_BOUND_NONE;
-    // The sample's symmetry-LOD shell (see sdfMapLodGap), in world units: like walkStepBound, never reset by RESET.
-    float lodGap = SDF_STEP_BOUND_NONE;
-    float lodInner = 0.0;
-    float lodOuter = SDF_STEP_BOUND_NONE;
     // The texturing half of an active wallpaper fold: the cell key times the fold's material stride, added to the
     // material id of later shape wins in the chain (never to the screen sentinel). Reset with the chain.
     int parityMaterialDelta = 0;
@@ -857,22 +850,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     uint plane = SDF_INSTRUCTION_BLEND(instructionHeader);
                     int axisA = ((plane == SDF_PLANE_YZ) ? 1 : 0);
                     int axisB = ((plane == SDF_PLANE_XY) ? 1 : 2);
-                    // The symmetry LOD is PER SAMPLE (not per ray): every map() consumer — beam cone-march, pixel march,
-                    // the normal probe, the shadow marches — samples the identical field, so cull and march can never disagree.
-                    float lodRadius = distance(worldPosition, sdfLodOrigin);
-                    bool lodSimplify = ((data1.z > 0.0) && (lodRadius > data1.z));
-
-                    // The switch is a wall of the sample's LOD shell, on the side lodSimplify chose, so the shell and
-                    // the lattice this sample evaluates can never disagree.
-                    if (lodSimplify) {
-                        lodInner = max(lodInner, data1.z);
-                        lodGap = min(lodGap, (lodRadius - data1.z));
-                    } else if (data1.z > 0.0) {
-                        lodOuter = min(lodOuter, data1.z);
-                        lodGap = min(lodGap, (data1.z - lodRadius));
-                    }
                     float2 cellIndex;
-                    float2 folded = sdfWallpaperFoldCell(float2(localPosition[axisA], localPosition[axisB]), group, data0.xy, data0.zw, data1.xy, lodSimplify, cellIndex);
+                    float2 folded = sdfWallpaperFoldCell(float2(localPosition[axisA], localPosition[axisB]), group, data0.xy, data0.zw, data1.xy, cellIndex);
 
                     localPosition[axisA] = folded.x;
                     localPosition[axisB] = folded.y;
@@ -1133,9 +1112,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     sdfMapFoldCenter = foldCenter;
     sdfMapFoldInner = foldInner;
     sdfMapFoldOuter = foldOuter;
-    sdfMapLodGap = lodGap;
-    sdfMapLodInner = lodInner;
-    sdfMapLodOuter = lodOuter;
 
     return result;
 }
@@ -1172,14 +1148,9 @@ float mapDistanceMasked(float3 worldPosition, uint instanceMaskBase) {
 }
 
 // The ball clearance of the last map sample: no geometry of any lattice, on either side of any fold wall, lies within
-// it of the sample. A proof by one ball (a reprojected march seed, the relaxed march's disjoint-sphere test) reads this.
+// it of the sample. A proof by one ball (the beam's cone, a reprojected march seed, the relaxed march's
+// disjoint-sphere test) reads this.
 float sdfMapBallClearance(float distance) {
-    return min(distance, min(sdfMapStepBound, min(sdfMapLodGap, sdfMapFoldGap)));
-}
-
-// The clearance a cone proof reads: the ball clearance of every wall but the LOD switch, which its march crosses. A cone
-// crosses only the switch exactly, the one wall centred on its apex (see coneMarchAdvance).
-float sdfMapConeClearance(float distance) {
     return min(distance, min(sdfMapStepBound, sdfMapFoldGap));
 }
 
@@ -1244,46 +1215,43 @@ float sdfWallNextUp(float value) {
     return asfloat(asuint(max(value, 1.0e-30)) + 1u);
 }
 
-// THE MARCH STEP ACROSS A FOLD WALL (see sdfMapStepBound), which every marcher takes (primary, the beam's cone, soft
-// shadows and the overshoot view). A marcher samples the field at rayOrigin + traveled * rayDirection and asks here
-// where its next sample goes, in ray parameter:
-//   clearance    how far along the ray the sample's own side is proven clear: the field (a cone passes its own
-//                advance, a soft shadow its own stride), never limited by a wall's gap;
+// THE MARCH STEP ACROSS A FOLD WALL (see sdfMapStepBound), which the fine marches take (primary, soft shadows and the
+// overshoot view). A marcher samples the field at rayOrigin + traveled * rayDirection and asks here where its next
+// sample goes, in ray parameter:
+//   clearance    how far along the ray the sample's own side is proven clear: the field (a soft shadow passes its own
+//                stride), never limited by a wall's gap;
 //   advance      the step the marcher would take with no wall (over-relaxed, or raised to a minimum stride);
-//   tolerance    the marcher's acceptance distance: a surface within it of a sample is accepted there (for a cone, it
-//                fails the clear test there);
-//   limit        the ray parameter the march ends at;
-//   crossFolds   whether the fold shell is crossed exactly; a cone passes false, since only the LOD switch is centred
-//                on its apex, and keeps the fold walls in its clearance (sdfMapConeClearance).
+//   tolerance    the marcher's acceptance distance: a surface within it of a sample is accepted there;
+//   limit        the ray parameter the march ends at.
 // A step that stays inside every wall's ball (sdfMapBallClearance) is returned unchanged with `proven` false, so a
 // relaxed step is still validated by the marcher's own test; so is one the march would relax across a ball wall,
 // which the disjoint-sphere test covers. Otherwise:
-// - EXACT WALLS (the LOD shell, and the fold shell when crossed): the ray leaves the sample's shell at a wall's root.
-//   When the sample's side is clear to it, the march CROSSES: it lands `beyond` past the root, the least of the
-//   tolerance, half the arrival chord and half the way to the limit, and samples the arrival side there before
-//   stepping on. When it is not, the step is the clearance, which stays in the shell.
+// - THE FOLD SHELL: the ray leaves the sample's shell at a wall's root. When the sample's side is clear to it, the
+//   march CROSSES: it lands `beyond` past the root, the least of the tolerance, half the arrival chord and half the
+//   way to the limit, and samples the arrival side there before stepping on. When it is not, the step is the
+//   clearance, which stays in the shell.
 // - BALL WALLS: a step reaches at most the tolerance past their ball, so arrival-side geometry it passes lies within
 //   the tolerance of the landing sample. Near such a wall a march advances at least the tolerance a step.
 // Either is `proven`: the marcher validates nothing and resets any relaxation. switchAt is the earliest depth the
-// step leaves unproven (an exact wall's root, or a ball wall's gap), SDF_STEP_BOUND_NONE when it proves the whole step.
+// step leaves unproven (the shell wall's root, or a ball wall's gap), SDF_STEP_BOUND_NONE when it proves the whole
+// step.
 // NO SKIP: the sample's side is clear up to the wall, and arrival-side geometry within the beyond segment lies within
 // the tolerance of the landing sample, which accepts it. A chord shorter than twice the tolerance is landed on at its
-// middle, so a grazing pass through an exact wall is still sampled on its arrival side.
-// AT MOST TWO CROSSINGS PER EXACT WALL: a line meets a sphere at most twice, every sample of a ray reads the same
+// middle, so a grazing pass through a shell wall is still sampled on its arrival side.
+// AT MOST TWO CROSSINGS PER SHELL WALL: a line meets a sphere at most twice, every sample of a ray reads the same
 // roots, a crossing lands strictly past its root, and a marcher never retreats behind a proven step; the next
-// crossing needs a root at or past the sample. A march crosses each switch sphere and each fold shell sphere at most
-// twice (in and out), one budgeted step each. A camera ray starts at sdfLodOrigin, so it meets each switch once, at
-// t = lodDistance. The walls are taken from the sample's side, so a sample a wall test places on the far side of a
-// root by rounding crosses from where it stands: the march never steps a lattice's clearance across the wrong side,
+// crossing needs a root at or past the sample. A march crosses each shell sphere at most twice (in and out), one
+// budgeted step each. The walls are taken from the sample's side, so a sample a wall test places on the far side of a
+// root by rounding crosses from where it stands: the march never steps a shell's clearance across the wrong side,
 // and only a landing that rounds back onto the departure side (a grazing ray within float spacing of the sphere)
 // spends one more crossing, each a tolerance further on.
 // A sample whose walls lie beyond both its clearance and its advance pays one compare.
 float sdfMarchAdvance(float3 rayOrigin, float3 rayDirection, float traveled, float clearance, float advance,
-    float tolerance, float limit, bool crossFolds, out bool proven, out float switchAt) {
+    float tolerance, float limit, out bool proven, out float switchAt) {
     proven = false;
     switchAt = SDF_STEP_BOUND_NONE;
 
-    float ballGap = min(sdfMapStepBound, min(sdfMapLodGap, sdfMapFoldGap));
+    float ballGap = min(sdfMapStepBound, sdfMapFoldGap);
 
     if (max(clearance, advance) <= ballGap) {
         return (traveled + advance);
@@ -1291,17 +1259,9 @@ float sdfMarchAdvance(float3 rayOrigin, float3 rayDirection, float traveled, flo
 
     float next = SDF_STEP_BOUND_NONE;
     float after = SDF_STEP_BOUND_NONE;
-    float ballWalls = sdfMapStepBound;
 
-    sdfShellExit(rayOrigin, rayDirection, traveled, sdfLodOrigin, sdfMapLodInner, sdfMapLodOuter, next, after);
-
-    if (crossFolds) {
-        if (sdfMapFoldGap < SDF_STEP_BOUND_NONE) {
-            sdfShellExit(rayOrigin, rayDirection, traveled, sdfMapFoldCenter, sdfMapFoldInner, sdfMapFoldOuter, next, after);
-        }
-    }
-    else {
-        ballWalls = min(ballWalls, sdfMapFoldGap);
+    if (sdfMapFoldGap < SDF_STEP_BOUND_NONE) {
+        sdfShellExit(rayOrigin, rayDirection, traveled, sdfMapFoldCenter, sdfMapFoldInner, sdfMapFoldOuter, next, after);
     }
 
     if (!(ballGap < clearance) && ((traveled + advance) < next)) {
@@ -1320,11 +1280,11 @@ float sdfMarchAdvance(float3 rayOrigin, float3 rayDirection, float traveled, flo
     }
 
     // A ball wall nearer than the landing: reach at most the tolerance past it, still strictly past a root it crosses.
-    if ((ballWalls < SDF_STEP_BOUND_NONE) && ((traveled + ballWalls + tolerance) < landing)) {
-        float reach = max((traveled + ballWalls + tolerance), sdfWallNextUp(traveled));
+    if ((sdfMapStepBound < SDF_STEP_BOUND_NONE) && ((traveled + sdfMapStepBound + tolerance) < landing)) {
+        float reach = max((traveled + sdfMapStepBound + tolerance), sdfWallNextUp(traveled));
 
         landing = ((reach >= next) ? max(reach, sdfWallNextUp(next)) : reach);
-        switchAt = min(((reach >= next) ? next : SDF_STEP_BOUND_NONE), (traveled + ballWalls));
+        switchAt = min(((reach >= next) ? next : SDF_STEP_BOUND_NONE), (traveled + sdfMapStepBound));
     }
 
     return landing;

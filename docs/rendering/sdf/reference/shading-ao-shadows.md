@@ -58,8 +58,7 @@ set for the shadow ray; each pixel then consumes the shared mask.
 Shadow steps must honor program `stepScale`, fold-safe bounds, and the same
 conservative sampled-region behavior as primary rays. The minimum stride steps
 through an occluder thinner than itself, but a stride that reaches a fold wall
-(a wallpaper fold's symmetry-LOD switch or a log-sphere shell boundary) lands
-just past it, within the occlusion threshold, and samples the other side before
+(a log-sphere shell boundary) lands just past it, within the occlusion threshold, and samples the other side before
 striding on.
 
 Light culling must never exclude a light that can affect the pixel. Oversized

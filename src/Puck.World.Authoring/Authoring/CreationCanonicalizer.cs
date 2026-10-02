@@ -1795,7 +1795,6 @@ public static partial class CreationCanonicalizer {
                     x: Math.Max(val1: (wallpaper.Limit?.X ?? ShapeDomainOp.Wallpaper.UnboundedLimit), val2: 0f),
                     y: Math.Max(val1: (wallpaper.Limit?.Y ?? ShapeDomainOp.Wallpaper.UnboundedLimit), val2: 0f)
                 ),
-                LodDistance: Math.Max(val1: (wallpaper.LodDistance ?? 0f), val2: 0f),
                 MaterialStride: Math.Max(val1: (wallpaper.MaterialStride ?? 0), val2: 0),
                 Plane: (Enum.IsDefined(value: (wallpaper.Plane ?? SdfPlane.XZ))
                 ? (wallpaper.Plane ?? SdfPlane.XZ)

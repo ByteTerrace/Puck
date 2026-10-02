@@ -189,15 +189,19 @@ These are one-line cautions; the owning pages hold the derivations.
 - **Path (shape 21) is presentation-only.** The fixed-point evaluator refuses
   it.
 - **A fold wall is crossed, never bounded by a floor.** `mapCore` publishes the
-  sample's walls: the wallpaper LOD shell (`sdfMapLodGap`, `sdfMapLodInner`,
-  `sdfMapLodOuter`), the nearest log-sphere shell whose chain is a similarity
-  (`sdfMapFoldGap`, `sdfMapFoldCenter`, `sdfMapFoldInner`, `sdfMapFoldOuter`),
-  and every other log-sphere wall as a ball gap (`sdfMapStepBound`). Every march
-  takes its next sample from `sdfMarchAdvance` (`field/sdf-map.hlsli`), passing
-  its own proven clearance (the field, never limited by a wall), intended
-  advance, acceptance distance and end; a new march does the same. A ball proof
-  reads `sdfMapBallClearance`, a cone `sdfMapConeClearance`. A crossing is a
-  proven step: a relaxed march resets its relaxation after one.
+  sample's walls: the nearest log-sphere shell whose chain is a similarity
+  (`sdfMapFoldGap`, `sdfMapFoldCenter`, `sdfMapFoldInner`, `sdfMapFoldOuter`)
+  and every other log-sphere wall as a ball gap (`sdfMapStepBound`). Every fine
+  march takes its next sample from `sdfMarchAdvance` (`field/sdf-map.hlsli`),
+  passing its own proven clearance (the field, never limited by a wall),
+  intended advance, acceptance distance and end; a new march does the same. A
+  ball proof, the beam's cone included, reads `sdfMapBallClearance`. A crossing
+  is a proven step: a relaxed march resets its relaxation after one.
+- **A wallpaper fold has no wall to cross.** A program folds only through a
+  group whose fold is continuous (`SdfWallpaperFold.IsContinuous`: PMM, P4M,
+  P3M1, P6M), which never reads past the nearest copy; `SdfProgram` refuses the
+  others by name. A kernel change to `sdfWallpaperFoldCell` changes
+  `SdfWallpaperFold` with it.
 
 ## Prototype bakes
 

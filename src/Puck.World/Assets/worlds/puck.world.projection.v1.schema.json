@@ -18529,7 +18529,7 @@
                                   "P6",
                                   "P6M"
                                 ],
-                                "description": "The wallpaper group.",
+                                "description": "The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see IsContinuous). A program refuses any other group by name when it builds.",
                                 "x-enumDescriptions": {
                                   "P1": "Pure lattice translation (bit-identical to a two-axis RepeatLimited).",
                                   "P2": "Half-turns keyed on the cell parity.",
@@ -18580,14 +18580,6 @@
                                 ],
                                 "default": null,
                                 "description": "The parity-material stride (null = 0, geometric only)."
-                              },
-                              "lodDistance": {
-                                "type": [
-                                  "number",
-                                  "null"
-                                ],
-                                "default": null,
-                                "description": "The symmetry-LOD distance threshold (null = 0, off)."
                               }
                             },
                             "required": [

@@ -3,23 +3,20 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-/// <summary>A CPU reference march of the fold-wall crossing rule, <c>sdfMarchAdvance</c> in
-/// <c>field/sdf-map.hlsli</c>, over a field with a different set of solids in every shell between concentric wall
-/// spheres: a wallpaper fold's symmetry-LOD switches about the camera, and a log-sphere fold's shell boundaries about
-/// its own center, crossed exactly when its chain is a similarity and by the march's tolerance (ball walls) when it is
-/// not. Neither fold has a fixed evaluator, so the reference states the rule's claims against an exact oracle: a
+/// <summary>A CPU reference march of the fold-wall crossing rule, <c>sdfMarchAdvance</c> in <c>field/sdf-map.hlsli</c>,
+/// over a log-sphere fold: a different set of solids in every shell between concentric wall spheres about the fold's
+/// center, crossed exactly when the fold's chain is a similarity and by the march's tolerance (ball walls) when it is
+/// not. The log-sphere fold has no fixed evaluator, so the reference states the rule's claims against an exact oracle: a
 /// sphere-traced ray never steps past a solid point of the shell it lies in (no skip), and it crosses each exactly
-/// crossed wall sphere at most twice, each switch once from the camera. The GPU rule itself is held on the device by
-/// <c>SdfMarchLodDeviceLawTests</c>.</summary>
-public sealed class SdfMarchLodCrossingLawTests {
+/// crossed wall sphere at most twice. The GPU rule itself is held on the device by
+/// <c>SdfLogSphereMarchDeviceLawTests</c>.</summary>
+public sealed class SdfLogSphereCrossingLawTests {
     private const float Limit = 240;
     private const float None = 1.0e30f;
     private const int Steps = 2048;
     private const float Tolerance = 0.001f;
-    // The floors a step once took at a wall: a fraction of the switch radius, and of the sample's radius about a
-    // log-sphere fold's center.
-    private const float LodFloorFraction = 1.0e-4f;
-    private const float FoldFloorFraction = 1.0e-3f;
+    // The floor a step once took at a shell wall, as a fraction of the sample's radius about the fold's center.
+    private const float FloorFraction = 1.0e-3f;
     private const float LayerThickness = 0.001f;
 
     private enum FoldWalls {
@@ -29,39 +26,17 @@ public sealed class SdfMarchLodCrossingLawTests {
     // A layer hugging a wall: the points between two radii about its center, on the side its normal faces.
     private sealed record Layer(Vector3 Center, float Low, float High, Vector3 Normal);
     private sealed record Cell((Vector3 Center, float Radius)[] Spheres, Layer[] Layers);
-    // Switch radii about the origin, shell radii about a fold center, and the solids of each pair of shells.
-    private sealed record Scene(float[] LodRadii, Vector3 FoldCenter, float[] FoldRadii, FoldWalls Fold, Func<int, int, Cell> CellOf);
+    // Shell radii about a fold center, how the march sees the walls, and the solids of each shell.
+    private sealed record Scene(Vector3 FoldCenter, float[] FoldRadii, FoldWalls Fold, Func<int, Cell> CellOf);
 
     private static readonly Vector3 FoldCenter = new(x: 4, y: -3, z: 2);
     private static readonly Vector3[] Normals = [Vector3.UnitX, Vector3.UnitY, -Vector3.UnitZ, -Vector3.UnitX, Vector3.UnitZ, -Vector3.UnitY];
-    // Switch spheres about the origin at radii 30 and 50, so three shells, each holding solids of its own; only the part
-    // of a solid in its own shell exists. A step floored at LodFloorFraction of the radius strides 0.003 at the inner
-    // switch and 0.005 at the outer, past the layers.
-    private static readonly (Vector3 Center, float Radius)[][] LodSpheres = [
-        [(new Vector3(x: 15, y: 5, z: 0), 4), (new Vector3(x: 0, y: 0, z: 29.997f), 0.004f), (new Vector3(x: -22, y: -18, z: 3), 2.5f)],
-        [(new Vector3(x: -35, y: 20, z: 10), 3), (new Vector3(x: 0, y: 0, z: 30.001f), 0.002f), (new Vector3(x: 0, y: 0, z: 40), 0.5f)],
-        [(new Vector3(x: -40, y: -40, z: 0), 5), (new Vector3(x: 0, y: 0, z: -50.001f), 0.002f)],
-    ];
-    // Layers hugging a switch, each over the half-space its normal faces: just inside the inner switch, just past it
-    // and just inside the outer, and just past the outer.
-    private static readonly Layer[][] LodLayers = [
-        [new(Vector3.Zero, 29.999f, 30, -Vector3.UnitX)],
-        [new(Vector3.Zero, 30, 30.001f, Vector3.UnitY), new(Vector3.Zero, 49.999f, 50, Vector3.UnitY)],
-        [new(Vector3.Zero, 50, 50.001f, -Vector3.UnitX)],
-    ];
-    private static readonly Scene Lod = new(
-        CellOf: static (lod, _) => new Cell(Layers: LodLayers[lod], Spheres: LodSpheres[lod]),
-        Fold: FoldWalls.Exact,
-        FoldCenter: FoldCenter,
-        FoldRadii: [],
-        LodRadii: [30, 50]
-    );
     // A shell ratio of two about FoldCenter: shell j lies between radii 2^(j - 2.5) and 2^(j - 1.5). Each holds a copy
     // of one sphere scaled by its shell, and layers hugging both of its walls, over half-spaces that turn shell to shell.
     private static readonly float[] ShellRadii = [.. Enumerable.Range(count: 8, start: 0).Select(selector: static k => MathF.Pow(x: 2, y: (k - 2.5f)))];
 
     private static Scene Droste(FoldWalls walls) => new(
-        CellOf: static (_, shell) => {
+        CellOf: static shell => {
             var scale = MathF.Pow(x: 2, y: (shell - 3));
             var layers = new List<Layer>();
 
@@ -76,56 +51,9 @@ public sealed class SdfMarchLodCrossingLawTests {
         },
         Fold: walls,
         FoldCenter: FoldCenter,
-        FoldRadii: ShellRadii,
-        LodRadii: []
+        FoldRadii: ShellRadii
     );
 
-    [Fact]
-    public void ACameraRayCrossesEachSwitchOnceAndSkipsNothing() {
-        var failures = new List<string>();
-
-        foreach (var direction in Directions(count: 4096)) {
-            Check(direction: direction, failures: failures, maximumCrossings: 1, origin: Vector3.Zero, scene: Lod);
-        }
-        Assert.True(condition: (failures.Count == 0), userMessage: string.Join(separator: Environment.NewLine, values: failures.Take(count: 20)));
-    }
-    [Fact]
-    public void AnyRayCrossesEachSwitchAtMostTwiceAndSkipsNothing() {
-        var failures = new List<string>();
-        Vector3[] origins = [new(x: -90, y: 3, z: 1), new(x: 0, y: -80, z: 20), new(x: 60, y: 60, z: -10), new(x: 10, y: 10, z: 10), new(x: 39, y: 0, z: 0)];
-
-        foreach (var origin in origins) {
-            foreach (var direction in Directions(count: 2048)) {
-                Check(direction: direction, failures: failures, maximumCrossings: 2, origin: origin, scene: Lod);
-            }
-        }
-        Assert.True(condition: (failures.Count == 0), userMessage: string.Join(separator: Environment.NewLine, values: failures.Take(count: 20)));
-    }
-    [Fact]
-    public void ARayAimedThroughBothWallsCrossesEachTwice() {
-        // From outside both spheres, past the center on the side no layer covers: in and out of each, clear of every solid.
-        var origin = new Vector3(x: 6, y: -6, z: -90);
-        var march = March(direction: Vector3.UnitZ, floored: false, origin: origin, scene: Lod);
-
-        Assert.Null(value: FirstSolid(direction: Vector3.UnitZ, origin: origin, scene: Lod));
-        Assert.Equal(expected: 2, actual: march.Crossings.GetValueOrDefault(key: 30f));
-        Assert.Equal(expected: 2, actual: march.Crossings.GetValueOrDefault(key: 50f));
-    }
-    [Fact]
-    public void AStepFlooredAtTheSwitchSkipsAThinLayerThatTheCrossingHits() {
-        // From 0.0005 inside the inner switch along +y, where the inner shell holds nothing ahead: the floored step lands
-        // about 0.0025 past the switch, beyond the layer there, while the crossing lands in it.
-        var origin = new Vector3(x: 1, y: MathF.Sqrt(x: ((29.9995f * 29.9995f) - 1)), z: 0);
-        var truth = FirstSolid(direction: Vector3.UnitY, origin: origin, scene: Lod);
-        var floored = March(direction: Vector3.UnitY, floored: true, origin: origin, scene: Lod);
-        var crossing = March(direction: Vector3.UnitY, floored: false, origin: origin, scene: Lod);
-
-        Assert.NotNull(value: truth);
-        Assert.True(condition: (!floored.Found || (floored.Traveled > (truth.Value + Tolerance))), userMessage: $"the floored step found {floored.Traveled}");
-        Assert.True(condition: (crossing.Found && (crossing.Traveled <= (truth.Value + Tolerance))), userMessage: $"the crossing found {crossing.Found} at {crossing.Traveled}, the first solid at {truth}");
-    }
-    [Fact]
-    public void TheSweepFailsAStepFlooredAtTheSwitch() => Assert.NotEmpty(collection: Sweep(floored: true, maximumCrossings: 1, origins: [Vector3.Zero], scene: Lod));
     [Fact]
     public void ARayCrossesEachExactFoldShellAtMostTwiceAndSkipsNothing() {
         var failures = Sweep(floored: false, maximumCrossings: 2, origins: DrosteOrigins(), scene: Droste(walls: FoldWalls.Exact));
@@ -137,6 +65,22 @@ public sealed class SdfMarchLodCrossingLawTests {
         var failures = Sweep(floored: false, maximumCrossings: int.MaxValue, origins: DrosteOrigins(), scene: Droste(walls: FoldWalls.Ball));
 
         Assert.True(condition: (failures.Count == 0), userMessage: string.Join(separator: Environment.NewLine, values: failures.Take(count: 20)));
+    }
+    [Fact]
+    public void AStepFlooredAtAShellWallSkipsAThinLayerThatTheCrossingHits() {
+        // From 0.0005 outside shell 5's outer wall (radius 2^2.5), below the center where the layer hugging that wall
+        // from inside lies and on the side the outer shell's layer leaves open, heading in toward the center: the
+        // floored step strides 0.0057, past the 0.001 layer, while the crossing lands in it.
+        var scene = Droste(walls: FoldWalls.Exact);
+        var outward = Vector3.Normalize(value: new Vector3(x: 0.3f, y: -1, z: 0));
+        var origin = (FoldCenter + (outward * (ShellRadii[5] + 0.0005f)));
+        var truth = FirstSolid(direction: -outward, origin: origin, scene: scene);
+        var floored = March(direction: -outward, floored: true, origin: origin, scene: scene);
+        var crossing = March(direction: -outward, floored: false, origin: origin, scene: scene);
+
+        Assert.NotNull(value: truth);
+        Assert.True(condition: (!floored.Found || (floored.Traveled > (truth.Value + Tolerance))), userMessage: $"the floored step found {floored.Traveled}");
+        Assert.True(condition: (crossing.Found && (crossing.Traveled <= (truth.Value + Tolerance))), userMessage: $"the crossing found {crossing.Found} at {crossing.Traveled}, the first solid at {truth}");
     }
     [Fact]
     public void TheSweepFailsAStepFlooredAtAFoldShell() => Assert.NotEmpty(collection: Sweep(floored: true, maximumCrossings: int.MaxValue, origins: DrosteOrigins(), scene: Droste(walls: FoldWalls.Ball)));
@@ -198,7 +142,7 @@ public sealed class SdfMarchLodCrossingLawTests {
 
     // The walls mapCore publishes for a sample: a shell between two concentric walls about a center.
     private readonly record struct Shell(Vector3 Center, float Inner, float Outer, float Gap, float GapRadius, int Index);
-    private readonly record struct Sampled(float Distance, Shell Lod, Shell Fold, float BallWalls, float FlooredBound);
+    private readonly record struct Sampled(float Distance, Shell Fold, float BallWalls, float FlooredBound);
 
     // The shell of `radii` about `center` holding a position: a wall the position lies past (r > R) is an inner wall.
     private static Shell ShellOf(Vector3 center, float[] radii, Vector3 position) {
@@ -223,9 +167,8 @@ public sealed class SdfMarchLodCrossingLawTests {
         return new Shell(Center: center, Gap: gap, GapRadius: gapRadius, Index: index, Inner: inner, Outer: outer);
     }
     private static Sampled Sample(Scene scene, Vector3 position) {
-        var lod = ShellOf(center: Vector3.Zero, position: position, radii: scene.LodRadii);
         var fold = ShellOf(center: scene.FoldCenter, position: position, radii: scene.FoldRadii);
-        var cell = scene.CellOf(arg1: lod.Index, arg2: fold.Index);
+        var cell = scene.CellOf(arg: fold.Index);
         var distance = 1.0e9f;
 
         foreach (var (center, solidRadius) in cell.Spheres) {
@@ -238,30 +181,27 @@ public sealed class SdfMarchLodCrossingLawTests {
 
             distance = MathF.Min(x: distance, y: MathF.Max(x: shell, y: -Vector3.Dot(vector1: layer.Normal, vector2: offset)));
         }
-        var lodFloor = ((lod.Gap < None) ? MathF.Max(x: lod.Gap, y: (lod.GapRadius * LodFloorFraction)) : None);
-        var foldFloor = ((fold.Gap < None) ? MathF.Max(x: fold.Gap, y: (Vector3.Distance(value1: position, value2: scene.FoldCenter) * FoldFloorFraction)) : None);
+        var foldFloor = ((fold.Gap < None) ? MathF.Max(x: fold.Gap, y: (Vector3.Distance(value1: position, value2: scene.FoldCenter) * FloorFraction)) : None);
         var exact = (scene.Fold == FoldWalls.Exact);
 
         return new Sampled(
             BallWalls: (exact ? None : fold.Gap),
             Distance: distance,
-            FlooredBound: MathF.Min(x: lodFloor, y: foldFloor),
-            Fold: (exact ? fold : (fold with { Gap = None })),
-            Lod: lod
+            FlooredBound: foldFloor,
+            Fold: (exact ? fold : (fold with { Gap = None }))
         );
     }
     // sdfMarchAdvance's steps, in float, crossing the fold shell; `crossed` names the radius of an exact wall a crossing
     // passes.
     private static float Advance(Sampled sample, Vector3 origin, Vector3 direction, float traveled, float clearance, float advance, float tolerance, out float? crossed) {
         crossed = null;
-        var ballGap = MathF.Min(x: sample.BallWalls, y: MathF.Min(x: sample.Lod.Gap, y: sample.Fold.Gap));
+        var ballGap = MathF.Min(x: sample.BallWalls, y: sample.Fold.Gap);
 
         if (MathF.Max(x: clearance, y: advance) <= ballGap) {
             return (traveled + advance);
         }
         var (next, after, wall) = (None, None, 0f);
 
-        ShellExit(after: ref after, direction: direction, next: ref next, origin: origin, shell: sample.Lod, traveled: traveled, wall: ref wall);
         if (sample.Fold.Gap < None) {
             ShellExit(after: ref after, direction: direction, next: ref next, origin: origin, shell: sample.Fold, traveled: traveled, wall: ref wall);
         }
@@ -331,12 +271,10 @@ public sealed class SdfMarchLodCrossingLawTests {
         var d = new Vector3d(value: direction);
         var breaks = new List<double> { 0, Limit };
 
-        foreach (var (center, radii) in new[] { (Vector3.Zero, scene.LodRadii), (scene.FoldCenter, scene.FoldRadii) }) {
-            foreach (var wall in radii) {
-                if (Interval(center: new Vector3d(value: center), direction: d, origin: o, radius: wall) is { } span) {
-                    breaks.Add(item: span.Near);
-                    breaks.Add(item: span.Far);
-                }
+        foreach (var wall in scene.FoldRadii) {
+            if (Interval(center: new Vector3d(value: scene.FoldCenter), direction: d, origin: o, radius: wall) is { } span) {
+                breaks.Add(item: span.Near);
+                breaks.Add(item: span.Far);
             }
         }
         breaks = [.. breaks.Where(predicate: static value => ((value >= 0) && (value <= Limit))).Order()];
@@ -347,9 +285,8 @@ public sealed class SdfMarchLodCrossingLawTests {
                 continue;
             }
             var middle = o.Plus(other: d.Times(scale: (0.5 * (start + end))));
-            var lodRadius = middle.Length;
             var foldRadius = middle.Minus(other: new Vector3d(value: scene.FoldCenter)).Length;
-            var cell = scene.CellOf(arg1: scene.LodRadii.Count(predicate: wall => (lodRadius > wall)), arg2: scene.FoldRadii.Count(predicate: wall => (foldRadius > wall)));
+            var cell = scene.CellOf(arg: scene.FoldRadii.Count(predicate: wall => (foldRadius > wall)));
             var spans = new List<(double Near, double Far)>();
             double? first = null;
 

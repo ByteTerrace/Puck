@@ -57,19 +57,18 @@ public abstract record ShapeDomainOp {
     public sealed record Polar(int Count, SdfAxis? Axis = null, bool? Mirror = null, int? MaterialStride = null, DocumentVector3? Origin = null) : ShapeDomainOp;
     /// <summary>Wallpaper-group lattice fold — <see cref="SdfDomainOp.Wallpaper"/>. Render only: it has no rigid-copy
     /// expansion, so a solid placement carrying one is refused by name at validation.</summary>
-    /// <param name="Group">The wallpaper group.</param>
+    /// <param name="Group">The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see
+    /// <see cref="SdfWallpaperFold.IsContinuous"/>). A program refuses any other group by name when it builds.</param>
     /// <param name="Cell">The lattice cell extents in the fold plane, creation units.</param>
     /// <param name="Limit">The repeat-cell limit per plane axis (null = <see cref="UnboundedLimit"/> per axis).</param>
     /// <param name="Plane">The fold plane (null = XZ).</param>
     /// <param name="MaterialStride">The parity-material stride (null = 0, geometric only).</param>
-    /// <param name="LodDistance">The symmetry-LOD distance threshold (null = 0, off).</param>
     public sealed record Wallpaper(
         SdfWallpaperGroup Group,
         DocumentVector2 Cell,
         DocumentVector2? Limit = null,
         SdfPlane? Plane = null,
-        int? MaterialStride = null,
-        float? LodDistance = null
+        int? MaterialStride = null
     ) : ShapeDomainOp {
         /// <summary>The per-axis repeat-cell limit an absent <see cref="Limit"/> means: far past any authored reach.</summary>
         public const float UnboundedLimit = 1000000f;
@@ -124,7 +123,6 @@ public static class ShapeDomainOps {
             Cell: wallpaper.Cell,
             Group: wallpaper.Group,
             Limit: (wallpaper.Limit ?? new Vector2(value: ShapeDomainOp.Wallpaper.UnboundedLimit)),
-            LodDistance: (wallpaper.LodDistance ?? 0f),
             MaterialStride: (wallpaper.MaterialStride ?? 0),
             Plane: (wallpaper.Plane ?? SdfPlane.XZ)
         ),

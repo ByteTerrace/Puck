@@ -7975,7 +7975,7 @@ export type WorldPrototype = {
       } | {
         $type?: "wallpaper";
         /**
-         * The wallpaper group.
+         * The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see IsContinuous). A program refuses any other group by name when it builds.
          */
         group: "P1" | "P2" | "Pm" | "Pg" | "Cm" | "Pmm" | "Pmg" | "Pgg" | "Cmm" | "P4" | "P4M" | "P4G" | "P3" | "P3M1" | "P31M" | "P6" | "P6M";
         /**
@@ -7994,10 +7994,6 @@ export type WorldPrototype = {
          * The parity-material stride (null = 0, geometric only).
          */
         materialStride?: number | null;
-        /**
-         * The symmetry-LOD distance threshold (null = 0, off).
-         */
-        lodDistance?: number | null;
       } | null)[] | null;
       /**
        * The driver-fed rotations this shape rides (ShapeSwingDocument), at most MaxSwings (null = none).

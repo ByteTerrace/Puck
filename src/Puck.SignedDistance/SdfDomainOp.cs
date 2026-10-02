@@ -42,14 +42,12 @@ public abstract record SdfDomainOp {
     /// <param name="Limit">The repeat-cell limit per plane axis.</param>
     /// <param name="Plane">The fold plane.</param>
     /// <param name="MaterialStride">The parity-material stride (0 = geometric only).</param>
-    /// <param name="LodDistance">The symmetry-LOD distance threshold (0 = off).</param>
     public sealed record Wallpaper(
         SdfWallpaperGroup Group,
         Vector2 Cell,
         Vector2 Limit,
         SdfPlane Plane = SdfPlane.XZ,
-        int MaterialStride = 0,
-        float LodDistance = 0f
+        int MaterialStride = 0
     ) : SdfDomainOp;
 }
 /// <summary>Applies an ordered <see cref="SdfDomainOp"/> list to a builder chain — the one place the family's
@@ -79,7 +77,6 @@ public static class SdfDomainOps {
             cell: wallpaper.Cell,
             group: wallpaper.Group,
             limit: wallpaper.Limit,
-            lodDistance: wallpaper.LodDistance,
             materialStride: wallpaper.MaterialStride,
             plane: wallpaper.Plane
         ),
