@@ -5791,7 +5791,9 @@ counted rows recorded in the same change.
      and naming the kind, pass and node over its ceiling; `puck counters --record`
      rewrites it. Deterministic kinds are judged on any device; a
      per-backend-deterministic kind is judged only on the device identity the file
-     was recorded on, the RTX 2060, and reported as not judged elsewhere.
+     was recorded on, the RTX 2060, and reported as not judged elsewhere, except
+     a required zero of a kernel kind (`requiredZero`), which is judged on every
+     device.
    - Touches: `src/Puck.Abstractions/Gpu/Counters` (`GpuWork`),
      `SdfWorldPackage` (the counter resource and members), the pass kernels under
      `Sdf/passes`, `SdfWorldPassRecorder`, `SdfWorldTables.Upload.cs`,
