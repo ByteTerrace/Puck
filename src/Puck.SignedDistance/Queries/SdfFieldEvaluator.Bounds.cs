@@ -13,6 +13,9 @@ namespace Puck.SignedDistance.Queries;
 public sealed partial class SdfFieldEvaluator {
     private static readonly FixedQ4816 SuperellipsoidSphereExponent = FixedQ4816.FromInteger(value: 2L);
 
+    // The frame's half-width in raws (see Frame), found once at construction.
+    private readonly long m_frameRaw;
+
     /// <summary>Encloses every distance <see cref="TryDistance"/> answers at a point of the box
     /// <c>[<paramref name="lower"/>, <paramref name="upper"/>]</c>, corners included.</summary>
     /// <param name="lower">The box's least corner.</param>
@@ -46,11 +49,77 @@ public sealed partial class SdfFieldEvaluator {
             throw new ArgumentException(message: $"The box's lower corner {lowerPoint} exceeds its upper corner {upperPoint}.", paramName: nameof(lower));
         }
 
-        var world = new IntervalVector3(
+        // A box reaching outside the frame holds points TryDistance refuses, so the bounds refuse it as well.
+        if (!IsInFrame(point: lowerPoint) || !IsInFrame(point: upperPoint)) {
+            return false;
+        }
+
+        distance = BoundsOver(world: new IntervalVector3(
             X: new FixedInterval(lower: lowerPoint.X, upper: upperPoint.X),
             Y: new FixedInterval(lower: lowerPoint.Y, upper: upperPoint.Y),
             Z: new FixedInterval(lower: lowerPoint.Z, upper: upperPoint.Z)
-        );
+        ));
+
+        return true;
+    }
+
+    /// <summary>Gets the evaluator's frame: the half-width, in each world axis, of the cube about the origin inside
+    /// which <see cref="TryDistance"/> answers and outside which it refuses. Inside it, no step of the evaluation can
+    /// leave the carrier. Negative when no position can be answered.</summary>
+    /// <remarks>Found once, at construction, by the bounds interpreter: the frame is the widest power-of-two cube over
+    /// which the bounds of the whole program stay bounded. A bounded interval proves that no step of the interval walk
+    /// left the carrier, and every point step's value lies inside its step's interval, so no point step inside the cube
+    /// can wrap. A program with an instruction the bounds interpreter refuses has no such proof, and keeps the whole
+    /// carrier as its frame.</remarks>
+    public FixedQ4816 Frame => FixedQ4816.FromRawBits(value: m_frameRaw);
+
+    // Whether every axis of a point lies inside the frame (the carrier's minimum, whose magnitude has no raw, never does).
+    private bool IsInFrame(FixedVector3 point) =>
+        (WithinRaw(raw: point.X.Value, limit: m_frameRaw) && WithinRaw(raw: point.Y.Value, limit: m_frameRaw) && WithinRaw(raw: point.Z.Value, limit: m_frameRaw));
+    private static bool WithinRaw(long raw, long limit) =>
+        ((raw != long.MinValue) && (Math.Abs(value: raw) <= limit));
+    // The widest power-of-two cube whose bounds stay bounded, capped so the instance cull's subtraction of each bound's
+    // centre stays inside the carrier; minus one raw when not even a one-raw cube is bounded, and the whole carrier for a
+    // program the bounds interpreter refuses.
+    private static long FindFrame(SdfFieldEvaluator evaluator) {
+        if (BoundsRefusal(instructions: evaluator.m_instructions) is not null) {
+            return long.MaxValue;
+        }
+
+        var centre = 0UL;
+
+        foreach (var bound in evaluator.m_cullBounds) {
+            centre = Math.Max(val1: centre, val2: Math.Max(val1: RawMagnitude(raw: bound.CenterX.Value), val2: Math.Max(val1: RawMagnitude(raw: bound.CenterY.Value), val2: RawMagnitude(raw: bound.CenterZ.Value))));
+        }
+
+        var ceiling = ((centre >= ((ulong)long.MaxValue)) ? 0L : (long.MaxValue - ((long)centre)));
+        var frame = -1L;
+        var low = 0;
+        var high = 62;
+
+        // Bounded over a cube implies bounded over every cube inside it (the bounds are inclusion isotonic), so the
+        // bounded cubes are an initial run of the powers of two.
+        while (low <= high) {
+            var middle = ((low + high) / 2);
+            var radius = Math.Min(val1: (1L << middle), val2: ceiling);
+            var side = new FixedInterval(lower: FixedQ4816.FromRawBits(value: -radius), upper: FixedQ4816.FromRawBits(value: radius));
+
+            if (!evaluator.BoundsOver(world: new IntervalVector3(X: side, Y: side, Z: side)).IsUnbounded) {
+                frame = radius;
+                low = (middle + 1);
+            } else {
+                high = (middle - 1);
+            }
+        }
+
+        return frame;
+    }
+    private static ulong RawMagnitude(long raw) =>
+        ((raw < 0L)
+            ? (0UL - unchecked((ulong)raw))
+            : ((ulong)raw));
+    // The bounds over a box whose every point the frame holds.
+    private FixedInterval BoundsOver(IntervalVector3 world) {
         var local = world;
         var distanceScale = Point(value: FixedQ4816.One);
         var result = FixedInterval.FromPoint(value: FarDistance);
@@ -172,10 +241,9 @@ public sealed partial class SdfFieldEvaluator {
             }
         }
 
-        distance = result;
-
-        return true;
+        return result;
     }
+
     /// <summary>Returns whether every instruction of the evaluator's program has an inclusion rule, naming the first that
     /// does not.</summary>
     /// <param name="refusal">The refusal naming the first instruction without a rule, or <see langword="null"/>.</param>
@@ -259,10 +327,12 @@ public sealed partial class SdfFieldEvaluator {
         static FixedQ4816 Fold(FixedQ4816 x, FixedQ4816 e) =>
             (x - FixedQ4816.Clamp(maximum: e, minimum: -e, value: x));
 
-        return new(
-            lower: (value.IsUnboundedBelow ? FixedQ4816.MinValue : Fold(x: value.Lower, e: extent)),
-            upper: (value.IsUnboundedAbove ? FixedQ4816.MaxValue : Fold(x: value.Upper, e: extent))
-        );
+        return (value.IsUnbounded
+            ? FixedInterval.Entire
+            : new(
+                lower: Fold(x: value.Lower, e: extent),
+                upper: Fold(x: value.Upper, e: extent)
+            ));
     }
     // FixedQuaternion.Rotate's two fused stages over the conjugate, each stage's three-term sum enclosed by the sum of its
     // outward-rounded products: t = u×v + w·v, then d = u×t, then v + 2d.
@@ -380,9 +450,7 @@ public sealed partial class SdfFieldEvaluator {
             (cx != (point.X.Upper.Value >> FixedQ4816.FractionBitCount)) ||
             (cy != (point.Y.Upper.Value >> FixedQ4816.FractionBitCount)) ||
             (cz != (point.Z.Upper.Value >> FixedQ4816.FractionBitCount)) ||
-            point.X.IsUnboundedBelow || point.X.IsUnboundedAbove ||
-            point.Y.IsUnboundedBelow || point.Y.IsUnboundedAbove ||
-            point.Z.IsUnboundedBelow || point.Z.IsUnboundedAbove
+            point.X.IsUnbounded || point.Y.IsUnbounded || point.Z.IsUnbounded
         ) {
             // Each delta component lies within |x| + 1/2 + |randomness|/2 + 1 of zero; the own cell (x = 0) bounds the
             // nearest feature and a face neighbour bounds the second, and F2 − F1 is at most the second.

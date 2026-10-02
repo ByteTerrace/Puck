@@ -194,6 +194,26 @@ approximated: `HasDistanceBounds` names it. Today that is `Sweep`, whose
 closest parameter comes from a search, and a `Superellipsoid` at an exponent
 other than 2.
 
+No step of an evaluation leaves the carrier unseen. An interval whose exact
+hull leaves the carrier is the unbounded `FixedInterval.Entire`, and every
+interval operation given it answers it. So a bounded result proves that no step
+overflowed. The evaluator uses that proof once, at construction, to find its
+**frame** (`Frame`): the widest power-of-two cube about the origin over which
+the whole program's bounds stay bounded.
+- Inside the frame, every point step's value lies inside a bounded interval, so
+  no point step can wrap.
+- Outside it, `TryDistance` refuses the position rather than wrapping it into a
+  wrong answer, and `TryDistanceBounds` refuses any box reaching past it.
+- A program that overflows everywhere (dilated by the carrier's whole range,
+  say) has a negative frame and answers nowhere.
+- Typical programs reach 2⁶⁰ raws or more. A polygon's or trapezoid's squared
+  distance leaves the carrier near 2³⁹ raws, so its frame is a few million
+  units.
+
+Every point answer therefore lies inside its box's bounds, or both refuse. A
+program the bounds interpreter refuses has no such proof and keeps the whole
+carrier as its frame.
+
 Two certified queries are built on it:
 - **`TryCertifiedSweep`** moves a sphere along a displacement by conservative
   advancement. Each step is the certified clearance divided by the program's
@@ -204,11 +224,12 @@ Two certified queries are built on it:
   surface, however thin the surface or however long the step. A step that only
   samples the field at its ends tunnels through such a surface.
   If the initial sphere cannot be proved clear, the result is `Contact` at zero
-  travel with the original centre. A box leaving the evaluator's representable
-  frame cannot certify an advance.
+  travel with the original centre. A box whose bounds are unbounded (it reaches
+  past the frame) proves nothing, so the sweep stops `Exhausted` there, never
+  `Clear` and never `Contact`.
 - **`TryCertifiedLineOfSight`** splits a segment into boxes until each is proved
   clear, or a point of it is proved inside. Anything it cannot prove within its
-  budget is `Undecided`.
+  budget is `Undecided`, and so is a segment reaching past the frame.
 
 Both take a bounds-query budget and report the queries they spent, each one
 walk of the program over one box, so a caller counts its cost. A run under a
@@ -223,7 +244,9 @@ halvings, and each costs at most two queries.
 through boxes against the bounds, and holds the bounds interpreter's rule sets
 to the point interpreter's. `SdfCertifiedQueryLawTests` holds the sweep to a
 thin wall at speeds up to 100,000 units a step, with the fixed-step stepper as
-the red leg.
+the red leg. `SdfFieldOverflowLawTests` sweeps programs whose constants and
+positions reach the carrier's ends, and holds every point answer inside its
+bounds or both refusing.
 
 ## What determinism means here
 

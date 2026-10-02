@@ -3,47 +3,31 @@ using System.Numerics;
 namespace Puck.Maths.Tests;
 
 internal static partial class Oracles {
-    /// <summary>The directed rounding of an exact rational to a raw: its floor or its ceiling, saturated to the signed
-    /// carrier, where the extremes stand for the unbounded ends of an interval.</summary>
-    /// <param name="numerator">The exact value's numerator, in raw units.</param>
-    /// <param name="denominator">The exact value's positive denominator.</param>
-    /// <param name="ceiling">Whether to round up rather than down.</param>
-    /// <returns>The saturated directed raw.</returns>
-    public static long DirectedRaw(BigInteger numerator, BigInteger denominator, bool ceiling) {
-        var floor = BigInteger.Divide(dividend: numerator, divisor: denominator);
-
-        if ((floor * denominator) > numerator) {
-            --floor;
-        }
-
-        var rounded = ((ceiling && ((floor * denominator) != numerator))
-            ? (floor + 1)
-            : floor);
-
-        return SaturateRaw(value: rounded);
-    }
-    /// <summary>Saturates an exact integer to the signed 64-bit carrier.</summary>
-    /// <param name="value">The value.</param>
-    /// <returns>The value, or the nearer carrier extreme.</returns>
-    public static long SaturateRaw(BigInteger value) =>
-        ((value > long.MaxValue)
-            ? long.MaxValue
-            : ((value < long.MinValue)
-                ? long.MinValue
-                : ((long)value)));
-    /// <summary>The reference interval product: over bounded operands, the floor of the least of the four exact
-    /// corner products and the ceiling of the greatest, each read at Q16 from the Q32 product; zero when either operand
-    /// is exactly zero; and the whole carrier when either operand reaches a carrier extreme.</summary>
-    /// <returns>The reference endpoints.</returns>
-    public static (long Lower, long Upper) IntervalProduct(long leftLower, long leftUpper, long rightLower, long rightUpper) {
-        if (((leftLower == 0L) && (leftUpper == 0L)) || ((rightLower == 0L) && (rightUpper == 0L))) {
-            return (0L, 0L);
-        }
-
-        if (IsCarrierExtreme(lower: leftLower, upper: leftUpper) || IsCarrierExtreme(lower: rightLower, upper: rightUpper)) {
-            return (long.MinValue, long.MaxValue);
-        }
-
+    /// <summary>The reference hull of two exact raw endpoints: themselves when both lie in the carrier, and
+    /// <see langword="null"/> (the unbounded interval) when either leaves it.</summary>
+    /// <param name="lower">The exact lower endpoint, in raws.</param>
+    /// <param name="upper">The exact upper endpoint, in raws.</param>
+    /// <returns>The endpoints, or <see langword="null"/>.</returns>
+    public static (long Lower, long Upper)? ExactHull(BigInteger lower, BigInteger upper) =>
+        (((lower < long.MinValue) || (upper > long.MaxValue))
+            ? null
+            : (((long)lower), ((long)upper)));
+    /// <summary>The reference directed hull of two exact rationals over one positive denominator: the floor of the
+    /// lower and the ceiling of the upper, or <see langword="null"/> when either leaves the carrier.</summary>
+    /// <param name="lower">The lower numerator.</param>
+    /// <param name="upper">The upper numerator.</param>
+    /// <param name="denominator">The positive denominator.</param>
+    /// <returns>The endpoints, or <see langword="null"/>.</returns>
+    public static (long Lower, long Upper)? DirectedHull(BigInteger lower, BigInteger upper, BigInteger denominator) =>
+        ExactHull(
+            lower: FloorDivide(denominator: denominator, numerator: lower),
+            upper: -FloorDivide(denominator: denominator, numerator: -upper)
+        );
+    /// <summary>The reference interval product: the floor of the least of the four exact corner products and the
+    /// ceiling of the greatest, each read at Q16 from the Q32 product, or <see langword="null"/> when that hull leaves
+    /// the carrier.</summary>
+    /// <returns>The reference endpoints, or <see langword="null"/>.</returns>
+    public static (long Lower, long Upper)? IntervalProduct(long leftLower, long leftUpper, long rightLower, long rightUpper) {
         BigInteger[] corners = [
             (((BigInteger)leftLower) * rightLower),
             (((BigInteger)leftLower) * rightUpper),
@@ -58,25 +42,19 @@ internal static partial class Oracles {
             greatest = BigInteger.Max(left: greatest, right: corner);
         }
 
-        return (
-            DirectedRaw(ceiling: false, denominator: (BigInteger.One << 16), numerator: least),
-            DirectedRaw(ceiling: true, denominator: (BigInteger.One << 16), numerator: greatest)
-        );
+        return DirectedHull(denominator: (BigInteger.One << 16), lower: least, upper: greatest);
     }
-    /// <summary>The reference interval quotient: over bounded operands whose divisor excludes zero, the floor of the
-    /// least exact corner quotient and the ceiling of the greatest; otherwise the whole carrier.</summary>
-    /// <returns>The reference endpoints.</returns>
-    public static (long Lower, long Upper) IntervalQuotient(long leftLower, long leftUpper, long rightLower, long rightUpper) {
-        if (
-            ((rightLower <= 0L) && (rightUpper >= 0L)) ||
-            IsCarrierExtreme(lower: leftLower, upper: leftUpper) ||
-            IsCarrierExtreme(lower: rightLower, upper: rightUpper)
-        ) {
-            return (long.MinValue, long.MaxValue);
+    /// <summary>The reference interval quotient: over a divisor excluding zero, the floor of the least exact corner
+    /// quotient and the ceiling of the greatest; <see langword="null"/> when the divisor holds zero or the hull leaves
+    /// the carrier.</summary>
+    /// <returns>The reference endpoints, or <see langword="null"/>.</returns>
+    public static (long Lower, long Upper)? IntervalQuotient(long leftLower, long leftUpper, long rightLower, long rightUpper) {
+        if ((rightLower <= 0L) && (rightUpper >= 0L)) {
+            return null;
         }
 
-        var lower = long.MaxValue;
-        var upper = long.MinValue;
+        BigInteger? lower = null;
+        BigInteger? upper = null;
 
         foreach (var numerator in ((long[])[leftLower, leftUpper])) {
             foreach (var denominator in ((long[])[rightLower, rightUpper])) {
@@ -86,24 +64,21 @@ internal static partial class Oracles {
                 var signed = ((denominator < 0L)
                     ? -scaled
                     : scaled);
+                var floor = FloorDivide(denominator: positive, numerator: signed);
+                var ceiling = -FloorDivide(denominator: positive, numerator: -signed);
 
-                lower = Math.Min(val1: lower, val2: DirectedRaw(ceiling: false, denominator: positive, numerator: signed));
-                upper = Math.Max(val1: upper, val2: DirectedRaw(ceiling: true, denominator: positive, numerator: signed));
+                lower = ((lower is { } least) ? BigInteger.Min(left: least, right: floor) : floor);
+                upper = ((upper is { } most) ? BigInteger.Max(left: most, right: ceiling) : ceiling);
             }
         }
 
-        return (lower, upper);
+        return ExactHull(lower: lower!.Value, upper: upper!.Value);
     }
     /// <summary>The reference interval root at Q16: the floor root of the lower endpoint and the ceiling root of the
-    /// upper, a non-positive radicand reading zero, and an unbounded upper endpoint staying unbounded.</summary>
+    /// upper, a non-positive radicand reading zero. The root of a carrier raw never leaves the carrier.</summary>
     /// <returns>The reference endpoints.</returns>
     public static (long Lower, long Upper) IntervalRoot(long lower, long upper) {
         var low = IntegerSquareRoot(value: (((BigInteger)Math.Max(val1: 0L, val2: lower)) << 16));
-
-        if (upper == long.MaxValue) {
-            return (SaturateRaw(value: low), long.MaxValue);
-        }
-
         var radicand = (((BigInteger)Math.Max(val1: 0L, val2: upper)) << 16);
         var high = IntegerSquareRoot(value: radicand);
 
@@ -111,16 +86,15 @@ internal static partial class Oracles {
             ++high;
         }
 
-        return (SaturateRaw(value: low), SaturateRaw(value: high));
+        return (((long)low), ((long)high));
     }
     /// <summary>The reference interval norm over a box of raw intervals: the floor root of the least exact sum of
-    /// squares and the ceiling root of the greatest, unbounded above when any side is.</summary>
+    /// squares and the ceiling root of the greatest, or <see langword="null"/> when that root leaves the carrier.</summary>
     /// <param name="sides">The box's sides as (lower, upper) raw pairs.</param>
-    /// <returns>The reference endpoints.</returns>
-    public static (long Lower, long Upper) IntervalMagnitude(ReadOnlySpan<(long Lower, long Upper)> sides) {
+    /// <returns>The reference endpoints, or <see langword="null"/>.</returns>
+    public static (long Lower, long Upper)? IntervalMagnitude(ReadOnlySpan<(long Lower, long Upper)> sides) {
         var least = BigInteger.Zero;
         var greatest = BigInteger.Zero;
-        var unbounded = false;
 
         foreach (var (lower, upper) in sides) {
             BigInteger low = lower;
@@ -135,7 +109,6 @@ internal static partial class Oracles {
             var far = BigInteger.Max(left: BigInteger.Abs(value: low), right: BigInteger.Abs(value: high));
 
             greatest += (far * far);
-            unbounded |= IsCarrierExtreme(lower: lower, upper: upper);
         }
 
         var root = IntegerSquareRoot(value: greatest);
@@ -144,12 +117,7 @@ internal static partial class Oracles {
             ++root;
         }
 
-        return (
-            SaturateRaw(value: IntegerSquareRoot(value: least)),
-            (unbounded
-                ? long.MaxValue
-                : SaturateRaw(value: root))
-        );
+        return ExactHull(lower: IntegerSquareRoot(value: least), upper: root);
     }
     /// <summary>An enclosure of <c>acos(v)·2^(16 + guardBitCount)</c> for <c>v = raw / 2¹⁶ ∈ [−1, 1]</c>, as the angle of
     /// the point <c>(v, √(1 − v²))</c>: the root is bracketed by its floor and ceiling at Q40 and the angle of each
@@ -218,8 +186,13 @@ internal static partial class Oracles {
         return (crest, trough);
     }
 
-    private static bool IsCarrierExtreme(long lower, long upper) =>
-        ((lower == long.MinValue) || (upper == long.MaxValue));
+    private static BigInteger FloorDivide(BigInteger numerator, BigInteger denominator) {
+        var floor = BigInteger.Divide(dividend: numerator, divisor: denominator);
+
+        return (((floor * denominator) > numerator)
+            ? (floor - 1)
+            : floor);
+    }
     // √(1 − v²)·2⁴⁰ for v = raw/2¹⁶, floored and ceilinged: (2³² − raw²)·2⁴⁸ is exact.
     private static (long Floor, long Ceiling) UnitComplementRootQ40(long raw) {
         var radicand = (((((BigInteger)1) << 32) - (((BigInteger)raw) * raw)) << 48);

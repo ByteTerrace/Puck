@@ -5842,14 +5842,7 @@
       "CoveredBy": [
         "interval.edges"
       ],
-      "Id": "Puck.Maths.FixedInterval.IsUnboundedAbove",
-      "State": "covered"
-    },
-    {
-      "CoveredBy": [
-        "interval.edges"
-      ],
-      "Id": "Puck.Maths.FixedInterval.IsUnboundedBelow",
+      "Id": "Puck.Maths.FixedInterval.IsUnbounded",
       "State": "covered"
     },
     {

@@ -25,53 +25,49 @@ internal static partial class Subjects {
         var bLower = b.Lower.Value;
         var bUpper = b.Upper.Value;
         var name = $"A = {a}, B = {b}";
-        var bothBelow = ((aLower == long.MinValue) || (bLower == long.MinValue));
-        var bothAbove = ((aUpper == long.MaxValue) || (bUpper == long.MaxValue));
+        BigInteger exactALower = aLower, exactAUpper = aUpper, exactBLower = bLower, exactBUpper = bUpper;
 
-        if (Mismatch(name: $"A + B for {name}", actual: (a + b), expected: (
-            (bothBelow ? long.MinValue : Oracles.SaturateRaw(value: (((BigInteger)aLower) + bLower))),
-            (bothAbove ? long.MaxValue : Oracles.SaturateRaw(value: (((BigInteger)aUpper) + bUpper)))
-        )) is { } sum) { return sum; }
-
-        var negated = (
-            ((aUpper == long.MaxValue) ? long.MinValue : Oracles.SaturateRaw(value: -((BigInteger)aUpper))),
-            ((aLower == long.MinValue) ? long.MaxValue : Oracles.SaturateRaw(value: -((BigInteger)aLower)))
-        );
-
-        if (Mismatch(actual: (-a), expected: negated, name: $"−A for {name}") is { } negation) { return negation; }
-        if (Mismatch(name: $"A − B for {name}", actual: (a - b), expected: (
-            (((aLower == long.MinValue) || (bUpper == long.MaxValue)) ? long.MinValue : Oracles.SaturateRaw(value: (((BigInteger)aLower) - bUpper))),
-            (((aUpper == long.MaxValue) || (bLower == long.MinValue)) ? long.MaxValue : Oracles.SaturateRaw(value: (((BigInteger)aUpper) - bLower)))
-        )) is { } difference) { return difference; }
+        if (Mismatch(name: $"A + B for {name}", actual: (a + b), expected: Oracles.ExactHull(lower: (exactALower + exactBLower), upper: (exactAUpper + exactBUpper))) is { } sum) { return sum; }
+        if (Mismatch(name: $"−A for {name}", actual: (-a), expected: Oracles.ExactHull(lower: -exactAUpper, upper: -exactALower)) is { } negation) { return negation; }
+        if (Mismatch(name: $"A − B for {name}", actual: (a - b), expected: Oracles.ExactHull(lower: (exactALower - exactBUpper), upper: (exactAUpper - exactBLower))) is { } difference) { return difference; }
         if (Mismatch(name: $"A × B for {name}", actual: (a * b), expected: Oracles.IntervalProduct(leftLower: aLower, leftUpper: aUpper, rightLower: bLower, rightUpper: bUpper)) is { } product) { return product; }
         if (Mismatch(name: $"A ÷ B for {name}", actual: (a / b), expected: Oracles.IntervalQuotient(leftLower: aLower, leftUpper: aUpper, rightLower: bLower, rightUpper: bUpper)) is { } quotient) { return quotient; }
 
-        var absolute = ((aLower >= 0L)
-            ? (aLower, aUpper)
-            : ((aUpper <= 0L)
-                ? negated
-                : (0L, Math.Max(val1: negated.Item2, val2: aUpper))));
+        // |A| over the exact endpoints: the nearer magnitude below (zero when A straddles zero), the farther above.
+        var absoluteLow = (((aLower <= 0L) && (aUpper >= 0L)) ? BigInteger.Zero : BigInteger.Min(left: BigInteger.Abs(value: exactALower), right: BigInteger.Abs(value: exactAUpper)));
+        var absoluteHigh = BigInteger.Max(left: BigInteger.Abs(value: exactALower), right: BigInteger.Abs(value: exactAUpper));
 
-        if (Mismatch(name: $"|A| for {name}", actual: FixedInterval.Abs(value: a), expected: absolute) is { } magnitude) { return magnitude; }
-
-        var squareLow = (((BigInteger)absolute.Item1) * absolute.Item1);
-        var squareHigh = (((BigInteger)absolute.Item2) * absolute.Item2);
-
-        if (Mismatch(name: $"A² for {name}", actual: FixedInterval.Square(value: a), expected: (
-            Oracles.DirectedRaw(ceiling: false, denominator: (BigInteger.One << 16), numerator: squareLow),
-            ((absolute.Item2 == long.MaxValue) ? long.MaxValue : Oracles.DirectedRaw(ceiling: true, denominator: (BigInteger.One << 16), numerator: squareHigh))
-        )) is { } square) { return square; }
+        if (Mismatch(name: $"|A| for {name}", actual: FixedInterval.Abs(value: a), expected: Oracles.ExactHull(lower: absoluteLow, upper: absoluteHigh)) is { } magnitude) { return magnitude; }
+        if (Mismatch(name: $"A² for {name}", actual: FixedInterval.Square(value: a), expected: ((absoluteHigh > long.MaxValue)
+            ? null
+            : Oracles.DirectedHull(denominator: (BigInteger.One << 16), lower: (absoluteLow * absoluteLow), upper: (absoluteHigh * absoluteHigh)))) is { } square) { return square; }
         if (Mismatch(name: $"√A for {name}", actual: FixedInterval.Sqrt(value: a), expected: Oracles.IntervalRoot(lower: aLower, upper: aUpper)) is { } root) { return root; }
-        if (Mismatch(name: $"round(A) for {name}", actual: FixedInterval.Round(value: a), expected: (
-            ((aLower == long.MinValue) ? long.MinValue : Oracles.SaturateRaw(value: (RoundRationalTiesToEvenOracle(raw: aLower) << 16))),
-            ((aUpper == long.MaxValue) ? long.MaxValue : Oracles.SaturateRaw(value: (RoundRationalTiesToEvenOracle(raw: aUpper) << 16)))
-        )) is { } round) { return round; }
-        if (Mismatch(name: $"floor(A) for {name}", actual: FixedInterval.Floor(value: a), expected: ((Oracles.DirectedRaw(ceiling: false, denominator: (BigInteger.One << 16), numerator: aLower) << 16), ((aUpper == long.MaxValue) ? long.MaxValue : (Oracles.DirectedRaw(ceiling: false, denominator: (BigInteger.One << 16), numerator: aUpper) << 16)))) is { } floor) { return floor; }
+        if (Mismatch(name: $"round(A) for {name}", actual: FixedInterval.Round(value: a), expected: Oracles.ExactHull(lower: (RoundRationalTiesToEvenOracle(raw: aLower) << 16), upper: (RoundRationalTiesToEvenOracle(raw: aUpper) << 16))) is { } round) { return round; }
+        if (Mismatch(name: $"floor(A) for {name}", actual: FixedInterval.Floor(value: a), expected: Oracles.ExactHull(lower: (exactALower - (((exactALower % 65536) + 65536) % 65536)), upper: (exactAUpper - (((exactAUpper % 65536) + 65536) % 65536)))) is { } floor) { return floor; }
         if (Mismatch(name: $"clamp(A, B) for {name}", actual: FixedInterval.Clamp(value: a, minimum: b.Lower, maximum: b.Upper), expected: (Math.Clamp(max: bUpper, min: bLower, value: aLower), Math.Clamp(max: bUpper, min: bLower, value: aUpper))) is { } clamp) { return clamp; }
         if (Mismatch(name: $"min(A, B) for {name}", actual: FixedInterval.Min(first: a, second: b), expected: (Math.Min(val1: aLower, val2: bLower), Math.Min(val1: aUpper, val2: bUpper))) is { } minimum) { return minimum; }
         if (Mismatch(name: $"max(A, B) for {name}", actual: FixedInterval.Max(first: a, second: b), expected: (Math.Max(val1: aLower, val2: bLower), Math.Max(val1: aUpper, val2: bUpper))) is { } maximum) { return maximum; }
         if (Mismatch(name: $"|(A, B, C)| for {name}, C = {c}", actual: FixedInterval.Magnitude(x: a, y: b, z: c), expected: Oracles.IntervalMagnitude(sides: [(aLower, aUpper), (bLower, bUpper), (c.Lower.Value, c.Upper.Value)])) is { } norm) { return norm; }
         if (Mismatch(name: $"|(A, B)| for {name}", actual: FixedInterval.Magnitude(x: a, y: b), expected: Oracles.IntervalMagnitude(sides: [(aLower, aUpper), (bLower, bUpper)])) is { } planar) { return planar; }
+
+        // The top absorbs: every operation given the unbounded interval answers it, whatever the other operand.
+        (string Name, Func<FixedInterval, FixedInterval, FixedInterval> Operation)[] absorbing = [
+            ("+", (x, y) => (x + y)), ("−", (x, y) => (x - y)), ("×", (x, y) => (x * y)), ("÷", (x, y) => (x / y)),
+            ("min", FixedInterval.Min), ("max", FixedInterval.Max), ("union", FixedInterval.Union),
+            ("norm", (x, y) => FixedInterval.Magnitude(x: x, y: y)), ("atan2", (x, y) => FixedInterval.Atan2(x: y, y: x)),
+            ("neg", (x, _) => (-x)), ("abs", (x, _) => FixedInterval.Abs(value: x)), ("square", (x, _) => FixedInterval.Square(value: x)),
+            ("sqrt", (x, _) => FixedInterval.Sqrt(value: x)), ("round", (x, _) => FixedInterval.Round(value: x)), ("floor", (x, _) => FixedInterval.Floor(value: x)),
+            ("clamp", (x, _) => FixedInterval.Clamp(value: x, minimum: FixedQ4816.Zero, maximum: FixedQ4816.One)), ("sin", (x, _) => FixedInterval.Sin(angle: x)),
+            ("cos", (x, _) => FixedInterval.Cos(angle: x)), ("asin", (x, _) => FixedInterval.Asin(value: x)), ("acos", (x, _) => FixedInterval.Acos(value: x)),
+        ];
+
+        foreach (var (operationName, operation) in absorbing) {
+            if (!operation(FixedInterval.Entire, b).IsUnbounded) { return $"{operationName} of the unbounded interval and {b} is bounded"; }
+        }
+
+        foreach (var (operationName, operation) in absorbing[..9]) {
+            if (!operation(a, FixedInterval.Entire).IsUnbounded) { return $"{operationName} of {a} and the unbounded interval is bounded"; }
+        }
 
         // Round-to-nearest point results at operands inside the intervals, wherever the exact result stays inside the
         // carrier (a wrapped point result leaves every interval's guarantee, by the type's own contract).
@@ -160,7 +156,7 @@ internal static partial class Subjects {
             var label = $"{(cosine ? "cos" : "sin")} {angle} = {actual}";
 
             // A carrier extreme is an unbounded end, which reaches every crest and trough.
-            if (angle.IsUnboundedBelow || angle.IsUnboundedAbove) {
+            if (angle.IsUnbounded) {
                 if (actual != UnitBox) { return $"{label}: an unbounded angle interval is not [−1, 1]"; }
 
                 continue;
@@ -277,11 +273,26 @@ internal static partial class Subjects {
 
         if (FixedInterval.Sin(angle: new(lower: FixedQ4816.FromRawBits(value: 102943L), upper: quarter)).Upper != FixedQ4816.One) { return "sin over the raws either side of π/2 does not reach one"; }
         if (FixedInterval.Cos(angle: FixedInterval.FromPoint(value: FixedQ4816.Zero)).Upper != FixedQ4816.One) { return "cos at zero does not reach one"; }
-        if (FixedInterval.Sin(angle: FixedInterval.Entire) != UnitBox) { return "sin over every angle is not [−1, 1]"; }
+        if (FixedInterval.Sin(angle: new(lower: FixedQ4816.MinValue, upper: FixedQ4816.MaxValue)) != UnitBox) { return "sin over the whole carrier is not [−1, 1]"; }
         if (FixedInterval.Atan2(x: UnitBox, y: UnitBox).Upper.Value != 205888L) { return "atan2 over a box holding the origin is not the whole circle"; }
         if (FixedInterval.Atan2(y: UnitBox, x: new(lower: FixedQ4816.FromRawBits(value: -(2L << 16)), upper: FixedQ4816.FromRawBits(value: -(1L << 16)))).Lower.Value != -205888L) { return "atan2 across the cut is not the whole circle"; }
         if ((FixedInterval.Entire + FixedInterval.FromPoint(value: FixedQ4816.One)) != FixedInterval.Entire) { return "an unbounded sum became bounded"; }
-        if ((FixedInterval.Entire * FixedInterval.FromPoint(value: FixedQ4816.Zero)) != FixedInterval.FromPoint(value: FixedQ4816.Zero)) { return "an unbounded product with zero is not zero"; }
+        // The top absorbs even where the bounded rule would answer a point, so an overflow is never multiplied away.
+        if ((FixedInterval.Entire * FixedInterval.FromPoint(value: FixedQ4816.Zero)) != FixedInterval.Entire) { return "an unbounded product with zero is bounded"; }
+        if (!FixedInterval.Clamp(value: FixedInterval.Entire, minimum: FixedQ4816.Zero, maximum: FixedQ4816.One).IsUnbounded) { return "a clamp hid an overflow"; }
+        if (!FixedInterval.Sin(angle: FixedInterval.Entire).IsUnbounded) { return "a sine hid an overflow"; }
+        // Overflow is the top: one raw past either end of the carrier, a negated minimum, a squared maximum and a
+        // rounding past the maximum all leave it.
+        if (!(FixedInterval.FromPoint(value: FixedQ4816.MaxValue) + FixedInterval.FromPoint(value: FixedQ4816.Epsilon)).IsUnbounded) { return "the maximum plus a raw stayed bounded"; }
+        if (!(FixedInterval.FromPoint(value: FixedQ4816.MinValue) - FixedInterval.FromPoint(value: FixedQ4816.Epsilon)).IsUnbounded) { return "the minimum less a raw stayed bounded"; }
+        if (!(-FixedInterval.FromPoint(value: FixedQ4816.MinValue)).IsUnbounded) { return "the negated minimum stayed bounded"; }
+        if (!FixedInterval.Square(value: FixedInterval.FromPoint(value: FixedQ4816.MaxValue)).IsUnbounded) { return "the squared maximum stayed bounded"; }
+        if (!FixedInterval.Round(value: FixedInterval.FromPoint(value: FixedQ4816.MaxValue)).IsUnbounded) { return "the maximum rounded up stayed bounded"; }
+        // The carrier's extremes are ordinary values: a bounded interval may reach them, and an exact sum that returns
+        // inside the carrier stays bounded.
+        if ((FixedInterval.FromPoint(value: FixedQ4816.MaxValue) - FixedInterval.FromPoint(value: FixedQ4816.One)).IsUnbounded) { return "the maximum less one became unbounded"; }
+        if (!new FixedInterval(lower: FixedQ4816.MinValue, upper: FixedQ4816.MaxValue).Contains(other: FixedInterval.FromPoint(value: FixedQ4816.MaxValue))) { return "the bounded whole carrier does not hold its maximum"; }
+        if (new FixedInterval(lower: FixedQ4816.MinValue, upper: FixedQ4816.MaxValue).Contains(other: FixedInterval.Entire)) { return "a bounded interval holds the unbounded one"; }
         if ((FixedInterval.FromPoint(value: FixedQ4816.One) / UnitBox) != FixedInterval.Entire) { return "a quotient by an interval holding zero is not the whole line"; }
 
         try {
@@ -310,10 +321,15 @@ internal static partial class Subjects {
     }
     private static bool Fits(BigInteger value) =>
         ((value >= long.MinValue) && (value <= long.MaxValue));
-    private static string? Mismatch(string name, FixedInterval actual, (long Lower, long Upper) expected) =>
-        (((actual.Lower.Value == expected.Lower) && (actual.Upper.Value == expected.Upper))
-            ? null
-            : $"{name} is {actual}, the directed hull is [{expected.Lower}, {expected.Upper}] in raws");
+    // The subject against the expected hull: null expects the unbounded interval, the hull having left the carrier.
+    private static string? Mismatch(string name, FixedInterval actual, (long Lower, long Upper)? expected) =>
+        ((expected is { } hull)
+            ? ((!actual.IsUnbounded && (actual.Lower.Value == hull.Lower) && (actual.Upper.Value == hull.Upper))
+                ? null
+                : $"{name} is {actual}, the directed hull is [{hull.Lower}, {hull.Upper}] in raws")
+            : (actual.IsUnbounded
+                ? null
+                : $"{name} is {actual}, but its exact hull leaves the carrier, so it must be unbounded"));
     // The chosen enclosure, clipped to [−1, 1]: the series' own width can reach a guard unit past a value of exactly ±1,
     // where the true value cannot go.
     private static Oracles.Enclosure Circular((Oracles.Enclosure Sin, Oracles.Enclosure Cos) enclosures, bool cosine) {

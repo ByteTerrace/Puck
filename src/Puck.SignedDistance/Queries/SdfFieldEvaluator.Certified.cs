@@ -9,7 +9,9 @@ public enum SdfCertifiedSweepOutcome {
     /// <summary>The sphere's next box cannot be proved clear: a surface may lie within one more step, or the box may
     /// leave the evaluator's frame.</summary>
     Contact = 1,
-    /// <summary>The caller's bounds-query budget ran out first; the fraction reached is still certified clear.</summary>
+    /// <summary>The sweep could not certify further: the caller's bounds-query budget ran out, or a box's bounds were
+    /// unbounded (it left the evaluator's frame, where answers are refused). The fraction reached is still certified
+    /// clear.</summary>
     Exhausted = 2,
 }
 /// <summary>A certified sweep's answer: how far along the displacement the sphere is proved clear, and why it
@@ -111,7 +113,12 @@ public sealed partial class SdfFieldEvaluator {
 
             ++queries;
 
-            if ((clearance <= FixedQ4816.Zero) || here.IsUnboundedBelow) {
+            // An unbounded box proves nothing: the sweep stops undecided rather than reading its endpoints as a clearance.
+            if (here.IsUnbounded) {
+                break;
+            }
+
+            if (clearance <= FixedQ4816.Zero) {
                 outcome = SdfCertifiedSweepOutcome.Contact;
                 break;
             }
@@ -128,15 +135,22 @@ public sealed partial class SdfFieldEvaluator {
             while (queries < boundsQueryBudget) {
                 ++queries;
 
-                if (SweepBounds(displacement: displacement, from: fraction, radius: radius, start: start, to: next).Lower > FixedQ4816.Zero) {
+                var proof = SweepBounds(displacement: displacement, from: fraction, radius: radius, start: start, to: next);
+
+                if (!proof.IsUnbounded && (proof.Lower > FixedQ4816.Zero)) {
                     proved = true;
                     break;
                 }
 
                 var half = ((next - fraction) >> 1);
 
+                // A step that cannot shrink further ends in contact only when its box proved a surface may be near; an
+                // unbounded box proved nothing, so the sweep stops undecided.
                 if (half == 0L) {
-                    outcome = SdfCertifiedSweepOutcome.Contact;
+                    if (!proof.IsUnbounded) {
+                        outcome = SdfCertifiedSweepOutcome.Contact;
+                    }
+
                     break;
                 }
 
@@ -246,11 +260,7 @@ public sealed partial class SdfFieldEvaluator {
 
         box = new(X: (box.X + extent), Y: (box.Y + extent), Z: (box.Z + extent));
 
-        var outsideFrame = (
-            box.X.IsUnboundedBelow || box.X.IsUnboundedAbove ||
-            box.Y.IsUnboundedBelow || box.Y.IsUnboundedAbove ||
-            box.Z.IsUnboundedBelow || box.Z.IsUnboundedAbove
-        );
+        var outsideFrame = (box.X.IsUnbounded || box.Y.IsUnbounded || box.Z.IsUnbounded);
 
         // Charge one program walk even when the box's unbounded ends prevent certification.
         return ((TryDistanceBounds(

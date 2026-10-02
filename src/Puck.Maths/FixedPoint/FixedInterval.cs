@@ -12,12 +12,15 @@ namespace Puck.Maths;
 /// raw of the exact extreme, and equals it whenever it is representable. The transcendentals read the shipped
 /// round-to-nearest kernel at each endpoint and widen it by one raw, because each is pinned within one raw of the true
 /// value (<c>scalar.sincos-vs-series</c> at 0.50000001 ULP, <c>scalar.atan2-vs-series</c> at 0.75 ULP).</para>
-/// <para><b>The carrier's extremes are unbounded.</b> A <see cref="Lower"/> of <see cref="FixedQ4816.MinValue"/>
-/// stands for −∞ and an <see cref="Upper"/> of <see cref="FixedQ4816.MaxValue"/> for +∞; an exact endpoint past the
-/// carrier saturates to that sentinel rather than wrapping. A point operation that wraps the carrier leaves every
-/// interval's guarantee, because its answer is no longer the rounding of the exact one.</para>
+/// <para><b>Overflow is the top, and the top absorbs.</b> An operation whose exact hull leaves the carrier answers
+/// <see cref="Entire"/>, the unbounded interval, rather than a saturated or wrapped endpoint, and every operation given
+/// <see cref="Entire"/> answers <see cref="Entire"/>, the bounded ones (a clamp, a minimum, a sine, a product with
+/// zero) included. An overflow anywhere in a computation therefore reaches its result: a bounded result proves that no
+/// step of it left the carrier, and so that the round-to-nearest point evaluation of the same steps never wrapped. The
+/// carrier's extremes are ordinary values of a bounded interval.</para>
 /// <para><b>Inclusion isotonic.</b> Shrinking an operand never widens a result: every rule reads only the exact
-/// extremes of its operands over the interval, which can only move inward.</para>
+/// extremes of its operands over the interval, which can only move inward, and a bounded operand inside an unbounded
+/// one only moves a result down from <see cref="Entire"/>.</para>
 /// </remarks>
 public readonly record struct FixedInterval {
     private const int FractionBitCount = FixedQ4816.FractionBitCount;
@@ -30,9 +33,9 @@ public readonly record struct FixedInterval {
     // just outside, which only widens the answer to the unit bound it would have reached a raw later.
     private const long CriticalAngleSlackRaw = 4L;
 
-    /// <summary>Creates the interval <c>[<paramref name="lower"/>, <paramref name="upper"/>]</c>.</summary>
-    /// <param name="lower">The lower endpoint; <see cref="FixedQ4816.MinValue"/> stands for −∞.</param>
-    /// <param name="upper">The upper endpoint; <see cref="FixedQ4816.MaxValue"/> stands for +∞.</param>
+    /// <summary>Creates the bounded interval <c>[<paramref name="lower"/>, <paramref name="upper"/>]</c>.</summary>
+    /// <param name="lower">The lower endpoint.</param>
+    /// <param name="upper">The upper endpoint.</param>
     /// <exception cref="ArgumentException"><paramref name="lower"/> exceeds <paramref name="upper"/>.</exception>
     public FixedInterval(FixedQ4816 lower, FixedQ4816 upper) {
         if (lower > upper) {
@@ -41,21 +44,27 @@ public readonly record struct FixedInterval {
 
         Lower = lower;
         Upper = upper;
+        IsUnbounded = false;
     }
 
-    /// <summary>Gets the interval holding every value, <c>[−∞, +∞]</c>.</summary>
-    public static FixedInterval Entire => new(
-        lower: FixedQ4816.MinValue,
-        upper: FixedQ4816.MaxValue
-    );
-    /// <summary>Gets the lower endpoint; <see cref="FixedQ4816.MinValue"/> stands for −∞.</summary>
+    private FixedInterval(bool unbounded) {
+        Lower = FixedQ4816.MinValue;
+        Upper = FixedQ4816.MaxValue;
+        IsUnbounded = unbounded;
+    }
+
+    /// <summary>Gets the unbounded interval, every real value: the answer to any operation whose exact hull leaves the
+    /// carrier, and to any operation given it.</summary>
+    public static FixedInterval Entire { get; } = new(unbounded: true);
+    /// <summary>Gets the lower endpoint; <see cref="FixedQ4816.MinValue"/> when <see cref="IsUnbounded"/>, where it
+    /// bounds nothing.</summary>
     public FixedQ4816 Lower { get; }
-    /// <summary>Gets the upper endpoint; <see cref="FixedQ4816.MaxValue"/> stands for +∞.</summary>
+    /// <summary>Gets the upper endpoint; <see cref="FixedQ4816.MaxValue"/> when <see cref="IsUnbounded"/>, where it
+    /// bounds nothing.</summary>
     public FixedQ4816 Upper { get; }
-    /// <summary>Gets whether the interval is unbounded below.</summary>
-    public bool IsUnboundedBelow => (Lower.Value == long.MinValue);
-    /// <summary>Gets whether the interval is unbounded above.</summary>
-    public bool IsUnboundedAbove => (Upper.Value == long.MaxValue);
+    /// <summary>Gets whether this is <see cref="Entire"/>: a computation that left the carrier, whose endpoints bound
+    /// nothing.</summary>
+    public bool IsUnbounded { get; }
 
     /// <summary>Returns the degenerate interval holding one value.</summary>
     /// <param name="value">The value.</param>
@@ -74,58 +83,51 @@ public readonly record struct FixedInterval {
     /// <summary>Returns the smallest interval holding both intervals.</summary>
     /// <param name="first">One interval.</param>
     /// <param name="second">The other interval.</param>
-    /// <returns>The hull of their union.</returns>
-    public static FixedInterval Union(FixedInterval first, FixedInterval second) => new(
-        lower: FixedQ4816.Min(x: first.Lower, y: second.Lower),
-        upper: FixedQ4816.Max(x: first.Upper, y: second.Upper)
-    );
+    /// <returns>The hull of their union; <see cref="Entire"/> when either is.</returns>
+    public static FixedInterval Union(FixedInterval first, FixedInterval second) => ((first.IsUnbounded || second.IsUnbounded)
+        ? Entire
+        : new(
+            lower: FixedQ4816.Min(x: first.Lower, y: second.Lower),
+            upper: FixedQ4816.Max(x: first.Upper, y: second.Upper)
+        ));
     /// <summary>Returns whether the interval holds <paramref name="value"/>.</summary>
     /// <param name="value">The value tested.</param>
-    /// <returns><see langword="true"/> when <c>Lower ≤ value ≤ Upper</c>.</returns>
+    /// <returns><see langword="true"/> when <c>Lower ≤ value ≤ Upper</c>, and always for <see cref="Entire"/>.</returns>
     public bool Contains(FixedQ4816 value) =>
-        ((Lower <= value) && (value <= Upper));
+        (IsUnbounded || ((Lower <= value) && (value <= Upper)));
     /// <summary>Returns whether the interval holds every value of <paramref name="other"/>.</summary>
     /// <param name="other">The interval tested.</param>
-    /// <returns><see langword="true"/> when <paramref name="other"/> is a subset of this interval.</returns>
+    /// <returns><see langword="true"/> when <paramref name="other"/> is a subset of this interval: always for
+    /// <see cref="Entire"/>, and never for a bounded interval asked about <see cref="Entire"/>.</returns>
     public bool Contains(FixedInterval other) =>
-        ((Lower <= other.Lower) && (other.Upper <= Upper));
+        (IsUnbounded || (!other.IsUnbounded && (Lower <= other.Lower) && (other.Upper <= Upper)));
 
     /// <summary>Returns the interval of every sum.</summary>
-    public static FixedInterval operator +(FixedInterval left, FixedInterval right) => new(
-        lower: ((left.IsUnboundedBelow || right.IsUnboundedBelow)
-            ? FixedQ4816.MinValue
-            : Saturate(value: (((Int128)left.Lower.Value) + right.Lower.Value))),
-        upper: ((left.IsUnboundedAbove || right.IsUnboundedAbove)
-            ? FixedQ4816.MaxValue
-            : Saturate(value: (((Int128)left.Upper.Value) + right.Upper.Value)))
-    );
-    /// <summary>Returns the interval of every negation.</summary>
-    public static FixedInterval operator -(FixedInterval value) => new(
-        lower: (value.IsUnboundedAbove
-            ? FixedQ4816.MinValue
-            : Saturate(value: -((Int128)value.Upper.Value))),
-        upper: (value.IsUnboundedBelow
-            ? FixedQ4816.MaxValue
-            : Saturate(value: -((Int128)value.Lower.Value)))
-    );
-    /// <summary>Returns the interval of every difference, formed directly rather than as a sum with the negation, so a
-    /// subtrahend reaching one raw above the carrier's minimum does not negate onto the unbounded sentinel.</summary>
-    public static FixedInterval operator -(FixedInterval left, FixedInterval right) => new(
-        lower: ((left.IsUnboundedBelow || right.IsUnboundedAbove)
-            ? FixedQ4816.MinValue
-            : Saturate(value: (((Int128)left.Lower.Value) - right.Upper.Value))),
-        upper: ((left.IsUnboundedAbove || right.IsUnboundedBelow)
-            ? FixedQ4816.MaxValue
-            : Saturate(value: (((Int128)left.Upper.Value) - right.Lower.Value)))
-    );
+    public static FixedInterval operator +(FixedInterval left, FixedInterval right) => ((left.IsUnbounded || right.IsUnbounded)
+        ? Entire
+        : Exact(
+            lower: (((Int128)left.Lower.Value) + right.Lower.Value),
+            upper: (((Int128)left.Upper.Value) + right.Upper.Value)
+        ));
+    /// <summary>Returns the interval of every negation; <see cref="Entire"/> when the operand reaches the carrier's
+    /// minimum, whose negation the carrier does not hold.</summary>
+    public static FixedInterval operator -(FixedInterval value) => (value.IsUnbounded
+        ? Entire
+        : Exact(
+            lower: -((Int128)value.Upper.Value),
+            upper: -((Int128)value.Lower.Value)
+        ));
+    /// <summary>Returns the interval of every difference.</summary>
+    public static FixedInterval operator -(FixedInterval left, FixedInterval right) => ((left.IsUnbounded || right.IsUnbounded)
+        ? Entire
+        : Exact(
+            lower: (((Int128)left.Lower.Value) - right.Upper.Value),
+            upper: (((Int128)left.Upper.Value) - right.Lower.Value)
+        ));
     /// <summary>Returns the interval of every product: the floor of the least exact endpoint product and the ceiling
     /// of the greatest.</summary>
     public static FixedInterval operator *(FixedInterval left, FixedInterval right) {
-        if (IsZero(value: left) || IsZero(value: right)) {
-            return FromPoint(value: FixedQ4816.Zero);
-        }
-
-        if (left.IsUnboundedBelow || left.IsUnboundedAbove || right.IsUnboundedBelow || right.IsUnboundedAbove) {
+        if (left.IsUnbounded || right.IsUnbounded) {
             return Entire;
         }
 
@@ -134,22 +136,21 @@ public readonly record struct FixedInterval {
         var c = (((Int128)left.Upper.Value) * right.Lower.Value);
         var d = (((Int128)left.Upper.Value) * right.Upper.Value);
 
-        return new(
-            lower: FloorShift(value: Int128.Min(x: Int128.Min(x: a, y: b), y: Int128.Min(x: c, y: d)), shift: FractionBitCount),
-            upper: CeilingShift(value: Int128.Max(x: Int128.Max(x: a, y: b), y: Int128.Max(x: c, y: d)), shift: FractionBitCount)
+        return Exact(
+            lower: (Int128.Min(x: Int128.Min(x: a, y: b), y: Int128.Min(x: c, y: d)) >> FractionBitCount),
+            upper: Ceiling(value: Int128.Max(x: Int128.Max(x: a, y: b), y: Int128.Max(x: c, y: d)), shift: FractionBitCount)
         );
     }
-    /// <summary>Returns the interval of every quotient, or <see cref="Entire"/> when the divisor holds zero or either
-    /// operand is unbounded.</summary>
+    /// <summary>Returns the interval of every quotient, or <see cref="Entire"/> when the divisor holds zero.</summary>
     public static FixedInterval operator /(FixedInterval left, FixedInterval right) {
-        if (right.Contains(value: FixedQ4816.Zero) || left.IsUnboundedBelow || left.IsUnboundedAbove || right.IsUnboundedBelow || right.IsUnboundedAbove) {
+        if (left.IsUnbounded || right.IsUnbounded || right.Contains(value: FixedQ4816.Zero)) {
             return Entire;
         }
 
         Span<long> numerators = [left.Lower.Value, left.Upper.Value];
         Span<long> denominators = [right.Lower.Value, right.Upper.Value];
-        var lower = long.MaxValue;
-        var upper = long.MinValue;
+        var lower = Int128.MaxValue;
+        var upper = Int128.MinValue;
 
         // A quotient is monotone in each operand over a divisor of one sign, so its extremes sit at the four corners.
         foreach (var numerator in numerators) {
@@ -159,21 +160,23 @@ public readonly record struct FixedInterval {
                     numerator: (((Int128)numerator) << FractionBitCount)
                 );
 
-                lower = Math.Min(val1: lower, val2: floor);
-                upper = Math.Max(val1: upper, val2: ceiling);
+                lower = Int128.Min(x: lower, y: floor);
+                upper = Int128.Max(x: upper, y: ceiling);
             }
         }
 
-        return new(
-            lower: FixedQ4816.FromRawBits(value: lower),
-            upper: FixedQ4816.FromRawBits(value: upper)
-        );
+        return Exact(lower: lower, upper: upper);
     }
 
     /// <summary>Returns the interval of every absolute value.</summary>
     /// <param name="value">The operand.</param>
-    /// <returns><c>|value|</c>, which starts at zero when the operand straddles it.</returns>
+    /// <returns><c>|value|</c>, which starts at zero when the operand straddles it; <see cref="Entire"/> when the operand
+    /// reaches the carrier's minimum.</returns>
     public static FixedInterval Abs(FixedInterval value) {
+        if (value.IsUnbounded) {
+            return Entire;
+        }
+
         if (value.Lower.Value >= 0L) {
             return value;
         }
@@ -182,11 +185,9 @@ public readonly record struct FixedInterval {
             return -value;
         }
 
-        var negated = -value;
-
-        return new(
-            lower: FixedQ4816.Zero,
-            upper: FixedQ4816.Max(x: negated.Upper, y: value.Upper)
+        return Exact(
+            lower: Int128.Zero,
+            upper: Int128.Max(x: -((Int128)value.Lower.Value), y: value.Upper.Value)
         );
     }
     /// <summary>Returns the interval of every square, tighter than a product of the operand with itself because both
@@ -195,67 +196,76 @@ public readonly record struct FixedInterval {
     /// <returns><c>value²</c>.</returns>
     public static FixedInterval Square(FixedInterval value) {
         var magnitude = Abs(value: value);
-        var low = ((Int128)magnitude.Lower.Value);
 
-        return new(
-            lower: FloorShift(shift: FractionBitCount, value: (low * low)),
-            upper: (magnitude.IsUnboundedAbove
-                ? FixedQ4816.MaxValue
-                : CeilingShift(value: (((Int128)magnitude.Upper.Value) * magnitude.Upper.Value), shift: FractionBitCount))
+        if (magnitude.IsUnbounded) {
+            return Entire;
+        }
+
+        var low = ((Int128)magnitude.Lower.Value);
+        var high = ((Int128)magnitude.Upper.Value);
+
+        return Exact(
+            lower: ((low * low) >> FractionBitCount),
+            upper: Ceiling(shift: FractionBitCount, value: (high * high))
         );
     }
     /// <summary>Returns the interval of every square root, with the non-positive part answering zero as
     /// <see cref="FixedQ4816.Sqrt"/> does.</summary>
     /// <param name="value">The operand.</param>
     /// <returns>The floor root of the lower endpoint and the ceiling root of the upper.</returns>
-    public static FixedInterval Sqrt(FixedInterval value) => new(
-        lower: FixedQ4816.FromRawBits(value: FloorRoot(radicand: (((UInt128)((ulong)Math.Max(val1: 0L, val2: value.Lower.Value))) << FractionBitCount))),
-        upper: (value.IsUnboundedAbove
-            ? FixedQ4816.MaxValue
-            : FixedQ4816.FromRawBits(value: CeilingRoot(radicand: (((UInt128)((ulong)Math.Max(val1: 0L, val2: value.Upper.Value))) << FractionBitCount))))
-    );
+    public static FixedInterval Sqrt(FixedInterval value) => (value.IsUnbounded
+        ? Entire
+        : Exact(
+            lower: FloorRoot(radicand: (((UInt128)((ulong)Math.Max(val1: 0L, val2: value.Lower.Value))) << FractionBitCount)),
+            upper: CeilingRoot(radicand: (((UInt128)((ulong)Math.Max(val1: 0L, val2: value.Upper.Value))) << FractionBitCount))
+        ));
     /// <summary>Returns the interval of every lesser of two values.</summary>
-    public static FixedInterval Min(FixedInterval first, FixedInterval second) => new(
-        lower: FixedQ4816.Min(x: first.Lower, y: second.Lower),
-        upper: FixedQ4816.Min(x: first.Upper, y: second.Upper)
-    );
+    public static FixedInterval Min(FixedInterval first, FixedInterval second) => ((first.IsUnbounded || second.IsUnbounded)
+        ? Entire
+        : new(
+            lower: FixedQ4816.Min(x: first.Lower, y: second.Lower),
+            upper: FixedQ4816.Min(x: first.Upper, y: second.Upper)
+        ));
     /// <summary>Returns the interval of every greater of two values.</summary>
-    public static FixedInterval Max(FixedInterval first, FixedInterval second) => new(
-        lower: FixedQ4816.Max(x: first.Lower, y: second.Lower),
-        upper: FixedQ4816.Max(x: first.Upper, y: second.Upper)
-    );
+    public static FixedInterval Max(FixedInterval first, FixedInterval second) => ((first.IsUnbounded || second.IsUnbounded)
+        ? Entire
+        : new(
+            lower: FixedQ4816.Max(x: first.Lower, y: second.Lower),
+            upper: FixedQ4816.Max(x: first.Upper, y: second.Upper)
+        ));
     /// <summary>Returns the interval of every <see cref="FixedQ4816.Round"/> result, which is monotone, so the rounded
     /// endpoints are exact.</summary>
     /// <param name="value">The operand.</param>
-    /// <returns>The rounded endpoints; an unbounded end stays unbounded.</returns>
-    public static FixedInterval Round(FixedInterval value) => new(
-        lower: (value.IsUnboundedBelow
-            ? FixedQ4816.MinValue
-            : RoundToEvenInteger(raw: value.Lower.Value)),
-        upper: (value.IsUnboundedAbove
-            ? FixedQ4816.MaxValue
-            : RoundToEvenInteger(raw: value.Upper.Value))
-    );
+    /// <returns>The rounded endpoints; <see cref="Entire"/> where rounding up passes the carrier.</returns>
+    public static FixedInterval Round(FixedInterval value) => (value.IsUnbounded
+        ? Entire
+        : Exact(
+            lower: RoundToEvenInteger(raw: value.Lower.Value),
+            upper: RoundToEvenInteger(raw: value.Upper.Value)
+        ));
     /// <summary>Returns the interval of every <see cref="FixedQ4816.Floor"/> result, which is monotone, so the floored
     /// endpoints are exact.</summary>
     /// <param name="value">The operand.</param>
-    /// <returns>The floored endpoints; an unbounded end stays unbounded.</returns>
-    public static FixedInterval Floor(FixedInterval value) => new(
-        lower: FixedQ4816.Floor(value: value.Lower),
-        upper: (value.IsUnboundedAbove
-            ? FixedQ4816.MaxValue
-            : FixedQ4816.Floor(value: value.Upper))
-    );
+    /// <returns>The floored endpoints.</returns>
+    public static FixedInterval Floor(FixedInterval value) => (value.IsUnbounded
+        ? Entire
+        : new(
+            lower: FixedQ4816.Floor(value: value.Lower),
+            upper: FixedQ4816.Floor(value: value.Upper)
+        ));
     /// <summary>Returns the interval of every <see cref="FixedQ4816.Clamp"/> result between two fixed bounds, which is
     /// monotone, so the clamped endpoints are exact.</summary>
     /// <param name="value">The operand.</param>
     /// <param name="minimum">The lower bound, at most <paramref name="maximum"/>.</param>
     /// <param name="maximum">The upper bound.</param>
-    /// <returns>The clamped endpoints.</returns>
-    public static FixedInterval Clamp(FixedInterval value, FixedQ4816 minimum, FixedQ4816 maximum) => new(
-        lower: FixedQ4816.Clamp(value: value.Lower, minimum: minimum, maximum: maximum),
-        upper: FixedQ4816.Clamp(value: value.Upper, minimum: minimum, maximum: maximum)
-    );
+    /// <returns>The clamped endpoints; <see cref="Entire"/> for an unbounded operand, whose overflow a clamp must not
+    /// hide.</returns>
+    public static FixedInterval Clamp(FixedInterval value, FixedQ4816 minimum, FixedQ4816 maximum) => (value.IsUnbounded
+        ? Entire
+        : new(
+            lower: FixedQ4816.Clamp(value: value.Lower, minimum: minimum, maximum: maximum),
+            upper: FixedQ4816.Clamp(value: value.Upper, minimum: minimum, maximum: maximum)
+        ));
     /// <summary>Returns the interval of every Euclidean length <c>√(x² + y²)</c>, decided on the exact sums of squares
     /// and rooted once in each direction, so it holds every <see cref="FixedVector2"/> length the box reaches.</summary>
     public static FixedInterval Magnitude(FixedInterval x, FixedInterval y) => Magnitude(
@@ -265,22 +275,19 @@ public readonly record struct FixedInterval {
     );
     /// <summary>Returns the interval of every Euclidean length <c>√(x² + y² + z²)</c>: the floor root of the least exact
     /// sum of squares the box reaches and the ceiling root of the greatest, so it holds every
-    /// <see cref="FixedVector3.Length"/> inside the box.</summary>
+    /// <see cref="FixedVector3.Length"/> inside the box. <see cref="Entire"/> where the greatest length passes the
+    /// carrier, where the point length saturates rather than answering it.</summary>
     public static FixedInterval Magnitude(FixedInterval x, FixedInterval y, FixedInterval z) {
-        var least = ((LeastSquare(value: x) + LeastSquare(value: y)) + LeastSquare(value: z));
-
-        if (x.IsUnboundedBelow || x.IsUnboundedAbove || y.IsUnboundedBelow || y.IsUnboundedAbove || z.IsUnboundedBelow || z.IsUnboundedAbove) {
-            return new(
-                lower: FixedQ4816.FromRawBits(value: FloorRoot(radicand: least)),
-                upper: FixedQ4816.MaxValue
-            );
+        if (x.IsUnbounded || y.IsUnbounded || z.IsUnbounded) {
+            return Entire;
         }
 
+        var least = ((LeastSquare(value: x) + LeastSquare(value: y)) + LeastSquare(value: z));
         var greatest = ((GreatestSquare(value: x) + GreatestSquare(value: y)) + GreatestSquare(value: z));
 
-        return new(
-            lower: FixedQ4816.FromRawBits(value: FloorRoot(radicand: least)),
-            upper: FixedQ4816.FromRawBits(value: CeilingRoot(radicand: greatest))
+        return Exact(
+            lower: FloorRoot(radicand: least),
+            upper: CeilingRoot(radicand: greatest)
         );
     }
     /// <summary>Returns the interval of every sine.</summary>
@@ -311,12 +318,16 @@ public readonly record struct FixedInterval {
             lower: FixedQ4816.FromRawBits(value: -HalfTurnCeilingRaw),
             upper: FixedQ4816.FromRawBits(value: HalfTurnCeilingRaw)
         );
+
+        if (y.IsUnbounded || x.IsUnbounded) {
+            return Entire;
+        }
+
         var holdsZeroOrdinate = y.Contains(value: FixedQ4816.Zero);
 
         if (
             (holdsZeroOrdinate && x.Contains(value: FixedQ4816.Zero)) ||
-            ((x.Lower.Value < 0L) && (y.Lower.Value < 0L) && holdsZeroOrdinate) ||
-            y.IsUnboundedBelow || y.IsUnboundedAbove || x.IsUnboundedBelow || x.IsUnboundedAbove
+            ((x.Lower.Value < 0L) && (y.Lower.Value < 0L) && holdsZeroOrdinate)
         ) {
             return circle;
         }
@@ -347,6 +358,10 @@ public readonly record struct FixedInterval {
     /// ceiling: the angle is monotone in the root, so the two brackets hold the exact angle, and each is the shipped
     /// arctangent within one raw.</remarks>
     public static FixedInterval Asin(FixedInterval value) {
+        if (value.IsUnbounded) {
+            return Entire;
+        }
+
         var (low, high) = ClampToUnit(value: value);
 
         return new(
@@ -360,6 +375,10 @@ public readonly record struct FixedInterval {
     /// <remarks>Formed as <c>atan2(√(1 − v²), v)</c> at each endpoint with the root bracketed by its exact floor and
     /// ceiling, as <see cref="Asin"/> is; the arccosine falls as the operand rises.</remarks>
     public static FixedInterval Acos(FixedInterval value) {
+        if (value.IsUnbounded) {
+            return Entire;
+        }
+
         var (low, high) = ClampToUnit(value: value);
 
         return new(
@@ -368,10 +387,20 @@ public readonly record struct FixedInterval {
         );
     }
     /// <inheritdoc/>
-    public override string ToString() => $"[{Lower}, {Upper}]";
+    public override string ToString() => (IsUnbounded
+        ? "(−∞, +∞)"
+        : $"[{Lower}, {Upper}]");
 
-    // FixedQ4816.Round's ties-to-even integer, saturated where the rounded value passes the carrier rather than thrown.
-    private static FixedQ4816 RoundToEvenInteger(long raw) {
+    // The bounded interval of two exact raw endpoints, or the top when either leaves the carrier.
+    private static FixedInterval Exact(Int128 lower, Int128 upper) =>
+        (((lower < long.MinValue) || (upper > long.MaxValue))
+            ? Entire
+            : new(
+                lower: FixedQ4816.FromRawBits(value: ((long)lower)),
+                upper: FixedQ4816.FromRawBits(value: ((long)upper))
+            ));
+    // FixedQ4816.Round's ties-to-even integer, exact and unsaturated.
+    private static Int128 RoundToEvenInteger(long raw) {
         var integer = (raw >> FractionBitCount);
         var fraction = raw & (RawOne - 1L);
         var half = (RawOne >> 1);
@@ -380,26 +409,16 @@ public readonly record struct FixedInterval {
             ++integer;
         }
 
-        return Saturate(value: (((Int128)integer) << FractionBitCount));
+        return (((Int128)integer) << FractionBitCount);
     }
-    private static bool IsZero(FixedInterval value) =>
-        ((value.Lower.Value == 0L) && (value.Upper.Value == 0L));
-    private static FixedQ4816 Saturate(Int128 value) => FixedQ4816.FromRawBits(value: ((value > long.MaxValue)
-        ? long.MaxValue
-        : ((value < long.MinValue)
-            ? long.MinValue
-            : ((long)value))));
     // Int128's arithmetic shift is the floor; the ceiling is the negated floor of the negation.
-    private static FixedQ4816 FloorShift(Int128 value, int shift) =>
-        Saturate(value: (value >> shift));
-    private static FixedQ4816 CeilingShift(Int128 value, int shift) =>
-        Saturate(value: -((-value) >> shift));
-    // The floor and ceiling of numerator/denominator for a non-zero denominator, saturated to the carrier.
-    private static (long Floor, long Ceiling) DirectedQuotient(Int128 numerator, long denominator) {
+    private static Int128 Ceiling(Int128 value, int shift) =>
+        -((-value) >> shift);
+    // The floor and ceiling of numerator/denominator for a non-zero denominator.
+    private static (Int128 Floor, Int128 Ceiling) DirectedQuotient(Int128 numerator, long denominator) {
         var quotient = Int128.DivRem(left: numerator, right: denominator);
-        var truncated = quotient.Quotient;
-        var floor = truncated;
-        var ceiling = truncated;
+        var floor = quotient.Quotient;
+        var ceiling = quotient.Quotient;
 
         if (quotient.Remainder != Int128.Zero) {
             // Truncation rounds toward zero: a positive exact quotient's floor is the truncation, a negative one's the
@@ -411,25 +430,18 @@ public readonly record struct FixedInterval {
             }
         }
 
-        return (Saturate(value: floor).Value, Saturate(value: ceiling).Value);
+        return (floor, ceiling);
     }
-    private static long FloorRoot(UInt128 radicand) {
-        var root = radicand.SquareRoot();
-
-        return ((root > ((UInt128)long.MaxValue))
-            ? long.MaxValue
-            : ((long)root));
-    }
-    private static long CeilingRoot(UInt128 radicand) {
+    private static Int128 FloorRoot(UInt128 radicand) =>
+        ((Int128)radicand.SquareRoot());
+    private static Int128 CeilingRoot(UInt128 radicand) {
         var root = radicand.SquareRoot();
 
         if ((root * root) != radicand) {
             ++root;
         }
 
-        return ((root > ((UInt128)long.MaxValue))
-            ? long.MaxValue
-            : ((long)root));
+        return ((Int128)root);
     }
     // The least and greatest exact squares over an interval, in raw² units; a magnitude of 2⁶³ squares to 2¹²⁶.
     private static UInt128 LeastSquare(FixedInterval value) {
@@ -458,11 +470,12 @@ public readonly record struct FixedInterval {
             upper: FixedQ4816.FromRawBits(value: RawOne)
         );
 
-        // A span of a whole turn or more reaches both a crest and a trough, as does an unbounded one.
-        if (
-            angle.IsUnboundedBelow || angle.IsUnboundedAbove ||
-            ((((Int128)angle.Upper.Value) - angle.Lower.Value) >= ((((Int128)2) * FixedQ4816.PiQ61) >> (FixedQ4816.PiQ61FractionBitCount - FractionBitCount)))
-        ) {
+        if (angle.IsUnbounded) {
+            return Entire;
+        }
+
+        // A span of a whole turn or more reaches both a crest and a trough.
+        if ((((Int128)angle.Upper.Value) - angle.Lower.Value) >= ((((Int128)2) * FixedQ4816.PiQ61) >> (FixedQ4816.PiQ61FractionBitCount - FractionBitCount))) {
             return unit;
         }
 
@@ -528,7 +541,7 @@ public readonly record struct FixedInterval {
     private static (long Floor, long Ceiling) UnitComplementRoot(long value) {
         var radicand = ((UInt128)((ulong)((1L << (2 * FractionBitCount)) - (value * value))));
 
-        return (FloorRoot(radicand: radicand), CeilingRoot(radicand: radicand));
+        return (((long)FloorRoot(radicand: radicand)), ((long)CeilingRoot(radicand: radicand)));
     }
     private static long ArcEndpoint(long sine, bool lower) {
         var (floor, ceiling) = UnitComplementRoot(value: sine);

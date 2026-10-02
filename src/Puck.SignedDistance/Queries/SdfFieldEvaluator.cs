@@ -132,6 +132,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                 break;
             }
         }
+
+        m_frameRaw = FindFrame(evaluator: this);
     }
 
     // StepScale is a lower-bound multiplier: rounding it upward would make a later advance larger than the program's
@@ -1608,19 +1610,21 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// alone would alias the whole field with the 2^<see cref="FixedPosition.CellSizeLog2"/>-unit cell period and
     /// answer for the wrong copy; <see cref="FixedPosition.FromLocal"/> creates a nonzero cell on its own past half a
     /// cell, so no caller has to opt in to reach that. Rebasing is exact integer arithmetic and is the identity for a
-    /// position already in cell <c>(0,0,0)</c>. Returns <see langword="false"/> when the program declares no shape, or
-    /// when the displacement is outside signed Q48.16 (past ~1.4e14 units from the origin), which no authored program
-    /// can hold geometry at.</remarks>
+    /// position already in cell <c>(0,0,0)</c>. Returns <see langword="false"/> when the program declares no shape, when
+    /// the displacement is outside signed Q48.16 (past ~1.4e14 units from the origin), or when it lies outside
+    /// <see cref="Frame"/>, where some step of the evaluation could leave the carrier and wrap.</remarks>
     public bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material) {
         distance = FixedQ4816.Zero;
         material = 0;
 
+        // Outside the frame some step of the evaluation can leave the carrier, so the position is refused, never wrapped.
         if (
             !m_hasShape ||
             !position.TryDelta(
             delta: out var worldPosition,
             origin: FixedPosition.Zero
-        )
+        ) ||
+            !IsInFrame(point: worldPosition)
         ) {
             return false;
         }
