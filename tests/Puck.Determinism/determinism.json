@@ -1,0 +1,74 @@
+{
+    "schema": "puck.determinism.manifest.v1",
+    "scenarios": [
+        {
+            "name": "body-dynamics",
+            "world": "../Puck.World.Canaries/body-dynamics/fixture.world.json",
+            "ticks": 240,
+            "seats": [0],
+            "intents": [
+                {"body": 0, "from": 1, "through": 120, "channels": {"forward": "1"}},
+                {"body": 0, "from": 60, "through": 90, "channels": {"forward": "1", "turn": "0.5"}}
+            ],
+            "cells": []
+        },
+        {
+            "name": "traveller-kit",
+            "world": "../Puck.World.Canaries/traveller-kit/fixture.world.json",
+            "ticks": 120,
+            "seats": [0],
+            "intents": [
+                {"body": 0, "from": 1, "through": 60, "channels": {"forward": "1"}},
+                {"body": 0, "from": 20, "through": 24, "channels": {"forward": "1", "jump": "1"}},
+                {"body": 0, "from": 40, "through": 41, "channels": {"forward": "1", "dash": "1"}}
+            ],
+            "cells": []
+        },
+        {
+            "name": "records-pools",
+            "world": "../Puck.World.Canaries/records-pools/fixture.world.json",
+            "ticks": 60,
+            "seats": [],
+            "intents": [],
+            "cells": [
+                {"tick": 10, "row": "request", "key": "$value", "value": "1"}
+            ]
+        },
+        {
+            "name": "tabletop-state",
+            "world": "../Puck.World.Canaries/tabletop-state/fixture.world.json",
+            "ticks": 60,
+            "seats": [],
+            "intents": [],
+            "cells": [
+                {"tick": 10, "row": "destination", "key": "scout", "value": "2"}
+            ]
+        },
+        {
+            "name": "flow-conservation",
+            "world": "../Puck.World.Canaries/flow-conservation-live/fixture.world.json",
+            "ticks": 240,
+            "seats": [],
+            "intents": [],
+            "cells": []
+        },
+        {
+            "name": "kart-lap",
+            "world": "../Puck.World.Canaries/kart-lap/host.world.json",
+            "ticks": 90,
+            "seats": [0],
+            "intents": [
+                {"body": 0, "from": 1, "through": 90, "channels": {"forward": "1"}}
+            ],
+            "cells": []
+        },
+        {
+            "name": "billiards",
+            "world": "../Puck.World.Tests/Fixtures/minimal-billiards-host.world.json",
+            "ticks": 120,
+            "seats": [0],
+            "intents": [],
+            "cells": []
+        }
+    ]
+}
