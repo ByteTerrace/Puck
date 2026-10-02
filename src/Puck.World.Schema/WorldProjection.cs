@@ -99,7 +99,8 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="Adjacencies">The reciprocal boundary rows.</param>
 /// <param name="Metadata">The title/description half of <c>metadata</c>, when the world authors one — see the type
 /// remarks.</param>
-/// <param name="Observations">Explicitly disclosed literal state observations, without executable or draw bookkeeping traits.</param>
+/// <param name="Observations">Explicitly disclosed state observations, without draw bookkeeping and with no trait but
+/// the follower an eased cell carries.</param>
 /// <param name="Spaces">The vector spaces the disclosed vector rows among <paramref name="Observations"/> name, and no
 /// other: a space declares only a model, a revision, and a dimension count, and a vector row loads only against its
 /// own.</param>
@@ -814,8 +815,10 @@ public static class WorldProjection {
         return true;
     }
 
-    // An observed row crosses as a plain state row of the literals the recipient was disclosed: no trait, no
-    // visibility, and no placeholder cell, since a placeholder names no key and a withheld cell is simply absent.
+    // An observed row crosses as a plain state row of the literals the recipient was disclosed: no visibility, no
+    // placeholder cell, since a placeholder names no key and a withheld cell is simply absent, and no trait but the
+    // follower an eased cell carries, so the recipient eases it as the authority presents it. A slot's follower is its
+    // row's, since a slot cell carries no trait of its own.
     private static bool TryObservedRow(WorldObservedRow observed, out WorldStateRow row, out string reason) {
         row = null!;
 
@@ -835,11 +838,30 @@ public static class WorldProjection {
             return false;
         }
 
+        if ((observed.Min is { } min) && (observed.Max is { } max) && (min > max)) {
+            reason = $"projection observation row '{observed.Name}' carries an envelope whose min {min} exceeds its max {max}";
+
+            return false;
+        }
+
         var cells = new List<StateCell>(capacity: observed.Cells.Count);
+        StateDynamics? slotDynamics = null;
 
         foreach (var cell in observed.Cells) {
             if (cell.Hidden) {
                 continue;
+            }
+
+            if ((cell.Dynamics is not null) && (observed.Kind is not (CellKind.Fixed or CellKind.Int))) {
+                reason = $"projection observation row '{observed.Name}' cell '{cell.Key}' eases, which only a Fixed or Int row does";
+
+                return false;
+            }
+
+            if ((cell.Clock is not null) && (cell.Dynamics is null)) {
+                reason = $"projection observation row '{observed.Name}' cell '{cell.Key}' carries a follower's clock without the dynamics it eases by";
+
+                return false;
             }
 
             if (!CellName.TryParse(
@@ -861,7 +883,17 @@ public static class WorldProjection {
                 return false;
             }
 
+            var slot = (key == WorldStateRow.SlotKey);
+
+            if (slot) {
+                slotDynamics = cell.Dynamics;
+            }
+
             cells.Add(item: new StateCell(
+                Clock: cell.Clock,
+                Dynamics: (slot
+                    ? null
+                    : cell.Dynamics),
                 Key: key,
                 Observation: cell.Observation,
                 Value: (observed.Kind switch {
@@ -875,9 +907,21 @@ public static class WorldProjection {
             ));
         }
 
+        // A slot's follower is the row's default, which every other cell that eases by none opts out of.
+        if (slotDynamics is not null) {
+            for (var index = 0; (index < cells.Count); index++) {
+                if ((cells[index].Key != WorldStateRow.SlotKey) && (cells[index].Dynamics is null)) {
+                    cells[index] = (cells[index] with { Behavior = StateCellBehavior.None });
+                }
+            }
+        }
+
         row = new WorldStateRow(
             Cells: cells,
+            Dynamics: slotDynamics,
             Kind: observed.Kind,
+            Max: observed.Max,
+            Min: observed.Min,
             Name: name,
             Space: observed.Space
         );

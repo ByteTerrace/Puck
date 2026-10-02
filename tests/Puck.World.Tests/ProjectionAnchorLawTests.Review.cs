@@ -1,5 +1,6 @@
 using System.Text;
 using Puck.Commands;
+using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -285,5 +286,120 @@ public sealed partial class ProjectionAnchorLawTests {
         Assert.Equal(expected: expected, actual: ClientFixtures.StateMirror(definition: next!).Scalar(fallback: float.NaN, scalar: density));
         observation.Dispose();
         feed.Release();
+    }
+    [Fact]
+    public void An_eased_binding_presents_what_the_authority_presents_and_its_target_reads_the_stored_value() {
+        var eased = new BindableScalar(binding: $"state.{Clock}");
+        var target = new BindableScalar(binding: $"state.{Clock}.$target");
+        var one = FixedQ4816.FromDouble(value: 1d).Value;
+        // An underdamped follower overshoots its target, so the envelope it is clamped to crosses with it.
+        var definition = Document(row: Row(dynamics: new StateDynamics(Row: "chase"), max: one, min: 0L, raw: 0L)) with {
+            RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [
+                new WorldRenderSkyLayer.Fog(Density: eased, Name: "eased"),
+                new WorldRenderSkyLayer.SunDisc(Intensity: target, Name: "sun"),
+            ])),
+            TimelineRaw = null,
+        };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        var (observation, mirror) = Observe(fixture: fixture);
+
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(Principal: Principal.Console, Row: Clock, Key: WorldStateRow.SlotKey.Value, Value: one, Kind: WorldDocumentWriteKind.Set));
+        fixture.Step();
+
+        var work = new WorldProjectionWork();
+        var easing = 0;
+        var stripped = false;
+
+        using (WorldProjectionWork.Attribute(work: work)) {
+            for (var index = 0; (index < (3 * RateHz)); index++) {
+                fixture.Step();
+
+                var host = ClientFixtures.StateMirror(definition: fixture.Server.Definition, engineTick: mirror.EngineTick, tick: mirror.Tick);
+                var recipient = ClientFixtures.StateMirror(definition: mirror.Definition, engineTick: mirror.EngineTick, tick: mirror.Tick);
+                var presented = host.Scalar(fallback: float.NaN, scalar: eased);
+
+                Assert.Equal(expected: presented, actual: recipient.Scalar(fallback: float.NaN, scalar: eased));
+                Assert.Equal(expected: 1f, actual: host.Scalar(fallback: float.NaN, scalar: target));
+                Assert.Equal(expected: 1f, actual: recipient.Scalar(fallback: float.NaN, scalar: target));
+
+                if (presented == 1f) {
+                    continue;
+                }
+
+                easing++;
+
+                if (stripped) {
+                    continue;
+                }
+
+                // Red leg: the stored truth alone, as observations carried it before, presents the target mid-ease.
+                var literal = mirror.Definition.WithWorldState(rows: [.. mirror.Definition.State.Select(selector: static row => ((row.Name.Value == Clock)
+                    ? (row with { Cells = [.. (row.Cells ?? []).Select(selector: static cell => (cell with { Clock = null, Dynamics = null }))], Dynamics = null })
+                    : row))]);
+
+                Assert.Equal(expected: 1f, actual: ClientFixtures.StateMirror(definition: literal, engineTick: mirror.EngineTick, tick: mirror.Tick).Scalar(fallback: float.NaN, scalar: eased));
+                stripped = true;
+            }
+        }
+
+        Assert.True(condition: stripped);
+        Assert.InRange(actual: easing, high: int.MaxValue, low: 2);
+        // The follower eases on the recipient from the state it was sent once: nothing crosses while it moves.
+        Assert.Equal(expected: 0L, actual: work.Read(kind: WorldProjectionWork.Deltas));
+        Assert.Equal(expected: 0L, actual: work.Read(kind: WorldProjectionWork.Documents));
+        observation.Dispose();
+    }
+    [Fact]
+    public void A_recipient_presents_forward_from_the_anchor_it_holds_and_never_seeks_back_through_coalesced_ones() {
+        var step = Fixtures.StepTicksAt(rateHz: RateHz);
+        var quarter = FixedQ4816.FromDouble(value: 0.25d).Value;
+        var threeQuarters = FixedQ4816.FromDouble(value: 0.75d).Value;
+        // The authority's history: still at a quarter through tick 1, then sought to three quarters at tick 2, where it
+        // advances or holds.
+        var history = Document(row: Row(raw: quarter));
+
+        foreach (var sought in new[] { Document(row: Row(advance: PerTick(raw: 1024L), raw: threeQuarters)), Document(row: Row(raw: threeQuarters)) }) {
+            var feed = new WorldProjectionFeed(recipient: null);
+
+            _ = feed.Compose(arena: Fixtures.Store(definition: history), authority: "boot", definition: history, revision: 1, time: ArenaTime.At(engineTick: step, tick: 1UL));
+
+            // Tick 1's anchor is replaced before a delivery reaches the recipient, which is sent only tick 2's.
+            var coalesced = feed.Compose(arena: Fixtures.Store(definition: sought), authority: "boot", definition: sought, revision: 1, time: ArenaTime.At(engineTick: (2UL * step), tick: 2UL));
+
+            Assert.True(condition: WorldProjection.TryToDefinition(definition: out var recipient, projection: coalesced.Projection!, reason: out var reason), userMessage: reason);
+
+            var anchor = AnchorOf(definition: recipient)!;
+
+            Assert.Equal(expected: (2UL * step), actual: anchor.Tick);
+
+            // Forward from the anchor, the recipient presents as the authority at every tick.
+            for (var tick = 2UL; (tick < 8UL); tick++) {
+                AssertPresentsAsTheHost(engineTick: (tick * step), host: sought, recipient: recipient, tick: tick);
+            }
+
+            // Behind it, the recipient presents the anchor's own phase, the latest it was told about, and the
+            // prediction refuses the seek by name.
+            Assert.True(condition: ClientFixtures.StateMirror(definition: recipient, engineTick: step, tick: 1UL).TryPhase(clock: out _, name: Clock, phase: out var held));
+            Assert.Equal(expected: WorldClockAnchor.ToTurn(phase: anchor.Phase), actual: held);
+
+            var refused = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => anchor.Predict(engineTick: step));
+
+            Assert.Contains(actualString: refused.Message, expectedSubstring: "never seeks backward");
+
+            // Red leg: a seek back through the coalesced anchor, holding it or extending its line, answers a phase the
+            // authority never presented at tick 1.
+            var presentedThen = HostPhase(definition: history, engineTick: step, tick: 1UL);
+
+            Assert.Equal(expected: 0.25d, actual: WorldClockAnchor.ToTurn(phase: presentedThen));
+            Assert.NotEqual(expected: presentedThen, actual: unchecked((anchor.Phase - ((ulong)anchor.Rate))));
+
+            // An authority restored to before the anchor it sent re-anchors rather than predicting backward.
+            Assert.Equal(expected: WorldProjectionDeliveryKind.Delta, actual: feed.Step(arena: Fixtures.Store(definition: history), definition: history, engineTick: step, tick: 1UL).Kind);
+            Assert.True(condition: feed.Anchors.TryHeld(anchor: out var restored, clock: Clock));
+            Assert.Equal(expected: step, actual: restored.Tick);
+            Assert.Equal(expected: presentedThen, actual: restored.Phase);
+            feed.Release();
+        }
     }
 }

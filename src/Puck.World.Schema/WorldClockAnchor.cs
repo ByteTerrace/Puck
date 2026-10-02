@@ -18,6 +18,11 @@ namespace Puck.World;
 /// <para>The rate is the phase one authoritative tick adds, <see cref="Step"/> engine ticks long. It is nonzero only over
 /// a span the authority has proved affine (<see cref="WorldClockAnchors.Read"/>); rate changes, quantized advances,
 /// staircases, eased rows and seeks all carry rate zero and re-anchor wherever the phase moves.</para>
+/// <para>An anchor predicts forward only. The authority keeps one anchor per recipient per clock and replaces it
+/// whenever a prediction misses, so anchors a recipient was never sent leave no trace in the one it holds: the phase
+/// before an anchor's tick is not the line extended backward, nor anything else a recipient can know.
+/// <see cref="Predict"/> refuses a tick before the anchor, and a presentation between the delivery before an anchor and
+/// the anchor's own tick presents the anchor's phase (<see cref="PhaseAt"/>).</para>
 /// </remarks>
 /// <param name="Tick">The engine tick the anchor stands at.</param>
 /// <param name="Phase">The phase at <paramref name="Tick"/>, a whole turn being <c>2^64</c>.</param>
@@ -58,12 +63,22 @@ public sealed record WorldClockAnchor(
             : turn
         );
     }
-    /// <summary>Predicts the phase at an engine tick: the anchor's phase plus its rate over the authoritative ticks
-    /// elapsed, floored, wrapping. Exact at every authoritative tick, where the elapsed engine ticks are a multiple of
-    /// <see cref="Step"/>; a tick before the anchor extrapolates back along the same line.</summary>
-    /// <param name="engineTick">The engine tick.</param>
+    /// <summary>Predicts the phase at an engine tick at or after the anchor: the anchor's phase plus its rate over the
+    /// authoritative ticks elapsed, floored, wrapping. Exact at every authoritative tick, where the elapsed engine ticks
+    /// are a multiple of <see cref="Step"/>.</summary>
+    /// <param name="engineTick">The engine tick, at or after <see cref="Tick"/>.</param>
     /// <returns>The predicted phase.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="engineTick"/> stands before the anchor, where the
+    /// anchors the recipient was not sent decided the phase.</exception>
     public ulong Predict(ulong engineTick) {
+        if (engineTick < Tick) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: engineTick,
+                message: $"an anchor at engine tick {Tick} predicts no phase at engine tick {engineTick}: a recipient never seeks backward through anchors it was not sent.",
+                paramName: nameof(engineTick)
+            );
+        }
+
         if ((Rate == 0L) || (Step == 0UL)) {
             return Phase;
         }
@@ -74,10 +89,16 @@ public sealed record WorldClockAnchor(
         return unchecked((Phase + ((ulong)advance)));
     }
     /// <summary>Returns the phase a frame presents at a presented tick, as a share of a turn: the prediction at its
-    /// whole tick, moved on by the rate over its fraction.</summary>
+    /// whole tick, moved on by the rate over its fraction. A frame before the anchor, interpolating toward the delivery
+    /// that brought it, presents the anchor's own phase: the latest authoritative tick the recipient was told
+    /// about.</summary>
     /// <param name="tick">The presented tick.</param>
     /// <returns>The phase, in <c>[0, 1)</c>.</returns>
     public double PhaseAt(PresentedTick tick) {
+        if (tick.Whole < Tick) {
+            return ToTurn(phase: Phase);
+        }
+
         var whole = ToTurn(phase: Predict(engineTick: tick.Whole));
 
         if ((Rate == 0L) || (Step == 0UL) || (tick.Fraction == 0d)) {

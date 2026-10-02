@@ -5,16 +5,38 @@ namespace Puck.World;
 
 /// <summary>A disclosed literal cell, or, under <see cref="HiddenCells.Placeholder"/>, an anonymous card back
 /// (<see cref="Hidden"/> true, empty key, zero value, no text, no observation).</summary>
+/// <remarks>A cell whose follower eases (<see cref="StateDynamics"/>) carries its stored target as <see cref="Value"/>,
+/// which a <c>.$target</c> read answers, beside the <see cref="Dynamics"/> it eases by and the <see cref="Clock"/> it
+/// eases from: the epoch tick and the follower's position and velocity there, or none for a follower at rest on its
+/// target. A recipient evaluates the same fixed-point follower over the dynamics rows its projection carries, so an
+/// eased read presents what the authority presents at every tick, with nothing sent while it eases.</remarks>
+/// <param name="Key">The cell's key.</param>
+/// <param name="Value">The stored value: the target, for an eased cell.</param>
+/// <param name="Text">The text of a <see cref="CellKind.Text"/> cell.</param>
+/// <param name="Observation">The cell's last-seen stamp.</param>
+/// <param name="Hidden">Whether the cell is an anonymous placeholder.</param>
+/// <param name="Vector">The vector of a <see cref="CellKind.Vector"/> cell.</param>
+/// <param name="Dynamics">The follower an eased cell eases by, or <see langword="null"/> for a cell that does not
+/// ease.</param>
+/// <param name="Clock">The follower's epoch tick, position and velocity, or <see langword="null"/> for a follower at
+/// rest on its target.</param>
 public sealed record WorldObservedCell(string Key, long Value, string? Text = null, StateObservation? Observation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Hidden = false,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateVector? Vector = null);
-/// <summary>A presentation observation, without draw seeds, cursors, masks, grants, or executable traits.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateVector? Vector = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateDynamics? Dynamics = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateCellClock? Clock = null);
+/// <summary>A presentation observation, without draw seeds, cursors, masks or grants, and with no trait but the
+/// follower an eased cell carries (<see cref="WorldObservedCell.Dynamics"/>).
 /// <see cref="HiddenCount"/> counts the cells the row's <see cref="StateVisibility.Hidden"/> policy withheld
 /// from this observer (placeholders included), zero under <see cref="HiddenCells.Omit"/>. <see cref="Space"/> names
-/// a <see cref="CellKind.Vector"/> row's vector space, and is absent for every other kind.</summary>
+/// a <see cref="CellKind.Vector"/> row's vector space, and is absent for every other kind. <see cref="Min"/> and
+/// <see cref="Max"/> are the row's declared envelope, which an eased read is clamped to and a bound value is read
+/// against.</summary>
 public sealed record WorldObservedRow(string Name, CellKind Kind, IReadOnlyList<WorldObservedCell> Cells,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int HiddenCount = 0,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Space = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Space = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? Min = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? Max = null);
 /// <summary>What one recipient's disclosure withheld from a single state row.</summary>
 /// <param name="Count">The number of the row's published cells the recipient may not read.</param>
 /// <param name="Policy">What the row's own policy shows a reader in place of a withheld cell.</param>
@@ -61,8 +83,9 @@ public static class WorldStateDisclosure {
     }
     /// <summary>Projects the rows and cells with explicit observation policies, and every row in
     /// <paramref name="presented"/> whether or not it has one, each under the same per-cell rule; token attributes
-    /// inherit their zone's restrictions. Discloses stored truth for cells carrying dynamics (the arena never eases), while
-    /// value-over-time traits such as advance and cycle evaluate live.</summary>
+    /// inherit their zone's restrictions. Discloses stored truth for cells carrying dynamics (the arena never eases),
+    /// with the follower's trait and clock beside it (<see cref="WorldObservedCell"/>), while value-over-time traits such
+    /// as advance and cycle evaluate live.</summary>
     /// <param name="definition">The live document, for the row declarations.</param>
     /// <param name="arena">The live store.</param>
     /// <param name="time">The clocks a cell's value-over-time trait is read at.</param>
@@ -128,6 +151,11 @@ public static class WorldStateDisclosure {
                     row: row,
                     rowOrdinal: rowOrdinal
                 )) {
+                    var dynamics = arena.LiveBehavior(
+                        key: key,
+                        rowOrdinal: rowOrdinal
+                    ).Dynamics;
+
                     cells.Add(item: new(
                         arena.Keys[key: key].Value,
                         (value.Kind switch {
@@ -151,7 +179,15 @@ public static class WorldStateDisclosure {
                             key: key,
                             rowOrdinal: rowOrdinal,
                             value: value
-                        )
+                        ),
+                        Dynamics: dynamics,
+                        Clock: ((dynamics is null)
+                            ? null
+                            : FollowerClock(
+                                arena: arena,
+                                key: key,
+                                rowOrdinal: rowOrdinal
+                            ))
                     ));
 
                     continue;
@@ -176,7 +212,9 @@ public static class WorldStateDisclosure {
                 hidden,
                 ((row.Kind == CellKind.Vector)
                     ? row.Space
-                    : null)
+                    : null),
+                row.Min,
+                row.Max
             ));
         }
 
@@ -508,6 +546,24 @@ public static class WorldStateDisclosure {
         }
     }
 
+    // The clock an eased cell's follower moves from: its epoch tick, position and velocity, which is all a follower
+    // reads; none while the clock has never settled, where the follower rests on its target.
+    private static StateCellClock? FollowerClock(StateArena arena, int rowOrdinal, CellKey key) => ((arena.TryReadClock(
+        epochEngineTick: out _,
+        epochTick: out var epochTick,
+        key: key,
+        rowOrdinal: rowOrdinal,
+        set: out var set,
+        substepTicks: out _,
+        v0: out var v0,
+        y0: out var y0
+    ) && set)
+        ? new StateCellClock(
+            EpochTick: epochTick,
+            V0: v0,
+            Y0: y0
+        )
+        : null);
     private static StateVector? Vector(StateArena arena, int rowOrdinal, CellKey key, in CellValue value) {
         if (
             (value.Kind != CellKind.Vector) ||

@@ -40236,13 +40236,13 @@
       "title": "WorldProjectedMetadata"
     },
     "observations": {
-      "description": "Explicitly disclosed literal state observations, without executable or draw bookkeeping traits.",
+      "description": "Explicitly disclosed state observations, without draw bookkeeping and with no trait but the follower an eased cell carries.",
       "type": [
         "array",
         "null"
       ],
       "items": {
-        "description": "A presentation observation, without draw seeds, cursors, masks, grants, or executable traits. HiddenCount counts the cells the row\u0027s Hidden policy withheld from this observer (placeholders included), zero under Omit. Space names a Vector row\u0027s vector space, and is absent for every other kind.",
+        "description": "A presentation observation, without draw seeds, cursors, masks or grants, and with no trait but the follower an eased cell carries (Dynamics). HiddenCount counts the cells the row\u0027s Hidden policy withheld from this observer (placeholders included), zero under Omit. Space names a Vector row\u0027s vector space, and is absent for every other kind. Min and Max are the row\u0027s declared envelope, which an eased read is clamped to and a bound value is read against.",
         "type": [
           "object",
           "null"
@@ -40271,12 +40271,15 @@
               ],
               "properties": {
                 "key": {
+                  "description": "The cell\u0027s key.",
                   "type": "string"
                 },
                 "value": {
+                  "description": "The stored value: the target, for an eased cell.",
                   "type": "integer"
                 },
                 "text": {
+                  "description": "The text of a Text cell.",
                   "type": [
                     "string",
                     "null"
@@ -40284,6 +40287,7 @@
                   "default": null
                 },
                 "observation": {
+                  "description": "The cell\u0027s last-seen stamp.",
                   "type": [
                     "object",
                     "null"
@@ -40307,12 +40311,70 @@
                   "title": "StateObservation"
                 },
                 "hidden": {
+                  "description": "Whether the cell is an anonymous placeholder.",
                   "type": "boolean",
                   "default": false
                 },
                 "vector": {
+                  "description": "The vector of a Vector cell.",
                   "default": null,
                   "title": "StateVector"
+                },
+                "dynamics": {
+                  "description": "The follower an eased cell eases by, or null for a cell that does not ease.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "row": {
+                      "description": "The referenced dynamics row name; must resolve.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "row"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "title": "StateDynamics"
+                },
+                "clock": {
+                  "description": "The follower\u0027s epoch tick, position and velocity, or null for a follower at rest on its target.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "epochTick": {
+                      "description": "The simulation tick this clock\u0027s rotation is measured from \u2014 the tick the cell\u0027s base value was last explicitly set, or its own behavior last changed. Read by StateCycle. A negative value is refused; in practice this can only be violated by an authored boot document, since every live settle rebases to the applying tick before validation sees it.",
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "epochEngineTick": {
+                      "description": "The engine tick (TicksPerSecond per second) this clock\u0027s accumulation is measured from \u2014 the engine tick the cell\u0027s base value was last explicitly set, or its own behavior last changed. Read by StateAdvance alone; never derived from EpochTick at a simulation rate, since a live rate change must move neither. A negative value is refused, for the same reason EpochTick is.",
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "y0": {
+                      "description": "A StateDynamics follower\u0027s position at EpochTick, as raw FixedQ4816 bits, independent of the carrying row\u0027s stored-value kind.",
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "v0": {
+                      "description": "A StateDynamics follower\u0027s velocity at EpochTick, per second, as raw FixedQ4816 bits.",
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "substepTicks": {
+                      "description": "Elapsed ticks a StateCycle has already accumulated toward its next step at EpochTick; must be non-negative and less than the cycle\u0027s own ticksPerStep.",
+                      "type": "integer",
+                      "default": 0
+                    }
+                  },
+                  "additionalProperties": false,
+                  "default": null,
+                  "title": "StateCellClock"
                 }
               },
               "required": [
@@ -40330,6 +40392,20 @@
           "space": {
             "type": [
               "string",
+              "null"
+            ],
+            "default": null
+          },
+          "min": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "max": {
+            "type": [
+              "integer",
               "null"
             ],
             "default": null

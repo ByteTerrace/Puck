@@ -710,10 +710,20 @@ A state clock is a reading of its row's slot, and a bindable bound to a state ce
 cell (of every cell of its row when it reads per body), so a recipient that may not read one refuses the
 composition by name before any derived value is emitted, rather than presenting the value at its
 fallback. A row a presented bindable binds that the recipient may read crosses as an observation of the
-cells it may read, whether or not the row declares a policy, and moves with the row's deltas. A late view hydrates the exact current phase; while a
+cells it may read, whether or not the row declares a policy, and moves with the row's deltas. An
+observed row carries its declared envelope, and an observed cell holds its stored value, which a
+`.$target` read answers. A cell that eases also carries the dynamics row it eases by and its follower's
+clock (the epoch tick, position and velocity). The recipient runs the same fixed-point follower over the
+dynamics rows its projection carries, so an eased read presents what the authority presents at every
+tick, and nothing is sent while the follower moves. A late view hydrates the exact current phase; while a
 clock's row holds no number, an early view keeps predicting its last anchor and a late view seeds from
 the phase the world loaded with, or zero clamped into the row's closed envelope. The last anchor per
-recipient per clock is a counted row under the `world.projection` work source, released when the
+recipient per clock is a counted row under the `world.projection` work source. It is the only anchor
+kept: one replaced before a delivery reached the recipient is gone. A recipient therefore presents the
+latest authoritative tick it was told about and predicts only forward from the anchor it holds. A frame
+that interpolates toward the delivery that brought an anchor presents the anchor's own phase, and
+`WorldClockAnchor.Predict` refuses a tick before its anchor by name. An authority restored to a tick
+before the anchor it sent re-anchors. The anchor row is released when the
 recipient leaves or loses disclosure, when its projection stops carrying the clock, or when its stream
 detaches, without waiting for the socket to drain.
 

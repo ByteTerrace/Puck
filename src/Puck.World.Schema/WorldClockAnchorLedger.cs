@@ -7,6 +7,9 @@ namespace Puck.World;
 /// at an authoritative tick, and at no other time. A clock whose row holds no number sends nothing: a recipient that
 /// holds an anchor keeps predicting from it, and a recipient that joins then seeds from the clock's load-validated
 /// phase (<see cref="WorldClockAnchors.Seeds"/>), so early and late views may differ while the clock reads none.
+/// <para>A row is only the last anchor sent. Anchors replaced before a delivery reached the recipient are coalesced
+/// away, so a recipient presents the latest authoritative tick it was told about and predicts only forward from the
+/// anchor it holds (<see cref="WorldClockAnchor.Predict"/>).</para>
 /// <para>Each row is counted retained when it is first sent and released when the recipient leaves or loses
 /// disclosure (<see cref="Release"/>), under <see cref="WorldProjectionWork"/>. Not thread-safe: one recipient's
 /// deliveries run on the thread that steps its world.</para>
@@ -153,14 +156,15 @@ public sealed class WorldClockAnchorLedger(IReadOnlyDictionary<string, ulong>? s
         m_carried.Clear();
     }
 
-    // Records the current anchor when the recipient's prediction misses it; answers whether one was sent.
+    // Records the current anchor when the recipient's prediction misses it; answers whether one was sent. An authority
+    // that stands before the held anchor (a restored checkpoint) has nothing the held anchor predicts, and re-anchors.
     private bool Note(string clock, WorldClockAnchor current, ulong engineTick) {
         var retained = m_held.TryGetValue(
             key: clock,
             value: out var held
         );
 
-        if (retained && (held!.Predict(engineTick: engineTick) == current.Phase)) {
+        if (retained && (engineTick >= held!.Tick) && (held.Predict(engineTick: engineTick) == current.Phase)) {
             return false;
         }
 

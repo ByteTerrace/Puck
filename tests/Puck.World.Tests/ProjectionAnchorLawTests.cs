@@ -156,17 +156,21 @@ public sealed partial class ProjectionAnchorLawTests(ITestOutputHelper output) {
         Assert.Contains(actualString: (refused ?? string.Empty), expectedSubstring: "timeline.clocks[0].anchor is what a projection carries for a state clock it discloses");
     }
     [Fact]
-    public void The_prediction_is_exact_at_every_authoritative_tick_through_the_wrap_and_in_either_direction() {
+    public void The_prediction_is_exact_at_every_authoritative_tick_through_the_wrap_and_refuses_a_tick_before_its_anchor() {
         const ulong Step = 1680UL;
 
         foreach (var rate in new[] { (1L << 56), -(3L << 50), long.MaxValue, (long.MinValue + 1L) }) {
             var anchor = new WorldClockAnchor(Phase: 0xFEDC_BA98_7654_3210UL, Rate: rate, Step: Step, Tick: 1_000_000UL);
 
-            foreach (var k in new long[] { 0L, 1L, 2L, 255L, 65_537L, -1L, -40L }) {
+            foreach (var k in new long[] { 0L, 1L, 2L, 255L, 65_537L }) {
                 Assert.Equal(
                     expected: unchecked((anchor.Phase + (((ulong)rate) * ((ulong)k)))),
                     actual: anchor.Predict(engineTick: ((ulong)(((long)anchor.Tick) + (k * ((long)Step)))))
                 );
+            }
+
+            foreach (var k in new long[] { -1L, -40L }) {
+                _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => anchor.Predict(engineTick: ((ulong)(((long)anchor.Tick) + (k * ((long)Step))))));
             }
         }
 

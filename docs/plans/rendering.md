@@ -5738,11 +5738,20 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      read), or the composition refuses by name before any derived value is
      emitted; a row a presented bindable binds crosses as an observation of
      the cells the recipient may read, policy or not, so a bound value is
-     never presented at its fallback. A late view hydrates the
+     never presented at its fallback. An observed row carries its envelope and
+     an eased cell its stored target with its dynamics row and follower clock,
+     so the recipient eases it as the authority presents it, with nothing sent
+     while it moves, and a `.$target` read answers the stored target. A late view hydrates the
      exact current phase; a clock whose row holds no number seeds a late view
      from the phase the world loaded with (`WorldServer.ClockSeeds`), or zero
      clamped into the row's closed envelope, while an early view keeps its
-     last anchor, so the two may differ while the clock reads none. The last
+     last anchor, so the two may differ while the clock reads none. Anchors
+     coalesce: the ledger keeps only the last one sent, so a recipient presents
+     the latest authoritative tick it was told about and never seeks backward
+     through anchors it was not sent. Presentation interpolates only forward
+     from the anchor it holds; a frame before the anchor's tick presents the
+     anchor's phase, `WorldClockAnchor.Predict` refuses an earlier tick by
+     name, and an authority restored before a sent anchor re-anchors. The last
      anchor per recipient per clock is a counted row (`world.projection`
      anchor rows retained and released), released when the recipient leaves
      or loses disclosure, when a projection stops carrying the clock, or when
@@ -5751,7 +5760,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      quantized, staircase, eased and seek trace to the host phase at every
      tick with no spurious anchor, a steady sky to zero bytes, a late join to
      the exact phase, a hidden clock to a refusal, the anchor rows to their
-     release, and the courtyard's and the parity world's skies to the
+     release, an eased binding to the authority's presented value and its
+     target, a coalesced anchor to forward-only presentation, and the
+     courtyard's and the parity world's skies to the
      authority's for a presentation-tier recipient; the federation wire
      carries a delta as its own `ProjectionDelta` frame.
    - Counted-cost gate: the environment re-resolves only when a clock a key
