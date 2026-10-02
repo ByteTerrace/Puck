@@ -60,7 +60,9 @@ public abstract record ShapeDomainOp {
     /// <param name="Group">The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see
     /// <see cref="SdfWallpaperFold.IsContinuous"/>). A program refuses any other group by name when it builds.</param>
     /// <param name="Cell">The lattice cell extents in the fold plane, creation units.</param>
-    /// <param name="Limit">The repeat-cell limit per plane axis (null = <see cref="UnboundedLimit"/> per axis).</param>
+    /// <param name="Limit">The repeat-cell limit per plane axis (null = <see cref="SdfWallpaperFold.UnboundedLimit"/> per
+    /// axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by
+    /// intersecting it with a bounding shape instead (<see cref="SdfWallpaperFold.LimitRefusal"/>).</param>
     /// <param name="Plane">The fold plane (null = XZ).</param>
     /// <param name="MaterialStride">The parity-material stride (null = 0, geometric only).</param>
     public sealed record Wallpaper(
@@ -70,8 +72,31 @@ public abstract record ShapeDomainOp {
         SdfPlane? Plane = null,
         int? MaterialStride = null
     ) : ShapeDomainOp {
-        /// <summary>The per-axis repeat-cell limit an absent <see cref="Limit"/> means: far past any authored reach.</summary>
-        public const float UnboundedLimit = 1000000f;
+        /// <summary>Returns each member of this op that no program could fold through: an unrecognized or discontinuous
+        /// group, an unrecognized plane, a non-finite cell, and a cell or limit the group's lattice cannot take
+        /// (<see cref="SdfWallpaperFold.CellRefusal"/>, <see cref="SdfWallpaperFold.LimitRefusal"/>). Range clamps are the
+        /// canonicalizer's Normalize; only what it cannot repair is refused here.</summary>
+        /// <returns>The refused member's document name and why.</returns>
+        public IEnumerable<(string Member, string Message)> Refusals() {
+            var defined = Enum.IsDefined(value: Group);
+
+            if (!defined) {
+                yield return ("group", $"group '{Group}' is not recognized.");
+            } else if (!SdfWallpaperFold.IsContinuous(group: Group)) {
+                yield return ("group", $"group '{Group}' folds discontinuously, so its field could read past a neighbouring copy; fold through a mirror group ({string.Join(separator: ", ", values: Enum.GetValues<SdfWallpaperGroup>().Where(predicate: SdfWallpaperFold.IsContinuous))}).");
+            }
+            if ((Plane is { } plane) && !Enum.IsDefined(value: plane)) {
+                yield return ("plane", $"plane '{plane}' is not recognized.");
+            }
+            if (!float.IsFinite(f: Cell.X) || !float.IsFinite(f: Cell.Y)) {
+                yield return ("cell", "cell is non-finite.");
+            } else if (defined && (SdfWallpaperFold.CellRefusal(group: Group, cell: Cell) is { } cellRefusal)) {
+                yield return ("cell", $"cell is refused: {cellRefusal}.");
+            }
+            if (defined && (SdfWallpaperFold.LimitRefusal(group: Group, limit: (Limit ?? new Vector2(value: SdfWallpaperFold.UnboundedLimit))) is { } limitRefusal)) {
+                yield return ("limit", $"limit is refused: {limitRefusal}.");
+            }
+        }
     }
 }
 /// <summary>
@@ -122,7 +147,7 @@ public static class ShapeDomainOps {
             ShapeDomainOp.Wallpaper wallpaper => new SdfDomainOp.Wallpaper(
             Cell: wallpaper.Cell,
             Group: wallpaper.Group,
-            Limit: (wallpaper.Limit ?? new Vector2(value: ShapeDomainOp.Wallpaper.UnboundedLimit)),
+            Limit: (wallpaper.Limit ?? new Vector2(value: SdfWallpaperFold.UnboundedLimit)),
             MaterialStride: (wallpaper.MaterialStride ?? 0),
             Plane: (wallpaper.Plane ?? SdfPlane.XZ)
         ),
@@ -186,7 +211,7 @@ public static class ShapeDomainOps {
 
         static float WallpaperReach(ShapeDomainOp.Wallpaper wallpaper) {
             var cell = wallpaper.Cell.Value;
-            var limit = (wallpaper.Limit?.Value ?? new Vector2(value: ShapeDomainOp.Wallpaper.UnboundedLimit));
+            var limit = (wallpaper.Limit?.Value ?? new Vector2(value: SdfWallpaperFold.UnboundedLimit));
 
             return ((wallpaper.Group >= SdfWallpaperGroup.P3)
                 ? ((cell.X * (limit.X + limit.Y)) * HexDiagonal)

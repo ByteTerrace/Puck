@@ -39,6 +39,131 @@ public sealed class SdfWallpaperFoldLawTests {
             Assert.Contains(expectedSubstring: $"wallpaper group {group},", actualString: refusal.Message);
         }
     }
+    // Every cell and limit a builder accepts, whatever the group: the folded point moves no farther than the point does.
+    // Finite and fractional limits, and cells from ten micro-units to three thousand, are in the table, so a clamp that
+    // collapses cells off their lattice, or a reciprocal that disagrees with the cell it divides, shows as a jump.
+    [Fact]
+    public void EveryCellAndLimitTheBuilderAcceptsFoldsContinuously() {
+        var failures = new List<string>();
+        var accepted = 0;
+
+        foreach (var group in Enum.GetValues<SdfWallpaperGroup>().Where(predicate: SdfWallpaperFold.IsContinuous)) {
+            foreach (var (cell, limit) in Configurations(group: group)) {
+                if (!Accepts(cell: cell, group: group, limit: limit)) {
+                    continue;
+                }
+                accepted++;
+                var stretch = Stretch(cell: cell, group: group, limit: limit);
+
+                if (stretch > 1.01f) {
+                    failures.Add(item: $"{group} cell {cell} limit {limit} is accepted, and folds a pair {stretch} times farther apart than it was");
+                }
+            }
+        }
+        Assert.True(condition: (accepted > 20), userMessage: $"only {accepted} configurations were accepted");
+        Assert.True(condition: (failures.Count == 0), userMessage: string.Join(separator: Environment.NewLine, values: failures.Take(count: 20)));
+    }
+    // The refusal is not conservatism: a fractional square limit (a quarter cell or more off the lattice) is one that
+    // makes its fold jump. A hex lattice's clamp cannot be measured, since no clamp is left in its fold to measure.
+    [Fact]
+    public void EveryFractionalLimitTheBuilderRefusesBreaksContinuity() {
+        var failures = new List<string>();
+
+        foreach (var group in Enum.GetValues<SdfWallpaperGroup>().Where(predicate: static group => (SdfWallpaperFold.IsContinuous(group: group) && (group < SdfWallpaperGroup.P3)))) {
+            var cell = ((group == SdfWallpaperGroup.Pmm) ? new Vector2(x: 1f, y: 0.8f) : Vector2.One);
+
+            foreach (var limit in new[] { new Vector2(value: 0.25f), new Vector2(x: 0.5f, y: 2f), new Vector2(x: 1.5f, y: 1.5f) }) {
+                Assert.False(condition: Accepts(cell: cell, group: group, limit: limit));
+                if (Stretch(cell: cell, group: group, limit: limit) <= 1.01f) {
+                    failures.Add(item: $"{group} cell {cell} limit {limit} is refused, and folds continuously");
+                }
+            }
+        }
+        Assert.True(condition: (failures.Count == 0), userMessage: string.Join(separator: Environment.NewLine, values: failures));
+    }
+    // Unit cells, limits (1, 1), then a sphere at (0.25, 0, 0.433): the points (1.75005, 0.4329261) and (1.74995, 0.4330993)
+    // are 0.0002 apart, and clamping each rounded axial index apart folded them 0.5 apart.
+    [Fact]
+    public void AProgramRefusesAFiniteHexLimitAndNamesTheBound() {
+        foreach (var group in new[] { SdfWallpaperGroup.P3M1, SdfWallpaperGroup.P6M }) {
+            var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgramBuilder().WallpaperFold(cell: Vector2.One, group: group, limit: Vector2.One));
+
+            Assert.Contains(expectedSubstring: "intersecting it with a bounding shape, not by limits", actualString: refusal.Message);
+            Assert.Equal(expected: "limit", actual: refusal.ParamName);
+        }
+    }
+    // PMM, unit cells, limits (0.25, 0.25): at x = 0.4999 the clamped index is 0, and at 0.5001 it is 0.25, which folds x to 0.2501.
+    [Fact]
+    public void AProgramRefusesAFractionalLimit() {
+        var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgramBuilder().WallpaperFold(cell: Vector2.One, group: SdfWallpaperGroup.Pmm, limit: new Vector2(value: 0.25f)));
+
+        Assert.Contains(expectedSubstring: "whole number", actualString: refusal.Message);
+        Assert.Equal(expected: "limit", actual: refusal.ParamName);
+        // The two points a ten-thousandth apart fold 0.25 apart under the fractional clamp.
+        var below = SdfWallpaperFold.Fold(cell: Vector2.One, cellIndex: out _, group: SdfWallpaperGroup.Pmm, limit: new Vector2(value: 0.25f), point: new Vector2(x: 0.4999f, y: 0f));
+        var above = SdfWallpaperFold.Fold(cell: Vector2.One, cellIndex: out _, group: SdfWallpaperGroup.Pmm, limit: new Vector2(value: 0.25f), point: new Vector2(x: 0.5001f, y: 0f));
+
+        Assert.True(condition: (Vector2.Distance(value1: below, value2: above) > 0.1f), userMessage: $"{below} against {above}");
+    }
+    // A program admits the same limits whatever built it: a stream whose limit is fractional, or a hex lattice's finite,
+    // is refused where the packed words are read.
+    [Fact]
+    public void AdmissionRefusesALimitTheBuilderWouldRefuse() {
+        foreach (var (group, limit) in new[] { (SdfWallpaperGroup.Pmm, new Vector2(value: 0.25f)), (SdfWallpaperGroup.P6M, new Vector2(value: 2f)), (SdfWallpaperGroup.P4M, new Vector2(x: -1f, y: 1f)) }) {
+            var refusal = Assert.Throws<ArgumentException>(testCode: () => Rebuilt(group: group, cell: Vector2.One, tamper: instruction => instruction with { Data1 = new Vector4(w: 0f, x: limit.X, y: limit.Y, z: 0f) }));
+
+            Assert.Contains(expectedSubstring: $"wallpaper group {group} through a limit", actualString: refusal.Message);
+        }
+    }
+    // Scale(1e6) then PMM with cells (1e-5, 1e-5) and limits (2, 2), a sphere at (4e-5, 0, 0) of radius 1e-6: the reciprocal
+    // was floored at 1e4, so the lattice round read cells of 1e-4 while the fold subtracted cells of 1e-5, and the field at
+    // world x = 49 read 8 while x = 50.1 was inside the sphere.
+    [Fact]
+    public void ATinyCellFoldsByItsOwnReciprocal() {
+        var cell = new Vector2(value: 1.0e-5f);
+        var limit = new Vector2(value: 2f);
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        var program = builder.Scale(scale: new Vector3(value: 1.0e6f)).WallpaperFold(cell: cell, group: SdfWallpaperGroup.Pmm, limit: limit).Translate(offset: new Vector3(x: 4.0e-5f, y: 0f, z: 0f)).Sphere(material: material, radius: 1.0e-6f).Build();
+        var fold = Assert.Single(collection: program.Instructions, predicate: static instruction => (instruction.Op == SdfOp.WallpaperFold));
+
+        Assert.Equal(expected: 1.0e5f, actual: fold.Data0.Z);
+        Assert.Equal(expected: 1.0e5f, actual: fold.Data0.W);
+        Assert.True(condition: (Stretch(cell: cell, group: SdfWallpaperGroup.Pmm, limit: limit) <= 1.01f));
+        // Either side of x = 5e-5, 1.1e-6 apart: the folded points stay no farther apart than the points.
+        var below = SdfWallpaperFold.Fold(cell: cell, cellIndex: out _, group: SdfWallpaperGroup.Pmm, limit: limit, point: new Vector2(x: 4.9e-5f, y: 0f));
+        var above = SdfWallpaperFold.Fold(cell: cell, cellIndex: out _, group: SdfWallpaperGroup.Pmm, limit: limit, point: new Vector2(x: 5.01e-5f, y: 0f));
+
+        Assert.True(condition: (Vector2.Distance(value1: below, value2: above) < 1.2e-6f), userMessage: $"{below} against {above}");
+    }
+    // The floor that guarded a vanishing cell is gone, so a cell is refused by what it must satisfy: positive, finite, and a
+    // reciprocal the lattice round keeps finite at any point a float resolves, outer scale included.
+    [Fact]
+    public void AProgramRefusesACellItCannotInvert() {
+        foreach (var extent in new[] { 0f, -1f, float.NaN, float.PositiveInfinity, 1.0e-39f, 1.0e-19f }) {
+            foreach (var group in new[] { SdfWallpaperGroup.Pmm, SdfWallpaperGroup.P6M }) {
+                var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgramBuilder().WallpaperFold(cell: new Vector2(value: extent), group: group, limit: new Vector2(value: ((group == SdfWallpaperGroup.P6M) ? SdfWallpaperFold.UnboundedLimit : 1f))));
+
+                Assert.Equal(expected: "cell", actual: refusal.ParamName);
+            }
+        }
+        Assert.NotNull(@object: SdfWallpaperFold.CellRefusal(group: SdfWallpaperGroup.Pmm, cell: new Vector2(value: 1.0e-19f)));
+        Assert.Null(@object: SdfWallpaperFold.CellRefusal(group: SdfWallpaperGroup.Pmm, cell: new Vector2(value: 1.0e-17f)));
+        // The largest reciprocal times the farthest point a float resolves a cell at stays finite.
+        Assert.True(condition: float.IsFinite(f: (SdfWallpaperFold.MaximumInverseCell * 3.0e20f)));
+        // A stream packed with a vanishing or non-reciprocal cell is refused where it is read.
+        Assert.Throws<ArgumentException>(testCode: () => Rebuilt(group: SdfWallpaperGroup.Pmm, cell: Vector2.One, tamper: static instruction => instruction with { Data0 = new Vector4(w: 1f, x: 0f, y: 1f, z: 1f) }));
+        Assert.Throws<ArgumentException>(testCode: () => Rebuilt(group: SdfWallpaperGroup.Pmm, cell: new Vector2(value: 1.0e-5f), tamper: static instruction => instruction with { Data0 = new Vector4(w: 1.0e4f, x: 1.0e-5f, y: 1.0e-5f, z: 1.0e4f) }));
+    }
+
+    private static SdfProgram Rebuilt(SdfWallpaperGroup group, Vector2 cell, Func<SdfInstruction, SdfInstruction> tamper) {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        var program = builder.WallpaperFold(cell: cell, group: group, limit: Limit(group: group) with { X = ((group >= SdfWallpaperGroup.P3) ? SdfWallpaperFold.UnboundedLimit : 2f), Y = ((group >= SdfWallpaperGroup.P3) ? SdfWallpaperFold.UnboundedLimit : 2f) }).Sphere(material: material, radius: 0.1f).Build();
+
+        return new SdfProgram(program.Instructions.Select(selector: instruction => ((instruction.Op == SdfOp.WallpaperFold) ? tamper(instruction) : instruction)).ToArray(), [new SdfMaterial(Albedo: Vector3.One)]);
+    }
+
     [Fact]
     public void AProgramRefusesTheOffCentreP2Lattice() {
         // Four-unit cells whose sphere sits at the cell's x = 1: from x = -1.75 the folded field reads cell 0's copy 2.5
@@ -59,7 +184,7 @@ public sealed class SdfWallpaperFoldLawTests {
     private static List<string> Sweep(SdfWallpaperGroup group) {
         var failures = new List<string>();
         var cell = ((group is SdfWallpaperGroup.Pmm or SdfWallpaperGroup.P2) ? new Vector2(x: 1f, y: 0.8f) : Vector2.One);
-        var limit = new Vector2(value: 50);
+        var limit = Limit(group: group);
 
         for (var offsetX = -1; (offsetX <= 1); offsetX++) {
             for (var offsetY = -1; (offsetY <= 1); offsetY++) {
@@ -177,8 +302,63 @@ public sealed class SdfWallpaperFoldLawTests {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        _ = builder.WallpaperFold(cell: cell, group: group, limit: new Vector2(value: 2)).Translate(offset: offset).Sphere(material: material, radius: radius);
+        _ = builder.WallpaperFold(cell: cell, group: group, limit: Limit(group: group)).Translate(offset: offset).Sphere(material: material, radius: radius);
 
         return builder.Build();
+    }
+    // The limit a group's lattice admits for these sweeps: a hex lattice only the unbounded one, a square lattice a few cells.
+    private static Vector2 Limit(SdfWallpaperGroup group) => new(value: ((group >= SdfWallpaperGroup.P3) ? SdfWallpaperFold.UnboundedLimit : 50f));
+    private static bool Accepts(SdfWallpaperGroup group, Vector2 cell, Vector2 limit) {
+        try {
+            _ = new SdfProgramBuilder().WallpaperFold(cell: cell, group: group, limit: limit);
+
+            return true;
+        } catch (ArgumentException) {
+            return false;
+        }
+    }
+    // The fold's worst stretch over pairs a thousandth of a cell apart, across twelve cells each way of the origin, past
+    // every clamp in the table and the first wall of a reciprocal floored ten times too large: a fold that keeps distances
+    // (a reflection, however the clamp collapses cells) reads about one, and a jump reads about a thousand.
+    private static float Stretch(SdfWallpaperGroup group, Vector2 cell, Vector2 limit) {
+        var stretch = 0f;
+
+        for (var index = 1; (index <= 16384); index++) {
+            var point = (new Vector2(x: ((Fraction(value: (index * 0.7548777f)) * 24f) - 12f), y: ((Fraction(value: (index * 0.5698403f)) * 24f) - 12f)) * cell);
+            var angle = (Fraction(value: (index * 0.6180340f)) * MathF.Tau);
+
+            Measure(point: point, step: ((0.001f * cell.X) * new Vector2(x: MathF.Cos(x: angle), y: MathF.Sin(x: angle))));
+        }
+        // A jump along a line is straddled by a random pair about once in ten thousand, so every cell wall within the
+        // spread is also crossed on purpose: a thousandth of a cell across it, at eight places along it, on each axis.
+        for (var wall = -14; (wall <= 14); wall++) {
+            for (var along = 0; (along < 8); along++) {
+                var offset = ((along * 1.37f) - 5f);
+
+                Measure(point: new Vector2(x: (((wall + 0.5f) * cell.X) - (0.0005f * cell.X)), y: (offset * cell.Y)), step: new Vector2(x: (0.001f * cell.X), y: 0f));
+                Measure(point: new Vector2(x: (offset * cell.X), y: (((wall + 0.5f) * cell.Y) - (0.0005f * cell.Y))), step: new Vector2(x: 0f, y: (0.001f * cell.Y)));
+            }
+        }
+
+        return stretch;
+
+        static float Fraction(float value) => (value - MathF.Floor(x: value));
+        void Measure(Vector2 point, Vector2 step) {
+            var a = SdfWallpaperFold.Fold(cell: cell, cellIndex: out _, group: group, limit: limit, point: point);
+            var b = SdfWallpaperFold.Fold(cell: cell, cellIndex: out _, group: group, limit: limit, point: (point + step));
+
+            stretch = MathF.Max(x: stretch, y: (Vector2.Distance(value1: a, value2: b) / step.Length()));
+        }
+    }
+    private static (Vector2 Cell, Vector2 Limit)[] Configurations(SdfWallpaperGroup group) {
+        var cells = ((group == SdfWallpaperGroup.Pmm)
+            ? new[] { new Vector2(x: 1f, y: 0.8f), new Vector2(x: 1.0e-5f, y: 2.0e-5f), new Vector2(x: 3.0e3f, y: 1.0e3f) }
+            : new[] { Vector2.One, new Vector2(value: 1.0e-5f), new Vector2(value: 3.0e3f) });
+        var limits = new[] {
+            new Vector2(value: SdfWallpaperFold.UnboundedLimit), Vector2.Zero, Vector2.One, new Vector2(x: 2f, y: 3f), new Vector2(value: 7f),
+            new Vector2(value: 0.25f), new Vector2(x: 0.5f, y: 2f), new Vector2(x: 1.5f, y: 1.5f), new Vector2(x: 2.000001f, y: 1f),
+        };
+
+        return [.. cells.SelectMany(selector: cell => limits.Select(selector: limit => (cell, limit)))];
     }
 }

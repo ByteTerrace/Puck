@@ -57,7 +57,7 @@ public sealed class SdfLogSphereMarchDeviceLawTests {
     private static IEnumerable<MarchCase> WallpaperCases() {
         foreach (var group in Enum.GetValues<SdfWallpaperGroup>().Where(predicate: SdfWallpaperFold.IsContinuous)) {
             var cell = ((group == SdfWallpaperGroup.Pmm) ? new Vector2(x: 1.7f, y: 1.3f) : new Vector2(value: 1.7f));
-            var limit = new Vector2(value: 3);
+            var limit = new Vector2(value: ((group >= SdfWallpaperGroup.P3) ? SdfWallpaperFold.UnboundedLimit : 3f));
             var program = WallpaperProgram(cell: cell, group: group, limit: limit);
 
             for (var index = 1; (index <= 8); index++) {

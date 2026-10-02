@@ -16,7 +16,7 @@
         "src/Puck.State/Expressions/Runtime/ExpressionSpelling.cs": 2272,
         "src/Puck.Text/CffFontOutlines.cs": 2434,
         "src/Puck.Transpiler/Parsing/PuckParser.Rules.cs": 2059,
-        "src/Puck.World.Authoring/Authoring/CreationCanonicalizer.cs": 2457,
+        "src/Puck.World.Authoring/Authoring/CreationCanonicalizer.cs": 2434,
         "src/Puck.World.Client/PlayerRoster.cs": 2243,
         "src/Puck.World.Console/WorldRowCommandModule.cs": 2315,
         "src/Puck.World.Schema/WorldDefinitionValidator.Placements.cs": 2375,

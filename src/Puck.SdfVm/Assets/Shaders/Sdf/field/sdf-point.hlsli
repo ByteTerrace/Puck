@@ -93,13 +93,15 @@ float sdfFloorMod(float x, float y) {
 
 // Hex-lattice wallpaper groups (P3 and up) on the equilateral triangular lattice of pitch cell.x (the host requires
 // square cells; the hex groups are only exact on the equilateral lattice, so the lattice shape is not a free
-// parameter). Cells are cube-rounded axial hexes; limits clamp the axial indices with RepeatLimited semantics. P3
+// parameter). Cells are cube-rounded axial hexes, never clamped: a hex edge cell has two neighbours inside any
+// boundary, so no clamp of the axial indices keeps the fold continuous, and a program folds a hex lattice only with
+// the unbounded limit (SdfWallpaperFold.LimitRefusal), bounding it by intersection instead. P3
 // keys a 120-degree turn count on the 3-coloring of the hex lattice (seams only at hex boundaries); P6 adds the
 // in-cell half-turn; P3m1/P31m/P6m are in-cell dihedral kaleidoscopes (pure conditional mirror folds — continuous),
 // with mirrors along the corner directions (P3m1), the edge directions (P31m), or both (P6m). All rotations/mirrors
 // are written as EXPLICIT component expressions (no float2x2) so no row/column convention can flip a fold.
 // inversePitch = (1/pitch, 2/(√3·pitch)), baked HOST-SIDE by SdfProgramBuilder.WallpaperFold (data0.zw).
-float2 sdfWallpaperFoldHexCell(float2 q, uint group, float pitch, float2 inversePitch, float2 limit, out float2 cellIndex) {
+float2 sdfWallpaperFoldHexCell(float2 q, uint group, float pitch, float2 inversePitch, out float2 cellIndex) {
     float axialB = (q.y * inversePitch.y);
     float axialA = ((q.x * inversePitch.x) - (0.5 * axialB));
     float axialC = -(axialA + axialB);
@@ -117,8 +119,6 @@ float2 sdfWallpaperFoldHexCell(float2 q, uint group, float pitch, float2 inverse
         roundedB = -(roundedA + roundedC);
     }
 
-    roundedA = clamp(roundedA, -limit.x, limit.x);
-    roundedB = clamp(roundedB, -limit.y, limit.y);
     cellIndex = float2(roundedA, roundedB);
 
     float2 r = (q - (float2((roundedA + (0.5 * roundedB)), (roundedB * (SDF_SQRT3 * 0.5))) * pitch));
@@ -201,7 +201,9 @@ float2 sdfWallpaperFoldHexCell(float2 q, uint group, float pitch, float2 inverse
 // a group whose fold it measures continuous (PMM, P4M, P3M1, P6M): every cell wall and in-cell seam a mirror, so the
 // field never reads past the nearest copy, and content may cross the mirrors. The other groups' branches remain the
 // fold's definition, refused at program build.
-// inverseCell = 1/cell (square lattices) or the hex (1/pitch, 2/(√3·pitch)) pair, baked HOST-SIDE (data0.zw).
+// inverseCell = 1/cell (square lattices) or the hex (1/pitch, 2/(√3·pitch)) pair, baked HOST-SIDE (data0.zw) and exactly
+// the reciprocal of the cell this fold subtracts (SdfProgram admission holds the two to each other): the round and the
+// displacement must read one cell. limit clamps a square lattice's indices, a whole number of cells; a hex lattice reads none.
 //
 // AUTHORING NOTE: `cell` is the fold cell, NOT the pattern's translation period, for every group whose in-cell
 // transform is keyed on the lattice PARITY (P2/PG/CM/PMG/PGG/CMM/P4/P4M) or on the hex 3-coloring (P3/P6). Those
@@ -214,7 +216,7 @@ float2 sdfWallpaperFoldHexCell(float2 q, uint group, float pitch, float2 inverse
 // translation-invariance test over all 17 groups.
 float2 sdfWallpaperFoldCell(float2 q, uint group, float2 cell, float2 inverseCell, float2 limit, out float2 cellIndex) {
     if (group >= SDF_WPG_P3) {
-        return sdfWallpaperFoldHexCell(q, group, cell.x, inverseCell, limit, cellIndex);
+        return sdfWallpaperFoldHexCell(q, group, cell.x, inverseCell, cellIndex);
     }
 
     cellIndex = clamp(round(q * inverseCell), -limit, limit);

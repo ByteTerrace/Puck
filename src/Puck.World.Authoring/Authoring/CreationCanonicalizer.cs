@@ -1210,33 +1210,10 @@ public static partial class CreationCanonicalizer {
                         break;
                     }
                 case ShapeDomainOp.Wallpaper wallpaper: {
-                        if (!Enum.IsDefined(value: wallpaper.Group)) {
+                        foreach (var (member, message) in wallpaper.Refusals()) {
                             errors.Add(item: new(
-                                Message: $"group '{wallpaper.Group}' is not recognized.",
-                                Path: $"{opPath}.group"
-                            ));
-                        } else if (!SdfWallpaperFold.IsContinuous(group: wallpaper.Group)) {
-                            errors.Add(item: new(
-                                Message: $"group '{wallpaper.Group}' folds discontinuously, so its field could read past a neighbouring copy; fold through a mirror group ({string.Join(separator: ", ", values: Enum.GetValues<SdfWallpaperGroup>().Where(predicate: SdfWallpaperFold.IsContinuous))}).",
-                                Path: $"{opPath}.group"
-                            ));
-                        }
-                        if (
-                            (wallpaper.Plane is { } plane) &&
-                            !Enum.IsDefined(value: plane)
-                        ) {
-                            errors.Add(item: new(
-                                Message: $"plane '{plane}' is not recognized.",
-                                Path: $"{opPath}.plane"
-                            ));
-                        }
-                        if (
-                            !float.IsFinite(f: wallpaper.Cell.X) ||
-                            !float.IsFinite(f: wallpaper.Cell.Y)
-                        ) {
-                            errors.Add(item: new(
-                                Message: "cell is non-finite.",
-                                Path: $"{opPath}.cell"
+                                Message: message,
+                                Path: $"{opPath}.{member}"
                             ));
                         }
 
@@ -1793,8 +1770,8 @@ public static partial class CreationCanonicalizer {
                 ),
                 Group: wallpaper.Group,
                 Limit: new Vector2(
-                    x: Math.Max(val1: (wallpaper.Limit?.X ?? ShapeDomainOp.Wallpaper.UnboundedLimit), val2: 0f),
-                    y: Math.Max(val1: (wallpaper.Limit?.Y ?? ShapeDomainOp.Wallpaper.UnboundedLimit), val2: 0f)
+                    x: Math.Max(val1: (wallpaper.Limit?.X ?? SdfWallpaperFold.UnboundedLimit), val2: 0f),
+                    y: Math.Max(val1: (wallpaper.Limit?.Y ?? SdfWallpaperFold.UnboundedLimit), val2: 0f)
                 ),
                 MaterialStride: Math.Max(val1: (wallpaper.MaterialStride ?? 0), val2: 0),
                 Plane: (Enum.IsDefined(value: (wallpaper.Plane ?? SdfPlane.XZ))

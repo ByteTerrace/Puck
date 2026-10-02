@@ -122,6 +122,25 @@ CMM, P4, P4G, P3, P31M and P6 jump. `SdfWallpaperFoldLawTests` holds every
 accepted group to a brute-force distance to its rendered geometry and to a
 sphere-traced ray, and shows the same sweep catching P2.
 
+A continuous group stays continuous only through the lattice it is given, and
+`SdfWallpaperFold` states what that is. A square lattice's `limit` is a
+non-negative whole number of cells per axis: the clamp then collapses whole
+cells onto the boundary cell of the same lattice row, which is still a
+reflection, where a fractional limit moves the clamped cell off the lattice and
+jumps at the wall. A hex lattice has no continuous clamp, because an edge cell
+has two neighbours inside any boundary and one clamped cell cannot match both,
+so a hex group takes only the unbounded limit and a hex wallpaper is bounded by
+intersecting it with a bounding shape inside a field scope. The reciprocals the
+kernel reads (`Data0.zw`) are exactly one over the cell the fold subtracts, so
+the lattice round and the displacement read one cell, and a cell is refused
+unless it is positive and finite and its reciprocal is at most
+`SdfWallpaperFold.MaximumInverseCell`, which keeps the round finite at any point
+a float resolves a cell. The builder, `SdfProgram` admission and the creation
+canonicalizer state each rule once, through `LimitRefusal` and `CellRefusal`.
+`SdfWallpaperFoldLawTests` folds pairs across every cell wall of finite,
+fractional and unbounded limits and of cells from ten micro-units to three
+thousand, and holds every configuration a builder accepts to the same stretch.
+
 A log-sphere fold changes its field across spheres: each shell holds the
 prototype at its own scale, and the shell boundaries are spheres about the
 fold's local origin. When every operation before the fold on its chain is a

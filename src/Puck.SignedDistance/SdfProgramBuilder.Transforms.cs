@@ -899,14 +899,17 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="group">The wallpaper group. P4/P4M/P4G and the hex groups (P3 and up) require a square cell —
     /// quarter-turns and the equilateral hex lattice are only isometries there (hex pitch = <paramref name="cell"/>.X).</param>
     /// <param name="cell">The lattice cell extents in the fold plane.</param>
-    /// <param name="limit">The repeat-cell limit per plane axis (RepeatLimited semantics; axial indices for hex).</param>
+    /// <param name="limit">The repeat-cell limit per plane axis: a non-negative whole number of cells for a square group
+    /// (RepeatLimited semantics), and <see cref="SdfWallpaperFold.UnboundedLimit"/> on both axes for a hex group, whose
+    /// lattice has no continuous clamp (<see cref="SdfWallpaperFold.LimitRefusal"/>).</param>
     /// <param name="plane">The plane the fold acts on (the third axis is untouched).</param>
     /// <param name="materialStride">The parity-material stride: the cell key (checker parity for square lattices,
     /// the 3-coloring for hex) times this strides the material id of later shape wins in the chain, so each lattice
     /// cell selects its own row of the palette. 0 (the default) keeps the fold purely geometric.</param>
     /// <exception cref="ArgumentException"><paramref name="materialStride"/> is negative.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A <paramref name="cell"/> extent the group reads is not finite and
-    /// positive, <paramref name="limit"/> is not finite and non-negative, <paramref name="group"/> is not a defined
+    /// positive or whose reciprocal is too large (<see cref="SdfWallpaperFold.CellRefusal"/>), <paramref name="limit"/> is not a limit the group's fold can clamp
+    /// continuously (<see cref="SdfWallpaperFold.LimitRefusal"/>), <paramref name="group"/> is not a defined
     /// <see cref="SdfWallpaperGroup"/>, or
     /// <paramref name="plane"/> is not a defined <see cref="SdfPlane"/>.</exception>
     public SdfProgramBuilder WallpaperFold(SdfWallpaperGroup group, Vector2 cell, Vector2 limit, SdfPlane plane = SdfPlane.XZ, int materialStride = 0) {
@@ -929,28 +932,20 @@ public sealed partial class SdfProgramBuilder {
             paramName: nameof(plane)
         );
 
-        var isHex = (group >= SdfWallpaperGroup.P3);
-
-        // cell.x is the lattice pitch for EVERY group, so it must be positive. cell.y is the second lattice extent for
-        // a square group only — sdfWallpaperFoldCell hands the hex path cell.x alone (sdfWallpaperFoldHexCell takes a
-        // scalar pitch), so a hex caller may leave cell.y at zero and it is checked for finiteness only.
-        RequirePositive(
-            value: cell.X,
-            paramName: nameof(cell),
-            subject: "A wallpaper cell extent"
-        );
-
-        if (isHex) {
+        // A hex lattice is set by its pitch cell.x alone (sdfWallpaperFoldHexCell takes a scalar pitch), so a hex caller
+        // may leave cell.y at zero and it is checked for finiteness only; CellRefusal states the rest.
+        if (group >= SdfWallpaperGroup.P3) {
             RequireFinite(
                 value: cell.Y,
                 paramName: nameof(cell),
                 subject: "A wallpaper cell extent"
             );
-        } else {
-            RequirePositive(
-                value: cell.Y,
+        }
+
+        if (SdfWallpaperFold.CellRefusal(cell: cell, group: group) is { } cellRefusal) {
+            throw new ArgumentOutOfRangeException(
                 paramName: nameof(cell),
-                subject: "A wallpaper cell extent"
+                message: $"A wallpaper cell extent is refused: {cellRefusal}."
             );
         }
 
@@ -961,7 +956,15 @@ public sealed partial class SdfProgramBuilder {
             subject: "A wallpaper repeat-cell limit"
         );
 
-        // The reciprocal cell extents are HOST-BAKED (Data0.zw), the values SdfWallpaperFold reads.
+        if (SdfWallpaperFold.LimitRefusal(group: group, limit: limit) is { } limitRefusal) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(limit),
+                message: $"A wallpaper repeat-cell limit is refused: {limitRefusal}."
+            );
+        }
+
+        // The reciprocal cell extents are HOST-BAKED (Data0.zw), the values SdfWallpaperFold reads. They are exactly
+        // 1 / cell, never floored.
         var inverseCell = SdfWallpaperFold.InverseCell(cell: cell, group: group);
 
         m_instructions.Add(item: new SdfInstruction(

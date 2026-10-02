@@ -18556,7 +18556,7 @@
                               },
                               "limit": {
                                 "default": null,
-                                "description": "The repeat-cell limit per plane axis (null = UnboundedLimit per axis)."
+                                "description": "The repeat-cell limit per plane axis (null = UnboundedLimit per axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by intersecting it with a bounding shape instead (LimitRefusal)."
                               },
                               "plane": {
                                 "enum": [

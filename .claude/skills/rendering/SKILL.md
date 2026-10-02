@@ -201,7 +201,11 @@ These are one-line cautions; the owning pages hold the derivations.
   group whose fold is continuous (`SdfWallpaperFold.IsContinuous`: PMM, P4M,
   P3M1, P6M), which never reads past the nearest copy; `SdfProgram` refuses the
   others by name. A kernel change to `sdfWallpaperFoldCell` changes
-  `SdfWallpaperFold` with it.
+  `SdfWallpaperFold` with it. The lattice is held to the same rule in three
+  places through one statement (`SdfWallpaperFold.LimitRefusal` and
+  `CellRefusal`: the builder, `SdfProgram` admission, the creation
+  canonicalizer): a square limit is whole, a hex group takes the unbounded
+  limit and no clamp, and `Data0.zw` is exactly `InverseCell`.
 
 ## Prototype bakes
 

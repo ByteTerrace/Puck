@@ -7983,7 +7983,7 @@ export type WorldPrototype = {
          */
         cell: unknown;
         /**
-         * The repeat-cell limit per plane axis (null = UnboundedLimit per axis).
+         * The repeat-cell limit per plane axis (null = UnboundedLimit per axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by intersecting it with a bounding shape instead (LimitRefusal).
          */
         limit?: unknown;
         /**

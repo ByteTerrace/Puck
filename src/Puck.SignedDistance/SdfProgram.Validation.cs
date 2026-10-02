@@ -497,7 +497,9 @@ public sealed partial class SdfProgram {
     // A wallpaper fold reads only its own cell's copy, which is the nearest copy everywhere exactly when the fold is
     // continuous: every cell wall and in-cell seam a mirror (SdfWallpaperFold.IsContinuous). A group whose fold jumps (a
     // translation wall, a rotation seam) would let a march step through a neighbour's copy, so it is refused here, before
-    // packing, whatever its content.
+    // packing, whatever its content. A continuous group stays continuous only through a limit its clamp can honour
+    // (SdfWallpaperFold.LimitRefusal) and reciprocals that are exactly 1 / cell (Data0.zw against InverseCell): the lattice
+    // round and the cell displacement must read one cell, or the fold jumps at a boundary.
     private static void RequireContinuousWallpaper(int index, SdfInstruction instruction, string paramName) {
         var group = ((SdfWallpaperGroup)instruction.Shape);
 
@@ -511,6 +513,31 @@ public sealed partial class SdfProgram {
         if (!SdfWallpaperFold.IsContinuous(group: group)) {
             throw new ArgumentException(
                 message: $"Instruction {index} folds through wallpaper group {group}, whose fold jumps at a translation wall or rotation seam: its field reads only the sample's own cell, so a march could step through a neighbouring copy. Fold through a mirror group ({string.Join(separator: ", ", values: Enum.GetValues<SdfWallpaperGroup>().Where(predicate: SdfWallpaperFold.IsContinuous))}).",
+                paramName: paramName
+            );
+        }
+
+        var cell = new Vector2(x: instruction.Data0.X, y: instruction.Data0.Y);
+
+        if (SdfWallpaperFold.CellRefusal(cell: cell, group: group) is { } cellRefusal) {
+            throw new ArgumentException(
+                message: $"Instruction {index} folds wallpaper group {group} through a cell it cannot invert: {cellRefusal}.",
+                paramName: paramName
+            );
+        }
+
+        if (SdfWallpaperFold.LimitRefusal(group: group, limit: new Vector2(x: instruction.Data1.X, y: instruction.Data1.Y)) is { } limitRefusal) {
+            throw new ArgumentException(
+                message: $"Instruction {index} folds wallpaper group {group} through a limit it cannot clamp continuously: {limitRefusal}.",
+                paramName: paramName
+            );
+        }
+
+        var inverseCell = SdfWallpaperFold.InverseCell(cell: cell, group: group);
+
+        if ((instruction.Data0.Z != inverseCell.X) || (instruction.Data0.W != inverseCell.Y)) {
+            throw new ArgumentException(
+                message: $"Instruction {index} folds wallpaper group {group} with reciprocal cell extents ({instruction.Data0.Z}, {instruction.Data0.W}) that are not 1 / its cell ({inverseCell.X}, {inverseCell.Y}): the lattice round and the cell displacement would read different cells.",
                 paramName: paramName
             );
         }

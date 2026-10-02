@@ -9,6 +9,14 @@ namespace Puck.SignedDistance;
 /// nearest copy. A fold that jumps (a translation wall, a rotation seam) can read a cell's own copy while a
 /// neighbour's lies nearer, which lets a march step through it.</summary>
 public static class SdfWallpaperFold {
+    /// <summary>The limit a hex group's lattice takes on both axes: far past any authored reach, so no cell index is
+    /// ever clamped. A square group's limit is a whole number, and this value is a whole number too.</summary>
+    public const float UnboundedLimit = 1000000f;
+    /// <summary>The largest reciprocal cell extent a fold admits. The lattice round multiplies the fold-plane point by
+    /// the reciprocal, so it bounds that product: a point as far out as 3e20 still rounds to a finite cell index, far
+    /// past where a float point resolves a cell, including under an outer scale that enlarges the point a millionfold.</summary>
+    public const float MaximumInverseCell = 1.0e18f;
+
     private const float Sqrt3 = 1.7320508f;
 
     private static readonly bool[] Continuity = MeasureContinuity();
@@ -20,32 +28,79 @@ public static class SdfWallpaperFold {
     /// <returns><see langword="true"/> when every cell wall and in-cell seam of the group is a mirror.</returns>
     public static bool IsContinuous(SdfWallpaperGroup group) => Continuity[((int)group)];
     /// <summary>Returns the reciprocal cell extents the kernels read (an instruction's Data0.zw): 1 / cell for a square
-    /// lattice, and 1 / pitch and 2 / (√3 pitch) for the hex lattice, whose pitch is <paramref name="cell"/>.X.</summary>
+    /// lattice, and 1 / pitch and 2 / (√3 pitch) for the hex lattice, whose pitch is <paramref name="cell"/>.X. The
+    /// reciprocal of the cell the fold subtracts is never floored: the lattice round and the cell displacement must
+    /// read one cell, or the fold jumps at a cell boundary.</summary>
     /// <param name="group">The wallpaper group.</param>
     /// <param name="cell">The lattice cell extents.</param>
     /// <returns>The reciprocal extents.</returns>
     public static Vector2 InverseCell(SdfWallpaperGroup group, Vector2 cell) {
-        var inverseX = (1f / MathF.Max(x: cell.X, y: 0.0001f));
+        var inverseX = (1f / cell.X);
 
         return new Vector2(
             x: inverseX,
             y: ((group >= SdfWallpaperGroup.P3)
                 ? ((2f / Sqrt3) * inverseX)
-                : (1f / MathF.Max(x: cell.Y, y: 0.0001f)))
+                : (1f / cell.Y))
         );
+    }
+    /// <summary>Returns why <paramref name="cell"/> cannot be a <paramref name="group"/> fold's cell, or
+    /// <see langword="null"/> when it can: the extents the group reads (X for every group, and Y for a square group, since
+    /// a hex lattice is set by its pitch alone) are positive and finite, and their reciprocals (<see cref="InverseCell"/>)
+    /// are finite and at most <see cref="MaximumInverseCell"/>.</summary>
+    /// <param name="group">The wallpaper group.</param>
+    /// <param name="cell">The lattice cell extents.</param>
+    /// <returns>The refusal, or <see langword="null"/>.</returns>
+    public static string? CellRefusal(SdfWallpaperGroup group, Vector2 cell) {
+        var isHex = (group >= SdfWallpaperGroup.P3);
+
+        if (!IsPositive(value: cell.X) || (!isHex && !IsPositive(value: cell.Y))) {
+            return $"the extents group {group} reads must be positive and finite; got ({cell.X}, {cell.Y})";
+        }
+        var inverseCell = InverseCell(cell: cell, group: group);
+
+        if (!(inverseCell.X <= MaximumInverseCell) || !(inverseCell.Y <= MaximumInverseCell)) {
+            return $"the reciprocal of a cell extent must be at most {MaximumInverseCell}, so the lattice round stays finite; got ({cell.X}, {cell.Y})";
+        }
+
+        return null;
+
+        static bool IsPositive(float value) => (float.IsFinite(f: value) && (value > 0f));
+    }
+    /// <summary>Returns why <paramref name="limit"/> cannot be a <paramref name="group"/> fold's limit, or
+    /// <see langword="null"/> when it can. A clamp keeps the fold continuous only where it collapses whole cells onto
+    /// the boundary cell of the same lattice row: a square group's limit is a non-negative whole number of cells per
+    /// axis, and a fractional one moves the clamped cell off the lattice. A hex lattice has no such clamp, since a hex
+    /// edge cell has two neighbours inside, so a hex group takes <see cref="UnboundedLimit"/> on both axes.</summary>
+    /// <param name="group">The wallpaper group.</param>
+    /// <param name="limit">The cell-index limit per lattice axis.</param>
+    /// <returns>The refusal, or <see langword="null"/>.</returns>
+    public static string? LimitRefusal(SdfWallpaperGroup group, Vector2 limit) {
+        if (group >= SdfWallpaperGroup.P3) {
+            return (((limit.X == UnboundedLimit) && (limit.Y == UnboundedLimit))
+                ? null
+                : $"a hex lattice has no continuous clamp, so group {group} takes the unbounded limit ({UnboundedLimit}) on both axes; got ({limit.X}, {limit.Y}). Bound a hex wallpaper by intersecting it with a bounding shape, not by limits");
+        }
+
+        return ((IsCount(value: limit.X) && IsCount(value: limit.Y))
+            ? null
+            : $"a square lattice's limit is a non-negative whole number of cells per axis, since a fractional limit clamps a cell off its lattice; got ({limit.X}, {limit.Y}). Round the limit to whole cells, or bound the wallpaper by intersecting it with a bounding shape");
+
+        static bool IsCount(float value) => (float.IsFinite(f: value) && (value >= 0f) && (value == MathF.Floor(x: value)));
     }
     /// <summary>Folds an in-plane point onto its cell, as the kernels do.</summary>
     /// <param name="point">The point in the fold plane, in the fold's local frame.</param>
     /// <param name="group">The wallpaper group.</param>
     /// <param name="cell">The lattice cell extents (the hex pitch is X).</param>
-    /// <param name="limit">The cell-index limit per lattice axis.</param>
+    /// <param name="limit">The cell-index limit per square lattice axis; a hex group reads none
+    /// (see <see cref="LimitRefusal"/>).</param>
     /// <param name="cellIndex">The cell the point folds in.</param>
     /// <returns>The folded point, relative to its cell's center.</returns>
     public static Vector2 Fold(Vector2 point, SdfWallpaperGroup group, Vector2 cell, Vector2 limit, out Vector2 cellIndex) {
         var inverseCell = InverseCell(cell: cell, group: group);
 
         if (group >= SdfWallpaperGroup.P3) {
-            return FoldHex(cellIndex: out cellIndex, group: group, inversePitch: inverseCell, limit: limit, pitch: cell.X, q: point);
+            return FoldHex(cellIndex: out cellIndex, group: group, inversePitch: inverseCell, pitch: cell.X, q: point);
         }
         cellIndex = Vector2.Clamp(max: limit, min: -limit, value1: new Vector2(x: MathF.Round(x: (point.X * inverseCell.X)), y: MathF.Round(x: (point.Y * inverseCell.Y))));
         var r = (point - (cell * cellIndex));
@@ -103,7 +158,7 @@ public static class SdfWallpaperFold {
         return (((group == SdfWallpaperGroup.Cmm) && (folded.Y < 0f)) ? -folded : folded);
     }
 
-    private static Vector2 FoldHex(Vector2 q, SdfWallpaperGroup group, float pitch, Vector2 inversePitch, Vector2 limit, out Vector2 cellIndex) {
+    private static Vector2 FoldHex(Vector2 q, SdfWallpaperGroup group, float pitch, Vector2 inversePitch, out Vector2 cellIndex) {
         var axialB = (q.Y * inversePitch.Y);
         var axialA = ((q.X * inversePitch.X) - (0.5f * axialB));
         var axialC = -(axialA + axialB);
@@ -119,8 +174,6 @@ public static class SdfWallpaperFold {
         } else if (errorB > errorC) {
             roundedB = -(roundedA + roundedC);
         }
-        roundedA = Math.Clamp(max: limit.X, min: -limit.X, value: roundedA);
-        roundedB = Math.Clamp(max: limit.Y, min: -limit.Y, value: roundedB);
         cellIndex = new Vector2(x: roundedA, y: roundedB);
         var r = (q - (new Vector2(x: (roundedA + (0.5f * roundedB)), y: (roundedB * (Sqrt3 * 0.5f))) * pitch));
 
@@ -172,7 +225,7 @@ public static class SdfWallpaperFold {
         var groups = Enum.GetValues<SdfWallpaperGroup>();
         var continuity = new bool[groups.Length];
         var cell = Vector2.One;
-        var limit = new Vector2(value: 1.0e6f);
+        var limit = new Vector2(value: UnboundedLimit);
 
         foreach (var group in groups) {
             var stretch = 0f;
