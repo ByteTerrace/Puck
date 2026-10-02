@@ -158,6 +158,7 @@ internal static class CountersCommand {
 
         return true;
     }
+
     private static int Report(IReadOnlyList<string> differences) {
         foreach (var difference in differences) {
             Console.Out.WriteLine(value: $"{Verb}: {difference}");

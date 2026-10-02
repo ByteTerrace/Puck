@@ -440,9 +440,9 @@ public sealed class CountersCeilingsLawTests {
             directory.Delete(recursive: true);
         }
     }
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    [Theory]
     public void AKernelZeroCannotBeReadWithoutItsRequiredZeroMark(bool explicitFalse) {
         var run = Recorded.Runs[0];
         var zero = run.Ceilings.First(predicate: static ceiling => ceiling.RequiredZero);
