@@ -263,11 +263,14 @@ tick, and a capture to the tick its frame composed; each law replays the same
 frame costs through `Advance` as its red leg, and holds a tick its root cannot
 render yet to one rendered frame, against one step an iteration as its red leg.
 The World's root reports its completion from the render graph runtime
-(`RenderGraphRuntime.Completion`): the root's image shows the frame only when
+(`RenderGraphRuntime.Render`): the root's image shows the frame only when
 the root rendered it and every instance it reads within the frame rendered it
 too, or stands unchanged on purpose (a refresh divisor, an unchanged view, a
-paused pane). `RenderGraphRuntimeLawTests` holds a cold build and a producer
-that keeps its older output to it.
+paused pipeline, including one held at time scale zero). A paused instance's
+last image is its output for every frame until it is stepped or resumed, so
+what reads it renders the frame over that image. `RenderGraphRuntimeLawTests`
+holds a cold build and a producer that keeps its older output to it, and a root
+reading a paused instance renders.
 
 Each launcher host registers its pacing (`HostPacing`): `OneTickPerFrame`
 for the offscreen host, `WallClock` for the windowed and headless hosts.

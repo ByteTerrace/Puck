@@ -80,6 +80,46 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.Null(@object: runtime.Render.Reason);
         }
     }
+    /// <summary>A paused instance presents its last image on purpose (a pipeline paused, or held at time scale zero, by
+    /// an editor), so the root that reads it within the frame renders the frame over that image: the offscreen host steps
+    /// on rather than holding the tick for a render the paused instance will never make. A step renders it again, and
+    /// the root stays rendered throughout. The red leg is a root held not yet renderable for as long as its input is
+    /// paused, since it read an earlier frame's image.</summary>
+    [Fact]
+    public void ARootReadingAPausedInstanceRendersOverItsStandingImage() {
+        var gpu = new FakePipelineGpu();
+
+        var (runtime, frames) = CompletionScene(gpu: gpu);
+
+        using (runtime) {
+            frames.Settle();
+            Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Render.Completion);
+
+            var camera = runtime.Node(instance: 0);
+            var submitted = camera.FrameCounter;
+
+            camera.Paused = true;
+
+            for (var frame = 0; (frame < 4); frame++) {
+                Assert.False(condition: frames.Next().IsEmpty);
+                Assert.Equal(expected: submitted, actual: camera.FrameCounter);
+                Assert.Equal(expected: (FrameCompletion.Rendered, ((string?)null)), actual: (runtime.Render.Completion, runtime.Render.Reason));
+            }
+
+            camera.Step();
+            _ = frames.Next();
+            Assert.Equal(expected: (submitted + 1), actual: camera.FrameCounter);
+            Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Render.Completion);
+            _ = frames.Next();
+            Assert.Equal(expected: (submitted + 1), actual: camera.FrameCounter);
+            Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Render.Completion);
+
+            camera.Paused = false;
+            _ = frames.Next();
+            Assert.Equal(expected: (submitted + 2), actual: camera.FrameCounter);
+            Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Render.Completion);
+        }
+    }
     [Fact]
     public void ARebuildNeverYieldsAnOlderImageForANewerFrame() {
         var gpu = new FakePipelineGpu();
