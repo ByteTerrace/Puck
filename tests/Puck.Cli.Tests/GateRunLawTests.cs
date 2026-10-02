@@ -126,6 +126,8 @@ public sealed class GateRunLawTests {
                 ["vocabulary", "--check"],
                 ["shaders", "generate", "--check"],
                 ["branding", "--check"],
+                ["formats", "--check"],
+                ["canary-ceilings", "--check"],
             }
         );
         // The run keeps only its log: the CLI copy and the file list go when it ends.
@@ -140,7 +142,7 @@ public sealed class GateRunLawTests {
         var (exitCode, output, _) = Gate(branches: branches, directory: directory, runner: runner);
 
         Assert.Equal(actual: exitCode, expected: CliExit.Failed);
-        Assert.Equal(actual: runner.Steps.Count, expected: 11);
+        Assert.Equal(actual: runner.Steps.Count, expected: 13);
         Assert.Contains(actualString: output, expectedSubstring: "gate: lengths FAILED (exit 1)");
         Assert.Contains(actualString: output, expectedSubstring: "gate: FAILED: lengths; full output in ");
         Assert.Contains(expectedSubstring: "===== lengths (exit 1)\noutput of lengths", actualString: File.ReadAllText(path: directory.PathOf(name: "gate.log")).ReplaceLineEndings(replacementText: "\n"));

@@ -764,7 +764,8 @@ against the merge base of `HEAD` and the branch it lands on, `--merge-base`
    over the changed C# and `.puck` sources, `puck lengths --check`,
    `puck comment-smells --check`, `puck docs links`, `puck schema --check`,
    `puck architecture --check`, `puck registry --check`, `puck vocabulary --check`,
-   `puck shaders generate --check` and `puck branding --check`.
+   `puck shaders generate --check`, `puck branding --check`, `puck formats --check`
+   and `puck canary-ceilings --check`.
    Nothing in the checkout is rewritten.
 
 A failed step fails the gate, and the later steps still run. Each step's full
@@ -787,6 +788,8 @@ gate: registry passed
 gate: vocabulary passed
 gate: shaders generate passed
 gate: branding passed
+gate: formats passed
+gate: canary-ceilings passed
 gate: passed; full output in ../../Temp/puck-gate-x1y2/gate.log
 ```
 

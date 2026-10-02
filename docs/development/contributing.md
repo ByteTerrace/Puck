@@ -129,7 +129,8 @@ solution and stops on a failed build; copies the CLI that build wrote into a
 directory of its own; runs the suites, test worlds and catalog check the change
 reaches, read against the merge base with the target branch so the target's
 newer commits are not counted; and runs `format`, `lengths`, `comment-smells`,
-`docs links` and `schema` in their check forms only. `puck gate --gpu` adds the
+`docs links`, `schema`, `architecture`, `registry`, `vocabulary`, `shaders generate`,
+`branding`, `formats` and `canary-ceilings` in their check forms only. `puck gate --gpu` adds the
 affected canaries and parity, one after the other, on a machine with no
 competing build or GPU work. The suites and canaries come from
 [`puck affected`](../reference/cli.md#puck-affectedthe-checks-a-change-needs),
