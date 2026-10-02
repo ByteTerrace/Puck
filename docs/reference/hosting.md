@@ -229,7 +229,11 @@ capture fill, so an external source waits only for its fill to convert, and a
 refused fill conversion refuses the frame. A filled source publishes the fill
 without publishing its live feed. A capture's CPU tier answers from its
 converted image rather than the pixels it captured, so a captured frame whose
-conversion refuses refuses too. An instance with no installed graph,
+conversion refuses refuses too. Camera CPU tiers forward the same conversion
+answer. A captured CPU frame keeps converting when its source has no newer
+frame; losing the source forgets its old image while submitted frames retain
+their leases. A GPU capture answers from the current ring's published image,
+so a replacement ring waits for its own first copy. An instance with no installed graph,
 or an uploaded source whose opening or descriptor has no conversion graph,
 also refuses the frame until its inputs change. Completion follows the
 scheduled same-frame reads, including buffers, external producers and package
@@ -422,6 +426,8 @@ and the frame's pass-pixel budget:
   imported source still answers its availability when no extent or display
   cadence can be scheduled: an unopened feed refuses, a first frame arriving
   on another thread waits, and an offscreen capture fill renders once it has converted.
+  These rows read `IRenderGraphSourceProducer.Answer`, which produces no work;
+  only scheduled rows call `Produce`. Repeated answers reuse their named diagnostics.
   The runtime declares an upload's state and a source producer's
   (`IRenderGraphSourceProducer.Descriptor`) itself, after the host's. Cadence is
   counted in ticks and frames, never the wall clock.

@@ -622,6 +622,11 @@ internal sealed partial class WorldScreenBinder {
                 return m_descriptor;
             }
         }
+        public FrameRender Answer => (feed.Live
+            ? FrameRender.Rendered
+            : ((feed.Refusal is { } refusal)
+                ? FrameRender.Refused(reason: refusal)
+                : FrameRender.Waiting(reason: (feed.Fault ?? "probe awaiting a first frame"))));
         public string? Fault => (feed.Live
             ? null
             : (feed.Fault ?? "probe awaiting a first frame")
@@ -635,11 +640,7 @@ internal sealed partial class WorldScreenBinder {
         public void NotifyDeviceLost() { }
         // The binder services the ring each publish; a probe whose ring could not be provisioned refuses until a later
         // provision succeeds, and one provisioned waits for its kernel's first frame.
-        public FrameRender Publish(in FrameContext context) => (feed.Live
-            ? FrameRender.Rendered
-            : ((feed.Refusal is { } refusal)
-                ? FrameRender.Refused(reason: refusal)
-                : FrameRender.Waiting(reason: (feed.Fault ?? "probe awaiting a first frame"))));
+        public FrameRender Publish(in FrameContext context) => Answer;
     }
     // A view export on the Vulkan host: the render device's import of a texture and a fence the binder's headless
     // Direct3D 12 device made, which the engine writes and signals as it would an image of its own. The import goes first,

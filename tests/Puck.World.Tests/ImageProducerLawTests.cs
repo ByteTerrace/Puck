@@ -608,6 +608,7 @@ public sealed class ImageProducerLawTests {
         public List<(int Seat, WorldCameraSensor Sensor)> Reads { get; } = [];
 
         public GpuImageLease Acquire(int seat, WorldCameraSensor sensor) => default;
+        public FrameRender Answer(int seat, WorldCameraSensor sensor) => FrameRender.Waiting(reason: "no camera assigned");
         public string? Fault(int seat, WorldCameraSensor sensor) => null;
         public nint Handle(int seat, WorldCameraSensor sensor) => 0;
         public Vector3 Light(int seat, WorldCameraSensor sensor) => Vector3.Zero;
@@ -622,6 +623,8 @@ public sealed class ImageProducerLawTests {
     }
     // An imported feed that answers its publish as the law says, with an image only when it answers rendered.
     private sealed class AnsweringFeed : IWorldImportFeed {
+        public int Publications { get; private set; }
+
         public FrameRender Answer { get; set; } = FrameRender.Rendered;
         public ImageSourceDescriptor Descriptor { get; } = new(
             Cadence: ImageSourceCadence.Rate(rateHz: 30U),
@@ -641,9 +644,40 @@ public sealed class ImageProducerLawTests {
         public void Dispose() { }
         public nint Handle() => (Answer.IsRendered ? FakeFeed.DesktopHandle : 0);
         public void NotifyDeviceLost() { }
-        public FrameRender Publish(in FrameContext context) => Answer;
+        public FrameRender Publish(in FrameContext context) {
+            Publications++;
+
+            return Answer;
+        }
     }
 
+    [Fact]
+    public void ReadingASourcesAnswerNeverPublishesItsFeed() {
+        var feed = new AnsweringFeed { Answer = FrameRender.Refused(reason: "the capture cannot convert") };
+        var filling = false;
+        using var source = new WorldImageFeedProducer(
+            fill: static _ => default,
+            fillRender: static _ => FrameRender.Rendered,
+            gate: new WorldCaptureGate(alwaysFills: false, captureArmed: () => filling),
+            opening: new WorldImageSourceOpening(
+                Context: new RenderGraphExternalProducerContext(Device: null!, HostsOnDirectX: false, Instance: "capture", Package: "source.capture"),
+                Fault: null,
+                Feed: feed
+            )
+        );
+
+        for (var frame = 0; (frame < 32); frame++) {
+            Assert.Equal(expected: feed.Answer, actual: source.Answer);
+        }
+
+        filling = true;
+
+        for (var frame = 0; (frame < 32); frame++) {
+            Assert.True(condition: source.Answer.IsRendered);
+        }
+
+        Assert.Equal(expected: 0, actual: feed.Publications);
+    }
     [Fact]
     public void ASteadyOffscreenFillAllocatesNothingWhileItsSeatHasNoCamera() {
         var feed = new WorldCameraSourceFeed(cameras: new FakeSeatCameras(), profile: null, seat: 1, sensor: WorldCameraSensor.Color);
@@ -760,6 +794,7 @@ public sealed class ImageProducerLawTests {
         public static readonly nint DesktopHandle = 0xDE5C;
 
         public int Acquisitions { get; private set; }
+        public FrameRender Answer => FrameRender.Rendered;
         public ImageSourceDescriptor Descriptor { get; } = descriptor;
         public bool Disposed { get; private set; }
         public string? Fault => null;

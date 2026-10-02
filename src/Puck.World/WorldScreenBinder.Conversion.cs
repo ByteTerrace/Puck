@@ -29,6 +29,10 @@ internal sealed partial class WorldScreenBinder {
 
         private Entry? m_current;
         private int m_nextToken;
+        // A CPU frame whose conversion has not submitted yet survives a source with no newer frame to hand over.
+        private byte[]? m_pendingPixels;
+        private Surface m_pendingSurface;
+        private bool m_pendingConversion;
         // Why the latest surface has no conversion: one that is not CPU pixels, or CPU pixels in a format none reads.
         private string? m_unconvertible;
         private bool m_retired;
@@ -120,14 +124,8 @@ internal sealed partial class WorldScreenBinder {
                 entry.Converter.OnDeviceLost();
             }
         }
-        // Retires every converter with the pixels' owner.
-        public void Retire() {
-            if (m_retired) {
-                return;
-            }
-
-            m_retired = true;
-
+        // Forgets a lost source's image while submitted frames keep their counted leases alive.
+        public void Forget() {
             if (m_current is { } current) {
                 Retire(entry: current);
             }
@@ -144,32 +142,48 @@ internal sealed partial class WorldScreenBinder {
 
             m_current = null;
             m_shown = null;
+            m_unconvertible = null;
+            m_pendingSurface = default;
+            m_pendingConversion = false;
         }
-        // Converts one captured surface, when the runtime runs: CPU pixels in a format a conversion reads convert, CPU
-        // pixels of no extent convert nothing, and any other surface refuses until a later one converts.
+        // Retires every converter with the pixels' owner.
+        public void Retire() {
+            if (m_retired) {
+                return;
+            }
+
+            m_retired = true;
+            Forget();
+            m_pendingPixels = null;
+        }
+        // Advances a captured frame's pending conversion even when the source has no newer pixels.
+        public bool Retry(RenderGraphRuntime? runtime, in FrameContext context) => (m_pendingConversion && TryConvert(
+            context: in context,
+            runtime: runtime,
+            surface: in m_pendingSurface
+        ));
+        // Converts a captured CPU surface when the runtime runs, retaining a snapshot until its conversion submits.
+        // A surface no conversion reads refuses until a later one converts.
         public bool TryConvert(RenderGraphRuntime? runtime, in FrameContext context, in Surface surface) {
+            if (m_retired) {
+                return false;
+            }
+
             if (
                 !surface.IsCpuPixels ||
                 (PixelFormatOf(format: surface.Format) is not { } format)
             ) {
                 m_unconvertible ??= $"{m_name} hands over a frame no conversion reads: one that is not CPU pixels";
+                m_pendingConversion = false;
+                m_pendingSurface = default;
 
                 return false;
             }
 
             m_unconvertible = null;
 
-            if (
-                (runtime is null) ||
-                (0U == surface.Width) ||
-                (0U == surface.Height)
-            ) {
-                return false;
-            }
-
             var byteCount = checked((int)((surface.Width * surface.Height) * 4U));
-
-            return ((surface.Pixels.Length >= byteCount) && TryConvert(
+            var converted = ((runtime is not null) && TryConvert(
                 context: in context,
                 format: format,
                 height: surface.Height,
@@ -177,6 +191,21 @@ internal sealed partial class WorldScreenBinder {
                 runtime: runtime,
                 width: surface.Width
             ));
+
+            m_pendingConversion = !converted;
+
+            if (converted) {
+                m_pendingSurface = default;
+            } else {
+                if (m_pendingPixels?.Length != byteCount) {
+                    m_pendingPixels = new byte[byteCount];
+                }
+
+                surface.Pixels.Span.CopyTo(destination: m_pendingPixels);
+                m_pendingSurface = Surface.CpuPixels(format: surface.Format, height: surface.Height, pixels: m_pendingPixels, width: surface.Width);
+            }
+
+            return converted;
         }
         // Converts one image of the given format and extent, making a converter for it when the pixels change shape.
         public bool TryConvert(RenderGraphRuntime runtime, in FrameContext context, ImagePixelFormat format, uint width, uint height, ReadOnlySpan<byte> planes) {

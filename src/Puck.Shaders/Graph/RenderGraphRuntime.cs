@@ -1113,7 +1113,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 // An unopened source or an unprovisioned probe has no extent to schedule, but it still answers:
                 // a refusal must reach its consumers, and a filled source can already show its 1x1 fill, including
                 // offscreen where the scheduler cannot pace a rate source against a display.
-                var production = producer.Produce(context: in context, width: ((uint)row.Width), height: ((uint)row.Height));
+                var production = producer.Answer;
 
                 if (production.IsRendered) {
                     MarkCurrent(index: index);

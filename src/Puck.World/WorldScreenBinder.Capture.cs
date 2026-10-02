@@ -165,7 +165,6 @@ internal sealed partial class WorldScreenBinder {
             }
 
             // Live once the platform has completed its first GPU copy — the same first-frame gate the CPU path uses.
-            feed.GpuCopied = (feed.Source!.GpuRevision > 0L);
             feed.Fault = (feed.Live
                 ? null
                 : $"{feed.Label} awaiting a compositor frame"
@@ -551,13 +550,11 @@ internal sealed partial class WorldScreenBinder {
             ? $"monitor {monitor}"
             : $"window '{Title}'"
         );
-        // Whether the platform has completed its first GPU copy into GpuTargets since the source was (re)acquired.
-        public bool GpuCopied { get; set; }
         public Vector3 Light { get; set; }
         // Whether the feed holds a frame: a completed GPU copy, or a captured CPU frame, which answers rendered only once
         // it has converted (WorldCapturePixels.Answer).
         public bool Live => (GpuRoute
-            ? GpuCopied
+            ? ((GpuTargets?.LatestHandle() ?? 0) != 0)
             : Pixels.Captured);
 
         public int? MonitorIndex { get; } = monitorIndex;
@@ -629,7 +626,6 @@ internal sealed partial class WorldScreenBinder {
             // The stale GPU attachment is left for EnsureGpuTargets to reallocate against the replacement source.
             Source?.Dispose();
             Source = null;
-            GpuCopied = false;
             Pixels.Forget();
             Fault = null;
 

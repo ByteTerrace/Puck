@@ -396,6 +396,11 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
         return true;
     }
 
+    FrameRender IWorldSeatCameras.Answer(int seat, WorldCameraSensor sensor) =>
+        ((m_roster.TryGetSeatDevice(slot: PlayerRoster.SlotFromDisplay(number: seat), kind: InputDeviceKind.Camera, device: out var deviceId) &&
+            m_cameraFeeds.TryGetValue(key: (deviceId, sensor), value: out var feed))
+            ? feed.Answer
+            : FrameRender.Waiting(reason: "camera awaiting a sensor"));
     GpuImageLease IWorldSeatCameras.Acquire(int seat, WorldCameraSensor sensor) =>
         (TryResolveCamera(
             device: out _,
@@ -936,6 +941,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
         var version = stream.Version;
 
         if (version == feed.LastFrameVersion) {
+            _ = feed.Pixels.Retry(context: in context, runtime: Runtime);
             NoteCameraStarvation(
                 device: device,
                 feed: feed
@@ -1468,6 +1474,21 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             ? (checked((uint)shared.Width), checked((uint)shared.Height))
             : (Pixels.Extent ?? (OutputWidth, OutputHeight))
         );
+        public FrameRender Answer {
+            get {
+                if (!Live) {
+                    return FrameRender.Waiting(reason: (Fault ?? "camera awaiting a first frame"));
+                }
+
+                var render = ((SharedStream is not null)
+                    ? FrameRender.Waiting(reason: "camera awaiting a first frame")
+                    : Pixels.Render);
+
+                return (((render.Completion != FrameCompletion.Refused) && (Handle() != 0))
+                    ? FrameRender.Rendered
+                    : render);
+            }
+        }
 
         public GpuImageLease AcquireFrame() {
             if (
@@ -1494,6 +1515,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             Fault = null;
             LastFrameVersion = -1L;
             Live = false;
+            Pixels.Forget();
             StarvedPulls = 0;
             m_cadence.Rearm();
         }
@@ -1504,6 +1526,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             Fault = fault;
             LastFrameVersion = -1L;
             Live = false;
+            Pixels.Forget();
             StarvedPulls = 0;
             m_cadence.Rearm();
         }

@@ -33,12 +33,24 @@ public sealed class WorldCaptureFillLawTests {
     public void ACapturedFrameAnswersFromItsConversionNeverFromItsPixels() {
         using var scene = new Scene(shown: Pattern());
         using var capture = new WorldCapturePixels(name: "capture:law");
+        using var camera = new WorldCameraSourceFeed(cameras: new CapturedSeatCameras(pixels: capture), profile: null, seat: 2, sensor: WorldCameraSensor.Infrared);
         var source = new CpuFrameSource();
 
         FrameRender Pull() {
             Assert.True(condition: capture.Pull(context: default, runtime: scene.Runtime, source: source));
 
-            return capture.Answer();
+            var answer = capture.Answer();
+
+            Assert.Equal(expected: answer, actual: camera.Publish(context: default));
+            Assert.Equal(expected: answer, actual: WorldCaptureFrame.Answer(
+                ended: false,
+                fault: null,
+                gpuHandle: 0x5A,
+                gpuRoute: false,
+                pixels: capture
+            ));
+
+            return answer;
         }
 
         Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: capture.Answer().Completion);
@@ -71,6 +83,84 @@ public sealed class WorldCaptureFillLawTests {
         source.Shared = true;
         Assert.Equal(expected: FrameCompletion.Refused, actual: Pull().Completion);
         Assert.Contains(expectedSubstring: "no conversion reads", actualString: capture.Answer().Reason);
+
+        var held = capture.Acquire();
+
+        capture.Forget();
+        Assert.Equal(expected: ((nint)0), actual: capture.Handle);
+        Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: capture.Answer().Completion);
+        source.Shared = false;
+        Assert.True(condition: capture.Pull(context: default, runtime: null, source: source));
+        Assert.Equal(expected: ((nint)0), actual: capture.Handle);
+        Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: camera.Publish(context: default).Completion);
+        held.Retire();
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ACapturedFrameSettlesItsConversionWhenNoNewerFrameArrives(bool refused) {
+        using var scene = new Scene(shown: Pattern());
+        using var capture = new WorldCapturePixels(name: "capture:quiet-law");
+        var source = new CpuFrameSource();
+
+        if (refused) {
+            scene.Faults.Arm(kind: GpuCreationKind.Pipeline, nth: 1);
+        }
+
+        scene.HoldPipelines();
+        Assert.True(condition: capture.Pull(context: default, runtime: scene.Runtime, source: source));
+        Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: capture.Answer().Completion);
+        source.Available = false;
+        scene.ReleasePipelines();
+        TestLiveness.Within(
+            building: () => capture.IsBuilding,
+            frames: SettleFrames,
+            reason: () => (capture.Answer().Reason ?? "the quiet capture never settled its conversion"),
+            step: () => {
+                Assert.False(condition: capture.Pull(context: default, runtime: scene.Runtime, source: source));
+
+                return (capture.Answer().Completion == (refused ? FrameCompletion.Refused : FrameCompletion.Rendered));
+            }
+        );
+
+        if (refused) {
+            Assert.Contains(expectedSubstring: GpuCreationFaults.RefusalCode, actualString: capture.Answer().Reason);
+            scene.Faults.Disarm();
+            TestLiveness.Within(
+                building: () => capture.IsBuilding,
+                frames: SettleFrames,
+                reason: () => (capture.Answer().Reason ?? "the quiet capture never rebuilt its conversion"),
+                step: () => {
+                    Assert.False(condition: capture.Pull(context: default, runtime: scene.Runtime, source: source));
+
+                    return capture.Answer().IsRendered;
+                }
+            );
+        }
+    }
+    [Fact]
+    public void ACaptureAnswersOnlyTheImageOfItsRouteAndAnEndedSourceRefusesItsLastFrame() {
+        using var capture = new WorldCapturePixels(name: "capture:route-law");
+        var source = new CpuFrameSource { Shared = true };
+
+        FrameRender Answer(bool gpuRoute, nint gpuHandle, bool ended = false) => WorldCaptureFrame.Answer(
+            ended: ended,
+            fault: null,
+            gpuHandle: gpuHandle,
+            gpuRoute: gpuRoute,
+            pixels: capture
+        );
+
+        Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: Answer(gpuRoute: true, gpuHandle: 0).Completion);
+        Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: Answer(gpuRoute: false, gpuHandle: 0x5A).Completion);
+        Assert.True(condition: capture.Pull(context: default, runtime: null, source: source));
+        Assert.Equal(expected: FrameCompletion.Refused, actual: Answer(gpuRoute: false, gpuHandle: 0x5A).Completion);
+        Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: Answer(gpuRoute: true, gpuHandle: 0).Completion);
+        Assert.True(condition: Answer(gpuRoute: true, gpuHandle: 0x5A).IsRendered);
+        Assert.Equal(expected: FrameCompletion.Refused, actual: Answer(ended: true, gpuHandle: 0x5A, gpuRoute: true).Completion);
+        Assert.Equal(expected: FrameCompletion.Refused, actual: Answer(ended: true, gpuHandle: 0x5A, gpuRoute: false).Completion);
+        capture.Forget();
+        Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: Answer(gpuRoute: false, gpuHandle: 0x5A).Completion);
     }
     [Fact]
     public void AnUnopenedImportedSourceRefusesWithoutAScheduledExtent() {
@@ -475,15 +565,32 @@ public sealed class WorldCaptureFillLawTests {
     private sealed class CpuFrameSource : IFrameCaptureSource {
         private readonly byte[] m_pixels = new byte[16];
 
+        public bool Available { get; set; } = true;
         public bool Shared { get; set; }
 
         public bool TryCapture(out Surface surface) {
+            if (!Available) {
+                surface = default;
+
+                return false;
+            }
+
             surface = (Shared
                 ? Surface.SharedTexture(format: GpuPixelFormat.B8G8R8A8Unorm, height: 2U, sharedHandle: 0x5A, width: 2U)
                 : Surface.CpuPixels(format: GpuPixelFormat.B8G8R8A8Unorm, height: 2U, pixels: m_pixels, width: 2U));
 
             return true;
         }
+    }
+    // A seat whose CPU sensor answers its real conversion. Handle deliberately remains the previously converted
+    // image, even when a later conversion refuses, so Publish cannot infer availability from the handle.
+    private sealed class CapturedSeatCameras(WorldCapturePixels pixels) : IWorldSeatCameras {
+        public GpuImageLease Acquire(int seat, WorldCameraSensor sensor) => pixels.Acquire();
+        public FrameRender Answer(int seat, WorldCameraSensor sensor) => pixels.Answer();
+        public (uint Width, uint Height)? Extent(int seat, WorldCameraSensor sensor) => (2U, 2U);
+        public string? Fault(int seat, WorldCameraSensor sensor) => pixels.Answer().Reason;
+        public nint Handle(int seat, WorldCameraSensor sensor) => pixels.Handle;
+        public Vector3 Light(int seat, WorldCameraSensor sensor) => pixels.Light;
     }
     private sealed class FaultingDevice(IGpuDeviceContext gpu, GpuCreationFaults faults) : IGpuDeviceContext {
         public long AdapterLuid => gpu.AdapterLuid;

@@ -40,10 +40,8 @@ public interface IRenderGraphExternalProducer : ICaptureRequestTarget, IDisposab
     /// <summary>Renders one frame at an extent, rebuilding its targets first when the extent differs from the last
     /// frame's.</summary>
     /// <param name="context">The host's frame context.</param>
-    /// <param name="width">The extent width, in pixels, at least one; zero for a source that has negotiated no extent,
-    /// which still answers its availability.</param>
-    /// <param name="height">The extent height, in pixels, at least one; zero for a source that has negotiated no extent,
-    /// which still answers its availability.</param>
+    /// <param name="width">The extent width, in pixels, at least one.</param>
+    /// <param name="height">The extent height, in pixels, at least one.</param>
     /// <param name="reads">The latest completed image of each instance the producer's instance reads, whose leases the
     /// producer takes for the images its submission samples (<see cref="RenderGraphExternalReads.Take"/>), or
     /// <see langword="null"/> when it reads none.</param>
@@ -63,6 +61,9 @@ public interface IRenderGraphExternalProducer : ICaptureRequestTarget, IDisposab
 /// at its producer's cadence and negotiated extent, and <see cref="IRenderGraphExternalProducer.Produce"/> publishes the
 /// image the cadence owes.</summary>
 public interface IRenderGraphSourceProducer : IRenderGraphExternalProducer {
+    /// <summary>Gets the source's availability without publishing, pulling or submitting work. The runtime reads it
+    /// when the scheduler refuses the source or gives it no extent.</summary>
+    FrameRender Answer { get; }
     /// <summary>Gets what the producer declares for the source right now: its extent, zero on either axis while none is
     /// negotiated, and its cadence; or <see langword="null"/> while it has no image to declare.</summary>
     ImageSourceDescriptor? Descriptor { get; }

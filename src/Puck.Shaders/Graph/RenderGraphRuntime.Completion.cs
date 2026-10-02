@@ -11,6 +11,9 @@ public sealed partial class RenderGraphRuntime {
     private string?[] m_stale = [];
     // Whether that reason is a refusal, which only a change to what the instance was built from lifts.
     private bool[] m_staleRefused = [];
+    // Repeated producer answers reuse their named diagnostic, even after a rendered frame clears the standing.
+    private string?[] m_productionReasons = [];
+    private string?[] m_productionMessages = [];
 
     /// <summary>Gets whether the latest produced frame's root image shows that frame:
     /// <see cref="FrameCompletion.Rendered"/> when the root rendered it over inputs current for it (or stands unchanged),
@@ -23,6 +26,8 @@ public sealed partial class RenderGraphRuntime {
     private void ResetStale(int count) {
         m_stale = new string?[count];
         m_staleRefused = new bool[count];
+        m_productionReasons = new string?[count];
+        m_productionMessages = new string?[count];
     }
     private void MarkCurrent(int index) {
         m_stale[index] = null;
@@ -102,11 +107,18 @@ public sealed partial class RenderGraphRuntime {
     }
     // A producer's or an upload's own answer that it produced nothing: refused or waiting, as it says, naming the
     // instance and its reason.
-    private void MarkProduction(int index, FrameRender production) => MarkStale(
-        index: index,
-        reason: $"the instance '{m_set.Instances[index].Name}' produced no output: {production.Reason}",
-        refused: (production.Completion == FrameCompletion.Refused)
-    );
+    private void MarkProduction(int index, FrameRender production) {
+        if ((m_productionMessages[index] is null) || (m_productionReasons[index] != production.Reason)) {
+            m_productionReasons[index] = production.Reason;
+            m_productionMessages[index] = $"the instance '{m_set.Instances[index].Name}' produced no output: {production.Reason}";
+        }
+
+        MarkStale(
+            index: index,
+            reason: m_productionMessages[index]!,
+            refused: (production.Completion == FrameCompletion.Refused)
+        );
+    }
     // A graph instance that rendered: stale when an input it reads within the frame is, when it bound a stand-in, or when
     // the output it bound is older than the frame the schedule has it read.
     private void MarkRendered(int index, RenderGraphSchedule schedule) {

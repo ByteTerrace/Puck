@@ -65,11 +65,15 @@ public sealed class WorldCapturePixels : IDisposable {
     public void Dispose() => m_pixels.Retire();
     /// <summary>Forgets the captured frame once the capture's source is gone, so the capture waits for its replacement's
     /// first frame.</summary>
-    public void Forget() => Captured = false;
+    public void Forget() {
+        Captured = false;
+        m_pixels.Forget();
+    }
     /// <summary>Drops every converter's device objects after a device loss; the next captured frame converts on the
     /// recreated device.</summary>
     public void OnDeviceLost() => m_pixels.OnDeviceLost();
-    /// <summary>Captures the source's current frame and converts it.</summary>
+    /// <summary>Captures the source's current frame and converts it, or advances the last captured frame's pending
+    /// conversion when the source has no newer frame.</summary>
     /// <param name="source">The source to capture from.</param>
     /// <param name="runtime">The runtime whose converter converts the frame, or <see langword="null"/> before one runs,
     /// when nothing converts.</param>
@@ -80,6 +84,8 @@ public sealed class WorldCapturePixels : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         if (!source.TryCapture(surface: out var surface)) {
+            _ = m_pixels.Retry(context: in context, runtime: runtime);
+
             return false;
         }
 

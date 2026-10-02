@@ -20,6 +20,7 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
     private readonly WorldCaptureGate m_gate;
     // Why the opened feed hands out no image, when it is no import feed.
     private readonly string? m_notImported;
+    private readonly string m_unopened;
 
     /// <summary>Initializes a new instance of the <see cref="WorldImageFeedProducer"/> class, which owns the opened
     /// feed.</summary>
@@ -42,8 +43,15 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
             ? $"image producer '{opening.Feed.Descriptor.Producer}' opened a feed that hands out no image"
             : null);
         Opening = opening;
+        m_unopened = $"source '{opening.Context.Instance}' opened no feed";
     }
 
+    /// <inheritdoc/>
+    public FrameRender Answer => ((Feed is { } feed)
+        ? (m_gate.Fills(content: feed.Descriptor.Content)
+            ? m_fillRender(arg: feed.Descriptor.CaptureFill)
+            : feed.Answer)
+        : FrameRender.Refused(reason: (Fault ?? m_unopened)));
     /// <inheritdoc/>
     public ImageSourceDescriptor? Descriptor => Feed?.Descriptor;
     /// <summary>Gets why the source shows nothing: why its feed did not open, or the feed's own fault; or
@@ -79,15 +87,11 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
     /// its feed does (<see cref="IWorldImportFeed.Publish"/>). The extent is the one the feed declared, so the arguments
     /// are not read. A filled source publishes only its fill; the live feed owes no publication.</remarks>
     public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
-        if (Feed is not { } feed) {
-            return FrameRender.Refused(reason: (Fault ?? $"source '{Opening.Context.Instance}' opened no feed"));
-        }
-
-        if (!m_gate.Fills(content: feed.Descriptor.Content)) {
+        if ((Feed is { } feed) && !m_gate.Fills(content: feed.Descriptor.Content)) {
             return feed.Publish(context: in context);
         }
 
-        return m_fillRender(arg: feed.Descriptor.CaptureFill);
+        return Answer;
     }
     /// <inheritdoc/>
     /// <remarks>A source is captured through the instance that shows it, so a capture armed on the source itself is

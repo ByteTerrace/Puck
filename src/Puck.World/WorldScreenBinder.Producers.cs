@@ -169,6 +169,13 @@ internal sealed partial class WorldScreenBinder {
             );
         }
 
+        public FrameRender Answer => WorldCaptureFrame.Answer(
+            ended: Feed.Ended,
+            fault: Feed.Fault,
+            gpuHandle: (Feed.GpuTargets?.LatestHandle() ?? 0),
+            gpuRoute: Feed.GpuRoute,
+            pixels: Feed.Pixels
+        );
         public ImageSourceDescriptor Descriptor { get; }
         public string? Fault => (Feed.Live
             ? null
@@ -189,18 +196,7 @@ internal sealed partial class WorldScreenBinder {
                 );
             }
 
-            if (Feed.Ended) {
-                return FrameRender.Refused(reason: (Feed.Fault ?? $"{Feed.Label} is unavailable"));
-            }
-
-            if (!Feed.Live) {
-                return FrameRender.Waiting(reason: (Feed.Fault ?? $"{Feed.Label} awaiting a compositor frame"));
-            }
-
-            // A captured CPU frame is rendered only once it has converted; a GPU copy is the sampled image itself.
-            return (Feed.GpuRoute
-                ? FrameRender.Rendered
-                : Feed.Pixels.Answer());
+            return Answer;
         }
     }
 }

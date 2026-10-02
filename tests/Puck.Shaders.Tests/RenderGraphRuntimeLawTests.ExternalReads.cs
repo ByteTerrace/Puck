@@ -132,7 +132,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         }
     }
     // While the display's rate is unknown a rate source's row is refused by name, yet the runtime still asks its producer
-    // to answer each frame, unpaced: a source producer paces its own feed, and an offscreen capture fill renders only so.
+    // to answer each frame without producing work; an offscreen capture fill can answer rendered that way.
     [Fact]
     public void ARateSourceIsRefusedByNameWhileTheDisplayRateIsUnknown() {
         var gpu = new FakePipelineGpu();
@@ -157,7 +157,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 );
             }
 
-            Assert.Equal(expected: 4, actual: source.Produced);
+            Assert.Equal(expected: 4, actual: source.Answered);
+            Assert.Equal(expected: 0, actual: source.Produced);
 
             // Once the display's rate is known, a 30 Hz source renders every second frame of a 60 Hz display.
             for (var frame = 4; (frame < 8); frame++) {
@@ -169,7 +170,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 );
             }
 
-            Assert.Equal(expected: 6, actual: source.Produced);
+            Assert.Equal(expected: 2, actual: source.Produced);
         }
     }
     // A source that hands out an image view alone, as a camera or a capture does, names no image a graph's barriers can
@@ -340,8 +341,19 @@ public sealed partial class RenderGraphRuntimeLawTests {
         private IGpuImage? m_image;
 
         public int Acquired { get; private set; }
+        public int Answered { get; private set; }
 
-        public ImageSourceDescriptor? Descriptor { get; } = new(
+        public FrameRender Availability { get; set; } = FrameRender.Waiting(reason: "the fake camera has not produced");
+
+        public FrameRender Answer {
+            get {
+                Answered++;
+
+                return Availability;
+            }
+        }
+
+        public ImageSourceDescriptor? Descriptor { get; set; } = new(
             Cadence: cadence,
             Color: ImageColorEncoding.Srgb,
             Content: ImageContentClass.External,
@@ -379,6 +391,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
             Extent = (width, height);
             Produced++;
+            Availability = FrameRender.Rendered;
 
             return FrameRender.Rendered;
         }

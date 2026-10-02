@@ -424,7 +424,13 @@ These are one-line cautions; the owning pages hold the derivations.
   shares the instance's region binding; the binder's `ConvertedPixels`), handed
   out under a counted lease; never upload a sampled image by hand. A capture's
   CPU tier (`WorldCapturePixels`) answers from its converted image, never from
-  the pixels it captured: a frame whose conversion refuses refuses the source. A converter
+  the pixels it captured: a frame whose conversion refuses refuses the source.
+  Camera CPU tiers forward that conversion answer through `IWorldSeatCameras.Answer`.
+  A pending CPU conversion retains its pixels and advances on cadence even when no newer
+  frame arrives. A lost source forgets its old image under the outstanding leases.
+  A capture slot delegates its answer to `WorldCaptureFrame.Answer`: an ended source
+  refuses; a GPU route answers from the currently attached ring's published image,
+  and a CPU route from `WorldCapturePixels.Answer`. A converter
   builds off the frame thread, so a capture fill (`WorldCaptureFills`)
   converts whenever a screen shows or a HUD frame names an external source,
   never first on the frame a capture is armed for, which would have no image,
@@ -500,6 +506,9 @@ These are one-line cautions; the owning pages hold the derivations.
   answers through `RenderGraphSourceConverter.Render` and `WorldCaptureFills.RenderOf`:
   a refused fill refuses the frame, and a filled source publishes no live feed.
   An imported source still answers when no extent or display cadence can be scheduled.
+  Such rows read `IRenderGraphSourceProducer.Answer`, which publishes no feed and
+  submits no work; only scheduled rows call `Produce`. Repeated producer answers
+  reuse their named diagnostics without allocating another string.
   A new kind of
   refusal states itself through `RefusalOf`, and `MarkUnproduced` in
   `RenderGraphRuntime.Completion.cs` is the one place it becomes `Refused`

@@ -25,6 +25,9 @@ public interface IWorldImageFeed : IDisposable {
 /// capture): its <see cref="WorldImageFeedProducer"/> publishes it at its cadence and acquires its image through
 /// <see cref="WorldCaptureGate"/>, so an external feed never reaches a capture.</summary>
 public interface IWorldImportFeed : IWorldImageFeed {
+    /// <summary>Gets the current image's answer without capturing, converting or submitting work.</summary>
+    FrameRender Answer { get; }
+
     /// <summary>Acquires the image for one submitted frame. A feed whose image another thread keeps writing returns a
     /// lease the sampling node retires once that submission completes.</summary>
     /// <returns>The lease, or one holding a zero handle while the feed has no image.</returns>
