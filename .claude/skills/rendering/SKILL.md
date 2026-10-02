@@ -958,7 +958,12 @@ These are one-line cautions; the owning pages hold the derivations.
   `sdfWorkSteps` beside the evaluation, never inside the interpreter; a texel
   counts only where one is written (`sdfVisibilityStoreWord`, the output writes),
   and `SdfWorkCountingLawTests` hold both. Vulkan devices are created with
-  `fragmentStoresAndAtomics` for the fragment stages' counts. A graphics
+  `fragmentStoresAndAtomics` for the fragment stages' counts and
+  `shaderDemoteToHelperInvocation` for a fragment `discard`, and every shader
+  module's SPIR-V capabilities are checked against
+  `VulkanShaderCapabilities.Enabled` before it is created: a capability that needs a
+  device feature is required at device creation and listed there
+  (`VulkanShaderCapabilitiesLawTests` holds every shipped module to it). A graphics
   pipeline whose layout binds a read-write buffer or storage image
   (`GpuPipelineLayoutDescription.ShaderWrites`) draws in a render pass that
   allows shader writes: `GpuPassPipelineKey.OfGraphics` derives
