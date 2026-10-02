@@ -1,0 +1,35 @@
+# The engine ready first, however long a cold driver cache takes; the leg's own timeout bounds it.
+world.wait ready 600
+# Dynamic resolution on at a native tier: the ceiling is three-quarter, and the grid is forced there first.
+world.dynamic-resolution three-quarter
+world.wait 10
+world.screenshot {run}/grid-three-quarter.png
+world.wait captures 10
+# The first capture builds its readback; from here the sweep creates nothing.
+world.counters gpu
+world.dynamic-resolution half
+world.wait 10
+world.screenshot {run}/grid-half.png
+world.wait captures 10
+world.dynamic-resolution quarter
+world.wait 10
+world.screenshot {run}/grid-quarter.png
+world.wait captures 10
+world.counters gpu
+# The references: dynamic resolution off, each tier allocated at its own ceiling.
+world.dynamic-resolution off
+world.render-scale three-quarter
+world.wait 10
+world.wait ready 30
+world.screenshot {run}/reference-three-quarter.png
+world.wait captures 10
+world.render-scale half
+world.wait 10
+world.wait ready 30
+world.screenshot {run}/reference-half.png
+world.wait captures 10
+world.render-scale quarter
+world.wait 10
+world.wait ready 30
+world.screenshot {run}/reference-quarter.png
+world.wait captures 10

@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'overlay-perturbed' (sha256/73dfef95f727ce612b31e5766e7a9e22d68aff2e6fd52165089c13cd3615816e), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
+// The echo pass of shader interface 'overlay-perturbed' (sha256/8329ddcb19226eadbff9ccf2658bf6ef48205d81bfad305ce0a53fe9157ae26d), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "overlay-perturbed.interface.hlsli"
 
@@ -19,9 +19,10 @@ void main(uint3 id : SV_DispatchThreadID) {
     echo[uint2(9, 0)] = ((asuint(frameGroup.cameraFov) == 0x400100A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(10, 0)] = ((asuint(frameGroup.cameraTarget.x) == 0x400110A5u) && (asuint(frameGroup.cameraTarget.y) == 0x400120A5u) && (asuint(frameGroup.cameraTarget.z) == 0x400130A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(11, 0)] = ((asuint(frameGroup.cameraUp.x) == 0x400150A5u) && (asuint(frameGroup.cameraUp.y) == 0x400160A5u) && (asuint(frameGroup.cameraUp.z) == 0x400170A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(12, 0)] = ((asuint(passGroup.extent.x) == 0x400013A5u) && (asuint(passGroup.extent.y) == 0x400023A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(13, 0)] = ((asuint(passGroup.counts.x) == 0x400053A5u) && (asuint(passGroup.counts.y) == 0x400063A5u) && (asuint(passGroup.counts.z) == 0x400073A5u) && (asuint(passGroup.counts.w) == 0x400083A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(14, 0)] = ((asuint(passGroup.misc.x) == 0x400093A5u) && (asuint(passGroup.misc.y) == 0x4000A3A5u) && (asuint(passGroup.misc.z) == 0x4000B3A5u) && (asuint(passGroup.misc.w) == 0x4000C3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(15, 0)] = ((asuint(passGroup.sdf.x) == 0x4000D3A5u) && (asuint(passGroup.sdf.y) == 0x4000E3A5u) && (asuint(passGroup.sdf.z) == 0x4000F3A5u) && (asuint(passGroup.sdf.w) == 0x400103A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(16, 0)] = ((asuint(passGroup.workCounterRow) == 0x400123A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(12, 0)] = ((asuint(frameGroup.placedExtent.x) == 0x400190A5u) && (asuint(frameGroup.placedExtent.y) == 0x4001A0A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(13, 0)] = ((asuint(passGroup.extent.x) == 0x400013A5u) && (asuint(passGroup.extent.y) == 0x400023A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(14, 0)] = ((asuint(passGroup.counts.x) == 0x400053A5u) && (asuint(passGroup.counts.y) == 0x400063A5u) && (asuint(passGroup.counts.z) == 0x400073A5u) && (asuint(passGroup.counts.w) == 0x400083A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(15, 0)] = ((asuint(passGroup.misc.x) == 0x400093A5u) && (asuint(passGroup.misc.y) == 0x4000A3A5u) && (asuint(passGroup.misc.z) == 0x4000B3A5u) && (asuint(passGroup.misc.w) == 0x4000C3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(16, 0)] = ((asuint(passGroup.sdf.x) == 0x4000D3A5u) && (asuint(passGroup.sdf.y) == 0x4000E3A5u) && (asuint(passGroup.sdf.z) == 0x4000F3A5u) && (asuint(passGroup.sdf.w) == 0x400103A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(17, 0)] = ((asuint(passGroup.workCounterRow) == 0x400123A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
 }

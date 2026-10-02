@@ -56,6 +56,10 @@
         "temporal": {
           "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
           "type": "boolean"
+        },
+        "dynamicResolution": {
+          "description": "Whether the preset moves each view\u0027s render extent with the load (world.dynamic-resolution).",
+          "type": "boolean"
         }
       },
       "additionalProperties": false,
@@ -657,7 +661,7 @@
       "title": "WorldRenderLightOccluder"
     },
     "WorldRenderLight": {
-      "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its lane semantics in SdfEnvironment.",
+      "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its kind in SdfLightKind.",
       "type": [
         "object",
         "null"
@@ -762,7 +766,7 @@
           "const": "gradient"
         },
         "stops": {
-          "description": "Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation.",
+          "description": "Two to SdfSky.MaxStops stops, strictly ascending in elevation.",
           "type": [
             "array",
             "null"

@@ -1,0 +1,5 @@
+# The engine ready first, however long a cold driver cache takes; the leg's own timeout bounds it.
+world.wait ready 180
+world.wait 10
+world.screenshot {run}/edge.png
+world.wait captures 30

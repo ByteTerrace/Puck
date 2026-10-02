@@ -15,8 +15,12 @@ is stale; update it in the same change and say so.
 Load this skill for every repository task. Constant activation is a restraint
 on scope, not permission to manufacture cleanup work, commits, or artifacts.
 
-The first command in a worktree is `puck worktree-base <tip>` — a worktree an
-agent is handed can sit at a stale base.
+Start a brief by merging the current tip of the integration branch the lead's
+brief names into your working branch, never by resetting it (`AGENTS.md`
+§ Branches, commits and pushes). A review pass instead starts at the author's
+head its scope names and neither merges nor resets it (`review-passes`). Use
+`puck worktree-base <tip>` only in a fresh worktree with no work of its own: it
+resets a tracked-clean tree and does not protect existing commits.
 
 ---
 

@@ -148,6 +148,13 @@
         },
         {
           "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "main",
           "pass": "main$view$2",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -274,6 +281,13 @@
         },
         {
           "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "main",
           "pass": "main$view$3",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -400,6 +414,13 @@
         },
         {
           "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "main",
           "pass": "main$view$4",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -522,6 +543,13 @@
           "pass": "main$view$4",
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
           "ceiling": 0
         },
         {
@@ -648,7 +676,14 @@
           "pass": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 64
+          "ceiling": 96
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0
         }
       ]
     },
@@ -798,6 +833,13 @@
         },
         {
           "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "main",
           "pass": "main$view$2",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -924,6 +966,13 @@
         },
         {
           "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "main",
           "pass": "main$view$3",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -1050,6 +1099,13 @@
         },
         {
           "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "main",
           "pass": "main$view$4",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -1172,6 +1228,13 @@
           "pass": "main$view$4",
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
           "ceiling": 0
         },
         {
@@ -1298,7 +1361,14 @@
           "pass": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 64
+          "ceiling": 96
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0
         }
       ]
     }

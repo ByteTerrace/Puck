@@ -1,0 +1,14 @@
+# Every frame renders, so the capture shows the scene as it stands.
+world.cadence off
+# The wait releases on the engine's readiness, a cold driver cache included; the leg's own timeout bounds it.
+world.wait ready 600
+# The bakes lever stays off: the prototype keeps drawing through its field and no card is recorded.
+world.bakes off
+# The wait releases once the presentation has baked the prototype (or held it from an earlier run).
+world.wait bakes 600
+world.debug-view visibility
+world.wait 30
+world.screenshot {run}/kind.png
+world.counters sdf.mesh.lod
+world.counters sdf.bakes
+world.wait 10

@@ -152,6 +152,23 @@
           "type": "boolean",
           "default": false
         },
+        "dynamicResolution": {
+          "description": "Whether the world\u0027s own views boot with dynamic resolution (world.dynamic-resolution): each frame one controller moves each view\u0027s render grid between DynamicResolutionFloor and the render-scale ceiling, by the present timing or, where the presenter reports none, by the views\u0027 counted march steps against the budget the floor tier\u0027s committed counters ceilings give per output pixel. A native ceiling is lowered to three-quarter while it is on, since a native view reconstructs nothing.",
+          "type": "boolean",
+          "default": false
+        },
+        "dynamicResolutionFloor": {
+          "description": "The lowest render-scale tier dynamic resolution moves a view\u0027s grid to.",
+          "enum": [
+            "Native",
+            "ThreeQuarter",
+            "Half",
+            "Quarter",
+            "Eighth"
+          ],
+          "default": "Quarter",
+          "title": "WorldRenderScaleTier"
+        },
         "low": {
           "description": "The world.quality low preset.",
           "type": [
@@ -186,6 +203,10 @@
             },
             "temporal": {
               "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
+              "type": "boolean"
+            },
+            "dynamicResolution": {
+              "description": "Whether the preset moves each view\u0027s render extent with the load (world.dynamic-resolution).",
               "type": "boolean"
             }
           },
@@ -228,6 +249,10 @@
             "temporal": {
               "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
               "type": "boolean"
+            },
+            "dynamicResolution": {
+              "description": "Whether the preset moves each view\u0027s render extent with the load (world.dynamic-resolution).",
+              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -269,6 +294,10 @@
             "temporal": {
               "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
               "type": "boolean"
+            },
+            "dynamicResolution": {
+              "description": "Whether the preset moves each view\u0027s render extent with the load (world.dynamic-resolution).",
+              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -283,13 +312,13 @@
           ],
           "properties": {
             "lights": {
-              "description": "The lights, at most SdfEnvironment.MaxLights, in slot order. At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
+              "description": "The lights, at most SdfLights.MaxLights, in slot order. At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
               "type": [
                 "array",
                 "null"
               ],
               "items": {
-                "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its lane semantics in SdfEnvironment.",
+                "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its kind in SdfLightKind.",
                 "type": [
                   "object",
                   "null"
@@ -2344,7 +2373,7 @@
           "title": "WorldRenderLighting"
         },
         "sky": {
-          "description": "The procedural sky \u2014 a gradient, sun disc, star field, and distance fog. Optional; an absent section renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed.",
+          "description": "The procedural sky \u2014 a gradient, sun disc, star field, and distance fog. Optional; an absent section renders the default look, the two-stop gradient and fog SdfSky starts from, as data the kernels read like any authored sky.",
           "type": [
             "object",
             "null"
@@ -2373,7 +2402,7 @@
                         "const": "gradient"
                       },
                       "stops": {
-                        "description": "Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation.",
+                        "description": "Two to SdfSky.MaxStops stops, strictly ascending in elevation.",
                         "type": [
                           "array",
                           "null"
@@ -3532,7 +3561,7 @@
           ],
           "properties": {
             "softboxes": {
-              "description": "The reflection softboxes, at most SdfEnvironment.MaxSoftboxes. Absent or empty contributes nothing.",
+              "description": "The reflection softboxes, at most SdfSky.MaxSoftboxes. Absent or empty contributes nothing.",
               "type": [
                 "array",
                 "null"

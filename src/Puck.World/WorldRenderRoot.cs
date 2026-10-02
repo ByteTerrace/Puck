@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Overlays;
 using Puck.SdfVm;
@@ -222,6 +223,7 @@ internal static class WorldRenderRoot {
         }
 
         binder.Runtime = runtime;
+        frameSource.CapturePending = () => (runtime.PendingCapturePath is not null);
         // A view the root places shows once its instance has completed an image, so a capture is never served over a
         // stand-in.
         frameSource.ViewRendered = view => runtime.TryLatestImage(
@@ -231,6 +233,11 @@ internal static class WorldRenderRoot {
 
         var overlaid = (overlay is not null);
         var timing = sp.GetRequiredService<WorldGpuTiming>();
+
+        frameSource.FrameComposed = () => {
+            host.PresentComparison();
+            compareCapture.RecordPreparedFrame();
+        };
 
         // The host composes the root again whenever the document's panes, views, views.post or render.tonemap move, or a
         // temporally resolved view starts or stops sharpening, from the post passes and tonemap the document names then,
@@ -263,6 +270,7 @@ internal static class WorldRenderRoot {
             // The host rewrites its footprint and root lists in place, so the node reads those lists rather than the copy
             // its constructor takes.
             Footprints = host.Footprints,
+            Named = host.Named,
             // The binder's GPU holdings (camera feeds, capture fills, the views' residencies) and the world's residency are
             // created before the device context, so the container would dispose them after it; the root's teardown releases
             // them, after the runtime's passes gave back their holds, while the device is alive.
@@ -271,8 +279,6 @@ internal static class WorldRenderRoot {
                 compareCapture.Poll();
                 bakes?.Pump(definition: client.Definition);
                 frameSource.PrepareGraph(context: in context);
-                host.PresentComparison();
-                compareCapture.RecordPreparedFrame();
                 timing.Tick();
             },
             Roots = host.Roots,
@@ -284,6 +290,15 @@ internal static class WorldRenderRoot {
         probe.Residency = residency;
         probe.Root = root;
         probe.Settings = sp.GetService<WorldRenderSettings>();
+        probe.DynamicResolution = frameSource.DynamicResolution;
+        // Dynamic resolution reads the views' GPU frame time, the presenter's present timing, resolved on the first frame
+        // it reads it, the views' counted march steps, and their budget for the device's backend.
+        frameSource.FrameLoad = new WorldFrameLoadSource(
+            backend: () => sp.GetService<IGpuWorkRegistry>()?.DeviceIdentity?.Backend,
+            presentTiming: () => (sp.GetService<ISurfacePresenter>() as IPresentTimingFeedback),
+            probe: probe,
+            timing: timing
+        );
         sp.GetRequiredService<WorldPostPasses>().Attach(
             graph: () => host.Synthesized,
             root: () => runtime.NodeOf(instance: WorldViewGraphs.MainInstance)

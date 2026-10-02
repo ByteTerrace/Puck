@@ -427,6 +427,20 @@ since a completed submission alone makes no device write visible to the host;
 
 ---
 
+## Required GPU features and shader capabilities
+
+The logical-device factory refuses a device, naming the feature, unless it reports
+`fragmentStoresAndAtomics` (the mesh pass's fragments count the texels they write),
+`shaderSampledImageArrayDynamicIndexing` (the SDF screen shading indexes its sources and samplers)
+and `shaderDemoteToHelperInvocation` (a fragment `discard`, which DXC compiles to
+`OpDemoteToHelperInvocation`; the SDF impostor card uses it). Before a shader module is created,
+`VulkanShaderCapabilities` reads the SPIR-V capabilities it declares and refuses, naming the module
+and the capability, any capability outside `VulkanShaderCapabilities.Enabled`: Vulkan core's
+`Shader`, `ImageQuery` and subgroup capabilities, and the capabilities a required feature grants.
+A kernel that needs a new feature-gated capability therefore fails at startup until the factory
+requires its feature and the list names it, and `VulkanShaderCapabilitiesLawTests` holds every
+module the World ships to that list.
+
 ## Optional GPU features
 
 The logical-device factory probes and enables these only when the device fully supports them;

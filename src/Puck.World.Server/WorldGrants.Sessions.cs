@@ -83,10 +83,10 @@ public sealed partial class WorldGrants {
     /// <returns><see langword="true"/> when the principal is a live session.</returns>
     public bool IsLiveSession(Principal principal) => (
         IsAdmittedSession(principal: principal) &&
-        !m_sessions[principal.Index].Faulted
+        !m_sessions[principal.Index].ObserverEnded
     );
 
-    // Whether a principal names an admitted session, faulted or not: the one an end still applies to.
+    // Whether a principal names an admitted session, its observer ended or not: the one an end still applies to.
     private bool IsAdmittedSession(Principal principal) => (
         (principal.Kind == PrincipalKind.Session) &&
         m_sessions.TryGetValue(
@@ -95,18 +95,19 @@ public sealed partial class WorldGrants {
         ) &&
         (entry.Principal == principal)
     );
-    // Whether a principal is a session that no longer acts: never admitted, ended, or faulted.
+    // Whether a principal is a session that no longer acts: never admitted, ended, or its observer ended.
     private bool IsStaleSession(Principal principal) => (
         (principal.Kind == PrincipalKind.Session) &&
         !IsLiveSession(principal: principal)
     );
 
-    /// <summary>Marks a session whose observer faulted: from this moment it is not live, so the grant table holds
-    /// nothing for it and every submission naming it is refused as stale, until its end applies at the next step.</summary>
+    /// <summary>Marks a session whose observer faulted or detached itself: from this moment it is not live, so the grant
+    /// table holds nothing for it and every submission naming it is refused as stale, until its end applies at the next
+    /// step.</summary>
     /// <param name="session">The session principal.</param>
-    internal void MarkSessionFaulted(Principal session) {
+    internal void MarkObserverEnded(Principal session) {
         if (IsAdmittedSession(principal: session)) {
-            m_sessions[session.Index].Faulted = true;
+            m_sessions[session.Index].ObserverEnded = true;
         }
     }
     /// <summary>Admits an unembodied session: the world's own <c>admission</c> policy decides, through the arrival
@@ -216,8 +217,8 @@ public sealed partial class WorldGrants {
 
         return true;
     }
-    /// <summary>Ends an admitted session, a faulted one included: revokes every row it holds and retires its epoch, so a
-    /// submission still carrying the principal is refused as stale. Called on the thread that steps this world.</summary>
+    /// <summary>Ends an admitted session, one whose observer ended included: revokes every row it holds and retires its
+    /// epoch, so a submission still carrying the principal is refused as stale. Called on the thread that steps this world.</summary>
     /// <param name="session">The session principal.</param>
     /// <param name="refusal">The named refusal, on failure.</param>
     /// <returns><see langword="true"/> when the session ended.</returns>
@@ -489,8 +490,9 @@ public sealed partial class WorldGrants {
 
         public int BodyGeneration { get; set; }
         public int? BodyIndex { get; set; }
-        // Set the moment the session's observer faulted: it acts no more, though its end applies at the next step.
-        public bool Faulted { get; set; }
+        // Set the moment the session's observer faulted or detached itself: it acts no more, though its end applies at
+        // the next step.
+        public bool ObserverEnded { get; set; }
         // The input the session's viewer last forwarded: its pointer ray in this world and its channels, held until the
         // next forward replaces it (a release forward clears it).
         public PlayerIntent Input { get; set; }

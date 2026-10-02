@@ -16,6 +16,43 @@ public sealed partial class ShaderPipelineRenderNode {
     // hold on that producer (HoldBinding).
     private readonly Dictionary<string, GpuImageLease> m_bindingHolds = new(comparer: StringComparer.Ordinal);
 
+    // The table the node's images belong to and its publications of other instances' images are leased from, if any.
+    private readonly GpuImageLeases? m_images;
+
+    // The frame slot of the node's latest submission, whose lease list retires once that submission has finished.
+    private int m_latestSlot;
+
+    /// <summary>Moves leases into the lease list of the node's latest submission, which retires them once a fence wait
+    /// proves that submission finished: a host hands the node the leases of images another reader sampled before that
+    /// submission was made, on the one queue.</summary>
+    /// <param name="leases">The leases, moved out of their list.</param>
+    internal void HoldUntilLatestSubmission(LeaseRetireList leases) => leases.MoveTo(destination: m_slots[m_latestSlot].Leases);
+
+    /// <summary>Gets whether a named external resource is bound: an image or a buffer a host bound for it, which the
+    /// installed graph samples when it renders.</summary>
+    /// <param name="name">The external resource's name.</param>
+    /// <returns><see langword="true"/> when an image or a buffer is bound for the name.</returns>
+    public bool IsBound(string name) => (
+        m_externalImages.ContainsKey(key: name) ||
+        m_externalBuffers.ContainsKey(key: name)
+    );
+    /// <summary>Returns the image a named external image is bound to now, the one the installed graph samples.</summary>
+    /// <param name="name">The name of a declared external image.</param>
+    /// <param name="image">The bound image, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the name is bound to an image.</returns>
+    public bool TryGetBoundImage(string name, out ShaderPipelineExternalImage image) => m_externalImages.TryGetValue(
+        key: name,
+        value: out image
+    );
+
+    /// <summary>Retires the leases of every submission the node made, once the host has drained the device, so every one of
+    /// them has finished.</summary>
+    internal void RetireDrainedLeases() {
+        foreach (var slot in m_slots) {
+            slot.Leases.RetireAll();
+        }
+    }
+
     // Resolves every leased binding this frame records against: its lease is held until the frame submits.
     private void HoldLeases() {
         foreach (var leased in m_leasedImages.Values) {

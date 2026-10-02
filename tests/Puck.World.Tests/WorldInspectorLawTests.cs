@@ -29,7 +29,7 @@ public sealed class WorldInspectorLawTests {
                 builder.Services.RemoveAt(index: index);
             }
         }
-        using var host = builder.Build();
+        var host = files.Own(owner: builder.Build());
         var registry = host.Services.GetRequiredService<CommandRegistry>();
         var source = host.Services.GetRequiredService<IInspectorSource>();
 
@@ -50,7 +50,7 @@ public sealed class WorldInspectorLawTests {
         var pipelines = new GpuPassPipelineCache();
         var catalog = new SdfWorldPipelineCatalog(
             regionCopy: new GpuRegionCopyPass(kernel: new byte[] { 1 }, pipelines: pipelines),
-            meshRaster: new SdfMeshRasterPass(fragment: new byte[] { 1 }, pipelines: pipelines, vertex: new byte[] { 1 }));
+            meshRaster: new SdfMeshRasterPass(fragment: new byte[] { 1 }, impostorFragment: new byte[] { 1 }, pipelines: pipelines, vertex: new byte[] { 1 }));
         using var pane = new SdfWorldResidency(pipelines: catalog, frameSource: new EmptyFrameSource(),
             kernels: new SdfKernelSet(bytecode: new ReadOnlyMemory<byte>[SdfKernelSet.Kernels.Count]), name: "pane-world", width: 32, height: 32);
         var picker = new SdfWorldPicker();

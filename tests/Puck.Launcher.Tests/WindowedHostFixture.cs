@@ -100,7 +100,7 @@ internal static class WindowedHostFixture {
                 throw failure;
             }
         }
-        public Surface ProduceFrame(in FrameContext context) => default;
+        public RootFrame ProduceFrame(in FrameContext context) => default;
     }
 
     private sealed class FakeWindowFactory : INativeWindowFactory {

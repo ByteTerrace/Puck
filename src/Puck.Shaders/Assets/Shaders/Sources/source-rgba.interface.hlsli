@@ -1,4 +1,4 @@
-// Generated from shader interface 'source-rgba' (sha256/e29cbf47920c52708b789e790d217d9ca9b8340d7f2136608b116d79fc9d730b). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'source-rgba' (sha256/479de0a2a839488b4db55f39fd658e9e5306a0bf98bb732bb4d9fe7299b92966). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SOURCE_RGBA
 #define PUCK_SHADER_INTERFACE_SOURCE_RGBA
 
@@ -19,6 +19,8 @@ struct SourceRgbaFrame {
     [[vk::offset(64)]] float3 cameraTarget;
     [[vk::offset(76)]] uint _pad76;
     [[vk::offset(80)]] float3 cameraUp;
+    [[vk::offset(92)]] uint _pad92;
+    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SourceRgbaFrame> frameGroup : register(b0, space0);
 
@@ -34,11 +36,13 @@ struct SourceRgbaPass {
 [[vk::binding(3, 3)]] RWStructuredBuffer<uint> workCounters : register(u3, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
-// back): each counted kind in GpuWork.KernelKinds order, march steps then texels written, as a 64-bit count in
-// two words, low word first. An interface declaring no work counters declares the same two functions empty.
-static const uint PuckWorkRowWords = 4u;
+// back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, then sky evaluations, as a
+// 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
+// empty.
+static const uint PuckWorkRowWords = 6u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
+static const uint PuckWorkSkyWord = 4u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -64,6 +68,14 @@ void puckCountWork(uint steps, uint texels) {
 
         puckAddWork((row + PuckWorkStepsWord), waveSteps);
         puckAddWork((row + PuckWorkTexelsWord), waveTexels);
+    }
+}
+// Adds an invocation's sky evaluations to its pass's row: the wave sums them, and its first active lane adds the sum.
+void puckCountSky(uint evaluations) {
+    uint waveEvaluations = WaveActiveSum(evaluations);
+
+    if (WaveIsFirstLane()) {
+        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkSkyWord), waveEvaluations);
     }
 }
 // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper

@@ -87,7 +87,7 @@ internal sealed class WorldInspector(WorldEditorSeats seats, WorldCursorFeed cur
         var text = m_text[slot];
 
         text.Format(snapshot: in snapshot);
-        if (timing.Enabled && (probe.Root?.Runtime is { } runtime)) {
+        if (timing.ReadoutEnabled && (probe.Root?.Runtime is { } runtime)) {
             var observed = fps.Summarize();
 
             text.FrameRate(mean: observed.AverageFps, slowest: observed.WorstFps);

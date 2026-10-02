@@ -17,7 +17,7 @@ public sealed partial class ShaderCompiler {
     /// <c>build/Shaders.targets</c> compiles every stage source with, one a stage and target
     /// (<see cref="BuildRecipePropertyOf"/>), generated from <see cref="StepsOf"/> by <c>puck shaders generate</c>
     /// (<see cref="GenerateBuildRecipe"/>), so the build and this compiler run one recipe.</summary>
-    public const string BuildRecipePath = "build/ShaderRecipe.props";
+    public const string BuildRecipePath = "build/ShaderRecipe.targets";
 
     /// <summary>Returns the DXC target profile a stage compiles under, such as <c>cs_6_6</c>.</summary>
     /// <param name="stage">The stage.</param>

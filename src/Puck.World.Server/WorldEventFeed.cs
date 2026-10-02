@@ -358,7 +358,7 @@ public sealed class WorldEventFeed {
                     continue;
                 }
 
-                var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: body.ScaledColliderVolumes());
+                var radius = body.BroadphaseRadius;
 
                 m_collisionBodies[bodyCount++] = new WorldSweepBody(
                     Index: index,
@@ -598,7 +598,7 @@ public sealed class WorldEventFeed {
                     hasCenter &&
                     population.IsActive(index: body) &&
                     (population.EntryBody(index: body) is { } entry) &&
-                    ((entry.FixedPosition - center).Length <= radius)
+                    (entry.FixedPosition - center).IsWithin(radius: radius)
                 );
 
                 _ = EmitTransition(

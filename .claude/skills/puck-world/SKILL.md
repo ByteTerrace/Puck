@@ -386,8 +386,11 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `entry` member); a composition with neither is refused by name. `host.presentation` has three values: windowed,
   `none` (`HeadlessWorldSimulation` — full authority, no GPU), and
   `offscreen` (full authority + GPU composition to images, no window —
-  what `puck parity` boots; its pump steps no tick past an armed capture
-  until the capture is served or refused). Tick-scheduled `captures`, the `schedule`
+  what `puck parity` boots; its time is its tick count, one tick per rendered
+  frame however long a frame takes, holding a tick whose frame the render
+  graph has not rendered yet (`[offscreen] holding tick T …` on stderr), so a
+  wait of N ticks has N rendered frames behind it, and its pump steps no tick past an armed capture until the
+  capture is served or refused). Tick-scheduled `captures`, the `schedule`
   section (armed only by `--schedule-dir`), verdict rows, and `.puck` `test`
   lowering are in [references/schedules-and-tests.md](references/schedules-and-tests.md).
 - `--state-dir <dir>` redirects the on-disk state root (profile catalog,
@@ -412,7 +415,10 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   `world.wait <ticks>` holds only its issuing session, clocked by completed
   host-work ticks; the console drains before every step, so the line after a
   wait releasing at R runs before tick R+1, and a piped script's lines up to
-  its first wait run before tick 1. End a script with `quit` to stop the run when the
+  its first wait run before tick 1. Offscreen every one of those ticks
+  composed its own frame; a windowed host may compose one frame for several
+  ticks it catches up, so a windowed script that reads rendered work waits on
+  `world.wait ready` or `world.wait captures`, never a tick count. End a script with `quit` to stop the run when the
   script ends (see [references/console.md](references/console.md)).
 - **Encoding, the two traps**: a pwsh spawned from Git Bash reads captured
   output under an OEM codepage and mangles the engine's em-dashes
@@ -454,8 +460,12 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
 - **A verification that cannot fail is a lie.** Pair every denial case with
   a control (actor holds the grant → succeeds), keep actor ≠ target (every
   seat is seeded wide, so self-targeting discriminates nothing), and prove
-  a new assertion once by breaking it. This repo's recorded dominant
-  failure mode is verification scripts that lie silently.
+  a new assertion once by breaking it. A law with a fix is proven by
+  `puck laws prove <law> --fix <commit>` (or `--file-list` for an
+  uncommitted fix), which withholds the fix in a worktree of its own and
+  requires the law to fail there and pass with it; never hand-revert files
+  in a shared tree. This repo's recorded dominant failure mode is
+  verification scripts that lie silently.
 - `replay.verify` MATCH proves the explicitly hashed authoritative state-system
   trajectory, not the whole document, grant table, or HUD
   ([references/replay.md](references/replay.md)). A recording tapes every row
@@ -478,9 +488,9 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   alone), and Ctrl+C or a leg that throws kills every child the run
   started (`CanaryCommand.RunLegsConcurrently`, exit 2). `--plan` prints a
   selection's World boots, spawns, builds and leg budget without running;
-  the automatic set and `--merge` are refused past their ceilings in
-  `src/Puck.Cli/Canary/CanaryCeilings.cs`, which a deliberate growth raises
-  in the same change. A GPU selection first warms the engine pipeline cache
+  the automatic set and `--merge` are refused past their ceilings recorded
+  in `CanaryCeilings.json`, which a deliberate growth records with
+  `puck canary-ceilings` in the same change. A GPU selection first warms the engine pipeline cache
   once per backend and seeds every offscreen and windowed leg with it
   (`CanaryCommand.Warm.cs`), so no leg builds the engine's pipelines cold. The
   acting-principal/administration and control-application authority contracts

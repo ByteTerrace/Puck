@@ -20,7 +20,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         var reads = 0;
 
         gpu.OnReadback = bytes => { if (bytes == 48) { reads++; } };
-        gpu.WriteReadback = bytes => {
+        gpu.WriteReadback = (_, bytes) => {
             for (var offset = 0; ((offset + 16) <= bytes.Length); offset += 16) {
                 BinaryPrimitives.WriteUInt64LittleEndian(destination: bytes[offset..], value: 0xFFFFFFF0);
                 BinaryPrimitives.WriteUInt64LittleEndian(destination: bytes[(offset + 8)..], value: 0x10);
@@ -55,6 +55,57 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         Assert.Equal(expected: 0UL, actual: node.TimingReadbackBytes);
         Assert.Equal(expected: 0UL, actual: node.TimingCpuBytes);
         node.TimingEnabled = false;
+    }
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [Theory]
+    public void LatestGpuTimeBelongsToTheNewestSubmissionAcrossSlotWrap(int firstSlot) {
+        var gpu = new FakeGpuDevice(holdFences: true);
+        using var node = new ShaderPipelineRenderNode(name: "timing", deviceContext: gpu, pipelines: new GpuPassPipelineCache(),
+            hostsOnDirectX: false, width: Extent, height: Extent, inFlightFrames: InFlight);
+
+        node.Swap(pipeline: CanaryPipeline(canary: "pipeline-feedback", fileName: "feedback.graph.json"));
+        _ = node.ProduceUntilInstalled();
+        Produce(frames: WarmFrames, node: node);
+        while ((node.FrameCounter % InFlight) != ((ulong)firstSlot)) {
+            _ = Produce(node: node);
+        }
+        var durations = new ulong[InFlight];
+        var fences = new List<FakeGpuDevice.Fence>();
+
+        gpu.WriteReadback = (name, bytes) => {
+            if (name.Part != "timing") { return; }
+            for (var offset = 0; ((offset + 16) <= bytes.Length); offset += 16) {
+                BinaryPrimitives.WriteUInt64LittleEndian(destination: bytes[offset..], value: 0);
+                BinaryPrimitives.WriteUInt64LittleEndian(destination: bytes[(offset + 8)..], value: durations[name.Index]);
+            }
+        };
+        node.TimingEnabled = true;
+        for (var frame = 0U; (frame < InFlight); frame++) {
+            durations[(node.FrameCounter % InFlight)] = ((frame + 1UL) * 1_000_000UL);
+            _ = Produce(node: node);
+            fences.Add(item: Assert.IsType<FakeGpuDevice.Fence>(@object: gpu.LastSubmittedFence));
+        }
+        Assert.Equal(expected: 0L, actual: node.TimingFrames);
+        node.Paused = true;
+        foreach (var fence in fences) { fence.Completed = true; }
+        _ = Produce(node: node);
+
+        // Three passes, each taking six milliseconds in the newest submission, whatever slot it occupied.
+        Assert.Equal(expected: 18d, actual: node.LatestTimingMilliseconds);
+        Assert.Equal(expected: 3L, actual: node.TimingFrames);
+        Assert.All(collection: node.Timings.ToArray(), action: timing => Assert.Equal(expected: 4d, actual: timing.Milliseconds));
+        // The latest time names the newest completed submission, and the grid the node rendered it at: the output's own,
+        // since no package of the graph sets another.
+        var completed = new GpuWorkSample();
+
+        Assert.True(condition: node.TryReadCompleted(sample: completed));
+        Assert.Equal(expected: completed.Submission, actual: node.LatestTimingSubmission);
+        Assert.True(condition: node.TryGetRenderGrid(grid: out var grid, submission: node.LatestTimingSubmission));
+        Assert.Equal(actual: grid, expected: 1d);
+        _ = Produce(node: node);
+        Assert.Equal(expected: 3L, actual: node.TimingFrames);
     }
     [Fact]
     public void TimingDisableImmediatelyHidesAndFenceRetiresItsEarlierEpoch() {

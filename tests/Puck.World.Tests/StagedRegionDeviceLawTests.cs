@@ -260,7 +260,7 @@ public sealed class StagedRegionDeviceLawTests {
         public long LastTick { get; private set; }
 
         public void Dispose() { }
-        public bool TryWrite(long tick, GpuRegion region) {
+        public FrameRender Write(long tick, GpuRegion region) {
             WritePattern(
                 pixels: m_pixels,
                 tick: tick
@@ -271,7 +271,7 @@ public sealed class StagedRegionDeviceLawTests {
             );
             LastTick = tick;
 
-            return true;
+            return FrameRender.Rendered;
         }
     }
 }

@@ -19,7 +19,7 @@ gitignored build products; never commit them.
 `ValidateShaderBytecodeSources` removes bytecode without a same-stem `.hlsl`
 when its sidecar records its bytes (the build wrote it), printing one line per
 file, and fails the build on any other sourceless bytecode, which it leaves in
-place; `ValidateShaderBytecodeFresh` fails it on bytecode stale against its
+place; `CollectShaderBytecode` fails it on bytecode stale against its
 source or sidecar. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader Model 6.6;
 do not raise that floor without evidence from every supported GPU.
 
@@ -55,7 +55,10 @@ interface: a kernel compiled against another instruction set (its pass block's
 stamp) or binding anything where the host does not place it. Reflecting a DXIL
 kernel needs the `dxcompiler.dll` beside the `dxc` on the path. The
 `sdf-shader-reload` canary holds both outcomes on both backends. Scene buffers, images, baked bricks, and world state
-survive; the cadence signature is invalidated. The last
+survive; the cadence signature is invalidated. A reload also builds again any
+views kernel the residency refused (its creation failed; `NotReadyReason`
+names it), even when the tree leaves its bytecode unchanged: that, or a device
+loss, is the only retry a refused views kernel gets. The last
 successful set survives device-loss recovery. `views.graphs` instances
 (`pipeline.reload`) and `views.post` post-process packages are outside this
 command, and host ABI or
@@ -65,9 +68,10 @@ buffer-layout changes need a rebuild.
 
 An SDF view is an `sdf.world` instance of the render graph: the graph compiler
 splices its selected package fragment into the one-pass graph the runtime makes
-for the instance. `NativeFragment` has ten passes, `sdf.world$sky` through
-`sdf.world$views`; `Fragment`, which a view below a native ceiling runs, adds
-`sdf.world$resolve`.
+for the instance. `NativeFragment` has eleven passes, `sdf.world$mask` through
+`sdf.world$views`, then `sdf.world$sky` and `sdf.world$composite`; `Fragment`,
+which a view below a native ceiling runs, puts `sdf.world$resolve` between views
+and the sky.
 `world.counters gpu` lists them under the instance's name. The frame's first pass to record submits its residency's one
 upload ahead of the instance's submission (`SdfWorldResidency.Submit`), counted
 under the residency as `sdf:<name>` with three passes (`SdfWorldTables.PassLabels`):
@@ -90,8 +94,7 @@ of its passes. The upload and the view's passes, in order:
 
 | Label | Kernel | Does |
 |---|---|---|
-| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, frame grid, screen surfaces, screen mappings, screen lights, volumes, decals, mesh draws) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, quality, levers and environment are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
-| `sky` | `sdf-sky.comp` | Fills every pixel of the view's output image with sky before any tile is culled. Binds the same frame and pass groups as every per-view pass. |
+| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, frame grid, screen surfaces, screen mappings, screen lights, volumes, decals, mesh draws, the lights and the sky's block, stops and softboxes) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, quality and levers, the light count, the shadow light and the curvature shading are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
 | `mask` | `sdf-instance-cull.comp` | Builds each tile's instance mask from the `SdfInstanceGrid` CSR grid. Deliberately not fused into the beam. |
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |
 | `cull-args` | `sdf-cull-args.comp` | Reduces the indirect dispatch bounds. |
@@ -100,17 +103,19 @@ of its passes. The upload and the view's passes, in order:
 | `surface` | `sdf-world-surface.comp` | Normals, curvature, gradient magnitude. |
 | `ambient` | `sdf-world-ambient.comp` | Ambient occlusion with its own candidate mask; skips a frame whose ambient occlusion is off (`Skips`). |
 | `shadow` | `sdf-world-shadow.comp` | The key light's soft shadow into the record's K row, with its own candidate mask; skips a frame whose soft shadows are off or that has no shadow light (`Skips`). |
-| `views` | `sdf-world-views*.comp` | Materials, lighting through the one light interface, volumes, diagnostics, written into the view's output image. |
+| `views` | `sdf-world-views*.comp` | Materials, lighting through the one light interface and diagnostics, shading the hits only into the lit image: premultiplied by coverage, the coverage in alpha, a miss left uncovered. |
+| `sky` | `sdf-sky-runs.comp` | The sky's field runs on the render grid, from views' color, only where a pixel or one of its neighbours is not wholly covered: the gradient's offset, then the cloud run's scale and offset, the base's alpha marking an evaluated texel. Counts `gpu.sky.evaluations`. Binds the sky interface (`SdfWorldInterfaces.SkyParameters`) and the World set. |
+| `composite` | `sdf-composite.comp` | The view's color: the lit image (already through each hit's fog transmittance) plus the gradient by the surface transport's in-scatter weight, the sky's runs in their authored order, filtered from the texels the sky evaluated, beneath it by its coverage (the disc and stars evaluated at the pixel), then the bounded media over the surface share to the transport's distance and over the sky share to the far distance. |
 
 The ceiling (`SdfViewSnapshot.RenderCeiling`) alone selects the fragment
 (`SdfWorldPasses.FragmentOf`) and is the whole render-extent revision, so a
 fragment change is always a rebuild the node holds its last image through, never
 a frame of one graph at another's grid. A view at a native ceiling uses
-`SdfWorldPackage.NativeFragment`, ten passes writing `color` directly, and
-ignores the current grid (`SdfViewSnapshot.RenderGrid`). A view below it uses
-`Fragment`: traversal writes `currentColor` (one transient allocation, started by
-the sky) at the active render grid, then `sdf-resolve.comp` writes `color` at the
-output grid, reading its render grid from the recording
+`SdfWorldPackage.NativeFragment`, eleven passes whose composite writes `color`,
+and ignores the current grid (`SdfViewSnapshot.RenderGrid`). A view below it uses
+`Fragment`: views writes `currentColor` (one transient allocation) at the active
+render grid, then `sdf-resolve.comp` writes the lit image and the surface transport
+at the output grid, the sky evaluates its runs on the render grid from views' color, and the composite follows the resolve at the output grid, reading its render grid from the recording
 (`RenderGraphPackageRecording.RenderWidth`), the node's one resolution of it.
 Scratch is allocated at the render ceiling; current-grid changes, a layout
 transition's dip among them, replace no resources and rebuild nothing. `place`
@@ -134,7 +139,7 @@ march by (`sdfMeshSampleAt`); primary alone reads it, and records a mesh hit's
 draw and triangle for the later stages; the target and its depth attachment are transient fragment
 resources the instance allocates with its graph. The pass draws with its own
 `sdf-mesh` interface, one set per frame slot from a pool of its own, pushes the
-draw (`SdfWorldInterfaces.MeshPushedIndex`), and skips a frame with no mesh
+draw (`SdfKernelInterfaces.MeshPushedIndex`), and skips a frame with no mesh
 draws (`IRenderGraphPackageRecorder.Skips`), recording neither its draws nor its
 target and depth barriers, when the pass block's `meshDraws` tells the hit
 passes not to read the target. A view the cadence gate declares unchanged records none of
@@ -160,7 +165,9 @@ module's typed load and store functions, so a layout change edits only that
 module and `VisibilityRecordByteLength`. A record is current only inside the frame's
 dispatch box, where primary writes every active pixel, misses included: a
 reader of another pixel's record asks `worldVisibilityCurrent` first and
-treats a pixel outside the box as sky, since the beam proved its tile empty.
+treats a pixel outside the box as sky, since the beam proved its tile empty; the
+resolve and the native sky and composite read the lit image the same way, every
+pixel outside the box uncovered.
 The rule is `SdfVisibility.IsCurrent`, generated into `sdf-isa.hlsli` as
 `SDF_VISIBILITY_CURRENT` with the box's unit `SDF_VISIBILITY_BOX_EDGE` (the hit
 passes' workgroup edge), and a pick applies it on the host to the box its copy
@@ -221,7 +228,7 @@ together. `SdfViewsKernelVariantLawTests` pins the host half.
 
 No SDF kernel declares a binding or a register by hand. Every per-view kernel
 includes `isa/sdf-world.interface.hlsli` (through `field/sdf-vm.hlsli`) and the baker
-`isa/sdf-bricks.interface.hlsli`, both generated from `SdfWorldInterfaces` and
+`isa/sdf-bricks.interface.hlsli`, both generated from `SdfKernelInterfaces` and
 owned by `puck shaders generate`; the pass-pipeline cache creates each pipeline from its
 interface's layout (`SdfWorldPipelines.Acquire`), and the tables and recorders write every
 binding by member name. A binding's
@@ -243,7 +250,12 @@ full binding map is in
 `coneMarchTileBounds` abandons its gap and tail searches after
 `TileGapStallLimit` consecutive occupied samples with non-increasing clearance,
 keeping the established entry and far-plane sentinels; a stall never proves
-empty space. Programs admitted for independent part tracing use
+empty space. Every cone step goes through `coneMarchAdvance`, which crosses a
+wallpaper LOD switch through `sdfMarchAdvance`; an entry or second entry
+reached by a crossing is the switch's depth, never the landing's, and the cone
+relies on its apex being the LOD origin (`sdf-beam` sets both to the camera).
+Log-sphere walls stay in a cone's clearance (`sdfMapConeClearance`), since they
+are not centred on its apex. Programs admitted for independent part tracing use
 `IndependentConeMarchSteps` entry samples without gap or tail searches. When
 changing these heuristics, compare whole-frame cost and hit/material captures,
 including grazing rays and separated bands.

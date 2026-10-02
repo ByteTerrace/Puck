@@ -55,6 +55,10 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     public IReadOnlyList<IDisposable> Holdings { get; init; } = [];
     /// <inheritdoc/>
     public string? PendingCapturePath => Runtime.PendingCapturePath;
+    /// <summary>Gets or sets the instances the host names whether or not the display shows them this frame
+    /// (<see cref="RenderGraphFrame.Named"/>), or <see langword="null"/>, which names every instance, so the runtime
+    /// releases none.</summary>
+    public IReadOnlyList<string>? Named { get; set; }
     /// <summary>Gets or sets the callback that prepares each frame before the runtime schedules it, or
     /// <see langword="null"/> for a display whose roots and footprints never change.</summary>
     public RenderGraphFramePreparer? Prepare { get; set; }
@@ -75,7 +79,9 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     /// <inheritdoc/>
     public void OnDeviceLost() => Runtime.OnDeviceLost();
     /// <inheritdoc/>
-    public Surface ProduceFrame(in FrameContext context) {
+    /// <remarks>The frame's completion is the runtime's (<see cref="RenderGraphRuntime.Render"/>): rendered only when
+    /// the root's image shows this frame.</remarks>
+    public RootFrame ProduceFrame(in FrameContext context) {
         Prepare?.Invoke(context: in context);
         m_roots.Clear();
         m_roots.Add(item: new RenderGraphRoot(
@@ -96,7 +102,7 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
             }
         }
 
-        return Runtime.ProduceFrame(
+        var surface = Runtime.ProduceFrame(
             context: in context,
             frame: new RenderGraphFrame(
                 DisplayHeight: m_displayHeight,
@@ -104,11 +110,17 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
                 DisplayWidth: m_displayWidth,
                 Footprints: Footprints,
                 Index: m_frame++,
+                Named: Named,
                 Roots: m_roots,
                 Tick: ((context.StepTicks == 0UL)
                     ? 0L
                     : ((long)(context.ElapsedTicks / context.StepTicks)))
             )
+        );
+
+        return new RootFrame(
+            Render: Runtime.Render,
+            Surface: surface
         );
     }
     /// <inheritdoc/>

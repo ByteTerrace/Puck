@@ -30,6 +30,7 @@ public sealed record ProbeTrackDocument(string? Schema = ProbeTrackDocument.Sche
 [JsonSerializable(typeof(ProbeTrackDocument))]
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    NewLine = "\n",
     WriteIndented = true
 )]
 public sealed partial class ProbeTrackJsonContext : JsonSerializerContext {

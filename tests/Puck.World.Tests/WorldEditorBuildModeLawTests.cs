@@ -69,11 +69,11 @@ public sealed class WorldEditorBuildModeLawTests : IDisposable {
     public void Dispose() => m_stateDirectory.Dispose();
     [Fact]
     public void ABuildingSeatsViewCarriesExactlyItsGridAndAPlayingSeatsNone() {
-        using var host = WorldBootHarness.Compose(
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
             world: World
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var registry = host.Services.GetRequiredService<CommandRegistry>();
         var client = host.Services.GetRequiredService<WorldClient>();
@@ -107,7 +107,7 @@ public sealed class WorldEditorBuildModeLawTests : IDisposable {
     [Fact]
     public void AFollowingGridTakesTheHeightOfThePlatformUnderTheAimWithinAFrame() {
         // The editor-grid fixture with a wide stage whose top, at height 1.5, lies under the middle of the seat's view.
-        using var host = WorldBootHarness.Compose(
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             edit: static definition => (definition with {
                 CreationsRaw = [
                     .. definition.Creations,
@@ -134,7 +134,7 @@ public sealed class WorldEditorBuildModeLawTests : IDisposable {
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
             world: "tests/Puck.World.Canaries/editor-grid/fixture.world.json"
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var registry = host.Services.GetRequiredService<CommandRegistry>();
         var pointer = host.Services.GetRequiredService<WorldEditorPointer>();
@@ -191,11 +191,11 @@ public sealed class WorldEditorBuildModeLawTests : IDisposable {
 
     [Fact]
     public void ACrossedSeatsSurfacesAreTheWorldItCrossedIntoAndItsFirstFrameThereFollowsNothingOfTheWorldItLeft() {
-        using var host = WorldBootHarness.Compose(
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
             world: "tests/Puck.World.Canaries/editor-grid/fixture.world.json"
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var registry = host.Services.GetRequiredService<CommandRegistry>();
         var client = host.Services.GetRequiredService<WorldClient>();
@@ -250,12 +250,12 @@ public sealed class WorldEditorBuildModeLawTests : IDisposable {
     }
     [Fact]
     public void APlaceThroughTheHostRestsOnTheFloorUnderTheAim() {
-        using var host = WorldBootHarness.Compose(
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             edit: WithFloor,
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
             world: World
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var registry = host.Services.GetRequiredService<CommandRegistry>();
         var server = host.Services.GetRequiredService<WorldServer>();

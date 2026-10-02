@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -9,11 +10,11 @@ public sealed class CheckedProcessCancellationTests {
     // test never opens the file: a scanner or indexer that briefly holds a fresh file open cannot fail a read.
     [Fact]
     public async Task CancellationTerminatesTheOwnedChildBeforeReturning() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-process-cancellation-");
+        using var directory = new TemporaryDirectory(prefix: "puck-process-cancellation-");
         var published = new TaskCompletionSource<int>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
         using var watcher = new FileSystemWatcher(
             filter: "child-*.pid",
-            path: directory.FullName
+            path: directory.RootPath
         );
 
         void Publish(object sender, FileSystemEventArgs change) {
@@ -47,7 +48,7 @@ public sealed class CheckedProcessCancellationTests {
                 arguments = ["-c", "touch child-$$.pid; exec sleep 120"];
             }
             run = CliProcess.RunCheckedAsync(
-                workingDirectory: directory.FullName,
+                workingDirectory: directory.RootPath,
                 fileName: executable,
                 arguments: arguments,
                 capture: true,
@@ -84,7 +85,6 @@ public sealed class CheckedProcessCancellationTests {
                 } catch (Exception error) when ((error is ArgumentException or InvalidOperationException)) { /* Already gone. */ }
             }
             watcher.EnableRaisingEvents = false;
-            directory.Delete(recursive: true);
         }
     }
 }

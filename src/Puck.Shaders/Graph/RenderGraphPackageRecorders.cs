@@ -217,9 +217,22 @@ public interface IRenderGraphPackageFactory {
     /// <param name="context">The host's frame context of the frame being scheduled.</param>
     /// <returns><see langword="true"/> when the instance's latest render stands for this frame.</returns>
     bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) => false;
+    /// <summary>Returns why the package cannot build or record an instance's passes until something they are built from
+    /// changes, naming the refusal, or <see langword="null"/> while it can or is still building. A refusal is permanent
+    /// until its inputs move, so the runtime reports a frame such an instance cannot render as
+    /// <see cref="Puck.Hosting.FrameCompletion.Refused"/> (<see cref="RenderGraphRuntime.Render"/>), and an offscreen
+    /// host steps on rather than waiting for it; a wait reports <see langword="null"/>.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The refusal, or <see langword="null"/>.</returns>
+    string? RefusalOf(string instance) => null;
     /// <summary>Releases whatever the factory holds on the device after the device was lost, without waiting for any
     /// submission. The runtime calls it once its nodes have released theirs.</summary>
     void OnDeviceLost() { }
+    /// <summary>Discards presentation history for an instance whose unnamed graph the runtime released. The runtime
+    /// calls each registered factory on the frame thread after the graph and its completed outputs are gone. A factory
+    /// that has no state for this instance does nothing; other instances and shared residency state stay intact.</summary>
+    /// <param name="instance">The instance whose graph was released.</param>
+    void OnGraphReleased(string instance) { }
     /// <summary>Starts a produced frame. The runtime calls it on the frame thread once a frame, before it asks any package
     /// whether an instance is unchanged and before any instance renders.</summary>
     /// <param name="context">The host's frame context of the frame being produced.</param>

@@ -7,7 +7,7 @@ namespace Puck.Cli.Tests;
 /// <summary>
 /// Proves what <c>puck canary --plan</c> counts: the World boots, runner-started processes, builds and summed leg
 /// budget of a selection, from its manifests alone; which legs run alone; and that each gate selection is refused
-/// once it outgrows its declared ceiling in <see cref="CanaryCeilings"/>.
+/// once it outgrows the cost recorded in <see cref="CanaryCeilingsLedger"/>.
 /// </summary>
 public sealed class CanaryPlanLawTests {
     private static CanaryLeg Leg(string name) => new(
@@ -312,32 +312,43 @@ public sealed class CanaryPlanLawTests {
 
         Assert.Null(@object: CanaryCommand.CeilingRefusal(
             ceiling: new CanaryCeiling(LegBudgetSeconds: 60, WorldBoots: 2),
-            name: "Merge",
+            name: "merge",
             plan: plan
         ));
 
         var boots = CanaryCommand.CeilingRefusal(
             ceiling: new CanaryCeiling(LegBudgetSeconds: 60, WorldBoots: 1),
-            name: "Merge",
+            name: "merge",
             plan: plan
         );
 
         Assert.NotNull(@object: boots);
         Assert.Contains(actualString: boots, expectedSubstring: "2 World boots against 1");
-        Assert.Contains(actualString: boots, expectedSubstring: "CanaryCeilings.Merge");
-        Assert.Contains(actualString: boots, expectedSubstring: "src/Puck.Cli/Canary/CanaryCeilings.cs");
+        Assert.Contains(actualString: boots, expectedSubstring: "merge in CanaryCeilings.json");
+        Assert.Contains(actualString: boots, expectedSubstring: "puck canary-ceilings");
         Assert.DoesNotContain(actualString: boots, expectedSubstring: "leg budget");
         Assert.Contains(
             expectedSubstring: "a 60-second leg budget against 59",
             actualString: CanaryCommand.CeilingRefusal(
                 ceiling: new CanaryCeiling(LegBudgetSeconds: 59, WorldBoots: 2),
-                name: "Automatic",
+                name: "automatic",
                 plan: plan
             )
         );
     }
     [Fact]
-    public void TheShippedGateSelectionsFitTheirDeclaredCeilings() {
+    public void TheShippedGateSelectionsFitTheirRecordedCeilings() {
+        Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
+        Assert.True(
+            condition: CanaryCeilingsLedger.TryRead(
+                error: out var error,
+                ledger: out var ledger,
+                repositoryRoot: repositoryRoot,
+                text: out _
+            ),
+            userMessage: error
+        );
+
         var manifests = Shipped();
         var automatic = CanaryCommand.Plan(
             manifests: [.. manifests.Where(predicate: static manifest => manifest.IsAutomatic)],
@@ -351,13 +362,13 @@ public sealed class CanaryPlanLawTests {
         );
 
         Assert.Null(@object: CanaryCommand.CeilingRefusal(
-            ceiling: CanaryCeilings.Automatic,
-            name: nameof(CanaryCeilings.Automatic),
+            ceiling: ledger!.Automatic,
+            name: "automatic",
             plan: automatic
         ));
         Assert.Null(@object: CanaryCommand.CeilingRefusal(
-            ceiling: CanaryCeilings.Merge,
-            name: nameof(CanaryCeilings.Merge),
+            ceiling: ledger.Merge,
+            name: "merge",
             plan: merge
         ));
     }

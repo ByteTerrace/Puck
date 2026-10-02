@@ -5,7 +5,7 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 // The host-written tables: program words, dynamic transforms, the frame instance grid, screen surfaces, screen mappings,
-// screen lights, volumes, glyph decals and mesh draws, each a GpuRegion under the policy GpuResidency.Select chooses for
+// screen lights, volumes, glyph decals, mesh draws, the lights and the sky's block, stops and softboxes, each a GpuRegion under the policy GpuResidency.Select chooses for
 // its size with the upload ring's readers in flight, a ring's buffers in the memory GpuResidency.RingMemory chooses. A
 // frame writes each table into its region, which owes only the words that differ; the upload flushes its ring slot's
 // share (the previous upload's fence has retired the views that read it), records each staged region's copy, then one
@@ -22,8 +22,8 @@ public sealed partial class SdfWorldTables {
     private const int InstanceGridRegionIndex = 2;
     private const int MeshRegionIndex = 8;
     private const int ProgramRegionIndex = 0;
-    // The per-frame regions RegionAt names, the mesh region last.
-    private const int RegionCount = 9;
+    // The per-frame regions RegionAt names.
+    private const int RegionCount = 13;
     private const int ScreenLightRegionIndex = 4;
     private const int ScreenMappingRegionIndex = 7;
     private const int ScreenSurfaceRegionIndex = 3;
@@ -168,7 +168,11 @@ public sealed partial class SdfWorldTables {
         VolumeRegionIndex => m_volumeRegion,
         DecalRegionIndex => m_decalRegion,
         ScreenMappingRegionIndex => m_screenMappingRegion,
-        _ => m_meshRegion,
+        MeshRegionIndex => m_meshRegion,
+        LightRegionIndex => m_lightRegion,
+        SkyRegionIndex => m_skyRegion,
+        SkyStopRegionIndex => m_skyStopRegion,
+        _ => m_softboxRegion,
     };
     // The debug name of region index's objects, its reserved copy sets included: its table's role.
     private static GpuObjectName RegionName(int region) => NameOf(part: region switch {
@@ -181,6 +185,10 @@ public sealed partial class SdfWorldTables {
         DecalRegionIndex => "decals",
         ScreenMappingRegionIndex => "screen-mappings",
         MeshRegionIndex => "mesh-region",
+        LightRegionIndex => "lights",
+        SkyRegionIndex => "sky",
+        SkyStopRegionIndex => "sky-stops",
+        SoftboxRegionIndex => "softboxes",
         _ => "brick-staging",
     });
     // Creates the one copy pool of every region the tables may create, the brick staging's with a brick pool, each

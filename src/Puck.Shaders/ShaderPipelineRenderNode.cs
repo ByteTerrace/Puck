@@ -35,6 +35,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     // The layout the published image is in between submissions: the output layout, or an external input's own when a
     // package that drew nothing publishes it in its output's place.
     private GpuImageLayout m_publishedLayout;
+    // The external image whose bound image the latest presentation publishes in the output's place, or null when it
+    // publishes an image of the node's own.
+    private string? m_publishedBinding;
 
     private readonly FrameSlot[] m_slots;
 
@@ -97,8 +100,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// preview's included, is leased from <paramref name="pipelines"/>, which counts what it creates; the node's
     /// own ledger counts none of it. A graph's package passes are recorded by <paramref name="packages"/>' recorders, one
     /// per pass, created when the graph installs and disposed with it; a node without recorders refuses a graph that has
-    /// any.</summary>
-    public ShaderPipelineRenderNode(string name, IGpuDeviceContext deviceContext, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General, RenderGraphPackageRecorders? packages = null) {
+    /// any. With <paramref name="images"/>, every image the node creates is one of that table's, which a reader leases and
+    /// which outlives the node's own disposal of it until the last lease retires.</summary>
+    public ShaderPipelineRenderNode(string name, IGpuDeviceContext deviceContext, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint width, uint height, uint inFlightFrames = 3, GpuImageLayout outputLayout = GpuImageLayout.General, RenderGraphPackageRecorders? packages = null, GpuImageLeases? images = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(deviceContext);
         ArgumentNullException.ThrowIfNull(pipelines);
@@ -112,8 +116,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         );
         m_gpu = GpuWorkCounting.Wrap(
             ledger: m_work,
-            services: deviceContext.Services
+            services: (images?.Wrap(services: deviceContext.Services) ?? deviceContext.Services)
         );
+        m_images = images;
         m_device = deviceContext;
         m_pipelines = pipelines;
         m_directX = hostsOnDirectX;
@@ -168,7 +173,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// <summary>Gets the submitted frame count.</summary>
     public ulong FrameCounter => m_frame;
     /// <summary>Gets or sets the frame values the host supplies to every pass's frame block, the presented tick and
-    /// presentation time among them; the node writes them whole each frame it renders and derives none of them.</summary>
+    /// presentation time among them; the node writes them whole each frame it renders and derives none of them, except
+    /// that values naming no placed extent are written with the node's own (<see cref="ShaderFrameValues.PlacedExtent"/>).</summary>
     public ShaderFrameValues Frame { get; set; }
     /// <summary>Gets whether a compiled graph has allocated all of its GPU resources.</summary>
     public bool IsReady => ((m_pipeline is not null) && m_ready);
@@ -193,6 +199,11 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// an external input's own layout while a package pass that drew nothing
     /// (<see cref="RenderGraphPackageOutcome.DrewNothing"/>) publishes that input in its output's place.</summary>
     public GpuImageLayout PublishedLayout => m_publishedLayout;
+    /// <summary>Gets the name of the external image the latest presentation published in its output's place, because a
+    /// package pass that drew nothing (<see cref="RenderGraphPackageOutcome.DrewNothing"/>) stands for it, or
+    /// <see langword="null"/> when the node published an image of its own. The published image is then whatever the host
+    /// bound to that name for the frame, and lives only as long as its owner keeps it.</summary>
+    public string? PublishedBinding => m_publishedBinding;
     /// <summary>Gets resource allocation and extent information for the active graph.</summary>
     public IReadOnlyList<ShaderPipelineResourceStatus> ResourceStatus => m_resources.Select(selector: StatusOf).ToArray();
     /// <summary>Gets or sets whether a step is pending.</summary>
@@ -1048,53 +1059,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         throw new InvalidDataException(message: $"Unknown shader pipeline format '{format}'.");
     }
 
-    private void PresentSelectedOutput() {
-        WaitAll();
-        HoldLeases();
-        var slot = ((int)((m_frame - 1) % m_inFlight));
-        var selected = m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput)];
-        var commands = m_commands;
-        var command = BeginFrameCommands(slot: slot);
-
-        commands.Clear();
-        if (NeedsPreview(spec: selected.Spec)) {
-            m_preview!.Record(
-                PreviewSource(
-                    selected: selected,
-                    slot: slot
-                ),
-                ResolveImage(
-                    selected,
-                    selected.Spec.Name,
-                    slot
-                ),
-                slot,
-                command
-            );
-        }
-        FinalizeOutputs(
-            command: command,
-            exported: null,
-            slot: slot
-        );
-        m_gpu.Recorder.EndCommandBuffer(commandBufferHandle: command);
-        commands.Add(item: command);
-        SubmitCounted(
-            commands: commands,
-            fence: m_slots[slot].Fence!
-        );
-        m_frameLeases.MoveTo(destination: m_slots[slot].Leases);
-        Publish(surface: Output(slot: slot));
-        m_outputRefreshRequested = false;
-    }
-    private RuntimeResource PresentationResource(RuntimeResource selected) {
-        var selectedFormat = ParseFormat(format: selected.Spec.Format);
-
-        if (Surface.IsImageFormat(format: selectedFormat)) {
-            return selected;
-        }
-        throw new InvalidDataException(message: $"Selected output '{selected.Spec.Name}' is {selectedFormat}, which no surface carries.");
-    }
     // Moves the carried history's instances out of the replaced graph into the installed one. The carried instances keep
     // their contents and the states the replaced graph left them in.
     private void PreserveCompatibleHistory(IReadOnlyDictionary<int, CarriedHistory> carried, ShaderPipelinePlan? previousPlan) {
@@ -1287,10 +1251,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         );
     }
     private void Release(bool wait) {
-        // A build in flight creates objects on the device being released, so it is waited out and discarded first.
-        m_build.CancelAndWait(discard: static built => built.Dispose());
-        m_buildKey = default;
-        CancelPreviewBuild();
+        CancelBuilds();
         // A node that never allocated submitted nothing, so it drains nothing and touches no device context.
         if (
             wait &&
@@ -1299,6 +1260,21 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             WaitAll();
             m_device.WaitIdle();
         }
+        ReleaseGraph();
+        RetireBindingHolds();
+        ReleaseRegions();
+        ReleaseRegionCopy();
+    }
+    // A build in flight creates objects on the device being released, so it is waited out and discarded first.
+    private void CancelBuilds() {
+        m_build.CancelAndWait(discard: static built => built.Dispose());
+        m_buildKey = default;
+        CancelPreviewBuild();
+    }
+    // Disposes the installed graph and everything that follows it: timing, cadence recovery, objects waiting to retire,
+    // frame leases, the preview, readback and encoder, and the frame slots. Persistent binding holds, regions and the
+    // region-copy pipeline the host's bindings rest on are the caller's to release.
+    private void ReleaseGraph() {
         ReleaseTiming();
         ReleaseCadenceRecovery();
         DisposeGraph(
@@ -1307,9 +1283,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         );
         ReleaseRetired();
         RetireAllLeases();
-        RetireBindingHolds();
-        ReleaseRegions();
-        ReleaseRegionCopy();
+        // The installed graph's copy pool went with its first pass, and the copies a frame owed with its slots.
+        m_regionCopies = null;
+        m_copyRecording = null;
         // The published images were the released graph's or held from one, so nothing stays published.
         m_lastSurface = default;
         m_publishedStateTick = null;
@@ -1328,6 +1304,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             slot.Fence?.Dispose();
             slot.Fence = null;
         }
+        Array.Clear(array: m_pendingRenders);
         m_passes = [];
         m_resources = [];
         m_resourceLookup = new Dictionary<string, RuntimeResource>(comparer: StringComparer.Ordinal);
@@ -1533,6 +1510,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// step, resume or reset renders.</summary>
     public void OnDeviceLost() {
         Release(wait: false);
+        // The replacement device is a new build input, including for a first candidate that never installed.
+        m_pending ??= m_refusedPending;
+        ForgetRefusal();
+        m_lastSwapError = null;
         m_publicationLost = true;
         m_capture.RefuseForDeviceLoss();
     }
@@ -1557,8 +1538,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             return default;
         }
         // Publishes the newest finished submission's counts, paused or not, so a held frame still completes them.
-        m_work.Poll();
-        PollTimings();
+        PollReadbacks();
         // A node with nothing published (never rendered, or reset) owes an initialization frame. That frame is its own
         // obligation: a step requested before it renders stays pending and advances one submission beyond it. A device
         // loss unpublishes the image without owing one.
@@ -1595,6 +1575,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             ((m_pending is not null) || m_resizePending)
         ) {
             if (m_frame != 0) {
+                PinStandingCaptureIfOffered();
                 CaptureIfPending();
             }
             return m_lastSurface;
@@ -1610,6 +1591,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             (!m_outputRefreshRequested || m_installedUnrendered)
         ) {
             if (m_frame != 0) {
+                PinStandingCaptureIfOffered();
                 CaptureIfPending();
             }
             return m_lastSurface;
@@ -1679,6 +1661,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
 
         slot.Fence!.Wait();
         NoteWaited(fence: slot.Fence);
+        m_latestSlot = slotIndex;
         PrepareTiming(slot: slotIndex);
         slot.Leases.RetireAll();
         BindRegionBuffers(slot: slotIndex);
@@ -1724,6 +1707,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             commands: commands,
             fence: slot.Fence!
         );
+        NoteRenderGrid();
+        NoteRenderCompletion(fence: slot.Fence!, slot: slotIndex);
         CommitCadenceFrame();
         SubmitPackageReadbacks(fence: slot.Fence!, slot: slotIndex);
         SubmitTiming(fence: slot.Fence!, slot: slotIndex);
@@ -1912,14 +1897,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             throw new InvalidDataException(message: "History requires at least two frame slots.");
         }
     }
-    /// <summary>Gets whether a named external resource is bound: an image or a buffer a host bound for it, which the
-    /// installed graph samples when it renders.</summary>
-    /// <param name="name">The external resource's name.</param>
-    /// <returns><see langword="true"/> when an image or a buffer is bound for the name.</returns>
-    public bool IsBound(string name) => (
-        m_externalImages.ContainsKey(key: name) ||
-        m_externalBuffers.ContainsKey(key: name)
-    );
     /// <summary>Requests one render while <see cref="Paused"/>. The initialization frame a paused node owes after a
     /// <see cref="Reset"/> never consumes a step, so a step requested before that frame renders one frame beyond it. A
     /// step taken while a candidate or resize builds waits until it installs, then renders once through it.</summary>

@@ -71,11 +71,14 @@ public static class WorldApplicationDefaults {
 /// <param name="AmbientOcclusion">Whether the preset enables ambient occlusion.</param>
 /// <param name="RenderScale">The render-scale tier the preset selects.</param>
 /// <param name="Temporal">Whether the preset reconstructs the world's views over time (<c>world.temporal</c>).</param>
+/// <param name="DynamicResolution">Whether the preset moves each view's render extent with the load
+/// (<c>world.dynamic-resolution</c>).</param>
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
     bool AmbientOcclusion,
     WorldRenderScaleTier RenderScale,
-    bool Temporal = false
+    bool Temporal = false,
+    bool DynamicResolution = false
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
@@ -88,6 +91,13 @@ public readonly record struct WorldQualityPreset(
 /// Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect's own extent.</param>
 /// <param name="Temporal">Whether the world's own views boot reconstructing over time (<c>world.temporal</c>): each
 /// jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.</param>
+/// <param name="DynamicResolution">Whether the world's own views boot with dynamic resolution
+/// (<c>world.dynamic-resolution</c>): each frame one controller moves each view's render grid between
+/// <paramref name="DynamicResolutionFloor"/> and the render-scale ceiling, by the present timing or, where the presenter
+/// reports none, by the views' counted march steps against the budget the floor tier's committed counters ceilings give
+/// per output pixel. A native ceiling is lowered to three-quarter while it is on, since a native view reconstructs
+/// nothing.</param>
+/// <param name="DynamicResolutionFloor">The lowest render-scale tier dynamic resolution moves a view's grid to.</param>
 /// <param name="LowRaw">The <c>world.quality low</c> preset.</param>
 /// <param name="MediumRaw">The <c>world.quality medium</c> preset.</param>
 /// <param name="HighRaw">The <c>world.quality high</c> preset.</param>
@@ -95,8 +105,8 @@ public readonly record struct WorldQualityPreset(
 /// optional individually — an absent section, or an absent field within it, resolves to <c>SdfFrame</c>'s pinned
 /// default for that field, so a world renders unchanged until it authors one.</param>
 /// <param name="Sky">The procedural sky — a gradient, sun disc, star field, and distance fog. Optional; an absent
-/// section renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section
-/// existed.</param>
+/// section renders the default look, the two-stop gradient and fog <c>SdfSky</c> starts from, as data the kernels
+/// read like any authored sky.</param>
 /// <param name="Environment">The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe
 /// reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.</param>
 /// <param name="Tonemap">The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs
@@ -117,6 +127,8 @@ public sealed record WorldRenderDefaults(
     WorldRenderScaleTier RenderScale = WorldRenderScaleTier.Native,
     float UpscaleSharpness = 0f,
     bool Temporal = false,
+    bool DynamicResolution = false,
+    WorldRenderScaleTier DynamicResolutionFloor = WorldRenderScaleTier.Quarter,
     [property: JsonPropertyName("low"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? LowRaw = null,
     [property: JsonPropertyName("medium"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? MediumRaw = null,
     [property: JsonPropertyName("high"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? HighRaw = null,
@@ -162,7 +174,7 @@ public sealed record WorldRenderDefaults(
 /// kind. Every value a light or the curvature carries may be keyed on a clock on its own; the section may instead be
 /// keyed whole (<paramref name="Clock"/>, <paramref name="Keys"/>), each key a partial record addressing lights by
 /// name.</summary>
-/// <param name="Lights">The lights, at most <c>SdfEnvironment.MaxLights</c>, in slot order. At most one directional
+/// <param name="Lights">The lights, at most <c>SdfLights.MaxLights</c>, in slot order. At most one directional
 /// may shadow: the soft-shadow march runs once per lit pixel.</param>
 /// <param name="Curvature">The stylized curvature enrichment — cavity darkening, curvature rim light, and an ink
 /// outline. Optional; absent (and all-zero) shades exactly as a world that declares none.</param>
@@ -198,7 +210,7 @@ public sealed record WorldRenderLightingKey(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderCurvature? Curvature = null
 );
 /// <summary>One light. The <c>$type</c> string is the JSON discriminator; a new kind is a new derived record, its
-/// <see cref="JsonDerivedTypeAttribute"/> line, and its lane semantics in <c>SdfEnvironment</c>.</summary>
+/// <see cref="JsonDerivedTypeAttribute"/> line, and its kind in <c>SdfLightKind</c>.</summary>
 [JsonDerivedType(typeof(WorldRenderLight.Directional), typeDiscriminator: "directional")]
 [JsonDerivedType(typeof(WorldRenderLight.Hemisphere), typeDiscriminator: "hemisphere")]
 [JsonDerivedType(typeof(WorldRenderLight.Rim), typeDiscriminator: "rim")]
@@ -328,9 +340,10 @@ public sealed record WorldRenderCurvature(
     BindableScalar? InkHigh = null,
     BindableColor? InkColor = null
 );
-/// <summary>The procedural sky as an ordered stack of layers. Absent is a hard gate: the world renders the pinned
-/// two-stop gradient and fog density, as before this section existed. The layers composite in a fixed order —
-/// gradient, stars, sun disc, clouds — whatever order they are authored in; fog is read every frame on its own. A
+/// <summary>The procedural sky as an ordered stack of layers. Absent is the default look: the two-stop gradient and fog
+/// density <c>SdfSky</c> starts from, which a layer drawn over an unauthored gradient draws over too. The layers
+/// composite in a fixed order, whatever order they are authored in: the gradient, then the sun disc and the stars,
+/// then the clouds over them; fog is read every frame on its own. A
 /// layer kind appears at most once. Every value a layer carries may be keyed on a clock on its own; the section may
 /// instead be keyed whole (<paramref name="Clock"/>, <paramref name="Keys"/>), each key a partial record addressing
 /// layers by name.</summary>
@@ -373,7 +386,7 @@ public abstract record WorldRenderSkyLayer {
     public abstract string? LayerName { get; }
 
     /// <summary>The colour gradient over elevation: piecewise-linear between stops, clamped to the end stops.</summary>
-    /// <param name="Stops">Two to <c>SdfEnvironment.MaxSkyStops</c> stops, strictly ascending in elevation.</param>
+    /// <param name="Stops">Two to <c>SdfSky.MaxStops</c> stops, strictly ascending in elevation.</param>
     /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
     public sealed record Gradient(
         IReadOnlyList<WorldRenderSkyStop>? Stops = null,
@@ -479,7 +492,7 @@ public enum WorldTonemap {
 }
 /// <summary>The analytic studio reflections a GGX specular lobe reflects — see
 /// <see cref="WorldRenderDefaults.Environment"/>.</summary>
-/// <param name="Softboxes">The reflection softboxes, at most <c>SdfEnvironment.MaxSoftboxes</c>. Absent or empty
+/// <param name="Softboxes">The reflection softboxes, at most <c>SdfSky.MaxSoftboxes</c>. Absent or empty
 /// contributes nothing.</param>
 /// <param name="Horizon">The reflection horizon gradient. Absent is black — contributes nothing.</param>
 public sealed record WorldRenderEnvironment(IReadOnlyList<WorldRenderSoftbox>? Softboxes = null, WorldRenderHorizon? Horizon = null);

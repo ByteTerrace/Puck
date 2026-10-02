@@ -95,11 +95,11 @@ leave it that way (rules 2 and 5).
    the same change. No compat aliases, deprecation steps, migration shims or
    read-side tolerance for retired data shapes: migrate data once and delete the
    old path.
-6. **Merges follow the branch's owner.** A lane merges into the integration
-   branch its lead's brief names, and the lead merges there; a delegated agent
-   merges only when its brief says to. `main` is the owner's: never merge,
-   squash or push onto it unless the owner asks, because a push to `main`
-   deploys to Azure.
+6. **Merges follow the branch's owner.** Only the lead merges into the
+   integration branch its brief names. A delegated agent merges that branch
+   into its own working branch and merges anything else only when its brief
+   says to. `main` is the owner's: never merge, squash or push onto it unless
+   the owner asks, because a push to `main` deploys to Azure.
 7. **Branded code is settled; changing it is deliberate.** A member carrying
    `[VerifiedCode("id", …)]` has been proven correct over its whole input space.
    `VerifiedCode.json` seals the source that proof read: the member's
@@ -121,7 +121,7 @@ leave it that way (rules 2 and 5).
    `puck-dsl`, `rendering`, `sdf-authoring`, `maths-usage`, `maths-laws`,
    `gaming-bricks`, `rom-forge`, `dotnet10-performance`, `symbol-analysis`,
    `content-search`, `documentation`, `boy-scout`, `verification`,
-   `review-passes`), then ask the code with `puck references`,
+   `review-passes`, `orchestration`), then ask the code with `puck references`,
    `puck declarations` or `puck search -M 0`. `experimental/` is one of the
    places to look. A second implementation is a defect, and a skill wrong about
    its own area is corrected in the same change.
@@ -184,13 +184,26 @@ steps it gives. Its rules in brief:
   work.
 - Commit subjects are lowercase `area: sentence` (`vulkan: …`), with the
   verification evidence in the body. Commits carry no `Co-Authored-By` trailer.
-- Push a working branch (a lane, review or partner branch) once its gates pass.
-  Pushing `main`, force-pushing, and deleting a remote branch are the owner's:
+- A delegated session has exactly one long-lived working branch, and every
+  brief it receives lands there. A brief starts by merging the integration
+  branch's current tip into it: merge, never rebase. Push it fast-forward only,
+  once its gates pass.
+- Create no per-lane, per-review or per-batch remote branch. A review pass runs
+  in a worktree of the author's own branch and its fixes land there as commits
+  ([`review-passes`](.claude/skills/review-passes/SKILL.md)). A local
+  subagent's branch stays local and is never pushed.
+- Worktrees live under the checkout's git-ignored `.claude/worktrees/<name>`,
+  never at a drive root.
+- Pushing `main`, force-pushing, and deleting a remote branch are the owner's:
   ask first.
 - Delete a local branch only once `git cherry` shows its work landed and no
   worktree holds it.
 
 ## Delegated work
+
+Load [`orchestration`](.claude/skills/orchestration/SKILL.md) when leading
+delegated work, sequencing integration merges, scheduling machines or routing
+reviews.
 
 When you delegate, inventory the work first, assign each agent explicit file
 ownership and its skills, and sequence edits to shared files. Each brief holds

@@ -22,7 +22,7 @@
 // The brick pool: primary and shading sample baked SampledRegion carves O(1), so the primary, shadow and occlusion marches
 // do not pay for every carve. All views variants inherit it.
 #define SDF_SAMPLED_REGIONS
-// The bounded volumes are in the shared interface, but only the views stage composites them (shade-volumes.hlsli).
+// The bounded volumes are in the shared interface, but only the composite pass integrates them (shade-volumes.hlsli).
 // The per-group ambient and shadow gathers (surface/sdf-shadow-gather.hlsli): one groupshared candidate mask per 8x8
 // workgroup, built cooperatively at a uniform seam of the ambient and shadow stages. Every lane, rendered pixel or not,
 // reaches its stage, so the entry point turns the per-pixel extent test into the pixel's `active` flag instead of a
@@ -68,12 +68,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 #elif defined(SDF_SHADOW_PASS)
     sdfShadowStage(p);
 #else
+    float coverage;
     float reactivity;
-    float3 color = sdfViewsStage(p, reactivity);
+    float3 color = sdfViewsStage(p, coverage, reactivity);
 
     if (p.active) {
-        // The float working color; the display encode dithers and quantizes it.
-        output[pixel] = float4(color, 1.0);
+        // The lit image: the float working color premultiplied by the pixel's coverage, the coverage in its alpha, which
+        // the composite puts over the sky.
+        output[pixel] = float4((color * coverage), coverage);
         sdfWorkTexels = 1u;
         if (passGroup.temporal != 0u) {
             reactivityRW[sdfReactivityIndex(pixel, viewIndex, passGroup.imageExtent)] = reactivity;

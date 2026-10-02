@@ -83,10 +83,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly IOverlayPredicateEvaluator? m_overlayFacts;
     private readonly WorldViewGraphHost? m_graphs;
 
-    // The display extent the last captured frame was composed for, which the next frame's pane placement reads.
+    // The display extent this frame's cameras and placements share.
     private uint m_displayHeight;
     private uint m_displayWidth;
     private bool m_displayExtentSupplied;
+    private FrameContext? m_graphContext;
 
     private readonly WorldBakeSchedule? m_bakes;
     private readonly Func<string, OverlayResolvedGlyph> m_resolveIcon;
@@ -154,6 +155,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly Dictionary<string, WorldCameraRigCompiler.Cache> m_namedCameraRigCache = new(comparer: StringComparer.Ordinal);
     private readonly WorldGroupAnchors m_groupAnchors = new();
     private readonly List<SdfViewSnapshot> m_views = new(capacity: PlayerRoster.MaxSlots);
+    // The extent the root reads each of m_views at, retained until the transition chain settles (WorldViewOutputRegions).
+    private readonly List<NormalizedRect> m_viewEnvelopes = new(capacity: PlayerRoster.MaxSlots);
+    private readonly WorldViewOutputRegions m_outputRegions = new();
     // The frame's views: the presentation's own (m_views), which it places, then the camera views filming the frame.
     private readonly List<SdfViewSnapshot> m_frameViews = new(capacity: PlayerRoster.MaxSlots);
     private DynamicTransform[] m_transforms = [];
@@ -728,20 +732,23 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             );
         }
 
+        var placed = PlacedExtent(height: height, region: region, width: width);
+
         return CameraSnapshot.LookAt(
+            fieldOfViewRadians: fieldOfView,
             position: eye,
             target: target,
-            fieldOfViewRadians: fieldOfView,
-            viewportWidth: Math.Max(
-                val1: 1u,
-                val2: ((uint)(region.Width * width))
-            ),
-            viewportHeight: Math.Max(
-                val1: 1u,
-                val2: ((uint)(region.Height * height))
-            )
+            viewportHeight: placed.Y,
+            viewportWidth: placed.X
         );
     }
+    // The extent, in display pixels, of a placed rect: what a camera projects for and what a pane's frame values carry,
+    // so a pane's shader and a hit through its paired camera share one aspect. A collapsed axis of an arriving slot
+    // counts one pixel, keeping a finite projection while it draws nothing; a positive axis stays fractional.
+    private static Vector2 PlacedExtent(NormalizedRect region, uint width, uint height) => new(
+        x: ((region.Width == 0f) ? 1f : (region.Width * width)),
+        y: ((region.Height == 0f) ? 1f : (region.Height * height))
+    );
     // The one shared anchor→pose resolver the camera path reads: entity/part ride the live snapshot pose, a
     // placement rides its stamped transform (WorldAnchorGeometry, the same math speakers read), a group rides its
     // smoothed centroid + spread, a seat-relative anchor rides the seat's perceived body (or the recent speaker),
@@ -832,7 +839,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             objA: state,
             objB: m_client.StateMirror
         )) {
-            state.Apply(fraction: (PinsStateFraction
+            state.Apply(fraction: (PinsPresentation
                 ? 1f
                 : route.Endpoint.InterpolationAlpha));
         }
@@ -918,18 +925,14 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             clock: in clock
         );
 
+        var placed = PlacedExtent(height: height, region: region, width: width);
+
         camera = CameraSnapshot.LookAt(
+            fieldOfViewRadians: fieldOfView,
             position: eye,
             target: target,
-            fieldOfViewRadians: fieldOfView,
-            viewportWidth: Math.Max(
-                val1: 1u,
-                val2: ((uint)(region.Width * width))
-            ),
-            viewportHeight: Math.Max(
-                val1: 1u,
-                val2: ((uint)(region.Height * height))
-            )
+            viewportHeight: placed.Y,
+            viewportWidth: placed.X
         );
 
         return true;
@@ -1156,23 +1159,22 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// screen retargeted to a view shows it on the frame of the change, then publishes the screens' content for the
     /// frame (<see cref="IWorldScreenPresenter.Publish"/>), so every source the frame acquires sees one answer from
     /// the capture gate, then reconciles the document's <c>views.graphs</c> rows and the screens' source instances onto
-    /// the runtime, hands every graph instance this frame's presented tick and
-    /// presentation time, then places each view of the world the last composed frame rendered in its output rect with the
-    /// live upscale sharpness, and, for each graph instance a slot of the last composed layout shows,
-    /// places it in its slot's rect, advances its clock, and hands it this frame's camera, pointer and its own time, and
-    /// then publishes the mapping of every pane the root draws (<see cref="WorldViewGraphHost.PublishPanes"/>), which the
+    /// the runtime. The world's capture then hands every graph instance this frame's presented tick and time,
+    /// places its freshly composed views and panes, advances each pane's
+    /// clock, and hands it the camera, pointer and time from that same composition. It then publishes the mapping of
+    /// every pane the root draws (<see cref="WorldViewGraphHost.PublishPanes"/>), which the
     /// pane pointer, the picker and the hit walk read. The tick is the state mirror's delivered engine tick and the time
     /// the mirror's presented engine tick at this frame's interpolation fraction (one for an offscreen presentation), in
     /// seconds, so a pass reads no wall clock. A lone view covering the whole display with no tonemap is not shown at any
     /// render scale, since the view reconstructs its own output: the root then stands for the world itself and publishes
     /// it as no pane. Whether a pane covers the whole display decides whether pixels no view
-    /// covers owe the letterbox color (<see cref="WorldViewGraphHost.PlaceViews"/>). The views and slots are the ones the
-    /// last captured frame composed, since the world producer captures its frame inside the runtime's schedule, so a
-    /// layout change places its views and panes one frame later.</summary>
+    /// covers owe the letterbox color (<see cref="WorldViewGraphHost.PlaceViews"/>). The package captures the world
+    /// before scheduling, so camera composition and placement both reach that frame's schedule.</summary>
     /// <param name="context">The host's frame context.</param>
     public void PrepareGraph(in FrameContext context) => PrepareGraphCore(context: FrozenContext(context: in context));
 
     private void PrepareGraphCore(in FrameContext context) {
+        m_graphContext = context;
         // The frame context's target extent IS the launcher's live client area (window.Width/Height at this frame's
         // BeginFrame) — the one place the World side can learn it. Published for the cursor feed's client→frame
         // mapping (see WorldCursorFeed.Decide); the per-seat views carry the FIXED frame extent instead.
@@ -1185,6 +1187,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // this frame instead of showing dark glass until the next. The capture's own call is then a no-op.
         ReconcileDelivery();
         m_binder.Publish(context: in context);
+        AdvanceDynamicResolution(context: in context);
 
         if (m_graphs is not { } graphs) {
             return;
@@ -1195,15 +1198,32 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             tonemap: m_client.Definition.Render.Tonemap,
             views: m_client.Definition.Views
         );
+        // The residency reuses its frozen frame without calling CaptureFrame again. BeginFrame cleared every
+        // placement, so publish the retained composition here on those frames as well.
+        if ((m_convergence is { Completion.IsCompleted: false }) && (m_convergedFrame is not null)) {
+            PlaceComposedFrame();
+        }
+    }
+
+    /// <summary>Gets or sets the work that follows this frame's composed cameras and graph placements, before the
+    /// runtime schedules it, such as the editor comparison's placement and viewport record.</summary>
+    public Action? FrameComposed { get; set; }
+
+    // Runs after the world's one capture has dressed its cameras, including when convergence reuses a frozen frame.
+    private void PlaceComposedFrame() {
+        if ((m_graphContext is not { } context) || (m_graphs is not { } graphs)) {
+            return;
+        }
+        m_graphContext = null;
 
         var width = m_displayWidth;
         var height = m_displayHeight;
         var deltaSeconds = ((float)context.FrameDeltaSeconds);
         var presented = PresentedFrame(context: in context);
-        var panesCover = false;
 
         graphs.Present(frame: in presented);
         graphs.WriteParameters(mirror: m_client.StateMirror);
+        var panesCover = false;
 
         var slots = m_composer.Slots;
 
@@ -1217,6 +1237,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         }
 
         graphs.PlaceViews(
+            envelopes: m_viewEnvelopes,
             panesCover: panesCover,
             rendered: ViewRendered,
             sharpness: m_settings.UpscaleSharpness,
@@ -1230,6 +1251,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             if (
                 (composed.Instance is not { } name) ||
                 !graphs.Place(
+                    envelope: m_outputRegions.Pane(
+                        composer: m_composer,
+                        instance: name,
+                        region: region
+                    ),
                     instance: name,
                     region: region,
                     sharpness: m_settings.UpscaleSharpness
@@ -1287,6 +1313,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 CameraPosition = cameraPos,
                 CameraTarget = cameraTarget,
                 CameraUp = cameraUp,
+                PlacedExtent = PlacedExtent(height: height, region: region, width: width),
                 Pointer = entry.Pointer,
                 PointerDown = entry.PointerWasDown,
                 PointerPresses = entry.PointerPresses,
@@ -1299,12 +1326,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             displayHeight: height,
             displayWidth: width
         );
+        FrameComposed?.Invoke();
     }
     // The frame values every graph instance presents this frame, at the frame's interpolation fraction, or one for an
     // offscreen presentation.
     private ShaderFrameValues PresentedFrame(in FrameContext context) {
         var frame = WorldViewGraphHost.PresentedFrame(
-            fraction: (PinsStateFraction
+            fraction: (PinsPresentation
                 ? 1f
                 : ((float)context.InterpolationAlpha)),
             mirror: m_client.StateMirror,
@@ -1338,6 +1366,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <summary>Gets a value indicating whether every frame presents bound state at the delivered tick itself rather
     /// than interpolated toward it — set for an offscreen presentation, whose captures pin the fraction to one.</summary>
     public bool PinsStateFraction { get; init; }
+    /// <summary>Gets or sets whether the render chain owes a capture. Such a frame presents the completed simulation
+    /// tick itself, including body poses, rather than interpolating from its predecessor.</summary>
+    public Func<bool>? CapturePending { get; set; }
+
+    private bool PinsPresentation => (PinsStateFraction || (CapturePending?.Invoke() ?? false));
 
     /// <inheritdoc/>
     public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
@@ -1448,8 +1481,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     ) {
                         CutRevision = ViewCut(index: m_views.Count, source: m_namedCameraRigCache[cameraName], revision: m_namedCameraRigCache[cameraName].Revision),
                         Quality = quality,
-                        RenderScale = m_settings.RenderScale,
-                        ResolvedRenderScale = (m_settings.RenderScale * transitionScale),
+                        RenderScale = m_settings.RenderCeiling,
+                        ResolvedRenderScale = (RenderGrid() * transitionScale),
                         UpscaleSharpness = m_settings.UpscaleSharpness,
                     });
                     if (!hasSeatViewFallback) {
@@ -1513,8 +1546,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 CutRevision = ViewCut(index: m_views.Count, source: m_seatCameraRigs[slot]!, revision: m_roster.Seat(slot: slot)!.View.CutRevision),
                 Grid = SeatGrid(slot: slot),
                 Quality = quality,
-                RenderScale = m_settings.RenderScale,
-                ResolvedRenderScale = (m_settings.RenderScale * transitionScale),
+                RenderScale = m_settings.RenderCeiling,
+                ResolvedRenderScale = (RenderGrid() * transitionScale),
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
             // A seat presented elsewhere keeps its place among the views, so every view keeps its index, and its view
@@ -1606,12 +1639,20 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             ) {
                 CutRevision = ViewCut(index: m_views.Count, source: this, revision: 0),
                 Quality = quality,
-                RenderScale = m_settings.RenderScale,
+                RenderScale = m_settings.RenderCeiling,
+                ResolvedRenderScale = (m_settings.DynamicResolution ? RenderGrid() : 0f),
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
         } else {
             m_noLocalSeatsNarrated = false;
         }
+
+        m_outputRegions.Views(
+            cameras: m_client.Definition.Cameras,
+            composer: m_composer,
+            envelopes: m_viewEnvelopes,
+            joinedCount: joinedRosterCount
+        );
 
         // The camera the frame's first view renders with, the spectator above included: the viewer a window fits its
         // eye to while no seat resolves a view (WorldSeatViewports.Viewer).
@@ -1676,9 +1717,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
-            // The environment: render.lighting and render.sky with every keyed value at its clock's presented phase
-            // (a world.row.set render lands on the next frame).
-            Environment = lighting,
+            // The lights and the sky: render.lighting, render.sky and render.environment with every keyed value at its
+            // clock's presented phase (a world.row.set render lands on the next frame).
+            Lights = lighting.Lights,
+            Sky = lighting.Sky,
             // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state at,
             // never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.
             Clock = m_client.StateMirror.Presented,

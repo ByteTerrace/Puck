@@ -36,6 +36,22 @@ public sealed class SdfReactivityDeviceLawTests {
         Assert.InRange(actual: Reactivity(device: device, emissive: false, extension: extension), low: 0f, high: 0.001f);
         Assert.InRange(actual: Reactivity(device: device, emissive: true, extension: extension), low: 0.8f, high: 1f);
     }
+    // The default lights at zero strength: the room is unlit, so the emission alone decides the pixel's color.
+    private static SdfLights Dark() {
+        var lights = SdfLights.Default();
+
+        for (var index = 0; (index < lights.Count); index++) {
+            lights.Set(
+                index: index,
+                light: (lights[index] with {
+                    Param = 0f,
+                    Weight = 0f,
+                })
+            );
+        }
+
+        return lights;
+    }
     private static float Reactivity(IGpuDeviceContext device, string extension, bool emissive) {
         SdfInstruction Sphere(float radius, uint material, bool detail) => new(
             Op: SdfOp.ShapeBlend, Shape: ((uint)SdfShapeType.Sphere), Blend: ((uint)SdfBlendOp.Union), Material: material,
@@ -49,7 +65,7 @@ public sealed class SdfReactivityDeviceLawTests {
                     Up: Vector3.UnitY, Forward: Vector3.UnitZ, TanHalfFieldOfView: 0.5f, AspectRatio: 1f),
                 Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)) {
                 Quality = new SdfViewQuality { Temporal = true },
-            }]) { AmbientScale = 0f, SunScale = 0f };
+            }]) { Lights = Dark() };
         var pipelines = new GpuPassPipelineCache();
         var catalog = new SdfWorldPipelineCatalog(
             regionCopy: new GpuRegionCopyPass(bytecodeExtension: extension, pipelines: pipelines),

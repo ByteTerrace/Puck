@@ -16,7 +16,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
     [Fact]
     public void AWindowIsAViewOfTheSceneItsWorldsSeatsRenderAtItsOwnQuality() {
         using var state = new TemporaryDirectory(prefix: "puck-routed-window-");
-        using var host = WorldBootHarness.Compose(
+        var host = state.Own(owner: WorldBootHarness.Compose(
             edit: definition => (definition with {
                 ViewsRaw = (definition.Views with {
                     Layouts = [new WorldViewLayout(Name: "seat", Slots: [new WorldViewSlot(Height: 1f, Width: 1f, X: 0f, Y: 0f)])],
@@ -25,7 +25,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,
             world: "tests/Puck.Counters/counters.world.json"
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var client = host.Services.GetRequiredService<WorldClient>();
         var routes = host.Services.GetRequiredService<WorldSeatAuthorityRouter>();
@@ -141,16 +141,17 @@ public sealed partial class WorldRoutedPresentationLawTests {
             revision: north.Mirror.DefinitionRevision
         );
 
-        Assert.Equal(actual: frame.Environment.Lanes.ToArray(), expected: sky.Lanes.ToArray());
-        Assert.NotEqual(expected: SdfEnvironment.Default().Lanes.ToArray(), actual: frame.Environment.Lanes.ToArray());
+        Assert.Equal(actual: frame.Sky.Stops.ToArray(), expected: sky.Sky.Stops.ToArray());
+        Assert.Equal(actual: frame.Sky.Block, expected: sky.Sky.Block);
+        Assert.NotEqual(expected: new SdfSky().Stops.ToArray(), actual: frame.Sky.Stops.ToArray());
 
-        var retained = frame.Environment.Lanes.ToArray();
+        var retained = frame.Sky.Stops.ToArray();
 
         north.Mirror.DeliverDefinition(definition: AwayDocument(), version: default);
         _ = Capture(source: scene.FrameSource);
         var changed = Capture(source: scene.FrameSource);
 
-        Assert.NotEqual(expected: retained, actual: changed.Environment.Lanes.ToArray());
+        Assert.NotEqual(expected: retained, actual: changed.Sky.Stops.ToArray());
     }
     // A routed view's sky clock (its stars' twinkle, its clouds' drift, its media's motion) is the destination's presented
     // tick: the sky it shows moves as its world does, whatever the viewer's own world has reached. Its presentation time

@@ -164,7 +164,7 @@ public readonly record struct CameraSnapshot {
     /// <summary>Creates a finite camera snapshot looking from <paramref name="position"/> toward <paramref name="target"/>.</summary>
     /// <exception cref="ArgumentException">A position or target component is not finite.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The field of view is outside 0..<see cref="MathF.PI"/>, or a viewport dimension is zero.</exception>
-    public static CameraSnapshot LookAt(Vector3 position, Vector3 target, float fieldOfViewRadians, uint viewportWidth, uint viewportHeight) {
+    public static CameraSnapshot LookAt(Vector3 position, Vector3 target, float fieldOfViewRadians, float viewportWidth, float viewportHeight) {
         ValidateFinite(
             value: position,
             paramName: nameof(position)
@@ -185,8 +185,8 @@ public readonly record struct CameraSnapshot {
                 "The field of view must be finite and strictly between zero and pi radians."
             );
         }
-        ArgumentOutOfRangeException.ThrowIfZero(value: viewportWidth);
-        ArgumentOutOfRangeException.ThrowIfZero(value: viewportHeight);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: viewportWidth);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: viewportHeight);
 
         var forward = SafeNormalize(
             fallback: -Vector3.UnitZ,
@@ -210,7 +210,7 @@ public readonly record struct CameraSnapshot {
             Up: up,
             Forward: forward,
             TanHalfFieldOfView: MathF.Tan(x: (fieldOfViewRadians * 0.5f)),
-            AspectRatio: (viewportWidth / ((float)viewportHeight))
+            AspectRatio: (viewportWidth / viewportHeight)
         );
     }
 }

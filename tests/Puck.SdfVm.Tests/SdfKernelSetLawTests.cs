@@ -18,8 +18,8 @@ namespace Puck.SdfVm.Tests;
 public sealed class SdfKernelSetLawTests {
     private static readonly string[] Stems = [
         "sdf-world-ambient", "sdf-beam", "sdf-brick-bake", "sdf-cull-args",
-        "sdf-instance-cull", "sdf-world-primary", "sdf-world-shadow", "sdf-sky", "sdf-world-surface", "sdf-world-views",
-        "sdf-world-views-core", "sdf-world-views-folds", "sdf-resolve",
+        "sdf-instance-cull", "sdf-world-primary", "sdf-world-shadow", "sdf-sky-runs", "sdf-world-surface", "sdf-world-views",
+        "sdf-world-views-core", "sdf-world-views-folds", "sdf-resolve", "sdf-composite",
     ];
 
     private static WorkCounterSet Work() =>
@@ -135,7 +135,7 @@ public sealed class SdfKernelSetLawTests {
                 Assert.Null(@object: SdfKernelSet.InterfaceMismatch(kernel: kernel, reflected: reflected));
                 Assert.Contains(
                     collection: reflected,
-                    filter: static binding => (binding.Name == ("passGroup" + SdfIsaHlsl.Stamp))
+                    filter: static binding => (binding.Name == ("passGroup" + SdfWorldInterfaces.Stamp))
                 );
             }
         }
@@ -144,16 +144,16 @@ public sealed class SdfKernelSetLawTests {
     [Fact]
     public void TheKernelInterfacesCarryTheHostsInstructionSetStamp() {
         foreach (var layout in ((ReadOnlySpan<ShaderInterfaceLayout>)[SdfWorldInterfaces.WorldLayout, SdfWorldInterfaces.BrickBakeLayout, SdfWorldInterfaces.ResolveParameters.Layout])) {
-            Assert.Equal(expected: SdfIsaHlsl.Stamp, actual: layout.Interface.Stamp);
+            Assert.Equal(expected: SdfWorldInterfaces.Stamp, actual: layout.Interface.Stamp);
             Assert.Equal(
-                expected: ("passGroup" + SdfIsaHlsl.Stamp),
+                expected: ("passGroup" + SdfWorldInterfaces.Stamp),
                 actual: layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass)).BlockVariableName
             );
         }
 
         // The recorded fingerprint is the model's: the host names the instruction set its kernels were generated against.
         Assert.Equal(expected: SdfIsaFingerprint.Value, actual: SdfIsaHlsl.DescribeFingerprint());
-        Assert.Equal(expected: SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value), actual: SdfIsaHlsl.Stamp);
+        Assert.Equal(expected: SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value), actual: SdfWorldInterfaces.Stamp);
     }
     // Kernels compiled against another instruction set carry another stamp, so no include beside them can make them pass
     // for this host's: an instruction set whose two opcodes, or whose two cell modes, trade values; one whose instruction
@@ -172,16 +172,16 @@ public sealed class SdfKernelSetLawTests {
             (Swapped(first: "SDF_CELL_MODE_F1", include: include, second: "SDF_CELL_MODE_F2_MINUS_F1"), encoding),
             (Swapped(first: "SDF_INSTRUCTION_SHAPE(v)", include: include, second: "SDF_INSTRUCTION_BLEND(v)"), encoding),
         ])) {
-            Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: otherEncoding, include: otherInclude)));
+            Assert.NotEqual(expected: SdfWorldInterfaces.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: otherEncoding, include: otherInclude)));
         }
         foreach (var other in SdfEncodingTrades.Traded(calls: calls)) {
             var otherEncoding = SdfEncodingProbe.Describe(calls: [.. calls.Select(selector: call => ((call.Name == other.Name) ? other : call))]);
 
-            Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: otherEncoding, include: include)));
+            Assert.NotEqual(expected: SdfWorldInterfaces.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: otherEncoding, include: include)));
         }
         // A packer that writes a rigid leaf's rotation X and Y, or a stroked path edge's two radii, in each other's places.
         foreach (var wordsOf in ((ReadOnlySpan<Func<SdfProgram, uint[]>>)[SdfEncodingTrades.RigidLeafRotationXySwapped, SdfEncodingTrades.PathRadiiSwapped])) {
-            Assert.NotEqual(expected: SdfIsaHlsl.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: SdfEncodingProbe.Describe(calls: calls, wordsOf: wordsOf), include: include)));
+            Assert.NotEqual(expected: SdfWorldInterfaces.Stamp, actual: SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.FingerprintOf(encoding: SdfEncodingProbe.Describe(calls: calls, wordsOf: wordsOf), include: include)));
         }
     }
 

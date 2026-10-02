@@ -39,7 +39,8 @@ public static class GpuWork {
     internal const int PushConstantBytesColumn = 10;
     internal const int RenderPassesColumn = 3;
     internal const int ShaderModulesCreatedIndex = 1;
-    internal const int SubmissionColumnCount = 18;
+    internal const int SkyEvaluationsColumn = 18;
+    internal const int SubmissionColumnCount = 19;
     internal const int TexelsWrittenColumn = 16;
     internal const int TimestampPoolsCreatedIndex = 6;
 
@@ -85,6 +86,11 @@ public static class GpuWork {
     /// visibility record. The kernels count it on the GPU, so it is per-backend-deterministic, as
     /// <see cref="MarchSteps"/> is.</summary>
     public static WorkKind TexelsWritten { get; } = new(name: "gpu.texels.written", unit: "count", workClass: WorkClass.PerBackendDeterministic);
+    /// <summary>Gets the kind counting sky field evaluations: the sky pass's field runs, the composite's in-place field
+    /// runs when no tap is valid, and each gradient evaluation for surface fog. Fog and a field fallback at the same pixel
+    /// each count. The kernels count it on the GPU, and coverage comes from the march, so it is per-backend-deterministic,
+    /// as <see cref="MarchSteps"/> is.</summary>
+    public static WorkKind SkyEvaluations { get; } = new(name: "gpu.sky.evaluations", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting compute and graphics pipelines created. A node's ledger counts the pipelines that
     /// node created; a backend's <see cref="GpuPipelineCacheWork"/> counts every pipeline its devices created.</summary>
     public static WorkKind PipelinesCreated { get; } = new(name: "gpu.created.pipelines", unit: "count", workClass: WorkClass.PerBackendDeterministic);
@@ -112,7 +118,8 @@ public static class GpuWork {
     public static WorkKind TimestampPoolsCreated { get; } = new(name: "gpu.created.timestamp-pools", unit: "count", workClass: WorkClass.PerBackendDeterministic);
 
     /// <summary>Gets the kinds a pass's kernels count on the GPU, in the order a counter row holds them
-    /// (<see cref="GpuKernelCounters"/>): <see cref="MarchSteps"/>, then <see cref="TexelsWritten"/>.</summary>
+    /// (<see cref="GpuKernelCounters"/>): <see cref="MarchSteps"/>, <see cref="TexelsWritten"/>, then
+    /// <see cref="SkyEvaluations"/>.</summary>
     public static ReadOnlySpan<WorkKind> KernelKinds =>
         Order.Kernel;
     /// <summary>Gets the lifetime kinds, in the order a report lists them.</summary>
@@ -126,7 +133,7 @@ public static class GpuWork {
     // A nested holder initializes after every kind above, whatever order the members are declared in. Each array is
     // filled through the column constants, so a kind's index is its column by construction.
     private static class Order {
-        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten];
+        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations];
         internal static readonly WorkKind[] Lifetime = CreateLifetime();
         internal static readonly WorkKind[] Submission = CreateSubmission();
 
@@ -164,6 +171,7 @@ public static class GpuWork {
             kinds[MarchStepsColumn] = MarchSteps;
             kinds[TexelsWrittenColumn] = TexelsWritten;
             kinds[BufferCopyBytesColumn] = BufferCopyBytes;
+            kinds[SkyEvaluationsColumn] = SkyEvaluations;
 
             return kinds;
         }

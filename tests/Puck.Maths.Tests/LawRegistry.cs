@@ -116,6 +116,13 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.25,
         NeighborhoodFraction: 0.25
     );
+    // Smoothstep's two edges and two values: its own key, so no other law's operands move with it.
+    private static readonly Domain ScalarSmoothstep = new(
+        Key: "scalar-smoothstep",
+        Block: 512,
+        EdgeFraction: 0.4,
+        NeighborhoodFraction: 0.3
+    );
     private static readonly Domain ScalarText = new(
         Key: "scalar-text",
         Block: 512,

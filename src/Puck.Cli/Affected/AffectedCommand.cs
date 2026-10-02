@@ -33,9 +33,16 @@ internal static class AffectedCommand {
     private static IReadOnlyList<string> Lines(string text) => [.. text.Split(separator: '\n')
         .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
         .Where(predicate: static line => (line.Length > 0))];
-    // Tracked files that differ from the base, staged or not, plus untracked files git does not ignore; and of those, the
-    // ones deleted since the base.
-    private static bool TryReadChanged(string repositoryRoot, string since, out IReadOnlyList<string> changed, out IReadOnlySet<string> deleted, out string error) {
+
+    /// <summary>Reads the working tree's changes against <paramref name="since"/>: tracked files that differ from it,
+    /// staged or not, plus untracked files git does not ignore; and of those, the ones deleted since it.</summary>
+    /// <param name="repositoryRoot">The repository root.</param>
+    /// <param name="since">The base revision.</param>
+    /// <param name="changed">Every changed path, repository-relative, in ordinal order.</param>
+    /// <param name="deleted">The changed paths deleted since the base.</param>
+    /// <param name="error">Why git could not answer, or empty.</param>
+    /// <returns><see langword="true"/> when the changes were read.</returns>
+    internal static bool TryReadChanged(string repositoryRoot, string since, out IReadOnlyList<string> changed, out IReadOnlySet<string> deleted, out string error) {
         changed = [];
         deleted = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -69,6 +76,7 @@ internal static class AffectedCommand {
 
         return true;
     }
+
     // The projects whose own files name a path's containing directory, spelled by its first two segments (such as
     // `tests/Puck.World.Verdicts` or `worlds/parlor`), or by its top-level name for a file one level down.
     private static Func<string, IReadOnlyList<string>> ConsumerSearch(string repositoryRoot, IReadOnlyList<AffectedProject> projects) {
@@ -296,16 +304,51 @@ internal static class AffectedCommand {
                 .Order(comparer: StringComparer.Ordinal),
         ]);
     }
-    private static int Execute(string repositoryRoot, AffectedPlan plan) {
+
+    /// <summary>Resolves the base a plan compares against: <paramref name="since"/> as given, or with
+    /// <paramref name="mergeBase"/> the merge base of <c>HEAD</c> and that revision, so commits the target gained after
+    /// the branch left it never count as the branch's change.</summary>
+    /// <param name="repositoryRoot">The repository root.</param>
+    /// <param name="since">The base revision, or <see langword="null"/> for <c>HEAD</c>.</param>
+    /// <param name="mergeBase">The revision to take the merge base with, or <see langword="null"/>.</param>
+    /// <param name="resolved">The base to compare against.</param>
+    /// <param name="error">Why no base could be resolved, or empty.</param>
+    /// <returns><see langword="true"/> when a base was resolved.</returns>
+    internal static bool TryResolveBase(string repositoryRoot, string? since, string? mergeBase, out string resolved, out string error) {
+        resolved = (since ?? "HEAD");
+        error = string.Empty;
+
+        if (mergeBase is null) {
+            return true;
+        }
+
+        if (since is not null) {
+            error = "--since and --merge-base each name the base; pass one.";
+
+            return false;
+        }
+
+        if (!CliGit.TryMergeBase(first: "HEAD", mergeBase: out resolved, repository: repositoryRoot, second: mergeBase)) {
+            error = $"HEAD and '{mergeBase}' have no merge base, or '{mergeBase}' does not resolve.";
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private static int Execute(string repositoryRoot, AffectedPlan plan, bool gpu) {
         var failed = new List<string>();
 
         // dotnet test builds each suite and applies the settings its project binds (RunSettingsFilePath), so an
         // opt-in tier such as Maths' Deep and Exhaustive stays out exactly as it does in CI. The suites build one after
         // another over a shared project graph, so build servers stay enabled for the next suite to reuse; the capture's
-        // post-exit drain bounds a server that inherited its pipes.
+        // post-exit drain bounds a server that inherited its pipes. The console logger is named at minimal verbosity:
+        // under a quiet build it would otherwise print a failed test's name on standard error and its message nowhere,
+        // and minimal prints each failure with its message and stack, and nothing for a pass.
         foreach (var suite in plan.Suites) {
             var run = CliProcess.RunCaptured(
-                arguments: ["test", Path.Combine(path1: repositoryRoot, path2: "tests", path3: suite, path4: $"{suite}.csproj"), "-c", "Release", "-v", "q", "-nologo"],
+                arguments: ["test", Path.Combine(path1: repositoryRoot, path2: "tests", path3: suite, path4: $"{suite}.csproj"), "-c", "Release", "-v", "q", "-nologo", "--logger", "console;verbosity=minimal"],
                 fileName: "dotnet",
                 input: string.Empty,
                 timeout: TimeSpan.FromMinutes(minutes: 30),
@@ -316,11 +359,13 @@ internal static class AffectedCommand {
 
             Console.Out.WriteLine(value: $"affected: {suite} {((run.ExitCode == 0) ? "passed" : "FAILED")} — {total}");
 
-            foreach (var line in output.Where(predicate: static line => (line.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "Failed ") || line.Contains(comparisonType: StringComparison.Ordinal, value: " error ")))) {
-                Console.Out.WriteLine(value: $"  {line.Trim()}");
-            }
-
+            // A failed suite's whole report follows its verdict line: every failure with its message and stack, or
+            // the build errors that stopped it.
             if (run.ExitCode != 0) {
+                foreach (var line in output.Concat(second: Lines(text: run.Stderr))) {
+                    Console.Out.WriteLine(value: $"  {line}");
+                }
+
                 failed.Add(item: suite);
             }
         }
@@ -335,13 +380,21 @@ internal static class AffectedCommand {
             failed.Add(item: "catalog");
         }
 
-        if (plan.Canaries.Count > 0) {
-            if (PuckRootCommand.Invoke(args: ["canary", .. plan.Canaries]) != 0) {
-                failed.Add(item: "canaries");
-            }
+        // The canaries boot real Worlds and parity holds both GPU backends, so they run only when asked for, one after
+        // the other, after every CPU check.
+        if (
+            gpu &&
+            (plan.Canaries.Count > 0) &&
+            (PuckRootCommand.Invoke(args: ["canary", .. plan.Canaries]) != 0)
+        ) {
+            failed.Add(item: "canaries");
         }
 
-        if (plan.Parity && (PuckRootCommand.Invoke(args: ["parity"]) != 0)) {
+        if (
+            gpu &&
+            plan.Parity &&
+            (PuckRootCommand.Invoke(args: ["parity"]) != 0)
+        ) {
             failed.Add(item: "parity");
         }
 
@@ -401,9 +454,16 @@ internal static class AffectedCommand {
         }
     }
 
-    private static int Run(string since, bool run, bool record) {
+    private static int Run(string? since, string? mergeBase, bool run, bool gpu, bool record) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refuse(verb: Verb, what: Environment.CurrentDirectory, why: "is not inside the Puck repository.");
+        }
+
+        if (
+            gpu &&
+            !run
+        ) {
+            return CliExit.Refuse(verb: Verb, what: "--gpu", why: "adds the canaries and parity to what --run runs, so it needs --run.");
         }
 
         if (record) {
@@ -415,11 +475,17 @@ internal static class AffectedCommand {
             );
         }
 
-        if (!TryPlan(changed: out var changed, error: out var error, plan: out var plan, repositoryRoot: repositoryRoot, since: since)) {
-            return CliExit.Refuse(verb: Verb, what: since, why: error);
+        if (!TryResolveBase(error: out var baseError, mergeBase: mergeBase, repositoryRoot: repositoryRoot, resolved: out var resolved, since: since)) {
+            return CliExit.Refuse(verb: Verb, what: (mergeBase ?? (since ?? "HEAD")), why: baseError);
         }
 
-        Console.Out.WriteLine(value: $"affected: {changed.Count} changed file(s) against {since}.");
+        if (!TryPlan(changed: out var changed, error: out var error, plan: out var plan, repositoryRoot: repositoryRoot, since: resolved)) {
+            return CliExit.Refuse(verb: Verb, what: resolved, why: error);
+        }
+
+        Console.Out.WriteLine(value: ((mergeBase is null)
+            ? $"affected: {changed.Count} changed file(s) against {resolved}."
+            : $"affected: {changed.Count} changed file(s) against {resolved[..12]}, the merge base of HEAD and {mergeBase}."));
 
         if (plan!.Everything) {
             Console.Out.WriteLine(value: "affected: build infrastructure changed, which reaches every project.");
@@ -431,25 +497,35 @@ internal static class AffectedCommand {
         );
 
         return (run
-            ? Execute(plan: plan, repositoryRoot: repositoryRoot)
+            ? Execute(gpu: gpu, plan: plan, repositoryRoot: repositoryRoot)
             : CliExit.Success
         );
     }
 
+    /// <summary>Creates <c>--merge-base</c>, the revision whose merge base with <c>HEAD</c> a change is read against;
+    /// <c>puck affected</c> and <c>puck gate</c> share it.</summary>
+    /// <param name="description">What the verb compares against the merge base.</param>
+    /// <returns>The option.</returns>
+    internal static Option<string> MergeBase(string description) => new(name: "--merge-base") { Description = description };
+    /// <summary>Creates <c>--gpu</c>, which adds the chosen canaries and parity to a run; <c>puck affected</c> and
+    /// <c>puck gate</c> share it.</summary>
+    /// <returns>The option.</returns>
+    internal static Option<bool> Gpu() => new(name: "--gpu") { Description = "Also run the chosen canaries and then parity, one after the other, after the CPU checks: real-World and GPU work, so run it on a machine with no competing build or GPU load." };
+
     public static Command Create() {
-        var sinceOption = new Option<string>(name: "--since") {
-            DefaultValueFactory = static _ => "HEAD",
-            Description = "The base revision the working tree is compared against (default: HEAD, so only uncommitted changes).",
-        };
-        var runOption = new Option<bool>(name: "--run") { Description = "Build and run the chosen suites, then puck test on the chosen worlds, then the catalog check, then the chosen canaries and parity." };
+        var sinceOption = new Option<string>(name: "--since") { Description = "The base revision the working tree is compared against (default: HEAD, so only uncommitted changes)." };
+        var mergeBaseOption = MergeBase(description: "Compare the working tree against the merge base of HEAD and this revision, so what the target gained after the branch left it is not the branch's change. Excludes --since.");
+        var runOption = new Option<bool>(name: "--run") { Description = "Build and run the chosen suites, then puck test on the chosen worlds, then the catalog check." };
+        var gpuOption = Gpu();
         var recordOption = new Option<bool>(name: "--record") { Description = $"Record {CoveragePath}: build a World that records the methods it compiles, run the full canary set on it, and map each canary's methods to source files. A full run; do it when the owner asks for one." };
         var command = new Command(
             description: "Name the test suites and canaries a change needs, and with --run run exactly those.",
             name: Verb
-        ) { sinceOption, runOption, recordOption };
+        ) { sinceOption, mergeBaseOption, runOption, gpuOption, recordOption };
 
         command.Detail(detail: $"""
-              Changed files are the working tree against --since, staged or not, plus untracked files.
+              Changed files are the working tree against --since (or against the merge base of HEAD
+              and --merge-base), staged or not, plus untracked files.
               A suite is chosen when its project, or any project it references (build-order-only
               references included), owns a changed file; a file in a directory no project owns chooses
               the projects whose sources name that directory. A canary is chosen when a changed file is
@@ -474,12 +550,17 @@ internal static class AffectedCommand {
               prints as a test line. A catalog line names the game's Release catalog, which --run checks
               with the compile it names; it holds no test worlds. Prose, .claude/, .github/, editors/ and experimental/ choose nothing.
 
+              --run runs the suites, the worlds and the catalog check; --run --gpu then runs the chosen
+              canaries and parity, one after the other.
+
               Exit codes: 0 planned or every chosen check passed, 1 a chosen check failed, 2 refused.
             """);
         command.SetAction(action: parseResult => Run(
+            gpu: parseResult.GetValue(option: gpuOption),
+            mergeBase: parseResult.GetValue(option: mergeBaseOption),
             record: parseResult.GetValue(option: recordOption),
             run: parseResult.GetValue(option: runOption),
-            since: parseResult.GetValue(option: sinceOption)!
+            since: parseResult.GetValue(option: sinceOption)
         ));
 
         return command;

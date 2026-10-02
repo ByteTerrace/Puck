@@ -18,6 +18,7 @@ public sealed partial class RenderGraphRuntime {
 
     // Binds an external instance's reads for the frame, or returns null when it reads nothing.
     private RenderGraphExternalReads? BindExternalReads(int index, RenderGraphSchedule schedule) {
+        m_standInReads[index] = null;
         m_taintedReads[index] = null;
 
         return BindReads(
@@ -159,7 +160,7 @@ public sealed partial class RenderGraphRuntime {
                         lease: output.Lease,
                         tainted: output.Tainted
                     );
-                } else if (unbound) {
+                } else {
                     NoteStandIn(frame: frame, index: index, producer: m_set.Instances[producer].Name);
                 }
 
@@ -172,7 +173,10 @@ public sealed partial class RenderGraphRuntime {
                 frame: ((frame < 0)
                     ? long.MaxValue
                     : frame),
-                producer: producer
+                producer: producer,
+                readFrame: ((frame < 0)
+                    ? long.MaxValue
+                    : (schedule.Frame - (previousFrame ? 1L : 0L)))
             );
 
             if (
@@ -191,10 +195,10 @@ public sealed partial class RenderGraphRuntime {
                     image: completed.Image,
                     index: position,
                     layout: completed.Layout,
-                    lease: completed.Image.ImageViewHandle,
+                    lease: LeaseOf(image: completed.Image),
                     tainted: completed.Tainted
                 );
-            } else if (unbound && !completed.Image.IsSameDeviceImage) {
+            } else if (!completed.Image.IsSameDeviceImage) {
                 NoteStandIn(frame: frame, index: index, producer: m_set.Instances[producer].Name);
             }
         }

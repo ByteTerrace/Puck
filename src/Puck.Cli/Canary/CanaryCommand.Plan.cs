@@ -111,23 +111,19 @@ internal static partial class CanaryCommand {
             : 1) * (RelaunchesLeg(manifest: manifest)
             ? 4
             : 2)) * manifest.TimeoutSeconds);
-    // The ceiling a selection is held to, or null when it names its proofs explicitly or is not a gate.
-    private static CanaryCeiling? CeilingOf(CanarySelection selection) => selection.Kind switch {
-        CanarySelectionKind.Automatic => CanaryCeilings.Automatic,
-        CanarySelectionKind.Capability when (selection.Capability == "automatic") => CanaryCeilings.Automatic,
-        CanarySelectionKind.Merge => CanaryCeilings.Merge,
+    // The ledger member a selection is held to, or null when it names its proofs explicitly or is not a gate.
+    private static string? CeilingName(CanarySelection selection) => selection.Kind switch {
+        CanarySelectionKind.Automatic => "automatic",
+        CanarySelectionKind.Capability when (selection.Capability == "automatic") => "automatic",
+        CanarySelectionKind.Merge => "merge",
         _ => null,
     };
-    private static string CeilingName(CanarySelection selection) => ((selection.Kind == CanarySelectionKind.Merge)
-        ? nameof(CanaryCeilings.Merge)
-        : nameof(CanaryCeilings.Automatic)
-    );
 
     /// <summary>Names how <paramref name="plan"/> exceeds <paramref name="ceiling"/>, or returns <see langword="null"/>
     /// when it fits.</summary>
     /// <param name="plan">The selection's plan.</param>
     /// <param name="ceiling">The ceiling it is held to.</param>
-    /// <param name="name">The ceiling's member of <see cref="CanaryCeilings"/>.</param>
+    /// <param name="name">The ceiling's member of <c>CanaryCeilings.json</c>: <c>automatic</c> or <c>merge</c>.</param>
     /// <returns>The refusal, or <see langword="null"/>.</returns>
     internal static string? CeilingRefusal(CanaryPlan plan, CanaryCeiling ceiling, string name) {
         var over = new List<string>(capacity: 2);
@@ -141,7 +137,7 @@ internal static partial class CanaryCommand {
 
         return ((over.Count == 0)
             ? null
-            : $"the selection plans {string.Join(separator: " and ", values: over)}, over its declared ceiling CanaryCeilings.{name} (src/Puck.Cli/Canary/CanaryCeilings.cs). Cut the set, or raise the ceiling in a reviewed change that states the new --plan counts.");
+            : $"the selection plans {string.Join(separator: " and ", values: over)}, over the cost recorded for {name} in {CanaryCeilingsLedger.FileName}. Cut the set, or record the rise with 'puck canary-ceilings' in a reviewed change that states the new --plan counts.");
     }
 
     // Prints the plan on stdout, one proof per line in authored order, then the totals. Every value is a count of the
@@ -166,7 +162,7 @@ internal static partial class CanaryCommand {
         Console.WriteLine(value: $"canary plan: every leg ends at the quit the runner appends to its script; {plan.BudgetSeconds.ToString(provider: CultureInfo.InvariantCulture)}s of summed per-leg timeouts is the kill ceiling, not the length.");
 
         if (ceiling is not null) {
-            Console.WriteLine(value: $"canary plan: ceiling CanaryCeilings.{ceilingName}: {ceiling.WorldBoots} World boot(s), {ceiling.LegBudgetSeconds}s leg budget.");
+            Console.WriteLine(value: $"canary plan: ceiling recorded in {CanaryCeilingsLedger.FileName} ({ceilingName}): {ceiling.WorldBoots} World boot(s), {ceiling.LegBudgetSeconds}s leg budget.");
         }
     }
 

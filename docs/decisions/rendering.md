@@ -383,23 +383,43 @@ rows in P10, which owns the tier a pipeline names. Building tier variants into
 the package format first was rejected, because nothing would select them and no
 check could tell a correct variant from a wrong one.
 
+**The offscreen host's time is its tick count.** Its frames are its only
+output, so it steps one tick per rendered frame, never several ticks in one
+iteration after a slow frame, and it steps the next tick only once the root
+reports the current tick's frame rendered. A frame that is not yet renderable
+(a cold build, a rebuild, an input with no output for the frame) holds the
+tick, composing it again, so the tick-to-frame mapping is total and no frame
+shows an older image for a newer tick; a refused frame releases the tick, since
+holding cannot render it. A wall-clock
+catch-up would make the tick a frame shows depend on how long the frame before
+it took: a script that waited a few ticks could read a GPU result before it
+landed, and a capture's frame could reproject across several ticks. Stepping
+per frame makes the tick a frame shows a function of the script alone. The
+wall clock only keeps
+the host from outrunning the world's rate. The windowed host keeps catching up,
+because a player's simulation keeps real time, and so does a headless
+authority, whose remote peers do; a headless host renders nothing, so no frame
+needs a tick of its own.
+
 **Bound rows are priced, and a capture reports the tick it shows.**
 `FixedStepPump.Advance` can run several steps in one call, so a frame composed
 after one tick may show a later one. For the simulation tick a scheduled capture
 already does both. It fences, because the pump ends its burst at the armed
 tick through `IFixedStepSimulation.AwaitsFrame`, so the host composes that
 tick's frame before stepping on; only frame interleaving changes, never the steps. The
-offscreen host, whose frames are its only output, also holds its clock: it
-steps no tick past the armed one until the capture is served or refused, and
-refuses it by name after a bounded hold. It also
+windowed and offscreen hosts also hold their clock: they
+step no tick past the armed one until the capture is served or refused, and
+refuse it by name after a bounded hold. Repeated window resizes delay serving
+without advancing its tick or blocking the next scheduled capture. A pending
+capture presents bound state and poses at fraction one. The scheduler also
 reports: `WorldCaptureScheduler` refuses a capture served by a frame showing
 another tick as `stale`, naming both ticks, rather than leaving it out of the
 manifest. Bindings are priced too: a world's bindings appear in the cost report
 as bytes per tick and bytes per frame, beside and separate from the
 simulation's cycle bound, and a document over its ceiling is refused at
 validation naming the pipeline and the binding. A state-bound parameter adds a
-second tick, the one its regions were refreshed at, which the fence does not
-pin. That tick is reported: a capture carries it as its region tick, and
+second tick, the one its regions were refreshed at, pinned by the capture hold
+along with the simulation. A capture carries it as its region tick, and
 `puck parity`'s tick verdict holds it to the armed tick, ordered before the
 pixel verdict, so a skewed capture fails as a skew. `puck parity` pins one
 reference tier, `high`, and its `bound` station's pixels depend on a bound row
@@ -510,7 +530,7 @@ and stays with the spike.
 **Seats and camera views share one SDF residency, and each renders as its own
 instance into its own output.** One `SdfWorldResidency` serves a world. Each
 composed view is an `sdf.world` instance of the render graph that runs the
-package's passes, sky through views, over the residency's tables into its own
+package's passes, mask through composite, over the residency's tables into its own
 output. The graph places each output into its seat rect with the `place`
 package. Everything a frame's views have in common is therefore shared by
 construction: the brick pool, the program upload, the glyph atlas, screen
@@ -531,10 +551,14 @@ N seats cost N instances' passes rather than one dispatch whose Z dimension is
 N, and the counted work shows that cost. Layered views return only if the
 counts call for them.
 
-**`SdfEnvironment` folds into the generated frame block.** A separate
-environment packing is a second hand-kept layout beside the frame data, and
-generating the frame block removed the three hand-written copies of each field
-(P14-7).
+**The lights and the sky are generated records in World-group tables.** A
+hand-numbered environment table is a second hand-kept layout beside the frame
+data, and carried in every pass block it makes every dispatch bind constant data
+that only the sky, shadow and views passes read. The lights table and the sky's
+block, stops and softboxes are C# records whose HLSL declarations are generated
+from the types, written as regions that owe only the words that changed, and
+referenced only by the kernels that read them, so a pass block holds the view
+and frame values alone.
 
 **Temporal reconstruction is Puck's own complete implementation.** The Steam
 Deck floor needs render scale to be cheap without looking cheap, and SDF
@@ -543,6 +567,23 @@ closed or platform-specific dependency, and it knows nothing about SDF
 surfaces, nested sources, or screens showing live content, which all need their
 own motion and reactive masks. The package produces the inputs vendor upscalers
 expect, so one could still be added later as an alternative pass.
+
+**March seeding is not pursued.** Seeding primary's march from the previous
+frame's depth, behind a one-evaluation ball test that proves the skipped segment
+empty, measured as a loss on the floor tier: primary's march steps rose about 8%
+on the still and panning legs. An accepted seed saved under one step on average,
+0.81 on the still leg, because the beam already starts primary near the surface
+and the march still converges from the candidate, while every tested seed costs
+its evaluation. Gating the test on the march's own first step only approached
+break-even. Performance is a feature and the engine keeps no mechanism that
+costs more than it saves, so there is no off-by-default seeding to maintain.
+Seeding returns only with a proof that also covers the convergence after the
+candidate (rendering plan P15-7). One backend difference appeared only on the
+seeded path: at the strictest gate, Direct3D 12 read 2,595 more primary steps
+than Vulkan on the still leg and 5,428 fewer on the panning leg, with surface
+steps moving slightly, while every other configuration agreed within three
+steps. It is unexplained and goes with the seeded path unless it appears
+elsewhere.
 
 **HDR output starts as a minimal forcing function.** One display transform, one
 HDR swapchain path on Windows, paper white for UI, and one HDR source are enough
@@ -568,6 +609,127 @@ keeps drawing. Bakes are presentation only, and contact keeps reading the field.
 Linux.** The import interface uses what Vulkan external memory and external
 semaphores define, which is also what PipeWire DMA-BUF and V4L2 need. Adding a
 Linux producer should never mean changing the contract.
+
+
+## Global illumination
+
+These decisions shape [P6-GI](../plans/rendering.md#p6-gi-global-illumination-from-the-field),
+the global illumination slices of P6.
+
+**Global illumination promises two things and bounds the rest.** It is
+presentation, so exactness everywhere would buy nothing a player sees and would
+cost work no floor device has. It guarantees that no light passes through
+sealed geometry, and that energy is conserved, so a closed furnace reads its
+finite-bounce series exactly. Every other error (angular parallax, light-view
+sampling, continuation merging, grazing rays, overshoot beside an opening) is a
+number held against the CPU reference by a law that fails when the number is
+exceeded. A guarantee that would cost tens of millions of evaluations in a
+cluttered room is not one that ships, so none is made.
+
+**Indirect light is a world-space cache traced through the field, and every
+view of a world with the same lighting inputs reads it.** A secondary ray in the
+SDF engine evaluates the whole interpreter per sample under a mask far looser
+than the primary march's, so a technique that marches per pixel spends the
+frame's most expensive work again, and one that runs per view multiplies it by
+the seats, camera views, mirrors and portal windows of a world. A lattice of
+probes in world space, placed where the field says surfaces are, puts tracing
+on the world and its changes: a still world finishes its solve and stands, and
+four seats pay one trace.
+
+**A probe stores the hits of its rays, and lighting is a finite solve.**
+Storing each ray's hit makes the cache relightable: a light's colour, a sky
+change, an emission or a screen's image re-shades the stored hits and retraces
+nothing, which is P18-6's lighting-visible class. Lighting is one direct sweep
+and a fixed count of feedback sweeps over two generations, so a capture runs a
+fixed solve from a cold start; a stopping test on display codes would be
+neither bounded nor the same on both backends.
+
+**Sealed geometry is kept out by proofs the field makes, cached in world
+space.** A cell's corner probes are connected only by segments an exact trace
+reaches end to end, and a receiver reads a component only through a trace of
+its own from a launched point, or through a cached proof whose certified ball
+meets its own. Moment-based visibility, which irradiance fields use, is an
+estimate that a texel mixing near and far hits defeats, and a fitted
+separating plane proves nothing about the free space it is fitted to, so
+neither decides what a receiver reads. A proof belongs to a patch of world
+geometry, not a pixel: it is invalidated with its cell and never by lighting,
+so a still scene proves once, a camera cut fills the cache within a per-frame
+allowance, and a receiver not yet proven reads no light rather than unproven
+light.
+
+**Every launch is certified, every hit is absolute.** A ray, a feedback lookup
+and a receiver start from a point joined to the surface by overlapping clear
+balls: a descent from the first sample down to one fixed-point tick of the
+surface, then a chain stepped out to the launch height, so a thin slab inside a
+fixed offset cannot be stepped over, even one thinner than the accept
+threshold. Where the descent cannot close, the launch is conservative and the
+receiver reads dark, never sky; only a solid within one tick of the surface,
+which the format cannot hold, goes unseen. Neither march demands that the field
+grow away from a surface, which Lipschitz continuity does not promise and a
+conservative gauge does not do. A view's receivers take the launched point free
+from their own primary march's approach. A hit is accepted only within an
+absolute distance of a zero the field brackets: a threshold that grows with
+travel stops grazing rays on empty space, and a small clamped distance is only
+a lower bound, which a conservative gauge reads far from any surface. A
+grazing ray that runs out of steps is unresolved and is excluded from its
+probe's mean, an error bounded by its cosine share.
+
+**Continuation seeks support and reprojects by the stored hit.** A fine ray
+that reaches its reach keeps marching through empty space until it stands in a
+coarser component with traced support, so nothing is allocated in empty space
+and a sealed hall reads its own wall. It then reads, from each supporting
+corner, the stored ray whose own end best continues it seen from the fine ray's
+end, and only one that ends beyond it, so no interval counts twice. Reading the
+nearest ray by direction instead leaves the parallax between the corner and
+the fine ray's end uncorrected, about four times the error on the law's
+fixture.
+
+**Each bounce source sees a light through a light view that never adds
+light.** A probe and the surfaces its rays hit do not share a view of the sun,
+so a probe's visibility cannot stand for a hit's. One depth-only camera view
+per residency, placed far along each shadowed light and accepting any surface
+within a texel's half-diagonal of a pixel's ray, gives every hit its own
+visibility for one render of a quarter of a million rays, through the engine's
+own march. Its dilation records every caster however thin, so it errs by
+widening a shadow by at most two texels, never by lighting a shadowed hit.
+Point and spot lights are unshadowed here, as in the direct path.
+
+**Portals read their destination's previous output in a finite closure.** A
+cache reads a portal's emission through the graph's previous-frame edge, so
+mutual portals form no same-frame cycle. Unit albedo and amplified view gains
+can make a loop's gain reach one, so convergence is not assumed: live rendering
+and captures run a fixed count of closure-wide portal iterations, each
+publishing every member together, from cold resets in a capture.
+
+**Considered, and kept as comparisons.** The floor device's counted rows decide
+whether the cache stays the default; G10 runs the comparison on the same
+fixtures and records the bound that decides each one.
+
+- **Screen-space indirect light over a probe fallback.** It is per view and
+  view-dependent, so split screen, mirrors and portal windows multiply it and
+  disagree, its fallback still needs a cache, and it cannot see behind a wall
+  from the camera, so it cannot keep the sealed-geometry promise by itself.
+- **Radiance cascades.** In screen space they are per view and per frame, with
+  every interval a field march. In world space a dense volume of short intervals
+  costs memory and updates in proportion to volume rather than surface area.
+  The cache keeps their interval merging between its levels.
+- **Cone occlusion extended to one diffuse bounce.** The field gives a cone's
+  occlusion cheaply but holds no radiance, so a bounce needs a radiance source:
+  a cache, or a voxelized radiance volume, which
+  [the global voxel representation's rejection](../rendering/sdf/reference/negative-results-and-rejections.md#global-voxel-representation)
+  rules out as a core representation. Per pixel it is per view.
+- **Per-pixel path tracing with reservoir reuse.** Several field marches a
+  pixel a frame, per view, is beyond the floor device's counted budget.
+- **Indirect light baked into prototype bakes or lightmaps.** A bake is per
+  prototype and static, while lights key on clocks, worlds are edited live and a
+  bounce depends on a placement's neighbours, not its prototype.
+
+**Off is the image without it.** With indirect light off a view takes the
+direct path unchanged, the cache and the light view do not exist, and the
+parity world pins it off. Global illumination enters `puck parity` through
+capture rows that run it cold with a fixed solve for one capture, compared under
+a tile tolerance, with a simulation hash equal to the indirect-off control's at
+that tick and after.
 
 ---
 

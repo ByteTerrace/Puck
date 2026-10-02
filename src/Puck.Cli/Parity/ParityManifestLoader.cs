@@ -1,10 +1,11 @@
 using System.Globalization;
 using System.Text.Json;
+using Puck.World;
 
 namespace Puck.Cli.Parity;
 
 /// <summary>Strict loader for the two documents <c>puck parity compare</c> reads: a capture pipeline's
-/// <c>manifest.json</c> (<see cref="ManifestSchema"/>) and the comparator's own <c>--contract</c> config
+/// <c>manifest.json</c> (<see cref="WorldCaptureManifest.SchemaId"/>) and the comparator's own <c>--contract</c> config
 /// (<see cref="ContractSchema"/>). Both refuse unknown members, duplicate keys, and any shape drift from the
 /// pinned contract — a comparator this strict about its own inputs cannot silently misread a producer's
 /// output as agreement.</summary>
@@ -12,7 +13,6 @@ internal static class ParityManifestLoader {
     private const string BindingReferenceKind = "binding";
     private const string ContractSchema = "puck.parity.contract.v1";
     private const int DefaultTileSize = 16;
-    private const string ManifestSchema = "puck.parity.manifest.v1";
     private const int MaxDepth = 16;
 
     private static readonly Func<string, Exception> Refusal = static message => new ParityDocumentRefusal(message: message);
@@ -578,7 +578,7 @@ internal static class ParityManifestLoader {
             RequireSchema(
                 context: "manifest",
                 element: root,
-                expected: ManifestSchema
+                expected: WorldCaptureManifest.SchemaId
             );
 
             var backend = CliStrictJson.ReadRequiredString(

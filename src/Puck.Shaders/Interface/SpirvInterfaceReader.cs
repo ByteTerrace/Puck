@@ -16,10 +16,6 @@ namespace Puck.Shaders;
 /// else.
 /// </summary>
 public static class SpirvInterfaceReader {
-    /// <summary>The prefix of the name the reader gives a variable the module carries no debug name for: followed by the
-    /// variable's result id, such as <c>%12</c>.</summary>
-    public const string UnnamedPrefix = "%";
-
     private const uint DecorationArrayStride = 6;
     private const uint DecorationBinding = 33;
     private const uint DecorationBlock = 2;
@@ -29,7 +25,6 @@ public static class SpirvInterfaceReader {
     private const uint DecorationOffset = 35;
     private const uint DimBuffer = 5;
     private const int HeaderWords = 5;
-    private const uint MagicNumber = 0x07230203;
     private const uint OpConstant = 43;
     private const uint OpDecorate = 71;
     private const uint OpMemberDecorate = 72;
@@ -76,7 +71,7 @@ public static class SpirvInterfaceReader {
         if (
             ((module.Length % 4) != 0) ||
             (module.Length < (HeaderWords * 4)) ||
-            (BinaryPrimitives.ReadUInt32LittleEndian(source: module) != MagicNumber)
+            !ShaderBytecode.IsSpirV(bytecode: module)
         ) {
             throw new InvalidDataException(message: "The bytes are not a little-endian SPIR-V module.");
         }
@@ -116,7 +111,7 @@ public static class SpirvInterfaceReader {
                 module: parsed,
                 typeId: declared
             );
-            var name = (parsed.Names.GetValueOrDefault(key: id) ?? $"{UnnamedPrefix}{id}");
+            var name = (parsed.Names.GetValueOrDefault(key: id) ?? $"{ShaderInterfaceBinding.UnnamedPrefix}{id}");
             var kind = (pushed
                 ? GpuBindingKind.ConstantBuffer
                 : Kind(

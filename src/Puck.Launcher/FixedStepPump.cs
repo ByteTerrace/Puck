@@ -4,16 +4,20 @@ using Puck.Hosting;
 namespace Puck.Launcher;
 
 /// <summary>
-/// The shared deterministic fixed-step accumulator both boot shapes drive: the windowed run loop
-/// (<c>LauncherWindowHostedService</c>) and a headless tick host (<c>HeadlessTickHostedService</c>). It owns the
-/// input→simulation contract in one place — the host's console drain → <c>InputRouter.SnapshotForTick</c> →
-/// <c>CommandRegistry.ApplySnapshot</c> → <c>IFixedStepSimulation.Step</c>, in that EXACT order, every step — so a
-/// boot-shape swap can never reorder it. Draining before every step, not once per host frame, is what makes console
-/// work exact against ticks: a line held behind a tick wait runs between the step that released it and the next.
+/// The shared deterministic fixed-step pump every host loop drives: the windowed run loop
+/// (<c>LauncherWindowHostedService</c>), the headless tick host (<c>HeadlessTickHostedService</c>) and the offscreen
+/// host (<c>OffscreenTickHostedService</c>). It owns the input→simulation contract in one place — the host's console
+/// drain → <c>InputRouter.SnapshotForTick</c> → <c>CommandRegistry.ApplySnapshot</c> → <c>IFixedStepSimulation.Step</c>,
+/// in that EXACT order, every step — so a boot-shape swap can never reorder it. Draining before every step, not once
+/// per host frame, is what makes console work exact against ticks: a line held behind a tick wait runs between the step
+/// that released it and the next.
 /// </summary>
-/// <remarks><para>Wall-clock PACING is the caller's job (a window's present cadence, or a headless waitable-timer
-/// loop); this type only turns an already-sampled wall-clock delta into whole simulation steps. Not thread-safe:
-/// driven from one pump thread per boot shape, same as the state it wraps.</para>
+/// <remarks><para>It has two ways to be driven, one per pacing rule. A host paced to the wall clock (a window's present
+/// cadence, or a headless waitable-timer loop) hands <see cref="Advance"/> the wall interval it sampled, and the pump
+/// turns it into every whole step now due, several after a slow host frame. A host whose time is its own iteration count
+/// (the offscreen host, one step per produced frame, and an unpaced headless run) calls <see cref="TryStep"/>, which runs
+/// at most one step whatever the interval was. Not thread-safe: driven from one pump thread per boot shape, same as the
+/// state it wraps.</para>
 /// <para><b><see cref="Advance"/> is safe across a change of <c>stepTicks</c> between calls</b> (e.g. a portal
 /// crossing into a differently-rated world, per the four-world charter's "no restart" contract) — a design necessity
 /// once the simulation rate stops being <c>SimulationRate</c>'s compile-time constant. <see cref="ElapsedTicks"/> and
@@ -28,6 +32,13 @@ namespace Puck.Launcher;
 /// and stepping it on its own width, so every instance keeps its own tick ordinal. This pump drives only that master
 /// cadence they bank against, never one rate they all share.</para></remarks>
 public sealed class FixedStepPump {
+    // What the gate before a step decided.
+    private enum StepGate {
+        Steps,
+        RateChanged,
+        Withheld,
+    }
+
     private readonly Action? m_beforeStep;
     private readonly bool m_holdsClock;
     private readonly InputRouter m_inputRouter;
@@ -54,9 +65,9 @@ public sealed class FixedStepPump {
     /// <see langword="null"/> always steps.</param>
     /// <param name="holdsClock">Whether this pump holds its clock for owed frames: before every step it asks
     /// <see cref="IFixedStepSimulation.HoldsClock"/>, and a step the simulation holds is withheld (see
-    /// <see cref="Advance"/>). The offscreen host holds; a host paced to a display or to nothing does not.</param>
+    /// <see cref="Advance"/>). Windowed and offscreen hosts hold; a headless host does not.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public FixedStepPump(IFixedStepSimulation simulation, InputRouter inputRouter, CommandRegistry registry, ulong captureOriginTicks, Action? beforeStep = null, Func<bool>? mayStep = null, bool holdsClock = false) {
+    public FixedStepPump(IFixedStepSimulation simulation, InputRouter inputRouter, CommandRegistry registry, ulong captureOriginTicks, Action? beforeStep = null, Func<bool>? mayStep = null, bool holdsClock = true) {
         ArgumentNullException.ThrowIfNull(argument: simulation);
         ArgumentNullException.ThrowIfNull(argument: inputRouter);
         ArgumentNullException.ThrowIfNull(argument: registry);
@@ -77,9 +88,10 @@ public sealed class FixedStepPump {
     /// <summary>The sub-step remainder held since the last whole step — the render-side interpolation alpha's
     /// numerator (<c>Puck.Hosting.FrameContext.AccumulatorTicks</c>).</summary>
     public ulong AccumulatorTicks => m_accumulatorTicks;
-    /// <summary>The input clock's tick origin newly captured input is measured against — rebased by
-    /// <see cref="Advance"/> whenever a runaway wall-clock delta is clamped, so newly captured input stays due now
-    /// rather than waiting out simulation time the pump deliberately discarded.</summary>
+    /// <summary>The input clock's tick origin newly captured input is measured against — rebased by every host
+    /// interval the pump does not step (a runaway wall-clock delta <see cref="Advance"/> clamps, steps it discards or
+    /// withholds, and whatever an interval handed to <see cref="TryStep"/> exceeds its one step by), so newly captured
+    /// input stays due now rather than waiting out host time the simulation never steps.</summary>
     public ulong CaptureOriginTicks { get; private set; }
     /// <summary>The exact engine time this pump has advanced the simulation by.</summary>
     public ulong ElapsedTicks => m_elapsedTicks;
@@ -94,8 +106,8 @@ public sealed class FixedStepPump {
     /// <param name="output">The buffered console output flushed after every drain.</param>
     /// <param name="terminal">The terminal whose exit request stops stepping.</param>
     /// <param name="inputBacklog">The standard-input backlog the first step is held on.</param>
-    /// <param name="holdsClock">Whether the pump holds its clock for owed frames, which only the offscreen host
-    /// does.</param>
+    /// <param name="holdsClock">Whether the pump holds its clock for owed frames, as windowed and offscreen hosts
+    /// do.</param>
     /// <returns>The pump, or <see langword="null"/> when no simulation is registered.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="registry"/>, <paramref name="inputClock"/>,
     /// <paramref name="textSource"/>, <paramref name="output"/>, <paramref name="terminal"/>, or
@@ -180,18 +192,17 @@ public sealed class FixedStepPump {
         var ratePerSecond = m_simulation.RatePerSecond;
 
         while (m_accumulatorTicks >= stepTicks) {
-            m_beforeStep?.Invoke();
+            var heldTicks = ((m_accumulatorTicks / stepTicks) * stepTicks);
+            var gate = Gate(
+                ratePerSecond: ratePerSecond,
+                withheldTicks: heldTicks
+            );
 
-            if (m_simulation.RatePerSecond != ratePerSecond) {
+            if (gate == StepGate.RateChanged) {
                 break;
             }
 
-            var heldTicks = ((m_accumulatorTicks / stepTicks) * stepTicks);
-
-            if (
-                !(m_mayStep?.Invoke() ?? true) ||
-                (m_holdsClock && m_simulation.HoldsClock(withheldTicks: heldTicks))
-            ) {
+            if (gate == StepGate.Withheld) {
                 CaptureOriginTicks += heldTicks;
                 m_accumulatorTicks -= heldTicks;
 
@@ -199,34 +210,7 @@ public sealed class FixedStepPump {
             }
 
             m_accumulatorTicks -= stepTicks;
-
-            var tick = m_completedStepCount;
-
-            m_completedStepCount++;
-            // The running elapsed-tick total is already rate-independent; never `tick * stepTicks`, which is only
-            // valid while `stepTicks` has been constant for every step `tick` counts.
-            m_elapsedTicks += stepTicks;
-
-            var stepElapsedTicks = m_elapsedTicks;
-            var windowEndTick = (CaptureOriginTicks + stepElapsedTicks);
-            var commands = m_inputRouter.SnapshotForTick(
-                tick: tick,
-                windowEndTick: windowEndTick
-            );
-
-            m_registry.ApplySnapshot(snapshot: in commands);
-
-            var fixedStep = new FixedStepContext(
-                ElapsedTicks: stepElapsedTicks,
-                StepTicks: stepTicks,
-                Tick: tick
-            );
-
-            m_simulation.Step(
-                commands: in commands,
-                context: in fixedStep
-            );
-
+            Step(stepTicks: stepTicks);
             stepCount++;
 
             // A step that owes the host a frame (a capture armed for its tick) ends the burst here, keeping the
@@ -237,5 +221,92 @@ public sealed class FixedStepPump {
         }
 
         return stepCount;
+    }
+    /// <summary>Runs at most one <paramref name="stepTicks"/>-sized step — drain, snapshot, apply, step — whatever host
+    /// interval preceded the call: the pacing of a host whose time is its own iteration count, never the wall clock, so
+    /// a slow host iteration (a first render, a rebuild, a hitch) is followed by one step, not a catch-up burst.
+    /// <para>The pump keeps no accumulator on this path (<see cref="AccumulatorTicks"/> stays zero), so a frame a host
+    /// composes after it presents exactly the tick the step completed. Whatever an interval exceeds its one step by is
+    /// host time the simulation never steps, and rebases the capture pin before the step snapshots its input, so input
+    /// captured during a slow iteration is due in the step after it.</para></summary>
+    /// <param name="intervalTicks">The host interval since the previous call, in engine ticks. It decides no step: it
+    /// rebases <see cref="CaptureOriginTicks"/> by whatever of it is not stepped, and is the host time a holding pump
+    /// withholds when the simulation holds its clock.</param>
+    /// <param name="stepTicks">The step size in engine ticks. May differ from the value a previous call used.</param>
+    /// <returns><see langword="true"/> when the step ran; <see langword="false"/> when the host may not step
+    /// (<c>mayStep</c>), the drain changed the simulation's rate, or a holding pump's simulation withheld the
+    /// step.</returns>
+    public bool TryStep(ulong intervalTicks, ulong stepTicks) {
+        var unstepped = ((intervalTicks > stepTicks)
+            ? (intervalTicks - stepTicks)
+            : 0UL);
+
+        CaptureOriginTicks += unstepped;
+
+        if (Gate(
+            ratePerSecond: m_simulation.RatePerSecond,
+            withheldTicks: intervalTicks
+        ) != StepGate.Steps) {
+            CaptureOriginTicks += (intervalTicks - unstepped);
+
+            return false;
+        }
+
+        Step(stepTicks: stepTicks);
+
+        return true;
+    }
+    /// <summary>Spends a host interval without stepping, for a host that holds its tick while the tick's frame has not
+    /// rendered: the simulation steps none of that time, so it rebases <see cref="CaptureOriginTicks"/> by all of it,
+    /// and input captured meanwhile is due in the step after the hold.</summary>
+    /// <param name="intervalTicks">The host interval since the previous call, in engine ticks.</param>
+    public void Hold(ulong intervalTicks) => CaptureOriginTicks += intervalTicks;
+
+    // Drains the console before a step, then decides whether the step runs: it does not when the drain changed the
+    // simulation's rate (read before the drain as ratePerSecond), when the host may not step, or when a holding pump's
+    // simulation withholds it, spending withheldTicks of host time.
+    private StepGate Gate(uint ratePerSecond, ulong withheldTicks) {
+        m_beforeStep?.Invoke();
+
+        if (m_simulation.RatePerSecond != ratePerSecond) {
+            return StepGate.RateChanged;
+        }
+
+        return ((
+            !(m_mayStep?.Invoke() ?? true) ||
+            (m_holdsClock && m_simulation.HoldsClock(withheldTicks: withheldTicks))
+        )
+            ? StepGate.Withheld
+            : StepGate.Steps
+        );
+    }
+    // Snapshots, applies and steps one tick.
+    private void Step(ulong stepTicks) {
+        var tick = m_completedStepCount;
+
+        m_completedStepCount++;
+        // The running elapsed-tick total is already rate-independent; never `tick * stepTicks`, which is only
+        // valid while `stepTicks` has been constant for every step `tick` counts.
+        m_elapsedTicks += stepTicks;
+
+        var stepElapsedTicks = m_elapsedTicks;
+        var windowEndTick = (CaptureOriginTicks + stepElapsedTicks);
+        var commands = m_inputRouter.SnapshotForTick(
+            tick: tick,
+            windowEndTick: windowEndTick
+        );
+
+        m_registry.ApplySnapshot(snapshot: in commands);
+
+        var fixedStep = new FixedStepContext(
+            ElapsedTicks: stepElapsedTicks,
+            StepTicks: stepTicks,
+            Tick: tick
+        );
+
+        m_simulation.Step(
+            commands: in commands,
+            context: in fixedStep
+        );
     }
 }

@@ -150,6 +150,7 @@ internal enum QualificationDeferredCheck {
     RespectNullableAnnotations = true,
     RespectRequiredConstructorParameters = true,
     UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+    NewLine = "\n",
     WriteIndented = true
 )]
 internal sealed partial class QualificationJsonContext : JsonSerializerContext;

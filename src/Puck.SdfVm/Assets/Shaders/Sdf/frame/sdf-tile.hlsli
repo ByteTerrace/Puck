@@ -12,7 +12,7 @@
 // (WorldTileSize / 8)^2 groups — sdf-cull-args.comp relies on that divisibility.
 static const uint WorldTileSize = 16u;
 // The sentinel a tile carries when the beam prepass's cone provably clears the field: no ray in the tile can hit, so
-// Stage 1 skips the tile's pixels entirely, leaving the sky pre-pass's pixels. Every other value the beam writes
+// Stage 1 skips the tile's pixels entirely, leaving them uncovered for the sky and composite passes. Every other value the beam writes
 // is a march-start t at or past the view's surface near distance, which is positive, so `== TileEmpty` is an exact
 // test rather than a tolerance.
 static const float TileEmpty = -1.0;

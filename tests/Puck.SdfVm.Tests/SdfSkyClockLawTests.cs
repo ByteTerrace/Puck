@@ -1,93 +1,38 @@
 using System.Numerics;
-using Puck.Abstractions.Cameras;
-using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SignedDistance;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-/// <summary>The sky and the bounded media animate on the frame's presented tick, reduced on the host: the environment
-/// arrives with the twinkle's phase and the cloud layer's drift, shear and spin already integrated by the World's
-/// environment resolver, which the block bakes as given, and the volume table carries each medium's integrated
+/// <summary>The sky and the bounded media animate on the frame's presented tick, reduced on the host: the sky arrives
+/// with the twinkle's phase and the cloud layer's drift, shear and spin already integrated by the World's environment
+/// resolver, which the sky block packs as given (<see cref="SdfSky.Pack"/>), and the volume table carries each medium's integrated
 /// advection and pulse gain, so its values move by one tick's worth of their rate between consecutive ticks wherever
 /// the tick or the reduction wraps.</summary>
 public sealed class SdfSkyClockLawTests {
-    private const ulong Wrap = (1UL << 32);
-
-    private static SdfFrame Frame(SdfEnvironment environment, ulong tick) {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        builder.Sphere(
-            radius: 1f,
-            material: material
-        );
-
-        return new SdfFrame(
-            Program: builder.Build(),
-            ProgramChanged: true,
-            Views: [
-                new SdfViewSnapshot(
-                    Camera: new CameraSnapshot(
-                        AspectRatio: 1f,
-                        Forward: Vector3.UnitZ,
-                        Position: Vector3.Zero,
-                        Right: Vector3.UnitX,
-                        TanHalfFieldOfView: 0.5f,
-                        Up: Vector3.UnitY
-                    ),
-                    Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
-                ),
-            ],
-            Time: 0f
-        ) {
-            Clock = new PresentedTick(
-                Fraction: 0d,
-                Whole: tick
-            ),
-            Environment = environment,
-        };
-    }
-    private static float[] Bake(SdfEnvironment environment, ulong tick) {
-        var rows = new float[SdfEnvironment.LaneCount];
-
-        SdfFrameBlock.BakeEnvironment(
-            frame: Frame(
-                environment: environment,
-                tick: tick
-            ),
-            rows: rows
-        );
-
-        return rows;
-    }
-
     [Fact]
-    public void The_block_carries_the_hosts_twinkle_phase_and_cloud_offsets_at_every_tick() {
-        var environment = SdfEnvironment.Default();
+    public void The_block_carries_the_hosts_twinkle_phase_and_cloud_offsets() {
+        var sky = new SdfSky();
 
-        environment.TwinklePhase = 0.25f;
-        environment.CloudDriftOffset = new Vector2(x: 0.5f, y: -0.25f);
-        environment.CloudShearOffset = new Vector2(x: 0.125f, y: 0.0625f);
-        environment.CloudSpinAngle = 1.5f;
+        sky.Block.TwinklePhase = 0.25f;
+        sky.Block.CloudDriftOffset = new Vector2(x: 0.5f, y: -0.25f);
+        sky.Block.CloudShearOffset = new Vector2(x: 0.125f, y: 0.0625f);
+        sky.Block.CloudSpinAngle = 1.5f;
 
-        var twinkle = ((SdfEnvironment.TwinkleRow * 4) + 2);
-        var drift = ((SdfEnvironment.CloudsRow + 2) * 4);
-        var spin = ((SdfEnvironment.CloudsRow + 3) * 4);
+        // The host integrates every rate to the presented tick (the World's environment resolver), so the sky block packs
+        // the phase and offsets the sky holds, which no tick reaches.
+        sky.Pack(
+            block: out var block,
+            lights: SdfLights.Default(),
+            softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes],
+            stops: new SdfSkyStop[SdfSky.MaxStops]
+        );
 
-        // The host integrates every rate to the presented tick (the World's environment resolver), so the block bakes
-        // the phase and offsets the environment holds, whatever tick the frame presents.
-        foreach (var tick in new[] { 0UL, (Wrap - 1UL), Wrap, (Wrap + 1234UL) }) {
-            var rows = Bake(environment: environment, tick: tick);
-
-            Assert.Equal(expected: 0.25f, actual: rows[twinkle]);
-            Assert.Equal(expected: 0.5f, actual: rows[drift]);
-            Assert.Equal(expected: -0.25f, actual: rows[(drift + 1)]);
-            Assert.Equal(expected: 0.125f, actual: rows[(drift + 2)]);
-            Assert.Equal(expected: 0.0625f, actual: rows[(drift + 3)]);
-            Assert.Equal(expected: 1.5f, actual: rows[spin]);
-        }
+        Assert.Equal(actual: block.TwinklePhase, expected: 0.25f);
+        Assert.Equal(expected: new Vector2(x: 0.5f, y: -0.25f), actual: block.CloudDriftOffset);
+        Assert.Equal(expected: new Vector2(x: 0.125f, y: 0.0625f), actual: block.CloudShearOffset);
+        Assert.Equal(actual: block.CloudSpinAngle, expected: 1.5f);
     }
     [Fact]
     public void A_mediums_advection_and_pulse_are_its_rates_integrated_to_the_tick() {

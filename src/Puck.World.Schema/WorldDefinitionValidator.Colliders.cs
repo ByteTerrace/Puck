@@ -108,7 +108,10 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        var volumes = (FixedWorldCollider.Compile(collider: collider, creations: creations)?.Volumes ?? []);
+        var volumes = ((FixedWorldCollider.Compile(collider: collider, creations: creations) is { } compiled)
+            ? compiled.Volumes
+            : []
+        );
 
         for (var index = 0; (index < volumes.Length); index++) {
             if (!FixedFieldContactSolver.VolumeCoreSweeps(volume: in volumes[index])) {

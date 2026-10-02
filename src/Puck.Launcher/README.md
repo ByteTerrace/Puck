@@ -21,13 +21,24 @@ library depend on a GPU backend.
 drains the console before each step. It holds the first step until a piped
 script reaches its first tick wait, or standard input ends. The
 [commands reference](../../docs/reference/commands.md#who-can-dispatch-a-command)
-explains the timing a script can rely on. The offscreen loop's pump also holds
-its clock for owed frames: before each step it asks the simulation
+explains the timing a script can rely on. Windowed and offscreen pumps also hold
+their clocks for owed frames: before each step they ask the simulation
 (`IFixedStepSimulation.HoldsClock`), and while a frame a step owes is unserved
-it withholds the step and spends the time rather than owing it. The windowed
-and headless pumps never ask. A loop that produces frames calls
+they withhold the step and spend the time rather than owing it. The headless
+pump never asks. A loop that produces frames calls
 `IFixedStepSimulation.SettleOwedFrames` in its teardown before it disposes its
 render root.
+
+The windowed and headless loops hand `FixedStepPump.Advance` the wall time
+they sampled and take every step it covers. The offscreen loop's time is its
+tick count: it calls `FixedStepPump.TryStep`, which runs at most one step
+whatever the interval was, and composes one frame for that step, so a slow
+frame delays the next tick instead of bursting several (see
+[host pacing](../../docs/reference/hosting.md#host-pacing)). An unpaced headless
+run (`LauncherOptions.Unpaced`) also calls `TryStep`, and waits for nothing.
+Each loop, its input capture clock, and device recovery use the same registered
+`TimeProvider`, which defaults to the system clock. `OffscreenTickPacingLawTests`
+makes its frames slow through that provider.
 
 Each host loop runs on its own thread, and its hosted service's task faults
 with whatever the loop threw, so a failing loop stops the host instead of

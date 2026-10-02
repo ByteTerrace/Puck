@@ -22,11 +22,11 @@ public sealed class EngageBodyIndexLawTests : IDisposable {
     public void Dispose() => m_stateDirectory.Dispose();
     [Fact]
     public void TheEngageVerbsReadOneZeroBasedBodyIndex() {
-        using var host = WorldBootHarness.Compose(
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
             world: World
-        ).Build();
+        ).Build());
         var registry = host.Services.GetRequiredService<CommandRegistry>();
         var last = (host.Services.GetRequiredService<WorldPopulation>().Capacity - 1);
 

@@ -3,7 +3,7 @@ using System.CommandLine;
 namespace Puck.Cli.WorktreeBase;
 
 /// <summary>
-/// <c>puck worktree-base</c> — the mandatory first step in any git worktree: puts HEAD at a named base commit,
+/// <c>puck worktree-base</c> — the first step in a fresh git worktree that holds no work of its own: puts HEAD at a named base commit,
 /// refusing rather than resetting when that would discard uncommitted work.
 /// </summary>
 internal static class WorktreeBaseCommand {

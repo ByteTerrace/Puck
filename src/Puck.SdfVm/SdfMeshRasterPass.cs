@@ -5,9 +5,12 @@ using Puck.Shaders;
 namespace Puck.SdfVm;
 
 /// <summary>
-/// The SDF engine's mesh pass pipeline: the graphics pipeline that rasterizes a frame's mesh draws
-/// (<see cref="SdfFrame.MeshDraws"/>) into the mesh visibility target before primary traversal, one entry a device in
-/// the composition's <see cref="GpuPassPipelineCache"/>. The engine's holder leases it beside its pipeline set, as it
+/// The SDF engine's mesh pass pipelines: the graphics pipeline that rasterizes a frame's mesh draws
+/// (<see cref="SdfFrame.MeshDraws"/>) into the mesh visibility target before primary traversal, and the impostor card
+/// pipeline that rasterizes the impostor draws beside it, one entry each a device in
+/// the composition's <see cref="GpuPassPipelineCache"/>. The two share the vertex stage, the layout and the render pass; the
+/// card's fragment stage discards the pixels its impostor does not cover and writes the depth of the surface it finds, so it
+/// runs after the depth test as well, where the mesh fragment stage forces the test first. The engine's holder leases it beside its pipeline set, as it
 /// leases the region copy, and the engine takes the built pipeline and its render pass at construction.
 /// <para>
 /// The pipeline draws with the mesh interface's layout (<see cref="SdfWorldInterfaces.Mesh"/>): one set per ring slot
@@ -20,6 +23,9 @@ namespace Puck.SdfVm;
 public sealed class SdfMeshRasterPass {
     /// <summary>The file stem of the pass's two stages: <c>sdf-mesh.vert</c> and <c>sdf-mesh.frag</c>.</summary>
     public const string ShaderStem = "sdf-mesh";
+    /// <summary>The file stem of the impostor card pipeline's fragment stage, <c>sdf-mesh-impostor.frag</c>; its vertex
+    /// stage is the mesh pass's.</summary>
+    public const string ImpostorShaderStem = "sdf-mesh-impostor";
     /// <summary>The bytes a pixel of the target and the depth attachment hold together.</summary>
     public const uint BytesPerPixel = (16u + 4u);
 
@@ -31,6 +37,12 @@ public sealed class SdfMeshRasterPass {
             bytecodeExtension: bytecodeExtension,
             directory: SdfKernelSet.DefaultDirectory,
             stage: "frag"
+        ),
+        impostorFragment: Load(
+            bytecodeExtension: bytecodeExtension,
+            directory: SdfKernelSet.DefaultDirectory,
+            stage: "frag",
+            stem: ImpostorShaderStem
         ),
         pipelines: pipelines,
         vertex: Load(
@@ -44,13 +56,18 @@ public sealed class SdfMeshRasterPass {
     /// <param name="pipelines">The composition's pass pipelines.</param>
     /// <param name="vertex">The vertex stage's bytecode.</param>
     /// <param name="fragment">The fragment stage's bytecode.</param>
+    /// <param name="impostorFragment">The impostor card fragment stage's bytecode.</param>
     /// <exception cref="ArgumentNullException"><paramref name="pipelines"/> is <see langword="null"/>.</exception>
-    public SdfMeshRasterPass(GpuPassPipelineCache pipelines, ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> fragment) {
+    public SdfMeshRasterPass(GpuPassPipelineCache pipelines, ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> fragment, ReadOnlyMemory<byte> impostorFragment) {
         ArgumentNullException.ThrowIfNull(argument: pipelines);
 
         Pipelines = pipelines;
         Key = KeyOf(
             fragment: fragment,
+            vertex: vertex
+        );
+        ImpostorKey = ImpostorKeyOf(
+            fragment: impostorFragment,
             vertex: vertex
         );
     }
@@ -66,6 +83,8 @@ public sealed class SdfMeshRasterPass {
             StrideBytes: 0
         )
     );
+    /// <summary>Gets the impostor card pipeline's description: the mesh pass's, named for the card stage.</summary>
+    public static GpuGraphicsPipelineDescription ImpostorDescription { get; } = Description with { Name = ImpostorShaderStem };
     /// <summary>Gets the render pass the pipeline draws in: the target (<see cref="SdfWorldPackage.MeshTargetFormat"/>)
     /// cleared and stored, left in its attachment layout, and the depth attachment
     /// (<see cref="SdfWorldPackage.MeshDepthAttachment"/>) cleared to its reversed-Z far plane and discarded.</summary>
@@ -81,6 +100,8 @@ public sealed class SdfMeshRasterPass {
 
     /// <summary>Gets the pipeline's key in <see cref="Pipelines"/>.</summary>
     public GpuPassPipelineKey Key { get; }
+    /// <summary>Gets the impostor card pipeline's key in <see cref="Pipelines"/>.</summary>
+    public GpuPassPipelineKey ImpostorKey { get; }
     /// <summary>Gets the composition's pass pipelines.</summary>
     public GpuPassPipelineCache Pipelines { get; }
 
@@ -95,19 +116,31 @@ public sealed class SdfMeshRasterPass {
             renderPass: RenderPass,
             vertex: vertex
         );
+    /// <summary>Returns the key of the impostor card pipeline built from given stages.</summary>
+    /// <param name="vertex">The vertex stage's bytecode, the mesh pass's.</param>
+    /// <param name="fragment">The card fragment stage's bytecode.</param>
+    /// <returns>The key.</returns>
+    public static GpuPassPipelineKey ImpostorKeyOf(ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> fragment) =>
+        GpuPassPipelineKey.OfGraphics(
+            description: ImpostorDescription,
+            fragment: fragment,
+            renderPass: RenderPass,
+            vertex: vertex
+        );
     /// <summary>Reads one deployed stage.</summary>
     /// <param name="bytecodeExtension">The backend's compiled-shader extension.</param>
     /// <param name="directory">The directory the stages are deployed in.</param>
     /// <param name="stage">The stage's file suffix, <c>vert</c> or <c>frag</c>.</param>
+    /// <param name="stem">The stage's file stem; the mesh pass's by default.</param>
     /// <returns>The stage's bytecode.</returns>
-    public static ReadOnlyMemory<byte> Load(string bytecodeExtension, string directory, string stage) {
+    public static ReadOnlyMemory<byte> Load(string bytecodeExtension, string directory, string stage, string stem = ShaderStem) {
         ArgumentException.ThrowIfNullOrEmpty(argument: bytecodeExtension);
         ArgumentException.ThrowIfNullOrEmpty(argument: directory);
         ArgumentException.ThrowIfNullOrEmpty(argument: stage);
 
         return File.ReadAllBytes(path: Path.Combine(
             path1: directory,
-            path2: $"{ShaderStem}.{stage}{bytecodeExtension}"
+            path2: $"{stem}.{stage}{bytecodeExtension}"
         ));
     }
     /// <summary>Takes a lease on the pipeline for a device, joining its build or starting it on the thread pool.</summary>
@@ -120,6 +153,18 @@ public sealed class SdfMeshRasterPass {
         return Pipelines.Acquire(
             device: device,
             key: Key
+        );
+    }
+    /// <summary>Takes a lease on the impostor card pipeline for a device, joining its build or starting it on the thread
+    /// pool.</summary>
+    /// <param name="device">The device.</param>
+    /// <returns>The lease.</returns>
+    public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> AcquireImpostor(IGpuDeviceContext device) {
+        ArgumentNullException.ThrowIfNull(argument: device);
+
+        return Pipelines.Acquire(
+            device: device,
+            key: ImpostorKey
         );
     }
 }

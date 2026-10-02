@@ -106,12 +106,13 @@ public sealed partial class SdfWorldPipelines : IDisposable {
     }
     /// <summary>Describes how far the set's builds have come as a clause: <c>building (9 of 11 pipelines
     /// created; waiting on sdf-world-surface, sdf-world-views)</c>, naming the pipelines not yet built in
-    /// <see cref="SdfKernel"/> order.</summary>
+    /// <see cref="SdfKernel"/> order, and then any refused (<see cref="IsBuilt"/>): <c>refused sdf-world-views</c>.</summary>
     /// <returns>The clause.</returns>
     public string Describe() {
         var built = 0;
         var total = 0;
         var waiting = new List<string>();
+        var refused = new List<string>();
 
         foreach (var slot in m_slots) {
             if (slot is null) {
@@ -122,6 +123,8 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
             if (slot.Lease.Current is not null) {
                 built++;
+            } else if (slot.Refusal is not null) {
+                refused.Add(item: slot.Description.Name);
             } else {
                 waiting.Add(item: slot.Description.Name);
             }
@@ -129,7 +132,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"building ({built} of {total} pipelines created{((waiting.Count == 0) ? string.Empty : $"; waiting on {string.Join(separator: ", ", values: waiting)}")})"
+            handler: $"building ({built} of {total} pipelines created{((waiting.Count == 0) ? string.Empty : $"; waiting on {string.Join(separator: ", ", values: waiting)}")}{((refused.Count == 0) ? string.Empty : $"; refused {string.Join(separator: ", ", values: refused)}")})"
         );
     }
     /// <inheritdoc/>
@@ -163,6 +166,40 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         return PollAll(slots: m_slots);
     }
+    /// <summary>Returns whether every pipeline the tables are built from is ready: all but the views variants, of which a
+    /// residency's views need only the one its program selects or a fuller one (<see cref="IsBuilt"/>), so a program that
+    /// selects a stripped variant never waits for the full ISA's translation. Polls every pipeline, the views variants
+    /// included; a views variant whose creation failed is refused (<see cref="IsBuilt"/>) rather than thrown, since the
+    /// tables are built without it.</summary>
+    /// <returns><see langword="true"/> once every pipeline but the views variants is ready.</returns>
+    /// <exception cref="ObjectDisposedException">The set has been disposed.</exception>
+    /// <exception cref="AggregateException">A pipeline's creation failed, other than a views variant's, named as
+    /// <see cref="Poll"/> names it.</exception>
+    /// <exception cref="DeviceLostException">The device was lost during a creation; thrown alone.</exception>
+    public bool PollRequired() {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        return PollAll(
+            slots: m_slots,
+            viewsRequired: false
+        );
+    }
+    /// <summary>Returns whether one of the set's pipelines is built, taking a build that has just finished. A creation that
+    /// failed, other than by a device loss, is refused: it is kept (<see cref="RefusalOf"/>), never thrown, and the
+    /// pipeline is not polled again, so its build is not restarted, until a reload replaces it
+    /// (<see cref="PrepareReload"/>) or the set is disposed on a device loss. Allocates nothing.</summary>
+    /// <param name="kernel">The kernel.</param>
+    /// <returns><see langword="true"/> when the set leases the kernel and its pipeline is built.</returns>
+    /// <exception cref="DeviceLostException">The device was lost during the creation.</exception>
+    public bool IsBuilt(SdfKernel kernel) => ((m_slots[((int)kernel)] is { } slot) && slot.PollRefusing());
+    /// <summary>Returns why one of the set's pipelines was refused (<see cref="IsBuilt"/>), or <see langword="null"/> when
+    /// it was not.</summary>
+    /// <param name="kernel">The kernel.</param>
+    /// <returns>The creation's failure, or <see langword="null"/>.</returns>
+    public Exception? RefusalOf(SdfKernel kernel) => m_slots[((int)kernel)]?.Refusal;
     /// <summary>Returns a task that completes once every pipeline of the set is ready, for a holder's own background
     /// build, which awaits it holding no thread, or a harness that drives tables directly.</summary>
     /// <param name="cancellationToken">The token that ends the wait; the entries keep building for their other
@@ -207,7 +244,8 @@ public sealed partial class SdfWorldPipelines : IDisposable {
         return waited;
     }
     /// <summary>Leases replacements for the pipelines whose bytecode differs between the installed kernels and
-    /// <paramref name="kernels"/>; unchanged bytecode leases nothing. Before it leases anything it reflects each changed
+    /// <paramref name="kernels"/>, and for each refused pipeline (<see cref="IsBuilt"/>), which the reload builds again;
+    /// unchanged bytecode leases nothing otherwise. Before it leases anything it reflects each changed
     /// kernel through <paramref name="reflector"/> and holds it to this host's interface
     /// (<see cref="SdfKernelSet.InterfaceMismatch"/>), so a kernel compiled against another instruction set, or binding
     /// anything the host does not place where the host places it, refuses the whole reload and the set keeps its kernels.
@@ -250,7 +288,12 @@ public sealed partial class SdfWorldPipelines : IDisposable {
                 }
                 var bytecode = kernels[kernel];
 
+                // A refused pipeline is built again from the bytecode it was refused with, which the set already reads.
                 if (bytecode.Span.SequenceEqual(other: baseline[kernel].Span)) {
+                    if (slot?.Refusal is not null) {
+                        changed.Add(item: (index, slot, bytecode));
+                    }
+
                     continue;
                 }
 
@@ -262,7 +305,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             }
 
             if (refusals is not null) {
-                throw new InvalidOperationException(message: $"The reloaded kernels do not read this host's interface (instruction set stamp '{SdfIsaHlsl.Stamp}'), so the set keeps its kernels: {string.Join(separator: " ", values: refusals)}");
+                throw new InvalidOperationException(message: $"The reloaded kernels do not read this host's interface (instruction set stamp '{SdfWorldInterfaces.Stamp}'), so the set keeps its kernels: {string.Join(separator: " ", values: refusals)}");
             }
 
             var replacements = new List<(int Index, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease)>();
@@ -324,13 +367,24 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             throw new InvalidOperationException(message: "The reload was prepared against kernels that are no longer installed.");
         }
     }
-    // Polls every lease, so each build that failed is named, in the set's order; a device loss is thrown alone.
-    internal static bool PollAll(IReadOnlyList<Slot?> slots) {
+    // The views variants, one of which a program dispatches its views with (SdfWorldTables.ViewsPipeline).
+    internal static bool IsViews(SdfKernel kernel) => (kernel is (SdfKernel.Views or SdfKernel.ViewsCore or SdfKernel.ViewsFolds));
+    // Polls every lease, so each build that failed is named, in the set's order; a device loss is thrown alone. The
+    // slots are a set's, in kernel order. Without viewsRequired, a views variant still building or refused leaves the set
+    // ready.
+    internal static bool PollAll(IReadOnlyList<Slot?> slots, bool viewsRequired = true) {
         var ready = true;
         List<(string Name, Exception Failure)>? failures = null;
 
         for (var index = 0; (index < slots.Count); index++) {
             if (slots[index] is not { } slot) {
+                continue;
+            }
+
+            // A views variant the tables do without is refused as IsBuilt refuses it, never thrown.
+            if (!viewsRequired && IsViews(kernel: ((SdfKernel)index))) {
+                _ = slot.PollRefusing();
+
                 continue;
             }
 
@@ -387,18 +441,43 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> m_lease = lease;
 
+        // The lease's failed creation, which PollRefusing keeps instead of polling the lease again; a reload's exchange
+        // clears it with the lease it replaces.
+        private Exception? m_refusal;
+
         public nint DescriptorSetLayoutHandle => Native.DescriptorSetLayoutHandle;
         public IReadOnlyList<nint> GroupLayoutHandles => Native.GroupLayoutHandles;
         public nint Handle => Native.Handle;
         public nint LayoutHandle => Native.LayoutHandle;
         public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease => Volatile.Read(location: ref m_lease);
+        public Exception? Refusal => Volatile.Read(location: ref m_refusal);
 
         private IGpuComputePipeline Native => (Lease.Current?.Compute ?? throw new InvalidOperationException(message: $"The '{Description.Name}' pipeline is not built."));
 
         public void Dispose() =>
             Lease.Release();
         public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Exchange(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> replacement) {
-            return Interlocked.Exchange(location1: ref m_lease, value: replacement);
+            var replaced = Interlocked.Exchange(location1: ref m_lease, value: replacement);
+
+            Volatile.Write(location: ref m_refusal, value: null);
+
+            return replaced;
+        }
+        // Whether the lease is built. A creation that failed other than by a device loss is kept as the refusal, and the
+        // lease is not polled again, since a poll after a failure starts a fresh build.
+        public bool PollRefusing() {
+            if (Refusal is not null) {
+                return false;
+            }
+
+            try {
+                return (Lease.Poll() is not null);
+            } catch (Exception failure) when ((failure is not DeviceLostException)) {
+                Volatile.Write(location: ref m_refusal, value: failure);
+                Console.Error.WriteLine(value: $"[{Description.Name}] kernel build refused, retried on a kernel reload or a device loss: {failure.Message}");
+
+                return false;
+            }
         }
     }
 }

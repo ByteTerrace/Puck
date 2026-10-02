@@ -32,11 +32,18 @@ showing its tick, or a named `refusal` (`cameraInside` when
 `map(cameraPos) <= 0`, `busy`, `stale`, `failed`, `unserved`, `deviceLost`
 when the graphics device was lost while it was armed) with a
 `detail` naming the ticks.
+The offscreen host steps one tick per rendered frame (`FixedStepPump.TryStep`,
+and a tick whose frame the root reports not yet renderable is held and composed
+again), so every tick, a captured one included, has a frame of its own, a slow
+frame never bursts ticks, and a capture's frame reprojects from the tick before.
 
-Offscreen, the host holds its clock for a capture: the pump steps no tick past
+Windowed and offscreen hosts hold their clock for a capture: the pump steps no tick past
 an armed capture's tick until the capture is served or refused, whatever keeps
 the render chain from serving it (a cold-cache pipeline build, a device
-rebuild). The hold counts from readiness (`IWorldEngineReadiness`): time held
+rebuild, or repeated window resizes). A pending capture pins the presenter's
+bound state and body poses to the completed tick, so its pixels and manifest
+describe that tick. Window resizes change the swapchain's client extent; the
+world's logical frame extent stays fixed. The hold counts from readiness (`IWorldEngineReadiness`): time held
 while the engine is not ready is bounded by
 `WorldCaptureScheduler.BuildHoldBudgetSeconds` (180), and time held once it is
 ready by `WorldCaptureScheduler.HoldBudgetSeconds` (60), each summed over the
@@ -48,10 +55,13 @@ script that takes several `world.screenshot` captures fences each one with
 `world.wait captures <seconds>` before arming the next, since a pending capture
 refuses the next arm and a tick count is a race under load.
 A capture still owed at the run's end is refused before the render root is
-disposed (`IFixedStepSimulation.SettleOwedFrames`). The windowed host never
-holds. `world.counters` shows the hold under `world.captures`
+disposed (`IFixedStepSimulation.SettleOwedFrames`). A host with no render chain
+does not hold. `world.counters` shows the hold under `world.captures`
 (`world.captures.held`, and `world.captures.ticks-while-armed`, which stays 0
-offscreen); `WorldCaptureHoldLawTests` pins all of it without a GPU.
+in both rendered hosts); `WorldCaptureHoldLawTests` pins the budgets and
+settlement without a GPU, and
+`WorldCaptureSchedulerLawTests.AWindowResizeStormWritesEveryScheduledTicksFrameWithoutBlockingTheNextCapture`
+pins the tick and state hash of every PNG through repeated delayed frames.
 
 ## Schedules, verdicts, and `test` blocks
 
