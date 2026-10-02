@@ -583,10 +583,11 @@ the primary march's, so a technique that marches per pixel spends the frame's
 most expensive work again, and a technique that runs per view multiplies it by
 the seats, camera views, mirrors and portal windows of a world. A lattice of
 probes in world space, placed where the field says surfaces are and traced
-through the field, puts the cost on the world and on its changes: a still world
-finishes its solve and stands, a panning camera pays only for the bricks it
-newly demands, and four seats pay one trace. It also makes indirect light a
-property of the world rather than of a view, so a mirror and the main view
+through the field, puts the probe-trace cost on the world and on its changes:
+a still world finishes its solve and stands, and four seats pay one probe
+trace. Receiver visibility can still trace at each view's pixels, and a moving
+portal camera changes its source image; P6-GI budgets those separately. This
+also makes indirect light a property of the world rather than of a view, so a mirror and the main view
 agree.
 
 **A probe stores the hits of its rays, and lighting is a finite solve.**
@@ -594,51 +595,70 @@ Classic irradiance probes blend each update into the last with a hysteresis,
 so a lighting change re-marches every probe, a moving light trails and a cache
 is never quite still. Storing each ray's hit (a distance, a normal, a material)
 makes the cache relightable: a light's colour, a sky change, an emission or a
-screen's image re-shades the stored hits and marches nothing, which is P18-6's
-lighting-visible class, and only geometry re-traces. Lighting is one direct
-sweep and a fixed count of feedback sweeps over two generations, so a capture
+screen's image re-shades the stored hits without retracing their rays, which is
+P18-6's lighting-visible class; lookup visibility has its own allowance.
+Only geometry re-traces. Lighting is one direct sweep and a fixed count of
+feedback sweeps over two generations, so a capture
 runs a fixed solve from a cold start and is reproducible, where a stopping test
 on display codes would be neither bounded nor the same on both backends.
 
-**The field partitions every cell, so a surface never reads a probe a wall
-separates it from.** Irradiance fields weight probes by the moments of their
+**The field partitions every cell; receiver visibility needs its own proof.**
+Irradiance fields weight probes by the moments of their
 rays' distances, which is an estimate: a texel mixing a near and a far hit has a
 mean that gives a surface behind the near wall full weight, and renormalizing
 the survivors makes it worse. Puck can do better because the field answers a
-segment query exactly. Each cell's eight corner probes are connected only by
-segments an exact field trace reaches end to end, and a surface reads only the
-corners of its own component, choosing it by a separating plane fitted inside
-the cutting surface or, in the rare complex cell, by its own exact traces. A
-sealed wall of any thickness that crosses a cell cuts every segment across it,
-so a sealed room takes no light through its walls, and the only bound left is a
-plane-fit tolerance beside curved surfaces. The cache keeps no moments.
+segment query conservatively. Each cell's eight corner probes are connected
+only by segments a field trace reaches end to end, with exhaustion blocked.
+Their connectivity does not prove visibility from a receiver. Hits from both
+faces of a slab do not prove that a fitted plane stays inside it, and a
+junction or small occluder can evade every sampled segment. A fit tolerance
+therefore gives neither a cell-wide error bound nor a dark-only residual.
+G1 supplies a sound shortcut, including bias and stored-plane precision, or
+admits the counted exact receiver-to-corner lookup; until then this design
+remains open. The cache keeps no moments.
 
 **Continuation seeks support instead of guessing.** Finer levels trace short
 rays and continue into coarser levels, the interval-merging idea of radiance
-cascades. A ray that reaches its reach keeps marching through empty space,
-which is cheap where the clearance is large, until it stands in a coarser cell
-component with traced probes, so nothing has to be allocated in empty space and
-a sealed hall reads its own wall, never the sky. Sky is read only at the far
-distance the camera treats as sky, and a coarser probe's ray is read only where
-its hit lies beyond the fine ray's end, so no interval counts twice.
+cascades. A ray that reaches its reach keeps marching through empty space
+until it stands in coarser support whose receiver visibility is established.
+It keeps the same 64-step budget, uses the full field beyond its original mask,
+and becomes unresolved on exhaustion. Geometry invalidation covers that whole
+path, not just the level's nominal reach. Sky requires a traced world exit.
+Continuation replaces a suffix once; its terminal hit must lie ahead of the
+original endpoint before filtering. An averaged radiance texel cannot perform
+that test after mixing nearer and farther hits. G1 settles the required
+terminal representation and its cost. Different ray directions add an error
+growing with distance as well as the probe offset; a cell diagonal alone does
+not bound it. The plan's continuation laws gate that approximation.
 
 **Each bounce source sees a light through a light view.** A probe and the
 surfaces its rays hit do not share a view of the sun, so a probe's visibility
 cannot stand for a hit's. Marching from every stored hit is exact and is the
 reference, but it costs about a million marches at `medium` each time a sun
-turns. A depth-only camera view of the residency placed far along the light,
-far enough that its rays diverge by less than half the light's penumbra, gives
-every hit its own visibility for one render of a quarter of a million rays,
-through the engine's own march and beam. Its error is its texel size and its
-divergence, both reported and held to the per-hit reference by law.
+turns. For a directional light, the candidate is a depth-only camera placed
+far along its direction, through the engine's own march and beam. Half a
+penumbra of divergence does not bound the visibility error: caster distance
+amplifies displacement, and a subtexel occluder can disappear. G3 establishes
+caster coverage, projection precision, resolution admission and a budgeted
+per-hit fallback. A positional light uses its true position, never the distant
+directional camera. Held and fade slots both count, with valid region
+generations and every scratch allocation in the budget. The stated cache and
+visibility-buffer bytes are subtotals; the full RTX 2060 admission remains
+open with the lookup allowances and light-view error contract.
 
-**Portals read their destination one frame late.** A cache reads a portal's
-emission from the destination view's preceding completed output, through the
-graph's previous-frame edge, so mutual portals form no same-frame cycle. The
-loop between two facing portals advances one step a frame, its gain is below
-one because every artistic gain on the path is bounded at one and diffuse
-albedo is below one, so it converges; a capture runs a fixed count of those
-steps from a cold start.
+**Portals use previous outputs in a finite solve.** Previous-frame edges break
+same-frame cycles but promise neither one-frame latency nor geometric
+convergence. Unit albedo is legal, and view gains, direct screen images and
+multiple return paths are outside the proposed contraction argument. Live
+rendering and captures instead run the plan's initial solve and fixed count of
+portal iterations over a frozen dependency closure, starting its radiance,
+previous outputs and view histories cold. Each iteration completes every world's solve and
+destination reduction before publishing to the next. Derived portal outputs
+do not restart that schedule, and P15's final samples hold the final reductions.
+Captures are repeatable per backend under different completion orders; their
+cross-backend comparison uses the tile tolerance. Camera motion can still show
+stale light or a discontinuity, so G7 gates source age and crossing images
+rather than claiming a one-frame delay.
 
 **Considered, and kept as comparisons.** The floor device's counted rows decide
 whether the cache stays the default; G10 runs the comparison on the same

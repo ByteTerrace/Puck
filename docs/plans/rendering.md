@@ -2269,13 +2269,14 @@ it opens from.
 probes in world space, placed against the field and traced through it, which
 every view of that residency with the same lighting inputs reads. A probe
 stores what its rays hit, not what they saw, so the cache relights without
-marching: a light changing colour re-shades the stored hits, and only geometry
-changes re-trace. The field also decides which probes a surface may read: each
-cell of the lattice is partitioned by exact field traces between its corner
-probes, so a surface never reads a probe that a wall separates it from. A world
-whose geometry and lights are still finishes a fixed number of lighting sweeps
-and then spends nothing updating the cache; a view that renders still pays for
-its apply.
+retracing those rays: a light changing colour re-shades the stored hits, and
+only geometry changes re-trace. The field also decides which probes a surface
+may read: each cell of the lattice is partitioned by field traces between its
+corner probes. Those traces alone do not locate a receiver's component; G1's
+wall guarantee below governs that lookup. A world whose geometry and lighting
+inputs, portal source cameras included, are still finishes a fixed number of
+lighting sweeps and then spends nothing updating the cache; a view that renders
+still pays for its apply.
 
 ```text
 upload → sky.environment → light views (one per shadow slot, depth only)
@@ -2301,9 +2302,13 @@ so it records nothing and holds no memory. Its parts:
   the 28 segments between the cell's eight corner probes (12 edges, 12 face
   diagonals and 4 body diagonals) through the clamped field, connecting two
   corners only when the trace reaches its end, so a march that gives up counts
-  as blocked, and traces each blocked segment again from its other end. The connected corners form the cell's components. Where the
-  blocked segments' first hits fit one plane within a tolerance τ, the cell
-  stores that oriented separating plane; otherwise the cell is **complex**.
+  as blocked, and traces each blocked segment again from its other end. The
+  connected corners form the cell's components. Where the blocked segments'
+  first hits fit one plane within a tolerance τ, the cell stores that oriented
+  plane as a candidate shortcut; a fit is not a proof that the plane separates
+  free space. Exhaustion supplies no hit to fit. Unless G1 proves that shortcut
+  sound for the cell, the cell is **complex**, including cells with no blocked
+  corner segment but uncertified interior geometry.
 - **`trace`** marches one stratum of a probe's rays: one 64-lane workgroup per
   probe and stratum, every lane a ray from the same origin. Because the rays
   share an origin, the group's instance mask is the instances whose bound meets
@@ -2311,30 +2316,49 @@ so it records nothing and holds no memory. Its parts:
   instance grid as the shadow gather builds its cone's. G2 proves the masked
   march's hits and cleared intervals equal the full field's, including world
   segments, unmaskable instances, blend halos and fold boundaries, and the
-  trace falls back to the full field wherever that proof does not hold. A ray
-  advances by the clamped clearance under `sdfMapStepBound` and accepts a hit
+  trace falls back to the full field wherever that proof does not hold. In
+  particular it uses the full field at and beyond that ball's boundary; the short-reach mask
+  never governs continuation marching. A masked step is clipped at the ball's
+  boundary, so it cannot jump past an excluded occluder. A ray advances by the
+  clamped clearance under `sdfMapStepBound` and accepts a hit
   only where the clamped distance falls below `max(surface epsilon, ε·t)`,
   with ε = 0.004, the angular size of a pixel at the floor tier's render scale:
   a hit position is never off its surface by more than ε·t, and a ray grazing
   past a wall does not land on it. At a hit it reads the gradient through
   `mapGradCore` (one evaluation) and the winning material, and stores a hit
-  record. A ray that reaches its level's reach stores a continuation, a ray
-  that reaches the residency's far distance a world exit, and a ray whose step
-  budget ends first stores **unresolved**: it contributes no light, never sky
-  and never an invented surface, and is counted.
-- **The light views** see each shadowed light. Per shadow slot, one `sdf.world`
-  camera view of the residency is placed along the light's direction at a
-  distance D from the region it covers, aimed at it with a depth-only quality
-  that runs the march group and no shading, and writes each pixel's distance as
+  record. After its level's reach, a ray stores a continuation only on reaching
+  eligible coarser support; until then it keeps marching. A ray that reaches
+  the residency's far distance stores a world exit, and a ray whose step budget
+  ends first stores **unresolved**: it contributes no light, never sky
+  and never an invented surface, and is counted. The 64-step budget covers the
+  whole ray, including travel beyond its level's reach; seeking support never
+  resets it. Field traces used to select that support also count, under the
+  lookup allowance below.
+- **The light views** see each shadowed directional light. Per shadow slot,
+  including P18-7's fade slots, one `sdf.world` camera view of the residency is
+  placed along the light's direction at a distance D from the region it covers,
+  aimed at it with a depth-only quality that runs the march group and no shading,
+  and writes each pixel's distance as
   32 bits. Two regions alternate on it: the bounds of the finest running level's
   allocated bricks and the bounds of the coarsest level's. A view this far away
-  is a perspective camera whose rays diverge by at most the region's half-width
-  over D across its image, so D is chosen to hold that divergence under half
-  the light's penumbra angle; the march, the beam and the engine are the ones
-  every view uses, and nothing new marches. A hit's visibility toward the light
-  is a percentage-closer lookup in the view whose region holds it, filtered
-  over the penumbra's width at the hit. A hit outside both regions marches its
-  own shadow ray from a counted, budgeted allowance.
+  is a perspective camera whose maximum divergence is bounded by
+  `atan(R / Zmin)`, with R the region's maximum transverse radius, image corners
+  included, and Zmin its nearest camera-space depth. D holds that angle under
+  half the light's penumbra angle. A zero penumbra has no finite D satisfying that
+  rule. Near and far bounds cover the light-to-receiver caster volume, including
+  the camera's offset D; the ordinary world's camera far distance cannot clip
+  it. G3 establishes the projection's precision and sampling limits below.
+  The march and beam are the ones every view uses. A hit's visibility toward
+  the light is a percentage-closer lookup in the view whose region holds it,
+  filtered over the penumbra's width at the hit. An out-of-region or unsupported lookup
+  marches its own shadow ray from a counted, budgeted allowance; unfinished or
+  unscheduled visibility is zero and counted. Point and spot lights do not use
+  a camera far along a direction: shadow rays start at the hit and stop at the
+  light's true position, or use a projection from that position covering its
+  supported directions. The one light interface supplies those requirements;
+  unshadowed lights stay unshadowed. Both region maps carry light and geometry
+  generations, and a solve reads only regions valid for its pinned snapshot.
+  Alternating refreshes never publish an old region as current.
 - **`shade`** turns a probe's stored hits into light. Each hit's outgoing light
   is the diffuse term the views pass would shade it with, from every source
   below, and the cache's own irradiance at the hit from the preceding complete
@@ -2348,15 +2372,21 @@ so it records nothing and holds no memory. Its parts:
   progress.
 - **The views pass applies the cache** where a lit surface shades. It finds the
   finest level whose cell holding the point is allocated, offsets the point
-  along its normal by a bias b to q, chooses its component by the side of the
-  cell's plane that q lies on (in a complex cell, by an exact trace from q to
-  each active corner, counted), and weights that component's active, traced
-  corners by trilinear position and by facing, renormalized over them. It adds
-  the irradiance to the diffuse radiance the material shades by, and evaluates
-  the field nowhere outside a complex cell. A component whose corners are all
-  inside geometry is occluded and gives zero; a cell that is unallocated or not
-  yet traced is pending and reads the next coarser level, and past the coarsest
-  the view shades as it does with indirect light off.
+  along its normal by a bias b to q without crossing geometry, and locates q's
+  cell, which can differ from the surface's. An unproved bias contributes zero.
+  A certified plane selects a component; otherwise the lookup tests q against
+  each active corner and admits only corners its own trace reaches, never a
+  whole component reached transitively through another corner. It weights the
+  admitted, traced corners by trilinear position and by facing, renormalized
+  over them. These rules also govern lookups at stored hits and continuation
+  points. All their field work, bias checks included, counts against a bounded
+  allowance; an unfinished lookup gives zero, not ambient or sky, and never
+  renormalizes a partly scheduled set of checks. It
+  adds the irradiance to the diffuse radiance the material shades by, and
+  evaluates the field only for the required visibility checks. A component
+  whose corners are all inside geometry is occluded and gives zero; a cell that
+  is unallocated or not yet traced is pending and reads the next coarser level,
+  and past the coarsest the view shades as it does with indirect light off.
 
 **The artist's model.** Global illumination is a typed section with three kinds
 of layer, each counted, each with the lowest tier it runs at, and each an
@@ -2392,8 +2422,8 @@ A palette entry gains `bleed`, a colour multiplying its albedo in the light it
 sends into the cache (default white), and `receive`, a gain on the indirect
 light it takes (default one); a near-black costume can glow-receive, a
 saturated floor can bleed less. A light gains `bounce`, the share of it that
-bounces (default one): a stage key light can light without bouncing, a lantern
-can bounce more than it lights. A placement gains `indirect: cast | receive |
+bounces (default one): a stage key light can light without bouncing, while a
+lantern keeps its full bounce. A placement gains `indirect: cast | receive |
 off`, which overrides the section's `bodies` for its instances through an
 instance flag beside the shadow-participation flags
 (`field/sdf-instance-flags.hlsli`); `receive` and `off` apply only to whole,
@@ -2404,8 +2434,7 @@ P18-3; a level's spacing, reach, radius and tier, the count and order of
 levels and `bounces` are structure and are never keyed, because changing one
 reallocates the cache or its solve. The validator bounds every gain, colour and
 reach before anything allocates or shades: `screens`, `feedback`, `bleed` and a
-light's `bounce` at most one, so the transport stays contractive, and every
-value representable in the maps' formats.
+light's `bounce` at most one, and every value representable in the maps' formats.
 
 The palette's `bounce` is renamed `fill`, which is what it is, and every
 authored use (the Moth's) migrates in the same change. A fill is the floor
@@ -2415,10 +2444,12 @@ bounce and the computed one are never added together.
 
 **Decisions.**
 
-- **A world-space cache traced through the field.** The cache's cost is paid
-  per residency and per change, never per view and per frame. Four seats, every
-  camera view, a mirror and a routed portal window read one cache, a camera
-  that pans over a still world costs nothing but the bricks it newly demands,
+- **A world-space cache traced through the field.** Probe tracing is paid
+  per residency and per change. Receiver lookups, including any visibility
+  traces, are paid by each view that renders. Four seats, every
+  camera view, a mirror and a routed portal window read one cache. A camera
+  that pans over a still world demands new bricks and pays its receiver lookups;
+  from G7 its changing portal source image can also queue a solve,
   and a mirror, a portal window and the main view agree on how bright a wall
   is. The view-local scales the light stage applies today (`sunScale`,
   `ambientScale`) become inputs of the residency's solve: views with equal
@@ -2432,7 +2463,8 @@ bounce and the computed one are never added together.
   traced corner, and only then reads that level (the continuation rule below).
   Empty space is cheap to march, because the clearance is large there, so
   support never has to be allocated in empty space: a fine ray inside a sealed
-  hall marches on to the hall's wall. Sky is read only at a world exit, the far
+  hall marches on toward the hall's wall within its remaining steps, becoming
+  unresolved if they run out. Sky is read only at a world exit, the far
   distance the camera also treats as sky; reaching a level's reach proves
   nothing about the sky. Each level allocates bricks of 4×4×4 probes from a
   pool of its own size, demanded within `radius` of each view's camera, or
@@ -2451,24 +2483,22 @@ bounce and the computed one are never added together.
   demand is sparse, because surfaces are two-dimensional; world segments and
   conservative instance bounds can still demand more, which allocation counts
   and refuses at the pool's limit.
-- **The field partitions every cell, so walls do not leak.** Moment-based
+- **The field partitions every cell; receiver visibility needs its own proof.** Moment-based
   probe visibility, as irradiance fields use it, is an estimate: a texel that
   mixes a 0.1 m hit and a 10 m one has a 5 m mean, and a surface 1 m behind the
   near wall gets full weight, which renormalization then makes worse. The cache
-  keeps no distance moments. Instead each cell's corners are connected only by
-  exact field traces, and a receiver reads only the corners of its own
-  component. A surface that cuts every segment between two groups of corners
-  separates them, and a sealed wall of any thickness that crosses a cell does
-  exactly that. For a cell cut by one planar sheet, the fitted plane lies
-  inside the sheet, because each blocked segment is traced from both ends and
-  so hits both of its faces, so
-  every receiver in free space on either side chooses its own side, however
-  thin the sheet. The precise guarantee, its bound and its laws are under
-  the guarantees below. The same
-  rule darkens the floor under a table, which the table separates from the
-  probes above it, and errs dark beside a small occluder inside one cell,
-  never light through a wall.
-- **A probe stores hits, so the cache relights without marching.** Each probe
+  keeps no distance moments. Connecting corners by clear segments establishes
+  their connectivity, not visibility from every point in the cell. A plane
+  fitted to both faces of a slab need not lie inside the slab everywhere; a
+  junction or a small interior occluder can be absent from every sampled
+  segment. Nor does a tolerance on those samples bound the unsampled field.
+  Only a proven separator can replace the receiver's own corner traces. G1
+  establishes that shortcut, including stored-plane rounding and relocated
+  corners, before G2 adopts it. Without it the exact lookup remains the
+  reference, and its counted cost is an open admission requirement. Omitting
+  visibility can err bright as well as dark; no dark-only or τ-wide residual
+  is claimed for an uncertified fit.
+- **A probe stores hits, so the cache relights without retracing them.** Each probe
   has fixed strata of 64 directions, a spherical Fibonacci set rotated by a
   rotation derived from the probe's key through an integer hash, the same on
   the CPU and both backends, never from a clock or a random stream. A stored
@@ -2509,8 +2539,10 @@ bounce and the computed one are never added together.
   shadowed light turns. A light view answers the same question for every hit by
   position with one depth-only render of its region per slot, about a quarter
   of a million rays, coherent enough for the beam, and the engine already
-  renders camera views of a residency. Its error is bounded by its texel size
-  and its divergence, both reported, and held to the per-hit reference by law.
+  renders camera views of a residency. Texel size and divergence describe its
+  sampling, not a general visibility-error bound: an occluder between sampled
+  rays can be missed entirely. G3 establishes the supported footprint and
+  fallback against the per-hit reference before this replaces hit shadows.
   P18-10's light shafts and P18-13's secondary shadows may read the same views.
 - **What it gathers, each source counted once.**
   - *Lights:* each light's diffuse term at each hit, through the one
@@ -2569,11 +2601,14 @@ bounce and the computed one are never added together.
   | Lighting-visible (a light's colour or intensity, a keyed material colour or emission, a screen's image, a lighting-visible sky value) | a new solve over valid hits | `views` onward |
   | Shadow direction (a shadowed light turning past P18-13's fraction of its penumbra; its position, reach, penumbra or slot ownership changing) | its light view re-renders, then a new solve | `shadow` and `views` onward |
   | Geometry (a program upload, a carve, a moved casting body) | invalidate the hits, partitions and light views it reaches; `classify` and `trace` them, then a new solve | every pass |
-  | Camera | new bricks only | every pass |
+  | Camera | new bricks; from G7, a changed portal source image also queues a lighting snapshot | every pass |
 
-  A geometry change invalidates every probe whose reach ball meets the changed
-  bounds' previous or current sphere, rays that missed included, and every
-  light-view region it overlaps; the hits of that geometry epoch and every
+  A geometry change invalidates every probe whose traced paths can meet the
+  changed bounds' previous or current sphere, rays that missed or sought
+  support beyond their level's reach included. Until a conservative bound on
+  those paths is stored, it invalidates the residency's whole cache. A light
+  view is invalidated by changes anywhere between the light and its receivers,
+  not just inside the receiver region. The hits of that geometry epoch and every
   radiance derived from them are withdrawn before the next apply, so an
   exhausted budget never leaves an occluded hit emitting through a body. A
   positional light dirties the probes whose stored hits meet its old or new
@@ -2602,23 +2637,41 @@ bounce and the computed one are never added together.
   reusable. Replacing the producers' CPU colours with the reduction moves
   pixels with indirect light off, so that replacement is its own explained
   baseline, not part of the off switch.
-- **Portals read their destination one frame late, and that ends every
-  cycle.** A cache that sees a screen showing another world reads the
-  reduction of that view's preceding completed output, through the graph's
-  previous-frame edge, as a camera view reads the views a screen shows. No
-  cache ever reads a view of the same frame, so mutual portals (A's cache
-  reading B's view, B's cache reading A's) form no same-frame cycle, and two
-  residencies sharing an endpoint are no exception. Light through a portal
-  lags its destination by one frame per portal it crosses. The loop between
-  two facing portals is a fixed-point iteration, one step a frame: the
-  validator holds `screens`, `feedback`, `bleed` and every light's `bounce` at
-  most one, and diffuse albedo is below one, so its gain is below one and it
-  converges geometrically. A capture of a world showing portals runs its
-  dependency closure cold for a fixed count of portal iterations (two by
-  default, stated on its row) after the fixed solve, so the result does not
-  depend on how long the world had been running. On a capture frame a tainted
+- **Portals use previous outputs in a finite solve.** A cache that sees a
+  screen showing another world reads a completed reduction through the graph's
+  previous-frame edge, so mutual portals form no same-frame cycle. That edge
+  alone specifies neither one frame of latency nor convergence: a destination
+  can render less often, a cache solve spans frames, unit albedo is legal, and
+  view gains and direct screen images can make the loop's gain at least one.
+  Per-source caps do not bound the sum of every return path.
+
+  Live rendering and captures use a fixed count of portal iterations, two by
+  default, recorded with the capture. An external lighting or camera change
+  starts one frozen snapshot of the dependency closure; derived portal outputs
+  do not restart it. The initial portal reductions and dependent radiance and
+  view histories are zero, with valid geometry records reusable. An initial
+  complete lighting solve and destination render use zero portal emission.
+  Each portal iteration then pins the preceding reductions, finishes every residency's whole
+  finite lighting solve, renders the destination views and their reductions,
+  and publishes them together before the next iteration. No member advances on
+  whichever GPU completion happens first. The final cache generation stands;
+  subsequent display renders do not feed another portal iteration. The newest
+  external snapshot queues while one finishes, as for an ordinary solve.
+
+  A moving portal image therefore has a reported age measured in completed
+  solves, not a promised one-frame delay. Routing changes, cuts and crossings
+  withdraw inputs from the wrong view epoch; pending light is a reported dark
+  fallback. G7 measures the camera-motion and crossing discontinuities against
+  its declared image and latency limits before claiming a lit crossing. A
+  capture resets the whole closure, including previous-output edges and P15
+  histories, and advances the iteration barrier only after all required work
+  completes. It then freezes the final portal reductions during P15's samples.
+  Different completion orders give the same result on each backend; pixels
+  across backends compare under the tile tolerance. On a capture frame a tainted
   destination's previous output binds nothing (`RenderGraphRuntime.Withholds`),
-  so its emission is zero there.
+  so its emission is zero until an untainted iteration publishes. The finite
+  solve checks intermediate format bounds too; gain caps alone do not prevent
+  overflow over several sweeps and return paths.
 - **Each world's cache is its own, and nested views are budgeted by what they
   show.** A session residency, an infinity view (P18-11) and a routed scene's
   endpoint each own a cache when a view of theirs has indirect light on, under
@@ -2652,8 +2705,9 @@ bounce and the computed one are never added together.
   what the kernels do inside a dispatch (a dormant probe's skipped rays, a
   complex cell, an unresolved ray) is `PerBackendDeterministic`, like every
   march. A capture starts its dependency closure cold from one frozen
-  presentation snapshot (materials, poses, slot fades, filled screens), runs a
-  fixed trace schedule, a fixed solve, its portal iterations and then P15's
+  presentation snapshot (materials, poses, slot fades, filled screens and view
+  cameras), runs a fixed trace schedule, an initial complete solve and complete
+  solves inside each portal iteration when present, and then P15's
   fixed samples, and serves; its manifest entry records the unresolved rays. A
   timeout refuses rather than serving an intermediate image. Pixels compare
   under the tile tolerance; the simulation hash must equal the indirect-off
@@ -2670,49 +2724,78 @@ bounce and the computed one are never added together.
 **The guarantees and their bounds.** These are the transport rules G1 holds on
 the CPU before any layout is settled, each with its counterexample laws.
 
-- **Walls.** *Guarantee:* within a cell, a receiver never reads a corner probe
-  that a surface separates from every corner on the receiver's side, where
-  "separates" means every straight segment between them is blocked by an exact
-  field trace. A sealed room therefore takes no light from probes outside it
-  through any wall, of any thickness, that crosses a cell as one planar sheet.
-  *Bound:* the separating plane is fitted within the tolerance τ, a tenth of
-  the spacing; where a curved sheet is fitted, a receiver whose offset point q
-  lies within τ of the sheet may choose the wrong side, so light can reach at
-  most a τ-wide band beside a curved surface. A complex cell resolves each
-  corner with an exact trace from q, which leaks nothing. Inside one component,
-  an occluder that separates no corners (a pillar inside a cell) is not
-  resolved, so light passes around it within that cell. *Laws:*
+- **Walls.** *Required guarantee:* a receiver reads a corner only when the
+  field proves the segment from its same-side offset q to that corner clear,
+  either directly or through a sound shortcut. Failure to finish a check
+  excludes that corner. This excludes probes across a sealed planar wall,
+  including a slab's two faces; membership in a connected component alone does
+  not. *Open bound:* the fit tolerance τ (a tenth of the spacing) bounds only
+  the sampled hits, not the separator over the cell. G1 supplies a conservative
+  certificate and its storage-error margin or keeps the exact lookup and
+  proves its cost admissible. No τ-wide or dark-only interpolation error bound
+  follows from the present fit. Even dropping a corner can brighten a
+  renormalized estimate when the dropped corner was darker. *Laws:*
   `IrradianceVisibilityLawTests` build a sealed dark room with 0.05 m walls,
   planar and curved, beside a bright exterior, with receivers throughout a
   1.5 m cell on both faces, on the floor at the wall's foot, under a table and
-  beside a doorway, and hold the dark side's irradiance to G1's reference
-  within a stated error and the lit side's light retained (red legs: the
-  partition skipped, an unfitted plane, moments in place of the partition,
-  renormalization across components).
-- **Continuation.** *Guarantee:* a ray reads sky only at a world exit; it reads
-  a coarser probe only from the component of the coarser cell that holds its
-  point, and only that probe's nearest stored ray whose hit lies beyond the
-  point along the ray (`dot(h − e, ω) > 0`), or which itself continued or
-  exited, so no interval the fine ray already crossed is counted twice.
-  *Bound:* the coarser probe's ray starts at its own position, not the fine
-  ray's point, so geometry within the coarser cell's diagonal of the fine
-  ray's line can be missed or added (parallax). *Laws:*
+  beside a doorway. They also put a receiver at a T-junction and a cell corner,
+  between two thin sheets, beside a small occluder missed by all 28 segments,
+  and within the stored plane's rounding error of an oblique slab. They hold
+  every admitted corner to the receiver's `LineOfSight`, check that the bias
+  crosses no wall, and hold dark and lit sides to the reference (red legs: a
+  fit accepted as a certificate, transitive connectivity used as visibility,
+  bias crossing a second sheet, moments replacing the partition, and weights
+  renormalized across components).
+- **Continuation.** *Required guarantee:* a ray reads sky only from a traced
+  world exit, and reads coarser support only after the receiver-visibility
+  check above. Continuation replaces the unresolved suffix once; no cleared
+  prefix or second level is added to it. For the original endpoint e and
+  direction ω, each accepted terminal hit h satisfies `dot(h − e, ω) > 0`,
+  with a margin for stored-distance error. A continued coarse ray must resolve
+  its terminal record and apply that same test; its continuation flag alone
+  admits nothing. A rejected candidate leaves the fine ray marching within its
+  remaining step budget, then unresolved if it exhausts.
+  *Open representation:* the test applies before angular or spatial filtering.
+  A radiance texel that has already mixed hits before and after e cannot answer
+  it. G1 specifies terminal provenance and the storage and reads needed to
+  filter individual contributions; G2 cannot adopt the current layout until
+  that is settled. The dot test is a forward-half-space test, not a proof that
+  differently directed rays cover the same interval. *Bound:* if the coarse
+  ray starts distance d from e and differs by angle δ, its displacement from
+  the fine line after distance t can be as large as `d + t·sin(δ)`, including
+  relocation, direction binning and encoding error. It is not bounded by a
+  cell diagonal alone. G1 bounds this footprint through the remaining far
+  distance, including every continuation level, and gates the resulting bright
+  and dark errors against the reference. *Laws:*
   `IrradianceContinuationLawTests` put a small receiver inside a large sealed
   emissive shell whose middle no coarse support reaches, a thin blocker
   between a ray's end and a coarse probe, every coarse probe inactive, a
-  refused pool and a wall beyond the coarsest level's reach, and hold each to
-  G1's reference with no sky in a sealed shell (red legs: a finite-reach miss
-  read as sky, dormant support read anyway, the beyond-the-point test
-  dropped).
+  refused pool and a wall beyond the coarsest level's reach. They add a distant
+  narrow emitter between the fine and coarse directions, a texel mixing a hit
+  behind e with one ahead, and a two-level continuation whose terminal hit is
+  behind e. They hold each to its stated footprint bound, with no sky in a
+  sealed shell and at most 64 march steps even in a large low-clearance hall
+  (red legs: reach read as sky, the step budget restarted, a prefiltered texel
+  or unresolved continuation accepted, the terminal test dropped).
 - **Bounce-source visibility.** *Guarantee:* each hit's visibility toward a
-  shadowed light is its own, never its probe's. *Bound:* a light view's answer
-  differs from a march from the hit only within its texel size at the hit and
-  its divergence, which is under half the penumbra angle by the choice of D.
+  shadowed light is its own, never its probe's. *Open bound:* the distant
+  perspective view approximates only a directional light. Angular divergence
+  δ displaces a shadow by as much as `L·tan(δ)` over caster-to-receiver distance
+  L, in addition to projected texel size, depth and bias error; the receiver
+  region alone does not bound L. A subtexel occluder may be missed entirely,
+  and percentage-closer filtering is not the per-hit soft-shadow march. G3
+  specifies caster coverage, projection limits, depth precision, resolution
+  admission and the budgeted exact fallback, with a stated error against that
+  reference. Until then 512² and half a penumbra are not a correctness bound.
   *Laws:* `IrradianceHitVisibilityLawTests` put a sunlit and a shadowed patch
   inside one probe's cell, move a thin occluder off every probe-to-hit segment
-  and onto a hit-to-light one, and reassign a slot, holding each hit to its own
-  `LineOfSight` (red legs: the probe's visibility substituted, the shadow path
-  left valid).
+  and onto a hit-to-light one, put a subtexel pole far in front of a receiver,
+  and exercise zero penumbra, a region beyond the ordinary camera far bound,
+  a point light with receivers on opposite sides, and a slot fade. They compare
+  binary visibility to `LineOfSight` and filtered visibility to the per-hit
+  shadow reference (red legs: the probe's visibility substituted, the caster
+  volume clipped to receiver bounds, a directional camera used for a positional
+  light, an old region or reassigned slot left valid).
 - **Acceptance and exhaustion.** *Guarantee:* a hit lies within `ε·t` of its
   surface, and an exhausted ray adds no light. *Bound:* the unresolved share is
   a counted row, held under a stated ceiling on the fixtures and recorded with
@@ -2736,13 +2819,16 @@ about 700,000 of them lit at a hit share of 0.6.
 | Trace budget a frame | 0 | 128 probe strata, 8,192 rays | 512 probe strata, 32,768 rays |
 | Steps a ray | — | 64, continuation included, plus one gradient evaluation at a hit | 64, plus one |
 | Classify budget a frame | 0 | 4 bricks | 8 bricks |
-| Light views | none | 1 slot, 512² each | 2 slots, 512² each |
+| Light views | none | 1 held + 1 fade slot, 512² each | 2 held + 1 fade slot, 512² each |
 | Shade budget a frame | 0 | 4,096 probes, 524,288 hits | 8,192 probes, 2,097,152 hits |
 | `bounces` at most | — | 2 | 4 |
 | Bodies | — | receive | cast |
 | Near field (G9) | — | off | on |
-| Cache and light-view bytes | 0 | 46,596,096 | 130,940,928 |
+| Candidate cache and light-view subtotal, no fade | 0 | 46,596,096 | 130,940,928 |
+| Candidate subtotal with all fade slots | 0 | 65,470,464 | 149,815,296 |
 
+These byte counts describe the candidate layout, not an admitted total; G1's
+visibility certificate and continuation representation remain to be costed.
 A probe holds its stored hits, 8 bytes a ray (a half distance, an 8-bit
 octahedral normal pair, a 16-bit material and 16 bits of state); two
 generations of 6×6 irradiance texels with a one-texel border, 8×8 texels of 32
@@ -2756,21 +2842,44 @@ distance maps (2,097,152) and its view's scratch, whose visibility record is 64
 bytes a pixel (16,777,216), held once per slot because its two regions render
 on alternate refreshes. At `high` the `near` level's 16,384 probes take 2,588
 bytes, the `room` and `world` levels 3,100 each, 93,192,192 bytes, and two slots
-add 37,748,736. Brick tables, the update list, the screen reductions, counters,
-descriptors and alignment are counted by G2's ledger in `world.budget`, beside
-each reconstructing view's history.
+add 37,748,736. P18-7's one fade slot adds another 18,874,368 bytes at either
+tier; authored slot counts use K + F, never K alone. The 16,777,216-byte
+scratch is justified by `SdfWorldPackage.VisibilityRecordByteLength`, but is
+only the visibility buffer. Reusing the march group also counts its instance
+masks, tile and instance bounds, dispatch arguments and mesh targets; the
+current 16-byte mesh target and 4-byte depth attachment alone add 5,242,880
+bytes at 512² for each concurrently owned set. G3's depth-only fragment either
+declares those resources or proves which it omits. Brick tables, update lists,
+screen reductions, counters, descriptors, alignment, frame slots, publication
+and replacement peaks join the full G2/G3 ledger in `world.budget`, beside each
+reconstructing view's history. Serial execution alone does not alias resources
+owned by separate graph instances.
 
 The worst frames at `medium` against today's work: today's ambient occlusion
 evaluates the field about 2,100,000 times on every frame `ambient` runs; a
-trace frame at most 532,480 times (8,192 rays of 65), only while there is
-something to trace; a classify frame at most four bricks of 64 probe
-evaluations, relocation and 1,792 partition traces of at most 16 steps (a
-cell for each probe, 28 segments a cell), with blocked ones traced twice; a light
-view refresh one depth-only 512² render, about a quarter of the view's own
-primary pass; a shade frame 524,288 hits, each a walk of the lights, a light
-view lookup per shadowed light and one cache lookup, which is about as much
-shading as `views` does but no field evaluation; and the apply one cell record,
-one component choice and eight filtered irradiance reads per lit pixel. Whether
+trace dispatch at most 532,480 times (8,192 rays of 65), only while there is
+something to trace. Classification of four bricks costs at most
+`4 × 64 × 28 × 2 × 16 = 229,376` segment evaluations, plus at most 768 probe
+evaluations with one gradient and one clearance recheck per relocation attempt:
+230,144 in all. When both run the subtotal is 762,624, before lookup visibility
+or light-view work. A light-view refresh is one depth-only 512² render per
+held or fade slot; ray count is not field-evaluation count, and mask, beam and
+march rows all count. A shade frame visits 524,288 hits, each walking all N
+lights, using visibility per shadow slot and a cache lookup. A complex lookup
+can march in `shade`, `trace` and `views`, not just at visible pixels.
+
+G1 fixes a per-lookup step cap and a deterministic aggregate allowance for each
+of those passes, including bias validation, and for the per-hit shadow fallback.
+An unfinished lookup contributes zero as a whole and records its reason; it
+does not renormalize across partly scheduled checks or substitute unoccluded
+ambient. The fixtures bound that dark fallback's share
+and image error. Merely calling complex cells rare is not admission: at 16
+steps for each of eight corners, 524,288 hit lookups alone can add 67,108,864
+field evaluations, and roughly 700,000 visible receivers add 89,600,000 per
+view. The four-brick classification budget bounds neither cost. G2 to G5 must
+show the combined worst frame, including clutter, N lights, slot fades and
+every view's apply. Until those allowances and errors are set, the RTX 2060
+budget remains open. Whether
 that fits the RTX 2060's `medium` frame is decided from the counted rows G2 to G5
 record, not from estimates. If it does not, `medium` steps down this ladder in
 order, each step re-recorded, and keeps the owner's 1.5 m `room` spacing
@@ -2778,16 +2887,26 @@ throughout: 64 rays a probe (halving the hit bytes and the trace), a 24 m `room`
 radius, half the trace and shade budgets (twice the latency), one bounce. Only
 if the last step still misses does the spacing return to the owner.
 
+Twelve frames at `medium` is only the shading schedule for already traced
+support and valid light views: `16,384 / 4,096 × (1 + 2)`. A full cold pool
+needs 256 trace frames at the ordinary budget and 64 classification frames,
+which can overlap, before dependent work finishes. Shadow refreshes, lookup
+allowances, queued snapshots and each portal iteration add their own latency;
+captures use the separately counted fourfold budget. G5 and G7 report those
+cases separately rather than promising twelve frames for all lighting changes.
+
 **Counted rows.** Every indirect pass counts through the node's kernel
 counters, as every SDF pass does since P15-1, and each row carries its level
 or slot as the detail label P18 adds to the ledger:
 
 - `gpu.march.steps` under `indirect$classify`, `indirect$trace` (a hit's
-  gradient evaluation counts as a step) and `views` for complex cells (detail
-  `indirect`), and each light view's march rows under its own instance;
+  gradient evaluation counts as a step), `indirect$shade` and `views` for
+  lookup visibility and shadow fallbacks (detail `indirect`), and each light
+  view's march rows under its own instance;
   `gpu.texels.written` under `indirect$shade`;
 - `gpu.indirect.hits`, the hits `shade` lit, `gpu.indirect.samples`, the cache
-  lookups `views` made, `gpu.indirect.unresolved` and
+  lookups each pass made, `gpu.indirect.unresolved` (rays, lookup checks and
+  shadow fallbacks distinguished by detail) and
   `gpu.indirect.complex`, all `PerBackendDeterministic` kernel kinds;
 - in an `indirect` `WorkCounterSet` on the host, all `Deterministic`:
   `indirect.rays.scheduled`, `indirect.probes.scheduled` by reason
@@ -2800,8 +2919,12 @@ and a required zero wherever no work is allowed. Change-class fixtures start
 from a completed cache with no unrelated pending work: every indirect row at
 `low`; every `indirect$trace` and `indirect$classify` row on a
 lighting-visible, shadow-direction or visual-only frame; every light view row on
-a lighting-visible or visual-only frame; every indirect row on a frame of a
-completed still world; and `gpu.indirect.samples` wherever `views` does not run.
+a lighting-visible or visual-only frame; every cache-update row on a frame of a
+completed still world; and each pass's lookup rows wherever that pass does not
+run. Lighting-visible frames can spend the bounded visibility allowance in
+`shade`; their zero is for path retracing and classification, not every field
+evaluation. Cached exact visibility checks may remove that work only after G1
+accounts for their storage and invalidation.
 
 **Build sequence.** Each slice lands alone, in order unless its dependencies
 say otherwise, with its counted rows, its laws and canaries, and any parity
@@ -2826,9 +2949,9 @@ re-record explained in the same change.
      - **The CPU model.** The cache's rules as the GPU's reference, as
        `ImageSourceConversion` is the conversion kernels': the lattice, keys
        and positions, the direction strata, the texel layouts and border
-       rule, classification and relocation, the cell partition over
-       `LineOfSight` with its plane fit and complex cells, acceptance and
-       exhaustion, the continuation rule with its beyond-the-point test, the
+        rule, classification and relocation, the cell partition over
+        `LineOfSight` with a proven shortcut or bounded exact lookup, acceptance
+       and exhaustion, the continuation rule with terminal provenance, the
        apply, and the finite two-generation solve.
      - **The schedule.** Demand, allocation and eviction, the dirty rules, the
        priority order, progress, the budget and the update list, as pure
@@ -2853,8 +2976,12 @@ re-record explained in the same change.
      the same inputs to the same list in any arrival order, a pan with no new
      bricks and a completed still world to empty lists, two cameras sharing a
      brick to one allocation, and eviction never taking a demanded brick nearer
-     a camera than one it keeps. Nothing outside the tests references the
-     folder.
+     a camera than one it keeps. Dense clutter saturates each lookup allowance
+     without exceeding it, with excluded work counted and no unproved corner
+     read (red leg: only probe strata budgeted). The wall certificate or exact
+     lookup's admission, the continuation layout, and their error and storage
+     bounds are explicit G1 outputs; the slice does not finish with these
+     marked open. Nothing outside the tests references the folder.
    - Counted-cost gate: no GPU row moves. The model's laws state the per-frame
      counts and the partition and unresolved shares G2's ceilings start from.
 2. **G2, the cache traced and partitioned.** After P18-4 and P18-5 reach the
@@ -2885,34 +3012,43 @@ re-record explained in the same change.
      and classes on G1's fixtures to the CPU model on both backends (red leg: a
      mask that drops an instance inside the reach); `SdfIndirectGatherLawTests`
      hold the ball-masked march's hits and cleared intervals to the full field
-     with folds, CSG and an instance just outside the reach (red leg: a ball
-     one spacing short); `SdfPassPlanLawTests` plan the instance, its edge and
+     with folds, CSG and an instance hit only after marching past reach (red
+     legs: a ball one spacing short, the original mask kept past reach);
+     `SdfPassPlanLawTests` plan the instance, its edge and
      its barriers; an `indirect-cadence` canary reads scheduled rays only until
      the cache is traced and none after, and none on a pan with no new bricks
      (red leg: a schedule that re-traces what a camera sees); parity is
      unchanged; `puck counters --check` holds every indirect row's required
      zero in every recorded workload.
    - Counted-cost gate: at `medium` at most 8,192 rays and 532,480 trace
-     evaluations a frame, at most four bricks classified, the unresolved and
+     evaluations for scheduled probe rays a frame, at most four bricks and
+     230,144 classification evaluations, with lookup work separately capped.
+     A schedule law saturates both at once and includes every reverse segment
+     (red leg: one brick's partition count charged for four). The unresolved and
      complex shares within the fixtures' ceilings, none on a completed still
      world or a pan with no new demand, all of G2's ledger in `world.budget`,
      and every row zero with the lever off.
 3. **G3, the light views.** After G2.
-   - Delivers: one depth-only camera view per shadow slot of a residency with
-     indirect light on, its two regions alternating, its distance D from the
-     light's penumbra, its 32-bit distance output, its refresh on P18-13's
+   - Delivers: one depth-only camera view per directional shadow slot of a
+     residency with indirect light on, its two regions alternating, its distance
+     D from the light's penumbra, its 32-bit distance output, its refresh on P18-13's
      rule, and the hits' lookup with its percentage-closer filter; a counted,
-     budgeted per-hit march for hits outside both regions; and the
+     budgeted per-hit march for unsupported and out-of-region lookups, the
+     region-generation checks and G1's hit-visibility bounds resolved; and the
      `indirect-light` debug view.
    - Touches: `WorldViewInstances`, `WorldViewNames` and its reversal law, the
-     view quality, `indirect/`.
+     view quality, the depth-only `SdfWorldPackage` fragment and its resource
+     ledger, the light interface, `indirect/`.
    - Done when: a device law holds every stored hit's light-view visibility on
-     G1's hit-visibility fixtures to the CPU's `LineOfSight` within the stated
-     texel and divergence bound (red leg: the probe's visibility
-     substituted); a view refreshes only past the rule's threshold.
+     G1's hit-visibility fixtures to the binary and soft-shadow references
+     within the established error, including the subtexel and distant-caster
+     cases (red leg: an unsupported projection accepted); a resource law
+     matches the complete allocation and replacement peak to independently
+     counted buffers and images (red leg: only visibility scratch counted).
    - Counted-cost gate: each light view's rows under its own instance, at most
-     one region render a frame per slot, zero on a frame whose slots' lights
-     have not turned.
+     one region render a frame per held or fade slot; fallback checks obey
+     their aggregate allowance. Refreshes are zero only once both regions are
+     current and neither geometry, region coverage nor light inputs change.
 4. **G4, bounce from lights and emission, on by default.** After G3.
    - Delivers: `shade` with its finite solve and its generations, the views
      apply with the partition, `fill` not applied while it is on; the
@@ -2957,8 +3093,9 @@ re-record explained in the same change.
      under their own tile contract with the simulation hash of the
      indirect-off control at their tick and after.
    - Counted-cost gate: at `medium` at most 524,288 hits shaded a frame, a
-     solve within `(1 + bounces)` sweeps, one cache lookup a lit pixel and no
-     field evaluation outside a complex cell; every row zero at `low`.
+     solve within `(1 + bounces)` sweeps, one cache lookup a lit pixel, and
+     `shade` and every view's lookup field work within G1's admitted allowances
+     and error ceilings; every row zero at `low`.
 5. **G5, change classes and standing.** After G4 and P18-6; slots after
    P18-7.
    - Delivers: the dirty rules in place of G2's epoch reset; the cache's
@@ -2972,7 +3109,8 @@ re-record explained in the same change.
      placement records, `tests/Puck.Counters`.
    - Done when: a law over the fake device drives one change of each class over
      a still camera and holds each frame to its class's work;
-     `IrradianceInvalidationLawTests` insert an occluder on a previous miss,
+     `IrradianceInvalidationLawTests` insert an occluder on a previous miss
+     beyond the probe's level reach,
      move one outside trace reach onto a hit-to-light segment, move a point
      light beside a hit whose probe is outside its influence, recolour then
      reassign a material and reassign a slot, comparing each completed result
@@ -2980,14 +3118,17 @@ re-record explained in the same change.
      left valid, no restart after a coarse level changed); an
      `indirect-moving` canary removes a wall by a row edit and reads its old
      bounce withdrawn at once and the room relit after its solve; an
-     `indirect-day` canary keys a light's colour and reads zero march steps in
-     the cache and the march group; an `indirect-orbit` canary re-renders a
-     light view only past the threshold; an `indirect-body` canary at `high`
+     `indirect-day` canary keys a light's colour and reads zero trace and
+     classify steps, with lookup checks within their allowance; an
+     `indirect-orbit` canary re-renders a light view only past the threshold;
+     an `indirect-body` canary at `high`
      dirties only what a moving body reaches, counted by reason.
    - Counted-cost gate: per class against G4's rows: no trace, classify or
      light view on a lighting-visible frame, no trace or classify on a
-     shadow-direction frame, nothing on a completed still world, and a moved
-     body's retraces within its reach ball.
+     shadow-direction frame, no updates on a completed still world, and a
+     moved body's invalidation covering the full traced paths. A slot fade
+     holds allocations and work to K + F, both light identities included
+     (red leg: only K slots charged).
 6. **G6, the sky through the cache.** After G4 and P18-9.
    - Delivers: world exits reading `sky.environment`'s map; the `sky` source,
      which when on replaces the harmonic ambient at the views pass and at hits;
@@ -2999,7 +3140,8 @@ re-record explained in the same change.
      canary reads a room with one window darker inside than its harmonic
      ambient and a terrace beside it within tolerance of it (red leg: the sky
      source off); parity's `indirect: on` stations re-recorded, explained.
-   - Counted-cost gate: a sky change marches nothing in the cache.
+   - Counted-cost gate: a sky change retraces no stored ray; lookup checks stay
+     within their admitted allowance.
 7. **G7, portals, screens and other worlds.** After G4; infinity views after
    P18-11.
    - Delivers: the screen emission reduction for every bound screen, read by
@@ -3009,26 +3151,35 @@ re-record explained in the same change.
      the analytic light at hits; emission from screens that show another world,
      read through the previous-frame edge; taint through every dependent light
      and history; caches for session, routed and infinity residencies with the
-     nested budgets; the follow in place keeping the destination's cache.
+     nested budgets; the finite portal iterations with closure-wide publication
+     barriers and cold resets; the follow in place keeping the destination's cache.
    - Touches: `SdfWorldResidency.BindScreens`,
      `SdfWorldTables.ScreenContent.cs`, `WorldScreenBinder`,
      `WorldSessionSceneEmitter`, `WorldRoutedScene`, `WorldViewInstances`,
-     `WorldCaptureGate`.
+     `WorldCaptureGate`, `RenderGraphRuntime`'s convergence and previous-output
+     handling, and their CPU scheduling laws.
    - Done when: an `indirect-portal` canary reads the floor before a portal
      onto a red-lit destination tinted red (red leg: `screens` at zero); a
      mutual-portal law plans two facing portals with no same-frame cycle,
-     converges their loop within a stated count of frames, and serves a cold
-     capture identically from different warm histories (red leg: a same-frame
-     edge, refused by the planner); a capture law holds a world whose screen
-     shows a filled external source to a cold solve with that fill after its
+     finishes exactly the declared iterations even with unit albedo and
+     amplified view gains, then schedules no further updates. It serves a
+     cold capture identically per backend from different warm histories,
+     cadence divisors, work batches and completion orders (red legs: old edge
+     images or P15 history retained, an iteration advanced before all solves
+     finish, derived portal revisions restarting the solve). A moving-camera
+     and crossing leg holds source age and image discontinuity to declared
+     limits and never reads a departed view epoch. A capture law holds a world
+     whose screen shows a filled external source to a cold solve with that fill after its
      light has bounced off ordinary surfaces and through history (red leg:
      only screen-face hits reset); a law holds the nested budgets, minimum
      progress and depth caps; `portal-walk` crosses with indirect light on and
      its crossing frame reads the destination's coarsest level (red leg: the
-     cache dropped on crossing).
+     cache dropped on a ready crossing); a cold crossing reports its fallback.
    - Counted-cost gate: the reduction's texels a bound screen a frame its image
      changed; each nested cache's rows under its own instance within its
-     budget; a depth-two reader adds no work.
+     budget; closure latency counts a complete solve and destination render
+     per iteration, including cadence and the minimum progress quantum; a
+     depth-two reader adds no work.
 8. **G8, asking why a surface is lit.** After G4 and the editor's E2, E4, E5
    and E6.
    - Delivers: `world.explain`'s indirect line, which reads the cached value at
@@ -3061,20 +3212,21 @@ re-record explained in the same change.
      near field on (red leg: added on top of the cache); a glossy, fogged
      surface adds no highlight or fog to the bounce (red leg: colour history
      reused); `temporal-ghosting` and `temporal-disocclusion` hold.
-   - Counted-cost gate: at most one ray every four render pixels and 12 steps a
-     ray; zero below `high`.
+   - Counted-cost gate: at most one ray every four render pixels and 12 march
+     steps a ray, plus continuation lookup checks within their separate
+     admitted allowance; zero below `high`.
 10. **G10, the tier defaults and the comparison.** The lead's call from the
     counted rows, beside P15-8 and P18-14.
-    - Delivers: the indirect legs of the counters workload recorded at each
-      tier on the RTX 2060 and the RTX 4070; the ladder above applied as far as
-      the rows require; `quality.puck`'s `indirect` rows as decided; and the
-      comparison the decision record names, run on the same fixtures: the cache
-      against screen-space indirect light over a probe fallback and against
-      cone occlusion extended to one diffuse bounce, each counted across every
-      view, light slot, history and byte.
-    - Done when: the chosen defaults' ceilings are recorded,
-      `puck counters --check` passes on the RTX 2060, and the comparison's rows
-      are recorded with the bound that decided each alternative.
+   - Delivers: the indirect legs of the counters workload recorded at each
+     tier on the RTX 2060 and the RTX 4070; the ladder above applied as far as
+     the rows require; `quality.puck`'s `indirect` rows as decided; and the
+     comparison the decision record names, run on the same fixtures: the cache
+     against screen-space indirect light over a probe fallback and against
+     cone occlusion extended to one diffuse bounce, each counted across every
+     view, light slot, history and byte.
+   - Done when: the chosen defaults' ceilings are recorded,
+     `puck counters --check` passes on the RTX 2060, and the comparison's rows
+     are recorded with the bound that decided each alternative.
 
 **Sequencing with other lanes.**
 
@@ -3116,6 +3268,13 @@ proposed.
 - **`bounce` becomes `fill`,** the floor tier's stand-in, never added to
   computed indirect light.
 
+**Open design blockers.** The design is not ready for implementation admission
+while these remain: G1's receiver-visibility shortcut or affordable exact
+lookup, its continuation representation and angular-error bound, and G3's
+light-view coverage and error contract. The aggregate lookup allowances and
+complete memory ledger follow those choices; the step-down ladder does not
+prove them. The counterexample laws above are requirements, not passing tests.
+
 **Open decision for the lead.**
 
 - **The tier defaults (G10).** Record, at 1920 by 1080 on the RTX 2060, every
@@ -3129,7 +3288,8 @@ bounced from its lights, its emissive surfaces, its screens, its sky and
 through its portals, from `.puck` and in the running World on both backends; a
 sealed room stays dark beside a bright exterior through walls as thin as the
 fixtures', and a sealed hall reads no sky; a completed still world spends
-nothing on cache updates, and a source-value change marches nothing; a capture
+nothing on cache updates, and a source-value change retraces no stored ray,
+with lookup checks within their admitted allowances; a capture
 with indirect light off is the capture without it, byte for byte; the
 counted-cost ceilings at the floor device hold every indirect row and its
 required zeros, re-recorded only in the change that explains the move and never
