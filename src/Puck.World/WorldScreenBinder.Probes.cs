@@ -450,6 +450,7 @@ internal sealed partial class WorldScreenBinder {
 
         if (m_renderAdapterLuid is not { } adapterLuid) {
             feed.Fault = "the render adapter reports no LUID";
+            feed.Refusal = feed.Fault;
 
             return;
         }
@@ -459,6 +460,7 @@ internal sealed partial class WorldScreenBinder {
             build: 10240
         )) {
             feed.Fault = "shared probe textures need Windows 10";
+            feed.Refusal = feed.Fault;
 
             return;
         }
@@ -476,6 +478,7 @@ internal sealed partial class WorldScreenBinder {
             width: width
         )) {
             feed.Fault = fault;
+            feed.Refusal = fault;
 
             return;
         }
@@ -503,6 +506,7 @@ internal sealed partial class WorldScreenBinder {
             SharedFenceHandle: targets.ProducerFenceHandle
         );
         feed.Fault = null;
+        feed.Refusal = null;
     }
     // Retires every probe's ring on the current device and keeps each feed's request, so after a device loss the next
     // publish provisions a fresh ring (a new generation) on the replacement. The render adapter's kernel host goes first,
@@ -531,6 +535,8 @@ internal sealed partial class WorldScreenBinder {
     private sealed class ProbeFeed(string id) {
         public bool Declared { get; set; }
         public string? Fault { get; set; }
+        // Why the probe's ring could not be provisioned, until a later provision succeeds.
+        public string? Refusal { get; set; }
         public string Id { get; } = id;
         public bool Live { get; set; }
         // How the kernel's writes reach the render device: the ring's shared fence unless the render device refused it,
@@ -616,6 +622,11 @@ internal sealed partial class WorldScreenBinder {
                 return m_descriptor;
             }
         }
+        public FrameRender Answer => (feed.Live
+            ? FrameRender.Rendered
+            : ((feed.Refusal is { } refusal)
+                ? FrameRender.Refused(reason: refusal)
+                : FrameRender.Waiting(reason: (feed.Fault ?? "probe awaiting a first frame"))));
         public string? Fault => (feed.Live
             ? null
             : (feed.Fault ?? "probe awaiting a first frame")
@@ -627,7 +638,9 @@ internal sealed partial class WorldScreenBinder {
         public void Dispose() { }
         public nint Handle() => feed.Handle();
         public void NotifyDeviceLost() { }
-        public void Publish(in FrameContext context) { }
+        // The binder services the ring each publish; a probe whose ring could not be provisioned refuses until a later
+        // provision succeeds, and one provisioned waits for its kernel's first frame.
+        public FrameRender Publish(in FrameContext context) => Answer;
     }
     // A view export on the Vulkan host: the render device's import of a texture and a fence the binder's headless
     // Direct3D 12 device made, which the engine writes and signals as it would an image of its own. The import goes first,

@@ -32,6 +32,10 @@ showing its tick, or a named `refusal` (`cameraInside` when
 `map(cameraPos) <= 0`, `busy`, `stale`, `failed`, `unserved`, `deviceLost`
 when the graphics device was lost while it was armed) with a
 `detail` naming the ticks.
+The offscreen host steps one tick per rendered frame (`FixedStepPump.TryStep`,
+and a tick whose frame the root reports not yet renderable is held and composed
+again), so every tick, a captured one included, has a frame of its own, a slow
+frame never bursts ticks, and a capture's frame reprojects from the tick before.
 
 Windowed and offscreen hosts hold their clock for a capture: the pump steps no tick past
 an armed capture's tick until the capture is served or refused, whatever keeps

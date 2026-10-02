@@ -69,29 +69,34 @@ never a Vulkan or DirectX type by name.
 
 A frame runs these kernels: `region-copy.comp` (from `Puck.Shaders`: the words each
 staged region of frame data owes, copied into its device-local buffer; see
-[what a frame uploads](../../docs/rendering/sdf/handbook/frame-rendering.md#what-a-frame-uploads)) → `sdf-sky.comp` (a direct, un-culled pass that
-fills every pixel of the view's output with the authored sky, before any tile is culled)
+[what a frame uploads](../../docs/rendering/sdf/handbook/frame-rendering.md#what-a-frame-uploads))
 → `sdf-instance-cull.comp` (the per-tile instance mask) → `sdf-beam.comp`
 (cone march over the tile-masked field) → `sdf-cull-args.comp` → the mesh pass
-(`sdf-mesh.vert`/`.frag`, rasterizing the frame's mesh draws) →
+(`sdf-mesh.vert`/`.frag`, rasterizing the frame's mesh draws, and `sdf-mesh-impostor.frag` the baked impostors' cards a view records) →
 `sdf-world-primary.comp` (camera traversal) → `sdf-world-surface.comp`
 (normals and curvature) → `sdf-world-ambient.comp` (ambient occlusion) →
 `sdf-world-shadow.comp` (the key light's soft shadow) → the views kernel
-(materials, lighting and diagnostics). The ambient and shadow passes skip a
+(materials, lighting and diagnostics, shading hits only into the lit image,
+premultiplied by coverage) → `sdf-sky-runs.comp` (the sky's field runs, only where
+coverage is below one) → `sdf-composite.comp` (the sky's runs in their authored
+order, the lit image over them by its coverage, the fog and the bounded media,
+into the output). The ambient and shadow passes skip a
 frame whose levers turn them off. The region copies are the
 residency's one upload a frame (`SdfWorldResidency.Submit`); every pass after
 it runs once per view as a pass of the view's `sdf.world` instance, into that
-instance's render grid. Native views use `SdfWorldPackage.NativeFragment` and
-write the output directly. Views whose render-scale ceiling is below native use
-`SdfWorldPackage.Fragment`: its final `sdf-resolve.comp` reconstructs full-output
-color from the render-grid color, which is one transient allocation. The graph
+instance's render grid. Native views use `SdfWorldPackage.NativeFragment`, whose sky and composite read
+the lit image and the visibility records views left. Views whose render-scale
+ceiling is below native use `SdfWorldPackage.Fragment`: its `sdf-resolve.comp`
+reconstructs the lit image and each pixel's surface transport at the output extent
+from the render-grid color, which is one transient allocation, and the sky and
+composite follow it, so the sky is never resampled or kept in history. The graph
 planner decides every barrier. `place` then places the output in its seat rect,
 copying the texels exactly when the output's scheduled extent equals the rect's
 pixels and resampling them otherwise. The residency counts its upload as three
 passes, `fillers`, `bricks` and `upload` (`SdfWorldTables.PassLabels`), in a
 ledger it owns, so counts survive a rebuild of its tables, and each view's node
-counts the view's passes as `sdf.world$sky` through `sdf.world$views`, their
-kernels' march steps and texels written among them. The views
+counts the view's passes as `sdf.world$mask` through `sdf.world$composite`, their
+kernels' march steps, texels written and sky evaluations among them. The views
 kernel ships in three compiled variants
 (`SdfViewsKernelVariant.Full`/`.Folds`/`.CoreOps`). Folds strips heavy operations;
 CoreOps also strips the remaining exotic cases. The program selects the smallest
@@ -119,7 +124,7 @@ allocates scratch once; a smaller current grid (`ResolvedRenderScale`, such as a
 layout transition's dip) changes dispatches and the packed visibility stride
 without replacing storage or rebuilding. The full-output color is priced beside
 the ceiling targets in the node's memory account. The scheduler prices each pass
-at its current grid. Views at a native ceiling retain their ten passes, allocate
+at its current grid. Views at a native ceiling retain their eleven passes, allocate
 no resolve resources and ignore the current grid. The shared reconstruction module
 serves both `place` and resolve; `SdfResolveDeviceLawTests` executes the shipped
 resolve kernel against the resample canary's analytic values.
@@ -284,8 +289,25 @@ host with a capture armed: it steps no further tick until the capture is served
 or refused, and a capture refused while the world's residency is not ready names
 its `NotReadyReason`, such as "the engine's pipeline set is building (10 of
 11 pipelines created; waiting on sdf-world-views)" (see [the World guide](../Puck.World/README.md#usage)).
-A residency is `IsReady` once its set is installed and its tables hold its
-first captured frame; the World is ready once the world's residency is and the
+A residency is `IsReady` once its tables are built from every pipeline but the
+views variants, hold its first captured frame, and the views kernel its program
+selects (or a fuller one) is built, so a program that selects the core or folds
+variant never waits for the full ISA's translation. A captured program whose
+views kernel is still building is not uploaded: the residency holds the frame it
+last packed, which keeps rendering, and is not ready, naming the kernel, until
+that kernel is built. The pending frame survives a film gate that captures
+nothing, and `WaitReadyAsync` waits for the hold to release. A newer capture
+replaces the pending frame. A views kernel whose creation fails, other than by a
+device loss, is refused rather than thrown: the residency holds its frame the
+same way, and `NotReadyReason` names the kernel and its failure. The error stream
+reports each slot's refusal once, naming the kernel, the failure, and its recovery.
+Every views slot is polled after the tables are built, including variants the
+program does not select, so a device loss in any of their builds reaches recovery.
+A program whose own variant was refused renders with a fuller variant that is
+built. No frame
+builds a refused kernel again; a kernel reload (`world.shaders.reload`) builds
+it again from the bytecode it was refused with, or from the tree's, and a device
+loss rebuilds every pipeline. The World is ready once the world's residency is and the
 render graph's root has rendered over a completed view, which is the fact
 `world.wait ready` waits on. A host that produces frames on its own thread and
 has nothing to present until the builds finish blocks between frames on
@@ -360,8 +382,8 @@ names its file and line. The issuing text session's later lines wait for the
 request to settle.
 
 `SdfWorldResidency.RequestShaderReload` queues the work. `SdfWorldPipelines.PrepareReload`
-creates replacements for the kernels whose bytecode changed, using the existing
-binding descriptions, off the frame thread. `SdfWorldTables.InstallReload` then
+creates replacements for the kernels whose bytecode changed, and for any refused
+views kernel, using the existing binding descriptions, off the frame thread. `SdfWorldTables.InstallReload` then
 owns the render-thread transaction: it waits for the device to go idle, swaps the
 pipelines and retires the old ones. A failed load or pipeline build keeps the
 previous kernels, and so do kernels that do not read this host's interface.
@@ -374,7 +396,7 @@ the `dxc` on the path.
 Buffers, images, scene programs, animation, and baked bricks remain allocated; only
 the frame-reuse signature is reset, so the next frame renders. A binding or layout
 change still needs a rebuilt host. Unchanged bytecode creates no
-pipeline and causes no GPU drain. Device-loss recovery uses the last
+pipeline and causes no GPU drain, unless its kernel was refused. Device-loss recovery uses the last
 successfully loaded set, and a loss during a reload fails that request. A
 reload replaces pipelines in place, so the residency first takes its set out of
 the cache's sharing; when another residency on the device leases the same set,

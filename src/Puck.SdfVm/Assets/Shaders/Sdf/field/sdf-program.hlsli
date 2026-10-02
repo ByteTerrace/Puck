@@ -352,9 +352,6 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 #define SDF_SQRT_HALF 0.7071067811865476   // sqrt(1/2) — the 45-degree chamfer bevel plane's normalization
 #define SDF_PI        3.141592653589793
 #define SDF_TAU       6.283185307179586    // 2*pi
-// 2^-32, exact. Maps a full-range uint hash to a float in [0, 1] — NOTE the CLOSED upper end: (float)0xFFFFFFFFu
-// rounds UP to 2^32, so the product can be exactly 1.0. Every consumer below is written to tolerate that.
-#define SDF_INV_2POW32 (1.0 / 4294967296.0)
 
 // The "nothing nearer yet" sentinel every accumulator and every unknown shape id starts at. It is deliberately far
 // beyond any authored far distance (render.farDistance is capped at 8192 world units by the world validator) so it
@@ -369,10 +366,6 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // Clamps length(p) away from 0 in the log-spherical fold so log() never sees -inf at the Droste center (the origin is
 // a measure-zero singularity, kept finite). A host-contracted literal — identical across DXC targets.
 #define SDF_LOGSPHERE_MIN_RADIUS 1.0e-4
-// Floors the fold-safe boundary gap (relative to the sample's radius) so a sample landing exactly ON a shell boundary
-// cannot stall the march: a step of up to 0.1% of the local radius may cross the boundary, an overestimate window far
-// below visible scale (a shell band is ~w/2 of the radius). Host-contracted literal.
-#define SDF_LOGSPHERE_GAP_FLOOR 1.0e-3
 // SDF_FLARE_MIN_SCALE floors SDF_OP_AXIAL_PROFILE's scale profile s(t) so an authored amount/bulge combination that
 // drives it non-positive still yields a finite warp rather than a divide-by-zero or a sign flip.
 // SDF_LANE_ERODE_RAGGED_AMOUNT is SDF_OP_LANE_ERODE's ragged-front noise weight: how far the noise sample (centered,

@@ -1,0 +1,196 @@
+{
+  "id": "sky-coverage",
+  "title": "A silhouette blends toward the full sky at its pixel by the coverage the lit image carries",
+  "binding": "The positive leg boots an offscreen 128x128 view at half render scale of an emissive grey sphere whose top silhouette crosses the core of a sun disc bright enough to saturate every pixel of sky, over a black gradient, with fog and lighting off so both sides of the edge are uniform. Views shades the sphere into the lit image with its coverage, the resolve reconstructs coverage between the render grid's samples, and the composite puts the lit image over the full sky by that coverage. Every pixel of a box straddling the silhouette is therefore at least the sphere's own grey (code 128): a partly covered pixel takes its uncovered share from the saturated disc, never from the black gradient. A composite that ignored a partly covered pixel's sky share leaves 48 edge pixels darker than the sphere, and one blending toward the gradient alone would too. The sphere's interior holds its grey. The discriminating leg removes the disc, so the sky behind the edge is the black gradient and the box's sky and edge pixels fall below the sphere's grey.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sky-coverage/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "the-silhouette-blends-toward-the-sky-behind-it",
+        "capture": "edge.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.4,
+          0.38,
+          0.6,
+          0.58
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.5,
+          0.5,
+          0.5,
+          1
+        ],
+        "maximum": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-sphere-is-its-own-grey",
+        "capture": "edge.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.4,
+          0.6,
+          0.6,
+          0.8
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.5,
+          0.5,
+          0.5,
+          1
+        ],
+        "maximum": [
+          0.505,
+          0.505,
+          0.505,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sky-coverage/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "the-silhouette-blends-toward-the-sky-behind-it",
+        "capture": "edge.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.4,
+          0.38,
+          0.6,
+          0.58
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.5,
+          0.5,
+          0.5,
+          1
+        ],
+        "maximum": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-sphere-is-its-own-grey",
+        "capture": "edge.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.4,
+          0.6,
+          0.6,
+          0.8
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.5,
+          0.5,
+          0.5,
+          1
+        ],
+        "maximum": [
+          0.505,
+          0.505,
+          0.505,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      }
+    ]
+  }
+}

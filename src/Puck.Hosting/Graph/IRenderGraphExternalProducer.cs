@@ -45,9 +45,11 @@ public interface IRenderGraphExternalProducer : ICaptureRequestTarget, IDisposab
     /// <param name="reads">The latest completed image of each instance the producer's instance reads, whose leases the
     /// producer takes for the images its submission samples (<see cref="RenderGraphExternalReads.Take"/>), or
     /// <see langword="null"/> when it reads none.</param>
-    /// <returns><see langword="true"/> when a frame was submitted; <see langword="false"/> while the producer cannot
-    /// render yet, such as while its pipelines build.</returns>
-    bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null);
+    /// <returns>Whether the frame was submitted: <see cref="FrameRender.Rendered"/>; waiting, with what for, only while
+    /// asking again for the same frame can deliver it (its pipelines building, a first frame arriving on another
+    /// thread); refused, naming why, when it cannot until something it was built from changes (a feed that ended or
+    /// failed to open). An offscreen host holds its tick for a wait and steps on past a refusal.</returns>
+    FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null);
     /// <summary>Acquires the latest completed output. Each acquisition is retired once, through its lease.</summary>
     /// <param name="output">The output, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="false"/> when the producer has completed no output.</returns>
@@ -59,6 +61,9 @@ public interface IRenderGraphExternalProducer : ICaptureRequestTarget, IDisposab
 /// at its producer's cadence and negotiated extent, and <see cref="IRenderGraphExternalProducer.Produce"/> publishes the
 /// image the cadence owes.</summary>
 public interface IRenderGraphSourceProducer : IRenderGraphExternalProducer {
+    /// <summary>Gets the source's availability without publishing, pulling or submitting work. The runtime reads it
+    /// when the scheduler refuses the source or gives it no extent.</summary>
+    FrameRender Answer { get; }
     /// <summary>Gets what the producer declares for the source right now: its extent, zero on either axis while none is
     /// negotiated, and its cadence; or <see langword="null"/> while it has no image to declare.</summary>
     ImageSourceDescriptor? Descriptor { get; }

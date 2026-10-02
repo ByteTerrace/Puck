@@ -9,7 +9,8 @@ namespace Puck.Shaders;
 /// their node's kernel counters (<see cref="GpuKernelCounters"/>): the pass's row, a pass-block value, and the frame
 /// slot's counter buffer, bound read-write in the pass group. Every generated include (<see cref="ShaderInterfaceHlsl"/>)
 /// declares the counting functions: <c>puckCountWork(steps, texels)</c>, which sums a wave's counts and adds them with its
-/// first active lane, and <c>puckCountFragmentWork(steps, texels)</c>, which does the same for a fragment stage over the
+/// first active lane, <c>puckCountSky(evaluations)</c>, which does the same for the sky's evaluations, and
+/// <c>puckCountFragmentWork(steps, texels)</c>, which does the same for a fragment stage over the
 /// wave's lanes that are not helper lanes, since a helper lane's atomics have no effect. An interface that declares both
 /// members gets their counting bodies, laid out as <see cref="GpuKernelCounters"/> reads the row back from the constants
 /// generated beside them; any other interface, a document pass's among them, gets them empty. So a kernel counts
@@ -69,6 +70,8 @@ public static class ShaderWorkCounters {
                 // are declared empty, and a kernel written for a counting package compiles here unchanged.
                 void puckCountWork(uint steps, uint texels) {
                 }
+                void puckCountSky(uint evaluations) {
+                }
                 void puckCountFragmentWork(uint steps, uint texels) {
                 }
 
@@ -82,11 +85,13 @@ public static class ShaderWorkCounters {
         _ = text.Append(value: $$"""
 
             // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
-            // back): each counted kind in GpuWork.KernelKinds order, march steps then texels written, as a 64-bit count in
-            // two words, low word first. An interface declaring no work counters declares the same two functions empty.
+            // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, then sky evaluations, as a
+            // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
+            // empty.
             static const uint PuckWorkRowWords = {{number(GpuKernelCounters.RowWords)}}u;
             static const uint PuckWorkStepsWord = 0u;
             static const uint PuckWorkTexelsWord = {{number(GpuKernelCounters.CountWords)}}u;
+            static const uint PuckWorkSkyWord = {{number((2 * GpuKernelCounters.CountWords))}}u;
             // Adds to one count: the low word atomically, then the high word by one when that addition carries.
             void puckAddWork(uint word, uint amount) {
                 if (amount == 0u) {
@@ -112,6 +117,14 @@ public static class ShaderWorkCounters {
 
                     puckAddWork((row + PuckWorkStepsWord), waveSteps);
                     puckAddWork((row + PuckWorkTexelsWord), waveTexels);
+                }
+            }
+            // Adds an invocation's sky evaluations to its pass's row: the wave sums them, and its first active lane adds the sum.
+            void puckCountSky(uint evaluations) {
+                uint waveEvaluations = WaveActiveSum(evaluations);
+
+                if (WaveIsFirstLane()) {
+                    puckAddWork(((passGroup.{{Row}} * PuckWorkRowWords) + PuckWorkSkyWord), waveEvaluations);
                 }
             }
             // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper

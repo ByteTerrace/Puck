@@ -513,6 +513,8 @@ public sealed class ShaderInterfaceLawTests {
                 // are declared empty, and a kernel written for a counting package compiles here unchanged.
                 void puckCountWork(uint steps, uint texels) {
                 }
+                void puckCountSky(uint evaluations) {
+                }
                 void puckCountFragmentWork(uint steps, uint texels) {
                 }
 
@@ -559,6 +561,8 @@ public sealed class ShaderInterfaceLawTests {
                 // This interface declares no work counters, so its passes count nothing: the counting functions a kernel calls
                 // are declared empty, and a kernel written for a counting package compiles here unchanged.
                 void puckCountWork(uint steps, uint texels) {
+                }
+                void puckCountSky(uint evaluations) {
                 }
                 void puckCountFragmentWork(uint steps, uint texels) {
                 }

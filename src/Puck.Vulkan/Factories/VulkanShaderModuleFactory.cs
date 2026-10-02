@@ -7,7 +7,8 @@ namespace Puck.Vulkan.Factories;
 
 /// <summary>
 /// The default <see cref="IVulkanShaderModuleFactory"/>: it creates a shader module from the SPIR-V code in
-/// the supplied stage information and returns an owning <see cref="VulkanShaderModule"/>.
+/// the supplied stage information and returns an owning <see cref="VulkanShaderModule"/>, first refusing a module that
+/// declares a capability the device was not created with (<see cref="VulkanShaderCapabilities"/>).
 /// </summary>
 public sealed class VulkanShaderModuleFactory : IVulkanShaderModuleFactory {
     private readonly IVulkanShaderModuleApi m_shaderModuleApi;
@@ -29,6 +30,11 @@ public sealed class VulkanShaderModuleFactory : IVulkanShaderModuleFactory {
         ArgumentNullException.ThrowIfNull(argument: logicalDevice);
 
         var spirVBytes = stageInfo.Content;
+
+        VulkanShaderCapabilities.Require(
+            module: stageInfo.Path,
+            spirv: spirVBytes.Span
+        );
         var request = new VulkanShaderModuleCreateRequest(
             Device: logicalDevice.Commands,
             SpirVBytes: spirVBytes

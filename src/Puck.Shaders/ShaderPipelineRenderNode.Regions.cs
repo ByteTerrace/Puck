@@ -49,8 +49,8 @@ public sealed partial class ShaderPipelineRenderNode {
     /// ahead of them, moves it to each later graph's share, and disposes it on device loss and at disposal, the only way a
     /// name takes another region. The host writes the region's contents at any time.</summary>
     /// <param name="name">The host buffer port's name.</param>
-    /// <returns>The region, or <see langword="null"/> while it would stage and no installed graph reserves its copy sets
-    /// yet, which binding advances as a produced frame does (the candidate's build starts, and installs once finished);
+    /// <returns>The region, or <see langword="null"/> while no graph is installed or building (a refused first build), or
+    /// while it would stage and no installed graph reserves its copy sets yet, which binding advances as a produced frame does (the candidate's build starts, and installs once finished);
     /// the host asks again on a later frame.</returns>
     /// <exception cref="ObjectDisposedException">The node is disposed.</exception>
     /// <exception cref="ArgumentException"><paramref name="name"/> is empty or not a declared host buffer port of the
@@ -62,11 +62,17 @@ public sealed partial class ShaderPipelineRenderNode {
         );
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
+        RetryRefusal();
+
         var declaration = ValidateExternalBinding(
             kind: ShaderPipelineResourceKind.Buffer,
             name: name
         );
 
+        // No graph is installed or building (the first build was refused): there is nothing to bind into yet.
+        if (declaration is null) {
+            return null;
+        }
         if (
             (declaration is not { IsHostBuffer: true, SizeBytes: { } sizeBytes }) ||
             (sizeBytes == 0UL) ||

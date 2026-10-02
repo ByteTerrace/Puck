@@ -89,6 +89,7 @@ public static class CreationBakeCodec {
         WriteTexture(texture: impostor.Albedo, writer: writer);
         WriteTexture(texture: impostor.Normal, writer: writer);
         WriteTexture(texture: impostor.Depth, writer: writer);
+        WriteTexture(texture: impostor.Material, writer: writer);
         WriteTexture(texture: impostor.Emission, writer: writer);
 
         return writer.WrittenSpan.ToArray();
@@ -190,6 +191,7 @@ public static class CreationBakeCodec {
         var albedo = ReadImpostorTexture(reader: ref reader, usage: SdfBakeTextureUsage.Albedo);
         var normal = ReadImpostorTexture(reader: ref reader, usage: SdfBakeTextureUsage.Normal);
         var depth = ReadImpostorTexture(reader: ref reader, usage: SdfBakeTextureUsage.Depth);
+        var material = ReadImpostorTexture(reader: ref reader, usage: SdfBakeTextureUsage.Material);
         var emission = ReadImpostorTexture(reader: ref reader, usage: SdfBakeTextureUsage.Emission);
 
         reader.ExpectEnd();
@@ -207,6 +209,7 @@ public static class CreationBakeCodec {
                 Center: center,
                 Depth: depth,
                 Emission: emission,
+                Material: material,
                 Normal: normal,
                 Radius: radius,
                 ViewTexels: viewTexels,

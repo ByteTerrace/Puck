@@ -5,7 +5,7 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>
 /// The light stage reaches every light through one interface (<c>shade/sdf-light.hlsli</c>): each light, an environment
-/// light or a bound screen's, is one <c>SdfLight</c>, and <c>sdfLightResponse</c> answers what it adds. So no other kernel
+/// light or a bound screen's, is one <c>SdfLightSource</c>, and <c>sdfLightResponse</c> answers what it adds. So no other kernel
 /// source branches on a light's kind, and the response answers every kind the instruction set generates.
 /// </summary>
 public sealed partial class SdfLightInterfaceLawTests {

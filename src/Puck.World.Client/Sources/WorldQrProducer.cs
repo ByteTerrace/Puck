@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Hosting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 using Puck.Assets.Qr;
@@ -163,7 +164,7 @@ public sealed class WorldQrFeed : IWorldUploadFeed, IImageSourceReference {
     /// <inheritdoc/>
     /// <remarks>The code never changes, so a region that already holds it owes nothing.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="region"/> is <see langword="null"/>.</exception>
-    public bool TryWrite(long tick, GpuRegion region) {
+    public FrameRender Write(long tick, GpuRegion region) {
         ArgumentNullException.ThrowIfNull(argument: region);
 
         _ = region.Write(
@@ -171,7 +172,7 @@ public sealed class WorldQrFeed : IWorldUploadFeed, IImageSourceReference {
             offset: ImageSourceUploadLayout.HeaderBytes
         );
 
-        return true;
+        return FrameRender.Rendered;
     }
     /// <inheritdoc/>
     public bool TryWriteReference(Span<byte> rgba, out ImageSourceStamp stamp) {

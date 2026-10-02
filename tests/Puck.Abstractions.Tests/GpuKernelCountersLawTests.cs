@@ -15,6 +15,7 @@ namespace Puck.Abstractions.Tests;
 /// </summary>
 public sealed class GpuKernelCountersLawTests {
     private static int MarchStepsColumn => GpuWork.SubmissionKinds.ToArray().ToList().IndexOf(item: GpuWork.MarchSteps);
+    private static int SkyEvaluationsColumn => GpuWork.SubmissionKinds.ToArray().ToList().IndexOf(item: GpuWork.SkyEvaluations);
     private static int TexelsWrittenColumn => GpuWork.SubmissionKinds.ToArray().ToList().IndexOf(item: GpuWork.TexelsWritten);
 
     [Fact]
@@ -51,12 +52,14 @@ public sealed class GpuKernelCountersLawTests {
             slot: 1
         );
 
-        // What the passes' kernels add: pass a five steps and seven texels, pass c a count past 32 bits.
+        // What the passes' kernels add, one 64-bit count per kind in each pass's row: pass a five steps, seven texels and
+        // eleven sky evaluations, pass c a step count past 32 bits.
         var memory = gpu.Memory(bufferHandle: counters.RowOf(row: 0, slot: 1).Buffer.BufferHandle);
 
         BinaryPrimitives.WriteUInt64LittleEndian(destination: memory.AsSpan(start: 0), value: 5UL);
         BinaryPrimitives.WriteUInt64LittleEndian(destination: memory.AsSpan(start: 8), value: 7UL);
-        BinaryPrimitives.WriteUInt64LittleEndian(destination: memory.AsSpan(start: 32), value: 0x1_0000_0003UL);
+        BinaryPrimitives.WriteUInt64LittleEndian(destination: memory.AsSpan(start: 16), value: 11UL);
+        BinaryPrimitives.WriteUInt64LittleEndian(destination: memory.AsSpan(start: (2 * GpuKernelCounters.RowBytes)), value: 0x1_0000_0003UL);
 
         for (var pass = 0; (pass < 3); pass++) {
             ledger.EnterPass(pass: pass);
@@ -83,15 +86,15 @@ public sealed class GpuKernelCountersLawTests {
         Assert.True(condition: ledger.TryReadCompleted(sample: sample));
         Assert.Equal(
             actual: Kernel(pass: 0, sample: sample),
-            expected: (5L, 7L)
+            expected: (5L, 7L, 11L)
         );
         Assert.Equal(
             actual: Kernel(pass: 1, sample: sample),
-            expected: (0L, 0L)
+            expected: (0L, 0L, 0L)
         );
         Assert.Equal(
             actual: Kernel(pass: 2, sample: sample),
-            expected: (0x1_0000_0003L, 0L)
+            expected: (0x1_0000_0003L, 0L, 0L)
         );
         Assert.Equal(actual: sample.GetOutsidePassCount(column: Column(kind: GpuWork.Clears)), expected: 1L);
         Assert.Equal(actual: sample.GetOutsidePassCount(column: Column(kind: GpuWork.Copies)), expected: 1L);
@@ -194,7 +197,7 @@ public sealed class GpuKernelCountersLawTests {
         Assert.True(condition: ledger.TryReadCompleted(sample: sample));
         Assert.Equal(
             actual: Kernel(pass: 0, sample: sample),
-            expected: (0L, 0L)
+            expected: (0L, 0L, 0L)
         );
     }
     [Fact]
@@ -220,10 +223,11 @@ public sealed class GpuKernelCountersLawTests {
     }
 
     private static int Column(WorkKind kind) => GpuWork.SubmissionKinds.ToArray().ToList().IndexOf(item: kind);
-    private static (long Steps, long Texels) Kernel(GpuWorkSample sample, int pass) {
+    private static (long Steps, long Texels, long Sky) Kernel(GpuWorkSample sample, int pass) {
         Assert.True(condition: sample.TryGetPassCount(column: MarchStepsColumn, pass: pass, value: out var steps));
         Assert.True(condition: sample.TryGetPassCount(column: TexelsWrittenColumn, pass: pass, value: out var texels));
+        Assert.True(condition: sample.TryGetPassCount(column: SkyEvaluationsColumn, pass: pass, value: out var sky));
 
-        return (steps, texels);
+        return (steps, texels, sky);
     }
 }

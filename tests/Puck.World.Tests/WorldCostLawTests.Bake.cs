@@ -48,7 +48,7 @@ public sealed partial class WorldCostLawTests {
         public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
             m_map.Clear(); m_draws.Clear();
             WorldPlacementStamper.EmitStatic(builder: builder, definition: definition, creations: definition.Creations,
-                placements: definition.Placements, meshDraws: m_draws, bakedMeshFor: _ => mesh, picks: m_map);
+                placements: definition.Placements, meshDraws: m_draws, bakedFor: _ => ((mesh is null) ? null : new WorldBakedDraw(Impostor: null, Mesh: mesh)), picks: m_map);
         }
         public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved,
             IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height,

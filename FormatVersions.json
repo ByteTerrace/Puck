@@ -192,14 +192,14 @@
             "token": "puck.release.profile.v1"
         },
         "RenderGraphSchemas.Graph": {
-            "shape": "abde801723cba7a9",
+            "shape": "c495fab562a4229e",
             "source": "src/Puck.Shaders/Graph/RenderGraphModel.cs",
             "token": "puck.render.graph.v1"
         },
         "SdfBaker.Version": {
-            "shape": "02c658afda3f7d3a",
+            "shape": "4436e12ea2703e2a",
             "source": "src/Puck.SignedDistance/Baking/SdfBaker.cs",
-            "token": "8"
+            "token": "9"
         },
         "SdfDocumentDecoder.Schema": {
             "shape": "762fae7b2ea0564b",
@@ -235,6 +235,11 @@
             "shape": "35feece16a3f486b",
             "source": "src/Puck.Analyzers/VerifiedCodeManifest.cs",
             "token": "csharp-tokens-v1"
+        },
+        "VulkanShaderCapabilities.Magic": {
+            "shape": "d4da3c43916bd9c4",
+            "source": "src/Puck.Vulkan/VulkanShaderCapabilities.cs",
+            "token": "119734787"
         },
         "WasmBinaryFormat.Magic": {
             "shape": "293a4f56b6458d75",
@@ -292,7 +297,7 @@
             "token": "puck.camera.program.v1"
         },
         "WorldCaptureManifest.SchemaId": {
-            "shape": "cfda3f18f3c78724",
+            "shape": "f6224f8e4d743781",
             "source": "src/Puck.World.Console/WorldCaptureScheduler.cs",
             "token": "puck.parity.manifest.v1"
         },
@@ -327,7 +332,7 @@
             "token": "puck.world.extensions.v1"
         },
         "WorldFederationCodec.WireKey": {
-            "shape": "d697b7d602b45e82",
+            "shape": "bad59f89234fc816",
             "source": "src/Puck.World.Server/WorldFederationCodec.cs",
             "token": "PUCKFED6"
         },

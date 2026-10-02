@@ -1,9 +1,9 @@
 # SDF frame rendering
 
 One world frame turns an SDF program and opaque meshes into pixels through a
-fixed sequence of compute and graphics passes. Upload and sky filling precede
-culling; the mask pass builds per-tile instance visibility before the beam and primary marches; surface,
-ambient, and view passes finish each view's image. The sequence exposes
+fixed sequence of compute and graphics passes. The upload precedes culling; the mask pass builds per-tile instance
+visibility before the beam and primary marches; surface, ambient, shadow and view passes shade each view's hits, and
+the sky and composite passes finish its image. The sequence exposes
 where the GPU work goes, why mask-first processing keeps beam cost tied to nearby
 instances, how render-scale tiers trade resolution for frame budget, and how
 frames stay in flight without stalling the whole device.
@@ -15,13 +15,13 @@ moving transforms, the screens, lights, volumes and mesh draws — live in one
 **residency** (`SdfWorldResidency`) per frame source, and the frame first
 submits one **upload** that brings those tables up to date. Then every view of
 the scene is an instance of the render graph's `sdf.world` package, and its node
-records the package's ten native passes into its own submission, reading the tables
-the upload wrote. Upload and sky filling precede culling; camera traversal,
-surface evaluation, AO, the key light's shadow and lighting have separate dispatches. The passes finish
-that view's own output image:
+records the package's eleven native passes into its own submission, reading the tables
+the upload wrote. The upload precedes culling; camera traversal, surface evaluation, AO,
+the key light's shadow, lighting, the sky and the composite have separate dispatches. The
+passes finish that view's own output image:
 
 ```text
-   upload → sky → mask → beam → cull-args → mesh → primary → surface → ambient → views
+   upload → mask → beam → cull-args → mesh → primary → surface → ambient → shadow → views → sky → composite
 ```
 
 The render graph plans the view's passes like any other graph: the package
@@ -29,14 +29,15 @@ declares them as a fragment (`SdfWorldPackage.NativeFragment`) that the graph
 compiler splices into the view's graph, and the planner decides every barrier
 between them. `world.counters gpu` reports the upload under the residency
 (`sdf:world` for the world's) and each view's passes under its instance, as
-`sdf.world$sky` through `sdf.world$views`. Here is what the culling and
+`sdf.world$mask` through `sdf.world$composite`. Here is what the culling and
 rendering passes do; [the engine README](../../../../src/Puck.SdfVm/README.md)
 describes the visibility records the four per-pixel passes share: one per pixel
 of each view's render grid, 64 bytes. A view whose render-scale ceiling is below
-native appends the full-output `resolve` pass described under
-[render scale](#render-scale-tiers-trade-resolution-for-frame-time), and a view
-that reconstructs over time appends it at any scale
-([temporal reconstruction](#temporal-reconstruction)).
+native puts the full-output `resolve` pass described under
+[render scale](#render-scale-tiers-trade-resolution-for-frame-time) between views
+and the sky, and a view that reconstructs over time does so at any scale
+([temporal reconstruction](#temporal-reconstruction)). The sky and the composite
+are described under [the sky once, and a composite last](#the-sky-once-and-a-composite-last).
 
 **mask** (`sdf-instance-cull.comp.hlsl`) computes, for every 16×16 screen tile, the
 set of instances that could possibly matter to that tile—a bitmask, one bit per
@@ -63,7 +64,9 @@ finds the bounding rectangle of surviving tiles. Empty margins outside that
 rectangle launch no threads; holes inside it remain in the dispatch.
 
 **mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
-each, into the mesh visibility target at the view's extent: per pixel the ray parameter the march records,
+each (and the impostor cards a view records, through a second pipeline with
+`sdf-mesh-impostor.frag.hlsl`, after the meshes; a baked placement's mesh and card are alternatives, and the view records
+one, as [the impostor](bricks-and-baking.md#prototype-bakes) describes), into the mesh visibility target at the view's extent: per pixel the ray parameter the march records,
 the draw plus one, and the triangle, kept nearest by a reversed-Z depth test. Primary alone reads the
 target: it resolves the triangle's material from the mesh region (the draw's, plus the triangle's palette entry
 when its mesh carries one) and records the draw and the triangle in the pixel's visibility record, from which
@@ -101,8 +104,8 @@ the seats the same way it places panes.
 The passes scale with different things. `mask` and `beam` scale with how many
 instances lie near each tile's cone. `primary`, `surface`, `ambient`, and
 `views` scale with on-screen content: how many pixels hit a surface and how
-much of the program each field query walks. `sky` and `cull-args` are
-small. **The four per-pixel passes are the scale lever for
+much of the program each field query walks. `cull-args` is small; `composite`
+scales with the output's pixels and `sky` with the uncovered ones. **The four per-pixel passes are the scale lever for
 on-screen content; `mask`+`beam` is the scale lever for instance count.**
 Moving work between the per-pixel passes can relieve register pressure but
 adds hit-buffer traffic, so compare their sum as well as each label.
@@ -247,6 +250,109 @@ adjacent grids, the controller settles on the cheaper one rather than
 alternating: a sample over the budget marks its grid, and the grid rises onto
 the mark only once a sample, compared exactly against the budget, predicts it
 within the budget.
+## The sky once, and a composite last
+
+Views shades only the pixels a surface covers. It writes the **lit image**: each
+pixel's shaded color premultiplied by its **coverage**, with the coverage in the
+alpha, which is one for a solid hit, the silhouette's share on an edge beside the
+sky, and zero for a miss. The color has already passed through the fog between
+the camera and the hit (see [surface transport](#surface-transport)). In a native
+view a pixel outside the dispatch box is never written, so the passes after views
+read it as uncovered; in a reduced or temporal view the resolve reconstructs the
+lit image, coverage with color, and each pixel's surface transport at the output
+extent.
+
+The sky's layers compose in their authored order, and the sky is cut into
+**runs** without reordering it: the gradient is a field run, the sun disc and the
+stars a point run, and the clouds a field run over them. Every blend is affine in
+the color beneath it, so a field run is summarized exactly as one per-channel
+scale and offset, and the runs compose as the stack does
+(`SdfSkyRuns`, held by `SkyRunCompositionLawTests`).
+
+- The `sky` pass (`passes/sdf-sky-runs.comp.hlsl`) evaluates the field runs on
+  the render grid, and only where the pixel or one of its eight neighbours is not
+  wholly covered by the color views wrote: the gradient's offset, then the clouds'
+  scale and offset, each a half-float image, the base's alpha marking the texels
+  it evaluated. A pixel covered with all its neighbours evaluates no field runs,
+  and each pixel evaluated counts one `gpu.sky.evaluations`. A reduced view's sky therefore costs its render
+  grid's uncovered pixels, not its output's.
+- The `composite` pass (`passes/sdf-composite.comp.hlsl`) writes the view's
+  color. It adds the fog's glow, the gradient scaled by the surface transport's
+  in-scatter weight, and counts that gradient evaluation in
+  `gpu.sky.evaluations`; zero fog density gives a zero weight and evaluates no
+  gradient. Where the coverage is below one it composes the runs beneath the
+  lit image, filtered from the texels the sky evaluated (or evaluated in place,
+  and counted separately from the fog, where it evaluated none beside the
+  pixel), the disc and the stars evaluated at the pixel so they stay sharp, and
+  puts the lit image over them by its coverage, so a silhouette blends toward
+  the full sky at its pixel. The bounded media integrate last, over each share
+  of the pixel separately: the surface share up to the surface transport's
+  distance, and the sky share up to the far distance.
+
+An unauthored world renders the default look: the two-stop gradient and fog
+`SdfSky` starts from, read like any authored sky. A debug view's lit image is
+its whole picture, so it is not fogged, the sky evaluates nothing and the
+composite passes it through.
+
+### Surface transport
+
+Fog and media depend on how far away a surface is, and a reduced or temporal
+view's output pixel is a weighted blend of several render samples, each at its
+own distance. A single distance per output pixel cannot describe that blend: at
+an edge where a quarter of the pixel is a wall 100 units away and the rest is
+sky, the sample under the pixel's center may be the sky's, and the wall's quarter
+would then receive no fog at all. Instead each render sample carries its own
+transport, in the same premultiplied form as its color, so that blending samples
+blends their transport by exactly the same weights.
+
+For a sample with coverage `a`, color `C` and ray distance `t`, the fog lets
+through `T = exp(-density · t)` of the surface's light and replaces the rest with
+the sky's gradient `G`. Its contribution to the pixel is
+`a · (T · C + (1 − T) · G)`, and the uncovered share `1 − a` shows the sky `S`.
+For a weighted blend of samples `i` with weights `wᵢ`:
+
+```text
+Σ wᵢ · [aᵢ (Tᵢ Cᵢ + (1 − Tᵢ) G) + (1 − aᵢ) S]
+  = Σ wᵢ aᵢ Tᵢ Cᵢ  +  G · Σ wᵢ aᵢ (1 − Tᵢ)  +  (1 − Σ wᵢ aᵢ) · S
+```
+
+Each sum is linear in the samples, so each can be filtered like color. Views
+writes the first, `aᵢ Tᵢ Cᵢ`, as the lit image's color; the alpha holds `aᵢ`.
+The resolve computes the second, the **in-scatter weight** `aᵢ (1 − Tᵢ)`, from
+each sample's own visibility record, and reads it beside the color at every tap
+of the same reconstruction footprint (`reconstruction.hlsli`'s footprint and
+combine); the temporal path sums it with the same Gaussian weights and
+reprojects it with the same history weights. The composite then adds `G` times
+the resolved weight and the sky runs times one minus the resolved coverage, so a
+pixel's fog is its samples' fog, exactly, whatever the footprint. The gradient
+is evaluated once at the output pixel's own direction, as the sky's runs are.
+
+A bounded medium does not blend the same way, because whether it lies in front of
+a surface depends on that surface's distance. The composite therefore splits the
+pixel into its surface share, of the resolved coverage, and its sky share, the
+rest, and clips each share's media at its own end: the sky share at the far
+distance, and the surface share at the harmonic mean of its samples' distances,
+which the transport carries as its second number, `aᵢ / tᵢ` (scaled to stay
+precise as a half float). Where a footprint holds one surface, that mean is the
+surface's own distance, so a medium behind an edge reaches only the sky share
+and never paints over the surface. Where a footprint spans a step between two
+surfaces, the harmonic mean lies toward the nearer one; a medium lying between
+the two is the one case the clip does not reproduce sample by sample.
+
+The transport costs no extra memory: it is one word of two half floats an output
+pixel, the size of a single float distance, and the history surface fits it in
+its three words by holding the distance and the weight as half floats. A pixel the
+resolve copies whole from one render sample, which every pixel is when the output
+has the render grid's extent and no jitter, as on the first frame of a temporal
+epoch at native scale, carries that sample's ray distance in the word instead,
+marked by its top bit. The composite then derives the sample's transport at the
+same line of code, with the same `precise` arithmetic, that a native view's
+composite runs on the same sample, so that first frame equals the spatial frame
+to the bit on any GPU rather than within the rounding of two half floats. `SdfSurfaceTransport` is the CPU reference, and
+`SdfSurfaceTransportLawTests` hold the blend to the per-sample result. Because
+each hit's transmittance is in the lit image, a change of fog density reaches
+views and the resolve, while a change of the fog's color, the gradient, reaches
+only the composite.
 
 ## Temporal reconstruction
 
@@ -266,17 +372,22 @@ one allocation a frame slot each, that the next frame reads through
 its resolved byte capacity and element size still match.
 
 - The **history color** holds, per output pixel, the weighted mean of every sample
-  the pixel has gathered in its RGB and their summed weight in its alpha, capped
-  at one jitter period of full-weight samples.
-- The **history surface** holds two words per output pixel: the ray distance and
-  the visibility identity of the nearest of the render samples the resolve read.
+  the pixel has gathered: the lit color in its RGB and the coverage in its alpha,
+  premultiplied as the lit image is.
+- The **history surface** holds three words per output pixel: the visibility
+  identity of the nearest of the render samples the resolve read; that sample's
+  ray distance and the samples' summed weight, capped at one jitter period of
+  full-weight samples, as two half floats; and the weighted mean of the samples'
+  surface transport.
 
-The sky and views passes also write a one-channel **reactivity** buffer at the
-render extent, which only the resolve reads: one where a screen or a bounded
-volume covers the pixel, and, since the material model cannot tell steady
-emission from animated, the share of the pixel's color it emits after detail
-material selection, material layers and mesh-atlas sampling.
-Coverage stays in the color's alpha.
+The views pass also writes a one-channel **reactivity** buffer at the render
+extent, which only the resolve reads, inside the dispatch box: one where a screen
+covers the pixel, and, since the material model cannot tell steady emission from
+animated, the share of the pixel's color it emits after detail material
+selection, material layers and mesh-atlas sampling. Coverage stays in the color's
+alpha. The sky, the fog's glow and the bounded media never enter the history:
+they composite after the resolve. The fog's transmittance does, inside the lit
+color and the transport, as a property of each sample's surface.
 
 The temporal resolve takes, for each output pixel, the 3x3 render samples
 nearest its center, each weighted by a Gaussian of its distance in output
@@ -288,10 +399,12 @@ position is rejected when the history surface there names another identity or a
 ray distance more than 5% from the reprojected one; the pixel then shows the
 spatial path at this frame's sample grid and its history restarts. Surviving
 history is clipped to the 3x3's YCoCg box, weighted down by the reactivity, and
-joined by this frame's samples.
-Non-finite history colors are rejected before clipping. History writes stay
-within the half-float range; a non-finite accumulation stores zero weight, so a
-bright transient cannot contaminate later history after its source recovers.
+joined by this frame's samples. The transport history is clamped to the 3x3's
+range, as coverage is, and joined with the same weights.
+Non-finite history colors or transports are rejected before clipping. History
+writes stay within the half-float range; a non-finite accumulation stores zero
+weight, so a bright transient cannot contaminate later history after its source
+recovers.
 
 History epochs are free: a reset sets the instance's frame count to zero, and the
 resolve then reads no history, so the first frame after a cut, a follow or a
@@ -376,10 +489,10 @@ from its memory profile and the table's size, with a reader always in flight:
 
 Every pass of every view reads the tables through one descriptor set, the
 `sdf.world` interface's World group at set 1: each ring slot's buffers, the
-brick pool, the glyph atlas, the samplers and the mesh atlases. The tables own
+brick pool, the glyph atlas, the samplers and the mesh and impostor atlases. The tables own
 one such set per ring slot and write both once; a frame binds the slot its
 upload wrote. They rewrite the sets only when what they bind moves (a region
-grows, or the glyph or mesh atlases change), after the device is idle, since
+grows, or the glyph, mesh or impostor atlases change), after the device is idle, since
 every view's submission in flight binds them.
 
 Dynamic transforms are never compared as a table: the residency packs only the
@@ -435,7 +548,7 @@ frame's image while the next one renders.
 Performance is judged by code, disassembly, and deterministic work counters —
 never by wall-clock or GPU timestamps. The residency counts the work of its
 upload's passes, and each view's node counts the work each of its passes
-(`sdf.world$sky` through `sdf.world$views`) records, with no arming and no
+(`sdf.world$mask` through `sdf.world$composite`) records, with no arming and no
 effect on the image: dispatches, indirect dispatches, barriers, pipeline and
 descriptor-set binds, push-constant bytes, descriptor writes and host-visible
 upload bytes. The upload has three passes: `fillers`, the fillers' first
@@ -488,7 +601,7 @@ disassembly or trace the code path instead.
 - The pass order and what each pass must respect when edited:
   [the rendering skill's kernel reference](../../../../.claude/skills/rendering/references/kernels.md)
   and the fragment in
-  [`src/Puck.Shaders/Graph/SdfWorldPackage.cs`](../../../../src/Puck.Shaders/Graph/SdfWorldPackage.cs).
+  [`src/Puck.Shaders.Model/Graph/SdfWorldPackage.cs`](../../../../src/Puck.Shaders.Model/Graph/SdfWorldPackage.cs).
 - Measurement method and the register-pressure lesson:
   [SDF performance](performance.md).
 - The uniform-grid cull rationale and why a per-frame BVH was rejected for it:

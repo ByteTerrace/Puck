@@ -24,8 +24,10 @@ public enum SdfKernel {
     ViewsCore,
     /// <summary>Shading with the heavy warp and noise family compiled out.</summary>
     ViewsFolds,
-    /// <summary>The sky pre-pass.</summary>
+    /// <summary>The sky's field runs, evaluated where the lit image's coverage is below one.</summary>
     Sky,
+    /// <summary>The composite: the sky's runs, the lit image over them by its coverage, the fog and the bounded media.</summary>
+    Composite,
     /// <summary>The carve-union brick baker, dispatched only when the engine keeps a brick pool.</summary>
     BrickBake,
     /// <summary>Full-output reconstruction, whose pipeline is acquired only by reduced or variable views.</summary>

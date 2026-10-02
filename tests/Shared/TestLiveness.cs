@@ -60,4 +60,26 @@ internal static class TestLiveness {
             deadline.GetAwaiter().GetResult();
         }
     }
+    /// <summary>Calls <paramref name="step"/>, one driven frame each, until it returns <see langword="true"/>, failing the
+    /// law once <paramref name="frames"/> frames pass without it. After each frame it waits out the work that frame
+    /// started, polling <paramref name="building"/> under <see cref="Bound"/>, so the frame count, not the pool's timing,
+    /// decides the law and a condition that never holds fails within those frames.</summary>
+    /// <param name="frames">The frames the condition must hold within, each taken with no work left in flight.</param>
+    /// <param name="step">Takes one frame and returns whether the condition holds.</param>
+    /// <param name="building">Returns whether work the frames wait for is still running on the thread pool.</param>
+    /// <param name="reason">Describes why the condition does not hold, read only when the frames run out.</param>
+    public static void Within(int frames, Func<bool> step, Func<bool> building, Func<string?>? reason = null) {
+        for (var frame = 0; (frame < frames); frame++) {
+            if (step()) {
+                return;
+            }
+
+            Until(
+                reason: () => "The work a frame started never finished.",
+                step: () => !building()
+            );
+        }
+
+        Xunit.Assert.Fail(message: $"The condition did not hold within {frames} frames: {(reason?.Invoke() ?? "no reason given")}");
+    }
 }

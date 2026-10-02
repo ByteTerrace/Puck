@@ -337,10 +337,18 @@ it and never builds a swap chain against it—see
 `WorldOffscreenGpuActivation`'s remarks for the exact obstacle. Camera and
 session screens render as in the windowed shape, through the views
 `WorldScreenBinder.ConfigureViews` sets up. `WorldBootComposition.AddWorldOffscreenPresentation` and
-`Puck.Launcher.OffscreenTickHostedService` (which produces one composed frame
-per host-loop iteration, paced by the fixed-step pump rather than vsync) are
-the seams; the server steps exactly like `host.presentation: none`
-(`HeadlessWorldSimulation`).
+`Puck.Launcher.OffscreenTickHostedService` are the seams; the server steps
+exactly like `host.presentation: none` (`HeadlessWorldSimulation`). The
+offscreen host's time is its tick count, never the wall clock: it steps one
+tick per rendered frame, so a slow frame delays the next tick instead of
+letting the simulation catch up several ticks in one iteration. Until the
+render graph reports the tick's frame rendered (a cold pipeline build, a graph
+rebuilding, an input with no output for the frame), the host composes the same
+tick again and steps none, narrating the hold once as `[offscreen] holding
+tick T until its frame renders: <reason>`. A script that waits N ticks has N rendered frames behind it,
+and a capture's frame reprojects from the frame of the tick before. The wall
+clock only keeps the host from running faster than the world's rate
+([host pacing](../../docs/reference/hosting.md#host-pacing)).
 
 An offscreen display has no window whose size could change, so
 `world.resize <width> <height>` (`WorldOffscreenCommandModule`, registered only
@@ -807,7 +815,7 @@ Facts a script needs:
   a completed view, the GPU has completed a frame of every instance that has
   rendered and the root has produced one more frame, so a pick or counted pass
   read after it waits on no cold device and a few ticks after it are a few
-  frames, and the bake schedule has reconciled and, while the
+  frames (offscreen, every tick is a frame of its own), and the bake schedule has reconciled and, while the
   presentation draws its bakes, settled, or
   the deadline passes, and reports which on standard error. A script that
   reads rendered work (`world.counters gpu`) waits on it, since a cold driver
@@ -1414,8 +1422,8 @@ the drawn image, none exists:
 | `producer`, `testPattern` | `WorldTestPatternProducer`, uploaded | `ImageProducerLawTests.ATestPatternFeedStatesTheExactPatternItShowsAndTheVerdictHoldsIt`, `WorldSourceInstanceLawTests`, the `uploaded-sources` canary |
 | `producer`, `qr` | `WorldQrProducer`, uploaded | `ImageProducerLawTests.AQrFeedStatesTheCodeItRasterized`, the `uploaded-sources` canary |
 | `producer`, `color` | `WorldColorProducer`, uploaded | `WorldNestedScreensLawTests` (a face past the nesting depth shows its fallback colour's instance), the `portal-nested` and `portal-return` canaries' discriminating legs |
-| `producer`, `camera` | the binder's `CameraProducer`, imported through `WorldCameraSourceFeed` | `ImageProducerLawTests.ACameraSourceDeclaresTheExtentItsSeatsSensorDelivers`, the `hud-frame-slots` canary (offscreen, it opens no device); a recorded camera run is deferred |
-| `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests`; the `uploaded-sources` canary opens monitor 0 offscreen and captures its fill |
+| `producer`, `camera` | the binder's `CameraProducer`, imported through `WorldCameraSourceFeed` | `ImageProducerLawTests.ACameraSourceDeclaresTheExtentItsSeatsSensorDelivers`, `WorldCaptureFillLawTests.ACapturedFrameAnswersFromItsConversionNeverFromItsPixels` (camera conversion refusal), the `hud-frame-slots` canary (offscreen, it opens no device); a recorded camera run is deferred |
+| `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed`, whose answer delegates to `WorldCaptureFrame.Answer` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests` (CPU conversion, quiet sources, GPU publication, source loss); the `uploaded-sources` canary opens monitor 0 offscreen and captures its fill |
 | `view` | an `sdf.world` instance of its own, rendering the residency `WorldScreenBinder.TryResolveView` creates for it | `WorldViewPaneMappingLawTests.Views`, the `view-screens` canary |
 | `session` | an `sdf.world` instance (`WorldViewNames.Session`) rendered through the destination's own frame source, or its endpoint's shared one; the destination's own screens show to `views.nestingDepth` (`WorldNestedScreens`, `WorldViewNames.Nested`) | `WorldScreenMappingLawTests.EachSourceKindNamesItsInstance`, `WorldSessionFollowLawTests`, `WorldNestedScreensLawTests`; the `uploaded-sources` canary shows and captures one, `portal-nested` a third world two levels deep and `portal-return` a destination's return portal |
 | `text` | no image: the decal tier draws its lines (`WorldScreenTextDecal`, through `TextSourceAt`) | `WorldTextAuthoringLawTests` (`TextScreenSourceValidates`, `TextScreenRefusesWithoutCatalogUnknownFontGridAndColor`, `TextCreationFaceSourceValidates`); the `uploaded-sources` canary checks its glyphs' ink |
@@ -1966,7 +1974,10 @@ hits and each native tool's runs) and the process's SDF kernel loads,
 allocated and released at their allocation sizes, and the peak held; swapchain
 images are never counted), and Vulkan adds `procedures.vulkan`. A rendering
 shape also registers `sdf.bakes`: the creation bakes its cache held, scheduled,
-baked and refused, and the field evaluations the bakes spent. The
+baked and refused, the held bakes that could not be decoded (`undecodable`, each named
+once on the error stream, the prototype drawing through its field), and the field evaluations the bakes spent; and `sdf.mesh.lod`: the
+mesh draws (`near`) and impostor cards (`far`) of baked placements the views
+recorded. The
 client registers `presentation.mirror`, the cells its state mirror read. A
 presented host registers `sdf.transforms`: the dynamic-transform rows packed,
 the bytes compared and the rows owed, summed over the main frame source and the
