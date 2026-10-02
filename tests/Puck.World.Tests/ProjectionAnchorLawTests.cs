@@ -1,5 +1,6 @@
 using Puck.Commands;
 using Puck.Maths;
+using Puck.SignedDistance;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -106,6 +107,21 @@ public sealed partial class ProjectionAnchorLawTests(ITestOutputHelper output) {
     }
     // The authority's presentation and the recipient's, each through a real state mirror at the same tick: the clock's
     // phase and the keyed fog it resolves.
+    // The records the kernels read for a resolved environment: the light table, and the sky's block, stops and
+    // softboxes as the sky packs them over those lights.
+    private static (SdfLight[] Lights, SdfSkyBlock Block, SdfSkyStop[] Stops, SdfSoftbox[] Softboxes) Packed(WorldResolvedEnvironment environment) {
+        var stops = new SdfSkyStop[SdfSky.MaxStops];
+        var softboxes = new SdfSoftbox[SdfSky.MaxSoftboxes];
+
+        environment.Sky.Pack(
+            block: out var block,
+            lights: environment.Lights,
+            softboxes: softboxes,
+            stops: stops
+        );
+
+        return (environment.Lights.Records.ToArray(), block, stops, softboxes);
+    }
     private static void AssertPresentsAsTheHost(WorldDefinition host, WorldDefinition recipient, ulong tick, ulong engineTick) {
         var hostMirror = ClientFixtures.StateMirror(definition: host, engineTick: engineTick, tick: tick);
         var recipientMirror = ClientFixtures.StateMirror(definition: recipient, engineTick: engineTick, tick: tick);
@@ -138,10 +154,13 @@ public sealed partial class ProjectionAnchorLawTests(ITestOutputHelper output) {
 
             Assert.True(condition: WorldProjection.TryToDefinition(definition: out var hydrated, projection: projection, reason: out var reason), userMessage: reason);
 
-            var expected = new WorldEnvironmentResolve().Resolve(definition: host, mirror: ClientFixtures.StateMirror(definition: host), revision: 0).Lanes.ToArray();
-            var actual = new WorldEnvironmentResolve().Resolve(definition: hydrated, mirror: ClientFixtures.StateMirror(definition: hydrated), revision: 0).Lanes.ToArray();
+            var expected = Packed(environment: new WorldEnvironmentResolve().Resolve(definition: host, mirror: ClientFixtures.StateMirror(definition: host), revision: 0));
+            var actual = Packed(environment: new WorldEnvironmentResolve().Resolve(definition: hydrated, mirror: ClientFixtures.StateMirror(definition: hydrated), revision: 0));
 
-            Assert.Equal(actual: actual, expected: expected);
+            Assert.Equal(actual: actual.Lights, expected: expected.Lights);
+            Assert.Equal(actual: actual.Block, expected: expected.Block);
+            Assert.Equal(actual: actual.Stops, expected: expected.Stops);
+            Assert.Equal(actual: actual.Softboxes, expected: expected.Softboxes);
         }
     }
     [Fact]
