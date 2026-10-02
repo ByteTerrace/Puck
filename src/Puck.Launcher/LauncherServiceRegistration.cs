@@ -33,7 +33,8 @@ public static class LauncherServiceRegistration {
 
         // The shared monotonic capture clock: every input backend stamps CaptureTick from this one instance, and
         // the window pump uses it to time-stamp drained input. One origin so all stamps are comparable.
-        services.TryAddSingleton<InputClock>(implementationFactory: static _ => InputClock.Start());
+        services.TryAddSingleton<TimeProvider>(instance: TimeProvider.System);
+        services.TryAddSingleton<InputClock>(implementationFactory: static sp => InputClock.Start(time: sp.GetRequiredService<TimeProvider>()));
         services.TryAddSingleton<IInputClock>(implementationFactory: static sp => sp.GetRequiredService<InputClock>());
 
         // The genlock (latency phase-align) ingestion seam: external rhythm producers (cameras, capture cards, network
@@ -269,6 +270,7 @@ public static class LauncherServiceRegistration {
     /// own stdin reader instead — the command pump and terminal baton are still wired identically either way.</param>
     public static IServiceCollection AddLauncherHeadlessTerminal(this IServiceCollection services, bool readStandardInput = true) {
         AddLauncherTerminalShared(services: services);
+        services.AddSingleton(implementationInstance: HostPacing.WallClock);
         services.AddHostedService<HeadlessTickHostedService>();
 
         if (readStandardInput) {
@@ -278,15 +280,17 @@ public static class LauncherServiceRegistration {
         return services;
     }
     /// <summary>The offscreen twin of <see cref="AddLauncherTerminal"/>: the SAME command pump and terminal baton, but
-    /// <see cref="OffscreenTickHostedService"/> paces the fixed step AND produces one composed frame per iteration —
-    /// no <see cref="Puck.Abstractions.Presentation.ISurfacePresenter"/>, no platform windowing registered here. The
-    /// composition root supplies the GPU backend, the <see cref="IRenderRoot"/>, and an
-    /// <see cref="OffscreenRenderOptions"/> registration; it calls this INSTEAD OF <see cref="AddLauncherTerminal"/>
+    /// <see cref="OffscreenTickHostedService"/> steps one fixed step per iteration AND produces the composed frame that
+    /// step owes — no <see cref="Puck.Abstractions.Presentation.ISurfacePresenter"/>, no platform windowing registered
+    /// here. The composition root supplies the GPU backend, the <see cref="IRenderRoot"/>, and an
+    /// <see cref="OffscreenRenderOptions"/> registration, and may register the <see cref="TimeProvider"/> the host reads
+    /// its wall clock through; it calls this INSTEAD OF <see cref="AddLauncherTerminal"/>
     /// or <see cref="AddLauncherHeadlessTerminal"/> (never more than one) when its boot shape composes a GPU device
     /// with no window.</summary>
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddLauncherOffscreenTerminal(this IServiceCollection services) {
         AddLauncherTerminalShared(services: services);
+        services.AddSingleton(implementationInstance: HostPacing.OneTickPerFrame);
         services.AddHostedService<OffscreenTickHostedService>();
         AddStandardInputReader(services: services);
 
@@ -306,6 +310,7 @@ public static class LauncherServiceRegistration {
         // production and presentation. Register one idle controller for every windowed host so composition roots need
         // only arm it with their chosen ICaptureSink (PNG sequence, recording session, verifier, and so on).
         services.TryAddSingleton<FrameCaptureController>();
+        services.AddSingleton(implementationInstance: HostPacing.WallClock);
         services.AddHostedService<LauncherWindowHostedService>();
         AddStandardInputReader(services: services);
 

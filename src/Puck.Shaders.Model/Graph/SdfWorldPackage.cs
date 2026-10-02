@@ -10,8 +10,9 @@ namespace Puck.Shaders;
 /// extent and the world values in ordinal name order and whose resources follow. A buffer one pass writes and a later
 /// pass reads is two members over the one buffer: a read-write member named with an <c>RW</c> suffix for its writer, and a
 /// read-only member for its readers.</para>
-/// <para>The fragment (<see cref="Fragment"/>) is one view: the sky, the instance masks, the beam, the cull arguments, the
-/// mesh pass, primary traversal, surface and ambient resolution, and shading into the output. Its scratch is transient,
+/// <para>The fragment (<see cref="Fragment"/>) is one view: the instance masks, the beam, the cull arguments, the mesh
+/// pass, primary traversal, surface, ambient and shadow resolution, shading the hits into the lit image, then the sky's
+/// field runs and the composite that writes the output. Its scratch is transient,
 /// one allocation shared by every frame slot, and scales with the counts its host resolves: the view's extent, one
 /// viewport, its tiles at <see cref="TileSize"/>, and the program's instances and instance-mask words.</para>
 /// </summary>
@@ -52,8 +53,8 @@ public static partial class SdfWorldPackage {
     public const string Jitter = "jitter";
     /// <summary>The number of preceding rendered samples in the current history epoch (<c>uint</c>).</summary>
     public const string HistoryFrames = "historyFrames";
-    /// <summary>The pass-group value set to one when the view runs <see cref="TemporalFragment"/>: the sky and views
-    /// passes then write the reactivity buffer and the resolve reconstructs over time (<c>uint</c>).</summary>
+    /// <summary>The pass-group value set to one when the view runs <see cref="TemporalFragment"/>: the views pass
+    /// then writes the reactivity buffer and the resolve reconstructs over time (<c>uint</c>).</summary>
     public const string Temporal = "temporal";
     /// <summary>The pass-group value holding the forward distance of the view camera's own near plane, in world units,
     /// zero for a camera whose image begins at its eye (<c>float</c>).</summary>
@@ -69,10 +70,25 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value holding the debug view mode, an index into the debug view names; zero renders the
     /// final image (<c>uint</c>).</summary>
     public const string DebugMode = "debugMode";
-    /// <summary>The pass-group value scaling the lit path's ambient terms (<c>float</c>).</summary>
-    public const string AmbientScale = "ambientScale";
-    /// <summary>The pass-group value scaling the lit path's sun term (<c>float</c>).</summary>
-    public const string SunScale = "sunScale";
+    /// <summary>The pass-group value holding the lights the lights table holds this frame, at most its records
+    /// (<c>uint</c>).</summary>
+    public const string LightCount = "lightCount";
+    /// <summary>The pass-group value holding the index of the light that drives the soft-shadow march, or −1 when none
+    /// does (<c>int</c>).</summary>
+    public const string ShadowLight = "shadowLight";
+    /// <summary>The pass-group value holding the curvature shading's cavity-darkening gain (<c>float</c>).</summary>
+    public const string CurvatureCavity = "curvatureCavity";
+    /// <summary>The pass-group value holding the curvature shading's rim gain (<c>float</c>).</summary>
+    public const string CurvatureRim = "curvatureRim";
+    /// <summary>The pass-group value holding the curvature shading's ink outline gain (<c>float</c>).</summary>
+    public const string CurvatureInk = "curvatureInk";
+    /// <summary>The pass-group value holding the curvature magnitude at which the ink outline starts (<c>float</c>).</summary>
+    public const string CurvatureInkLow = "curvatureInkLow";
+    /// <summary>The pass-group value holding the curvature magnitude at which the ink outline saturates
+    /// (<c>float</c>).</summary>
+    public const string CurvatureInkHigh = "curvatureInkHigh";
+    /// <summary>The pass-group value holding the ink outline's linear color (<c>float3</c>).</summary>
+    public const string CurvatureInkColor = "curvatureInkColor";
     /// <summary>The pass-group value selecting the slice debug view's plane: zero camera-locked, one to three the world
     /// X, Y or Z axis (<c>float</c>).</summary>
     public const string DebugSliceAxis = "debugSliceAxis";
@@ -135,12 +151,6 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value set to one to march past the beam's per-tile far bound to the far distance
     /// (<c>uint</c>).</summary>
     public const string DisableFarBound = "disableFarBound";
-    /// <summary>The pass-group block array holding the frame's environment, <c>SdfEnvironment</c>'s lane table row for row
-    /// with its host bakes, <see cref="EnvironmentRows"/> <c>float4</c> rows.</summary>
-    public const string Environment = "environment";
-    /// <summary>The rows of <see cref="Environment"/>: <c>SdfEnvironment.RowCount</c>, which the SDF engine holds it to
-    /// when it writes the block.</summary>
-    public const uint EnvironmentRows = 53;
     /// <summary>The program word stream.</summary>
     public const string ProgramWords = "sdfWords";
     /// <summary>The dynamic-transform table, three float4 rows per slot.</summary>
@@ -172,7 +182,8 @@ public static partial class SdfWorldPackage {
     public const string VisibilityRecords = "sdfVisibilityRecords";
     /// <summary>The visibility records, written by primary, surface and ambient.</summary>
     public const string VisibilityRecordsWritten = "sdfVisibilityRecordsRW";
-    /// <summary>The view's output image, written by sky and views.</summary>
+    /// <summary>The image a pass writes its color to: the lit image views shades, the resolved lit image the resolve
+    /// writes, and the view's output the composite writes.</summary>
     public const string Output = "output";
     /// <summary>The screen-surface table, three float4 rows per screen slot.</summary>
     public const string ScreenSurfaces = "screenSurfaces";
@@ -206,7 +217,22 @@ public static partial class SdfWorldPackage {
     public const string MeshMaterials = "sdfMeshMaterials";
     /// <summary>The mesh emission atlas: linear emitted light, BC6H.</summary>
     public const string MeshEmission = "sdfMeshEmission";
+    /// <summary>The impostor albedo atlas, sRGB-encoded BC7 with coverage in alpha.</summary>
+    public const string ImpostorAlbedo = "sdfImpostorAlbedo";
+    /// <summary>The impostor normal atlas: octahedral object-space normal pairs, BC5.</summary>
+    public const string ImpostorNormals = "sdfImpostorNormals";
+    /// <summary>The impostor depth atlas, BC4: 0 at a view's near side of the bounding sphere, 1 at its far side and where
+    /// the view's ray missed.</summary>
+    public const string ImpostorDepth = "sdfImpostorDepth";
+    /// <summary>The impostor material atlas: each texel's program material id, R8, read without filtering.</summary>
+    public const string ImpostorMaterials = "sdfImpostorMaterials";
+    /// <summary>The impostor emission atlas: linear emitted light, BC6H.</summary>
+    public const string ImpostorEmission = "sdfImpostorEmission";
 
+    /// <summary>Gets the impostor atlases, World-group members of every compute pass (and, for the depth atlas, the mesh
+    /// pass's pass group), in the order the impostor atlases hold the usages they pack (albedo, normal, depth, material, emission):
+    /// images that change only when the set of impostors a frame draws does.</summary>
+    public static IReadOnlyList<string> ImpostorAtlases { get; } = [ImpostorAlbedo, ImpostorNormals, ImpostorDepth, ImpostorMaterials, ImpostorEmission];
     /// <summary>Gets the mesh atlases, World-group members of every compute pass, in the order the mesh atlases hold
     /// the usages they pack (albedo, normal, occlusion, material, emission): images that change only when the set of
     /// textured meshes a frame draws does.</summary>
@@ -254,13 +280,14 @@ public static partial class SdfWorldPackage {
         Store: GpuAttachmentStore.Discard
     );
 
-    /// <summary>The name the fragment's output port version takes: the view's color, which the sky writes and views shades
-    /// over.</summary>
+    /// <summary>The name the fragment's output port version takes: the view's color, which the composite writes from the
+    /// sky's runs and the lit image.</summary>
     public const string Color = "color";
 
     /// <summary>Gets the values every pass of the fragment reads from its pass block beside the extent, which the mesh
-    /// pass's interface shares so its block lies alike: the world values, the view, the frame's levers and its
-    /// environment.</summary>
+    /// pass's interface shares so its block lies alike: the world values, the view, the frame's levers, its light count
+    /// and shadow light, and its curvature shading. The lights and the sky are World-group tables the SDF engine's
+    /// kernel interface adds (<c>SdfKernelInterfaces</c>), bound only by the passes that read them.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Values { get; } = [
         Value(name: ImageExtent, type: ShaderValueType.Uint2),
         Value(name: InstanceMaskWordCount, type: ShaderValueType.Uint),
@@ -283,8 +310,14 @@ public static partial class SdfWorldPackage {
         Value(name: NearDistance, type: ShaderValueType.Float),
         Value(name: FarDistance, type: ShaderValueType.Float),
         Value(name: DebugMode, type: ShaderValueType.Uint),
-        Value(name: AmbientScale, type: ShaderValueType.Float),
-        Value(name: SunScale, type: ShaderValueType.Float),
+        Value(name: LightCount, type: ShaderValueType.Uint),
+        Value(name: ShadowLight, type: ShaderValueType.Int),
+        Value(name: CurvatureCavity, type: ShaderValueType.Float),
+        Value(name: CurvatureRim, type: ShaderValueType.Float),
+        Value(name: CurvatureInk, type: ShaderValueType.Float),
+        Value(name: CurvatureInkLow, type: ShaderValueType.Float),
+        Value(name: CurvatureInkHigh, type: ShaderValueType.Float),
+        Value(name: CurvatureInkColor, type: ShaderValueType.Float3),
         Value(name: DebugSliceAxis, type: ShaderValueType.Float),
         Value(name: DebugSliceOffset, type: ShaderValueType.Float),
         Value(name: GridFlags, type: ShaderValueType.Uint),
@@ -309,15 +342,10 @@ public static partial class SdfWorldPackage {
         Value(name: FastAmbientOcclusion, type: ShaderValueType.Uint),
         Value(name: DisableFarBound, type: ShaderValueType.Uint),
         ShaderWorkCounters.RowMember,
-        ShaderInterfaceMember.Value(
-            group: ShaderInterfaceGroup.Pass,
-            length: EnvironmentRows,
-            name: Environment,
-            type: ShaderValueType.Float4
-        ),
     ];
     /// <summary>Gets the World group's members: what every pass of every view reads alike, the residency's tables, the
-    /// brick pool, the glyph atlas, the samplers and the mesh atlases (<see cref="MeshAtlases"/>), which the residency
+    /// brick pool, the glyph atlas, the samplers and the mesh and impostor atlases (<see cref="MeshAtlases"/>,
+    /// <see cref="ImpostorAtlases"/>), which the residency
     /// binds as one set per upload ring slot, written once and again only when what it binds moves.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Tables { get; } = [
         Table(element: ShaderValueType.Uint4, name: ProgramWords),
@@ -343,6 +371,11 @@ public static partial class SdfWorldPackage {
         WorldImage(name: MeshOcclusion),
         WorldImage(name: MeshMaterials),
         WorldImage(name: MeshEmission),
+        WorldImage(name: ImpostorAlbedo),
+        WorldImage(name: ImpostorNormals),
+        WorldImage(name: ImpostorDepth),
+        WorldImage(name: ImpostorMaterials),
+        WorldImage(name: ImpostorEmission),
     ];
     /// <summary>Gets what every compute pass of the fragment reads: from its pass group, beside the extent, the values
     /// (<see cref="Values"/>), the view's scratch, its output, the screens it shows, the mesh target and the work counters;
@@ -381,14 +414,15 @@ public static partial class SdfWorldPackage {
         .. Tables,
     ];
     /// <summary>Gets the fragment the package runs as: one view's dispatch set, its scratch transient and counted, its
-    /// one output the view's color. Every pass counts its kernels' march steps and texels written into the work counters
+    /// one output the view's color. Views shades the hits into the lit image (<see cref="Parts.Lit"/>), the sky evaluates
+    /// its field runs where the lit image's coverage is below one (<see cref="Parts.Sky"/>), and the composite writes the
+    /// color (<see cref="Parts.Composite"/>). Every pass counts its kernels' march steps and texels written into the work counters
     /// (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>): the mesh pass each fragment it writes to its
     /// target.</summary>
     public static RenderGraphPackageFragment NativeFragment { get; } = new(
         InputVersions: [],
         OutputVersions: [Color],
         Passes: [
-            Pass(name: Parts.Sky, outputs: [Parts.SkyImage]),
             Pass(name: Parts.Mask, outputs: [Parts.InstanceMasks]),
             Pass(inputs: [Parts.InstanceMasks], name: Parts.Beam, outputs: [Parts.Tiles]),
             Pass(inputs: [Parts.Tiles], name: Parts.CullArgs, outputs: [Parts.Arguments, Parts.CullBounds]),
@@ -404,11 +438,14 @@ public static partial class SdfWorldPackage {
             Hit(mesh: false, name: Parts.Surface, visibility: null, written: Parts.SurfaceVisibility),
             Hit(mesh: false, name: Parts.Ambient, visibility: null, written: Parts.AmbientVisibility),
             Hit(mesh: false, name: Parts.Shadow, visibility: null, written: Parts.ShadowVisibility),
-            Hit(mesh: false, name: Parts.Views, visibility: Parts.ShadowVisibility, written: Color),
+            Hit(mesh: false, name: Parts.Views, visibility: Parts.ShadowVisibility, written: Parts.Lit),
+            Pass(inputs: [Parts.Lit, Parts.CullBounds], name: Parts.Sky, outputs: SkyRuns) with { Members = SkyMembers },
+            Pass(inputs: [Parts.Lit, Parts.CullBounds, Parts.ShadowVisibility, .. SkyRuns], name: Parts.Composite, outputs: [Color]) with { Members = SkyMembers },
         ],
         Resources: [
-            Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.SkyImage, transient: false),
-            Image(format: RenderGraphPackageCatalog.WorkingFormat, from: Parts.SkyImage, name: Color, transient: false),
+            Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.Lit, transient: true),
+            .. SkyResources,
+            Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Color, transient: false),
             Buffer(
                 count: [Term(1, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.InstanceMaskWords)],
                 name: Parts.InstanceMasks,
@@ -528,8 +565,6 @@ public static partial class SdfWorldPackage {
 
     /// <summary>The names of the fragment's passes and versions.</summary>
     public static class Parts {
-        /// <summary>The sky pre-pass.</summary>
-        public const string Sky = "sky";
         /// <summary>The instance-cull pass building each tile's instance mask.</summary>
         public const string Mask = "mask";
         /// <summary>The beam prepass writing the tile planes and part bounds.</summary>
@@ -546,10 +581,31 @@ public static partial class SdfWorldPackage {
         public const string Ambient = "ambient";
         /// <summary>The key light's soft shadow, continuing the visibility records.</summary>
         public const string Shadow = "shadow";
-        /// <summary>Shading into the view's color.</summary>
+        /// <summary>Shading the hits into the lit image.</summary>
         public const string Views = "views";
-        /// <summary>The sky's version of the view's color.</summary>
-        public const string SkyImage = "sky";
+        /// <summary>The sky's field runs, evaluated where the lit image's coverage is below one.</summary>
+        public const string Sky = "sky";
+        /// <summary>The composite: the sky's runs in their authored order, the lit image over them by its coverage, then
+        /// the fog and the bounded media, into the view's color.</summary>
+        public const string Composite = "composite";
+        /// <summary>The lit image: the hits' shaded color premultiplied by coverage and by the fog's transmittance over each
+        /// hit's ray distance, the coverage in its alpha (one for a solid hit, the silhouette's weight on an edge, zero on a
+        /// miss), written by views in a native view and, at the output extent, by the resolve in a reduced or temporal
+        /// one.</summary>
+        public const string Lit = "lit";
+        /// <summary>Each output pixel's surface transport, which the resolve writes for the composite in a reduced or
+        /// temporal view, reconstructed from the render samples with the lit image's weights: one word a pixel
+        /// (<c>shade/sdf-transport.hlsli</c>). With its top bit clear, two half floats, the low the fog's in-scatter weight
+        /// (coverage times one minus transmittance), the high the coverage over the ray distance, scaled; with it set, a
+        /// pixel the resolve copied whole from one render sample, carrying that sample's ray distance's float bits, from
+        /// which the composite derives the transport as a native view's composite does.</summary>
+        public const string Transport = "transport";
+        /// <summary>The sky's lowest field run, which composes over nothing, so its offset alone.</summary>
+        public const string SkyBase = "skyBase";
+        /// <summary>The scale of the sky's field run above its point run.</summary>
+        public const string SkyScale = "skyScale";
+        /// <summary>The offset of the sky's field run above its point run.</summary>
+        public const string SkyOffset = "skyOffset";
         /// <summary>The per-tile instance masks.</summary>
         public const string InstanceMasks = "instanceMasks";
         /// <summary>The cull buffer: the tile planes and the part bounds.</summary>
@@ -570,14 +626,13 @@ public static partial class SdfWorldPackage {
         public const string AmbientVisibility = "ambientVisibility";
         /// <summary>Shadow's visibility records, forwarding ambient's.</summary>
         public const string ShadowVisibility = "shadowVisibility";
-        /// <summary>The sky's version of the reactivity buffer: a temporal view's render-extent reactivity, which the sky
-        /// starts and views overwrites where it shades.</summary>
-        public const string SkyReactivity = "skyReactivity";
-        /// <summary>The reactivity buffer views writes and the resolve consumes, forwarding the sky's.</summary>
+        /// <summary>The reactivity buffer views writes where it shades and the resolve reads inside the dispatch
+        /// box.</summary>
         public const string Reactivity = "reactivity";
         /// <summary>The history color: the resolved color, one image a frame slot, read by the next frame.</summary>
         public const string HistoryColor = "historyColor";
-        /// <summary>The history surface: each output pixel's ray distance and identity, read by the next frame.</summary>
+        /// <summary>The history surface: each output pixel's identity, ray distance, gathered weight and accumulated
+        /// transport, read by the next frame.</summary>
         public const string HistorySurface = "historySurface";
     }
 }

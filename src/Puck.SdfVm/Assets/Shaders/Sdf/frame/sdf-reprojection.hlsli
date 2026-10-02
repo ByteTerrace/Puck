@@ -18,12 +18,19 @@ bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint
         uint mesh = sdfMeshRecord(draw);
         uint first = (3u * sdfVisibilityMeshTriangle(record));
         float3 weights;
-        if (!sdfMeshBarycentric(sdfMeshWorldPosition(mesh, first), sdfMeshWorldPosition(mesh, first + 1u),
-            sdfMeshWorldPosition(mesh, first + 2u), currentPoint, weights)) {
-            return false;
+        float3 local;
+        // An impostor card's point is the surface its views show, off the card's plane, so its object-space point is the
+        // draw's inverse matrix of the point itself; any other mesh point lies on its triangle.
+        if (sdfMeshIsImpostor(draw)) {
+            local = sdfMeshObjectFromWorld(mesh, (currentPoint - sdfMeshRow(mesh, 3u)));
+        } else {
+            if (!sdfMeshBarycentric(sdfMeshWorldPosition(mesh, first), sdfMeshWorldPosition(mesh, first + 1u),
+                sdfMeshWorldPosition(mesh, first + 2u), currentPoint, weights)) {
+                return false;
+            }
+            local = ((weights.x * sdfMeshObjectPosition(mesh, first)) +
+                (weights.y * sdfMeshObjectPosition(mesh, first + 1u)) + (weights.z * sdfMeshObjectPosition(mesh, first + 2u)));
         }
-        float3 local = ((weights.x * sdfMeshObjectPosition(mesh, first)) +
-            (weights.y * sdfMeshObjectPosition(mesh, first + 1u)) + (weights.z * sdfMeshObjectPosition(mesh, first + 2u)));
         uint previousMatrix = (4u * draw);
         previousPoint = ((local.x * sdfPreviousMeshTransforms[previousMatrix].xyz) +
             (local.y * sdfPreviousMeshTransforms[previousMatrix + 1u].xyz) +

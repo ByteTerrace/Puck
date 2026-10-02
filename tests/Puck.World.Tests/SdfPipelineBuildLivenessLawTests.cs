@@ -195,14 +195,14 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         driver.WaitUntilFull();
 
         // The loss cancels every kernel's build inside the cache's gate before any entry leaves the cache, so once the
-        // cache lists only the region copy and the mesh pass, released after the set, the held creations can return: no
+        // cache lists only the region copy, the mesh pass and its impostor card pass, released after the set, the held creations can return: no
         // canceled build starts another.
         var loss = new Thread(start: node.OnDeviceLost);
 
         loss.Start();
         TestLiveness.Until(
             reason: () => $"{cache.Pipelines.SharedPipelines} pipelines are still leased",
-            step: () => (cache.Pipelines.SharedPipelines <= 2)
+            step: () => (cache.Pipelines.SharedPipelines <= 3)
         );
         driver.Open();
         loss.Join();
@@ -250,7 +250,7 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         first.Dispose();
         Assert.Equal(
             actual: (cache.Pipelines.SharedPipelines, last.Describe()),
-            expected: (11, "building (0 of 11 pipelines created; waiting on sdf-beam, sdf-instance-cull, sdf-cull-args, sdf-world-primary, sdf-world-surface, sdf-world-ambient, sdf-world-shadow, sdf-world-views, sdf-world-views-core, sdf-world-views-folds, sdf-sky)")
+            expected: (12, "building (0 of 12 pipelines created; waiting on sdf-beam, sdf-instance-cull, sdf-cull-args, sdf-world-primary, sdf-world-surface, sdf-world-ambient, sdf-world-shadow, sdf-world-views, sdf-world-views-core, sdf-world-views-folds, sdf-sky-runs, sdf-composite)")
         );
 
         var release = new Thread(start: last.Dispose);

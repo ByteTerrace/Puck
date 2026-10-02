@@ -43,7 +43,7 @@ public sealed partial class WorldMachineHost {
         ((m_instances.TryGetValue(
             key: instance,
             value: out var entry
-        ) && (entry.Lease.Runtime is IMachineVideoOutputs outputs) &&
+        ) && entry.Declaration.Running && (entry.Lease.Runtime is IMachineVideoOutputs outputs) &&
         outputs.VideoOutputs.TryGetValue(
             key: output,
             value: out var selected

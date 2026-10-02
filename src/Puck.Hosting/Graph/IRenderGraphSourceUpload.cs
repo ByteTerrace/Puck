@@ -26,7 +26,10 @@ public interface IRenderGraphSourceUpload : IDisposable {
     /// function of.</param>
     /// <param name="region">The region, <see cref="ImageSourceUploadLayout.ByteCount"/> bytes of the descriptor's
     /// header.</param>
-    /// <returns><see langword="true"/> when the region holds an image to convert; <see langword="false"/> while the
-    /// producer has none, and the runtime withdraws the render so the source is asked again.</returns>
-    bool TryWrite(long tick, GpuRegion region);
+    /// <returns>Whether the region holds the tick's image to convert: <see cref="FrameRender.Rendered"/>; waiting only
+    /// while writing the same tick again can deliver it (a region the runtime rebuilds for a changed shape); refused,
+    /// naming why, when it cannot: its producer faulted, or its image is a function of the simulation and it has none
+    /// for this tick, which only a later tick can change. A render that writes nothing is withdrawn, so the source is
+    /// asked again.</returns>
+    FrameRender Write(long tick, GpuRegion region);
 }

@@ -254,8 +254,10 @@ read-after-write across ticks (e.g. asserting motion after input).
 
 **The release is exact.** `FixedStepPump` runs the host's console drain
 (`TextCommandSource.Collect`, then the buffered-output flush) before EVERY
-step, including each step of a catch-up burst (`FixedStepPump.CreateHosted`
-wires it for the windowed, headless, and offscreen hosts alike). The line after
+step, including each step of a windowed or headless catch-up burst
+(`FixedStepPump.CreateHosted` wires it for the windowed, headless, and
+offscreen hosts alike; the offscreen host never bursts, since it steps one tick
+per produced frame). The line after
 a wait releasing at R therefore runs after tick R completes and before tick
 R+1 steps: an `Immediate` read observes the state at R, and a `Simulation`
 line applies in tick R+1, because the administrative stdin session is

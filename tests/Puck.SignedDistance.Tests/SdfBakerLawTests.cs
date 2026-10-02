@@ -110,6 +110,7 @@ public sealed class SdfBakerLawTests {
         AssertSameTexture(actual: second.Impostor.Albedo, expected: first.Impostor.Albedo);
         AssertSameTexture(actual: second.Impostor.Normal, expected: first.Impostor.Normal);
         AssertSameTexture(actual: second.Impostor.Depth, expected: first.Impostor.Depth);
+        AssertSameTexture(actual: second.Impostor.Material, expected: first.Impostor.Material);
         AssertSameTexture(actual: second.Impostor.Emission, expected: first.Impostor.Emission);
     }
     [MemberData(memberName: nameof(SceneNames))]
@@ -121,10 +122,11 @@ public sealed class SdfBakerLawTests {
 
         Assert.Equal(expected: [SdfBakeTextureUsage.Albedo, SdfBakeTextureUsage.Normal, SdfBakeTextureUsage.Occlusion, SdfBakeTextureUsage.Material, SdfBakeTextureUsage.Emission], actual: bake.Textures.Select(selector: static texture => texture.Usage));
         Assert.All(collection: bake.Textures, action: texture => AssertChain(texture: texture, tileTexels: Tile));
-        Assert.Equal(expected: [SdfBakeTextureUsage.Albedo, SdfBakeTextureUsage.Normal, SdfBakeTextureUsage.Depth, SdfBakeTextureUsage.Emission], actual: ((SdfBakedTexture[])[bake.Impostor.Albedo, bake.Impostor.Normal, bake.Impostor.Depth, bake.Impostor.Emission]).Select(selector: static texture => texture.Usage));
+        Assert.Equal(expected: [SdfBakeTextureUsage.Albedo, SdfBakeTextureUsage.Normal, SdfBakeTextureUsage.Depth, SdfBakeTextureUsage.Material, SdfBakeTextureUsage.Emission], actual: ((SdfBakedTexture[])[bake.Impostor.Albedo, bake.Impostor.Normal, bake.Impostor.Depth, bake.Impostor.Material, bake.Impostor.Emission]).Select(selector: static texture => texture.Usage));
         AssertChain(texture: bake.Impostor.Albedo, tileTexels: bake.Impostor.ViewTexels);
         AssertChain(texture: bake.Impostor.Normal, tileTexels: bake.Impostor.ViewTexels);
         AssertChain(texture: bake.Impostor.Depth, tileTexels: bake.Impostor.ViewTexels);
+        AssertChain(texture: bake.Impostor.Material, tileTexels: bake.Impostor.ViewTexels);
         AssertChain(texture: bake.Impostor.Emission, tileTexels: bake.Impostor.ViewTexels);
 
         var albedo = bake.Textures[0].Decode(level: 0);

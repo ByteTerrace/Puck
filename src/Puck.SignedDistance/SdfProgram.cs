@@ -186,6 +186,7 @@ public sealed partial class SdfProgram {
         m_screenSurfacesView = Array.AsReadOnly(array: m_screenSurfaces);
 
         ValidateIsa();
+        BakeLogSphereFrames();
 
         if (m_instances.Length > SdfProgramBuilder.MaxInstances) {
             throw new ArgumentException(
@@ -217,10 +218,9 @@ public sealed partial class SdfProgram {
             instructions: m_instructions
         );
 
-        // The Lipschitz pass runs BEFORE any packing because it PATCHES scoped PopField instructions in place (their
-        // Data1.y gains the scope's 1/L candidate scale) — the packed words and the typed stream must describe the
-        // same program. Exactly 1.0f for a warp-free, seam-free program, so isometric scenes stay
-        // byte-identical; a factor-1 scope stays unpatched (Data1.y = 0 reads as no scale in the shader).
+        // The Lipschitz pass PATCHES scoped PopField instructions in place (Data1.y gains the scope's 1/L candidate
+        // scale), so it runs before packing: the packed words and the typed stream describe one program. A warp-free,
+        // seam-free program gets exactly 1.0f, and a factor-1 scope stays unpatched (Data1.y = 0 reads as no scale).
         var stepScale = AnalyzeLipschitz(chainFactors: out var chainFactors, convexPolygonProfiles: m_convexPolygonProfiles, instructions: m_instructions, sweepCurves: m_sweepCurves);
 
         FieldScopeClamps = ReadFieldScopeClamps(instructionOwners: instructionOwners);

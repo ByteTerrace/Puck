@@ -11,7 +11,7 @@ namespace Puck.World.Tests;
 /// <summary>
 /// The device half of a capture of CPU float pixels. A CPU-pixel surface in a float working format reaches a capture sink
 /// only through <see cref="SurfaceEncoder.ReadSurface"/>, which uploads it through the device's one image upload
-/// (<see cref="IGpuSurfaceUpload"/>), draws the display encode (<c>Assets/Runtime/display-encode.frag.hlsl</c>) over it
+/// (<see cref="IGpuSurfaceUpload"/>), draws the display encode (<c>Assets/Shaders/Runtime/display-encode.frag.hlsl</c>) over it
 /// in SDR into its RGBA8 target and reads that back. Every working value the law hands in sits on an 8-bit code, so the
 /// encode's half code of dither either side leaves each channel within one code of it; headroom above SDR white saturates
 /// to 255, a negative value to 0, and the encode writes an opaque alpha whatever the source's. The pattern differs per

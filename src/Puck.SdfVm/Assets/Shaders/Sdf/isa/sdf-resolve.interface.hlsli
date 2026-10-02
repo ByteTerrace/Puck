@@ -1,6 +1,65 @@
-// Generated from shader interface 'sdf-resolve' (sha256/7704567f5bd0c5f98e16b43980036ac46119baa521285e24668cb7ba29ae9358). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/29c5894d92cad97ac996f4f080b2113ed718c011259b087640cbbcb0ff5b0639). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
+
+struct SdfLight {
+    [[vk::offset(0)]] float3 Direction;
+    [[vk::offset(12)]] float Weight;
+    [[vk::offset(16)]] float3 Color;
+    [[vk::offset(28)]] uint Kind;
+    [[vk::offset(32)]] float Param;
+    [[vk::offset(36)]] uint Shadows;
+    [[vk::offset(40)]] int DynamicSlot;
+    [[vk::offset(44)]] uint _pad44;
+};
+
+struct SdfSkyBlock {
+    [[vk::offset(0)]] float FogDensity;
+    [[vk::offset(4)]] uint StopCount;
+    [[vk::offset(8)]] uint SoftboxCount;
+    [[vk::offset(12)]] int DiscLight;
+    [[vk::offset(16)]] float3 DiscDirection;
+    [[vk::offset(28)]] float DiscIntensity;
+    [[vk::offset(32)]] float DiscExponent;
+    [[vk::offset(36)]] uint _pad36;
+    [[vk::offset(40)]] float StarDensity;
+    [[vk::offset(44)]] float StarBrightness;
+    [[vk::offset(48)]] uint StarSeed;
+    [[vk::offset(52)]] float TwinkleShare;
+    [[vk::offset(56)]] float TwinkleDepth;
+    [[vk::offset(60)]] float TwinklePhase;
+    [[vk::offset(64)]] float3 CloudColor;
+    [[vk::offset(76)]] float CloudCoverage;
+    [[vk::offset(80)]] float CloudSoftness;
+    [[vk::offset(84)]] float CloudScale;
+    [[vk::offset(88)]] uint CloudSeed;
+    [[vk::offset(92)]] float CloudCurl;
+    [[vk::offset(96)]] float2 CloudDriftOffset;
+    [[vk::offset(104)]] float2 CloudShearOffset;
+    [[vk::offset(112)]] float3 CloudLightDirection;
+    [[vk::offset(124)]] float CloudSpinAngle;
+    [[vk::offset(128)]] float3 CloudLightColor;
+    [[vk::offset(140)]] uint _pad140;
+    [[vk::offset(144)]] float3 HorizonLow;
+    [[vk::offset(156)]] uint _pad156;
+    [[vk::offset(160)]] float3 HorizonHigh;
+    [[vk::offset(172)]] uint _pad172;
+};
+
+struct SdfSkyStop {
+    [[vk::offset(0)]] float3 Color;
+    [[vk::offset(12)]] float Elevation;
+};
+
+struct SdfSoftbox {
+    [[vk::offset(0)]] float3 Direction;
+    [[vk::offset(12)]] float Weight;
+    [[vk::offset(16)]] float3 Color;
+    [[vk::offset(28)]] uint _pad28;
+    [[vk::offset(32)]] float2 Size;
+    [[vk::offset(40)]] float Blur;
+    [[vk::offset(44)]] uint _pad44;
+};
 
 // The Frame group: descriptor set 0, register space 0.
 struct SdfResolveFrame {
@@ -44,89 +103,114 @@ struct SdfResolveFrame {
 [[vk::binding(17, 1)]] Texture2D<float4> sdfMeshOcclusion : register(t17, space1);
 [[vk::binding(18, 1)]] Texture2D<float4> sdfMeshMaterials : register(t18, space1);
 [[vk::binding(19, 1)]] Texture2D<float4> sdfMeshEmission : register(t19, space1);
+[[vk::binding(20, 1)]] Texture2D<float4> sdfImpostorAlbedo : register(t20, space1);
+[[vk::binding(21, 1)]] Texture2D<float4> sdfImpostorNormals : register(t21, space1);
+[[vk::binding(22, 1)]] Texture2D<float4> sdfImpostorDepth : register(t22, space1);
+[[vk::binding(23, 1)]] Texture2D<float4> sdfImpostorMaterials : register(t23, space1);
+[[vk::binding(24, 1)]] Texture2D<float4> sdfImpostorEmission : register(t24, space1);
+[[vk::binding(25, 1)]] StructuredBuffer<SdfLight> sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2 : register(t25, space1);
+#define sdfLights sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2
+[[vk::binding(26, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutc21dea5f8b5a7c8005406de8a2810f1fa8c9cd0b443a9e283a9cb686059d22c6 : register(t26, space1);
+#define sdfSky sdfSkyLayoutc21dea5f8b5a7c8005406de8a2810f1fa8c9cd0b443a9e283a9cb686059d22c6
+[[vk::binding(27, 1)]] StructuredBuffer<SdfSkyStop> sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224 : register(t27, space1);
+#define sdfSkyStops sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224
+[[vk::binding(28, 1)]] StructuredBuffer<SdfSoftbox> sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf : register(t28, space1);
+#define sdfSoftboxes sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf
 
 // The Pass group: descriptor set 3, register space 3.
 struct SdfResolvePass {
     [[vk::offset(0)]] uint2 extent;
-    [[vk::offset(8)]] float ambientScale;
-    [[vk::offset(12)]] float aspectRatio;
-    [[vk::offset(16)]] uint cameraTileShadowMask;
-    [[vk::offset(20)]] uint debugMode;
-    [[vk::offset(24)]] float debugSliceAxis;
-    [[vk::offset(28)]] float debugSliceOffset;
-    [[vk::offset(32)]] uint disableAmbientOcclusion;
-    [[vk::offset(36)]] uint disableFarBound;
-    [[vk::offset(40)]] uint disableScreenLights;
-    [[vk::offset(44)]] uint disableShadowCull;
-    [[vk::offset(48)]] uint disableSoftShadows;
-    [[vk::offset(52)]] uint enableShadowProxy;
-    [[vk::offset(56)]] uint _pad56;
-    [[vk::offset(60)]] uint _pad60;
-    [[vk::offset(64)]] float4 environment[53];
-    [[vk::offset(912)]] float farDistance;
-    [[vk::offset(916)]] uint fastAmbientOcclusion;
-    [[vk::offset(920)]] uint fastSoftShadowMarch;
-    [[vk::offset(924)]] uint finiteDifferenceNormals;
-    [[vk::offset(928)]] float2 frustumOffset;
-    [[vk::offset(936)]] uint gridFlags;
-    [[vk::offset(940)]] float gridLineWidth;
-    [[vk::offset(944)]] float4 gridObjectFrame;
-    [[vk::offset(960)]] float3 gridObjectOrigin;
-    [[vk::offset(972)]] float gridObjectPatchRadius;
-    [[vk::offset(976)]] float3 gridObjectPitch;
-    [[vk::offset(988)]] float gridPlaneY;
-    [[vk::offset(992)]] float4 gridWorldFrame;
-    [[vk::offset(1008)]] float3 gridWorldOrigin;
-    [[vk::offset(1020)]] uint _pad1020;
-    [[vk::offset(1024)]] float3 gridWorldPitch;
-    [[vk::offset(1036)]] uint historyFrames;
-    [[vk::offset(1040)]] uint2 imageExtent;
-    [[vk::offset(1048)]] uint instanceMaskWordCount;
-    [[vk::offset(1052)]] uint _pad1052;
-    [[vk::offset(1056)]] float2 jitter;
-    [[vk::offset(1064)]] uint meshDraws;
-    [[vk::offset(1068)]] float nearDistance;
-    [[vk::offset(1072)]] float4 previousView[6];
-    [[vk::offset(1168)]] uint screenCount;
-    [[vk::offset(1172)]] float shadowDistanceScale;
-    [[vk::offset(1176)]] float sunScale;
-    [[vk::offset(1180)]] float tanHalfFieldOfView;
-    [[vk::offset(1184)]] uint temporal;
-    [[vk::offset(1188)]] uint _pad1188;
-    [[vk::offset(1192)]] uint2 tileGrid;
-    [[vk::offset(1200)]] float upscaleSharpness;
-    [[vk::offset(1204)]] uint viewBase;
-    [[vk::offset(1208)]] uint _pad1208;
-    [[vk::offset(1212)]] uint _pad1212;
-    [[vk::offset(1216)]] float3 viewForward;
-    [[vk::offset(1228)]] uint _pad1228;
-    [[vk::offset(1232)]] float3 viewPosition;
-    [[vk::offset(1244)]] uint _pad1244;
-    [[vk::offset(1248)]] float3 viewRight;
-    [[vk::offset(1260)]] uint _pad1260;
-    [[vk::offset(1264)]] float3 viewUp;
-    [[vk::offset(1276)]] uint viewportCount;
-    [[vk::offset(1280)]] uint workCounterRow;
+    [[vk::offset(8)]] float aspectRatio;
+    [[vk::offset(12)]] uint cameraTileShadowMask;
+    [[vk::offset(16)]] float curvatureCavity;
+    [[vk::offset(20)]] float curvatureInk;
+    [[vk::offset(24)]] uint _pad24;
+    [[vk::offset(28)]] uint _pad28;
+    [[vk::offset(32)]] float3 curvatureInkColor;
+    [[vk::offset(44)]] float curvatureInkHigh;
+    [[vk::offset(48)]] float curvatureInkLow;
+    [[vk::offset(52)]] float curvatureRim;
+    [[vk::offset(56)]] uint debugMode;
+    [[vk::offset(60)]] float debugSliceAxis;
+    [[vk::offset(64)]] float debugSliceOffset;
+    [[vk::offset(68)]] uint disableAmbientOcclusion;
+    [[vk::offset(72)]] uint disableFarBound;
+    [[vk::offset(76)]] uint disableScreenLights;
+    [[vk::offset(80)]] uint disableShadowCull;
+    [[vk::offset(84)]] uint disableSoftShadows;
+    [[vk::offset(88)]] uint enableShadowProxy;
+    [[vk::offset(92)]] float farDistance;
+    [[vk::offset(96)]] uint fastAmbientOcclusion;
+    [[vk::offset(100)]] uint fastSoftShadowMarch;
+    [[vk::offset(104)]] uint finiteDifferenceNormals;
+    [[vk::offset(108)]] uint _pad108;
+    [[vk::offset(112)]] float2 frustumOffset;
+    [[vk::offset(120)]] uint gridFlags;
+    [[vk::offset(124)]] float gridLineWidth;
+    [[vk::offset(128)]] float4 gridObjectFrame;
+    [[vk::offset(144)]] float3 gridObjectOrigin;
+    [[vk::offset(156)]] float gridObjectPatchRadius;
+    [[vk::offset(160)]] float3 gridObjectPitch;
+    [[vk::offset(172)]] float gridPlaneY;
+    [[vk::offset(176)]] float4 gridWorldFrame;
+    [[vk::offset(192)]] float3 gridWorldOrigin;
+    [[vk::offset(204)]] uint _pad204;
+    [[vk::offset(208)]] float3 gridWorldPitch;
+    [[vk::offset(220)]] uint historyFrames;
+    [[vk::offset(224)]] uint2 imageExtent;
+    [[vk::offset(232)]] uint instanceMaskWordCount;
+    [[vk::offset(236)]] uint _pad236;
+    [[vk::offset(240)]] float2 jitter;
+    [[vk::offset(248)]] uint lightCount;
+    [[vk::offset(252)]] uint meshDraws;
+    [[vk::offset(256)]] float nearDistance;
+    [[vk::offset(260)]] uint _pad260;
+    [[vk::offset(264)]] uint _pad264;
+    [[vk::offset(268)]] uint _pad268;
+    [[vk::offset(272)]] float4 previousView[6];
+    [[vk::offset(368)]] uint screenCount;
+    [[vk::offset(372)]] float shadowDistanceScale;
+    [[vk::offset(376)]] int shadowLight;
+    [[vk::offset(380)]] float tanHalfFieldOfView;
+    [[vk::offset(384)]] uint temporal;
+    [[vk::offset(388)]] uint _pad388;
+    [[vk::offset(392)]] uint2 tileGrid;
+    [[vk::offset(400)]] float upscaleSharpness;
+    [[vk::offset(404)]] uint viewBase;
+    [[vk::offset(408)]] uint _pad408;
+    [[vk::offset(412)]] uint _pad412;
+    [[vk::offset(416)]] float3 viewForward;
+    [[vk::offset(428)]] uint _pad428;
+    [[vk::offset(432)]] float3 viewPosition;
+    [[vk::offset(444)]] uint _pad444;
+    [[vk::offset(448)]] float3 viewRight;
+    [[vk::offset(460)]] uint _pad460;
+    [[vk::offset(464)]] float3 viewUp;
+    [[vk::offset(476)]] uint viewportCount;
+    [[vk::offset(480)]] uint workCounterRow;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa1D91FDE2 : register(b0, space3);
-#define passGroup passGroupIsa1D91FDE2
+[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsaCD9F88B9 : register(b0, space3);
+#define passGroup passGroupIsaCD9F88B9
 [[vk::binding(1, 3)]] Texture2D<float4> currentColor : register(t1, space3);
 [[vk::binding(2, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);
 [[vk::binding(4, 3)]] StructuredBuffer<uint> cullBounds : register(t4, space3);
-[[vk::binding(5, 3)]] StructuredBuffer<float> reactivity : register(t5, space3);
-[[vk::binding(6, 3)]] Texture2D<float4> historyColor : register(t6, space3);
-[[vk::binding(7, 3)]] StructuredBuffer<uint> historySurface : register(t7, space3);
-[[vk::binding(8, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> historyColorRW : register(u8, space3);
-[[vk::binding(9, 3)]] RWStructuredBuffer<uint> historySurfaceRW : register(u9, space3);
-[[vk::binding(10, 3)]] RWStructuredBuffer<uint> workCounters : register(u10, space3);
+[[vk::binding(5, 3)]] RWStructuredBuffer<uint> transportRW : register(u5, space3);
+[[vk::binding(6, 3)]] StructuredBuffer<float> reactivity : register(t6, space3);
+[[vk::binding(7, 3)]] Texture2D<float4> historyColor : register(t7, space3);
+[[vk::binding(8, 3)]] StructuredBuffer<uint> historySurface : register(t8, space3);
+[[vk::binding(9, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> historyColorRW : register(u9, space3);
+[[vk::binding(10, 3)]] RWStructuredBuffer<uint> historySurfaceRW : register(u10, space3);
+[[vk::binding(11, 3)]] RWStructuredBuffer<uint> workCounters : register(u11, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
-// back): each counted kind in GpuWork.KernelKinds order, march steps then texels written, as a 64-bit count in
-// two words, low word first. An interface declaring no work counters declares the same two functions empty.
-static const uint PuckWorkRowWords = 4u;
+// back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, then sky evaluations, as a
+// 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
+// empty.
+static const uint PuckWorkRowWords = 6u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
+static const uint PuckWorkSkyWord = 4u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -152,6 +236,14 @@ void puckCountWork(uint steps, uint texels) {
 
         puckAddWork((row + PuckWorkStepsWord), waveSteps);
         puckAddWork((row + PuckWorkTexelsWord), waveTexels);
+    }
+}
+// Adds an invocation's sky evaluations to its pass's row: the wave sums them, and its first active lane adds the sum.
+void puckCountSky(uint evaluations) {
+    uint waveEvaluations = WaveActiveSum(evaluations);
+
+    if (WaveIsFirstLane()) {
+        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkSkyWord), waveEvaluations);
     }
 }
 // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper

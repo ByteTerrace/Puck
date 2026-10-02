@@ -81,11 +81,11 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             UnifiedMemory: true
         );
 
-        // Eight per-frame tables, each a ring of one buffer per slot, and nothing copied; the mesh region is always staged,
-        // so it takes no aperture buffer.
+        // Twelve per-frame tables, each a ring of one buffer per slot, and nothing copied; the mesh region is always
+        // staged, so it takes no aperture buffer.
         using (var rig = new Rig(profile: discrete, slots: 40)) {
             rig.Warm();
-            Assert.Equal(expected: (8 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
+            Assert.Equal(expected: (12 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
             rig.Move(slot: 3);
             rig.Render(time: 0f);
             Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);
@@ -654,9 +654,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         // A draw's record: its matrix row by row, its material, then the word its mesh's first index sits at, its index
         // count, the word its first vertex sits at, its attribute flags, the word its first triangle material sits at, and
-        // its normal matrix (the inverse transpose of its upper 3x3). The vertices start past the three records (word 93),
-        // the triangle materials past the seven vertices (word 149), and the indices past the one triangle material
-        // (word 150).
+        // its normal matrix (the inverse transpose of its upper 3x3) and its ten impostor words, zeros for a draw with none. The
+        // vertices start past the three records (word 123), the triangle materials past the seven vertices (word 179), and
+        // the indices past the one triangle material (word 180).
         void Record(Matrix4x4 matrix, uint material, uint indexWord, uint indexCount, uint vertexWord, uint flags) {
             float[] rows = [
                 matrix.M11, matrix.M12, matrix.M13, matrix.M14,
@@ -666,12 +666,13 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             ];
 
             expected.AddRange(collection: rows.Select(selector: BitConverter.SingleToUInt32Bits));
-            expected.AddRange(collection: [material, indexWord, indexCount, vertexWord, flags, 149u]);
+            expected.AddRange(collection: [material, indexWord, indexCount, vertexWord, flags, 179u]);
             Assert.True(condition: Matrix4x4.Invert(matrix: matrix with { M41 = 0f, M42 = 0f, M43 = 0f }, result: out var inverse));
 
             var normal = Matrix4x4.Transpose(matrix: inverse);
 
             expected.AddRange(collection: new[] { normal.M11, normal.M12, normal.M13, normal.M21, normal.M22, normal.M23, normal.M31, normal.M32, normal.M33 }.Select(selector: BitConverter.SingleToUInt32Bits));
+            expected.AddRange(collection: new uint[10]);
         }
         // A vertex: its position, its normal and its texture coordinate, zeros for an attribute its mesh lacks.
         void Vertices(SdfMesh mesh) {
@@ -684,9 +685,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             }
         }
 
-        Record(flags: 0u, indexCount: 6, indexWord: 150, material: 4, matrix: moved, vertexWord: 93);
-        Record(flags: SdfMeshRegion.NormalsFlag | SdfMeshRegion.MaterialsFlag, indexCount: 3, indexWord: 156, material: 5, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: 125);
-        Record(flags: 0u, indexCount: 6, indexWord: 150, material: 6, matrix: Matrix4x4.Identity, vertexWord: 93);
+        Record(flags: 0u, indexCount: 6, indexWord: 180, material: 4, matrix: moved, vertexWord: 123);
+        Record(flags: SdfMeshRegion.NormalsFlag | SdfMeshRegion.MaterialsFlag, indexCount: 3, indexWord: 186, material: 5, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: 155);
+        Record(flags: 0u, indexCount: 6, indexWord: 180, material: 6, matrix: Matrix4x4.Identity, vertexWord: 123);
         Vertices(mesh: quad);
         Vertices(mesh: triangle);
         expected.Add(item: 2u);
@@ -933,6 +934,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         private readonly DynamicTransform[] m_transforms;
 
         private SdfWorldPipelines m_pipelines = null!;
+        private GpuPassPipeline m_impostorRaster = null!;
         private GpuPassPipeline m_meshRaster = null!;
         private GpuPassPipeline m_regionCopy = null!;
 
@@ -961,6 +963,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             m_pipelines.Dispose();
             m_regionCopy.Dispose();
             m_meshRaster.Dispose();
+            m_impostorRaster.Dispose();
         }
         // Moves one slot to a pose no earlier frame gave it.
         public void Move(int slot) {
@@ -986,6 +989,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             m_pipelines.Dispose();
             m_regionCopy.Dispose();
             m_meshRaster.Dispose();
+            m_impostorRaster.Dispose();
             Engine = Build();
         }
         // Renders one frame at the given time, by default resetting the tallies first so they read that frame's writes.
@@ -1051,6 +1055,10 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                 device: Gpu,
                 ledger: ledger
             );
+            m_impostorRaster = SdfTestPipelines.ImpostorRaster(
+                device: Gpu,
+                ledger: ledger
+            );
             // A brick pool needs its bake pipeline, so its set is built with a one-byte brick kernel.
             m_pipelines = ((m_brickPoolVoxelCapacity == 0)
                 ? SdfTestPipelines.Build(
@@ -1075,6 +1083,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                     WorkLedger: ledger
                 ),
                 pipelines: m_pipelines,
+                impostorRaster: m_impostorRaster,
                 meshRaster: m_meshRaster,
                 regionCopy: m_regionCopy.Compute!
             );

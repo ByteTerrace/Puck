@@ -12,24 +12,23 @@ namespace Puck.SdfVm;
 /// <param name="InstanceMaskWordCount">The live program's per-tile instance-mask width.</param>
 /// <param name="MeshDraws">The frame's mesh draws.</param>
 /// <param name="DebugMode">The debug view mode; zero renders the final image.</param>
-/// <param name="Environment">The environment rows <see cref="SdfFrameBlock.BakeEnvironment"/> baked,
-/// <see cref="SdfEnvironment.LaneCount"/> floats.</param>
-public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode, ReadOnlyMemory<float> Environment);
+public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode);
 /// <summary>
 /// Writes what one view's passes read of a frame into an <c>sdf.world</c> pass block: the world values, the view's camera,
-/// the frame's levers and its environment, each at the offset the generated declarations read it from
-/// (<see cref="SdfWorldInterfaces.WorldParameters"/>). It is the one writer of that block; the kernels read each value by
-/// name through <c>isa/sdf-world.interface.hlsli</c>, and the environment's rows by the indices <see cref="SdfIsaHlsl"/>
-/// generates from <see cref="SdfEnvironment"/>.
+/// the frame's levers, its light count and shadow light, and its curvature shading, each at the offset the generated
+/// declarations read it from (<see cref="SdfWorldInterfaces.WorldParameters"/>). It is the one writer of that block; the
+/// kernels read each value by name through <c>isa/sdf-world.interface.hlsli</c>. The lights and the sky are no part of
+/// it: the tables write them into their own regions (<see cref="SdfLights.Pack"/>, <see cref="SdfSky.Pack"/>).
 /// </summary>
 public static class SdfFrameBlock {
-    // The cloud offsets' wrap period in layer units, the lattice period of the sky's noise (SdfNoisePeriodCells in
-    // field/sdf-noise.hlsli, whose cells wrap to it before they are hashed), so an offset reduced by it joins without a
-    // seam.
-
     private static readonly ShaderPipelineParameterLayout Layout = SdfWorldInterfaces.WorldParameters;
-    private static readonly int AmbientScale = Offset(member: SdfWorldPackage.AmbientScale);
     private static readonly int AspectRatio = Offset(member: SdfWorldPackage.AspectRatio);
+    private static readonly int CurvatureCavity = Offset(member: SdfWorldPackage.CurvatureCavity);
+    private static readonly int CurvatureInk = Offset(member: SdfWorldPackage.CurvatureInk);
+    private static readonly int CurvatureInkColor = Offset(member: SdfWorldPackage.CurvatureInkColor);
+    private static readonly int CurvatureInkHigh = Offset(member: SdfWorldPackage.CurvatureInkHigh);
+    private static readonly int CurvatureInkLow = Offset(member: SdfWorldPackage.CurvatureInkLow);
+    private static readonly int CurvatureRim = Offset(member: SdfWorldPackage.CurvatureRim);
     private static readonly int CameraTileShadowMask = Offset(member: SdfWorldPackage.CameraTileShadowMask);
     private static readonly int DebugMode = Offset(member: SdfWorldPackage.DebugMode);
     private static readonly int DebugSliceAxis = Offset(member: SdfWorldPackage.DebugSliceAxis);
@@ -40,7 +39,6 @@ public static class SdfFrameBlock {
     private static readonly int DisableShadowCull = Offset(member: SdfWorldPackage.DisableShadowCull);
     private static readonly int DisableSoftShadows = Offset(member: SdfWorldPackage.DisableSoftShadows);
     private static readonly int EnableShadowProxy = Offset(member: SdfWorldPackage.EnableShadowProxy);
-    private static readonly int Environment = Offset(member: SdfWorldPackage.Environment);
     private static readonly int FarDistance = Offset(member: SdfWorldPackage.FarDistance);
     private static readonly int FastAmbientOcclusion = Offset(member: SdfWorldPackage.FastAmbientOcclusion);
     private static readonly int FastSoftShadowMarch = Offset(member: SdfWorldPackage.FastSoftShadowMarch);
@@ -61,12 +59,13 @@ public static class SdfFrameBlock {
     private static readonly int HistoryFrames = Offset(member: SdfWorldPackage.HistoryFrames);
     private static readonly int Temporal = Offset(member: SdfWorldPackage.Temporal);
     private static readonly int ImageExtent = Offset(member: SdfWorldPackage.ImageExtent);
+    private static readonly int LightCount = Offset(member: SdfWorldPackage.LightCount);
     private static readonly int InstanceMaskWordCount = Offset(member: SdfWorldPackage.InstanceMaskWordCount);
     private static readonly int MeshDraws = Offset(member: SdfWorldPackage.MeshDraws);
     private static readonly int NearDistance = Offset(member: SdfWorldPackage.NearDistance);
     private static readonly int ScreenCount = Offset(member: SdfWorldPackage.ScreenCount);
     private static readonly int ShadowDistanceScale = Offset(member: SdfWorldPackage.ShadowDistanceScale);
-    private static readonly int SunScale = Offset(member: SdfWorldPackage.SunScale);
+    private static readonly int ShadowLight = Offset(member: SdfWorldPackage.ShadowLight);
     private static readonly int TanHalfFieldOfView = Offset(member: SdfWorldPackage.TanHalfFieldOfView);
     private static readonly int TileGrid = Offset(member: SdfWorldPackage.TileGrid);
     private static readonly int ViewBase = Offset(member: SdfWorldPackage.ViewBase);
@@ -136,8 +135,9 @@ public static class SdfFrameBlock {
         );
     /// <summary>Writes a view's values into a pass block: its render extent and tile grid, the frame's bound screens,
     /// instance-mask width and mesh draws the tables packed, the view's camera and quality
-    /// (<see cref="SdfViewSnapshot.Quality"/>), the far distance and the debug view mode, the frame's bench levers, and
-    /// the environment the tables baked. The extent is not written: the node writes it.</summary>
+    /// (<see cref="SdfViewSnapshot.Quality"/>), the far distance and the debug view mode, the frame's bench levers, its
+    /// light count and shadow light (<see cref="SdfLights"/>), and its curvature shading. The extent is not written: the
+    /// node writes it.</summary>
     /// <param name="block">The pass block, at least <see cref="SizeBytes"/> bytes.</param>
     /// <param name="tables">The values of the tables that packed <paramref name="frame"/>.</param>
     /// <param name="frame">The frame.</param>
@@ -175,8 +175,17 @@ public static class SdfFrameBlock {
         WriteSingle(block: block, offset: NearDistance, value: camera.Near);
         WriteSingle(block: block, offset: FarDistance, value: frame.FarDistance);
         WriteUInt32(block: block, offset: DebugMode, value: ((uint)tables.DebugMode));
-        WriteSingle(block: block, offset: AmbientScale, value: frame.AmbientScale);
-        WriteSingle(block: block, offset: SunScale, value: frame.SunScale);
+        var lights = frame.Lights;
+        var curvature = lights.Curvature;
+
+        WriteUInt32(block: block, offset: LightCount, value: ((uint)lights.Count));
+        WriteUInt32(block: block, offset: ShadowLight, value: unchecked((uint)lights.ShadowLight));
+        WriteSingle(block: block, offset: CurvatureCavity, value: curvature.Cavity);
+        WriteSingle(block: block, offset: CurvatureRim, value: curvature.Rim);
+        WriteSingle(block: block, offset: CurvatureInk, value: curvature.Ink);
+        WriteSingle(block: block, offset: CurvatureInkLow, value: curvature.InkLow);
+        WriteSingle(block: block, offset: CurvatureInkHigh, value: curvature.InkHigh);
+        WriteVector3(block: block, offset: CurvatureInkColor, value: curvature.InkColor);
         WriteSingle(block: block, offset: DebugSliceAxis, value: frame.DebugSliceAxis);
         WriteSingle(block: block, offset: DebugSliceOffset, value: frame.DebugSliceOffset);
         var grid = snapshot.Grid;
@@ -208,101 +217,11 @@ public static class SdfFrameBlock {
         WriteFlag(block: block, offset: FastSoftShadowMarch, value: quality.UseFastSoftShadowMarch);
         WriteFlag(block: block, offset: FastAmbientOcclusion, value: quality.UseFastAmbientOcclusion);
         WriteFlag(block: block, offset: DisableFarBound, value: quality.DisableFarBound);
-        MemoryMarshal.AsBytes(span: tables.Environment.Span).CopyTo(destination: block[Environment..]);
-    }
-    /// <summary>Bakes a frame's environment into the rows every pass block carries: <see cref="SdfEnvironment.Lanes"/>
-    /// copied row for row, with the host bakes the shader must not pay per pixel: every directional (light and softbox)
-    /// normalized in double and rounded once (DXC's DXIL backend constant-folds a <c>normalize()</c> while its SPIR-V
-    /// backend emits a runtime call; a uniform has no such asymmetry), the sun-disc angular radius baked into the
-    /// <c>pow()</c> exponent that puts the disc's edge at half brightness (k = ln 0.5 / ln cos r). The twinkle's phase and
-    /// the cloud drift, shear and spin arrive integrated to the frame's presented tick: the World's environment
-    /// resolver integrates each rate, keyed or literal, so the rows carry phases and offsets, never a rate. The kernels read the rows' indices from the
-    /// generated <c>sdf-isa.hlsli</c>, and <c>frame/sdf-lights.hlsli</c> decodes each row's lanes as
-    /// <see cref="SdfEnvironment"/> lays them out.</summary>
-    /// <param name="frame">The frame whose environment the rows are baked from.</param>
-    /// <param name="rows">The rows, <see cref="SdfEnvironment.LaneCount"/> floats.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="rows"/> holds other than <see cref="SdfEnvironment.LaneCount"/>
-    /// floats.</exception>
-    public static void BakeEnvironment(SdfFrame frame, Span<float> rows) {
-        ArgumentNullException.ThrowIfNull(argument: frame);
-
-        if (rows.Length != SdfEnvironment.LaneCount) {
-            throw new ArgumentException(
-                message: $"The environment bakes into {SdfEnvironment.LaneCount} floats; the rows hold {rows.Length}.",
-                paramName: nameof(rows)
-            );
-        }
-
-        var environment = frame.Environment;
-        var lanes = environment.Lanes;
-        var floats = rows;
-
-        lanes.CopyTo(destination: floats);
-
-        for (var index = 0; (index < SdfEnvironment.MaxLights); index++) {
-            var row = ((SdfEnvironment.LightsRow + (index * SdfEnvironment.RowsPerLight)) * 4);
-            var kind = ((SdfLightKind)((byte)lanes[(row + 7)]));
-
-            if (kind != SdfLightKind.Directional) {
-                continue;
-            }
-
-            double x = lanes[(row + 0)], y = lanes[(row + 1)], z = lanes[(row + 2)];
-            var length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
-
-            if (length <= 0d) {
-                // A zero direction has no Lambert term; the authoring doors refuse one by name, and a frame assembled
-                // in code still must not upload NaNs into every shaded pixel.
-                x = SdfEnvironment.DefaultSunDirection.X; y = SdfEnvironment.DefaultSunDirection.Y; z = SdfEnvironment.DefaultSunDirection.Z;
-                length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
-            }
-
-            floats[(row + 0)] = ((float)(x / length)); floats[(row + 1)] = ((float)(y / length)); floats[(row + 2)] = ((float)(z / length));
-        }
-
-        var skyControl = (SdfEnvironment.SkyControlRow * 4);
-        var cosDiscRadius = Math.Cos(d: environment.SunDiscRadians);
-        var discExponent = ((cosDiscRadius is > 0d and < 1d)
-            ? Math.Clamp(
-                value: (Math.Log(d: 0.5d) / Math.Log(d: cosDiscRadius)),
-                min: 0d,
-                max: 100000d
-            )
-            : 100000d
-        );
-
-        floats[(skyControl + 2)] = ((float)discExponent);
-
-        for (var index = 0; (index < SdfEnvironment.MaxSoftboxes); index++) {
-            var row = ((SdfEnvironment.SoftboxesRow + (index * SdfEnvironment.RowsPerSoftbox)) * 4);
-
-            double x = lanes[(row + 0)], y = lanes[(row + 1)], z = lanes[(row + 2)];
-            var length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
-
-            if (length <= 0d) {
-                continue; // an unauthored softbox slot has zero weight and never contributes; leave its direction zero
-            }
-
-            floats[(row + 0)] = ((float)(x / length)); floats[(row + 1)] = ((float)(y / length)); floats[(row + 2)] = ((float)(z / length));
-        }
     }
 
-    // The offset a pass-block member lies at, which the environment's rows must fill exactly.
-    private static int Offset(string member) {
-        if (
-            string.Equals(
-                a: member,
-                b: SdfWorldPackage.Environment,
-                comparisonType: StringComparison.Ordinal
-            ) &&
-            (SdfWorldPackage.EnvironmentRows != SdfEnvironment.RowCount)
-        ) {
-            throw new InvalidOperationException(message: $"The pass block holds {SdfWorldPackage.EnvironmentRows} environment rows; the environment lays out {SdfEnvironment.RowCount}.");
-        }
-
-        return ((int)Layout.BlockOffsetOf(member: member));
-    }
+    // The offset a pass-block member lies at.
+    private static int Offset(string member) =>
+        ((int)Layout.BlockOffsetOf(member: member));
     private static void WriteFlag(Span<byte> block, int offset, bool value) =>
         WriteUInt32(
             block: block,

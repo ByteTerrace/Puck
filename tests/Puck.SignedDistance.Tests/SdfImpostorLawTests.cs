@@ -1,0 +1,328 @@
+using System.Numerics;
+using Puck.SignedDistance.Baking;
+using Xunit;
+
+namespace Puck.SignedDistance.Tests;
+
+/// <summary>
+/// THE LAW: an impostor's views, searched as the card's fragments search them (<see cref="SdfImpostorOracle"/>, the CPU
+/// twin of <c>sdfImpostorTrace</c>), show the surface the field has. For rays from every direction of a Fibonacci sphere,
+/// across the sphere's disc, the oracle and the analytic surface of a sphere and of a box agree on whether the ray hits
+/// except within a stated share of the rays near the silhouette, and where both hit, the distance along the ray stays within
+/// a stated share of the bounding radius. The view basis the oracle reads is the baker's: a mutant that exchanges the
+/// basis' right and up exceeds both bounds, so the bounds discriminate. The direction selection is the octahedral map's
+/// inverse of the baker's decode, and the three views' weights are a partition of one.
+/// </summary>
+public sealed class SdfImpostorLawTests(ITestOutputHelper output) {
+    // The stated bounds, at the standard tier: the share of rays whose hit/miss differs more than a silhouette's tolerance (see
+    // Compare), and the mean and ninety-fifth percentile distance
+    // errors of those they agree on, in bounding radii (a ray grazing the silhouette moves a hit far for a texel of depth).
+    private const double UnexplainedShare = 0.005;
+    // How far a ray may be moved across the silhouette for the surface to show what the views show, in view texels.
+    private const float SilhouetteTexels = 1.5f;
+    private const double MeanError = 0.04;
+    private const double TailError = 0.12;
+
+    private static readonly SdfMaterial[] Materials = [new(Albedo: new Vector3(x: 0.8f, y: 0.2f, z: 0.1f))];
+
+    private static SdfBake Bake(SdfProgram program, float reach) =>
+        SdfBaker.Bake(
+            center: Vector3.Zero,
+            materials: Materials,
+            program: program,
+            reach: reach,
+            tier: SdfBakeTier.For(quality: SdfBakeQuality.Standard)
+        );
+    private static SdfProgram Make(Action<SdfProgramBuilder> emit) {
+        var builder = new SdfProgramBuilder();
+
+        _ = builder.AddMaterial(material: Materials[0]);
+        emit(obj: builder);
+
+        return builder.Build(buildInstanceGrid: false);
+    }
+    // The first parameter at which a ray meets a sphere centered at the origin, or none.
+    private static double? Sphere(Vector3 origin, Vector3 direction, float radius) {
+        var b = Vector3.Dot(vector1: origin, vector2: direction);
+        var c = (Vector3.Dot(vector1: origin, vector2: origin) - (radius * radius));
+        var discriminant = ((b * b) - c);
+
+        return ((discriminant <= 0f) ? null : ((((-b - MathF.Sqrt(x: discriminant)) is var t) && (t > 0f)) ? t : null));
+    }
+    // The first parameter at which a ray meets a box centered at the origin, or none.
+    private static double? Box(Vector3 origin, Vector3 direction, Vector3 half) {
+        var near = double.NegativeInfinity;
+        var far = double.PositiveInfinity;
+
+        for (var axis = 0; (axis < 3); axis++) {
+            var o = origin[axis];
+            var d = direction[axis];
+            var h = half[axis];
+
+            if (Math.Abs(value: d) < 1e-9) {
+                if (Math.Abs(value: o) > h) {
+                    return null;
+                }
+
+                continue;
+            }
+
+            var (t0, t1) = (((-h - o) / d), ((h - o) / d));
+
+            near = Math.Max(val1: near, val2: Math.Min(val1: t0, val2: t1));
+            far = Math.Min(val1: far, val2: Math.Max(val1: t0, val2: t1));
+        }
+
+        return (((near <= far) && (near > 0.0)) ? near : null);
+    }
+    private static IEnumerable<(Vector3 Direction, Vector3 Origin)> Rays(SdfBakedImpostor impostor) {
+        const int Directions = 64;
+        const int Grid = 7;
+        var golden = (MathF.PI * (3f - MathF.Sqrt(x: 5f)));
+
+        for (var index = 0; (index < Directions); index++) {
+            var y = (1f - ((2f * (index + 0.5f)) / Directions));
+            var ring = MathF.Sqrt(x: (1f - (y * y)));
+            var direction = new Vector3(x: (ring * MathF.Cos(x: (golden * index))), y: y, z: (ring * MathF.Sin(x: (golden * index))));
+            var reference = ((MathF.Abs(x: direction.Y) > 0.9f) ? Vector3.UnitX : Vector3.UnitY);
+            var right = Vector3.Normalize(value: Vector3.Cross(vector1: reference, vector2: direction));
+            var up = Vector3.Cross(vector1: direction, vector2: right);
+
+            for (var j = 0; (j < Grid); j++) {
+                for (var i = 0; (i < Grid); i++) {
+                    var across = ((((i + 0.5f) / Grid) * 2f) - 1f);
+                    var down = ((((j + 0.5f) / Grid) * 2f) - 1f);
+
+                    if (((across * across) + (down * down)) > 0.94f) {
+                        continue;
+                    }
+
+                    yield return (direction, ((impostor.Center + (impostor.Radius * ((across * right) + (down * up)))) - (direction * (3f * impostor.Radius))));
+                }
+            }
+        }
+    }
+    // Casts the rays at the oracle. A ray whose hit or miss differs from the surface's is explained when a ray moved
+    // SilhouetteTexels across the view (in any of eight directions) has the outcome the views gave, which is the silhouette
+    // a texel of depth bends. The rest are unexplained.
+    private (int Total, int Unexplained, double Mean, double Tail) Compare(SdfBakedImpostor impostor, Func<Vector3, Vector3, double?> surface, bool swapBasis) {
+        var oracle = new SdfImpostorOracle(impostor: impostor);
+
+        var (total, unexplained, sum) = (0, 0, 0.0);
+        var errors = new List<double>();
+        var radius = ((double)impostor.Radius);
+
+        foreach (var (direction, origin) in Rays(impostor: impostor)) {
+            total++;
+
+            var truth = surface((origin - impostor.Center), direction);
+            var start = ((origin - impostor.Center) / impostor.Radius);
+            var travel = (direction / impostor.Radius);
+            var hit = oracle.Trace(
+                start: (((double)start.X), ((double)start.Y), ((double)start.Z)),
+                swapBasis: swapBasis,
+                t: out var t,
+                travel: (((double)travel.X), ((double)travel.Y), ((double)travel.Z))
+            );
+
+            if (hit != truth.HasValue) {
+                var texel = ((2f * impostor.Radius) / impostor.ViewTexels);
+                var reference = ((MathF.Abs(x: direction.Y) > 0.9f) ? Vector3.UnitX : Vector3.UnitY);
+                var right = Vector3.Normalize(value: Vector3.Cross(vector1: reference, vector2: direction));
+                var up = Vector3.Cross(vector1: direction, vector2: right);
+                var explained = false;
+
+                for (var around = 0; ((around < 8) && !explained); around++) {
+                    var angle = (around * (MathF.PI / 4f));
+                    var moved = (origin + ((SilhouetteTexels * texel) * ((MathF.Cos(x: angle) * right) + (MathF.Sin(x: angle) * up))));
+
+                    explained = (surface((moved - impostor.Center), direction).HasValue == hit);
+                }
+
+                unexplained += (explained ? 0 : 1);
+                continue;
+            }
+            if (hit) {
+                var error = (Math.Abs(value: (t - truth!.Value)) / radius);
+
+                errors.Add(item: error);
+                sum += error;
+            }
+        }
+
+        errors.Sort();
+
+        return (total, unexplained, (sum / Math.Max(val1: errors.Count, val2: 1)), ((errors.Count == 0) ? 0.0 : errors[((int)(0.95 * (errors.Count - 1)))]));
+    }
+
+    [Fact]
+    public void TheViewsShowTheSphereAndTheBoxTheFieldHas() {
+        var sphere = Bake(program: Make(emit: static builder => builder.ResetPoint().Sphere(material: 0, radius: 0.8f)), reach: 0.85f).Impostor;
+        var box = Bake(program: Make(emit: static builder => builder.ResetPoint().Box(halfExtents: new Vector3(x: 0.6f, y: 0.4f, z: 0.5f), material: 0, round: 0f)), reach: 0.9f).Impostor;
+
+        foreach (var (name, impostor, surface) in new (string, SdfBakedImpostor, Func<Vector3, Vector3, double?>)[] {
+            ("sphere", sphere, static (origin, direction) => Sphere(direction: direction, origin: origin, radius: 0.8f)),
+            ("box", box, static (origin, direction) => Box(origin: origin, direction: direction, half: new Vector3(x: 0.6f, y: 0.4f, z: 0.5f))),
+        }) {
+            var (total, unexplained, mean, tail) = Compare(impostor: impostor, surface: surface, swapBasis: false);
+
+            output.WriteLine(message: $"{name}: {total} rays, {unexplained} unexplained disagreements, mean error {mean:F4}, 95th percentile {tail:F4} radii");
+            Assert.True(condition: (unexplained <= (UnexplainedShare * total)), userMessage: $"{name}: {unexplained} of {total} rays disagree on a hit by more than {SilhouetteTexels} texels");
+            Assert.True(condition: (mean <= MeanError), userMessage: $"{name}: mean distance error {mean} radii");
+            Assert.True(condition: (tail <= TailError), userMessage: $"{name}: 95th percentile distance error {tail} radii");
+        }
+    }
+
+    // Two spheres of different materials side by side along X, baked at the standard tier.
+    private static SdfBakedImpostor TwoMaterialImpostor() {
+        SdfMaterial[] materials = [new(Albedo: new Vector3(x: 0.8f, y: 0.2f, z: 0.1f)), new(Albedo: new Vector3(x: 0.1f, y: 0.5f, z: 0.9f), Emissive: 2f)];
+        var builder = new SdfProgramBuilder();
+
+        foreach (var material in materials) {
+            _ = builder.AddMaterial(material: material);
+        }
+
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: -0.4f, y: 0f, z: 0f)).Sphere(material: 0, radius: 0.3f);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0.4f, y: 0f, z: 0f)).Sphere(material: 1, radius: 0.3f);
+
+        return SdfBaker.Bake(
+            center: Vector3.Zero,
+            materials: materials,
+            program: builder.Build(buildInstanceGrid: false),
+            reach: 0.8f,
+            tier: SdfBakeTier.For(quality: SdfBakeQuality.Standard)
+        ).Impostor;
+    }
+
+    [Fact]
+    public void ATwoMaterialCardNamesEachRegionsOwnMaterialAndTheFirstMaterialMutantDoesNot() {
+        // Two spheres of different materials side by side along X. A ray aimed at a sphere's center from any direction
+        // across Y and Z meets that sphere first, so the texel the views hold there names its material: 0 on the left, 1 on
+        // the right. The mutant, the first-material shading the material plane replaced, names 0 everywhere.
+        var impostor = TwoMaterialImpostor();
+        // Level zero, and level one, whose nearest texel is a coarser tile's: a coarse hit reads that level's own texel.
+        SdfImpostorOracle[] oracles = [new(impostor: impostor), new(impostor: impostor, level: 1)];
+        Vector3[] directions = [-Vector3.UnitZ, Vector3.UnitZ, -Vector3.UnitY, Vector3.UnitY, Vector3.Normalize(value: new Vector3(x: 0f, y: -0.5f, z: -1f)), Vector3.Normalize(value: new Vector3(x: 0f, y: 0.5f, z: 1f))];
+
+        var (checkedRays, mutantWrong) = (0, 0);
+
+        foreach (var (oracle, direction) in oracles.SelectMany(selector: oracle => directions.Select(selector: direction => (oracle, direction)))) {
+            foreach (var (x, expected) in new[] { (-0.4f, 0), (0.4f, 1) }) {
+                var center = new Vector3(x: x, y: 0f, z: 0f);
+                var start = ((center - (direction * (3f * impostor.Radius))) / impostor.Radius);
+                var travel = (direction / impostor.Radius);
+                var hit = oracle.TraceMaterial(
+                    firstMaterialOnly: false,
+                    material: out var material,
+                    start: (((double)start.X), ((double)start.Y), ((double)start.Z)),
+                    t: out _,
+                    travel: (((double)travel.X), ((double)travel.Y), ((double)travel.Z))
+                );
+                var mutantHit = oracle.TraceMaterial(
+                    firstMaterialOnly: true,
+                    material: out var mutant,
+                    start: (((double)start.X), ((double)start.Y), ((double)start.Z)),
+                    t: out _,
+                    travel: (((double)travel.X), ((double)travel.Y), ((double)travel.Z))
+                );
+
+                Assert.True(condition: (hit && mutantHit), userMessage: $"the ray at x {x} along {direction} misses");
+                Assert.Equal(actual: material, expected: expected);
+                checkedRays++;
+                mutantWrong += ((mutant != expected) ? 1 : 0);
+            }
+        }
+
+        Assert.Equal(actual: checkedRays, expected: 24);
+        // Half the rays are the second material's, and the mutant names every one of them wrong.
+        Assert.Equal(actual: mutantWrong, expected: 12);
+    }
+    [Fact]
+    public void TheMaterialChainVotesOnlyCoveredTexelsAtEveryLevel() {
+        var impostor = TwoMaterialImpostor();
+        var plainDiffers = 0;
+
+        for (var level = 1; (level < impostor.Material.Levels.Count); level++) {
+            var (sourceWidth, _) = impostor.Material.LevelExtent(level: (level - 1));
+            var (width, height) = impostor.Material.LevelExtent(level: level);
+            var source = impostor.Material.Levels[(level - 1)];
+            var coverage = impostor.Albedo.Decode(level: (level - 1));
+            var target = impostor.Material.Levels[level];
+
+            for (var y = 0; (y < height); y++) {
+                for (var x = 0; (x < width); x++) {
+                    var at = new[] { (((2 * y) * sourceWidth) + (2 * x)), ((((2 * y) * sourceWidth) + (2 * x)) + 1), ((((2 * y) + 1) * sourceWidth) + (2 * x)), (((((2 * y) + 1) * sourceWidth) + (2 * x)) + 1) };
+                    var covered = at.Where(predicate: index => (coverage[((index * 4) + 3)] > 0)).ToArray();
+                    var voters = ((covered.Length == 0) ? at : covered);
+                    // The most common value among the voters, the smallest on a tie.
+                    var expected = voters.GroupBy(keySelector: index => source[index]).OrderByDescending(keySelector: group => group.Count()).ThenBy(keySelector: group => group.Key).First().Key;
+                    var plain = at.GroupBy(keySelector: index => source[index]).OrderByDescending(keySelector: group => group.Count()).ThenBy(keySelector: group => group.Key).First().Key;
+
+                    Assert.True(condition: (target[((y * width) + x)] == expected), userMessage: $"level {level} texel ({x}, {y}) names {target[((y * width) + x)]}, where its covered texels vote {expected}");
+                    plainDiffers += ((plain != expected) ? 1 : 0);
+                }
+            }
+        }
+
+        // The red leg, the vote that counts misses, would have named a different material somewhere on this bake.
+        Assert.True(condition: (plainDiffers > 0), userMessage: "no texel separates the covered-only vote from the plain one");
+    }
+    [Fact]
+    public void AnUncoveredViewNeverNamesThePixelsMaterialEvenWhenItsFilteredAlphaWins() {
+        // Weights .45/.30/.25 with filtered alphas .70/1/1: weight times filtered alpha puts the first view ahead
+        // (.315 against .30 and .25), but its nearest texel is uncovered, so the highest-weighted covered view, the
+        // second, names the material. The rule it replaced names the first view's.
+        double[] weights = [0.45, 0.30, 0.25];
+        bool[] covered = [false, true, true];
+        double[] alpha = [0.70, 1.0, 1.0];
+        int[] materials = [0, 1, 2];
+
+        Assert.Equal(actual: SdfImpostorOracle.PickMaterial(covered: covered, filteredAlpha: alpha, filteredAlphaRule: false, materials: materials, weights: weights), expected: 1);
+        Assert.Equal(actual: SdfImpostorOracle.PickMaterial(covered: covered, filteredAlpha: alpha, filteredAlphaRule: true, materials: materials, weights: weights), expected: 0);
+        // When every view's texel is covered the highest weight wins, as it does under either rule.
+        Assert.Equal(actual: SdfImpostorOracle.PickMaterial(covered: [true, true, true], filteredAlpha: [1.0, 1.0, 1.0], filteredAlphaRule: false, materials: materials, weights: weights), expected: 0);
+    }
+    [Fact]
+    public void ExchangingTheViewBasisBreaksTheBoundsSoTheyDiscriminate() {
+        var box = Bake(program: Make(emit: static builder => builder.ResetPoint().Box(halfExtents: new Vector3(x: 0.6f, y: 0.4f, z: 0.5f), material: 0, round: 0f)), reach: 0.9f).Impostor;
+
+        var (total, unexplained, mean, tail) = Compare(
+            impostor: box,
+            surface: static (origin, direction) => Box(origin: origin, direction: direction, half: new Vector3(x: 0.6f, y: 0.4f, z: 0.5f)),
+            swapBasis: true
+        );
+
+        output.WriteLine(message: $"mutant: {total} rays, {unexplained} unexplained disagreements, mean error {mean:F4}, 95th percentile {tail:F4} radii");
+        Assert.True(condition: ((unexplained > (UnexplainedShare * total)) || (mean > MeanError) || (tail > TailError)), userMessage: "the exchanged basis stays within every bound");
+    }
+    [Fact]
+    public void TheSelectedViewsArePartOfTheGridAndTheirWeightsSumToOne() {
+        for (var index = 0; (index < 200); index++) {
+            var y = (1.0 - ((2.0 * (index + 0.5)) / 200.0));
+            var ring = Math.Sqrt(d: (1.0 - (y * y)));
+            var chosen = SdfImpostorOracle.Views(toward: ((ring * Math.Cos(d: (index * 2.399963))), y, (ring * Math.Sin(a: (index * 2.399963)))), views: 8);
+
+            Assert.InRange(actual: ((chosen.Wa + chosen.Wb) + chosen.Wc), high: 1.0000001, low: 0.9999999);
+            Assert.All(collection: new[] { chosen.Wa, chosen.Wb, chosen.Wc }, action: static weight => Assert.InRange(actual: weight, high: 1.0000001, low: -0.0000001));
+
+            foreach (var (i, j) in new[] { chosen.A, chosen.B, chosen.C }) {
+                Assert.InRange(actual: i, high: 7, low: 0);
+                Assert.InRange(actual: j, high: 7, low: 0);
+            }
+        }
+    }
+    [Fact]
+    public void ADirectionAtAViewCenterSelectsThatViewAlone() {
+        for (var j = 0; (j < 8); j++) {
+            for (var i = 0; (i < 8); i++) {
+                var view = SdfBakedImpostor.ViewDirection(i: i, j: j, views: 8);
+                var chosen = SdfImpostorOracle.Views(toward: (((double)view.X), ((double)view.Y), ((double)view.Z)), views: 8);
+                var weights = new[] { (chosen.A, chosen.Wa), (chosen.B, chosen.Wb), (chosen.C, chosen.Wc) };
+                var heaviest = weights.OrderByDescending(keySelector: static pair => pair.Item2).First();
+
+                Assert.Equal(actual: heaviest.Item1, expected: (i, j));
+                Assert.InRange(actual: heaviest.Item2, high: 1.0001, low: 0.99);
+            }
+        }
+    }
+}

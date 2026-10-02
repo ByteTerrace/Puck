@@ -4,28 +4,26 @@ using Puck.Abstractions.Gpu;
 namespace Puck.SdfVm;
 
 /// <summary>
-/// The mesh atlases: every distinct baked mesh's surface textures (<see cref="SdfMeshTextures"/>) packed into one image
-/// per usage, which the hit passes sample at a mesh hit's texture coordinate. Every mesh takes the same rectangle in all
-/// five, so a mesh's texture coordinates move into the atlases by one scale and offset (<see cref="Placement"/>), which the
-/// mesh region applies to its vertices.
-/// <para>A rectangle starts on a multiple of <see cref="Alignment"/> texels and spans a multiple of it, so at every level of
-/// the chain it covers whole blocks of a block-compressed format and packing moves whole blocks: the atlases hold each
-/// mesh's stored bytes unchanged, and a sampler that clamps inside a tile (<c>frame/sdf-mesh-textures.hlsli</c>) reads
+/// A frame's atlases of one kind of texture set: every distinct set (<see cref="SdfTextureSet"/>) packed into one image per
+/// usage. The mesh atlases pack baked meshes' surface textures (<see cref="SdfMeshTextures"/>), which the hit passes sample
+/// at a mesh hit's texture coordinate; the impostor atlases pack baked impostors' views (<see cref="SdfMeshImpostor"/>).
+/// Every set takes the same rectangle in all of its usages' images, so a mesh's texture coordinates move into the atlases
+/// by one scale and offset (<see cref="Placement"/>), which the mesh region applies to its vertices.
+/// <para>A rectangle starts on a multiple of <see cref="AlignmentOf"/> texels and spans a multiple of it, so at every level
+/// of the chain it covers whole blocks of a block-compressed format and packing moves whole blocks: the atlases hold each
+/// set's stored bytes unchanged, and a sampler that clamps inside a tile (<c>frame/sdf-mesh-textures.hlsli</c>) reads
 /// exactly what the bake wrote. Rectangles are packed in rows, tallest first, the row width the smallest power of two
 /// that holds the widest rectangle and at least the square root of their summed area; texels no rectangle covers are
 /// zero.</para>
 /// </summary>
 public sealed class SdfMeshAtlas {
-    /// <summary>The alignment of every rectangle, in level-0 texels: a whole block of four texels at the last level of a
-    /// chain whose tiles are four texels, so every level's rectangle is whole blocks.</summary>
-    public const int Alignment = 16;
     /// <summary>The most texels an atlas spans on either axis: the largest two-dimensional image both backends
     /// create.</summary>
     public const int MaxExtent = 16384;
 
-    private readonly Dictionary<SdfMeshTextures, Vector4> m_placements;
+    private readonly Dictionary<SdfTextureSet, Vector4> m_placements;
 
-    private SdfMeshAtlas(int width, int height, int levels, IReadOnlyList<byte[]> chains, Dictionary<SdfMeshTextures, Vector4> placements) {
+    private SdfMeshAtlas(int width, int height, int levels, IReadOnlyList<byte[]> chains, Dictionary<SdfTextureSet, Vector4> placements) {
         Chains = chains;
         Height = height;
         Levels = levels;
@@ -33,7 +31,7 @@ public sealed class SdfMeshAtlas {
         m_placements = placements;
     }
 
-    /// <summary>Gets each usage's atlas, in <see cref="SdfMeshTextures.Usages"/> order, as every level from 0 tightly
+    /// <summary>Gets each usage's atlas, in the order of the sets' <see cref="SdfTextureSet.UsageOrder"/>, as every level from 0 tightly
     /// packed in its stored format, the layout an image upload reads (<see cref="GpuPixelFormats.ChainByteLength"/>).</summary>
     public IReadOnlyList<byte[]> Chains { get; }
     /// <summary>Gets the atlases' height in texels at level 0.</summary>
@@ -45,15 +43,21 @@ public sealed class SdfMeshAtlas {
     /// <summary>Gets the atlases' width in texels at level 0.</summary>
     public int Width { get; }
 
+    /// <summary>Returns the alignment of every rectangle, in level-0 texels: a whole block of four texels at the last level
+    /// of a chain of <paramref name="levels"/>, so every level's rectangle is whole blocks.</summary>
+    /// <param name="levels">The chain's level count, at least one.</param>
+    /// <returns>The alignment.</returns>
+    public static int AlignmentOf(int levels) =>
+        (((int)GpuPixelFormats.BlockTexels) << (levels - 1));
     /// <summary>Packs every distinct texture set, compared by reference, into one atlas per usage.</summary>
-    /// <param name="textures">The meshes' texture sets; a set listed twice is packed once.</param>
+    /// <param name="textures">The texture sets, all of one kind; a set listed twice is packed once.</param>
     /// <returns>The atlases.</returns>
-    /// <exception cref="ArgumentException">The list is empty, the sets' tiles or level counts differ, or the packed rows
-    /// span more than <see cref="MaxExtent"/> texels.</exception>
-    public static SdfMeshAtlas Pack(IEnumerable<SdfMeshTextures> textures) {
+    /// <exception cref="ArgumentException">The list is empty, the sets are not all of one kind, their tiles or level counts
+    /// differ, or the packed rows span more than <see cref="MaxExtent"/> texels.</exception>
+    public static SdfMeshAtlas Pack(IEnumerable<SdfTextureSet> textures) {
         ArgumentNullException.ThrowIfNull(argument: textures);
 
-        var distinct = textures.Distinct(comparer: ReferenceEqualityComparer.Instance).Cast<SdfMeshTextures>().ToArray();
+        var distinct = textures.Distinct(comparer: ReferenceEqualityComparer.Instance).Cast<SdfTextureSet>().ToArray();
 
         if (distinct.Length == 0) {
             throw new ArgumentException(
@@ -74,6 +78,16 @@ public sealed class SdfMeshAtlas {
 
         var levels = distinct[0].Levels;
         var tile = distinct[0].TileTexels;
+        var usages = distinct[0].UsageOrder;
+
+        foreach (var set in distinct) {
+            if (!usages.SequenceEqual(second: set.UsageOrder)) {
+                throw new ArgumentException(
+                    message: "The sets an atlas holds are all of one kind, with the same usages.",
+                    paramName: nameof(textures)
+                );
+            }
+        }
 
         foreach (var set in distinct) {
             if ((set.Levels != levels) || (set.TileTexels != tile)) {
@@ -85,7 +99,7 @@ public sealed class SdfMeshAtlas {
         }
 
         var order = distinct
-            .Select(selector: static (set, index) => (Set: set, Index: index, Width: Align(texels: set.Width), Height: Align(texels: set.Height)))
+            .Select(selector: (set, index) => (Set: set, Index: index, Width: Align(levels: levels, texels: set.Width), Height: Align(levels: levels, texels: set.Height)))
             .OrderByDescending(keySelector: static entry => entry.Height)
             .ThenBy(keySelector: static entry => entry.Index)
             .ToArray();
@@ -127,10 +141,10 @@ public sealed class SdfMeshAtlas {
             );
         }
 
-        var chains = new byte[SdfMeshTextures.Usages.Count][];
+        var chains = new byte[usages.Count][];
 
         for (var usage = 0; (usage < chains.Length); usage++) {
-            var format = SdfMeshTextures.FormatOf(usage: SdfMeshTextures.Usages[usage]);
+            var format = SdfTextureSet.FormatOf(usage: usages[usage]);
 
             chains[usage] = new byte[checked((int)GpuPixelFormats.ChainByteLength(format: format, height: ((uint)height), levels: ((uint)levels), width: ((uint)width)))];
 
@@ -146,7 +160,7 @@ public sealed class SdfMeshAtlas {
             }
         }
 
-        var placements = new Dictionary<SdfMeshTextures, Vector4>(comparer: ReferenceEqualityComparer.Instance);
+        var placements = new Dictionary<SdfTextureSet, Vector4>(comparer: ReferenceEqualityComparer.Instance);
 
         for (var index = 0; (index < distinct.Length); index++) {
             var set = distinct[index];
@@ -172,16 +186,19 @@ public sealed class SdfMeshAtlas {
     /// <param name="textures">A set the atlases hold.</param>
     /// <returns>The scale in X and Y, the offset in Z and W.</returns>
     /// <exception cref="KeyNotFoundException">The atlases do not hold the set.</exception>
-    public Vector4 Placement(SdfMeshTextures textures) =>
+    public Vector4 Placement(SdfTextureSet textures) =>
         m_placements[textures];
     /// <summary>Returns whether the atlases hold a texture set.</summary>
     /// <param name="textures">The set.</param>
     /// <returns><see langword="true"/> when it was packed.</returns>
-    public bool Holds(SdfMeshTextures textures) =>
+    public bool Holds(SdfTextureSet textures) =>
         m_placements.ContainsKey(key: textures);
 
-    private static int Align(int texels) =>
-        (((texels + (Alignment - 1)) / Alignment) * Alignment);
+    private static int Align(int levels, int texels) {
+        var alignment = AlignmentOf(levels: levels);
+
+        return (((texels + (alignment - 1)) / alignment) * alignment);
+    }
     // Copies every level of one texture into its rectangle of an atlas chain, a row of units at a time: a unit is a
     // block of a block-compressed format and a texel of any other.
     private static void Copy(byte[] atlas, int atlasWidth, int atlasHeight, GpuPixelFormat format, (int X, int Y) origin, Puck.SignedDistance.Baking.SdfBakedTexture texture) {

@@ -29,6 +29,17 @@ pump never asks. A loop that produces frames calls
 `IFixedStepSimulation.SettleOwedFrames` in its teardown before it disposes its
 render root.
 
+The windowed and headless loops hand `FixedStepPump.Advance` the wall time
+they sampled and take every step it covers. The offscreen loop's time is its
+tick count: it calls `FixedStepPump.TryStep`, which runs at most one step
+whatever the interval was, and composes one frame for that step, so a slow
+frame delays the next tick instead of bursting several (see
+[host pacing](../../docs/reference/hosting.md#host-pacing)). An unpaced headless
+run (`LauncherOptions.Unpaced`) also calls `TryStep`, and waits for nothing.
+Each loop, its input capture clock, and device recovery use the same registered
+`TimeProvider`, which defaults to the system clock. `OffscreenTickPacingLawTests`
+makes its frames slow through that provider.
+
 Each host loop runs on its own thread, and its hosted service's task faults
 with whatever the loop threw, so a failing loop stops the host instead of
 killing the process. A presenter whose `Activate` throws is reported as

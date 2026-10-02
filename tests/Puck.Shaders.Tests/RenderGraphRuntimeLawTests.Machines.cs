@@ -298,12 +298,16 @@ public sealed partial class RenderGraphRuntimeLawTests {
         );
 
         Assert.Null(@object: upload.Fault);
-        Assert.True(condition: upload.TryWrite(region: region, tick: 1L));
+        Assert.True(condition: upload.Write(region: region, tick: 1L).IsRendered);
         Assert.Equal(expected: 1, actual: output.Writes);
 
         running = false;
 
-        Assert.False(condition: upload.TryWrite(region: region, tick: 2L));
+        // A machine's frames are a function of the simulation: one that stopped running refuses the tick, never waits.
+        Assert.Equal(
+            actual: upload.Write(region: region, tick: 2L),
+            expected: FrameRender.Refused(reason: "machine output 'cabinet' is not running")
+        );
         Assert.Equal(expected: "machine output 'cabinet' is not running", actual: upload.Fault);
         Assert.Equal(expected: 1, actual: output.Writes);
         Assert.Equal(

@@ -34,14 +34,14 @@ static const int DebugViewModeOvershoot = 9;
 // folds this mode in alongside the final-image modes instead of skipping straight to a cheap switch-only case.
 static const int DebugViewModeEvals = 10;
 // Mode 11 (visibility) colors each pixel by the kind of its visibility record: background dark blue, SDF green, mesh
-// orange. Like the termination view it shows what the pipeline dispatched, so a tile outside the dispatch box keeps the
-// sky pre-pass's color. KEEP IN SYNC with DebugViewModes.Names in src/Puck.SdfVm/DebugViewModes.cs.
+// orange. Like the termination view it shows what the pipeline dispatched, so a tile outside the dispatch box shows the
+// lit image's nothing, black, since a debug view draws no sky. KEEP IN SYNC with DebugViewModes.Names in src/Puck.SdfVm/DebugViewModes.cs.
 static const int DebugViewModeVisibility = 11;
 // Mode 12 encodes visibility-derived motion in render pixels; its valid-history blue channel distinguishes a cut.
 static const int DebugViewModeMotion = 12;
 
 // The analytic-normal A/B toggle (the forward-mode dual's debug lever): 0 (the default) selects the analytic dual normal
-// (calculateNormalAnalytic), 1 selects the 4-tap finite-difference probe (calculateNormal) for comparison under
+// (calculateNormalAnalytic), 1 selects the 4-tap finite-difference probe (calculateTapNormal) for comparison under
 // world.debug-view normals.
 bool worldUseTapNormals() {
     return (passGroup.finiteDifferenceNormals != 0u);
@@ -103,7 +103,7 @@ bool worldUseFastAmbientOcclusion() {
 // beyond the four the normal already takes, and the enrichment carries a divide, so both hang off this one predicate
 // rather than an arithmetic *0 that DXC's DXIL backend does not fold away.
 bool worldCurvatureShadingEnabled() {
-    return (max(worldCurvatureCavity(), max(worldCurvatureRim(), worldCurvatureInk())) > 0.0);
+    return (max(passGroup.curvatureCavity, max(passGroup.curvatureRim, passGroup.curvatureInk)) > 0.0);
 }
 // The soft-shadow grid-cull A/B lever (the sdf.shadowcull verb): 0 (the default) = on, the grid-gathered shadow-ray march;
 // 1 = off, the flat all-instances march, the ground-truth reference the cull matches.

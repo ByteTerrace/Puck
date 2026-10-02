@@ -68,6 +68,20 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     public bool SamplesReads => true;
 
     /// <inheritdoc/>
+    /// <remarks>The refusal of the residency the instance's view renders from (<see cref="SdfWorldResidency.Refusal"/>):
+    /// its tables' build or the views kernel its program selects, refused by name, which only a change to what they are
+    /// built from retries.</remarks>
+    public string? RefusalOf(string instance) {
+        lock (m_gate) {
+            return ((m_entries.TryGetValue(
+                key: instance,
+                value: out var entry
+            ) && (entry.Residency is { } residency))
+                ? residency.Refusal
+                : null);
+        }
+    }
+    /// <inheritdoc/>
     /// <remarks>Awaits, holding no thread, until the instance's residency has built its tables, and holds the residency
     /// for the recorder.</remarks>
     public async ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
@@ -113,6 +127,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         try {
             if (context.Part == SdfWorldPackage.Resolve) {
                 return new SdfResolveRecorder(context: context, groups: groups, owner: this, view: view);
+            }
+            if ((context.Part == SdfWorldPackage.Parts.Sky) || (context.Part == SdfWorldPackage.Parts.Composite)) {
+                return new SdfSkyRecorder(context: context, groups: groups, owner: this, view: view);
             }
             return new SdfWorldPassRecorder(
                 context: context,

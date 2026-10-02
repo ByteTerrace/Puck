@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Puck.Abstractions.Pacing;
@@ -13,7 +12,10 @@ namespace Puck.Launcher;
 /// <see cref="FixedStepPump"/> the windowed <see cref="LauncherWindowHostedService"/> drives, off a high-resolution
 /// waitable-timer wait instead of a present cadence — wall clock paces ordinary runs and never enters simulation
 /// state (<see cref="TickClock"/> converts the sampled delta to engine ticks exactly, same as windowed). An offline
-/// run may instead request <see cref="LauncherOptions.Unpaced"/>, which feeds one exact fixed step per loop. The
+/// run may instead request <see cref="LauncherOptions.Unpaced"/>, which takes one fixed step per loop
+/// (<see cref="FixedStepPump.TryStep"/>) and waits for nothing. A headless host renders nothing, so no frame needs a
+/// tick of its own, and a headless authority serving remote clients keeps the wall clock: its peers send input and
+/// expect snapshots in real time. The
 /// console pump (stdin → <see cref="CommandRegistry"/>) and every registered
 /// <see cref="ISnapshotInputCapture"/> contribution run
 /// every iteration exactly like the windowed loop, so a headless session is scriptable over stdin/stdout identically
@@ -33,6 +35,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
     private readonly ISnapshotInputCapture[] m_snapshotInputCaptures;
     private readonly TerminalControl m_terminal;
     private readonly TextCommandSource m_textSource;
+    private readonly TimeProvider m_time;
 
     public HeadlessTickHostedService(
         IHostApplicationLifetime applicationLifetime,
@@ -47,9 +50,11 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         CommandRegistry registry,
         TextCommandSource textSource,
         TerminalControl terminal,
-        StandardInputBacklog inputBacklog
+        StandardInputBacklog inputBacklog,
+        TimeProvider time
     ) {
         ArgumentNullException.ThrowIfNull(applicationLifetime);
+        ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(bufferedOutput);
         ArgumentNullException.ThrowIfNull(inputClock);
         ArgumentNullException.ThrowIfNull(inputRouters);
@@ -76,6 +81,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         m_registry = registry;
         m_snapshotInputCaptures = [.. snapshotInputCaptures];
         m_textSource = textSource;
+        m_time = time;
         m_simulation = LauncherHostLoop.SingleOrDefault(
             items: simulations,
             name: nameof(IFixedStepSimulation),
@@ -102,7 +108,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 m_logger.LogInformation(message: "Headless boot: no window, no GPU device, no swapchain, no audio device — the authoritative server, console, and tape only.");
             }
 
-            var clock = TickClock.Start();
+            var clock = TickClock.Start(time: m_time);
             // Mirrors LauncherWindowHostedService's own null-simulation tolerance: a composition root that registers
             // no fixed-step sim still runs the console pump alone.
             var pump = FixedStepPump.CreateHosted(
@@ -116,7 +122,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 terminal: m_terminal,
                 textSource: m_textSource
             );
-            var frequency = Stopwatch.Frequency;
+            var frequency = m_time.TimestampFrequency;
             var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
             // The registered simulation declares its own rate; DefaultUpdateRate is the null-simulation fallback
             // (console pump alone) and the fallback while the registered simulation reports 0 (an authored
@@ -132,7 +138,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
             // rate.
             var spinThreshold = LauncherHostLoop.SpinThreshold(frequency: frequency);
             var hostFrame = 0UL;
-            var nextDeadline = Stopwatch.GetTimestamp();
+            var nextDeadline = m_time.GetTimestamp();
             var exitAfterTimestamp = ((m_options.ExitAfter is { } exitAfter)
                 ? (nextDeadline + ((long)(exitAfter.TotalSeconds * frequency)))
                 : (long?)null
@@ -147,7 +153,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
 
                 if (
                     (exitAfterTimestamp is { } deadline) &&
-                    (Stopwatch.GetTimestamp() >= deadline)
+                    (m_time.GetTimestamp() >= deadline)
                 ) {
                     m_terminal.RequestExit();
                 }
@@ -167,23 +173,27 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 // Re-resolved every iteration — see ResolveRatePerSecond's own remarks above.
                 var ratePerSecond = LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation);
                 var stepTicks = EngineTicks.PerRate(ratePerSecond: ratePerSecond);
-                // An offline schedule already pins every input and observation to the simulation's integer tick
-                // grid. Feeding exactly one step here preserves the ordinary FixedStepPump/InputRouter path while
-                // removing wall time from the run; no synthetic clock or alternate simulation loop is introduced.
-                var deltaTicks = (m_options.Unpaced
-                    ? stepTicks
-                    : clock.Sample()
-                );
+                var intervalTicks = clock.Sample();
                 // The wall-clock pacing grid for ONE fixed step — presentation-adjacent only (paces the wait, never
                 // enters sim state); the TickClock sample above is what actually measures elapsed time for the
                 // accumulator.
                 var period = (frequency / ((long)ratePerSecond));
 
-                pump?.Advance(
-                    deltaTicks: deltaTicks,
-                    maxFrameTicks: maxFrameTicks,
-                    stepTicks: stepTicks
-                );
+                if (m_options.Unpaced) {
+                    // An offline schedule already pins every input and observation to the simulation's integer tick
+                    // grid, so an unpaced run takes one step per iteration through the ordinary FixedStepPump/InputRouter
+                    // path, and wall time decides no step.
+                    _ = pump?.TryStep(
+                        intervalTicks: intervalTicks,
+                        stepTicks: stepTicks
+                    );
+                } else {
+                    _ = pump?.Advance(
+                        deltaTicks: intervalTicks,
+                        maxFrameTicks: maxFrameTicks,
+                        stepTicks: stepTicks
+                    );
+                }
 
                 // Simulation-routed console handlers run while snapshots are applied above. Flush their real results
                 // in this iteration rather than leaving them buffered until the next tick.
@@ -195,7 +205,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
 
                 nextDeadline += period;
 
-                var nowTimestamp = Stopwatch.GetTimestamp();
+                var nowTimestamp = m_time.GetTimestamp();
 
                 // CATCH-UP: fell more than a whole slot behind (a scripted burst, a stalled thread) — re-origin the
                 // grid at now instead of accumulating debt as a scheduling storm of steps. The FIXED-STEP ACCUMULATOR
@@ -207,9 +217,9 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 } else {
                     LauncherHostLoop.WaitUntil(
                         deadlineTimestamp: nextDeadline,
-                        frequency: frequency,
                         precisionWaiter: m_precisionWaiter,
-                        spinThreshold: spinThreshold
+                        spinThreshold: spinThreshold,
+                        time: m_time
                     );
                 }
             }

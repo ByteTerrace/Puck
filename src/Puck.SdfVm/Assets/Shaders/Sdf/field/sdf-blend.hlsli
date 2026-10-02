@@ -115,7 +115,7 @@ void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int m
 // mapGradCore below is the HIT-ONLY dual twin of mapCore: it walks the SAME instruction stream and, alongside the
 // scalar distance, carries the WORLD-space gradient of the accumulated field so the surface normal is analytic —
 // forward-mode chain rule through the runtime transforms, NOT the baked Lipschitz scalars (those bound the STEP; these
-// propagate the DERIVATIVE). It runs once per lit hit pixel, replacing the 4-tap finite-difference calculateNormal;
+// propagate the DERIVATIVE). It runs once per lit hit pixel, replacing the 4-tap finite-difference calculateTapNormal;
 // the march stays scalar (mapCore). The dual eval costs ~2x a scalar one, paid once per hit — never in the march loop.
 //
 // TRANSPORT STATE. The gradient is created only at a SHAPE (a primitive's local gradient), so between shapes there is

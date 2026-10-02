@@ -7,16 +7,16 @@
 // blow every rounded edge to white). Cavity darkening scales the color down in concavities, the ridge light adds on
 // convexities, and the ink outline lerps toward the ink color where the magnitude spikes.
 float3 applyCurvatureShading(float3 shaded, float curvature) {
-    float low = max(worldCurvatureInkLow(), 1.0e-3);
+    float low = max(passGroup.curvatureInkLow, 1.0e-3);
     float ridge = smoothstep(0.0, low, max(curvature, 0.0));
     float cavity = smoothstep(0.0, low, max(-curvature, 0.0));
 
-    shaded *= (1.0 - (worldCurvatureCavity() * cavity));
-    shaded += (worldCurvatureRim() * ridge);
+    shaded *= (1.0 - (passGroup.curvatureCavity * cavity));
+    shaded += (passGroup.curvatureRim * ridge);
 
-    float ink = (worldCurvatureInk() * smoothstep(low, worldCurvatureInkHigh(), abs(curvature)));
+    float ink = (passGroup.curvatureInk * smoothstep(low, passGroup.curvatureInkHigh, abs(curvature)));
 
-    return lerp(shaded, worldCurvatureInkColor(), saturate(ink));
+    return lerp(shaded, passGroup.curvatureInkColor, saturate(ink));
 }
 
 #endif

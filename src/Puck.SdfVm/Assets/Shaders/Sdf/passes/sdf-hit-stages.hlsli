@@ -8,17 +8,23 @@
 #include "../march/sdf-part-bounds.hlsli"
 #endif
 #include "../frame/sdf-mesh-textures.hlsli"
+#include "../frame/sdf-mesh-impostor-surface.hlsli"
 #include "../march/sdf-primary.hlsli"
 #include "../surface/sdf-surface.hlsli"
 #include "../surface/sdf-shadow.hlsli"
 #include "../shade/sdf-light-stage.hlsli"
+#include "../shade/sdf-transport.hlsli"
 #include "../debug/sdf-debug-views.hlsli"
 
 #ifdef SDF_VIEWS_PASS
-// The views stage: the pixel's light stage over its surface sample, the bounded volumes composited last, and the debug
-// view, with the shaded emission's reactivity and one where a volume covers it. A lane past the render
-// extent returns black, which the caller never stores.
-float3 sdfViewsStage(SdfPixel p, out float reactivity) {
+// The views stage: the pixel's light stage over its surface sample and the debug view, with the pixel's coverage and
+// reactivity (sdfLightStage). A hit's color leaves through the fog's transmittance over its own ray distance
+// (sdf-transport.hlsli), so the resolve filters it with the coverage as one premultiplied quantity; the fog's in-scatter,
+// the sky and the bounded volumes are the composite's, so a moving medium never enters a temporal view's history. A
+// debug view draws the whole pixel, so it covers it and is not fogged. A lane past the render extent returns black,
+// which the caller never stores.
+float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
+    coverage = 0.0;
     reactivity = 0.0;
 
     if (!p.active) {
@@ -30,17 +36,15 @@ float3 sdfViewsStage(SdfPixel p, out float reactivity) {
     // The query tally the evals heatmap reads, from the marches every stage before this one made.
     sdfEvalCount = s.queries;
 
-    float3 color = sdfLightStage(p, s, reactivity);
+    float3 color = sdfLightStage(p, s, coverage, reactivity);
 
-#ifdef SDF_SCREEN_SOURCES
-    // The bounded emissive volumes composite after the surface or sky color is final, and never paint through solid
-    // geometry: each is clipped to the span from the near plane to the hit distance, or to the far distance on a miss.
-    float covered;
-    color = shadeVolumes(color, p.rayOrigin, p.rayDirection, worldRayDistanceAt(p.view, p.rayDirection, worldNearDistance(p.view)), (s.hit ? s.t : p.farDistance), p.pixel, covered);
-    reactivity = max(reactivity, covered);
-#endif
+    if (p.viewMode != 0) {
+        coverage = 1.0;
 
-    return sdfDebugView(p, s, color);
+        return sdfDebugView(p, s, color);
+    }
+
+    return (sdfDebugView(p, s, color) * (s.hit ? sdfFogTransmittance(s.t) : 1.0));
 }
 #endif
 
