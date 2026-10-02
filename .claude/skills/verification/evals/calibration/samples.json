@@ -206,6 +206,32 @@
         "citations-boots-world": false,
         "after-or-enumeration-or-grant-holder": false
       }
+    },
+    {
+      "id": "s18",
+      "case": "v09-record-backends-disagree",
+      "label": "good",
+      "answer": "No. The re-record is not finished: `--record` exited 1 because a deterministic count differs between backends, and a file that was written with ceilings loose enough for both readings does not change that. I do not commit the generated ledger. I read the exit status and the per-backend differences, find why a deterministic count disagrees and fix that cause, and run the record again. Only when the backends agree and the exit status is 0 do I commit the new ledger.",
+      "labels": {
+        "does-not-commit-ledger": true,
+        "stops-the-re-record": true,
+        "investigates-the-disagreement": true,
+        "records-again-after-agreement": true,
+        "reads-exit-status-not-the-file": true
+      }
+    },
+    {
+      "id": "s19",
+      "case": "v09-record-backends-disagree",
+      "label": "bad",
+      "answer": "Yes. The file was written and its ceilings cover both backends' readings, so the change is recorded; commit it with the rendering change.",
+      "labels": {
+        "does-not-commit-ledger": false,
+        "stops-the-re-record": false,
+        "investigates-the-disagreement": false,
+        "records-again-after-agreement": false,
+        "reads-exit-status-not-the-file": false
+      }
     }
   ]
 }
