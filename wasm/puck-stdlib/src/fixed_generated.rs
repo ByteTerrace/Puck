@@ -385,7 +385,7 @@ pub fn atan2(y: i64, x: i64) -> i64 {
         angle = ATAN2_PI_Q61.wrapping_sub(angle);
     }
 
-    let raw = (angle.wrapping_add((1i64 << 44) - 1).wrapping_add((angle >> 45) & 1)) >> 45;
+    let raw = angle.wrapping_add(1i64 << 44) >> 45;
 
     if sign_y != 0 {
         raw.wrapping_neg()
@@ -477,7 +477,7 @@ pub fn log2(value: i64) -> i64 {
     let fraction = log2_fraction_q61(mantissa_q62);
 
     ((integer_part - (FRACTION_BITS as i64)) << 16)
-        .wrapping_add((fraction.wrapping_add((1i64 << 44) - 1).wrapping_add((fraction >> 45) & 1)) >> 45)
+        .wrapping_add(fraction.wrapping_add(1i64 << 44) >> 45)
 }
 
 /// `2^value` in fixed point — ported from `FixedQ4816.Exp2`.
@@ -496,7 +496,11 @@ pub fn exp2(value: i64) -> i64 {
 
     let f = value & (FRACTION_MASK as i64);
 
-    exp2_mantissa((f >> 9) as usize, (f & 0x1FF) << 46, shift)
+    if f == 0 {
+        return exp2_whole(k);
+    }
+
+    exp2_narrow(exp2_mantissa_q62((f >> 9) as usize, (f & 0x1FF) << 46), shift)
 }
 
 // `2^exponent` for an exponent carried at Q56 — ported from FixedQ4816.Exp2Q56: the same table and
@@ -515,11 +519,28 @@ fn exp2_q56(exponent_q56: i64) -> i64 {
 
     let f = exponent_q56 & ((1i64 << 56) - 1);
 
-    exp2_mantissa((f >> 49) as usize, (f & ((1i64 << 49) - 1)) << 6, shift)
+    if f == 0 {
+        return exp2_whole(k);
+    }
+
+    exp2_narrow(exp2_mantissa_q62((f >> 49) as usize, (f & ((1i64 << 49) - 1)) << 6), shift)
 }
 
-// The shared tail of exp2 and exp2_q56 — ported from FixedQ4816.Exp2Mantissa, narrowing with ties to even.
-fn exp2_mantissa(index: usize, residual_q62: i64, shift: i64) -> i64 {
+// 2^k for a whole k in [-17, 46], exactly — ported from FixedQ4816.Exp2Whole: the true tie 2^-17 goes to the even
+// zero.
+fn exp2_whole(k: i64) -> i64 {
+    if k >= -(FRACTION_BITS as i64) { 1i64 << (k + FRACTION_BITS as i64) } else { ZERO }
+}
+
+// Narrows a Q62 mantissa by shift (46 - k), below 64, half up — ported from FixedQ4816.Exp2Narrow; a non-whole
+// exponent's 2^x is irrational, so a tie there is an artifact of the approximation.
+fn exp2_narrow(mantissa: i64, shift: i64) -> i64 {
+    if shift <= 0 { mantissa } else { (((mantissa as u64) + (1u64 << (shift - 1))) >> shift) as i64 }
+}
+
+// The shared core of exp2, exp2_q56 and pow's whole-exponent estimate — ported from FixedQ4816.Exp2MantissaQ62:
+// 2^(i/128 + r) at Q62, unrounded.
+fn exp2_mantissa_q62(index: usize, residual_q62: i64) -> i64 {
     let r = residual_q62;
     let mut acc = EXP2_POLY_Q62[3];
 
@@ -527,18 +548,10 @@ fn exp2_mantissa(index: usize, residual_q62: i64, shift: i64) -> i64 {
         acc = EXP2_POLY_Q62[i].wrapping_add(big_mul_shift62(r, acc));
     }
 
-    let mantissa = big_mul_shift62(
+    big_mul_shift62(
         EXP2_TABLE_Q62[index] as i64,
         (1i64 << 62).wrapping_add(big_mul_shift62(r, acc)),
-    );
-
-    if shift <= 0 {
-        mantissa
-    } else {
-        let magnitude = mantissa as u64;
-
-        ((magnitude + ((1u64 << (shift - 1)) - 1) + ((magnitude >> shift) & 1)) >> shift) as i64
-    }
+    )
 }
 
 // The base-2 logarithm of a positive raw for pow's exponential path — ported from FixedQ4816.Log2Wide: an
@@ -770,6 +783,55 @@ fn limb_round_power_of_two_quotient(exponent: u32, divisor: &[u64; POW_LIMBS]) -
 // FixedQ4816.PowWhole: the power is built in one u128 while it stays below 2^127 and in limbs past that, then
 // shifted by 16(n-1) or divided into 2^(16(m+1)) once; a power that reaches the decided bit length is already
 // past the carrier (positive) or below half a raw (negative).
+// y*log2(x) at Q56 — ported from FixedQ4816.PowExponentQ56: the integer part exactly, the wide logarithm's
+// fraction through its top 63 significant bits and one floor to Q56.
+fn pow_exponent_q56(raw: u64, y: i64) -> i128 {
+    let (integer_part, fraction) = log2_wide(raw);
+    let fraction_magnitude = fraction.unsigned_abs();
+    let cut = ((128 - fraction_magnitude.leading_zeros()) as i32 - 63).max(0) as u32;
+    let fraction_top = (fraction_magnitude >> cut) as i64;
+    let signed_top = if fraction < 0 { -fraction_top } else { fraction_top };
+    let fraction_product = (y as i128) * (signed_top as i128);
+
+    (((y as i128) * (integer_part as i128)) << 40) + (fraction_product >> (83 - cut))
+}
+
+// The correctly-rounded magnitude of x^n from the exponential path when its error bound proves the rounding —
+// ported from FixedQ4816.PowWholeEstimate: trusted only more than a relative 2^-40 from a rounding midpoint.
+fn pow_whole_estimate(magnitude: u64, exponent: i64) -> Option<u64> {
+    let exponent_q56 = pow_exponent_q56(magnitude, exponent << FRACTION_BITS);
+
+    if exponent_q56 >= (23i128 << 56) {
+        return None;
+    }
+
+    if exponent_q56 < -(17i128 << 56) - (1i128 << 16) {
+        return Some(0);
+    }
+
+    let e = exponent_q56 as i64;
+    let k = e >> 56;
+
+    if k < -17 {
+        return None;
+    }
+
+    let f = e & ((1i64 << 56) - 1);
+    let mantissa = exp2_mantissa_q62((f >> 49) as usize, (f & ((1i64 << 49) - 1)) << 6) as u64;
+    let shift = (46 - k) as u32;
+    let discarded = mantissa & ((1u64 << shift) - 1);
+    let half = 1u64 << (shift - 1);
+    let error = (mantissa >> 40) + 64;
+    let above = discarded > half;
+    let distance = if above { discarded - half } else { half - discarded };
+
+    if distance <= error {
+        return None;
+    }
+
+    Some((mantissa >> shift) + u64::from(above))
+}
+
 fn pow_whole(magnitude: u64, exponent: i64, negative_result: bool) -> i64 {
     let power = exponent.unsigned_abs() as u32;
     let shift = if exponent > 0 { FRACTION_BITS * (power - 1) } else { FRACTION_BITS * (power + 1) };
@@ -778,9 +840,20 @@ fn pow_whole(magnitude: u64, exponent: i64, negative_result: bool) -> i64 {
     let mut wide = magnitude as u128;
     let mut built = 1u32;
 
-    while built < power && (128 - wide.leading_zeros()) + base_bit_length <= 127 {
+    // X^n has at least n*(bits(X) - 1) + 1 bits; past the one-word lane the estimate answers first.
+    let lane_can_hold = power * (base_bit_length - 1) + 1 <= 127;
+
+    while lane_can_hold && built < power && (128 - wide.leading_zeros()) + base_bit_length <= 127 {
         wide *= magnitude as u128;
         built += 1;
+    }
+
+    if built < power || (exponent < 0 && shift > 126) {
+        if let Some(estimate) = pow_whole_estimate(magnitude, exponent) {
+            let estimate = estimate as i64;
+
+            return if negative_result { estimate.wrapping_neg() } else { estimate };
+        }
     }
 
     let rounded = if built == power {
@@ -887,13 +960,7 @@ fn pow_magnitude(x: i64, y: i64, whole: bool, negative_result: bool) -> i64 {
     // y*log2(x) at Q56: the integer part exactly, the wide logarithm's fraction through its top 63 significant
     // bits and one floor to Q56; the saturation gates apply to that i128 exponent before it narrows — deliberately
     // NOT `fixed::mul`, which wraps to i64 before the gates ever see the result.
-    let (integer_part, fraction) = log2_wide(x as u64);
-    let fraction_magnitude = fraction.unsigned_abs();
-    let cut = ((128 - fraction_magnitude.leading_zeros()) as i32 - 63).max(0) as u32;
-    let fraction_top = (fraction_magnitude >> cut) as i64;
-    let signed_top = if fraction < 0 { -fraction_top } else { fraction_top };
-    let fraction_product = (y as i128) * (signed_top as i128);
-    let exponent_q56 = (((y as i128) * (integer_part as i128)) << 40) + (fraction_product >> (83 - cut));
+    let exponent_q56 = pow_exponent_q56(x as u64, y);
 
     if exponent_q56 >= (47i128 << 56) {
         return if negative_result { i64::MIN } else { i64::MAX };
