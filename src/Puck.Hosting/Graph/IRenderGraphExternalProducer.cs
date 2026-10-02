@@ -40,8 +40,10 @@ public interface IRenderGraphExternalProducer : ICaptureRequestTarget, IDisposab
     /// <summary>Renders one frame at an extent, rebuilding its targets first when the extent differs from the last
     /// frame's.</summary>
     /// <param name="context">The host's frame context.</param>
-    /// <param name="width">The extent width, in pixels, at least one.</param>
-    /// <param name="height">The extent height, in pixels, at least one.</param>
+    /// <param name="width">The extent width, in pixels, at least one; zero for a source that has negotiated no extent,
+    /// which still answers its availability.</param>
+    /// <param name="height">The extent height, in pixels, at least one; zero for a source that has negotiated no extent,
+    /// which still answers its availability.</param>
     /// <param name="reads">The latest completed image of each instance the producer's instance reads, whose leases the
     /// producer takes for the images its submission samples (<see cref="RenderGraphExternalReads.Take"/>), or
     /// <see langword="null"/> when it reads none.</param>

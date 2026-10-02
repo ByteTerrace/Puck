@@ -13,29 +13,6 @@ internal sealed partial class WorldScreenBinder {
         GpuPixelFormat.R8G8B8A8Unorm => ImagePixelFormat.R8G8B8A8Unorm,
         _ => null,
     };
-    // Converts one CPU surface through a tier's conversion, when the runtime runs and a conversion reads its pixels.
-    private bool TryConvert(ConvertedPixels pixels, in FrameContext context, in Surface surface) {
-        if (
-            (Runtime is not { } runtime) ||
-            !surface.IsCpuPixels ||
-            (0U == surface.Width) ||
-            (0U == surface.Height) ||
-            (PixelFormatOf(format: surface.Format) is not { } format)
-        ) {
-            return false;
-        }
-
-        var byteCount = checked((int)((surface.Width * surface.Height) * 4U));
-
-        return ((surface.Pixels.Length >= byteCount) && pixels.TryConvert(
-            context: in context,
-            format: format,
-            height: surface.Height,
-            planes: surface.Pixels.Span[..byteCount],
-            runtime: runtime,
-            width: surface.Width
-        ));
-    }
 
     // A CPU tier's pixels — a camera's or a desktop capture's, or a capture fill (WorldCaptureFills) — converted through the
     // image source conversion their format names (RenderGraphRuntime.CreateConverter) into the image a frame samples. A
@@ -52,6 +29,8 @@ internal sealed partial class WorldScreenBinder {
 
         private Entry? m_current;
         private int m_nextToken;
+        // Why the latest surface has no conversion: one that is not CPU pixels, or CPU pixels in a format none reads.
+        private string? m_unconvertible;
         private bool m_retired;
         // The converter whose image a frame acquires: the current one once it has converted, else the one before it.
         private Entry? m_shown;
@@ -65,6 +44,12 @@ internal sealed partial class WorldScreenBinder {
 
         // The image-view handle a frame samples, for a read that submits no GPU work; zero before the first conversion.
         public nint Handle => (m_shown?.Converter.ImageViewHandle ?? 0);
+        // Whether the current converter's graph is building on the thread pool.
+        public bool IsBuilding => (m_current?.Converter.IsBuilding ?? false);
+        // The latest conversion's answer: refused for a surface no conversion reads or a refused graph build.
+        public FrameRender Render => ((m_unconvertible is { } unconvertible)
+            ? FrameRender.Refused(reason: unconvertible)
+            : (m_current?.Converter.Render ?? FrameRender.Waiting(reason: "its conversion has not started")));
         // The extent of the image a frame samples, or null before the first conversion.
         public (uint Width, uint Height)? Extent => ((m_shown is { } shown)
             ? (shown.Width, shown.Height)
@@ -159,6 +144,39 @@ internal sealed partial class WorldScreenBinder {
 
             m_current = null;
             m_shown = null;
+        }
+        // Converts one captured surface, when the runtime runs: CPU pixels in a format a conversion reads convert, CPU
+        // pixels of no extent convert nothing, and any other surface refuses until a later one converts.
+        public bool TryConvert(RenderGraphRuntime? runtime, in FrameContext context, in Surface surface) {
+            if (
+                !surface.IsCpuPixels ||
+                (PixelFormatOf(format: surface.Format) is not { } format)
+            ) {
+                m_unconvertible ??= $"{m_name} hands over a frame no conversion reads: one that is not CPU pixels";
+
+                return false;
+            }
+
+            m_unconvertible = null;
+
+            if (
+                (runtime is null) ||
+                (0U == surface.Width) ||
+                (0U == surface.Height)
+            ) {
+                return false;
+            }
+
+            var byteCount = checked((int)((surface.Width * surface.Height) * 4U));
+
+            return ((surface.Pixels.Length >= byteCount) && TryConvert(
+                context: in context,
+                format: format,
+                height: surface.Height,
+                planes: surface.Pixels.Span[..byteCount],
+                runtime: runtime,
+                width: surface.Width
+            ));
         }
         // Converts one image of the given format and extent, making a converter for it when the pixels change shape.
         public bool TryConvert(RenderGraphRuntime runtime, in FrameContext context, ImagePixelFormat format, uint width, uint height, ReadOnlySpan<byte> planes) {

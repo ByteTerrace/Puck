@@ -1105,6 +1105,21 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         for (var index = 0; (index < m_sources.Length); index++) {
             if (m_sources[index] is { Graph: null }) {
                 MarkUnproduced(index: index, node: m_nodes[index]!);
+            } else if (m_set.Instances[index].IsSource &&
+                (m_producers[index] is IRenderGraphSourceProducer producer) &&
+                (schedule.Instances[index] is { } row) &&
+                ((row.Status == RenderGraphInstanceStatus.Refused) ||
+                    ((row.Status == RenderGraphInstanceStatus.Waiting) && ((row.Width == 0) || (row.Height == 0))))) {
+                // An unopened source or an unprovisioned probe has no extent to schedule, but it still answers:
+                // a refusal must reach its consumers, and a filled source can already show its 1x1 fill, including
+                // offscreen where the scheduler cannot pace a rate source against a display.
+                var production = producer.Produce(context: in context, width: ((uint)row.Width), height: ((uint)row.Height));
+
+                if (production.IsRendered) {
+                    MarkCurrent(index: index);
+                } else {
+                    MarkProduction(index: index, production: production);
+                }
             }
         }
 

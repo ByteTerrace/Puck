@@ -473,6 +473,7 @@ public sealed class ImageProducerLawTests {
 
         using var source = new WorldImageFeedProducer(
             fill: Fill,
+            fillRender: static _ => FrameRender.Rendered,
             gate: new WorldCaptureGate(
                 alwaysFills: false,
                 captureArmed: () => filling
@@ -527,6 +528,7 @@ public sealed class ImageProducerLawTests {
         );
         using var source = new WorldImageFeedProducer(
             fill: static _ => default,
+            fillRender: static _ => FrameRender.Waiting(reason: "fill not converted"),
             gate: new WorldCaptureGate(
                 alwaysFills: false,
                 captureArmed: static () => false
@@ -642,6 +644,36 @@ public sealed class ImageProducerLawTests {
         public FrameRender Publish(in FrameContext context) => Answer;
     }
 
+    [Fact]
+    public void ASteadyOffscreenFillAllocatesNothingWhileItsSeatHasNoCamera() {
+        var feed = new WorldCameraSourceFeed(cameras: new FakeSeatCameras(), profile: null, seat: 1, sensor: WorldCameraSensor.Color);
+        using var source = new WorldImageFeedProducer(
+            fill: static _ => ((nint)0xF111),
+            fillRender: static _ => FrameRender.Rendered,
+            gate: new WorldCaptureGate(alwaysFills: true, captureArmed: static () => false),
+            opening: new WorldImageSourceOpening(
+                Context: new RenderGraphExternalProducerContext(Device: null!, HostsOnDirectX: false, Instance: "camera", Package: "source.camera"),
+                Fault: null,
+                Feed: feed
+            )
+        );
+
+        for (var frame = 0; (frame < 32); frame++) {
+            _ = source.Produce(context: default, width: 8U, height: 8U);
+        }
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var rendered = true;
+
+        for (var frame = 0; (frame < 128); frame++) {
+            rendered &= source.Produce(context: default, width: 8U, height: 8U).IsRendered;
+        }
+
+        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+
+        Assert.True(condition: rendered);
+        Assert.Equal(actual: allocated, expected: 0L);
+    }
     /// <summary>An imported source answers its frame three ways. Outside a fill it answers as its feed does: an image is
     /// rendered, a feed still making its first frame waits, and a feed that ended (its window gone) refuses by its own
     /// reason, so an offscreen host steps on rather than holding the tick for an image that cannot come. While the gate
@@ -653,6 +685,7 @@ public sealed class ImageProducerLawTests {
         var feed = new AnsweringFeed();
         var filling = false;
         var fillHandle = ((nint)0);
+        var fillRender = FrameRender.Waiting(reason: "fill converting");
         var context = new RenderGraphExternalProducerContext(
             Device: null!,
             HostsOnDirectX: false,
@@ -662,6 +695,7 @@ public sealed class ImageProducerLawTests {
 
         using var source = new WorldImageFeedProducer(
             fill: _ => fillHandle,
+            fillRender: _ => fillRender,
             gate: new WorldCaptureGate(
                 alwaysFills: false,
                 captureArmed: () => filling
@@ -690,13 +724,17 @@ public sealed class ImageProducerLawTests {
         filling = true;
         Assert.Equal(
             actual: Produce(),
-            expected: FrameRender.Waiting(reason: "source 'source$capture$0' shows its capture fill, which is still converting")
+            expected: fillRender
         );
+        fillRender = FrameRender.Refused(reason: "fill conversion build refused");
+        Assert.Equal(actual: Produce(), expected: fillRender);
         fillHandle = 0xF111;
+        fillRender = FrameRender.Rendered;
         Assert.Equal(actual: Produce(), expected: FrameRender.Rendered);
 
         using var unopened = new WorldImageFeedProducer(
             fill: static _ => default,
+            fillRender: static _ => FrameRender.Rendered,
             gate: new WorldCaptureGate(
                 alwaysFills: true,
                 captureArmed: static () => false

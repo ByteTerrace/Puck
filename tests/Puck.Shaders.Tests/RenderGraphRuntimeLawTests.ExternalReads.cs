@@ -131,6 +131,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.Equal(expected: (FakeSource.Width, FakeSource.Height), actual: source.Extent);
         }
     }
+    // While the display's rate is unknown a rate source's row is refused by name, yet the runtime still asks its producer
+    // to answer each frame, unpaced: a source producer paces its own feed, and an offscreen capture fill renders only so.
     [Fact]
     public void ARateSourceIsRefusedByNameWhileTheDisplayRateIsUnknown() {
         var gpu = new FakePipelineGpu();
@@ -155,7 +157,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 );
             }
 
-            Assert.Equal(expected: 0, actual: source.Produced);
+            Assert.Equal(expected: 4, actual: source.Produced);
 
             // Once the display's rate is known, a 30 Hz source renders every second frame of a 60 Hz display.
             for (var frame = 4; (frame < 8); frame++) {
@@ -167,7 +169,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 );
             }
 
-            Assert.Equal(expected: 2, actual: source.Produced);
+            Assert.Equal(expected: 6, actual: source.Produced);
         }
     }
     // A source that hands out an image view alone, as a camera or a capture does, names no image a graph's barriers can

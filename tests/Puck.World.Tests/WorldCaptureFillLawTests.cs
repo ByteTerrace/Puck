@@ -1,4 +1,7 @@
 using System.Numerics;
+using Puck.Abstractions.Capture;
+using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
 using Puck.Shaders;
@@ -19,6 +22,146 @@ namespace Puck.World.Tests;
 /// armed on a windowed gate or an offscreen gate fills every frame, so a capture of such a world builds no pipeline.
 /// </summary>
 public sealed class WorldCaptureFillLawTests {
+    // The frames a conversion settles within once each frame has waited out the build it started: one starts the build,
+    // the next installs it and converts, with room for a refused build's retry.
+    private const int SettleFrames = 16;
+
+    /// <summary>A desktop capture's CPU route answers a frame from its converted image, never from the pixels it
+    /// captured: a captured frame whose conversion refuses answers refused, and never rendered, until a changed build
+    /// converts it, and a frame no conversion reads refuses even with an older image still shown.</summary>
+    [Fact]
+    public void ACapturedFrameAnswersFromItsConversionNeverFromItsPixels() {
+        using var scene = new Scene(shown: Pattern());
+        using var capture = new WorldCapturePixels(name: "capture:law");
+        var source = new CpuFrameSource();
+
+        FrameRender Pull() {
+            Assert.True(condition: capture.Pull(context: default, runtime: scene.Runtime, source: source));
+
+            return capture.Answer();
+        }
+
+        Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: capture.Answer().Completion);
+
+        scene.Faults.Arm(kind: GpuCreationKind.Pipeline, nth: 1);
+        TestLiveness.Within(
+            building: () => capture.IsBuilding,
+            frames: SettleFrames,
+            reason: () => (capture.Answer().Reason ?? "the refused conversion answered rendered"),
+            step: () => {
+                var answer = Pull();
+
+                Assert.False(condition: answer.IsRendered);
+
+                return (answer.Completion == FrameCompletion.Refused);
+            }
+        );
+        Assert.Contains(expectedSubstring: GpuCreationFaults.RefusalCode, actualString: Pull().Reason);
+        Assert.Equal(expected: ((nint)0), actual: capture.Handle);
+
+        scene.Faults.Disarm();
+        TestLiveness.Within(
+            building: () => capture.IsBuilding,
+            frames: SettleFrames,
+            reason: () => (capture.Answer().Reason ?? "the rebuilt conversion never rendered"),
+            step: () => Pull().IsRendered
+        );
+        Assert.NotEqual(expected: ((nint)0), actual: capture.Handle);
+
+        source.Shared = true;
+        Assert.Equal(expected: FrameCompletion.Refused, actual: Pull().Completion);
+        Assert.Contains(expectedSubstring: "no conversion reads", actualString: capture.Answer().Reason);
+    }
+    [Fact]
+    public void AnUnopenedImportedSourceRefusesWithoutAScheduledExtent() {
+        using var scene = new Scene(shown: Desktop(), openingFault: "the capture window is gone");
+
+        scene.Compose();
+        Assert.Equal(expected: FrameCompletion.Refused, actual: scene.Runtime.Render.Completion);
+        Assert.Contains(expectedSubstring: "the capture window is gone", actualString: scene.Runtime.Render.Reason);
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ARefusedFillConversionRefusesTheRootAndAChangedBuildCanRenderIt(bool deviceLost) {
+        using var scene = new Scene(shown: Desktop(), alwaysFills: true);
+
+        scene.Faults.Arm(kind: GpuCreationKind.Pipeline, nth: 1);
+        TestLiveness.Within(
+            building: () => scene.Fills.IsBuilding,
+            frames: SettleFrames,
+            reason: () => (scene.Runtime.Render.Reason ?? "the fill refusal never reached the root"),
+            step: () => {
+                scene.Compose();
+
+                return (scene.Runtime.Render.Completion == FrameCompletion.Refused);
+            }
+        );
+        Assert.Contains(expectedSubstring: GpuCreationFaults.RefusalCode, actualString: scene.Runtime.Render.Reason);
+        Assert.False(condition: FillConverted(fills: scene.Fills));
+
+        scene.Compose();
+        Assert.Equal(expected: FrameCompletion.Refused, actual: scene.Runtime.Render.Completion);
+        if (deviceLost) {
+            var revision = scene.Faults.Revision;
+
+            scene.Fills.OnDeviceLost();
+            Assert.Equal(expected: revision, actual: scene.Faults.Revision);
+        } else {
+            scene.Faults.Disarm();
+        }
+        TestLiveness.Within(
+            building: () => scene.Fills.IsBuilding,
+            frames: SettleFrames,
+            reason: () => (scene.Runtime.Render.Reason ?? "the replacement fill never rendered"),
+            step: () => {
+                scene.Compose();
+
+                return scene.Runtime.Render.IsRendered;
+            }
+        );
+        Assert.True(condition: FillConverted(fills: scene.Fills));
+    }
+    [InlineData(false, 0)]
+    [InlineData(true, 0)]
+    [InlineData(false, 30)]
+    [InlineData(true, 30)]
+    [Theory]
+    public void ASourceWithNoExtentAnswersItsFeedOrItsOffscreenFill(bool alwaysFills, int displayHertz) {
+        using var scene = new Scene(shown: Desktop(), alwaysFills: alwaysFills, feedExtent: 0U);
+        var producer = Assert.IsType<WorldImageFeedProducer>(@object: scene.Runtime.Producer(instance: 0));
+        var feed = Assert.IsType<FakeFeed>(@object: producer.Feed);
+
+        scene.DisplayHertz = displayHertz;
+        feed.Answer = FrameRender.Waiting(reason: "probe starting on another thread");
+        scene.HoldPipelines();
+        scene.Compose();
+        Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: scene.Runtime.Render.Completion);
+
+        feed.Answer = FrameRender.Refused(reason: "probe never opened its kernel");
+        scene.Compose();
+        Assert.Equal(expected: (alwaysFills ? FrameCompletion.NotYetRenderable : FrameCompletion.Refused), actual: scene.Runtime.Render.Completion);
+        scene.ReleasePipelines();
+
+        if (alwaysFills) {
+            TestLiveness.Within(
+                building: () => scene.Fills.IsBuilding,
+                frames: SettleFrames,
+                reason: () => (scene.Runtime.Render.Reason ?? "the fill never rendered without a probe extent"),
+                step: () => {
+                    scene.Compose();
+
+                    return scene.Runtime.Render.IsRendered;
+                }
+            );
+            Assert.NotEqual(expected: ((nint)0), actual: scene.Read(producer: producer));
+        } else {
+            feed.Answer = FrameRender.Waiting(reason: "probe restarted");
+            scene.Compose();
+            Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: scene.Runtime.Render.Completion);
+        }
+    }
+
     private static WorldScreenSource.Producer Desktop() => WorldImageProducerSettings.SourceOf(
         id: WorldImageProducerSettings.CaptureId,
         settings: new WorldCaptureSettings(
@@ -153,21 +296,28 @@ public sealed class WorldCaptureFillLawTests {
 
     // A desktop-capture producer standing in for the real one: every feed it opens is a fake whose image is one fixed
     // handle.
-    private sealed class FakeCaptureProducer : IWorldImageProducer {
+    private sealed class FakeCaptureProducer(uint extent, string? openingFault) : IWorldImageProducer {
         public ImageContentClass Content => ImageContentClass.External;
         public string Id => WorldImageProducerSettings.CaptureId;
         public ImageSourceTransport Transport => ImageSourceTransport.Imported;
 
         public bool TryOpen(WorldScreenSource.Producer source, out IWorldImageFeed? feed, out string? fault) {
+            if (openingFault is not null) {
+                feed = null;
+                fault = openingFault;
+
+                return false;
+            }
+
             feed = new FakeFeed(descriptor: new ImageSourceDescriptor(
                 Cadence: ImageSourceCadence.Rate(rateHz: 30U),
                 Color: ImageColorEncoding.Srgb,
                 Content: Content,
                 Format: ImagePixelFormat.B8G8R8A8Unorm,
-                Height: 1U,
+                Height: extent,
                 Producer: Id,
                 Transport: Transport,
-                Width: 1U
+                Width: extent
             ));
             fault = null;
 
@@ -179,7 +329,10 @@ public sealed class WorldCaptureFillLawTests {
         public static readonly nint DesktopHandle = 0xDE5C;
 
         public int Acquisitions { get; private set; }
+
+        public FrameRender Answer { get; set; } = FrameRender.Rendered;
         public ImageSourceDescriptor Descriptor { get; } = descriptor;
+
         public string? Fault => null;
         public Vector3 Light => Vector3.One;
 
@@ -191,7 +344,7 @@ public sealed class WorldCaptureFillLawTests {
         public void Dispose() { }
         public nint Handle() => DesktopHandle;
         public void NotifyDeviceLost() { }
-        public FrameRender Publish(in FrameContext context) => FrameRender.Rendered;
+        public FrameRender Publish(in FrameContext context) => Answer;
     }
     // One screen showing a source, run as the binder runs it: the source is a render-graph instance whose producer reads
     // through the capture gate and the fills, and each frame converts the fills it needs before its source resolves, on a
@@ -201,8 +354,9 @@ public sealed class WorldCaptureFillLawTests {
         private readonly ManualResetEventSlim m_held = new(initialState: true);
 
         private int m_pipelinesEntered;
+        private long m_frame;
 
-        public Scene(WorldScreenSource shown, bool alwaysFills = false) {
+        public Scene(WorldScreenSource shown, bool alwaysFills = false, uint feedExtent = 1U, string? openingFault = null) {
             ConsumesExternal = WorldCaptureFills.IsExternal(source: shown);
             Gate = new WorldCaptureGate(
                 alwaysFills: alwaysFills,
@@ -223,12 +377,13 @@ public sealed class WorldCaptureFillLawTests {
                 pipelines: pipelines
             ));
 
-            producers.Register(producer: new FakeCaptureProducer());
+            producers.Register(producer: new FakeCaptureProducer(extent: feedExtent, openingFault: openingFault));
             producers.Register(producer: new WorldTestPatternProducer());
             SourceConversionPackage.RegisterAll(packages: packages);
             producers.RegisterPackages(
                 adapt: opening => new WorldImageFeedProducer(
                     fill: Fills.Acquire,
+                    fillRender: Fills.RenderOf,
                     gate: Gate,
                     opening: opening
                 ),
@@ -240,7 +395,7 @@ public sealed class WorldCaptureFillLawTests {
                 set: out var set
             ), userMessage: setRefusal?.Message);
             Assert.True(condition: RenderGraphRuntime.TryCreate(
-                deviceContext: m_gpu,
+                deviceContext: new FaultingDevice(gpu: m_gpu, faults: Faults),
                 graphs: new RenderGraphRuntimeGraph?[set.Instances.Count],
                 hostsOnDirectX: false,
                 packages: packages,
@@ -254,6 +409,10 @@ public sealed class WorldCaptureFillLawTests {
         }
 
         public bool Armed { get; set; }
+        public int DisplayHertz { get; set; }
+
+        public GpuCreationFaults Faults { get; } = new();
+
         // Whether a consumer shows external content: at first, whether the scene's screen does.
         public bool ConsumesExternal { get; set; }
         public WorldCaptureFills Fills { get; }
@@ -277,6 +436,20 @@ public sealed class WorldCaptureFillLawTests {
             context: default,
             runtime: Runtime
         );
+        public void Compose() {
+            _ = Frame();
+            var frame = new RenderGraphFrame(
+                Index: m_frame++,
+                Tick: 1L,
+                DisplayWidth: 8,
+                DisplayHeight: 8,
+                DisplayHertz: DisplayHertz,
+                Footprints: [],
+                Roots: [new RenderGraphRoot(Instance: Runtime.Root, Width: 1.0, Height: 1.0)]
+            );
+
+            _ = Runtime.ProduceFrame(context: default, frame: in frame);
+        }
         // Holds every pipeline creation from here on until ReleasePipelines, counting from zero.
         public void HoldPipelines() {
             m_held.Reset();
@@ -297,5 +470,28 @@ public sealed class WorldCaptureFillLawTests {
             return output.Lease.ImageViewHandle;
         }
         public void ReleasePipelines() => m_held.Set();
+    }
+    // A capture source handing over one 2x2 B8G8R8A8 frame: CPU pixels, or a shared texture no conversion reads.
+    private sealed class CpuFrameSource : IFrameCaptureSource {
+        private readonly byte[] m_pixels = new byte[16];
+
+        public bool Shared { get; set; }
+
+        public bool TryCapture(out Surface surface) {
+            surface = (Shared
+                ? Surface.SharedTexture(format: GpuPixelFormat.B8G8R8A8Unorm, height: 2U, sharedHandle: 0x5A, width: 2U)
+                : Surface.CpuPixels(format: GpuPixelFormat.B8G8R8A8Unorm, height: 2U, pixels: m_pixels, width: 2U));
+
+            return true;
+        }
+    }
+    private sealed class FaultingDevice(IGpuDeviceContext gpu, GpuCreationFaults faults) : IGpuDeviceContext {
+        public long AdapterLuid => gpu.AdapterLuid;
+        public GpuDeviceCapabilities? Capabilities => gpu.Capabilities;
+        public GpuDeviceIdentity? Identity => gpu.Identity;
+        public GpuMemoryProfile MemoryProfile => gpu.MemoryProfile;
+        public GpuDeviceServices Services { get; } = GpuCreationFaults.Wrap(faults: faults, services: gpu.Services);
+
+        public void WaitIdle() => gpu.WaitIdle();
     }
 }

@@ -189,11 +189,18 @@ internal sealed partial class WorldScreenBinder {
                 );
             }
 
-            return (Feed.Live
+            if (Feed.Ended) {
+                return FrameRender.Refused(reason: (Feed.Fault ?? $"{Feed.Label} is unavailable"));
+            }
+
+            if (!Feed.Live) {
+                return FrameRender.Waiting(reason: (Feed.Fault ?? $"{Feed.Label} awaiting a compositor frame"));
+            }
+
+            // A captured CPU frame is rendered only once it has converted; a GPU copy is the sampled image itself.
+            return (Feed.GpuRoute
                 ? FrameRender.Rendered
-                : (Feed.Ended
-                    ? FrameRender.Refused(reason: (Feed.Fault ?? $"{Feed.Label} is unavailable"))
-                    : FrameRender.Waiting(reason: (Feed.Fault ?? $"{Feed.Label} awaiting a compositor frame"))));
+                : Feed.Pixels.Answer());
         }
     }
 }

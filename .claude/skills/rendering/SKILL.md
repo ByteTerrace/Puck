@@ -422,7 +422,9 @@ These are one-line cautions; the owning pages hold the derivations.
   convert through the same one-pass graph on a converter of their own
   (`RenderGraphRuntime.CreateConverter`, `RenderGraphSourceConverter`, which
   shares the instance's region binding; the binder's `ConvertedPixels`), handed
-  out under a counted lease; never upload a sampled image by hand. A converter
+  out under a counted lease; never upload a sampled image by hand. A capture's
+  CPU tier (`WorldCapturePixels`) answers from its converted image, never from
+  the pixels it captured: a frame whose conversion refuses refuses the source. A converter
   builds off the frame thread, so a capture fill (`WorldCaptureFills`)
   converts whenever a screen shows or a HUD frame names an external source,
   never first on the frame a capture is armed for, which would have no image,
@@ -483,7 +485,7 @@ These are one-line cautions; the owning pages hold the derivations.
   never bursts ticks and a capture's frame reprojects from the tick before
   (`OffscreenTickPacingLawTests`). `IRenderRoot.ProduceFrame` returns a
   `RootFrame`, whose completion the World's root reads from
-  `RenderGraphRuntime.Completion`: rendered only when the root rendered the
+  `RenderGraphRuntime.Render`: rendered only when the root rendered the
   frame and every instance it reads within the frame did too (a previous-frame
   read, a refresh divisor, an unchanged view or a paused node stands on
   purpose), `Refused` when a node's refused build or a package's refusal of the
@@ -494,7 +496,11 @@ These are one-line cautions; the owning pages hold the derivations.
   `IRenderGraphSourceUpload.Write` and a World feed's `Publish` or `Write`): a
   source waits only for what waiting can deliver (a build, a first frame on
   another thread), and refuses when it ended, failed to open, or has no image
-  for a tick its image is a function of (`MarkProduction`). A new kind of
+  for a tick its image is a function of (`MarkProduction`). A fill's conversion
+  answers through `RenderGraphSourceConverter.Render` and `WorldCaptureFills.RenderOf`:
+  a refused fill refuses the frame, and a filled source publishes no live feed.
+  An imported source still answers when no extent or display cadence can be scheduled.
+  A new kind of
   refusal states itself through `RefusalOf`, and `MarkUnproduced` in
   `RenderGraphRuntime.Completion.cs` is the one place it becomes `Refused`
   (`RenderGraphRuntimeLawTests.Completion`,

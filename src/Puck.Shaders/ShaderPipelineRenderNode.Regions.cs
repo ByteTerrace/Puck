@@ -62,6 +62,8 @@ public sealed partial class ShaderPipelineRenderNode {
         );
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
+        RetryRefusal();
+
         var declaration = ValidateExternalBinding(
             kind: ShaderPipelineResourceKind.Buffer,
             name: name

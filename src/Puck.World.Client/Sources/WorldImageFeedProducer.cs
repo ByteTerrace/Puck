@@ -16,31 +16,32 @@ namespace Puck.World.Client;
 /// </summary>
 public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWorkSource {
     private readonly Func<uint, GpuImageLease> m_fill;
+    private readonly Func<uint, FrameRender> m_fillRender;
     private readonly WorldCaptureGate m_gate;
     // Why the opened feed hands out no image, when it is no import feed.
     private readonly string? m_notImported;
-    // What a filled source waits for until its fill has converted, built once.
-    private readonly string m_fillConverting;
 
     /// <summary>Initializes a new instance of the <see cref="WorldImageFeedProducer"/> class, which owns the opened
     /// feed.</summary>
     /// <param name="opening">What the source instance's factory opened: its feed, or why it has none.</param>
     /// <param name="gate">The gate that keeps external content out of captures.</param>
     /// <param name="fill">Returns the image of a packed RGBA8 capture fill.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="gate"/> or <paramref name="fill"/> is
+    /// <param name="fillRender">Returns the capture fill conversion's answer.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="gate"/>, <paramref name="fill"/> or <paramref name="fillRender"/> is
     /// <see langword="null"/>.</exception>
-    public WorldImageFeedProducer(WorldImageSourceOpening opening, WorldCaptureGate gate, Func<uint, GpuImageLease> fill) {
+    public WorldImageFeedProducer(WorldImageSourceOpening opening, WorldCaptureGate gate, Func<uint, GpuImageLease> fill, Func<uint, FrameRender> fillRender) {
         ArgumentNullException.ThrowIfNull(argument: gate);
         ArgumentNullException.ThrowIfNull(argument: fill);
+        ArgumentNullException.ThrowIfNull(argument: fillRender);
 
         m_fill = fill;
+        m_fillRender = fillRender;
         m_gate = gate;
         Feed = (opening.Feed as IWorldImportFeed);
         m_notImported = (((opening.Feed is not null) && (Feed is null))
             ? $"image producer '{opening.Feed.Descriptor.Producer}' opened a feed that hands out no image"
             : null);
         Opening = opening;
-        m_fillConverting = $"source '{opening.Context.Instance}' shows its capture fill, which is still converting";
     }
 
     /// <inheritdoc/>
@@ -76,26 +77,17 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
     /// feed refuses. While the gate fills the feed's content class the source hands out its capture fill, never the
     /// feed's image, so it is rendered once the fill has converted, whatever the feed answers; otherwise it answers as
     /// its feed does (<see cref="IWorldImportFeed.Publish"/>). The extent is the one the feed declared, so the arguments
-    /// are not read.</remarks>
+    /// are not read. A filled source publishes only its fill; the live feed owes no publication.</remarks>
     public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
         if (Feed is not { } feed) {
             return FrameRender.Refused(reason: (Fault ?? $"source '{Opening.Context.Instance}' opened no feed"));
         }
 
-        var published = feed.Publish(context: in context);
-
         if (!m_gate.Fills(content: feed.Descriptor.Content)) {
-            return published;
+            return feed.Publish(context: in context);
         }
 
-        var fill = m_fill(arg: feed.Descriptor.CaptureFill);
-        var converted = (fill.ImageViewHandle != 0);
-
-        fill.Retire();
-
-        return (converted
-            ? FrameRender.Rendered
-            : FrameRender.Waiting(reason: m_fillConverting));
+        return m_fillRender(arg: feed.Descriptor.CaptureFill);
     }
     /// <inheritdoc/>
     /// <remarks>A source is captured through the instance that shows it, so a capture armed on the source itself is

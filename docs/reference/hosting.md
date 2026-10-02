@@ -225,7 +225,11 @@ window or monitor that is gone, a probe whose ring cannot be provisioned)
 refuses, and so does a source whose image is a function of the simulation with
 none for this tick (a machine that is not running or has completed no frame),
 since only a later tick can change it. Offscreen, external content renders its
-capture fill, so an external source waits only for its fill to convert. An instance with no installed graph,
+capture fill, so an external source waits only for its fill to convert, and a
+refused fill conversion refuses the frame. A filled source publishes the fill
+without publishing its live feed. A capture's CPU tier answers from its
+converted image rather than the pixels it captured, so a captured frame whose
+conversion refuses refuses too. An instance with no installed graph,
 or an uploaded source whose opening or descriptor has no conversion graph,
 also refuses the frame until its inputs change. Completion follows the
 scheduled same-frame reads, including buffers, external producers and package
@@ -414,8 +418,11 @@ and the frame's pass-pixel budget:
   `FrameContext.DisplayHertz`, the rate its pacer targets). While the
   display's rate is unknown (zero, as offscreen) a rate source is refused: it
   does not render, and its row reads `RenderGraphInstanceStatus.Refused`. A
-  source whose producer declares nothing or no extent does not render. The
-  runtime declares an upload's state and a source producer's
+  source whose producer declares nothing or no extent does not render. An
+  imported source still answers its availability when no extent or display
+  cadence can be scheduled: an unopened feed refuses, a first frame arriving
+  on another thread waits, and an offscreen capture fill renders once it has converted.
+  The runtime declares an upload's state and a source producer's
   (`IRenderGraphSourceProducer.Descriptor`) itself, after the host's. Cadence is
   counted in ticks and frames, never the wall clock.
   `RenderGraphHistory.Withdraw` takes back a render the producer could not

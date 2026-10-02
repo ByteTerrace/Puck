@@ -961,9 +961,9 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             surface: in surface
         );
 
-        _ = TryConvert(
+        _ = feed.Pixels.TryConvert(
             context: in context,
-            pixels: feed.Pixels,
+            runtime: Runtime,
             surface: in panelSurface
         );
         feed.StarvedPulls = 0;
