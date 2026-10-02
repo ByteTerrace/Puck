@@ -143,7 +143,9 @@ GPU work is `puck parity`, `puck counters`, any canary requiring `gpu`
 This includes a full `Puck.World.Tests` run: its device-law classes open the
 GPU. `puck docs citations` builds `Puck.World` and boots it headless and
 windowed to read its help vocabulary; it is a World run and waits for the GPU
-like any other GPU leg.
+like any other GPU leg. Given `--enumeration <file>`, a saved `help` listing, it
+boots nothing and may run beside a GPU leg; `puck docs links` only reads files
+and runs at any time.
 
 - A GPU runs one GPU leg at a time. Legs compete for the device, the ports and
   the frame budget, and a contended leg times out.
