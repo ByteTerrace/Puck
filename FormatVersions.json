@@ -297,7 +297,7 @@
             "token": "puck.camera.program.v1"
         },
         "WorldCaptureManifest.SchemaId": {
-            "shape": "cb7c3b9f90bf4d96",
+            "shape": "13e601de0868a4a1",
             "source": "src/Puck.World.Console/WorldCaptureScheduler.cs",
             "token": "puck.parity.manifest.v1"
         },
@@ -332,7 +332,7 @@
             "token": "puck.world.extensions.v1"
         },
         "WorldFederationCodec.WireKey": {
-            "shape": "7877d13dabed5f28",
+            "shape": "b5892da595b6a7d1",
             "source": "src/Puck.World.Server/WorldFederationCodec.cs",
             "token": "PUCKFED5"
         },

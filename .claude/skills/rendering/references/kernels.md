@@ -250,7 +250,12 @@ full binding map is in
 `coneMarchTileBounds` abandons its gap and tail searches after
 `TileGapStallLimit` consecutive occupied samples with non-increasing clearance,
 keeping the established entry and far-plane sentinels; a stall never proves
-empty space. Programs admitted for independent part tracing use
+empty space. Every cone step goes through `coneMarchAdvance`, which crosses a
+wallpaper LOD switch through `sdfMarchAdvance`; an entry or second entry
+reached by a crossing is the switch's depth, never the landing's, and the cone
+relies on its apex being the LOD origin (`sdf-beam` sets both to the camera).
+Log-sphere walls stay in a cone's clearance (`sdfMapConeClearance`), since they
+are not centred on its apex. Programs admitted for independent part tracing use
 `IndependentConeMarchSteps` entry samples without gap or tail searches. When
 changing these heuristics, compare whole-frame cost and hit/material captures,
 including grazing rays and separated bands.
