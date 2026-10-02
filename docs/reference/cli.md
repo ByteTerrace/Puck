@@ -1476,8 +1476,10 @@ with bakes on, drew none. The static creations draw their bakes, as a world
 that carries its `BAKE` chunk does by default; with `--bakes off` they draw
 through their fields, and `puck parity compare` of an on run against an off
 run holds every capture's state hash, since bakes are presentation only.
-The offscreen host never steps past an armed capture's tick until the capture
-is served or refused, so a cold driver shader cache lengthens a leg instead of
+The offscreen host steps one tick per produced frame, so every captured tick is
+a frame of its own and its frame reprojects from the frame of the tick before
+([host pacing](hosting.md#host-pacing)). It never steps past an armed
+capture's tick until the capture is served or refused, so a cold driver shader cache lengthens a leg instead of
 losing its first capture. After 60 seconds of holding in all, a capture the
 render chain still cannot serve is refused as `unserved`, naming the reason,
 and the leg runs on (see [the offscreen shape](../../src/Puck.World/README.md#usage)).
@@ -1505,8 +1507,7 @@ Per capture, these independent verdicts, in order:
    sim-state divergence is a defect, never noise.
 3. **Tick verdict**—each side's `regionTick`, the tick its frame refreshed
    its bound regions at, equals the armed tick. A frame composed after the
-   simulation moved on, such as a capture requested in the middle of a
-   catch-up burst, fails here rather than as a pixel difference.
+   simulation moved on fails here rather than as a pixel difference.
 4. **Source verdict**—only for a capture of a source instance whose source
    states its image (a `captures` row naming a screen or an uploaded source's
    instance): each side's `sourceVerdict` must hold, the frame equal to that

@@ -165,7 +165,7 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: Vector2.Zero, actual: rig.Jitter());
     }
     // A view that asks for temporal reconstruction runs the temporal fragment even at native scale: a resolve after views,
-    // and history the next frame reads, one image and one surface a frame slot at the output extent.
+    // the sky and the composite after it, and history the next frame reads, one image and one surface a frame slot at the output extent.
     [Fact]
     public void ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput() {
         using var rig = new TemporalRig(views: 1, temporal: true);
@@ -173,11 +173,13 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Same(expected: SdfWorldPackage.TemporalFragment, actual: rig.Passes.FragmentOf(instance: "world"));
         var plan = rig.World.Plan!;
 
-        Assert.EndsWith(expectedEndString: $"${SdfWorldPackage.Resolve}", actualString: plan.Passes[^1].Name);
+        var resolve = plan.Passes.Single(predicate: static pass => pass.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.Resolve}"));
+
+        Assert.EndsWith(expectedEndString: $"${SdfWorldPackage.Parts.Composite}", actualString: plan.Passes[^1].Name);
         var history = plan.Storages.Where(predicate: static storage => storage.Declaration.History).Select(selector: static storage => storage.Name).Order(comparer: StringComparer.Ordinal);
 
         Assert.Equal(actual: history, expected: [$"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistoryColor}", $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistorySurface}"]);
-        Assert.Contains(collection: plan.Passes[^1].Accesses, filter: static access => access.PreviousFrame);
+        Assert.Contains(collection: resolve.Accesses, filter: static access => access.PreviousFrame);
         Assert.True(condition: rig.Temporal());
         // Every render advances the sequence with no capture converging.
         var frames = rig.HistoryFrames();
@@ -287,13 +289,13 @@ public sealed partial class SdfWorldPassesLawTests {
     public void AResizeAllocatesTheHistorySurfaceAtTheNewOutputExtent(uint extent) {
         using var rig = new TemporalRig(views: 1, temporal: true);
 
-        Assert.Equal(expected: ((8 * Extent) * Extent), actual: rig.HistorySurfaceBytes());
+        Assert.Equal(expected: (((SdfWorldPackage.HistorySurfaceWords * sizeof(uint)) * Extent) * Extent), actual: rig.HistorySurfaceBytes());
         rig.OutputExtent = extent;
         TestLiveness.Until(step: () => {
             rig.Produce();
             return ((rig.World.Extent == (extent, extent)) && !rig.World.IsBuildingCandidate);
         }, reason: () => rig.World.LastSwapError?.Message);
-        Assert.Equal(expected: ((8 * extent) * extent), actual: rig.HistorySurfaceBytes());
+        Assert.Equal(expected: (((SdfWorldPackage.HistorySurfaceWords * sizeof(uint)) * extent) * extent), actual: rig.HistorySurfaceBytes());
     }
     [Fact]
     public void ARenderGridDipRendersAFullPeriodBeforeStandingAgain() {
@@ -442,9 +444,19 @@ public sealed partial class SdfWorldPassesLawTests {
             return new Vector2(x: BitConverter.ToSingle(startIndex: jitter, value: block), y: BitConverter.ToSingle(startIndex: (jitter + sizeof(float)), value: block));
         }
         public bool PreviousValid() => (BitConverter.ToSingle(value: Block(), startIndex: (Offset(member: SdfWorldPackage.PreviousView) + (3 * sizeof(float)))) != 0f);
-        public uint HistorySurfaceBytes() => ((uint)m_gpu.Memory(bufferHandle: m_gpu.BufferAt(
-            set: m_gpu.BoundSet(group: 3),
-            binding: SdfKernelInterfaces.BindingOf(layout: SdfWorldInterfaces.ResolveParameters.Layout, member: SdfWorldPackage.HistorySurfaceWritten))).Length);
+        // The bytes of the history surface the resolve of one more frame writes. The resolve's pass set is the third from the
+        // frame's last: the sky and the composite follow it.
+        public uint HistorySurfaceBytes() {
+            m_gpu.SetBinds = [];
+            Produce();
+            var set = m_gpu.SetBinds.Where(predicate: static bind => (bind.Group == ((uint)ShaderInterfaceGroup.Pass))).Select(selector: static bind => bind.Set).Distinct().ToArray()[^3];
+
+            m_gpu.SetBinds = null;
+
+            return ((uint)m_gpu.Memory(bufferHandle: m_gpu.BufferAt(
+                set: set,
+                binding: SdfKernelInterfaces.BindingOf(layout: SdfWorldInterfaces.ResolveParameters.Layout, member: SdfWorldPackage.HistorySurfaceWritten))).Length);
+        }
         public void Dispose() {
             Runtime.Dispose();
             m_feed?.Dispose();
@@ -471,10 +483,10 @@ public sealed partial class SdfWorldPassesLawTests {
             m_image = null;
         }
         public void OnDeviceLost() => Dispose();
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+        public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             m_image ??= gpu.Services.ImageFactory.Create(format: Format, height: height, name: default, usage: GpuImageUsage.Sampled | GpuImageUsage.Storage, width: width);
 
-            return true;
+            return FrameRender.Rendered;
         }
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new NotSupportedException(message: "The feed is captured through the view that reads it."));
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {

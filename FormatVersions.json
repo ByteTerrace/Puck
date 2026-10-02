@@ -197,9 +197,9 @@
             "token": "puck.render.graph.v1"
         },
         "SdfBaker.Version": {
-            "shape": "02c658afda3f7d3a",
+            "shape": "4436e12ea2703e2a",
             "source": "src/Puck.SignedDistance/Baking/SdfBaker.cs",
-            "token": "8"
+            "token": "9"
         },
         "SdfDocumentDecoder.Schema": {
             "shape": "762fae7b2ea0564b",
@@ -235,6 +235,11 @@
             "shape": "35feece16a3f486b",
             "source": "src/Puck.Analyzers/VerifiedCodeManifest.cs",
             "token": "csharp-tokens-v1"
+        },
+        "VulkanShaderCapabilities.Magic": {
+            "shape": "d4da3c43916bd9c4",
+            "source": "src/Puck.Vulkan/VulkanShaderCapabilities.cs",
+            "token": "119734787"
         },
         "WasmBinaryFormat.Magic": {
             "shape": "293a4f56b6458d75",

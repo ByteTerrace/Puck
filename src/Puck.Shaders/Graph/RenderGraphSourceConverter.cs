@@ -45,8 +45,13 @@ public sealed class RenderGraphSourceConverter : IDisposable {
     /// <summary>Gets the image-view handle of the latest conversion's output, or zero before the first and after a device
     /// loss.</summary>
     public nint ImageViewHandle => m_output.ImageViewHandle;
+    /// <summary>Gets whether the conversion's graph is building on the thread pool
+    /// (<see cref="ShaderPipelineRenderNode.IsBuildingCandidate"/>); a later conversion installs it.</summary>
+    public bool IsBuilding => m_node.IsBuildingCandidate;
     /// <summary>Gets the conversion's counted GPU work, one pass per conversion.</summary>
     public IGpuWorkSource Work => m_node;
+    /// <summary>Gets the latest conversion's answer, including a refused graph build.</summary>
+    public FrameRender Render { get; private set; } = FrameRender.Waiting(reason: "its conversion graph is building");
 
     /// <inheritdoc/>
     public void Dispose() => m_node.Dispose();
@@ -56,6 +61,7 @@ public sealed class RenderGraphSourceConverter : IDisposable {
         m_node.OnDeviceLost();
         m_region.OnDeviceLost();
         m_output = default;
+        Render = FrameRender.Waiting(reason: "its conversion graph is building");
     }
     /// <summary>Converts one image: writes its planes into the region behind the header and records the conversion.</summary>
     /// <param name="context">The host's frame context.</param>
@@ -64,10 +70,14 @@ public sealed class RenderGraphSourceConverter : IDisposable {
     /// <returns><see langword="true"/> when the conversion was submitted and <see cref="ImageViewHandle"/> names its
     /// output; <see langword="false"/> while the graph builds, or when no conversion reads the descriptor.</returns>
     public bool TryConvert(in FrameContext context, ReadOnlySpan<byte> planes) {
-        if (
-            (Fault is not null) ||
-            (m_region.Bind(node: m_node) is not { } region)
-        ) {
+        if (Fault is { } fault) {
+            Render = FrameRender.Refused(reason: fault);
+
+            return false;
+        }
+        if (m_region.Bind(node: m_node) is not { } region) {
+            Render = Unconverted();
+
             return false;
         }
 
@@ -80,13 +90,21 @@ public sealed class RenderGraphSourceConverter : IDisposable {
         var surface = m_node.ProduceFrame(context: in context);
 
         if (m_node.FrameCounter == submitted) {
+            Render = Unconverted();
+
             return false;
         }
 
         m_output = surface;
+        Render = FrameRender.Rendered;
 
         return true;
     }
+
+    private FrameRender Unconverted() => (((m_node.LastSwapError is { } error) &&
+        !m_node.IsBuildingCandidate && !m_node.HasPendingCandidate)
+        ? FrameRender.Refused(reason: error.Message)
+        : FrameRender.Waiting(reason: "its conversion graph is building"));
 }
 
 /// <summary>A source conversion's region: the node's host buffer port, bound once the node's graph installs, whose header

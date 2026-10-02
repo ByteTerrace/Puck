@@ -6,8 +6,9 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// The <c>sdf.world</c> package's fragment (<see cref="SdfWorldPackage.NativeFragment"/>), spliced into a view's graph by the
-/// graph compiler, is the one statement of an SDF view's dispatch set: the planner orders its passes sky, mask, beam,
-/// cull arguments, mesh, primary, surface, ambient, shadow and views, and plans between them exactly the buffer transitions the
+/// graph compiler, is the one statement of an SDF view's dispatch set: the planner orders its passes mask, beam, cull
+/// arguments, mesh, primary, surface, ambient, shadow, views, sky and composite, the sky's field runs and the composite
+/// after the hits are shaded, and plans between them exactly the buffer transitions the
 /// kernels' reads and writes need, each after the pass that last wrote or read what the next writes or reads. Every
 /// scratch buffer is transient, one allocation shared by every frame slot, whose first use of a frame orders it after the
 /// frame before, and at every capacity the planner sizes each buffer as the kernels index it. Every compute pass counts its
@@ -19,7 +20,6 @@ public sealed partial class SdfPassPlanLawTests {
 
     // The fragment's passes in dispatch order.
     private static readonly string[] Order = [
-        SdfWorldPackage.Parts.Sky,
         SdfWorldPackage.Parts.Mask,
         SdfWorldPackage.Parts.Beam,
         SdfWorldPackage.Parts.CullArgs,
@@ -29,6 +29,8 @@ public sealed partial class SdfPassPlanLawTests {
         SdfWorldPackage.Parts.Ambient,
         SdfWorldPackage.Parts.Shadow,
         SdfWorldPackage.Parts.Views,
+        SdfWorldPackage.Parts.Sky,
+        SdfWorldPackage.Parts.Composite,
     ];
     // Every buffer transition between two passes of a frame: the buffer, the pass it orders after and the pass it orders
     // before, and the accesses and stages on either side.
@@ -101,6 +103,7 @@ public sealed partial class SdfPassPlanLawTests {
     [Fact]
     public void EachStageDeclaresExactlyItsReadsAndWrites() {
         string[] hit = [SdfWorldPackage.Parts.CullBounds, SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Tiles];
+        string[] runs = [SdfWorldPackage.Parts.SkyBase, SdfWorldPackage.Parts.SkyScale, SdfWorldPackage.Parts.SkyOffset];
 
         Assert.Equal(
             actual: SdfWorldPackage.NativeFragment.Passes.Select(selector: static pass => (
@@ -109,7 +112,6 @@ public sealed partial class SdfPassPlanLawTests {
                 string.Join(separator: ",", values: pass.Outputs.Select(selector: static output => output.Name))
             )),
             expected: [
-                (SdfWorldPackage.Parts.Sky, "", SdfWorldPackage.Parts.SkyImage),
                 (SdfWorldPackage.Parts.Mask, "", SdfWorldPackage.Parts.InstanceMasks),
                 (SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Tiles),
                 (SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Tiles, $"{SdfWorldPackage.Parts.Arguments},{SdfWorldPackage.Parts.CullBounds}"),
@@ -118,7 +120,9 @@ public sealed partial class SdfPassPlanLawTests {
                 (SdfWorldPackage.Parts.Surface, string.Join(separator: ",", values: hit), SdfWorldPackage.Parts.SurfaceVisibility),
                 (SdfWorldPackage.Parts.Ambient, string.Join(separator: ",", values: hit), SdfWorldPackage.Parts.AmbientVisibility),
                 (SdfWorldPackage.Parts.Shadow, string.Join(separator: ",", values: hit), SdfWorldPackage.Parts.ShadowVisibility),
-                (SdfWorldPackage.Parts.Views, string.Join(separator: ",", values: [.. hit, SdfWorldPackage.Parts.ShadowVisibility]), SdfWorldPackage.Color),
+                (SdfWorldPackage.Parts.Views, string.Join(separator: ",", values: [.. hit, SdfWorldPackage.Parts.ShadowVisibility]), SdfWorldPackage.Parts.Lit),
+                (SdfWorldPackage.Parts.Sky, $"{SdfWorldPackage.Parts.Lit},{SdfWorldPackage.Parts.CullBounds}", string.Join(separator: ",", values: runs)),
+                (SdfWorldPackage.Parts.Composite, string.Join(separator: ",", values: [SdfWorldPackage.Parts.Lit, SdfWorldPackage.Parts.CullBounds, SdfWorldPackage.Parts.ShadowVisibility, .. runs]), SdfWorldPackage.Color),
             ]
         );
     }
@@ -201,8 +205,12 @@ public sealed partial class SdfPassPlanLawTests {
                 SdfWorldPackage.Parts.Arguments,
                 SdfWorldPackage.Parts.CullBounds,
                 SdfWorldPackage.Parts.InstanceMasks,
+                SdfWorldPackage.Parts.Lit,
                 SdfWorldPackage.Parts.MeshDepth,
                 SdfWorldPackage.Parts.MeshTarget,
+                SdfWorldPackage.Parts.SkyBase,
+                SdfWorldPackage.Parts.SkyOffset,
+                SdfWorldPackage.Parts.SkyScale,
                 SdfWorldPackage.Parts.Tiles,
                 SdfWorldPackage.Parts.Visibility,
             }.Select(selector: static part => RenderGraphPackageFragment.Spliced(name: part, pass: Sdf)).Order(comparer: StringComparer.Ordinal)
@@ -213,7 +221,7 @@ public sealed partial class SdfPassPlanLawTests {
         Assert.False(condition: color.Declaration.Transient);
         Assert.Equal(
             actual: color.Versions,
-            expected: [RenderGraphPackageFragment.Spliced(name: SdfWorldPackage.Parts.SkyImage, pass: Sdf), SdfWorldPackage.Color]
+            expected: [SdfWorldPackage.Color]
         );
     }
     [Fact]
