@@ -37,7 +37,8 @@ public enum StateCellBehavior : byte {
 /// </summary>
 /// <remarks>
 /// For a slot-shaped row written with the <c>value</c> sugar, the slot cell's clock is authored as a row-level
-/// <c>clock</c> member beside <c>value</c> — see <see cref="StateRowJsonConverter{TRow}"/>. Every field defaults
+/// <c>clock</c> member beside <c>value</c> — see <see cref="StateRowJsonConverter{TRow}"/>. A clock has one wire
+/// form wherever it travels (<see cref="StateCellClockJsonConverter"/>). Every field defaults
 /// to zero, the settled-at-epoch-zero shape <c>world.save</c> and undo/checkpoint restore leave behind; the
 /// fields a particular effective behavior does not read are simply ignored (an <see cref="StateAdvance"/> cell
 /// never reads <see cref="Y0"/>/<see cref="V0"/>/<see cref="SubstepTicks"/>/<see cref="EpochTick"/>, a
@@ -63,6 +64,7 @@ public enum StateCellBehavior : byte {
 /// raw <c>FixedQ4816</c> bits.</param>
 /// <param name="SubstepTicks">Elapsed ticks a <see cref="StateCycle"/> has already accumulated toward its next
 /// step at <see cref="EpochTick"/>; must be non-negative and less than the cycle's own <c>ticksPerStep</c>.</param>
+[JsonConverter(typeof(StateCellClockJsonConverter))]
 public sealed record StateCellClock(long EpochTick = 0, long EpochEngineTick = 0, long Y0 = 0, long V0 = 0, long SubstepTicks = 0);
 /// <summary>
 /// One cell of the <c>state</c> section's substrate — a typed value addressed by a stable string <see cref="Key"/>

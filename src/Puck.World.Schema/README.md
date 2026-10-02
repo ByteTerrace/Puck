@@ -1513,7 +1513,9 @@ since a slot's one cell has no separate default of its own to override.
 Timing state — the epoch, a dynamics follower's sampled position/velocity, a
 cycle's carried substep remainder — lives on the CELL, in `clock`
 (`StateCellClock`, `{epochTick?, epochEngineTick?, y0?, v0?, substepTicks?}`,
-every field optional), never on the trait: a key a write mints later starts
+every field optional, a zero field left out, and the same form wherever a
+clock travels: a row's cell, a pool value, a disclosed observation), never on
+the trait: a key a write mints later starts
 its own clock from the tick (and engine tick) it was created, and a slot
 row's timing state is authored as a `clock` object beside its bare `value`
 sugar. The two epochs are independent: `epochTick` is a simulation tick, read

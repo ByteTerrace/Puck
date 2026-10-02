@@ -4,7 +4,8 @@ namespace Puck.World;
 
 /// <summary>
 /// The deterministic work an authority does to keep presentation-tier recipients current, counted in a
-/// <see cref="WorkCounterSet"/> under the source name <see cref="SourceName"/>: the whole projections and the member
+/// <see cref="WorkCounterSet"/> under the source name <see cref="SourceName"/>: the projections it composes, the whole
+/// projections and the member
 /// deltas it delivers and their bytes, the clock anchors it sends, and the anchor rows it holds for its recipients,
 /// one per recipient per clock, as rows retained and rows released, so a reader takes the rows held as the
 /// difference. Each count is a monotonic total; a reader takes a window by reading twice and subtracting. None is
@@ -35,6 +36,9 @@ public sealed class WorldProjectionWork : IWorkCounterSource {
     /// <summary>Gets the kind counting whole projections delivered: a recipient's first, and every one a delta could not
     /// carry.</summary>
     public static WorkKind Documents { get; } = new(name: "world.projection.documents", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting projections composed: every disclosure of the document to a presentation-tier
+    /// reader, a recipient's delivery and a one-off read alike, whether or not it then owes anything.</summary>
+    public static WorkKind Compositions { get; } = new(name: "world.projection.compositions", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting member deltas delivered: the members of a recipient's projection that changed,
     /// and nothing else.</summary>
     public static WorkKind Deltas { get; } = new(name: "world.projection.deltas", unit: "count", workClass: WorkClass.Deterministic);
@@ -117,6 +121,7 @@ public sealed class WorldProjectionWork : IWorkCounterSource {
     // A nested holder initializes after every kind above, whatever order the members are declared in.
     private static class Order {
         internal static readonly WorkKind[] Kinds = [
+            Compositions,
             Documents,
             Deltas,
             Bytes,

@@ -24,7 +24,7 @@ public sealed partial class ProjectionAnchorLawTests {
         }
     }
     [Fact]
-    public void Advancing_and_cycling_bound_observations_refresh_without_writes_or_a_timeline() {
+    public void Advancing_and_cycling_bound_observations_move_on_the_recipient_with_nothing_composed_or_sent() {
         var density = new BindableScalar(binding: $"state.{Clock}");
 
         foreach (var row in new[] {
@@ -38,19 +38,36 @@ public sealed partial class ProjectionAnchorLawTests {
             using var fixture = Fixtures.FreshServer(definition: definition);
 
             var (observation, mirror) = Observe(fixture: fixture);
-            var initial = ClientFixtures.StateMirror(definition: mirror.Definition).Scalar(fallback: float.NaN, scalar: density);
+            var held = mirror.Definition;
+            var initial = ClientFixtures.StateMirror(definition: held).Scalar(fallback: float.NaN, scalar: density);
+            // Red leg: the cell's value alone, as observations once carried it, never moves on the recipient.
+            var literal = held.WithWorldState(rows: [.. held.State.Select(selector: static stored => ((stored.Name.Value == Clock)
+                ? (stored with { Advance = null, Cells = [.. (stored.Cells ?? []).Select(selector: static cell => (cell with { Advance = null, Clock = null, Cycle = null }))], Cycle = null })
+                : stored))]);
+            var work = new WorldProjectionWork();
             var moved = false;
+            var stale = false;
 
-            for (var index = 0; (index < 12); index++) {
-                fixture.Step();
-                var expected = ClientFixtures.StateMirror(definition: fixture.Server.Definition, engineTick: mirror.EngineTick, tick: mirror.Tick).Scalar(fallback: float.NaN, scalar: density);
-                var actual = ClientFixtures.StateMirror(definition: mirror.Definition, engineTick: mirror.EngineTick, tick: mirror.Tick).Scalar(fallback: float.NaN, scalar: density);
+            using (WorldProjectionWork.Attribute(work: work)) {
+                for (var index = 0; (index < 12); index++) {
+                    fixture.Step();
+                    var expected = ClientFixtures.StateMirror(definition: fixture.Server.Definition, engineTick: mirror.EngineTick, tick: mirror.Tick).Scalar(fallback: float.NaN, scalar: density);
+                    var actual = ClientFixtures.StateMirror(definition: mirror.Definition, engineTick: mirror.EngineTick, tick: mirror.Tick).Scalar(fallback: float.NaN, scalar: density);
 
-                Assert.Equal(actual: actual, expected: expected);
-                moved |= (actual != initial);
+                    Assert.Equal(actual: actual, expected: expected);
+                    moved |= (actual != initial);
+                    stale |= (ClientFixtures.StateMirror(definition: literal, engineTick: mirror.EngineTick, tick: mirror.Tick).Scalar(fallback: float.NaN, scalar: density) != expected);
+                }
             }
 
             Assert.True(condition: moved);
+            Assert.True(condition: stale);
+
+            // The recipient advances the cell itself: no tick composes a projection or sends a byte.
+            foreach (var kind in WorldProjectionWork.Kinds) {
+                Assert.Equal(expected: 0L, actual: work.Read(kind: kind));
+            }
+
             observation.Dispose();
         }
     }
@@ -71,7 +88,7 @@ public sealed partial class ProjectionAnchorLawTests {
 
         Assert.Equal(expected: 0, actual: feed.Anchors.Count);
         Assert.Equal(expected: 1L, actual: work.Read(kind: WorldProjectionWork.AnchorRowsReleased));
-        Assert.Equal(expected: WorldProjectionDeliveryKind.None, actual: feed.Step(arena: arena, definition: unkeyed, engineTick: Fixtures.StepTicksAt(rateHz: RateHz), tick: 1UL).Kind);
+        Assert.Equal(expected: WorldProjectionDeliveryKind.None, actual: feed.Step(definition: unkeyed, engineTick: Fixtures.StepTicksAt(rateHz: RateHz), tick: 1UL).Kind);
         feed.Release();
         Assert.Equal(expected: work.Read(kind: WorldProjectionWork.AnchorRowsRetained), actual: work.Read(kind: WorldProjectionWork.AnchorRowsReleased));
     }
@@ -159,6 +176,39 @@ public sealed partial class ProjectionAnchorLawTests {
         Assert.Equal(expected: pending, actual: sink.PendingDeliveries);
         sink.Release();
         Assert.Equal(expected: 1L, actual: work.Read(kind: WorldProjectionWork.AnchorRowsReleased));
+    }
+    [Fact]
+    public void A_composition_that_does_not_flatten_faults_rather_than_detaching_as_a_disclosure_refusal() {
+        using var fixture = Fixtures.FreshServer(definition: Document(row: Row(raw: 0L)));
+        var sink = new WorldFederationProjectionSink(
+            authority: "boot",
+            disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)),
+            revision: static () => 1,
+            server: fixture.Server,
+            tier: WorldDisclosureTier.Presentation
+        );
+        using var lease = fixture.Server.AttachSink(sink: sink);
+        var installed = fixture.Server.Definition;
+        // A look named by a state reference whose row the delivered document does not hold cannot be flattened.
+        var unflattenable = (installed with {
+            LookRowsRaw = [new WorldLook(
+                Motion: WorldLookMotion.Default,
+                Name: System.Text.Json.JsonSerializer.Deserialize<Puck.Assets.Documents.DocumentIdentifier>(json: "\"state.missing\"")!,
+                Scale: 1f,
+                Source: new WorldLookSource.Creation(PrototypeId: installed.Creations[0].Id)
+            )],
+        });
+
+        var fault = Assert.Throws<InvalidOperationException>(testCode: () => sink.DeliverDefinition(definition: unflattenable, version: fixture.Server.DocumentVersion));
+
+        Assert.Contains(actualString: fault.Message, expectedSubstring: "could not be flattened");
+        Assert.Null(@object: sink.DetachReason);
+
+        // Red leg: a disclosure refusal through the same door detaches by name.
+        var hidden = installed.WithWorldState(rows: [.. installed.State.Where(predicate: static row => (row.Name.Value != Clock)), Row(raw: 0L, visibility: new StateVisibility(Readers: ["seat1"]))]);
+
+        sink.DeliverDefinition(definition: hidden, version: fixture.Server.DocumentVersion);
+        Assert.Equal(expected: WorldFederationProjectionSink.DisclosureDetachReason, actual: sink.DetachReason);
     }
     [InlineData(false)]
     [InlineData(true)]
@@ -346,6 +396,7 @@ public sealed partial class ProjectionAnchorLawTests {
         Assert.True(condition: stripped);
         Assert.InRange(actual: easing, high: int.MaxValue, low: 2);
         // The follower eases on the recipient from the state it was sent once: nothing crosses while it moves.
+        Assert.Equal(expected: 0L, actual: work.Read(kind: WorldProjectionWork.Compositions));
         Assert.Equal(expected: 0L, actual: work.Read(kind: WorldProjectionWork.Deltas));
         Assert.Equal(expected: 0L, actual: work.Read(kind: WorldProjectionWork.Documents));
         observation.Dispose();
@@ -395,7 +446,7 @@ public sealed partial class ProjectionAnchorLawTests {
             Assert.NotEqual(expected: presentedThen, actual: unchecked((anchor.Phase - ((ulong)anchor.Rate))));
 
             // An authority restored to before the anchor it sent re-anchors rather than predicting backward.
-            Assert.Equal(expected: WorldProjectionDeliveryKind.Delta, actual: feed.Step(arena: Fixtures.Store(definition: history), definition: history, engineTick: step, tick: 1UL).Kind);
+            Assert.Equal(expected: WorldProjectionDeliveryKind.Delta, actual: feed.Step(definition: history, engineTick: step, tick: 1UL).Kind);
             Assert.True(condition: feed.Anchors.TryHeld(anchor: out var restored, clock: Clock));
             Assert.Equal(expected: step, actual: restored.Tick);
             Assert.Equal(expected: presentedThen, actual: restored.Phase);

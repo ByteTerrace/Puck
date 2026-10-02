@@ -67,8 +67,9 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
     /// <param name="arena">The authority's live store.</param>
     /// <param name="time">The authoritative tick the composition stands at.</param>
     /// <returns>The delivery owed.</returns>
-    /// <exception cref="InvalidOperationException">The projection refuses for this recipient
+    /// <exception cref="WorldDisclosureException">The projection refuses for this recipient
     /// (<see cref="WorldProjection.Compose"/>).</exception>
+    /// <exception cref="InvalidOperationException">The composed projection does not round-trip or flatten.</exception>
     public WorldProjectionDelivery Compose(WorldDefinition definition, string authority, int revision, StateArena arena, in ArenaTime time) {
         var projection = WorldProjection.Compose(
             anchors: m_anchors,
@@ -123,25 +124,14 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
                 valuesOnly: valuesOnly
             ));
     }
-    /// <summary>Refreshes observed values and steps anchors at an authoritative tick, sending only changed members.</summary>
+    /// <summary>Steps the recipient's anchors at an authoritative tick: a timeline delta when a held prediction misses
+    /// the authority's phase, and nothing otherwise. Observations need no step: each carries the trait that moves it,
+    /// which the recipient evaluates, and only a write, which composes, changes one.</summary>
     /// <param name="definition">The authority's installed document.</param>
-    /// <param name="arena">The authority's live store.</param>
     /// <param name="tick">The authoritative simulation tick.</param>
     /// <param name="engineTick">The engine tick that simulation tick stands at.</param>
     /// <returns>The delivery owed.</returns>
-    public WorldProjectionDelivery Step(WorldDefinition definition, StateArena arena, ulong tick, ulong engineTick) {
-        // Observations carry literals, so an advance or cycle has no executable trait on the receiver. Refresh them
-        // even when no stored value was written and even when this tick's body snapshot is not sampled.
-        if (m_held is { Observations.Count: > 0 } observed) {
-            return Compose(
-                arena: arena,
-                authority: observed.Provenance.Authority,
-                definition: definition,
-                revision: observed.Provenance.Revision,
-                time: ArenaTime.At(engineTick: engineTick, tick: tick)
-            );
-        }
-
+    public WorldProjectionDelivery Step(WorldDefinition definition, ulong tick, ulong engineTick) {
         if (
             (m_held?.Timeline is not { Clocks: { } clocks } timeline) ||
             (m_tree is null) ||

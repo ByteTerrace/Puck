@@ -5728,8 +5728,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      per-recipient deltas of the projection members that changed
      (`WorldDocumentBasis.Diff`, merged by `WorldProjectionHold` on the far
      side), and only when one changed; a delta of values alone reaches the
-     recipient as a state delivery. Observations refresh at every authoritative
-     tick, including ticks whose body snapshot is not sampled. A change to
+     recipient as a state delivery. An observed cell carries its stored
+     value with the value-over-time trait that governs it and the clock it
+     reads, so the recipient advances, turns and eases it itself, and the
+     per-tick step sends anchors alone. A change to
      observed row order or cell layout installs the definition so bindings
      resolve their row ordinals again. A session's state mirror uses a delta's
      stamped clock independently of the sampled body snapshots. Every state clock a value keys on must
@@ -5738,10 +5740,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      read), or the composition refuses by name before any derived value is
      emitted; a row a presented bindable binds crosses as an observation of
      the cells the recipient may read, policy or not, so a bound value is
-     never presented at its fallback. An observed row carries its envelope and
-     an eased cell its stored target with its dynamics row and follower clock,
-     so the recipient eases it as the authority presents it, with nothing sent
-     while it moves, and a `.$target` read answers the stored target. A late view hydrates the
+     never presented at its fallback. An observed row carries its envelope,
+     and a `.$target` read answers an eased cell's stored target. Only a
+     disclosure refusal (`WorldDisclosureException`) detaches a federation
+     stream by name; any other composition failure is a fault. A late view hydrates the
      exact current phase; a clock whose row holds no number seeds a late view
      from the phase the world loaded with (`WorldServer.ClockSeeds`), or zero
      clamped into the row's closed envelope, while an early view keeps its
@@ -5761,7 +5763,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      tick with no spurious anchor, a steady sky to zero bytes, a late join to
      the exact phase, a hidden clock to a refusal, the anchor rows to their
      release, an eased binding to the authority's presented value and its
-     target, a coalesced anchor to forward-only presentation, and the
+     target, advancing and cycling observations to the authority's values
+     with no composition or byte sent, a composition that does not flatten
+     to a fault rather than a disclosure detach, a coalesced anchor to
+     forward-only presentation, and the
      courtyard's and the parity world's skies to the
      authority's for a presentation-tier recipient; the federation wire
      carries a delta as its own `ProjectionDelta` frame.

@@ -130,6 +130,8 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         if (m_feed is not null) {
             var time = server!.DeliveryTime;
 
+            // Only a disclosure refusal ends the stream by name; any other failure to compose is a fault, which the
+            // hub detaches the sink for.
             try {
                 Present(
                     delivery: m_feed.Compose(
@@ -143,7 +145,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
                     tick: time.Tick,
                     version: version
                 );
-            } catch (InvalidOperationException) {
+            } catch (WorldDisclosureException) {
                 End(reason: DisclosureDetachReason);
             }
 
@@ -170,21 +172,16 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         }
         // Every authoritative tick checks the peer's anchors, sampled or not: a prediction that misses is owed now.
         if (m_feed is not null) {
-            try {
-                Present(
-                    delivery: m_feed.Step(
-                        arena: server!.Arena,
-                        definition: server.Definition,
-                        engineTick: snapshot.EngineTick,
-                        tick: snapshot.Tick
-                    ),
+            Present(
+                delivery: m_feed.Step(
+                    definition: server!.Definition,
                     engineTick: snapshot.EngineTick,
-                    tick: snapshot.Tick,
-                    version: server.DocumentVersion
-                );
-            } catch (InvalidOperationException) {
-                End(reason: DisclosureDetachReason);
-            }
+                    tick: snapshot.Tick
+                ),
+                engineTick: snapshot.EngineTick,
+                tick: snapshot.Tick,
+                version: server.DocumentVersion
+            );
 
             if (m_invalidated) {
                 return;

@@ -45,12 +45,10 @@ public sealed class StateDisclosureTruthLawTests {
         fixture.Step();
         fixture.Step();
 
-        var time = server.Time;
         var disclosed = WorldStateDisclosure.Compose(
             arena: server.Arena,
             definition: server.Definition,
-            recipient: null,
-            time: in time
+            recipient: null
         );
 
         Assert.NotNull(@object: disclosed);

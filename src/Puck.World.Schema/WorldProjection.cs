@@ -99,8 +99,8 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="Adjacencies">The reciprocal boundary rows.</param>
 /// <param name="Metadata">The title/description half of <c>metadata</c>, when the world authors one — see the type
 /// remarks.</param>
-/// <param name="Observations">Explicitly disclosed state observations, without draw bookkeeping and with no trait but
-/// the follower an eased cell carries.</param>
+/// <param name="Observations">Explicitly disclosed state observations, without draw bookkeeping: each cell as stored,
+/// with the value-over-time trait that governs it.</param>
 /// <param name="Spaces">The vector spaces the disclosed vector rows among <paramref name="Observations"/> name, and no
 /// other: a space declares only a model, a revision, and a dimension count, and a vector row loads only against its
 /// own.</param>
@@ -236,15 +236,19 @@ public static class WorldProjection {
     /// <param name="anchors">The anchors the recipient holds, which the composed timeline carries while their
     /// predictions hold and replaces where they miss, or <see langword="null"/> for a one-off composition that no
     /// recipient keeps anchors from, which carries each state clock's anchor at <paramref name="time"/>.</param>
-    /// <exception cref="InvalidOperationException">A carried value keys on a state clock whose row the recipient may not
+    /// <exception cref="WorldDisclosureException">A carried value keys on a state clock whose row the recipient may not
     /// read, or binds a state cell it may not read: the composition refuses by name before any derived value is
     /// emitted.</exception>
+    /// <exception cref="InvalidOperationException">The composed projection does not round-trip or flatten: a fault, not
+    /// a refusal.</exception>
     public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, StateArena arena, in ArenaTime time, Principal? recipient = null, bool unrestricted = false, WorldClockAnchorLedger? anchors = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (tier != WorldDisclosureTier.Presentation) {
             return null;
         }
+
+        WorldProjectionWork.Count(kind: WorldProjectionWork.Compositions);
 
         // Every state clock a carried value keys on is a dependency of a derived value: it must pass the disclosure
         // boundary before anything is composed, or nothing is.
@@ -353,7 +357,6 @@ public static class WorldProjection {
                 definition: definition
             ),
             recipient: recipient,
-            time: in time,
             unrestricted: unrestricted
         );
 
@@ -410,7 +413,7 @@ public static class WorldProjection {
                 recipient: recipient,
                 row: row
             )) {
-                throw new InvalidOperationException(message: $"{path} keys on clock '{clock.Name}', which reads state row '{rowName}' this recipient may not read; a hidden source sends no derived value.");
+                throw new WorldDisclosureException(message: $"{path} keys on clock '{clock.Name}', which reads state row '{rowName}' this recipient may not read; a hidden source sends no derived value.");
             }
         }
     }
@@ -453,7 +456,7 @@ public static class WorldProjection {
                 continue;
             }
 
-            throw new InvalidOperationException(message: $"{path} binds state row '{binding.Row}' this recipient may not read; a hidden source sends no derived value.");
+            throw new WorldDisclosureException(message: $"{path} binds state row '{binding.Row}' this recipient may not read; a hidden source sends no derived value.");
         }
     }
     // The rows a presented bindable reads, which cross as observations so the recipient reads the value the authority
@@ -815,10 +818,10 @@ public static class WorldProjection {
         return true;
     }
 
-    // An observed row crosses as a plain state row of the literals the recipient was disclosed: no visibility, no
-    // placeholder cell, since a placeholder names no key and a withheld cell is simply absent, and no trait but the
-    // follower an eased cell carries, so the recipient eases it as the authority presents it. A slot's follower is its
-    // row's, since a slot cell carries no trait of its own.
+    // An observed row crosses as a state row of the cells the recipient was disclosed, each with the value-over-time
+    // trait that governs it, so the recipient evaluates it as the authority does: no visibility, and no placeholder
+    // cell, since a placeholder names no key and a withheld cell is simply absent. A slot's trait is its row's, since a
+    // slot cell carries no trait of its own.
     private static bool TryObservedRow(WorldObservedRow observed, out WorldStateRow row, out string reason) {
         row = null!;
 
@@ -845,21 +848,29 @@ public static class WorldProjection {
         }
 
         var cells = new List<StateCell>(capacity: observed.Cells.Count);
-        StateDynamics? slotDynamics = null;
+        WorldObservedCell? slotTrait = null;
 
         foreach (var cell in observed.Cells) {
             if (cell.Hidden) {
                 continue;
             }
 
-            if ((cell.Dynamics is not null) && (observed.Kind is not (CellKind.Fixed or CellKind.Int))) {
-                reason = $"projection observation row '{observed.Name}' cell '{cell.Key}' eases, which only a Fixed or Int row does";
+            var traits = ((((cell.Advance is null) ? 0 : 1) + ((cell.Cycle is null) ? 0 : 1)) + ((cell.Dynamics is null) ? 0 : 1));
+
+            if (traits > 1) {
+                reason = $"projection observation row '{observed.Name}' cell '{cell.Key}' carries {traits} value-over-time traits; a cell is governed by one";
 
                 return false;
             }
 
-            if ((cell.Clock is not null) && (cell.Dynamics is null)) {
-                reason = $"projection observation row '{observed.Name}' cell '{cell.Key}' carries a follower's clock without the dynamics it eases by";
+            if ((traits == 1) && (observed.Kind is not (CellKind.Fixed or CellKind.Int))) {
+                reason = $"projection observation row '{observed.Name}' cell '{cell.Key}' carries a value-over-time trait, which only a Fixed or Int row does";
+
+                return false;
+            }
+
+            if ((cell.Clock is not null) && (traits == 0)) {
+                reason = $"projection observation row '{observed.Name}' cell '{cell.Key}' carries a clock without the trait that reads it";
 
                 return false;
             }
@@ -885,12 +896,18 @@ public static class WorldProjection {
 
             var slot = (key == WorldStateRow.SlotKey);
 
-            if (slot) {
-                slotDynamics = cell.Dynamics;
+            if (slot && (traits == 1)) {
+                slotTrait = cell;
             }
 
             cells.Add(item: new StateCell(
+                Advance: (slot
+                    ? null
+                    : cell.Advance),
                 Clock: cell.Clock,
+                Cycle: (slot
+                    ? null
+                    : cell.Cycle),
                 Dynamics: (slot
                     ? null
                     : cell.Dynamics),
@@ -907,18 +924,20 @@ public static class WorldProjection {
             ));
         }
 
-        // A slot's follower is the row's default, which every other cell that eases by none opts out of.
-        if (slotDynamics is not null) {
+        // A slot's trait is the row's default, which every other cell that carries none opts out of.
+        if (slotTrait is not null) {
             for (var index = 0; (index < cells.Count); index++) {
-                if ((cells[index].Key != WorldStateRow.SlotKey) && (cells[index].Dynamics is null)) {
+                if ((cells[index].Key != WorldStateRow.SlotKey) && (cells[index] is { Advance: null, Cycle: null, Dynamics: null })) {
                     cells[index] = (cells[index] with { Behavior = StateCellBehavior.None });
                 }
             }
         }
 
         row = new WorldStateRow(
+            Advance: slotTrait?.Advance,
             Cells: cells,
-            Dynamics: slotDynamics,
+            Cycle: slotTrait?.Cycle,
+            Dynamics: slotTrait?.Dynamics,
             Kind: observed.Kind,
             Max: observed.Max,
             Min: observed.Min,

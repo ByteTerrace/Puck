@@ -374,7 +374,7 @@ public sealed partial class ProjectionAnchorLawTests(ITestOutputHelper output) {
 
                 Assert.Contains(actualString: refusal, expectedSubstring: "may not read");
                 Assert.Null(@object: AnchorOf(definition: mirror.Definition));
-                Assert.Throws<InvalidOperationException>(testCode: () => Fixtures.Project(authority: "boot", definition: hidden, revision: 1, tier: WorldDisclosureTier.Presentation));
+                Assert.Throws<WorldDisclosureException>(testCode: () => Fixtures.Project(authority: "boot", definition: hidden, revision: 1, tier: WorldDisclosureTier.Presentation));
 
                 return (observation is not null);
             },
@@ -583,7 +583,7 @@ public sealed partial class ProjectionAnchorLawTests(ITestOutputHelper output) {
         var deltas = 0;
 
         for (var tick = 4UL; (tick < 40UL); tick++) {
-            var delivery = feed.Step(arena: arena, definition: definition, engineTick: (tick * step), tick: tick);
+            var delivery = feed.Step(definition: definition, engineTick: (tick * step), tick: tick);
 
             if (delivery.Kind == WorldProjectionDeliveryKind.None) {
                 continue;

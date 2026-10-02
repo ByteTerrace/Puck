@@ -2278,11 +2278,11 @@ export type StateCellClock = {
   /**
    * A StateDynamics follower's position at EpochTick, as raw FixedQ4816 bits, independent of the carrying row's stored-value kind.
    */
-  y0?: number;
+  y0?: string;
   /**
    * A StateDynamics follower's velocity at EpochTick, per second, as raw FixedQ4816 bits.
    */
-  v0?: number;
+  v0?: string;
   /**
    * Elapsed ticks a StateCycle has already accumulated toward its next step at EpochTick; must be non-negative and less than the cycle's own ticksPerStep.
    */
@@ -2591,7 +2591,7 @@ export type StatePoolSnapshot = {
  */
 export type StatePoolValue = {
   field: CellName;
-  clock?: StateCellClock | null;
+  clock?: StateCellClock;
   /**
    * Gets an immutable snapshot of the field value.
    */

@@ -319,7 +319,6 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             if (Tier == WorldDisclosureTier.Presentation) {
                 Present(
                     delivery: m_feed.Step(
-                        arena: server.Arena,
                         definition: server.Definition,
                         engineTick: engineTick,
                         tick: tick

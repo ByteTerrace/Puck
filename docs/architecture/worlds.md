@@ -660,7 +660,9 @@ invalidation. The hub detaches it immediately; draining the retained records doe
 A peer reopens for a fresh primer: a snapshot alone cannot repair a missed definition revision
 or authority route. The queued records retain their original order and authority/session epochs until that
 invalidation; no later record enters a detached queue. A retired authority route detaches with
-`world.observation.invalidated`. Faulting sinks still detach independently.
+`world.observation.invalidated`, and a composition its recipient's disclosure refuses
+(`WorldDisclosureException`) with `world.observation.disclosure`. Any other failure to compose is a
+fault, and faulting sinks still detach independently.
 
 Session queries cross the same disclosure decision as delivery. A `Frames` session reads no query result;
 `Presentation` sessions can query only recipient-filtered state observations, whose projection is also used
@@ -687,8 +689,7 @@ nothing changed. A delta of values alone (the timeline, the observations, the pr
 recipient as a state delivery rather than a new definition, and a session's state mirror reads it at the
 tick it was stamped with, even when no body snapshot was sampled there; on the federation wire it travels
 as a `ProjectionDelta` frame. A delta that changes which rows are observed, their order, or their cells'
-keys installs a new definition instead, so bindings resolve their row ordinals again. Observations are
-refreshed at every authoritative tick, so an advancing or cycling bound row moves without a write. A
+keys installs a new definition instead, so bindings resolve their row ordinals again. A
 peer's projection and deltas are read through `WorldJsonContext.Untrusted`, which refuses duplicate
 members and nulls the model does not admit, and a delta that does not hydrate leaves the held
 projection unchanged. Projections and deltas travel as compact canonical JSON
@@ -711,11 +712,15 @@ cell (of every cell of its row when it reads per body), so a recipient that may 
 composition by name before any derived value is emitted, rather than presenting the value at its
 fallback. A row a presented bindable binds that the recipient may read crosses as an observation of the
 cells it may read, whether or not the row declares a policy, and moves with the row's deltas. An
-observed row carries its declared envelope, and an observed cell holds its stored value, which a
-`.$target` read answers. A cell that eases also carries the dynamics row it eases by and its follower's
-clock (the epoch tick, position and velocity). The recipient runs the same fixed-point follower over the
-dynamics rows its projection carries, so an eased read presents what the authority presents at every
-tick, and nothing is sent while the follower moves. A late view hydrates the exact current phase; while a
+observed row carries its declared envelope, and an observed cell holds its stored value beside the one
+value-over-time trait that governs it and the clock that trait reads: an advance's base and epoch engine
+tick, a cycle's phase, epoch tick and substep remainder, or an eased cell's target with the dynamics row
+it eases by and its follower's epoch tick, position and velocity. A `.$target` read answers the stored
+target. The recipient evaluates the trait with the engine's own fixed-point computation, over the
+dynamics rows its projection carries, so a bound read presents what the authority presents at every
+tick. Only a write changes an observation, and a write composes the projection, so the per-tick step
+sends anchors alone and nothing while a value only moves as its trait says; the `world.projection` work
+source counts every composition. A late view hydrates the exact current phase; while a
 clock's row holds no number, an early view keeps predicting its last anchor and a late view seeds from
 the phase the world loaded with, or zero clamped into the row's closed envelope. The last anchor per
 recipient per clock is a counted row under the `world.projection` work source. It is the only anchor
