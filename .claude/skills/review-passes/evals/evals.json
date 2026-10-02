@@ -4,13 +4,19 @@
     {
       "id": 1,
       "prompt": "Write the brief for a Codex review-and-fix pass over a lane's three commits that change capture readback in the render-graph runtime.",
-      "expected_output": "Writes a self-contained brief to a lane-named file: a one-sentence frame naming the domains, the review worktree path and branch with edit-only and don't-commit, an exact commit range with each commit listed and its message to be read, the contract in the code's own names with decisions already taken, a hunt list per area drawing on rendering's runtime-contracts reference (pinned or copied pixels, leases, completion, epochs), the evidence already gathered, and the verbatim rules and instructions blocks including compiling what it changed and the end-list format.",
+      "expected_output": "Writes a self-contained brief to a lane-named file: a one-sentence frame naming the domains, the review worktree path (a worktree of the author's own working branch, with no branch created for the pass) and branch with edit-only and don't-commit, an exact commit range with each commit listed and its message to be read, the contract in the code's own names with decisions already taken, a hunt list per area drawing on rendering's runtime-contracts reference (pinned or copied pixels, leases, completion, epochs), the evidence already gathered, and the verbatim rules and instructions blocks including compiling what it changed and the end-list format.",
       "files": []
     },
     {
       "id": 2,
-      "prompt": "The review pass finished with four fixes and one open finding, uncommitted. How do you land it?",
-      "expected_output": "Checks each finding against current files, commits the pass unbuilt as a WIP on the review branch, has a Claude agent build the touched projects and the solution, prove each new law red with its fix withheld and green with it, run the reached suites and check forms, and settle the open finding; replaces the WIP with area: sentence commits carrying the evidence and no Co-Authored-By trailer; then briefs a smaller second review over the fix diff alone.",
+      "prompt": "The Codex review pass over a Claude-written lane finished with four fixes and one open finding, uncommitted. How do you land it?",
+      "expected_output": "Checks each finding against current files, commits the pass unbuilt as a local WIP that is never pushed, has a Claude agent build the touched projects and the solution, prove each new law red with its fix withheld and green with it, run the reached suites and check forms, settle the open finding, and review the fix diff for blockers as round 2; replaces the WIP with area: sentence commits on the author's working branch carrying the evidence and no Co-Authored-By trailer; sends what round 2 still raises to the lead for a ruling instead of opening a third round; pushes the working branch fast-forward only.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "A Codex-written lane needs its review. Who reviews it, and when does the loop end?",
+      "expected_output": "A Claude agent (Sonnet or Opus) runs round 1 over the lane with fixes enabled; because those fixes are Claude-written, a Codex task --write pass runs round 2 over round 1's fix diff alone. The loop ends when a pass reports no blockers, and after round 2 at the latest; the lead rules on what round 2 still raises (a scoped fix, an open item, or a dismissal with its reason); there is never a third round, and non-blocking findings never extend the loop.",
       "files": []
     }
   ]

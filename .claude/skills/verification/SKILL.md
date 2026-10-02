@@ -1,6 +1,6 @@
 ---
 name: verification
-description: Routes the verification of a Puck change and defines what a finished lane proves. Covers the gate route (`puck gate` when the CLI lists it), running gates from a private copy of the head's own CLI, ledgers and generated files checked with `--check`, `puck affected` against the lane's merge base, never testing binaries a failed build left behind, red legs proved by withholding the fix (`puck laws prove` when listed), GPU legs one at a time per GPU under a grant, and flake versus failure. Use before calling any change verified, before handing back or merging a lane, when writing a law or canary, when running parity, canaries or GPU tests, and when a gate fails. Subsystem commands belong to their owners: maths-laws for the Maths law suite, gaming-bricks for the emulator batteries, rendering for GPU, parity and capture specifics, puck-world for World runs and stdin scripts. review-passes owns briefing and verifying a Codex review-and-fix pass.
+description: Routes the verification of a Puck change and defines what a finished lane proves. Covers the gate route (`puck gate` when the CLI lists it), running gates from a private copy of the head's own CLI, ledgers and generated files checked with `--check`, `puck affected` against the lane's merge base, never testing binaries a failed build left behind, red legs proved by withholding the fix (`puck laws prove` when listed), GPU legs one at a time per GPU under a grant, and flake versus failure. Use before calling any change verified, before handing back or merging a lane, when writing a law or canary, when running parity, canaries or GPU tests, and when a gate fails. Subsystem commands belong to their owners: maths-laws for the Maths law suite, gaming-bricks for the emulator batteries, rendering for GPU, parity and capture specifics, puck-world for World runs and stdin scripts. review-passes owns briefing and verifying a cross-family review-and-fix pass.
 ---
 
 # Verification
@@ -179,7 +179,7 @@ command for the parts it covers.
 
 | Skill | Route there for |
 |---|---|
-| [`review-passes`](../review-passes/SKILL.md) | Briefing a Codex review-and-fix pass, and verifying and landing its fixes. |
+| [`review-passes`](../review-passes/SKILL.md) | Briefing a cross-family review-and-fix pass, and verifying and landing its fixes. |
 | [`maths-laws`](../maths-laws/SKILL.md) | The Maths law suite's tiers, mutation probe and recorded registers. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | The Humble and Advanced Post batteries. |
 | [`rendering`](../rendering/SKILL.md) | Which canaries, parity stations and captures a render change owes; GPU counters and ceilings. |
