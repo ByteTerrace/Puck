@@ -648,6 +648,22 @@ public static class WorldModuleNamespace {
             return;
         }
 
+        // Converter-backed bindables have no serializer members. Their keyed arm still names a clock, and
+        // that reference must follow the module's declaration just as a keyed section's clock does.
+        if (WorldKeyedValues.IsKeyable(type: type)) {
+            if ((node is JsonObject keyed) && (keyed["clock"] is { } clock)) {
+                visitor(
+                    keyed,
+                    "clock",
+                    clock,
+                    new WorldNameField(Owner: type, Member: nameof(IWorldKeyTrack.Clock), Kind: WorldNameKind.Clock, Role: WorldNameRole.Names),
+                    typeof(string)
+                );
+            }
+
+            return;
+        }
+
         if (type == typeof(ExpressionProgram)) {
             if (node is JsonObject) {
                 VisitExpressionProgram(
@@ -827,17 +843,19 @@ public static class WorldModuleNamespace {
         }
     }
 
-    // Where a declared name lives: a placement and a prototype each keep their own namespace, and every other kind
-    // shares the document's, so a module's placement 'gate' never renames a host row 'gate' the module reads.
+    // Where a declared name lives: a placement, a prototype and a clock each keep their own namespace, and every other
+    // kind shares the document's, so a module's placement 'gate' never renames a host row 'gate' the module reads.
     private enum NameSpace : byte {
         Document,
         Placement,
         Prototype,
+        Clock,
     }
 
     private static NameSpace SpaceOf(WorldNameKind kind) => kind switch {
         WorldNameKind.Placement => NameSpace.Placement,
         WorldNameKind.Prototype => NameSpace.Prototype,
+        WorldNameKind.Clock => NameSpace.Clock,
         _ => NameSpace.Document,
     };
 

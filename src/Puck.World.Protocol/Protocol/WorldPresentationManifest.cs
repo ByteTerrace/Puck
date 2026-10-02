@@ -19,8 +19,8 @@ public readonly record struct WorldPresentationBinding(StateBinding Binding, Wor
 /// deduplicated. <see cref="Bindings"/> are the reads that last as long as the document, which a
 /// <see cref="WorldStateMirror"/> registers when it installs the document: a HUD element's binding or template
 /// placeholder, an overlay <c>state</c> predicate, a binding bar's layout and model cells, every bindable scalar and
-/// color (camera program operands, markers, render lighting, sky and environment colors, the theme), a render
-/// cycle's position row, every color a signed-distance program bakes (a creation palette's surface, bounce,
+/// color (camera program operands, markers, render lighting, sky and environment colors, the theme), every state
+/// clock's row (read eased, as every keyed value on it reads it), every color a signed-distance program bakes (a creation palette's surface, bounce,
 /// weathering and inset colors, a height field's color, a text screen's ink), and each height field's row read whole,
 /// which its brick is baked from. <see cref="BodyBindings"/> are templates a body reads through its own
 /// <c>WorldStateLease</c>: the population's scale row, a look's pose references and lane operands, a creation
@@ -45,6 +45,7 @@ public sealed class WorldPresentationManifest {
     public static readonly WorldPresentationManifest Empty = new(
         bindings: [],
         bodyBindings: [],
+        clocks: [],
         templates: []
     );
 
@@ -53,6 +54,7 @@ public sealed class WorldPresentationManifest {
     private static readonly ConcurrentDictionary<Type, PropertyInfo?> PairValueCache = new();
     private static readonly Lazy<HashSet<Type>> Reaching = new(valueFactory: ComputeReaching);
     private static readonly Type[] Surfaces = [
+        typeof(BindableAngle),
         typeof(BindableColor),
         typeof(BindableScalar),
         typeof(CreationDriverDocument),
@@ -65,17 +67,18 @@ public sealed class WorldPresentationManifest {
         typeof(WorldBindingBarAuthoring),
         typeof(WorldHudElement),
         typeof(WorldLookMotion),
-        typeof(WorldRenderCycle),
         typeof(WorldScreenSource.Text),
     ];
 
     private readonly WorldPresentationBinding[] m_bindings;
     private readonly WorldPresentationBinding[] m_bodyBindings;
+    private readonly WorldClock[] m_clocks;
     private readonly Dictionary<object, WorldPresentationBinding[]> m_templates;
 
-    private WorldPresentationManifest(WorldPresentationBinding[] bindings, WorldPresentationBinding[] bodyBindings, Dictionary<object, WorldPresentationBinding[]> templates) {
+    private WorldPresentationManifest(WorldPresentationBinding[] bindings, WorldPresentationBinding[] bodyBindings, WorldClock[] clocks, Dictionary<object, WorldPresentationBinding[]> templates) {
         m_bindings = bindings;
         m_bodyBindings = bodyBindings;
+        m_clocks = clocks;
         m_templates = templates;
     }
 
@@ -84,7 +87,47 @@ public sealed class WorldPresentationManifest {
     /// <summary>Gets the templates a body reads through its lease, each once, in document order; a template's key may
     /// be <see cref="StateBinding.BodyKey"/>.</summary>
     public ReadOnlySpan<WorldPresentationBinding> BodyBindings => m_bodyBindings;
+    /// <summary>Gets the document's presentation clocks (its <c>timeline</c> section), which every keyed value reads
+    /// by name; a state clock's row is among <see cref="Bindings"/>, read eased as a number.</summary>
+    public ReadOnlySpan<WorldClock> Clocks => m_clocks;
 
+    /// <summary>Returns the clock the document's timeline names.</summary>
+    /// <param name="name">The clock's name.</param>
+    /// <param name="clock">The clock, or <see langword="null"/> when the timeline names none.</param>
+    /// <returns><see langword="true"/> when the timeline names the clock.</returns>
+    public bool TryClock(string name, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldClock? clock) {
+        foreach (var candidate in m_clocks) {
+            if (string.Equals(
+                a: candidate.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                clock = candidate;
+
+                return true;
+            }
+        }
+
+        clock = null;
+
+        return false;
+    }
+    /// <summary>Returns the binding a state clock's row is read through: the row's slot cell, eased.</summary>
+    /// <param name="clock">The state clock.</param>
+    /// <returns>The binding.</returns>
+    /// <exception cref="ArgumentException"><paramref name="clock"/> is a tick clock.</exception>
+    public static StateBinding ClockBinding(WorldClock clock) {
+        ArgumentNullException.ThrowIfNull(argument: clock);
+
+        return new StateBinding(
+            Key: null,
+            Row: (clock.State ?? throw new ArgumentException(
+                message: $"Clock '{clock.Name}' reads the tick, not a state row.",
+                paramName: nameof(clock)
+            )),
+            Target: false
+        );
+    }
     /// <summary>Returns the templates one document object carries, each once, in document order: the document's own
     /// (<see cref="WorldDefinition"/>, the population's scale row every body reads), a <see cref="WorldLook"/>'s pose
     /// references and lane operands, or a <see cref="WorldPrototype"/>'s driver and effector reads. The object is found by reference, so
@@ -139,11 +182,23 @@ public sealed class WorldPresentationManifest {
         builder.Visit(value: definition);
         builder.AddFields(fields: definition.Fields);
 
-        return (((builder.Bindings.Count == 0) && (builder.BodyBindings.Count == 0))
+        var clocks = (definition.Timeline.Clocks ?? []).Where(predicate: static clock => (clock is not null)).ToArray();
+
+        foreach (var clock in clocks) {
+            if (clock.IsStateClock) {
+                builder.Add(
+                    binding: ClockBinding(clock: clock),
+                    conversion: WorldStateConversion.Number
+                );
+            }
+        }
+
+        return (((builder.Bindings.Count == 0) && (builder.BodyBindings.Count == 0) && (clocks.Length == 0))
             ? Empty
             : new WorldPresentationManifest(
                 bindings: [.. builder.Bindings],
                 bodyBindings: [.. builder.BodyBindings],
+                clocks: clocks,
                 templates: builder.Templates.ToDictionary(
                     comparer: ReferenceEqualityComparer.Instance,
                     elementSelector: static pair => pair.Value.ToArray(),
@@ -584,6 +639,13 @@ public sealed class WorldPresentationManifest {
                     );
 
                     return false;
+                case BindableAngle angle:
+                    Add(
+                        binding: angle.Value.State,
+                        conversion: WorldStateConversion.Number
+                    );
+
+                    return false;
                 case BindableColor color:
                     Add(
                         binding: color.State,
@@ -630,20 +692,6 @@ public sealed class WorldPresentationManifest {
                         binding: StateBinding.Parse(token: bar.ModelCell),
                         conversion: WorldStateConversion.Number
                     );
-
-                    return true;
-                case WorldRenderCycle cycle:
-                    // The cycle's position is its row's stored truth, read only once the cycle has two keys.
-                    if (cycle.Keys is { Count: >= 2 }) {
-                        Add(
-                            binding: new StateBinding(
-                                Key: null,
-                                Row: cycle.State,
-                                Target: true
-                            ),
-                            conversion: WorldStateConversion.Number
-                        );
-                    }
 
                     return true;
                 case WorldLookMotion motion:

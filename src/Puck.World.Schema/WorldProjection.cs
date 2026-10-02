@@ -103,6 +103,9 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="Spaces">The vector spaces the disclosed vector rows among <paramref name="Observations"/> name, and no
 /// other: a space declares only a model, a revision, and a dimension count, and a vector row loads only against its
 /// own.</param>
+/// <param name="Timeline">The world's tick clocks, which a recipient evaluates from the tick it presents, and no state
+/// clock: a state clock reads a state row, and a projection sends no anchor of its phase, so a projection whose values
+/// key on one does not hydrate (<see cref="WorldProjection.TryToDefinition"/>).</param>
 public sealed record WorldProjectionDocument(
     WorldProjectionProvenance Provenance,
     WorldMotionDefaults Motion,
@@ -137,7 +140,8 @@ public sealed record WorldProjectionDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldAdjacency>? Adjacencies = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldProjectedMetadata? Metadata = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldObservedRow>? Observations = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StateSpace>? Spaces = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StateSpace>? Spaces = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTimelineSection? Timeline = null
 ) {
     /// <summary>The document schema version. A reader refuses any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.projection.v1";
@@ -295,7 +299,8 @@ public static class WorldProjection {
                     Title: metadata.Title,
                     Description: metadata.Description
                 )
-            : null)
+            : null),
+            Timeline: TickClocksOf(timeline: definition.Timeline)
         );
 
         WorldStateDisclosure.ValidateBindings(
@@ -326,6 +331,41 @@ public static class WorldProjection {
         );
     }
 
+    // The timeline a projection carries: its tick clocks, which are functions of the tick alone; null when it declares
+    // none.
+    private static WorldTimelineSection? TickClocksOf(WorldTimelineSection timeline) {
+        var clocks = (timeline.Clocks ?? [])
+            .Where(predicate: static clock => ((clock is not null) && !clock.IsStateClock))
+            .ToArray();
+
+        return ((clocks.Length == 0)
+            ? null
+            : new WorldTimelineSection(Clocks: clocks));
+    }
+    // A value keyed on a clock the hydrated timeline does not declare would resolve to its fallback, so the projection
+    // refuses to hydrate instead; the clock it names is a state clock, the one kind a projection does not carry.
+    private static string? UncarriedClock(WorldDefinition definition) {
+        static bool Carries(WorldDefinition definition, string clock) => WorldKeyResolver.TryClock(
+            clock: out _,
+            name: clock,
+            timeline: definition.Timeline
+        );
+
+        foreach (var (path, clock) in new[] { ("render.lighting", definition.Render.Lighting?.Clock), ("render.sky", definition.Render.Sky?.Clock) }) {
+            if ((clock is not null) && !Carries(clock: clock, definition: definition)) {
+                return UncarriedClockRefusal(clock: clock, path: path);
+            }
+        }
+
+        foreach (var keyed in WorldKeyedValues.Of(definition: definition)) {
+            if (!Carries(clock: keyed.Track.Clock, definition: definition)) {
+                return UncarriedClockRefusal(clock: keyed.Track.Clock, path: keyed.Path);
+            }
+        }
+
+        return null;
+    }
+    private static string UncarriedClockRefusal(string path, string clock) => $"projection keys {path} on clock '{clock}', which it does not carry: a state clock does not cross to a presentation-tier recipient, which receives no anchor of its phase.";
     // The declared spaces a disclosed vector row names, in declaration order; null when no vector row was disclosed.
     private static StateSpace[]? SpacesOf(IReadOnlyList<WorldObservedRow>? observations, IReadOnlyList<StateSpace>? spaces) {
         if (
@@ -530,10 +570,17 @@ public static class WorldProjection {
                     Title: metadata.Title,
                     Description: metadata.Description
                 )
-            : null)
+            : null),
+            TimelineRaw: projection.Timeline
         ) {
             DocumentId = projection.Provenance.DocumentId,
         };
+
+        if (UncarriedClock(definition: hydrated) is { } uncarried) {
+            reason = uncarried;
+
+            return false;
+        }
 
         if (!WorldStateDocumentValues.TryResolve(
             definition: hydrated,

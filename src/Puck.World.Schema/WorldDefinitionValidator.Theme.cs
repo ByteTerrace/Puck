@@ -10,12 +10,12 @@ namespace Puck.World;
 public static partial class WorldDefinitionValidator {
     private static void RequireBindableColor(BindableColor color, WorldDefinition definition, string path, List<string> errors) {
         if (!color.IsAuthorable(definition: definition)) {
-            errors.Add(item: $"{path} '{color.Raw}' {BindableColor.Grammar}.");
+            errors.Add(item: $"{path} '{color}' {BindableColor.Grammar}.");
         }
     }
     private static void RequireBindableScalar(BindableScalar scalar, WorldDefinition definition, string path, List<string> errors) {
         if (!scalar.IsAuthorable(definition: definition)) {
-            errors.Add(item: $"{path} {(scalar.Binding ?? (scalar.Literal?.ToString() ?? "(absent)"))} {BindableScalar.Grammar}.");
+            errors.Add(item: $"{path} {scalar} {BindableScalar.Grammar}.");
         }
     }
     private static void RequireBindableUnitScalar(BindableScalar scalar, WorldDefinition definition, string path, List<string> errors) {
@@ -26,11 +26,10 @@ public static partial class WorldDefinitionValidator {
             scalar: scalar
         );
 
-        if (
-            (scalar.Literal is { } literal) &&
-            ((literal < 0f) || (literal > 1f))
-        ) {
-            errors.Add(item: $"{path} {literal} must be in [0, 1].");
+        foreach (var value in scalar.AuthoredValues()) {
+            if ((value < 0f) || (value > 1f)) {
+                errors.Add(item: $"{path} {value} must be in [0, 1].");
+            }
         }
     }
     private static void RequireScrim(WorldThemeScrim scrim, WorldDefinition definition, string path, List<string> errors) {
@@ -47,10 +46,7 @@ public static partial class WorldDefinitionValidator {
             scalar: scrim.Alpha
         );
 
-        if (
-            (scrim.Alpha.Literal is { } literal) &&
-            ((literal < WorldThemeCapacity.ScrimMinAlpha) || (literal > 1f))
-        ) {
+        foreach (var literal in scrim.Alpha.AuthoredValues().Where(predicate: static value => ((value < WorldThemeCapacity.ScrimMinAlpha) || (value > 1f)))) {
             errors.Add(item: $"{path}.alpha {literal} must be in [{WorldThemeCapacity.ScrimMinAlpha}, 1] — below it the guaranteed-AA contrast floor (over both a dark corner and a lit CRT) breaks. A state.<row> binding is not refused here; it clamps to the floor at resolve time instead.");
         }
     }

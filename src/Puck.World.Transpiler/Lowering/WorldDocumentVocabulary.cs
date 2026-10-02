@@ -83,6 +83,19 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
     );
     /// <inheritdoc />
     public bool TryLowerValue(ExpressionNode expression, DocumentScope scope, string? fieldKey, out System.Text.Json.Nodes.JsonNode? value) {
+        if (
+            (expression is ObjectExpressionNode keyed) &&
+            WorldDocumentEmitter.TryLowerKeyed(
+            fieldKey: fieldKey,
+            properties: keyed.Properties,
+            scope: scope,
+            value: out var keys
+        )
+        ) {
+            value = keys;
+
+            return true;
+        }
         if (expression is AssetExpressionNode asset) {
             value = null;
             if ((scope.Annotations.GetValueOrDefault(key: "AssetContext") is not Assets.AssetCompilationContext context) || (scope.BasePath is null)) {
