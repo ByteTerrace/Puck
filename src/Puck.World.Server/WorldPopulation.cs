@@ -287,6 +287,9 @@ public sealed partial class WorldPopulation {
     private WorldRowAssignment m_lookAssignment = null!;
     private IntentSource m_defaultPeerSource = IntentSource.Live;
     private readonly List<BodyEffectOutput> m_effectOutputs = [];
+    // The one scratch every body step this population runs captures into and restores a refused sweep from
+    // (WorldBody.StepScratch). Bodies step one at a time, so one serves them all and no body holds a snapshot of its own.
+    private readonly WorldBody.StepScratch m_stepScratch = new();
     private readonly List<WorldDesignation> m_designationOutputs = [];
     private readonly List<WorldGeneratorInvocation> m_generatorInvocations = [];
     private readonly List<DurableStateOutput> m_durableStateOutputs = [];

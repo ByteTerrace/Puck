@@ -727,6 +727,7 @@ public sealed partial class WorldPopulation {
                     entityIndex: slot,
                     generatorInvocations: m_generatorInvocations,
                     rigidPolicy: m_rigidContactPolicy,
+                    scratch: m_stepScratch,
                     stepTicks: stepTicks,
                     tick: tick
                 );
@@ -960,6 +961,7 @@ public sealed partial class WorldPopulation {
                 designationOutputs: m_designationOutputs,
                 generatorInvocations: m_generatorInvocations,
                 rigidPolicy: m_rigidContactPolicy,
+                scratch: m_stepScratch,
                 sleepAfterTicks: m_sleepAfterTicks,
                 contactFieldVersion: contactFieldVersion
             );

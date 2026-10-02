@@ -10,27 +10,27 @@ public sealed partial class WorldBody {
     /// before <see cref="Puck.World.Server.WorldPopulation.TryDetachSeatForTransfer"/> discards this body object, so
     /// the abort/restore path has something to reapply if the transfer unwinds. See <see cref="WorldBodyTransferState"/>'s own
     /// remarks for the complete field-by-field classification.</summary>
-    public WorldBodyTransferState CaptureTransferState() => CaptureTransferStateInto(reuse: default);
+    public WorldBodyTransferState CaptureTransferState() => CaptureTransferStateInto(buffers: null);
 
-    // Captures into the arrays of an earlier capture wherever one still has the length it needs, so a capture taken
-    // every tick (the sweep refusal's snapshot, WorldBody.SweepRefusal.cs) allocates nothing in steady state. The
-    // default state reuses nothing. A reused capture is overwritten, so only the latest one is valid.
-    private WorldBodyTransferState CaptureTransferStateInto(in WorldBodyTransferState reuse) {
-        var laneLatch = Reuse(length: ActionLaneCount, reuse: reuse.LaneLatch);
-        var laneFactHeld = Reuse(length: ActionLaneCount, reuse: reuse.LaneFactHeld);
-        var laneRecency = Reuse(length: ActionLaneCount, reuse: reuse.LaneRecency);
+    // Captures into arrays taken from the buffers, so a capture taken every step (the sweep refusal's snapshot,
+    // WorldBody.SweepRefusal.cs) allocates nothing in steady state; null allocates fresh arrays throughout. A capture
+    // into buffers lasts until they are next reset.
+    private WorldBodyTransferState CaptureTransferStateInto(CaptureBuffers? buffers) {
+        var laneLatch = Take<ulong>(buffers: buffers, length: ActionLaneCount);
+        var laneFactHeld = Take<ulong>(buffers: buffers, length: ActionLaneCount);
+        var laneRecency = Take<ulong[]?>(buffers: buffers, length: ActionLaneCount);
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             laneLatch[lane] = m_laneActions[lane].Latch;
             laneFactHeld[lane] = m_laneActions[lane].FactHeld;
             laneRecency[lane] = ((m_laneActions[lane].Recency is { } recency)
-                ? CopyInto(reuse: laneRecency[lane], source: recency)
+                ? CopyInto(buffers: buffers, source: recency)
                 : null
             );
         }
 
-        var tapeIntents = Reuse(length: m_tapeCount, reuse: reuse.TapeIntents);
-        var tapeRemainingTicks = Reuse(length: m_tapeCount, reuse: reuse.TapeRemainingTicks);
+        var tapeIntents = Take<PlayerIntent>(buffers: buffers, length: m_tapeCount);
+        var tapeRemainingTicks = Take<ulong>(buffers: buffers, length: m_tapeCount);
 
         for (var offset = 0; (offset < m_tapeCount); offset++) {
             var segment = m_tape[((m_tapeHead + offset) % m_tape.Length)];
@@ -46,17 +46,17 @@ public sealed partial class WorldBody {
             DrivePitch: m_drivePitch,
             OverlayVelocity: m_overlayVelocity,
             OverlayRemainingTicks: m_overlayRemaining,
-            ChannelTimerTicks: CopyInto(reuse: reuse.ChannelTimerTicks, source: m_laneTimers),
-            ChannelTimerValues: CopyInto(reuse: reuse.ChannelTimerValues, source: m_channelTimerValues),
+            ChannelTimerTicks: CopyInto(buffers: buffers, source: m_laneTimers),
+            ChannelTimerValues: CopyInto(buffers: buffers, source: m_channelTimerValues),
             BodyMotionProgramName: m_bodyMotionProgram.Name,
             Source: m_source,
-            PreviousChannelBit: CopyInto(reuse: reuse.PreviousChannelBit, source: m_previousChannelBit),
+            PreviousChannelBit: CopyInto(buffers: buffers, source: m_previousChannelBit),
             HeldChannelImage: (m_hasTransferHeldChannels
             ? m_transferHeldChannels
             : m_channelReadHeld),
-            PendingDefaultChannelPress: CopyInto(reuse: reuse.PendingDefaultChannelPress, source: m_pendingDefaultChannelPress),
-            PendingDefaultChannelValue: CopyInto(reuse: reuse.PendingDefaultChannelValue, source: m_pendingDefaultChannelValue),
-            MotionRecency: CopyInto(reuse: reuse.MotionRecency, source: m_motionRecency),
+            PendingDefaultChannelPress: CopyInto(buffers: buffers, source: m_pendingDefaultChannelPress),
+            PendingDefaultChannelValue: CopyInto(buffers: buffers, source: m_pendingDefaultChannelValue),
+            MotionRecency: CopyInto(buffers: buffers, source: m_motionRecency),
             PlanarRampRemainder: m_planarRampAccumulator.Remainder,
             DriveLongRemainder: m_driveLongAccumulator.Remainder,
             DriveLatRemainder: m_driveLatAccumulator.Remainder,
@@ -78,14 +78,14 @@ public sealed partial class WorldBody {
             LaneLatch: laneLatch,
             LaneFactHeld: laneFactHeld,
             LaneRecency: laneRecency,
-            ActionState: CaptureActionStateInto(reuse: reuse.ActionState),
-            ActionStateDirty: CopyInto(reuse: reuse.ActionStateDirty, source: m_actionStateDirty),
-            ActionStateDirtyKind: CopyInto(reuse: reuse.ActionStateDirtyKind, source: m_actionStateDirtyKind),
-            ActionStateDirtyOperand: CopyInto(reuse: reuse.ActionStateDirtyOperand, source: m_actionStateDirtyOperand),
-            DurableInputPresent: CopyInto(reuse: reuse.DurableInputPresent, source: m_durableInputPresent),
-            DurableInputValues: CopyInto(reuse: reuse.DurableInputValues, source: m_durableInputValues),
-            DurableInputTimers: CopyInto(reuse: reuse.DurableInputTimers, source: m_durableInputTimers),
-            DurableInputWriters: CopyInto(reuse: reuse.DurableInputWriters, source: m_durableInputWriters),
+            ActionState: CaptureActionStateInto(buffers: buffers),
+            ActionStateDirty: CopyInto(buffers: buffers, source: m_actionStateDirty),
+            ActionStateDirtyKind: CopyInto(buffers: buffers, source: m_actionStateDirtyKind),
+            ActionStateDirtyOperand: CopyInto(buffers: buffers, source: m_actionStateDirtyOperand),
+            DurableInputPresent: CopyInto(buffers: buffers, source: m_durableInputPresent),
+            DurableInputValues: CopyInto(buffers: buffers, source: m_durableInputValues),
+            DurableInputTimers: CopyInto(buffers: buffers, source: m_durableInputTimers),
+            DurableInputWriters: CopyInto(buffers: buffers, source: m_durableInputWriters),
             DurableInputTick: m_durableInputTick,
             TapeIntents: tapeIntents,
             TapeRemainingTicks: tapeRemainingTicks,
@@ -248,26 +248,23 @@ public sealed partial class WorldBody {
     }
     /// <summary>Reads this body's whole register file out of the arena slot lanes, one raw value per slot.</summary>
     /// <returns>The lane image, parallel to the kit's compiled definitions.</returns>
-    public long[] CaptureActionState() => CaptureActionStateInto(reuse: null);
+    public long[] CaptureActionState() => CaptureActionStateInto(buffers: null);
 
-    // An array of the given length: the reused one when it has that length, a fresh one otherwise.
-    private static T[] Reuse<T>(int length, T[]? reuse) => ((reuse?.Length == length)
-        ? reuse
-        : ((length == 0)
-            ? []
-            : new T[length]
-        )
-    );
-    // A copy of the source, written into the reused array when it has the source's length.
-    private static T[] CopyInto<T>(T[]? reuse, T[] source) {
-        var copy = Reuse(length: source.Length, reuse: reuse);
+    // An array of the given length, taken from the buffers when there are some and fresh otherwise.
+    private static T[] Take<T>(CaptureBuffers? buffers, int length) => (buffers?.Take<T>(length: length) ?? ((length == 0)
+        ? []
+        : new T[length]
+    ));
+    // A copy of the source, in an array taken as Take takes one.
+    private static T[] CopyInto<T>(CaptureBuffers? buffers, T[] source) {
+        var copy = Take<T>(buffers: buffers, length: source.Length);
 
         source.AsSpan().CopyTo(destination: copy);
 
         return copy;
     }
-    private long[] CaptureActionStateInto(long[]? reuse) {
-        var image = Reuse(length: m_actionStateDefinitions.Length, reuse: reuse);
+    private long[] CaptureActionStateInto(CaptureBuffers? buffers) {
+        var image = Take<long>(buffers: buffers, length: m_actionStateDefinitions.Length);
 
         for (var slot = 0; (slot < image.Length); slot++) {
             image[slot] = ((m_stateLane is { } lane)

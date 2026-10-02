@@ -832,7 +832,11 @@ full block: the body does not move this tick. `WorldBody.SweepRefusal.cs`
 captures everything the step writes before it begins (the whole
 `WorldBodyTransferState` and `WorldBodyIntegrationResidue`, with the pose and
 the contact facts both leave to re-derivation) and restores it for a walking,
-rigid or carried body, so the body reads exactly as it did before the tick. A
+rigid or carried body, so the body reads exactly as it did before the tick. The
+snapshot is scratch the population owns (`WorldBody.StepScratch`), not body
+state: bodies step one at a time, so each step captures into the one scratch
+and reads it only until the step ends, and its buffers are reused, so steady
+state allocates nothing. A
 walking body's refused step withdraws the outputs it emitted, and an arriving
 body keeps the pose it was installed with. A body refused this tick
 (`WorldBody.SweepRefusedThisTick`) is immovable until `CompleteStep` ends the

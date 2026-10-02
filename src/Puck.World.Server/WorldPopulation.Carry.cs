@@ -172,7 +172,7 @@ public sealed partial class WorldPopulation {
             }
 
             if (follow) {
-                target.FollowCarrier(carrier: carrier);
+                target.FollowCarrier(carrier: carrier, scratch: m_stepScratch);
                 ResolveCarriedBodyPush(
                     carrier: carrier,
                     carrierIndex: relationship.CarrierIndex,

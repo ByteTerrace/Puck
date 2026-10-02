@@ -31,13 +31,15 @@ public sealed partial class WorldBody {
     /// (the caller should engage); otherwise <see langword="false"/>.</returns>
     /// <param name="rigidPolicy">The authored, once-compiled rigid-contact tunables <see cref="AdvanceRigid"/> reads;
     /// ignored for a locomotion kit.</param>
+    /// <param name="scratch">The step scratch the caller owns, which this step captures the body into before it begins
+    /// and restores from if its sweep is refused (<see cref="StepScratch"/>).</param>
     /// <param name="sleepAfterTicks">The authored <c>bodies.sleepAfterSeconds</c> idle floor, in engine ticks, this body sleeps under
     /// once cleared with no motion and no incoming intent; 0 (the default) never sleeps — see
     /// <see cref="UpdateSleepEligibility"/>.</param>
     /// <param name="contactFieldVersion">The population's current <see cref="WorldPopulation.ContactFieldVersion"/>,
     /// folded into this body's own idle bookkeeping so a contact-surface change under it is never mistaken for rest.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
-    internal bool Advance(ulong tick, ulong stepTicks, RigidContactPolicy rigidPolicy, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null, ulong sleepAfterTicks = 0UL, ulong contactFieldVersion = 0UL) {
+    internal bool Advance(ulong tick, ulong stepTicks, RigidContactPolicy rigidPolicy, StepScratch scratch, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null, ulong sleepAfterTicks = 0UL, ulong contactFieldVersion = 0UL) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
 
         // Captured before ExecuteProgram (or the overlay add below) can move m_position — the swept portal-crossing
@@ -59,6 +61,7 @@ public sealed partial class WorldBody {
             AdvanceRigid(
                 entityIndex: entityIndex,
                 policy: rigidPolicy,
+                scratch: scratch,
                 stepTicks: stepTicks
             );
 
@@ -67,7 +70,7 @@ public sealed partial class WorldBody {
 
         // A refused sweep is a full block: everything this step writes from here on is undone when its contact phase
         // meets a refusal, and the outputs it emitted are withdrawn (WorldBody.SweepRefusal.cs).
-        CaptureMotion();
+        CaptureMotion(scratch: scratch);
         var effectOutputCount = (effectOutputs?.Count ?? 0);
         var designationOutputCount = (designationOutputs?.Count ?? 0);
         var generatorInvocationCount = (generatorInvocations?.Count ?? 0);
@@ -191,7 +194,7 @@ public sealed partial class WorldBody {
         );
 
         if (refused) {
-            RestoreMotion();
+            RestoreMotion(scratch: scratch);
             effectOutputs?.RemoveRange(index: effectOutputCount, count: (effectOutputs.Count - effectOutputCount));
             designationOutputs?.RemoveRange(index: designationOutputCount, count: (designationOutputs.Count - designationOutputCount));
             generatorInvocations?.RemoveRange(index: generatorInvocationCount, count: (generatorInvocations.Count - generatorInvocationCount));
