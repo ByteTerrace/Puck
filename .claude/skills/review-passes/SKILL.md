@@ -42,13 +42,17 @@ stale and is corrected in the same change.
   exist. The Codex sandbox has no network: fetch corpora and packages before
   the run. A documentation-only pass needs no build unless XML comments change.
 - Launch a Codex pass as the companion's `task --write`. The subcommand takes
-  `--write`, `--model`, `--effort`, `--cwd`, `--prompt-file` and `--background`.
+  `--write`, `--model`, `--effort`, `--cwd`, `--prompt-file`, `--background`
+  and `--resume-last` (with `--resume` and `--fresh`).
   Set `--cwd` to the review worktree and use the model and effort the lead
   names. Pass the brief with `--prompt-file <path>`, never as command-line
   prompt text. `task` has no `--help`: `task --help` is sent to the model as a
   prompt. Launch a Claude pass as an agent working in that worktree. A pass
   cannot read this conversation, message a session or ask a question, so the
-  brief carries every string, decision and path it needs.
+  brief carries every string, decision and path it needs, and tells it to answer
+  its own questions from the code and the brief. A Codex pass that ends on a
+  question has done nothing: answer it in a prompt file and continue the same
+  thread with `task --resume-last`.
 - Write the brief to a lane-named file (`<scratchpad>/rb/<lane>.md`) so the
   second review and the verifier can reuse it.
 - Name a scratch directory outside the tree in the brief for any CLI copy or
@@ -66,8 +70,12 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    tree; don't commit." For a detached tree, name its head and the author's
    working branch that will receive its commits.
 3. **Scope.** An exact range, `git diff <base> <head>`, with the base as a
-   commit when the integration branch may move. List each lane commit by
-   commit and subject and say "read each message". Name exclusions exactly: a
+   commit when the integration branch may move. Two dots compare the two tips
+   (`git diff A..B` is `git diff A B`), three dots start at their merge base,
+   and `git log A..B` lists what B has that A lacks; none of them says A is an
+   ancestor of B, so check that with `git merge-base --is-ancestor A B` before
+   calling the range the lane's own. List each lane commit by commit and
+   subject and say "read each message". Name exclusions exactly: a
    merge of already-reviewed work is reviewed only for its conflict
    resolutions, in the files you name.
 4. **Contract.** What the change claims, in the code's own names: the types,
@@ -126,7 +134,10 @@ no brief, so it raises compatibility findings and tries to run tests.
 
 1. **Read the result.** Check every finding against the current files. A
    finding is evidence, not a verdict. Dismiss a compatibility finding under
-   `AGENTS.md` rule 5 once nothing checked in uses the old shape.
+   `AGENTS.md` rule 5 once nothing checked in uses the old shape. A pass's
+   build, test and format claims count only when its own environment could
+   run them: a sandbox that could not reach the SDK proved nothing, so step 3
+   builds and proves every law outside it.
    Record the round and fix range before continuing. If the pass changes
    nothing, skip steps 2 to 5; report remaining blockers to the lead in step 6,
    or go to step 7 when it reports none. Never create an empty WIP.

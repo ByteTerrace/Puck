@@ -1,6 +1,6 @@
 ---
 name: verification
-description: Routes the verification of a Puck change and defines what a finished lane proves. Covers the gate route (`puck gate` when the CLI lists it), running gates from a private copy of the head's own CLI, ledgers and generated files checked with `--check`, `puck affected` against the lane's merge base, never testing binaries a failed build left behind, red legs proved by withholding the fix (`puck laws prove` when listed), GPU legs one at a time per GPU under a grant, and flake versus failure. Use before calling any change verified, before handing back or merging a lane, when writing a law or canary, when running parity, canaries or GPU tests, and when a gate fails. Subsystem commands belong to their owners: maths-laws for the Maths law suite, gaming-bricks for the emulator batteries, rendering for GPU, parity and capture specifics, puck-world for World runs and stdin scripts. review-passes owns briefing and verifying a cross-family review-and-fix pass.
+description: Routes the verification of a Puck change and defines what a finished lane proves. Covers the gate route (`puck gate`), running gates from a private copy of the head's own CLI, ledgers and generated files checked with `--check`, `puck affected` against the lane's merge base, never testing binaries a failed build left behind, red legs proved by withholding the fix (`puck laws prove`), GPU legs one at a time per GPU under a grant, and flake versus failure. Use before calling any change verified, before handing back or merging a lane, when writing a law or canary, when running parity, canaries or GPU tests, and when a gate fails. Subsystem commands belong to their owners: maths-laws for the Maths law suite, gaming-bricks for the emulator batteries, rendering for GPU, parity and capture specifics, puck-world for World runs and stdin scripts. review-passes owns briefing and verifying a cross-family review-and-fix pass.
 ---
 
 # Verification
@@ -16,16 +16,24 @@ same change. The user's current instruction outranks it.
 
 ## The route
 
-Run `puck --help` from your CLI copy (below) and look for two verbs:
+- **`puck gate`** builds the solution and runs the affected selection and
+  repository checks against the merge base. Run it on the lane's final head
+  with `--merge-base origin/<integration-branch>`, naming the branch in the
+  brief, from a CLI copy outside the checkout. Report its verdict and do not
+  repeat by hand a step it ran; its `--help` lists the steps. Its `--gpu` adds
+  the GPU legs and runs only under a GPU grant.
+- **`puck laws prove`** proves red legs: use it for every new or changed law,
+  with `--fix <commit>` or with `--file-list` for an uncommitted fix. It
+  withholds the fix in a detached worktree of its own, never in the shared
+  tree, and refuses a proof in which a selected test was skipped.
 
-- **`puck gate`** is the route for verifying a lane. When it is listed, run it
-  on the lane's final head, report its verdict, and read its `--help` for what
-  it already covers; do not repeat by hand a step it ran.
-- **`puck laws prove`** is the route for proving red legs. When it is listed,
-  use it for every new or changed law instead of the manual withholding below.
-
-When a verb is not listed, run the manual steps in this skill. They are the
-same obligations either way.
+Run covered steps by hand only where a brief rules a verb out, for example a
+machine that must not build the solution. Complete checks the gate omits:
+`puck baselines <artifact> --check` for affected committed baselines, explicit
+`puck docs links <document>...` for changed documents outside its default set,
+and `puck docs citations` when required below, under the GPU rules. The law
+prover supplies build and run evidence; inspect the withheld change and the
+failure messages before accepting a red leg.
 
 ## Run gates from your own CLI copy
 
@@ -79,20 +87,21 @@ check form:
 Run the recording form only to apply a deliberate change: `puck lengths` after
 shrinking a recorded file, `puck format --file-list` over your own files,
 `puck formats` after bumping a format token, `puck canary-ceilings` after
-changing canary cost, a baseline whose movement the change explains. Review the rewritten file's diff
-and commit it in the same change. A ledger rewritten during verification hides
-the drift the check exists to report.
+changing canary cost, a baseline whose movement the change explains. Review
+the rewritten file's diff and commit it in the same change. A ledger rewritten
+during verification hides the drift the check exists to report.
 
 ## Choose what to run
 
-- Use the lane's real base: `puck affected --since $(git merge-base HEAD
-  origin/<integration-branch>)`. A branch name whose tip moved after the lane
-  started folds other landings into the selection. The integration branch is
-  the one the lead's brief names.
-- `puck affected` without `--run` prints the plan. `--run` also runs every GPU
-  canary and parity line it selected, so run it only when you hold the GPU
-  grant; otherwise run the plan's suites, `test` worlds and catalog check, and
-  list its `canary` and `parity` lines as GPU legs owed.
+- Use the lane's real base: `puck affected --merge-base
+  origin/<integration-branch>` reads the change against the merge base of HEAD
+  and that branch, so landings on it after the lane started are not counted.
+  `--since <branch>` compares against the branch's moving tip and folds those
+  landings in. The integration branch is the one the lead's brief names.
+- `puck affected` without `--run` prints the plan. `--run` builds and runs the
+  chosen suites, `test` worlds and catalog check; `--gpu` adds the chosen
+  canaries and parity, so add it only under a GPU grant and otherwise list the
+  plan's `canary` and `parity` lines as GPU legs owed.
 - While iterating, run only the test classes your edits add or touch and the
   canaries that exercise the change. Run the affected selection once at the
   lane's end. Run full sets (`puck canary --merge`, every suite) only when the
@@ -106,17 +115,29 @@ A law or canary that passes proves nothing until it has been seen to fail when
 the behavior it pins is wrong. A law that passes with the fix withheld pins
 nothing, however plausible it reads.
 
-1. Withhold the fix and keep the law: `git stash push -- <fix files>`, or a
-   scratch worktree at the base with only the law applied.
-2. Run the law. It must fail at the assertion it was written for, with the
+Before `puck laws prove`, inspect the change its selected paths will withhold.
+Afterwards, check its reported failures against the intended assertion and
+message. It rejects failed builds, skipped tests and inconsistent runs, but
+does not judge whether a failure is the one the law was written for. When a
+brief requires a manual proof, use these steps:
+
+1. Withhold the fix and keep the law, in a scratch worktree of your own, never
+   by reverting or stashing files in a shared tree.
+2. Rebuild, and confirm the build exited 0 after the withholding: a failed
+   build leaves the previous binaries, and a run against them tests the fix.
+3. Run the law. It must fail at the assertion it was written for, with the
    intended message. A failure anywhere else (a compile error, a setup throw, a
    different assertion) is not a red leg. The outcome must be **Failed**; a
-   **Skipped** run is not a red leg.
-3. Restore the fix, then touch the restored files before rebuilding and running
+   **Skipped** run, or one that selected no test, is not a red leg: read the
+   counts.
+4. Confirm the withheld tree differs from the fixed one exactly where you
+   meant it to (diff it): a mutation tool can produce a different mutant, and
+   a red leg against it proves nothing about the fix.
+5. Restore the fix, then touch the restored files before rebuilding and running
    the law again. It must pass. Restoring an older timestamp can let MSBuild
    keep the mutated assembly, so a run without this rebuild can test the
    mutation instead of the restored fix.
-4. Record in the commit message which laws were proved red and how.
+6. Record in the commit message which laws were proved red and how.
 
 In xUnit v3, `Assert.Throws`, `Assert.ThrowsAny`, `Assert.ThrowsAsync`,
 `Record.Exception` and `Record.ExceptionAsync` all rethrow the skip exception
@@ -133,11 +154,14 @@ owed when your change relies on it.
 ## GPU legs
 
 GPU work is `puck parity`, `puck counters`, any canary requiring `gpu`
-(including `--merge`), a `Puck.World` run, and any test that opens a device.
-This includes a full `Puck.World.Tests` run: its device-law classes open the
-GPU. `puck docs citations` builds `Puck.World` and boots it headless and
-windowed to read its help vocabulary; it is a World run and waits for the GPU
-like any other GPU leg.
+(including `--merge`), a windowed or offscreen `Puck.World` run, any verb that
+boots one in those modes, and any test that opens a device. This includes a
+full `Puck.World.Tests` run: its device-law classes open the GPU. `puck docs
+citations` without `--enumeration` builds `Puck.World` and boots it headless
+and windowed to read its help vocabulary, so it waits for the GPU like any
+other GPU leg. A World run with effective `host.presentation: none` uses no
+GPU; the `puck-world` skill owns the presentation modes and deployment
+overrides.
 
 - A GPU runs one GPU leg at a time. Legs compete for the device, the ports and
   the frame budget, and a contended leg times out.
@@ -192,7 +216,7 @@ The same rule applies to load-sensitive CPU tests.
 ## What a finished lane proves
 
 A lane is finished when its final head, with the integration branch's current
-tip merged in, shows all of the following. `puck gate`, when listed, is the one
+tip merged in, shows all of the following. `puck gate` is the one
 command for the parts it covers.
 
 1. `dotnet build Puck.slnx -c Release` exits 0 with zero warnings.

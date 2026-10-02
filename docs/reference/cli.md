@@ -153,7 +153,9 @@ conventions, not the argument. `wasm-stdlib` anchors the same way: it takes no
 path argument at all, because every registered artifact's path (e.g.
 `wasm/puck-stdlib/src`) is a repo convention, not something a caller supplies.)
 Reporting anchors are the one asymmetry: `scan` records name files relative to
-the scan root, while the other verbs print working-directory-relative paths.
+the scan root, while the other verbs print paths relative to the working
+directory when at or beneath it, and absolute paths otherwise, always with
+forward slashes.
 
 ## Publishing
 
@@ -3384,7 +3386,8 @@ the target worktree (default `--path`: the current directory) and shells out to
 "Dirty" is a tracked modification (`git status --porcelain
 --untracked-files=no` nonempty); untracked files never block a reset. Always
 prints the worktree's toplevel path it acted on, relative to the working
-directory. Shells out to `git` rather than adding a git library dependency.
+directory when at or beneath it, and absolute otherwise. Shells out to `git`
+rather than adding a git library dependency.
 
 ## `puck branding`—maintained assets
 
