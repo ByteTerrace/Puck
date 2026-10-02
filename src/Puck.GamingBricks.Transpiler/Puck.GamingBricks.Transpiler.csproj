@@ -13,7 +13,7 @@
     <ItemGroup>
         <!-- The language core, and the forge that owns the document this vocabulary speaks. Neither names a world
              schema, so this package stays as narrow as the brick forge it sits beside. -->
-        <ProjectReference Include="..\Puck.GamingBricks.Forge\Puck.GamingBricks.Forge.csproj" />
-        <ProjectReference Include="..\Puck.Transpiler\Puck.Transpiler.csproj" />
+        <ProjectReference Include="../Puck.GamingBricks.Forge/Puck.GamingBricks.Forge.csproj" />
+        <ProjectReference Include="../Puck.Transpiler/Puck.Transpiler.csproj" />
     </ItemGroup>
 </Project>

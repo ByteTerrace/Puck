@@ -17,8 +17,8 @@
         <!-- Puck.State is the one engine the LANGUAGE itself reads: an operand span is handed to
              ExpressionSpelling rather than re-parsed here, and PuckDslVocabulary spells its comparison and
              cell-kind enums. No document schema is named. -->
-        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
+        <ProjectReference Include="../Puck.State/Puck.State.csproj" />
         <!-- Puck.Assets owns the content pin a compile records for each file it read. -->
-        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
     </ItemGroup>
 </Project>

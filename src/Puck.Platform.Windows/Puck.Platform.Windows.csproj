@@ -17,25 +17,25 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <Reference Include="Microsoft.Windows.SDK.NET">
-            <HintPath>$(WindowsSdkNetRefRoot)\Microsoft.Windows.SDK.NET.dll</HintPath>
+            <HintPath>$(WindowsSdkNetRefRoot)/Microsoft.Windows.SDK.NET.dll</HintPath>
             <Private>true</Private>
         </Reference>
         <Reference Include="WinRT.Runtime">
-            <HintPath>$(WindowsSdkNetRefRoot)\WinRT.Runtime.dll</HintPath>
+            <HintPath>$(WindowsSdkNetRefRoot)/WinRT.Runtime.dll</HintPath>
             <Private>true</Private>
         </Reference>
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
-        <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />
-        <ProjectReference Include="..\Puck.Platform\Puck.Platform.csproj" />
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.Commands/Puck.Commands.csproj" />
+        <ProjectReference Include="../Puck.Input/Puck.Input.csproj" />
+        <ProjectReference Include="../Puck.Platform/Puck.Platform.csproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- The camera frame converter's conversion kernels, compiled to cs_5_0 DXBC beside the source at build
              (CompileDirect3D11Kernels in build/Shaders.targets) and shipped as content: a camera device creates them
              and compiles nothing. -->
-        <Direct3D11KernelSource Include="Assets\Shaders\camera-conversion.hlsl" Entries="packed;planar;infrared" />
+        <Direct3D11KernelSource Include="Assets/Shaders/camera-conversion.hlsl" Entries="packed;planar;infrared" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.Abstractions.Capture" />

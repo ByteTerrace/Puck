@@ -13,11 +13,11 @@
          pin, so that single property is the whole guard). -->
     <ItemGroup Condition="'$(OS)' == 'Windows_NT' AND '@(ProjectReference->AnyHaveMetadataValue('Filename', 'Puck.Platform.Windows'))' == 'true'">
         <Reference Include="Microsoft.Windows.SDK.NET">
-            <HintPath>$(WindowsSdkNetRefRoot)\Microsoft.Windows.SDK.NET.dll</HintPath>
+            <HintPath>$(WindowsSdkNetRefRoot)/Microsoft.Windows.SDK.NET.dll</HintPath>
             <Private>true</Private>
         </Reference>
         <Reference Include="WinRT.Runtime">
-            <HintPath>$(WindowsSdkNetRefRoot)\WinRT.Runtime.dll</HintPath>
+            <HintPath>$(WindowsSdkNetRefRoot)/WinRT.Runtime.dll</HintPath>
             <Private>true</Private>
         </Reference>
     </ItemGroup>

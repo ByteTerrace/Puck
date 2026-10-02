@@ -13,6 +13,6 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="../../src/Puck.Assets/Puck.Assets.csproj" />
     </ItemGroup>
 </Project>

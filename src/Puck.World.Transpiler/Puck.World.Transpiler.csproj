@@ -7,8 +7,8 @@
     <ItemGroup>
         <!-- The world's own vocabulary on top of the language core: lowering to puck.world.definition.v1, decompiling
              from it, its reference lint, and the language server that completes its names. -->
-        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\Puck.Transpiler\Puck.Transpiler.csproj" />
-        <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
+        <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
+        <ProjectReference Include="../Puck.Transpiler/Puck.Transpiler.csproj" />
+        <ProjectReference Include="../Puck.World.Schema/Puck.World.Schema.csproj" />
     </ItemGroup>
 </Project>

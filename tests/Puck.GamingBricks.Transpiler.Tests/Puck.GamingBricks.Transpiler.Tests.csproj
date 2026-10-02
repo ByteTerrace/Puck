@@ -11,7 +11,7 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.GamingBricks.Transpiler\Puck.GamingBricks.Transpiler.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Transpiler\Puck.Transpiler.csproj" />
+        <ProjectReference Include="../../src/Puck.GamingBricks.Transpiler/Puck.GamingBricks.Transpiler.csproj" />
+        <ProjectReference Include="../../src/Puck.Transpiler/Puck.Transpiler.csproj" />
     </ItemGroup>
 </Project>
