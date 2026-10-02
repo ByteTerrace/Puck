@@ -37,7 +37,10 @@ Brief: <id> blocked: <question>
 
 The message is the notification; git is the record. Inspect the reported
 changes and checks before merging, following
-[`verification`](../verification/SKILL.md).
+[`verification`](../verification/SKILL.md). At each merge, turn every GPU leg
+or re-record owed in a commit body into a tracked item: the commit records a
+debt, but assigns it to no lane. Carry each item into the batch's GPU run and
+close it only with that run's evidence.
 
 ## Assemble and refresh batches
 
@@ -46,6 +49,12 @@ Assemble a batch on a local-only branch in a worktree under
 batch lands, merge the integration head into every open batch before its
 qualification run ([`verification`](../verification/SKILL.md#gpu-legs) owns
 the run).
+
+Include every counters workload under `tests/Puck.Counters` in batch
+qualification, not just the default. Inspect the directory before naming the
+inputs: the worlds, scripts and ceilings sit directly in it. Read each
+ledger's workload and script paths to select the matching inputs. Run each set
+as `puck counters --check --world <world> --script <script> --ceilings <file>`.
 
 The lead runs any merge an agent is denied. Agents resolve conflicts in
 generated files, including shader interfaces, fingerprints and generated

@@ -488,6 +488,15 @@ framed as unverified when no device run exists.
 - In Git Bash on Windows, `python3` and `python` can resolve to the Microsoft
   Store alias, which waits on standard input until the command times out. Use
   the repository's own tools, or `sed`, `awk` or `perl`, instead.
+- The Codex Windows sandbox reads profile folders through an inherited
+  `CodexSandboxUsers` read-and-execute (RX) grant. A folder with inheritance
+  disabled is unreadable to it; affected locations include
+  `%LOCALAPPDATA%/Microsoft SDKs`, `%APPDATA%/NuGet` and `%LOCALAPPDATA%/NuGet`.
+  MSBuild can then fail inside the sandbox with MSB4184 from
+  `ToolLocationHelper.GetPlatformSDKLocation`, and NuGet with
+  "Failed to read NuGet.Config due to unauthorized access". The machine's
+  owner fixes the folder's permissions by re-enabling inheritance or granting
+  `CodexSandboxUsers` read and execute on that folder.
 - On the reference Windows/RTX 4070 system, enabling the Direct3D 12 debug
   layer can make `D3D12CreateDevice` fail with `0x887A0007`; it is opt-in.
 - Vulkan import of a Direct3D 12 shared texture on NVIDIA uses handle type

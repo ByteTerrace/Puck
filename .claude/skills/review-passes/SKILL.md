@@ -38,6 +38,9 @@ stale and is corrected in the same change.
   Keep a detached worktree under the checkout's `.claude/worktrees/<name>`.
   Pause other edits and commits on the author's branch until the pass lands;
   preserve any existing dirty work and clear it before the fast-forward.
+- Never launch a `--write` pass into a tree a canary, counters or parity run
+  builds from: an edit mid-run changes the source state that run reuses. Wait
+  for the run to finish or give the pass a separate worktree.
 - For a code pass, restore and build that worktree first so `obj/` and `bin/`
   exist. The Codex sandbox has no network: fetch corpora and packages before
   the run. A documentation-only pass needs no build unless XML comments change.
@@ -53,6 +56,14 @@ stale and is corrected in the same change.
   its own questions from the code and the brief. A Codex pass that ends on a
   question has done nothing: answer it in a prompt file and continue the same
   thread with `task --resume-last`.
+- Preserve the launch's working-directory spelling for `status`, `result` and
+  `cancel`: the companion keys job state by that spelling. A Git Bash `/c/...`
+  launch is invisible to a PowerShell `C:/...` query, and the reverse.
+- Cancel from PowerShell with the launch's path form, or use
+  `MSYS_NO_PATHCONV=1` under Git Bash: MSYS path conversion turns taskkill's
+  `/PID` into a path and makes `cancel` fail. Then stop the companion's
+  app-server broker for that working directory before removing the worktree;
+  the broker can outlive the job and hold the worktree open.
 - Write the brief to a lane-named file (`<scratchpad>/rb/<lane>.md`) so the
   second review and the verifier can reuse it.
 - Name a scratch directory outside the tree in the brief for any CLI copy or
@@ -182,10 +193,6 @@ no brief, so it raises compatibility findings and tries to run tests.
    under the lead's grant or report them as owed. Once the required gates
    pass, push the working branch, fast-forward only. Only the lead merges it
    into the integration branch the lead's brief names.
-
-A Codex companion job's app-server broker can outlive the job and hold its
-worktree open. Stop that job's broker process before removing the review
-worktree.
 
 ## Route adjacent work
 
