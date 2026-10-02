@@ -829,12 +829,17 @@ reaches this one at all (`Advance` returns before it).
 
 A refused contact sweep (`ContactRefusal`, from `FixedFieldContactSolver`) is a
 full block: the body does not move this tick. `WorldBody.SweepRefusal.cs`
-captures the body's motion state before the step integrates and restores it
-for a walking, rigid, carried or arriving body, so its pose, velocity and
-grounded fact read as they did before, while action triggers, timers and
-followers stand. A carrier is never handed a refused carried body's correction,
-nor one from a sweep that held its body for want of proof
-(`ContactResolution.Unproved`): only a proven contact corrects a carrier.
+captures everything the step writes before it begins (the whole
+`WorldBodyTransferState` and `WorldBodyIntegrationResidue`, with the pose and
+the contact facts both leave to re-derivation) and restores it for a walking,
+rigid or carried body, so the body reads exactly as it did before the tick. A
+walking body's refused step withdraws the outputs it emitted, and an arriving
+body keeps the pose it was installed with. A body refused this tick
+(`WorldBody.SweepRefusedThisTick`) is immovable until `CompleteStep` ends the
+tick: the pair passes resolve its partner against it as static, a tether does
+not pull it, and no carrier is corrected through it. A carrier is never handed
+a correction from a sweep that held its body for want of proof
+(`ContactResolution.Unproved`) either: only a proven contact corrects a carrier.
 `WorldPopulation.CompleteStep` narrates each transition once on `body.sweep`
 (refused, then recovered), and `body.where` trails `sweep=refused(<reason>)`
 while the refusal holds (absent otherwise).

@@ -1,109 +1,101 @@
 using Puck.Maths;
 using Puck.Physics;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
 // A REFUSED SWEEP IS A FULL BLOCK: THE BODY DOES NOT MOVE THIS TICK. A contact field refuses a step whose sweep it
-// cannot run (ContactRefusal: arithmetic the carrier cannot hold, or a capsule core past its piece ceiling). The body's
-// motion state is captured before the step integrates and restored after it, so its position, attitude, velocity,
-// integrator remainders and contact facts read exactly as they did before. Everything else the step did stands: action
-// triggers fired against the pre-step pose, timers and followers advanced, because time does pass and nothing they did
-// depends on motion that did not happen. A refusal is local to the refused body; it never reaches a carrier or any other
-// body. The population narrates each transition, refused and recovered, once on the body.sweep channel, and body.where
-// carries the refusal while it holds.
+// cannot run (ContactRefusal: arithmetic the carrier cannot hold, or a capsule core past its piece ceiling). Every field
+// the step writes is captured before the step begins and restored when its sweep is refused, so the body reads exactly
+// as it did before the tick: its pose, attitude, velocity, integrator remainders, rate accumulators, frame, input tape,
+// timers, action state and contact facts. The outputs a refused locomotion step emitted (effects, designations,
+// generator firings) are withdrawn with it, so a tick the body did not take fires nothing either. A refused body is
+// immovable for the rest of its tick (WorldPopulation's pair passes resolve against it as static), and a carrier is never
+// corrected through it. The population narrates each transition, refused and recovered, once on the body.sweep channel,
+// and body.where carries the refusal while it holds.
 public sealed partial class WorldBody {
     // The refusal the body's most recent swept step met, or None when its last swept step was resolved.
     private ContactRefusal m_sweepRefusal;
     // The refusal the population last narrated for this body, so each transition is reported once.
     private ContactRefusal m_reportedSweepRefusal;
+    // Whether any swept step this body took this tick was refused; the population clears it once the tick completes.
+    private bool m_sweepRefusedThisTick;
 
     /// <summary>Gets why this body's most recent swept step was refused, or <see cref="ContactRefusal.None"/> when it
     /// was resolved. A refused step leaves the body exactly where it was.</summary>
     public ContactRefusal SweepRefusal => m_sweepRefusal;
+    /// <summary>Gets whether a swept step this body took this tick was refused. Such a body is immovable for the rest
+    /// of the tick: a body pair resolves against it as static, and nothing corrects a carrier through it.</summary>
+    public bool SweepRefusedThisTick => m_sweepRefusedThisTick;
 
-    // The body's motion state, captured before a step integrates and restored when its sweep is refused. It holds every
-    // field the motion program, the timed overlay or the rigid solver integrates or writes from a contact:
-    //   position, orientation, yaw, drive pitch, up axis and its reseat flag;
-    //   planar and vertical velocity, rigid linear and angular velocity;
-    //   the position, rotation and overlay accumulators and the vertical-velocity accumulator;
-    //   grounded and the contact count; the obstruction witness, its grace ticks and its position;
-    //   the rigid ground and obstruction contact latches and their miss streaks.
-    // A field a later change adds to those integrators belongs here, or a refused step moves it. Value types only: a
-    // capture allocates nothing.
+    // Records a refused swept step: the latch body.where and the narration read, and the tick's immovability.
+    private void NoteSweepRefusal(ContactRefusal refusal) {
+        m_sweepRefusal = refusal;
+        m_sweepRefusedThisTick = true;
+    }
+
+    /// <summary>Ends this body's tick for the sweep refusal: a body refused this tick may be moved again by the next
+    /// tick's pair passes.</summary>
+    internal void EndSweepTick() => m_sweepRefusedThisTick = false;
+
+    // Everything a step writes, captured before it begins and restored when its sweep is refused. The snapshot is the
+    // body's two whole state records, not a list of fields: the transfer state (velocities, attitude, rate
+    // accumulators, followers, tape, timers, action state) and the integration residue (previous position, the
+    // position, rotation and up-turn remainders, up, frame, grounded, sleep, hold, tether and rigid state). A field
+    // added to either record is covered here without a change. The rest are the facts both records leave to be
+    // re-derived from the pose after a discontinuous restore, which a refused step is not: the pose itself, the contact
+    // count, the obstruction witness, the medium facts, and the transfer-held channel image, which ApplyTransferState
+    // seeds for an arrival rather than restoring as it stood.
     private readonly record struct MotionSnapshot(
         FixedVector3 Position,
-        FixedQuaternion Orientation,
         FixedQ4816 Yaw,
-        FixedQ4816 DrivePitch,
-        FixedVector3 Up,
-        bool UpNeedsReseat,
-        FixedVector3 PlanarVelocity,
-        FixedQ4816 VerticalVelocity,
-        FixedVector3 RigidVelocity,
-        FixedVector3 AngularVelocity,
-        FixedVector3RateAccumulator PositionAccumulator,
-        FixedVector3RateAccumulator RotationAccumulator,
-        FixedVector3RateAccumulator OverlayAccumulator,
-        FixedRateAccumulator VerticalVelocityAccumulator,
-        bool Grounded,
+        WorldBodyTransferState Transfer,
+        WorldBodyIntegrationResidue Residue,
         int LastContactCount,
         FixedVector3 ObstructionWitness,
         ulong ObstructionWitnessGraceTicks,
         FixedVector3 ObstructionWitnessPosition,
-        bool RigidGroundContacting,
-        bool RigidObstructionContacting,
-        int RigidGroundMissStreak,
-        int RigidObstructionMissStreak
+        bool InMedium,
+        bool AtMediumBand,
+        PlayerIntent TransferHeldChannels,
+        bool HasTransferHeldChannels
     );
 
-    private MotionSnapshot CaptureMotion() => new(
-        AngularVelocity: m_angularVelocity,
-        DrivePitch: m_drivePitch,
-        Grounded: m_grounded,
+    // The body's snapshot, overwritten by each capture into the arrays the last one left, so a capture taken every
+    // step allocates nothing in steady state. One step holds it at a time, from its capture to its end.
+    private MotionSnapshot m_motion;
+
+    private void CaptureMotion() => m_motion = new(
+        AtMediumBand: m_atMediumBand,
+        HasTransferHeldChannels: m_hasTransferHeldChannels,
+        InMedium: m_inMedium,
         LastContactCount: m_lastContactCount,
         ObstructionWitness: m_obstructionWitness,
         ObstructionWitnessGraceTicks: m_obstructionWitnessGraceTicks,
         ObstructionWitnessPosition: m_obstructionWitnessPosition,
-        Orientation: m_orientation,
-        OverlayAccumulator: m_overlayAccumulator,
-        PlanarVelocity: m_planarVelocity,
         Position: m_position,
-        PositionAccumulator: m_positionAccumulator,
-        RigidGroundContacting: m_rigidGroundContacting,
-        RigidGroundMissStreak: m_rigidGroundMissStreak,
-        RigidObstructionContacting: m_rigidObstructionContacting,
-        RigidObstructionMissStreak: m_rigidObstructionMissStreak,
-        RigidVelocity: m_rigidVelocity,
-        RotationAccumulator: m_rotationAccumulator,
-        Up: m_up,
-        UpNeedsReseat: m_upNeedsReseat,
-        VerticalVelocity: m_verticalVelocity,
-        VerticalVelocityAccumulator: m_verticalVelocityAccumulator,
+        Residue: CaptureIntegrationResidue(),
+        Transfer: CaptureTransferStateInto(reuse: m_motion.Transfer),
+        TransferHeldChannels: m_transferHeldChannels,
         Yaw: m_yaw
     );
-    private void RestoreMotion(in MotionSnapshot motion) {
-        m_angularVelocity = motion.AngularVelocity;
-        m_drivePitch = motion.DrivePitch;
-        m_grounded = motion.Grounded;
+    // The order the checkpoint restore uses: the transfer state, then the residue over it (which undoes the transfer
+    // state's own wake and latch writes), then the pose and the re-derived facts, which a program switch inside
+    // ApplyTransferState may have re-pinned.
+    private void RestoreMotion() {
+        ref readonly var motion = ref m_motion;
+
+        ApplyTransferState(state: motion.Transfer);
+        ApplyIntegrationResidue(residue: motion.Residue);
+        m_atMediumBand = motion.AtMediumBand;
+        m_hasTransferHeldChannels = motion.HasTransferHeldChannels;
+        m_inMedium = motion.InMedium;
         m_lastContactCount = motion.LastContactCount;
         m_obstructionWitness = motion.ObstructionWitness;
         m_obstructionWitnessGraceTicks = motion.ObstructionWitnessGraceTicks;
         m_obstructionWitnessPosition = motion.ObstructionWitnessPosition;
-        m_orientation = motion.Orientation;
-        m_overlayAccumulator = motion.OverlayAccumulator;
-        m_planarVelocity = motion.PlanarVelocity;
         m_position = motion.Position;
-        m_positionAccumulator = motion.PositionAccumulator;
-        m_rigidGroundContacting = motion.RigidGroundContacting;
-        m_rigidGroundMissStreak = motion.RigidGroundMissStreak;
-        m_rigidObstructionContacting = motion.RigidObstructionContacting;
-        m_rigidObstructionMissStreak = motion.RigidObstructionMissStreak;
-        m_rigidVelocity = motion.RigidVelocity;
-        m_rotationAccumulator = motion.RotationAccumulator;
-        m_up = motion.Up;
-        m_upNeedsReseat = motion.UpNeedsReseat;
-        m_verticalVelocity = motion.VerticalVelocity;
-        m_verticalVelocityAccumulator = motion.VerticalVelocityAccumulator;
+        m_transferHeldChannels = motion.TransferHeldChannels;
         m_yaw = motion.Yaw;
     }
 

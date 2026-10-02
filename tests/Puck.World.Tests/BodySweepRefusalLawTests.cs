@@ -8,11 +8,12 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: a refused sweep is a full block — the body does not move this tick. Its position, attitude,
-/// velocity and grounded fact read exactly as before the step, the population narrates the refusal once and its
-/// recovery once on the <c>body.sweep</c> channel, and <c>body.where</c> carries it while it holds. A refusal is local to
-/// the refused body: a carrier under a refused carried body steps exactly as if it carried nothing, and a rigid body
-/// refused across its substeps keeps the velocity and pose it began the tick with.
+/// CONTRACT UNDER TEST: a refused sweep is a full block — the body does not move this tick. Its whole captured state
+/// (integration residue, transfer state, pose and up) reads exactly as before the step, the population narrates the
+/// refusal once and its recovery once on the <c>body.sweep</c> channel, and <c>body.where</c> carries it while it holds.
+/// A refused body is immovable for the rest of its tick: a carrier under a refused carried body steps exactly as if it
+/// carried nothing, a body overlapping it is resolved against it as static, and a rigid body refused across its
+/// substeps keeps the velocity and pose it began the tick with.
 /// </summary>
 [Collection(ConsoleRedirectionCollection.Name)]
 public sealed class BodySweepRefusalLawTests {
@@ -98,6 +99,51 @@ public sealed class BodySweepRefusalLawTests {
         Assert.Equal(expected: 1, actual: Count(narration: narration, needle: "[body.sweep: body 0 refused"));
         Assert.Equal(expected: 1, actual: Count(narration: narration, needle: "[body.sweep: body 0 recovered"));
     }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ARefusedStepLeavesTheBodysWholeCapturedStateAsItWas(bool shapedAtThirtyHertz) {
+        // The lattice body under the carrier's top, walking forward under a tilted uniform gravity: phase 0 turns the
+        // frame toward the field's up (0.6, 0.8, 0) before the contact phase refuses the step. At 30 Hz under a shaping
+        // row whose Along.Engage is 1, the planar ramp accumulator integrates too. A refused step restores every field
+        // it wrote, so the body's whole captured state (integration residue, transfer state, pose and up) reads after
+        // the tick exactly as before it. Both records are described member by member, so a field added to either is
+        // compared without a change here.
+        var world = LatticeWorld() with {
+            GravityRaw = new WorldGravity(
+                Attractors: [],
+                GravitationalConstant: 0f,
+                SofteningLength: 0.5f,
+                Solver: WorldGravitySolver.Pairwise,
+                Uniform: new DocumentVector3(x: -3f, y: -4f, z: 0f)
+            ),
+        };
+
+        if (shapedAtThirtyHertz) {
+            world = world with {
+                KitRowsRaw = [.. world.Kits.Select(selector: kit => kit with { Motion = kit.Motion with { Shaping = [new WorldShaping(Along: new WorldShapingAlong(Engage: 1f))] } })],
+                Simulation = new WorldSimulationDefaults(RateHz: 30),
+            };
+        }
+
+        using var fixture = Fixtures.FreshServer(definition: world);
+        var body = fixture.JoinSeat();
+
+        body.Pose(pitchRadians: FixedQ4816.Zero, position: new FixedVector3(X: FixedQ4816.One, Y: (FixedQ4816.MaxValue - Quarter), Z: FixedQ4816.One), rollRadians: FixedQ4816.Zero, yawRadians: FixedQ4816.Zero);
+        body.EnqueueRun(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One), seconds: 1f);
+
+        // The population admits each body to its tick (TryBeginOrdinaryAdvance) before the step begins. That latch is
+        // the tick's, not the step's, and a refused body keeps it, so it is seeded here as the admission leaves it,
+        // and the comparison is about the step alone.
+        body.ApplyIntegrationResidue(residue: body.CaptureIntegrationResidue() with { OrdinaryAdvanceAdmitted = true });
+
+        var before = WholeState(body: body);
+
+        fixture.Step();
+
+        Assert.Equal(expected: ContactRefusal.UnrepresentableSweep, actual: body.SweepRefusal);
+        Assert.Equal(expected: before, actual: WholeState(body: body));
+    }
     [Fact]
     public void ARigidBodyRefusedAcrossItsSubstepsKeepsTheVelocityAndPoseItBeganWith() {
         // A rigid ball rising at fifteen units a second takes seven substeps a tick. Posed a tenth of a unit under the
@@ -149,7 +195,96 @@ public sealed class BodySweepRefusalLawTests {
         Assert.Equal(actual: carried.BallRefusal, expected: ContactRefusal.None);
         Assert.Equal(actual: carried.BallX, expected: quarterPast);
     }
+    [Fact]
+    public void ARefusedCarriedBodyIsImmovableForTheRestOfItsTickAndPushesNothingIntoItsCarrier() {
+        // The carried ball posed at the carrier's least x is refused; a second, resting ball overlaps it from an eighth
+        // of a unit away. The pair pass must resolve the second ball against the refused one as static: the refused
+        // ball keeps its pose bit for bit, the second ball alone leaves the overlap, and the carrier, which falls under
+        // its own kit's gravity, ends the tick exactly where it ends it when the second ball is posed far away.
+        var overlapped = CarriedPairTick(otherZ: -FixedQ4816.FromDouble(value: 0.125));
+        var apart = CarriedPairTick(otherZ: FixedQ4816.FromInteger(value: 50L));
 
+        Assert.True(condition: overlapped.OverlappedBefore, userMessage: "the fixture must start the two balls in overlap");
+        Assert.Equal(actual: overlapped.BallRefusal, expected: ContactRefusal.UnrepresentableSweep);
+        Assert.Equal(actual: overlapped.BallAfter, expected: overlapped.BallBefore);
+        Assert.Equal(actual: overlapped.Carrier, expected: apart.Carrier);
+        Assert.False(condition: overlapped.OverlappedAfter, userMessage: "the second ball must be resolved out of the refused ball");
+    }
+
+    // One tick of a carry whose ball is posed at the carrier's least x, with a second, resting ball posed beside it at
+    // the given z.
+    private static ((FixedVector3, FixedQuaternion) BallBefore, (FixedVector3, FixedQuaternion) BallAfter, (FixedVector3, FixedQuaternion) Carrier, ContactRefusal BallRefusal, bool OverlappedBefore, bool OverlappedAfter) CarriedPairTick(FixedQ4816 otherZ) {
+        using var fixture = Fixtures.FreshServer(definition: WorldCarryTangibilityLawTests.WallCarryDocument(includeOtherBody: true, includeWall: true));
+        var carrier = fixture.JoinSeat();
+        var ball = fixture.Server.Body(index: WorldCarryTangibilityLawTests.BallIndex)!;
+        var other = fixture.Server.Body(index: (WorldCarryTangibilityLawTests.BallIndex + 1))!;
+
+        Assert.True(condition: fixture.Server.Population.TryBeginCarry(carrierIndex: WorldCarryTangibilityLawTests.CarrierIndex, reason: out var reason, targetIndex: WorldCarryTangibilityLawTests.BallIndex), userMessage: reason);
+
+        ball.Pose(pitchRadians: FixedQ4816.Zero, position: new FixedVector3(X: FixedQ4816.MinValue, Y: FixedQ4816.One, Z: FixedQ4816.Zero), rollRadians: FixedQ4816.Zero, yawRadians: FixedQ4816.Zero);
+        other.Pose(pitchRadians: FixedQ4816.Zero, position: new FixedVector3(X: FixedQ4816.MinValue, Y: FixedQ4816.One, Z: otherZ), rollRadians: FixedQ4816.Zero, yawRadians: FixedQ4816.Zero);
+        other.ApplyIntegrationResidue(residue: other.CaptureIntegrationResidue() with {
+            RigidAngularVelocity = FixedVector3.Zero,
+            RigidResting = true,
+            RigidRestingHoldTicks = 1UL,
+            RigidVelocity = FixedVector3.Zero,
+        });
+
+        var ballBefore = (ball.FixedPosition, ball.FixedOrientation);
+        var overlappedBefore = Overlaps(left: ball, right: other);
+
+        fixture.Step();
+
+        return (ballBefore, (ball.FixedPosition, ball.FixedOrientation), (carrier.FixedPosition, carrier.FixedOrientation), ball.SweepRefusal, overlappedBefore, Overlaps(left: ball, right: other));
+    }
+    private static bool Overlaps(WorldBody left, WorldBody right) => FixedDynamicBodyContacts.TryCorrection(
+        correction: out _,
+        leftOrientation: left.FixedOrientation,
+        leftPosition: left.FixedPosition,
+        leftVolumes: left.ScaledColliderVolumes(),
+        rightOrientation: right.FixedOrientation,
+        rightPosition: right.FixedPosition,
+        rightVolumes: right.ScaledColliderVolumes(),
+        tieBreaker: 0
+    );
+    // The body's whole captured state, described member by member through every nested record and array, so two
+    // captures compare by value and a member added later is described without a change here.
+    private static string WholeState(WorldBody body) => string.Join(
+        separator: Environment.NewLine,
+        values: [
+            $"residue {Describe(value: body.CaptureIntegrationResidue())}",
+            $"transfer {Describe(value: body.CaptureTransferState())}",
+            $"pose {body.FixedPosition} {body.FixedOrientation} {body.FixedYaw}",
+            $"up {body.FixedUp}",
+        ]
+    );
+    private static string Describe(object? value) {
+        switch (value) {
+            case null:
+                return "null";
+            case string text:
+                return text;
+            case System.Collections.IEnumerable sequence:
+                return $"[{string.Join(separator: ", ", values: sequence.Cast<object?>().Select(selector: Describe))}]";
+        }
+
+        var type = value.GetType();
+
+        if (
+            type.IsPrimitive ||
+            type.IsEnum ||
+            (type.Namespace?.StartsWith(comparisonType: StringComparison.Ordinal, value: "Puck.World") != true)
+        ) {
+            return (Convert.ToString(provider: System.Globalization.CultureInfo.InvariantCulture, value: value) ?? string.Empty);
+        }
+
+        var members = type.GetProperties(bindingAttr: System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public)
+            .Where(predicate: static property => (property.GetIndexParameters().Length == 0))
+            .OrderBy(keySelector: static property => property.Name, comparer: StringComparer.Ordinal)
+            .Select(selector: property => $"{property.Name}={Describe(value: property.GetValue(obj: value))}");
+
+        return $"{type.Name} {{ {string.Join(separator: ", ", values: members)} }}";
+    }
     // A carrier walking forward ten ticks beside the wall program, with the ball posed at the given x and carried or not.
     private static (FixedVector3 Carrier, ContactRefusal BallRefusal, FixedQ4816 BallX) CarrierWalk(FixedQ4816 ballX, bool carrying) {
         using var fixture = Fixtures.FreshServer(definition: WorldCarryTangibilityLawTests.WallCarryDocument(includeWall: true));

@@ -1086,6 +1086,8 @@ public sealed partial class WorldPopulation {
                         : $"[body.sweep: body {index} refused at tick {tick} ({refusal}): the step's sweep could not run, so the body did not move]")
                 );
             }
+
+            m_entries[index].Body?.EndSweepTick();
         }
     }
     /// <summary>Returns a value indicating whether solid world geometry leaves the sight-offset segment between two live bodies unobstructed —

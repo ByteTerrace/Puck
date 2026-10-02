@@ -213,16 +213,23 @@ admitted it). The resolution names it in `ContactRefusal`, the body keeps the
 position it started the step from, its velocity comes back as it came, and no
 sweep or endpoint push runs; nothing is wrapped or clamped. In the World a
 refused sweep is a full block: the body does not move this tick. `WorldBody`
-captures its motion state before the step integrates (the fields
-`WorldBody.SweepRefusal.cs` lists) and restores it, for a walking, rigid,
-carried or arriving body alike, while its action triggers, timers and
-followers stand, since time does pass. A refusal is local to the refused body:
-a carrier under a refused carried body is handed no correction. A carrier is
-corrected only by a proven contact: a sweep that held its body for want of
-proof (out of budget, or at a box its field could not bound) marks the
-resolution `Unproved`, and hands the carrier nothing either. The population
-narrates each transition once on the `body.sweep` channel, refused and
-recovered, and `body.where` reads `sweep=refused(...)` while the refusal holds.
+captures everything the step writes before the step begins and restores it on a
+refusal, for a walking, rigid or carried body alike: its whole transfer state
+and integration residue (velocities, attitude, frame, rate accumulators, input
+tape, timers, action state, sleep, hold and tether) with its pose and contact
+facts, so a field added to either record is covered without a change. A
+walking body's refused step also withdraws the effects, designations and
+generator firings it emitted, so a tick the body did not take fires nothing.
+An arriving body keeps the pose and velocity it was installed with. A body
+refused this tick is immovable for the rest of it: a body pair resolves the
+other side against it as static (the other side takes the whole correction,
+and a rigid partner meets it with no velocity and no mass), a tether does not
+pull it, and no carrier is corrected through it. A carrier is corrected only by
+a proven contact: a sweep that held its body for want of proof (out of budget,
+or at a box its field could not bound) marks the resolution `Unproved`, and
+hands the carrier nothing either. The population narrates each transition once
+on the `body.sweep` channel, refused and recovered, and `body.where` reads
+`sweep=refused(...)` while the refusal holds.
 A body approaching the carrier's end is ordinarily held a step sooner by its
 sweep, whose box reaches the end before any core's start does and proves no
 ground there; the refusal is met by a body already past that point, posed or

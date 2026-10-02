@@ -515,7 +515,15 @@ public sealed partial class WorldBody {
 
         handle.Orientation = m_orientation;
 
-        if (m_rigid is { } rigid) {
+        // A body whose sweep was refused this tick is immovable until the tick ends: its partner meets it as static.
+        if (m_sweepRefusedThisTick) {
+            handle.LinearVelocity = FixedVector3.Zero;
+            handle.AngularVelocity = FixedVector3.Zero;
+            handle.InverseMassRaw = 0L;
+            handle.InverseInertiaXX = 0L;
+            handle.InverseInertiaYY = 0L;
+            handle.InverseInertiaZZ = 0L;
+        } else if (m_rigid is { } rigid) {
             var scaledRigid = ScaleRigid(rigid: rigid);
 
             handle.LinearVelocity = m_rigidVelocity;
@@ -574,9 +582,13 @@ public sealed partial class WorldBody {
 
     /// <summary>Writes a rigid body's own <see cref="TwoBodyHandle"/>, after the kernel has applied an impulse to it,
     /// back onto this body's velocity state and wakes it. A no-op for a locomotion kit (its handle is a static
-    /// phantom — see <see cref="TwoBodyHandle"/> — and never receives a written impulse to commit).</summary>
+    /// phantom — see <see cref="TwoBodyHandle"/> — and never receives a written impulse to commit), and for a body
+    /// whose sweep was refused this tick, whose handle is static for the same reason.</summary>
     internal void CommitRigidHandle(FixedRigidBody handle) {
-        if (m_rigid is null) {
+        if (
+            (m_rigid is null) ||
+            m_sweepRefusedThisTick
+        ) {
             return;
         }
 
@@ -590,9 +602,13 @@ public sealed partial class WorldBody {
     /// and wakes it: a body another body's overlap has just physically displaced is no longer at rest, whatever its
     /// latched velocity said a moment ago. A no-op for zero correction, so a body already merely touching (never
     /// re-entering overlap once actually settled — see <see cref="Puck.Physics.FixedDynamicBodyContacts"/>) is never
-    /// woken by a call that does nothing.</summary>
+    /// woken by a call that does nothing. A no-op too for a body whose sweep was refused this tick
+    /// (<see cref="SweepRefusedThisTick"/>), which is immovable until the tick ends.</summary>
     internal void ApplyRigidPositionalCorrection(FixedVector3 correction) {
-        if (correction == FixedVector3.Zero) {
+        if (
+            (correction == FixedVector3.Zero) ||
+            m_sweepRefusedThisTick
+        ) {
             return;
         }
 
@@ -636,7 +652,7 @@ public sealed partial class WorldBody {
 
         // A refused sweep is a full block: the body does not move this tick (WorldBody.SweepRefusal.cs). The capture
         // precedes damping and gravity, so a refused tick leaves the velocity it began with.
-        var motion = CaptureMotion();
+        CaptureMotion();
 
         m_sweepRefusal = ContactRefusal.None;
 
@@ -740,8 +756,8 @@ public sealed partial class WorldBody {
 
             // The substeps stop at a refusal, and every one before it is undone with the rest of the tick's motion.
             if (resolution.Refusal != ContactRefusal.None) {
-                m_sweepRefusal = resolution.Refusal;
-                RestoreMotion(motion: in motion);
+                NoteSweepRefusal(refusal: resolution.Refusal);
+                RestoreMotion();
 
                 return;
             }

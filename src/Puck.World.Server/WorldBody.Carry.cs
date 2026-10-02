@@ -190,7 +190,7 @@ public sealed partial class WorldBody {
         var desiredPosition = (carrier.m_position + carrier.m_orientation.Rotate(vector: (carry.Offset * carrier.m_scale)));
         // A refused sweep is a full block for this body alone (WorldBody.SweepRefusal.cs): it stays as it was, and the
         // carrier is handed no correction, so a refusal never reaches it.
-        var motion = CaptureMotion();
+        CaptureMotion();
 
         m_sweepRefusal = ContactRefusal.None;
         m_orientation = carrier.m_orientation;
@@ -213,8 +213,8 @@ public sealed partial class WorldBody {
             );
 
             if (resolution.Refusal != ContactRefusal.None) {
-                m_sweepRefusal = resolution.Refusal;
-                RestoreMotion(motion: in motion);
+                NoteSweepRefusal(refusal: resolution.Refusal);
+                RestoreMotion();
 
                 return;
             }

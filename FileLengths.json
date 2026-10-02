@@ -20,7 +20,6 @@
         "src/Puck.World.Schema/WorldDefinitionValidator.Placements.cs": 2292,
         "src/Puck.World.Schema/WorldDefinitionValidator.cs": 2318,
         "src/Puck.World.Schema/WorldNameRegistry.cs": 2035,
-        "src/Puck.World.Server/WorldBody.Step.cs": 2013,
         "src/Puck.World.Server/WorldDocument.Compose.cs": 2129,
         "src/Puck.World.Server/WorldGrants.cs": 2147,
         "src/Puck.World.Server/WorldInstanceHost.Transfers.cs": 2314,

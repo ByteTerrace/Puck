@@ -65,6 +65,14 @@ public sealed partial class WorldBody {
             return false;
         }
 
+        // A refused sweep is a full block: everything this step writes from here on is undone when its contact phase
+        // meets a refusal, and the outputs it emitted are withdrawn (WorldBody.SweepRefusal.cs).
+        CaptureMotion();
+        var effectOutputCount = (effectOutputs?.Count ?? 0);
+        var designationOutputCount = (designationOutputs?.Count ?? 0);
+        var generatorInvocationCount = (generatorInvocations?.Count ?? 0);
+        var refused = false;
+
         ApplyDurableInput(tick: tick);
         MaterializeDefaultLanePresses(stepTicks: stepTicks);
 
@@ -118,8 +126,6 @@ public sealed partial class WorldBody {
                 // no-op clamp elided entirely; a kit pinning its speed outright authors min == max.
                 var moveSpeed = ResolveMoveSpeed();
                 var turnSpeed = ResolveTurnRate();
-                // A refused sweep is a full block: the body does not move this tick (WorldBody.SweepRefusal.cs).
-                var motion = CaptureMotion();
 
                 m_sweepRefusal = ContactRefusal.None;
 
@@ -154,9 +160,7 @@ public sealed partial class WorldBody {
                     }
                 }
 
-                if (m_sweepRefusal != ContactRefusal.None) {
-                    RestoreMotion(motion: in motion);
-                }
+                refused = (m_sweepRefusal != ContactRefusal.None);
             }
         }
 
@@ -186,37 +190,14 @@ public sealed partial class WorldBody {
             tick: tick
         );
 
+        if (refused) {
+            RestoreMotion();
+            effectOutputs?.RemoveRange(index: effectOutputCount, count: (effectOutputs.Count - effectOutputCount));
+            designationOutputs?.RemoveRange(index: designationOutputCount, count: (designationOutputs.Count - designationOutputCount));
+            generatorInvocations?.RemoveRange(index: generatorInvocationCount, count: (generatorInvocations.Count - generatorInvocationCount));
+        }
+
         return engageEdge;
-    }
-    /// <summary>Applies one deterministic body-contact depenetration without turning it into a teleport.</summary>
-    internal void ApplyDynamicContact(FixedVector3 correction) {
-        if (correction == FixedVector3.Zero) {
-            return;
-        }
-
-        // A peer pushed this body: its program must run again to carry the push.
-        WakeUp();
-
-        m_position += correction;
-        var normal = correction.Normalize();
-        var velocity = (m_planarVelocity + (FixedVector3.UnitY * m_verticalVelocity));
-        var inward = FixedVector3.Dot(
-            left: velocity,
-            right: normal
-        );
-
-        if (inward < FixedQ4816.Zero) {
-            velocity -= (normal * inward);
-            m_planarVelocity = new FixedVector3(
-                X: velocity.X,
-                Y: FixedQ4816.Zero,
-                Z: velocity.Z
-            );
-            if (m_verticalVelocity != velocity.Y) {
-                m_verticalVelocity = velocity.Y;
-                m_verticalVelocityAccumulator.Reset();
-            }
-        }
     }
     internal bool ApplyTargetedEffect(int sourceIndex, CompiledBodyInstruction instruction) {
         // A foreign effect always targets a live consequence (velocity, state, a pose), so a sleeping target wakes

@@ -37,9 +37,9 @@ public sealed partial class WorldBody {
                 )
             );
 
-            // A refused step writes nothing from its resolution; the body's motion is restored once the program ends.
+            // A refused step writes nothing from its resolution; everything the step wrote is restored once it ends.
             if (contactResolution.Refusal != ContactRefusal.None) {
-                m_sweepRefusal = contactResolution.Refusal;
+                NoteSweepRefusal(refusal: contactResolution.Refusal);
 
                 return;
             }
@@ -172,6 +172,42 @@ public sealed partial class WorldBody {
             m_lastContactCount = 0;
             m_obstructionWitness = FixedVector3.Zero;
             m_obstructionWitnessGraceTicks = 0;
+        }
+    }
+
+    /// <summary>Applies one deterministic body-contact depenetration without turning it into a teleport. A body whose
+    /// sweep was refused this tick (<see cref="SweepRefusedThisTick"/>) is immovable until the tick ends, so the
+    /// correction is not applied.</summary>
+    internal void ApplyDynamicContact(FixedVector3 correction) {
+        if (
+            (correction == FixedVector3.Zero) ||
+            m_sweepRefusedThisTick
+        ) {
+            return;
+        }
+
+        // A peer pushed this body: its program must run again to carry the push.
+        WakeUp();
+
+        m_position += correction;
+        var normal = correction.Normalize();
+        var velocity = (m_planarVelocity + (FixedVector3.UnitY * m_verticalVelocity));
+        var inward = FixedVector3.Dot(
+            left: velocity,
+            right: normal
+        );
+
+        if (inward < FixedQ4816.Zero) {
+            velocity -= (normal * inward);
+            m_planarVelocity = new FixedVector3(
+                X: velocity.X,
+                Y: FixedQ4816.Zero,
+                Z: velocity.Z
+            );
+            if (m_verticalVelocity != velocity.Y) {
+                m_verticalVelocity = velocity.Y;
+                m_verticalVelocityAccumulator.Reset();
+            }
         }
     }
 }

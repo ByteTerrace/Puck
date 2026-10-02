@@ -10,22 +10,27 @@ public sealed partial class WorldBody {
     /// before <see cref="Puck.World.Server.WorldPopulation.TryDetachSeatForTransfer"/> discards this body object, so
     /// the abort/restore path has something to reapply if the transfer unwinds. See <see cref="WorldBodyTransferState"/>'s own
     /// remarks for the complete field-by-field classification.</summary>
-    public WorldBodyTransferState CaptureTransferState() {
-        var laneLatch = new ulong[ActionLaneCount];
-        var laneFactHeld = new ulong[ActionLaneCount];
-        var laneRecency = new ulong[]?[ActionLaneCount];
+    public WorldBodyTransferState CaptureTransferState() => CaptureTransferStateInto(reuse: default);
+
+    // Captures into the arrays of an earlier capture wherever one still has the length it needs, so a capture taken
+    // every tick (the sweep refusal's snapshot, WorldBody.SweepRefusal.cs) allocates nothing in steady state. The
+    // default state reuses nothing. A reused capture is overwritten, so only the latest one is valid.
+    private WorldBodyTransferState CaptureTransferStateInto(in WorldBodyTransferState reuse) {
+        var laneLatch = Reuse(length: ActionLaneCount, reuse: reuse.LaneLatch);
+        var laneFactHeld = Reuse(length: ActionLaneCount, reuse: reuse.LaneFactHeld);
+        var laneRecency = Reuse(length: ActionLaneCount, reuse: reuse.LaneRecency);
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             laneLatch[lane] = m_laneActions[lane].Latch;
             laneFactHeld[lane] = m_laneActions[lane].FactHeld;
             laneRecency[lane] = ((m_laneActions[lane].Recency is { } recency)
-                ? [.. recency]
+                ? CopyInto(reuse: laneRecency[lane], source: recency)
                 : null
             );
         }
 
-        var tapeIntents = new PlayerIntent[m_tapeCount];
-        var tapeRemainingTicks = new ulong[m_tapeCount];
+        var tapeIntents = Reuse(length: m_tapeCount, reuse: reuse.TapeIntents);
+        var tapeRemainingTicks = Reuse(length: m_tapeCount, reuse: reuse.TapeRemainingTicks);
 
         for (var offset = 0; (offset < m_tapeCount); offset++) {
             var segment = m_tape[((m_tapeHead + offset) % m_tape.Length)];
@@ -41,17 +46,17 @@ public sealed partial class WorldBody {
             DrivePitch: m_drivePitch,
             OverlayVelocity: m_overlayVelocity,
             OverlayRemainingTicks: m_overlayRemaining,
-            ChannelTimerTicks: [.. m_laneTimers],
-            ChannelTimerValues: [.. m_channelTimerValues],
+            ChannelTimerTicks: CopyInto(reuse: reuse.ChannelTimerTicks, source: m_laneTimers),
+            ChannelTimerValues: CopyInto(reuse: reuse.ChannelTimerValues, source: m_channelTimerValues),
             BodyMotionProgramName: m_bodyMotionProgram.Name,
             Source: m_source,
-            PreviousChannelBit: [.. m_previousChannelBit],
+            PreviousChannelBit: CopyInto(reuse: reuse.PreviousChannelBit, source: m_previousChannelBit),
             HeldChannelImage: (m_hasTransferHeldChannels
             ? m_transferHeldChannels
             : m_channelReadHeld),
-            PendingDefaultChannelPress: [.. m_pendingDefaultChannelPress],
-            PendingDefaultChannelValue: [.. m_pendingDefaultChannelValue],
-            MotionRecency: [.. m_motionRecency],
+            PendingDefaultChannelPress: CopyInto(reuse: reuse.PendingDefaultChannelPress, source: m_pendingDefaultChannelPress),
+            PendingDefaultChannelValue: CopyInto(reuse: reuse.PendingDefaultChannelValue, source: m_pendingDefaultChannelValue),
+            MotionRecency: CopyInto(reuse: reuse.MotionRecency, source: m_motionRecency),
             PlanarRampRemainder: m_planarRampAccumulator.Remainder,
             DriveLongRemainder: m_driveLongAccumulator.Remainder,
             DriveLatRemainder: m_driveLatAccumulator.Remainder,
@@ -73,20 +78,21 @@ public sealed partial class WorldBody {
             LaneLatch: laneLatch,
             LaneFactHeld: laneFactHeld,
             LaneRecency: laneRecency,
-            ActionState: CaptureActionState(),
-            ActionStateDirty: [.. m_actionStateDirty],
-            ActionStateDirtyKind: [.. m_actionStateDirtyKind],
-            ActionStateDirtyOperand: [.. m_actionStateDirtyOperand],
-            DurableInputPresent: [.. m_durableInputPresent],
-            DurableInputValues: [.. m_durableInputValues],
-            DurableInputTimers: [.. m_durableInputTimers],
-            DurableInputWriters: [.. m_durableInputWriters],
+            ActionState: CaptureActionStateInto(reuse: reuse.ActionState),
+            ActionStateDirty: CopyInto(reuse: reuse.ActionStateDirty, source: m_actionStateDirty),
+            ActionStateDirtyKind: CopyInto(reuse: reuse.ActionStateDirtyKind, source: m_actionStateDirtyKind),
+            ActionStateDirtyOperand: CopyInto(reuse: reuse.ActionStateDirtyOperand, source: m_actionStateDirtyOperand),
+            DurableInputPresent: CopyInto(reuse: reuse.DurableInputPresent, source: m_durableInputPresent),
+            DurableInputValues: CopyInto(reuse: reuse.DurableInputValues, source: m_durableInputValues),
+            DurableInputTimers: CopyInto(reuse: reuse.DurableInputTimers, source: m_durableInputTimers),
+            DurableInputWriters: CopyInto(reuse: reuse.DurableInputWriters, source: m_durableInputWriters),
             DurableInputTick: m_durableInputTick,
             TapeIntents: tapeIntents,
             TapeRemainingTicks: tapeRemainingTicks,
             PendingContinuum: m_pendingContinuum
         );
     }
+
     /// <summary>Installs an adjacency arrival's already-evaluated motion segment and resolves it through this
     /// authority's own contact field. No input, action, timer, gravity, or motion-program operation is evaluated.</summary>
     public void ApplyContinuumTrajectory(in WorldContinuumTrajectory trajectory, int entityIndex, ulong destinationCompletedEngineTick) {
@@ -126,7 +132,7 @@ public sealed partial class WorldBody {
         // A refused sweep is a full block (WorldBody.SweepRefusal.cs): the arrival keeps the pose, velocity and contact
         // facts it was installed with, and only the segment's consumption below advances.
         if (resolution.Refusal != ContactRefusal.None) {
-            m_sweepRefusal = resolution.Refusal;
+            NoteSweepRefusal(refusal: resolution.Refusal);
         } else {
             m_previousPosition = trajectory.PreviousPosition;
             m_position = next;
@@ -242,8 +248,26 @@ public sealed partial class WorldBody {
     }
     /// <summary>Reads this body's whole register file out of the arena slot lanes, one raw value per slot.</summary>
     /// <returns>The lane image, parallel to the kit's compiled definitions.</returns>
-    public long[] CaptureActionState() {
-        var image = new long[m_actionStateDefinitions.Length];
+    public long[] CaptureActionState() => CaptureActionStateInto(reuse: null);
+
+    // An array of the given length: the reused one when it has that length, a fresh one otherwise.
+    private static T[] Reuse<T>(int length, T[]? reuse) => ((reuse?.Length == length)
+        ? reuse
+        : ((length == 0)
+            ? []
+            : new T[length]
+        )
+    );
+    // A copy of the source, written into the reused array when it has the source's length.
+    private static T[] CopyInto<T>(T[]? reuse, T[] source) {
+        var copy = Reuse(length: source.Length, reuse: reuse);
+
+        source.AsSpan().CopyTo(destination: copy);
+
+        return copy;
+    }
+    private long[] CaptureActionStateInto(long[]? reuse) {
+        var image = Reuse(length: m_actionStateDefinitions.Length, reuse: reuse);
 
         for (var slot = 0; (slot < image.Length); slot++) {
             image[slot] = ((m_stateLane is { } lane)
@@ -257,6 +281,7 @@ public sealed partial class WorldBody {
 
         return image;
     }
+
     /// <summary>Writes a previously captured lane image back into this body's slot lanes.</summary>
     /// <param name="image">The lane image, parallel to the kit's compiled definitions.</param>
     public void RestoreActionState(IReadOnlyList<long> image) {
