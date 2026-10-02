@@ -1,6 +1,6 @@
 # Cloud lane: value domains, review fixes
 
-**Your main:** `cloud/value-domains` (head `31b59a4cc`). Skills: `puck-world` and `rendering` (camera rigs, render bindings).
+**Your main:** `fleet/cloud-b` (Cloud B) (head `31b59a4cc`). Skills: `puck-world` and `rendering` (camera rigs, render bindings).
 
 The lane gives every bound render or camera scalar one domain per field. Load time refuses an out-of-domain value; at runtime the value is clamped statelessly and a one-shot diagnostic is reported. The lane exists because bound render scalars were unchecked: a softness of 0 or less leaves smoothstep undefined. It branches from batch C, so read its commits ahead of `origin/integration/batch-c` first. A Codex review found five merge blockers:
 
@@ -26,7 +26,7 @@ Then check every other site that compiles a bound scalar (camera, render, views,
 
 ## Rules for every cloud lane
 
-- **Your main is your `cloud/<lane>` branch** on `ByteTerrace/Puck`. Start from its head, commit there, and push plain fast-forwards to it; the owner pre-authorizes those pushes. Never push or merge any other branch, never `main`, never force-push, never delete a branch. The lead integrates your branch into `features/gfx-pipeline`.
+- **Your main is your `fleet/<session>` branch (Cloud A `fleet/cloud-a`, Cloud B `fleet/cloud-b`, Cloud C `fleet/cloud-c`)** on `ByteTerrace/Puck`. Start from its head, commit there, and push plain fast-forwards to it; the owner pre-authorizes those pushes. Never push or merge any other branch, never `main`, never force-push, never delete a branch. The lead integrates your branch into `features/gfx-pipeline`.
 - Read `CLAUDE.md`/`AGENTS.md` first. Before editing, load `verification`, `review-passes` and the skill that owns your area (named in your brief).
 - Machine: Linux, no GPU. Build with `dotnet build -c Release -m:4 -nodeReuse:false`; a full Release build needs `dotnet workload install wasm-tools` once per container. DXC compiles HLSL on Linux. The cloud container caps background commands at 2 h.
 - Every fix carries a law that fails without it. Prove the red leg by withholding the fix, then restore and touch the restored files, or MSBuild keeps the mutated DLL. Report each red leg's actual failure message.

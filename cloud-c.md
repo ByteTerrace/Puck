@@ -1,8 +1,8 @@
 # Cloud lane: wallpaper walls, review fixes
 
-**Your main:** `cloud/wallpaper-walls` (head `6979ad16b`). Skills: `rendering` (the SDF ISA, both interpreters, the C#/HLSL sync contract) and `sdf-authoring` (creation wallpaper groups).
+**Your main:** `fleet/cloud-c` (Cloud C) (head `6979ad16b`). Skills: `rendering` (the SDF ISA, both interpreters, the C#/HLSL sync contract) and `sdf-authoring` (creation wallpaper groups).
 
-The lane closes a soundness gap in the wallpaper fold's cell walls. Its rule: a fold builds only through a continuous group, the symmetry LOD is gone, and a creation's non-continuous group is refused where it enters. It sits on `bed61871c` (march-lod-2, in batch C). Read the commits in `bed61871c..cloud/wallpaper-walls` first. The review covered `9f536288c`; the head commit `6979ad16b` (authoring refusal) was not in the reviewed range, so self-review it too.
+The lane closes a soundness gap in the wallpaper fold's cell walls. Its rule: a fold builds only through a continuous group, the symmetry LOD is gone, and a creation's non-continuous group is refused where it enters. It sits on `bed61871c` (march-lod-2, in batch C). Read the commits in `bed61871c..fleet/cloud-c` first. The review covered `9f536288c`; the head commit `6979ad16b` (authoring refusal) was not in the reviewed range, so self-review it too.
 
 The fold exists in C# (`src/Puck.SignedDistance/SdfWallpaperFold.cs`) and in HLSL (`src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-map.hlsli`, `sdf-map-grad.hlsli`, `sdf-point.hlsli`). Every fix lands in both, per the sync contract in `rendering`. A Codex review found three merge blockers:
 
@@ -23,7 +23,7 @@ Strengthen the continuity probe so it covers finite and fractional limits and ti
 
 ## Rules for every cloud lane
 
-- **Your main is your `cloud/<lane>` branch** on `ByteTerrace/Puck`. Start from its head, commit there, and push plain fast-forwards to it; the owner pre-authorizes those pushes. Never push or merge any other branch, never `main`, never force-push, never delete a branch. The lead integrates your branch into `features/gfx-pipeline`.
+- **Your main is your `fleet/<session>` branch (Cloud A `fleet/cloud-a`, Cloud B `fleet/cloud-b`, Cloud C `fleet/cloud-c`)** on `ByteTerrace/Puck`. Start from its head, commit there, and push plain fast-forwards to it; the owner pre-authorizes those pushes. Never push or merge any other branch, never `main`, never force-push, never delete a branch. The lead integrates your branch into `features/gfx-pipeline`.
 - Read `CLAUDE.md`/`AGENTS.md` first. Before editing, load `verification`, `review-passes` and the skill that owns your area (named in your brief).
 - Machine: Linux, no GPU. Build with `dotnet build -c Release -m:4 -nodeReuse:false`; a full Release build needs `dotnet workload install wasm-tools` once per container. DXC compiles HLSL on Linux. The cloud container caps background commands at 2 h.
 - Every fix carries a law that fails without it. Prove the red leg by withholding the fix, then restore and touch the restored files, or MSBuild keeps the mutated DLL. Report each red leg's actual failure message.

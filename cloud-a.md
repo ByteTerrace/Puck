@@ -1,6 +1,6 @@
 # Cloud lane: certified physics, review fixes
 
-**Your main:** `cloud/certified-physics` (head `35e5ca8ae`). Skills: `maths-usage`, `maths-laws` (any `tests/Puck.Maths.Tests` edit), `rendering` (fixed-point SDF query evaluator).
+**Your main:** `fleet/cloud-a` (Cloud A) (head `35e5ca8ae`). Skills: `maths-usage`, `maths-laws` (any `tests/Puck.Maths.Tests` edit), `rendering` (fixed-point SDF query evaluator).
 
 The lane adds certified SDF bounds over a region, built on an outward-rounded interval type in `Puck.Maths`. On top of those bounds sit a certified sweep, line of sight, and a physics step proved clear before the contact solve. Read the ten commits ahead of `origin/features/gfx-pipeline` before starting. A Codex review found three merge blockers:
 
@@ -23,7 +23,7 @@ Then hunt the same three classes across the rest of the lane: precision dropped 
 
 ## Rules for every cloud lane
 
-- **Your main is your `cloud/<lane>` branch** on `ByteTerrace/Puck`. Start from its head, commit there, and push plain fast-forwards to it; the owner pre-authorizes those pushes. Never push or merge any other branch, never `main`, never force-push, never delete a branch. The lead integrates your branch into `features/gfx-pipeline`.
+- **Your main is your `fleet/<session>` branch (Cloud A `fleet/cloud-a`, Cloud B `fleet/cloud-b`, Cloud C `fleet/cloud-c`)** on `ByteTerrace/Puck`. Start from its head, commit there, and push plain fast-forwards to it; the owner pre-authorizes those pushes. Never push or merge any other branch, never `main`, never force-push, never delete a branch. The lead integrates your branch into `features/gfx-pipeline`.
 - Read `CLAUDE.md`/`AGENTS.md` first. Before editing, load `verification`, `review-passes` and the skill that owns your area (named in your brief).
 - Machine: Linux, no GPU. Build with `dotnet build -c Release -m:4 -nodeReuse:false`; a full Release build needs `dotnet workload install wasm-tools` once per container. DXC compiles HLSL on Linux. The cloud container caps background commands at 2 h.
 - Every fix carries a law that fails without it. Prove the red leg by withholding the fix, then restore and touch the restored files, or MSBuild keeps the mutated DLL. Report each red leg's actual failure message.
