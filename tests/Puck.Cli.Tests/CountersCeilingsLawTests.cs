@@ -278,6 +278,35 @@ public sealed class CountersCeilingsLawTests {
             }
         }
     }
+    // A record is all or nothing: when the backends disagree on a deterministic count the ceilings are not written, so a
+    // failed re-record leaves the committed ledger as it was and creates none where there was none.
+    [Fact]
+    public void ADisagreeingRecordWritesNothingAndLeavesTheExistingFileByteIdentical() {
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-ceilings-law-");
+
+        try {
+            var path = Path.Combine(path1: directory.FullName, path2: "counters.ceilings.json");
+            var absent = Path.Combine(path1: directory.FullName, path2: "absent.ceilings.json");
+            var disagreeing = Report(directx: Run(backend: "directx", dispatches: 2L), vulkan: Run(backend: "vulkan"));
+
+            CountersCeilings.Write(ceilings: Recorded, path: path);
+
+            var before = File.ReadAllBytes(path: path);
+
+            Assert.False(condition: CountersCommand.TryRecord(path: path, reason: out var reason, report: disagreeing));
+            Assert.Contains(actualString: reason, expectedSubstring: "the backends disagree on 1 deterministic count(s) or pass state(s)");
+            Assert.Equal(actual: File.ReadAllBytes(path: path), expected: before);
+
+            Assert.False(condition: CountersCommand.TryRecord(path: absent, reason: out _, report: disagreeing));
+            Assert.False(condition: File.Exists(path: absent));
+
+            // Agreeing backends record, and the file is what the recorder writes.
+            Assert.True(condition: CountersCommand.TryRecord(path: absent, reason: out var agreed, report: Report(vulkan: Run(backend: "vulkan"))), userMessage: agreed);
+            Assert.Equal(actual: File.ReadAllBytes(path: absent), expected: before);
+        } finally {
+            directory.Delete(recursive: true);
+        }
+    }
     [Fact]
     public void AnotherWorkloadOrExtentIsRefusedByName() {
         var report = Report(vulkan: Run(backend: "vulkan"));

@@ -119,6 +119,45 @@ internal static class CountersCommand {
         ));
     }
 
+    /// <summary>Records a report's counts as the ceilings in a file, writing nothing unless the whole record is sound: the
+    /// backends agree on every deterministic count and pass state, and the recorded ceilings hold the report they were
+    /// recorded from. A refused record leaves an existing file as it was.</summary>
+    /// <param name="report">The report.</param>
+    /// <param name="path">The ceilings file to write.</param>
+    /// <param name="reason">Why nothing was written, or empty.</param>
+    /// <returns><see langword="true"/> when the ceilings were written.</returns>
+    internal static bool TryRecord(WorldCountersReport report, string path, out string reason) {
+        var disagreements = CountersComparison.AcrossBackends(
+            left: report.Runs[0],
+            right: report.Runs[1]
+        );
+
+        if (disagreements.Count > 0) {
+            reason = $"the backends disagree on {disagreements.Count} deterministic count(s) or pass state(s), so no ceilings are recorded";
+
+            return false;
+        }
+
+        var ceilings = CountersCeilings.Record(report: report);
+        var verdict = CountersCeilings.Check(
+            ceilings: ceilings,
+            report: report
+        );
+
+        if (verdict.Failures.Count > 0) {
+            reason = $"the recorded ceilings fail their own run ({verdict.Failures[0]}), so no ceilings are recorded";
+
+            return false;
+        }
+
+        CountersCeilings.Write(
+            ceilings: ceilings,
+            path: path
+        );
+        reason = string.Empty;
+
+        return true;
+    }
     private static int Report(IReadOnlyList<string> differences) {
         foreach (var difference in differences) {
             Console.Out.WriteLine(value: $"{Verb}: {difference}");
@@ -277,11 +316,19 @@ internal static class CountersCommand {
         ));
 
         if (record) {
-            CountersCeilings.Write(
-                ceilings: CountersCeilings.Record(report: report),
-                path: ceilingsFile
-            );
-            Console.Out.WriteLine(value: $"{Verb}: ceilings {CliPaths.ToDisplay(fullPath: ceilingsFile)}");
+            if (TryRecord(
+                path: ceilingsFile,
+                reason: out var refusal,
+                report: report
+            )) {
+                Console.Out.WriteLine(value: $"{Verb}: ceilings {CliPaths.ToDisplay(fullPath: ceilingsFile)}");
+            } else {
+                Console.Out.WriteLine(value: $"{Verb}: ceilings {CliPaths.ToDisplay(fullPath: ceilingsFile)} not written: {refusal}");
+
+                if (differences.Count == 0) {
+                    differences.Add(item: refusal);
+                }
+            }
         }
         if (ceilings is not null) {
             var verdict = CountersCeilings.Check(
@@ -349,7 +396,8 @@ internal static class CountersCommand {
             each required zero broken, each ceiling not measured or measured as another class, and each count no
             ceiling was recorded for. --record writes the report's counts as the ceilings instead, each reading its
             own ceiling, every kind of a pass that did not execute as a zero, and each zero of a kernel kind as a
-            required zero.
+            required zero. A record writes nothing, and leaves an existing ceilings file as it was, when the
+            backends disagree on a deterministic count or pass state, which then fails the run as it does without --record.
 
             Performance is judged by these counts, never by time; 'puck bench' is the only wall-clock tool.
 

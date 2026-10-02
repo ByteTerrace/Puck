@@ -1217,7 +1217,8 @@ on the device its backend was recorded on, except a ceiling carrying
 evaluations, which the recorder sets and the model validates), a structural
 contract that is judged on every device; the foreign-device note says how many
 counts were not judged and how many zeros still were. `--record` rewrites the file, only
-in the change that explains the move. It needs a GPU on both backends, so it
+in the change that explains the move, and writes nothing when the backends
+disagree on a deterministic count. It needs a GPU on both backends, so it
 runs with the other GPU checks, never beside a build.
 
 **Qualification judges a published package, not a change.** `puck qualify
