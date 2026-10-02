@@ -13,9 +13,9 @@ adversarial review's job, not this file's.
 
 | leg kind | flavor | legs | statements |
 | --- | --- | --- | --- |
-| classical | — | 847 | 559 |
+| classical | — | 848 | 560 |
 | presented-twin | — | 9 | 8 |
-| in-tree-independent | — | 32 | 26 |
+| in-tree-independent | — | 33 | 27 |
 | shared-substrate | fused-substrate | 36 | 34 |
 | shared-substrate | shared-exact-kernel | 19 | 18 |
 | shared-substrate | delegation-twin | 46 | 42 |
@@ -24,14 +24,14 @@ adversarial review's job, not this file's.
 | shared-substrate | shared-upstream | 22 | 15 |
 | relative-canary | — | 18 | 17 |
 | structural | — | 1201 | 606 |
-| **total** | | **2340** | **785** |
+| **total** | | **2342** | **786** |
 
 ## Counts by surface
 
 | surface | statements | agreement legs | structural legs | statements with no independent leg |
 | --- | --- | --- | --- | --- |
 | law: Deep | 112 | 148 | 123 | 21 |
-| law: Default | 644 | 920 | 1077 | 189 |
+| law: Default | 645 | 922 | 1077 | 189 |
 | law: Exhaustive | 7 | 23 | 11 | 1 |
 | law: Smoke | 22 | 30 | 8 | 2 |
 
@@ -2278,6 +2278,8 @@ adversarial review's job, not this file's.
 | vector.adoption-ladder | law: Default | classical | — | FixedVector3.FromVector3 over the twenty-row binary32 ladder — both signed zeros, both unit values, the 2⁻¹⁶ quantum, three exact scaled HALVES and their negatives resolving ties to even in both directions, 0.1f, both float extremes, both infinities and a NaN | Subjects.AdoptionBinary32Ladder, a constant table of IEEE-754 binary32 bit patterns fed in through BitConverter.Int32BitsToSingle and compared as exact int64 raws, so no floating-point arithmetic authors an operand or an expectation | — | hand-derived from the binary32 layout and the Q48.16 scale: a binary32 widens to binary64 exactly and the 2¹⁶ scale is a pure exponent shift, so the scaled value is EXACT and the conversion is one round-half-to-even of that exact dyadic followed by saturation — every expectation is that integer, resolved by hand. Shares no code and no substrate with the subject |
 | vector.adoption-ladder | law: Default | structural | — | the ties are decided in three different directions on the SAME magnitude class — scaled ½ rounds down to 0, 1½ rounds up to 2, and 2½ rounds down to 2 — so a nearest-away-from-zero, a truncation and a floor are each excluded rather than merely unobserved; the saturating rows exclude a wrapping cast at both ends, and negative zero must land on 0 rather than carrying a sign into a carrier that has none | — | — | — |
 | vector.adoption-ladder | law: Default | structural | — | the three lanes are carried in order — each ladder row is placed at X, then Y, then Z with two distinct sentinels in the other lanes, and both the row and the sentinels land at exactly their own lanes | — | — | — |
+| vector.compare-length-matches-the-squares | law: Default | classical | — | FixedVector3.CompareLengthTo over pairs drawn across the whole raw carrier (the edge battery reaches three MinValue lanes, where the sum of squares is 3·2¹²⁶): each first vector against the drawn second, against a permuted, sign-flipped copy of itself (the same sum by another route, so the answer is zero), and against itself nudged one raw in each lane in turn (sums 2\|x\| ± 1 apart) | Oracles.SquaredNorm, the exact sum of squares in BigInteger, compared with BigInteger.CompareTo. The subject sums 128-bit squares instead; a sum narrowed, wrapped or rounded first fails at the one-raw neighbours or the MinValue edge, and a sign confusion fails antisymmetry | — | — |
+| vector.compare-length-matches-the-squares | law: Default | in-tree-independent | — | the same pairs against the shipped Length: the vector CompareLengthTo calls longer never reports the shorter Length | FixedVector3.Length, the rounded saturating root behind the call site that moved onto CompareLengthTo (a capsule's broadphase radius takes the longer endpoint's Length, where it took the larger of two Lengths); the property is what makes that choice bit-identical | — | Length's own envelope is pinned by vector.space-full-width-oracle-and-length-policy |
 | vector.componentwise-helpers-vs-oracle | law: Default | classical | — | FixedVector3 op_CheckedAddition, op_CheckedSubtraction and op_CheckedUnaryNegation, every component, and the refusal | The exact BigInteger sum, difference and negation per lane: the operator must answer them exactly when all three fit the signed 64-bit raw and throw OverflowException when any one does not. The claim decides representability by a BigInteger range comparison, sharing nothing with the branded scalar operators the subject lifts | — | — |
 | vector.componentwise-helpers-vs-oracle | law: Default | classical | — | FixedVector3 op_CheckedMultiply by a scalar, every component, and the refusal | Oracles.ExactRoundedProduct: one ties-to-even rounding of the exact BigInteger product, UNWRAPPED, so representability is decided on the rounded value itself. The operator must answer it exactly when all three lanes fit and throw OverflowException otherwise | — | — |
 | vector.componentwise-helpers-vs-oracle | law: Default | classical | — | FixedVector3.Multiply (the Hadamard product) and FixedVector3.Divide, every component | Oracles.RoundDyadic of the exact BigInteger lane product and Oracles.RoundDyadicRatio of the exact lane ratio, each one ties-to-even rounding at shift 16, wrapped to the carrier. ENVELOPE: a sampled zero divisor lane is mapped to one raw unit by Subjects.NonZeroDivisor before either side reads it; the zero divisor is the scalar operator's refusal and belongs to its own law | — | — |

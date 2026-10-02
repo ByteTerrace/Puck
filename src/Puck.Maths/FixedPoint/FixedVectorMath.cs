@@ -353,6 +353,19 @@ internal static class FixedVectorMath {
 
         return (((Square(value: x) + Square(value: y)) + Square(value: z)) <= ((limit * limit) + limit));
     }
+    // The sign of (x² + y² + z²) − (otherX² + otherY² + otherZ²) on the exact raw sums, each at most 3·2¹²⁶ and so
+    // exact in 128 bits for every pair. The reported magnitude rounds and saturates a monotone root of the sum, so the
+    // side this compare calls longer never reports the shorter magnitude.
+    internal static int CompareMagnitude(long x, long y, long z, long otherX, long otherY, long otherZ) {
+        var sum = ((Square(value: x) + Square(value: y)) + Square(value: z));
+        var otherSum = ((Square(value: otherX) + Square(value: otherY)) + Square(value: otherZ));
+
+        return ((sum < otherSum)
+            ? -1
+            : ((sum > otherSum)
+                ? 1
+                : 0));
+    }
     internal static bool TryMagnitude(long x, long y, out FixedQ4816 result) {
         var squaredSum = (Square(value: x) + Square(value: y));
 

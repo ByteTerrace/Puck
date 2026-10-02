@@ -13,6 +13,12 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.4,
         NeighborhoodFraction: 0.3
     );
+    private static readonly Domain VectorCompareLength = new(
+        Key: "vector-compare-length",
+        Block: 512,
+        EdgeFraction: 0.4,
+        NeighborhoodFraction: 0.3
+    );
     private static readonly Domain QuaternionArc = new(
         Key: "quaternion-arc",
         Block: 512,
@@ -95,6 +101,12 @@ internal static partial class LawRegistry {
             claim: Subjects.FixedVectorIsWithinMatchesLength,
             domain: VectorWithin,
             id: "vector.is-within-matches-length",
+            width: 3
+        ),
+        SweptCase(
+            claim: Subjects.FixedVectorCompareLengthMatchesTheSquares,
+            domain: VectorCompareLength,
+            id: "vector.compare-length-matches-the-squares",
             width: 3
         ),
         Case(

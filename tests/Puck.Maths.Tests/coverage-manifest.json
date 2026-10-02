@@ -9119,6 +9119,13 @@
     },
     {
       "CoveredBy": [
+        "vector.compare-length-matches-the-squares"
+      ],
+      "Id": "Puck.Maths.FixedVector3.CompareLengthTo(Puck.Maths.FixedVector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "deep.vector-cross-vs-oracle",
         "vector.construction-and-refusals",
         "vector.exact-algebra-on-the-sublattice",
