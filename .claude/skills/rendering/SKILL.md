@@ -1,6 +1,6 @@
 ---
 name: rendering
-description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and camera views, how world render data reaches SdfFrame, Puck.Shaders packages and pipelines, and the views.post post passes. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
+description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and camera views, how world render data reaches SdfFrame, Puck.Shaders packages, pipelines and the frame-graph runtime, and views.post passes. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
 ---
 
 # Rendering
@@ -1041,8 +1041,8 @@ These are one-line cautions; the owning pages hold the derivations.
 ## Performance work
 
 Judged by code, disassembly, and deterministic work counters — never
-wall-clock or GPU timestamps. Measure before and after on the same scene,
-without competing builds or GPU workloads:
+wall-clock or GPU timestamps. Measure before and after on the same scene, as
+one GPU run at a time ([`verification`](../verification/SKILL.md#gpu-legs)):
 
 ```text
 world.cadence off      # a still scene otherwise skips frames and reads near zero
@@ -1782,9 +1782,24 @@ shader of its own; the Direct3D 12 one binds a set of a pool admitted into the
 device's heaps. No Puck assembly may
 import `d3dcompiler_*.dll` (`NoDeviceShaderCompileLawTests`).
 
+## Render-graph runtime contracts
+
+[references/runtime-contracts.md](references/runtime-contracts.md) states the
+five invariants every change to the frame-graph runtime keeps, with the code
+and laws that hold each, where the code is weaker than the rule, and the
+violations a review hunts: image lifetime leased per image and per reader;
+nothing resolving silently to nothing; a capture's pixels pinned or copied;
+render completion as rendered, not yet renderable or refused, with a permanent
+condition always refused; and history epochs that reset for unseen views but
+never for cadence gaps. Read it before changing `RenderGraphRuntime`,
+`ShaderPipelineRenderNode`, a package recorder, a capture path or a host's
+pacing, and when briefing a review of such a change.
+
 ## Verifying
 
-Say plainly what a change was not checked against. Only `puck parity`'s
+The [`verification`](../verification/SKILL.md) skill owns the gate route, the
+CLI copy, red-leg proofs, GPU grants and the flake rule; this section owns which
+checks a render change owes. Say plainly what a change was not checked against. Only `puck parity`'s
 stations gate GPU kernel behavior by machine.
 
 ```bash
@@ -1931,3 +1946,5 @@ runtime's convergence laws hold these. Run the `temporal-jitter` and
 | `maths-usage` | Fixed-point primitives and determinism for the query evaluator and anything simulation-facing. |
 | `dotnet10-performance` | C# hot paths on the host side (packing, emission, grid building). |
 | `documentation` | Editing the rendering handbook, reference pages, or READMEs. |
+| `verification` | Running gates, proving red legs, GPU legs under a grant, flake versus failure. |
+| `review-passes` | Briefing a review-and-fix pass over a render lane; the runtime contracts supply its hunt list. |
