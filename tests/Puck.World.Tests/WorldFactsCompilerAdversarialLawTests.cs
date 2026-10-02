@@ -27,7 +27,7 @@ public sealed class WorldFactsCompilerAdversarialLawTests {
     );
 
     [Fact]
-    public void BindableCameraScalars_ExportTheirNumberOrStringWireShape() {
+    public void BindableCameraScalars_ExportTheirNumberStringOrKeyedWireShape() {
         var split = WorldSchema.Export(postProcessPackages: []);
         var definitions = Assert.IsType<JsonObject>(@object: split.Common["$defs"]);
         var orbit = Assert.IsType<JsonObject>(@object: definitions["WorldCameraProgramOpOrbit"]);
@@ -35,13 +35,20 @@ public sealed class WorldFactsCompilerAdversarialLawTests {
 
         foreach (var property in new[] { "yaw", "pitch" }) {
             var node = Assert.IsType<JsonObject>(@object: properties[property]);
-            var types = Assert.IsType<JsonArray>(@object: node["type"]);
 
-            Assert.Equal(
-                expected: ["number", "string"],
-                actual: types.Select(selector: static type => type!.GetValue<string>())
-            );
+            Assert.Equal(expected: "#/$defs/BindableAngle", actual: node["$ref"]!.GetValue<string>());
         }
+
+        // A number (a literal), a string (a state binding) or an object (keys on a clock); an angle takes the scalar's
+        // wire form.
+        var arms = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: definitions["BindableAngle"])["anyOf"]);
+
+        Assert.Equal(expected: "number", actual: arms[0]!["type"]!.GetValue<string>());
+        Assert.Equal(expected: "string", actual: arms[1]!["type"]!.GetValue<string>());
+
+        var keyed = Assert.IsType<JsonObject>(@object: definitions[arms[2]!["$ref"]!.GetValue<string>()["#/$defs/".Length..]]);
+
+        Assert.Equal(expected: ["clock", "keys"], actual: Assert.IsType<JsonObject>(@object: keyed["properties"]).Select(selector: static member => member.Key));
     }
     [Fact]
     public void EmptyAnyPredicate_RefusesRatherThanCompilingAnAlwaysFalseDeadRule() => Refuses(

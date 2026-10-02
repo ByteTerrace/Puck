@@ -18,10 +18,18 @@ public static class WorldDocumentEmitterUnits {
     // Qualified `call.argument` keys only: `pitch`/`yaw` are radians as `orbit` arguments and degrees-or-anything
     // as a bare property elsewhere, so a bare name must never reach the radians conversion.
     private static readonly HashSet<string> RadiansCallArguments = new(comparer: StringComparer.Ordinal) {
-        "orbit.pitch", "orbit.yaw",
+        "orbit.pitch", "orbit.yaw", "sunDisc.radius", "clouds.curl",
+    };
+    // An angle a light or the sky keeps in radians under a name that does not say so, written in degrees.
+    private static readonly HashSet<string> RadiansFields = new(comparer: StringComparer.Ordinal) {
+        "angularRadius",
     };
     private static readonly HashSet<string> MetersFields = new(comparer: StringComparer.Ordinal) {
         "position", "scale", "radius", "margin", "reach", "standoff", "cellSize", "spacing", "distance",
+    };
+    // A key's time on its clock: seconds, minutes or hours on a clock whose span reads as a time of day.
+    private static readonly HashSet<string> SecondsFields = new(comparer: StringComparer.Ordinal) {
+        "at",
     };
     private static readonly HashSet<string> FractionFields = new(comparer: StringComparer.Ordinal) {
         "alpha", "opacity", "fraction", "ratio", "percent", "chance", "probability",
@@ -53,16 +61,22 @@ public static class WorldDocumentEmitterUnits {
         ) {
             return UnitDimension.Degrees;
         }
-        if (bare.EndsWith(
+        if (
+            RadiansFields.Contains(item: bare) ||
+            bare.EndsWith(
             comparisonType: StringComparison.Ordinal,
             value: "Radians"
-        )) {
+        )
+        ) {
             return UnitDimension.Radians;
         }
-        if (bare.EndsWith(
+        if (
+            SecondsFields.Contains(item: bare) ||
+            bare.EndsWith(
             comparisonType: StringComparison.Ordinal,
             value: "Seconds"
-        )) {
+        )
+        ) {
             return UnitDimension.Seconds;
         }
         if (

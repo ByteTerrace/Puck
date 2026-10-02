@@ -1,5 +1,4 @@
 using System.Globalization;
-using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.World.Server;
 
@@ -9,9 +8,9 @@ namespace Puck.World;
 /// The <c>render.lighting</c>/<c>render.sky</c>/<c>render.environment</c>/<c>render.grounding</c>/
 /// <c>render.tonemap</c> read-back: <c>world.lighting</c> reports every authored light by slot, the curvature
 /// enrichment, every sky layer, the studio-reflection softbox count and horizon colors, the grounding
-/// strength/radius, the tonemap mode, and the state row a <c>render.cycle</c> keys them on. The sections are
-/// authored through <c>world.row.set render</c>; every field is optional and an absent one reads <c>default</c>,
-/// which is the engine's pinned value for that field of that kind, not zero.
+/// strength/radius, the tonemap mode, and the clock and key count of each keyed section; a keyed value reads as its
+/// clock and key count. The sections are authored through <c>world.row.set render</c>; every field is optional and an
+/// absent one reads <c>default</c>, which is the engine's pinned value for that field of that kind, not zero.
 /// </summary>
 public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
     private static string Describe(float? value) => ((value is { } number)
@@ -35,23 +34,64 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority)
         ? number.ToString(provider: CultureInfo.InvariantCulture)
         : "default"
     );
-    private static string Describe(BindableColor? color) => (color?.Raw ?? "default");
-    private static string Describe(DocumentVector3? vector) => ((vector is { } value)
-        ? string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"{value.X:0.####},{value.Y:0.####},{value.Z:0.####}"
-        )
+    private static string Describe(BindableColor? color) => ((color is { } value)
+        ? value.ToString()
         : "default"
     );
-    private static string Describe(DocumentVector2? vector) => ((vector is { } value)
+    private static string Describe(BindableScalar? value) => (value switch {
+        null => "default",
+        { Keys: { } keys } => keys.ToString(),
+        { Binding: { } binding } => binding,
+        { Literal: { } literal } => Describe(value: ((float?)literal)),
+        _ => "default",
+    });
+    private static string Describe(BindableAngle? value) => Describe(value: value?.Value);
+    private static string Describe(BindableDirection? direction) => ((direction is { } value)
+        ? ((value.Literal is { } literal)
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{literal.X:0.####},{literal.Y:0.####},{literal.Z:0.####}"
+            )
+            : value.ToString())
+        : "default"
+    );
+    private static string Describe(BindableVector2? vector) => ((vector is { } value)
+        ? ((value.Literal is { } literal)
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{literal.X:0.####},{literal.Y:0.####}"
+            )
+            : value.ToString())
+        : "default"
+    );
+    // Whether a gain can be positive: a literal or any key above zero, or a binding, whose value the echo cannot know.
+    private static bool MayBePositive(BindableScalar? value) => (
+        (value?.Binding is not null) ||
+        (value?.AuthoredValues().Any(predicate: static number => (number > 0f)) ?? false)
+    );
+    private static string DescribeKeys(string? clock, int count) => ((clock is not null)
         ? string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"{value.X:0.####},{value.Y:0.####}"
+            handler: $"{clock}/{count}"
         )
+        : "none"
+    );
+    private static string Describe(BindableVector3? vector) => ((vector is { } value)
+        ? ((value.Literal is { } literal)
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{literal.X:0.####},{literal.Y:0.####},{literal.Z:0.####}"
+            )
+            : value.ToString())
         : "default"
     );
     private static CommandEcho DescribeLayer(CommandEcho echo, int index, WorldRenderSkyLayer layer) {
-        echo = echo.Head(head: $"sky[{index}]");
+        echo = echo
+            .Head(head: $"sky[{index}]")
+            .Field(
+            key: "name",
+            value: (layer.LayerName ?? "none")
+        );
 
         switch (layer) {
             case WorldRenderSkyLayer.Gradient gradient: {
@@ -178,7 +218,12 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority)
         }
     }
     private static CommandEcho DescribeLight(CommandEcho echo, int index, WorldRenderLight light) {
-        echo = echo.Head(head: $"lights[{index}]");
+        echo = echo
+            .Head(head: $"lights[{index}]")
+            .Field(
+            key: "name",
+            value: (light.LightName ?? "none")
+        );
 
         return (light switch {
             WorldRenderLight.Directional directional => echo
@@ -188,7 +233,7 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority)
         )
                 .Field(
             key: "direction",
-            value: Describe(vector: directional.Direction)
+            value: Describe(direction: directional.Direction)
         )
                 .Field(
             key: "color",
@@ -350,7 +395,7 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority)
             // The three gains share the runtime gate: all-zero costs the renderer nothing at all.
             .Field(
             key: "active",
-            value: (((curvature?.Cavity ?? 0f) > 0f) || ((curvature?.Rim ?? 0f) > 0f) || ((curvature?.Ink ?? 0f) > 0f))
+            value: (MayBePositive(value: curvature?.Cavity) || MayBePositive(value: curvature?.Rim) || MayBePositive(value: curvature?.Ink))
         )
             .Segment()
             .Head(head: "sky")
@@ -397,32 +442,29 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority)
             value: (definition.Render.Tonemap ?? WorldTonemap.None).ToString()
         )
             .Segment()
-            .Head(head: "cycle");
-
-        return ((definition.Render.Cycle is { } cycle)
-            ? echo
-                .Field(
-                key: "state",
-                value: cycle.State
+            .Head(head: "keys")
+            .Field(
+            key: "lighting",
+            value: DescribeKeys(
+                clock: lighting?.Clock,
+                count: (lighting?.Keys?.Count ?? 0)
             )
-                .Field(
-                key: "keys",
-                value: cycle.Keys.Count
+        )
+            .Field(
+            key: "sky",
+            value: DescribeKeys(
+                clock: definition.Render.Sky?.Clock,
+                count: (definition.Render.Sky?.Keys?.Count ?? 0)
             )
-                .Close()
-            : echo
-                .Field(
-                key: "state",
-                value: "none"
-            )
-                .Close()
         );
+
+        return echo.Close();
     }
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return authority.CreateServerQueryCommand(
-            description: "Reports the render.lighting, render.sky, render.environment, render.grounding, and render.tonemap census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): every light by slot with its kind and fields, the stylized curvature enrichment and whether its runtime gate is open, every sky layer by index, the studio-reflection softbox count and horizon colors, the grounding strength/radius, the tonemap mode, and the state row a render.cycle keys them on. An unauthored field reads 'default' — the engine's pinned value for it, not zero.",
+            description: "Reports the render.lighting, render.sky, render.environment, render.grounding, and render.tonemap census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): every light by slot with its kind and fields, the stylized curvature enrichment and whether its runtime gate is open, every sky layer by index, the studio-reflection softbox count and horizon colors, the grounding strength/radius, the tonemap mode, and the clock and key count of each keyed section. A keyed value reads keys(clock: <name>, <n> keys); an unauthored field reads 'default' — the engine's pinned value for it, not zero.",
             describe: server => DescribeLighting(definition: server.Definition),
             name: "world.lighting"
         );

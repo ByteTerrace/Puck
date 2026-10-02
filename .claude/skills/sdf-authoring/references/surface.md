@@ -194,7 +194,9 @@ shadow. An `anchor` must name an entity, an entity part, or a placement frame,
 so a light can ride a body.
 
 `render.lighting.curvature` adds `cavity`, `rim`, `ink`, `inkLow`, `inkHigh`, and
-`inkColor`; `inkLow` must be strictly below `inkHigh`. All three gains at zero
+`inkColor`; `inkLow` must be strictly below `inkHigh` wherever they resolve, so
+keyed ends are judged between keys as well as at them, and neither end binds a
+state row. All three gains at zero
 closes the gate.
 
 ### Environment

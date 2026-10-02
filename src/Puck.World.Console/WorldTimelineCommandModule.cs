@@ -1,6 +1,7 @@
 using System.Globalization;
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.World.Client;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -8,9 +9,14 @@ namespace Puck.World;
 /// <summary>
 /// The <c>timeline</c> read-back: <c>world.timeline</c> reports every named clock with its source (the tick, with its
 /// period and start in exact engine ticks, or a state row), its span, and, for a tick clock, its phase and reading at
-/// the authority's completed engine tick. The section is authored through <c>world.row.set timeline</c>.
+/// the authority's completed engine tick, then how many keyed values the presentation has resolved
+/// (<see cref="WorldStateMirror.KeyedResolutions"/>), which rises only while a clock a key reads moves. The section is
+/// authored through <c>world.row.set timeline</c>.
 /// </summary>
-public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
+/// <param name="authority">The console authority whose world's clocks are reported.</param>
+/// <param name="presentation">The presentation's state mirror, whose keyed resolutions are reported, or
+/// <see langword="null"/> for a host that presents nothing.</param>
+public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority, WorldStateMirror? presentation = null) : ICommandModule {
     private static string Number(double value) => value.ToString(
         format: "0.######",
         provider: CultureInfo.InvariantCulture
@@ -19,9 +25,11 @@ public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority)
     /// <summary>Returns the <c>world.timeline</c> echo of a definition's clocks at an engine tick.</summary>
     /// <param name="definition">The definition whose <c>timeline</c> section is echoed.</param>
     /// <param name="engineTick">The completed engine tick a tick clock's phase is read at.</param>
+    /// <param name="keyedResolutions">The keyed values the presentation has resolved, or <see langword="null"/> when
+    /// nothing presents.</param>
     /// <returns>The echo line.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static string Describe(WorldDefinition definition, ulong engineTick) {
+    public static string Describe(WorldDefinition definition, ulong engineTick, long? keyedResolutions = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         var clocks = (definition.Timeline.Clocks ?? []);
@@ -33,6 +41,12 @@ public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority)
             .Field(
             key: "engineTick",
             value: engineTick.ToString(provider: CultureInfo.InvariantCulture)
+        )
+            .Field(
+            key: "keyedResolutions",
+            value: ((keyedResolutions is { } count)
+                ? count.ToString(provider: CultureInfo.InvariantCulture)
+                : "none")
         );
 
         foreach (var clock in clocks) {
@@ -85,10 +99,11 @@ public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority)
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return authority.CreateServerQueryCommand(
-            description: "Reports the timeline section's clocks (Immediate; the stdin barrier makes it read the settled state after any pending mutation): each clock's span and source, a tick clock's period and start in engine ticks with its phase and reading at the authority's completed engine tick, or a state clock's row.",
+            description: "Reports the timeline section's clocks (Immediate; the stdin barrier makes it read the settled state after any pending mutation): each clock's span and source, a tick clock's period and start in engine ticks with its phase and reading at the authority's completed engine tick, or a state clock's row; and how many keyed values the presentation has resolved, which rises only while a clock a key reads moves.",
             describe: server => Describe(
                 definition: server.Definition,
-                engineTick: server.CompletedEngineTicks
+                engineTick: server.CompletedEngineTicks,
+                keyedResolutions: presentation?.KeyedResolutionCount
             ),
             name: "world.timeline"
         );

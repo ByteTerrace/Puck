@@ -517,7 +517,11 @@ public static class WorldBootComposition {
         // The render.lighting read-back — world.lighting. The fields themselves are authored through
         // world.row.set render.
         services.AddSingleton<ICommandModule, WorldLightingCommandModule>();
-        services.AddSingleton<ICommandModule, WorldTimelineCommandModule>();
+        // world.timeline reads the clocks off the authority and the keyed resolutions off the client's state mirror.
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldTimelineCommandModule(
+            authority: sp.GetRequiredService<IWorldConsoleAuthority>(),
+            presentation: sp.GetRequiredService<WorldClient>().StateMirror
+        ));
         // The inhabitation + creation-facet READ-BACK surface — world.inhabitants, world.faces,
         // world.attachments, world.portals. The facets themselves are authored through
         // world.row.set placements <json>.
