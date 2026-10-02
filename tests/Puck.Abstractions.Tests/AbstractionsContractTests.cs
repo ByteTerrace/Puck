@@ -24,7 +24,7 @@ public sealed class AbstractionsContractTests {
         ));
     }
     [Fact]
-    public void ASurfaceCarriesTheTwoEightBitOrdersAndASameDeviceImageTheFloatWorkingFormatsToo() {
+    public void ASharedTextureCarriesTheTwoEightBitOrdersAndCpuPixelsAndASameDeviceImageTheFloatFormatsToo() {
         foreach (var format in Enum.GetValues<GpuPixelFormat>()) {
             Assert.Equal(
                 expected: (format is GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm),
@@ -51,6 +51,22 @@ public sealed class AbstractionsContractTests {
             height: 1,
             sharedHandle: 23,
             width: 1
+        ));
+        // A capture of an HDR display hands its pixels over in half floats, eight bytes a pixel.
+        Assert.Equal(
+            actual: Surface.CpuPixels(
+                format: GpuPixelFormat.R16G16B16A16Float,
+                height: 1,
+                pixels: new byte[16],
+                width: 2
+            ).Format,
+            expected: GpuPixelFormat.R16G16B16A16Float
+        );
+        _ = Assert.Throws<ArgumentException>(testCode: () => Surface.CpuPixels(
+            format: GpuPixelFormat.R16G16B16A16Float,
+            height: 1,
+            pixels: new byte[8],
+            width: 2
         ));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => Surface.CpuPixels(
             format: GpuPixelFormat.R8G8B8A8Srgb,

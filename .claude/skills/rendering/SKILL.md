@@ -1,6 +1,6 @@
 ---
 name: rendering
-description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and camera views, how world render data reaches SdfFrame, Puck.Shaders packages and pipelines, and the views.post post passes. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
+description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and camera views, how world render data reaches SdfFrame, Puck.Shaders packages, pipelines and the frame-graph runtime, and views.post passes. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
 ---
 
 # Rendering
@@ -35,7 +35,7 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | Image sources and producers | `src/Puck.Abstractions/Sources` (contract, upload layout, conversion reference, verdict); `src/Puck.Shaders/Assets/Shaders/Sources` (conversion kernels); `WorldImageProducerVocabulary`/`WorldImageProducerSettings` (`src/Puck.World.Schema`); `WorldImageProducers`, `WorldCaptureGate` (`src/Puck.World.Client/Sources`); `WorldCaptureFills`, `WorldScreenBinder.Producers.cs` (`src/Puck.World`) | [the World guide's image producers](../../../src/Puck.World/README.md#image-producers), [rendering plan P12](../../../docs/plans/rendering.md#p12--image-sources) |
 | Backends | `src/Puck.Vulkan`, `src/Puck.DirectX` | [contributing: GPU support](../../../docs/development/contributing.md#gpu-support-and-shader-builds), [Vulkan](../../../docs/rendering/vulkan.md), [Direct3D 12](../../../docs/rendering/directx.md) |
 
-Before adding a mechanism, find the existing one (`CLAUDE.md` rule 8): ask the
+Before adding a mechanism, find the existing one (`AGENTS.md` rule 8): ask the
 code with `puck references`, `puck declarations`, or `puck search -M 0` via the
 `symbol-analysis` and `content-search` skills.
 
@@ -237,8 +237,10 @@ These are one-line cautions; the owning pages hold the derivations.
   Direct3D 12 hardware and WARP; a fixture regeneration is checked there on the
   GPU.
 - **One pixel-format vocabulary.** `GpuPixelFormat` is the format of a GPU
-  image, a swapchain, a `Surface` (which admits only `R8G8B8A8Unorm` and
-  `B8G8R8A8Unorm`, `Surface.IsSurfaceFormat`) and a baked texture's levels;
+  image, a swapchain, a `Surface` (whose shared texture admits only
+  `R8G8B8A8Unorm` and `B8G8R8A8Unorm`, `Surface.IsSurfaceFormat`, and whose CPU
+  pixels and same-device image the float formats too, `Surface.IsImageFormat`)
+  and a baked texture's levels;
   `GpuPixelFormats.UnitBytes` is the one statement of a texel's or block's
   bytes, which the codecs, `LevelByteLength` and the pipeline budget read. Never
   add a second format enum or a conversion between two; a new format is a member
@@ -432,8 +434,23 @@ These are one-line cautions; the owning pages hold the derivations.
   An uploaded
   source's region layout and the conversion kernels are a
   sync pair ([references/sync-pairs.md](references/sync-pairs.md#image-sources));
-  a change to either moves `ImageSourceConversionLawTests`, the
-  `source-conversion` canary and `SourceConversionCanaryFixtureTests` together.
+  a change to either moves `ImageSourceConversionLawTests`,
+  `ImageSourceWorkingSpaceLawTests`, the `source-conversion` canary and
+  `SourceConversionCanaryFixtureTests` together. Every conversion writes
+  working values; `source-transfer` writes them relative to the host's paper
+  white, the pass-block value `SourceConversionPackage` writes each frame, so
+  an HDR sample shows at its own luminance. A desktop capture of an HDR display
+  hands over half-float scRGB (`INativeImageCaptureFeed.Output`), which
+  converts on its CPU tier, never the B8G8R8A8 GPU route.
+  An HDR toggle, a move to a display that differs in it, or unavailable display
+  discovery ends the native feed; its consumer reopens it with fresh metadata.
+  Frame callbacks and background checks queued by consumer liveness polls check
+  the display through `Win32DisplayColorSpaceProbe`, including when no frames arrive,
+  which holds one DXGI factory and opens another only when it goes stale; never
+  read DXGI from `IsEnded`, which the render thread polls.
+  Unknown discovery refuses the open instead of guessing SDR. Presented CPU float surfaces pass through
+  `SurfaceEncoder` before capture sinks receive their RGBA8 pixels; `SurfaceEncoderUploadDeviceLawTests`
+  holds that upload route on both backends.
 - **Builder exception safety.** A throwing `Instance`/`DynamicInstance` callback
   leaves the builder with an open instance; discard it.
 - **Captures.** Create the `FrameCaptureRequest`, arm it with
@@ -1041,8 +1058,8 @@ These are one-line cautions; the owning pages hold the derivations.
 ## Performance work
 
 Judged by code, disassembly, and deterministic work counters — never
-wall-clock or GPU timestamps. Measure before and after on the same scene,
-without competing builds or GPU workloads:
+wall-clock or GPU timestamps. Measure before and after on the same scene, as
+one GPU run at a time ([`verification`](../verification/SKILL.md#gpu-legs)):
 
 ```text
 world.cadence off      # a still scene otherwise skips frames and reads near zero
@@ -1782,9 +1799,24 @@ shader of its own; the Direct3D 12 one binds a set of a pool admitted into the
 device's heaps. No Puck assembly may
 import `d3dcompiler_*.dll` (`NoDeviceShaderCompileLawTests`).
 
+## Render-graph runtime contracts
+
+[references/runtime-contracts.md](references/runtime-contracts.md) states the
+five invariants every change to the frame-graph runtime keeps, with the code
+and laws that hold each, where the code is weaker than the rule, and the
+violations a review hunts: image lifetime leased per image and per reader;
+nothing resolving silently to nothing; a capture's pixels pinned or copied;
+render completion as rendered, not yet renderable or refused, with a permanent
+condition always refused; and history epochs that reset for unseen views but
+never for cadence gaps. Read it before changing `RenderGraphRuntime`,
+`ShaderPipelineRenderNode`, a package recorder, a capture path or a host's
+pacing, and when briefing a review of such a change.
+
 ## Verifying
 
-Say plainly what a change was not checked against. Only `puck parity`'s
+The [`verification`](../verification/SKILL.md) skill owns the gate route, the
+CLI copy, red-leg proofs, GPU grants and the flake rule; this section owns which
+checks a render change owes. Say plainly what a change was not checked against. Only `puck parity`'s
 stations gate GPU kernel behavior by machine.
 
 ```bash
@@ -1912,14 +1944,55 @@ the same render-pixel offset to the march and mesh projection. While a capture
 converges the index is the runtime's count (`RenderGraphConvergence.Samples`,
 handed to each contributing package by `BeginConvergence`), never the
 instance's own renders: a frame the runtime does not count renders the same
-sample again. Ordinary rendering keeps jitter zero until reconstruction is
-enabled, and cadence enforces it: `SdfWorldPasses.IsUnchanged` lets a view stand
+sample again. Ordinary rendering keeps jitter zero unless the view reconstructs
+over time, and cadence enforces it: `SdfWorldPasses.IsUnchanged` lets a view stand
 only while `SdfTemporalHistory.Stands` finds a render now would feed the same
 temporal inputs (jitter always; previous view and poses where the pass reads
 motion). A new temporal input a pass reads joins `Stands` in the same change.
 `SdfTemporalHistoryLawTests`, `SdfWorldPassesLawTests.Temporal` and the
 runtime's convergence laws hold these. Run the `temporal-jitter` and
 `temporal-motion` canaries on both backends after changing this contract.
+
+## Temporal reconstruction
+
+A view reconstructs over time exactly when its quality asks
+(`SdfViewQuality.Temporal`; `Restrict` keeps it only when both ask, so
+`WorldScreenBinder.CameraViewQuality` keeps camera views spatial and session
+views never ask). `world.temporal` is the lever for the world's own views and
+the quality presets carry it. The ask selects `SdfWorldPackage.TemporalFragment`
+(`SdfWorldPasses.FragmentOf`) and is folded into the render-extent revision, so
+a change rebuilds beside the installed graph. Each recorder captures at creation
+whether its graph is the temporal fragment and hands it to `TemporalOf`, so the
+epoch's `Enabled` and `Temporal` follow the installed graph, never the request:
+a graph still building never jitters, and the resolve never reads history its
+graph did not write. The history is two fragment history versions at the output
+extent (color with the gathered weight in alpha; the surface's ray distance and
+identity), zero-initialized, so a fresh graph reads nothing; the reactivity
+buffer is the sky's then views' at the render extent. The one resolve kernel
+switches on the pass block's `temporal` and the debug mode; a spatial resolve
+binds the tables' fillers at every temporal member. Its first epoch frame calls
+`puckReconstruct`, the spatial path itself, so a reset frame is the spatial
+frame exactly. `SdfTemporalHistory.Stands` lets a temporal epoch stand only once
+`Frames` and the renders since `Changed` (which `IsUnchanged` calls when the
+residency reports a change) both reach `Period`. The epoch carries the instance's unread frames, which the render graph counts
+for each frame its schedule leaves the instance unread and absent from displayed
+outputs, including held consumer outputs, and hands to
+`IsUnchanged` and every recording (`RenderGraphPackageRecording.UnreadFrames`),
+so a parked view shown again starts a new epoch; never infer parking from a
+render gap, which cadence leaves too. `place` sharpens a temporal
+view at its own extent (`RenderGraphPlacement.Sharpen`), and the root places a
+lone view when one sharpens (`WorldRootGraph.Sharpens`). A residency builds its
+resolve pipeline only on request, so `SdfWorldPasses.Refresh` requests the
+arrival residency's (`SdfWorldPipelines.RequestResolve`, from the build source
+`BuildAsync` last used) whenever a followed view changes residency; without it
+`CanFollow` fails and a temporal view crossing a portal holds the departed world
+(`ATemporalViewCrossesToAnotherResidencyInPlace`; `portal-walk` crosses with
+`world.temporal on` and holds its crossing frame to a relaunch's spatial one
+exactly). Run `temporal-convergence`,
+`temporal-ghosting`, `temporal-disocclusion` and `temporal-reset` on both
+backends with `--debug-layers` after changing the resolve, the fragment or the
+reprojection; `SdfPassPlanLawTests.Temporal` and `SdfWorldPassesLawTests.Temporal`
+hold the plan and the convergence rule without a device.
 
 ## Route adjacent work
 
@@ -1931,3 +2004,5 @@ runtime's convergence laws hold these. Run the `temporal-jitter` and
 | `maths-usage` | Fixed-point primitives and determinism for the query evaluator and anything simulation-facing. |
 | `dotnet10-performance` | C# hot paths on the host side (packing, emission, grid building). |
 | `documentation` | Editing the rendering handbook, reference pages, or READMEs. |
+| `verification` | Running gates, proving red legs, GPU legs under a grant, flake versus failure. |
+| `review-passes` | Briefing a review-and-fix pass over a render lane; the runtime contracts supply its hunt list. |

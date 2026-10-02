@@ -13,7 +13,8 @@ namespace Puck.World.Client;
 /// its rect (<see cref="RenderGraphPackageCatalog.PlaceLetterbox"/>) so pixels no view covers show it. When
 /// <c>render.tonemap</c> is <c>Filmic</c>, each view's place pass tonemaps the view it reconstructs
 /// (<see cref="RenderGraphPackageCatalog.PlaceTonemap"/>), so the scene is tonemapped where it enters the frame and the
-/// letterbox color, written beside it, reaches the display exact; with one view the root then places that view too.
+/// letterbox color, written beside it, reaches the display exact; with one view the root then places that view too, as it
+/// does when a temporally resolved view sharpens, which its place pass applies (<see cref="Sharpens"/>).
 /// Then the root places each pane over the scene with one <c>place</c> pass per <c>views.graphs</c> instance a layout
 /// slot names, and runs each <c>views.post</c> row as a pass of its post-process package, named by the row, in document
 /// order. That image is the scene (<see cref="Scene"/>): the world as the editor holds and compares it. A presentation
@@ -41,7 +42,7 @@ public sealed class WorldRootGraph {
     // draws over (a comparison turned on or off) rebinds its input and builds nothing.
     private readonly CompiledShaderPipeline? m_overlayPipeline;
 
-    private WorldRootGraph(RenderGraphPlan? plan, RenderGraphPlan? overlay, IReadOnlyList<WorldViewPostPass> post, IReadOnlyList<string> panes, int views, WorldTonemap tonemap) {
+    private WorldRootGraph(RenderGraphPlan? plan, RenderGraphPlan? overlay, IReadOnlyList<WorldViewPostPass> post, IReadOnlyList<string> panes, int views, WorldTonemap tonemap, bool sharpens) {
         Plan = plan;
         OverlayPlan = overlay;
         m_overlayPipeline = ((overlay is null)
@@ -53,8 +54,9 @@ public sealed class WorldRootGraph {
         Panes = panes;
         Post = post;
         Tonemap = tonemap;
+        Sharpens = sharpens;
         Views = views;
-        ViewPasses = (PlacesViews(tonemap: tonemap, views: views)
+        ViewPasses = (PlacesViews(sharpens: sharpens, tonemap: tonemap, views: views)
             ? [.. Enumerable.Range(count: views, start: 1).Select(selector: ViewPass)]
             : []);
 
@@ -115,8 +117,8 @@ public sealed class WorldRootGraph {
     /// <summary>Gets the views the graph places: the most a world's layouts compose (<see cref="ViewsOf"/>).</summary>
     public int Views { get; }
     /// <summary>Gets the root graph's place pass for each view, in view order, each also the name of the version its
-    /// source is bound under: one per view with more than one view or a tonemap, and none otherwise, when the world's
-    /// one view is the root's base as it is.</summary>
+    /// source is bound under: one per view with more than one view, a tonemap or a sharpen, and none otherwise, when the
+    /// world's one view is the root's base as it is.</summary>
     public IReadOnlyList<string> ViewPasses { get; }
     /// <summary>Gets the <c>views.graphs</c> instances the root places, one <c>place</c> pass each, in the order a layout
     /// slot first names them.</summary>
@@ -135,6 +137,9 @@ public sealed class WorldRootGraph {
     /// <summary>Gets the tonemap the root graph applies: <see cref="WorldTonemap.Filmic"/> tonemaps each view as its place
     /// pass reconstructs it, and nothing else; <see cref="WorldTonemap.None"/> tonemaps nothing.</summary>
     public WorldTonemap Tonemap { get; }
+    /// <summary>Gets whether a temporally resolved view sharpens: its place pass applies the contrast-adaptive sharpen at
+    /// the rect's own extent, so the root places even a lone view.</summary>
+    public bool Sharpens { get; }
     /// <summary>Gets the name of the instance holding the scene, the world image before the overlay: the root graph
     /// whenever there is one, which there always is with more than one view, else the world producer.</summary>
     public string Scene => ((Plan is null)
@@ -153,16 +158,17 @@ public sealed class WorldRootGraph {
     /// <param name="packages">The packages the host offers.</param>
     /// <param name="panes">The <c>views.graphs</c> instances a layout slot names (<see cref="PanesOf"/>), or
     /// <see langword="null"/> for none.</param>
-    /// <param name="views">The most views a layout composes (<see cref="ViewsOf"/>); with more than one, or with a
-    /// tonemap, the root places each.</param>
+    /// <param name="views">The most views a layout composes (<see cref="ViewsOf"/>); with more than one, with a tonemap or
+    /// with a sharpen, the root places each.</param>
     /// <param name="tonemap">The document's <c>render.tonemap</c>, or <see langword="null"/> for none.</param>
+    /// <param name="sharpens">Whether a temporally resolved view sharpens (<see cref="Sharpens"/>).</param>
     /// <returns>The graph.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="packages"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="views"/> is below one.</exception>
     /// <exception cref="WorldRootGraphRefusedException">The graph compiler refused the synthesized graph, such as an
     /// row's config that does not bind against its package's schema; the message names the row and the compiler's
     /// code.</exception>
-    public static WorldRootGraph Compose(IReadOnlyList<WorldViewPostPass>? post, bool overlay, RenderGraphPackageCatalog packages, IReadOnlyList<string>? panes = null, int views = 1, WorldTonemap? tonemap = null) {
+    public static WorldRootGraph Compose(IReadOnlyList<WorldViewPostPass>? post, bool overlay, RenderGraphPackageCatalog packages, IReadOnlyList<string>? panes = null, int views = 1, WorldTonemap? tonemap = null, bool sharpens = false) {
         ArgumentNullException.ThrowIfNull(argument: packages);
         ArgumentOutOfRangeException.ThrowIfLessThan(
             other: 1,
@@ -172,7 +178,7 @@ public sealed class WorldRootGraph {
         var entries = (post ?? []);
         var placed = (panes ?? []);
         var curve = (tonemap ?? WorldTonemap.None);
-        var viewCount = (PlacesViews(tonemap: curve, views: views)
+        var viewCount = (PlacesViews(sharpens: sharpens, tonemap: curve, views: views)
             ? views
             : 0);
         var passCount = ((viewCount + placed.Count) + entries.Count);
@@ -186,6 +192,7 @@ public sealed class WorldRootGraph {
                 panes: placed,
                 plan: null,
                 post: entries,
+                sharpens: sharpens,
                 tonemap: curve,
                 views: views
             );
@@ -294,6 +301,7 @@ public sealed class WorldRootGraph {
             panes: placed,
             plan: plan,
             post: entries,
+            sharpens: sharpens,
             tonemap: curve,
             views: views
         );
@@ -473,9 +481,9 @@ public sealed class WorldRootGraph {
         Initialization: initialization,
         Name: name
     );
-    // Whether the root places each view with a pass of its own: with more than one view, and with a tonemap, which a view's
-    // place pass applies. Otherwise the world's one view is the root's base as it is.
-    private static bool PlacesViews(WorldTonemap tonemap, int views) => ((views > 1) || (tonemap == WorldTonemap.Filmic));
+    // Whether the root places each view with a pass of its own: with more than one view, and with a tonemap or a sharpen,
+    // which a view's place pass applies. Otherwise the world's one view is the root's base as it is.
+    private static bool PlacesViews(WorldTonemap tonemap, int views, bool sharpens) => ((views > 1) || sharpens || (tonemap == WorldTonemap.Filmic));
     // A view's place pass config: the first view is placed over nothing the display shows, so outside its rect it writes the
     // letterbox color, which every later view's place pass keeps as its base; with a tonemap, each view's pass tonemaps the
     // view it reconstructs and nothing else, so the letterbox color is never tonemapped.

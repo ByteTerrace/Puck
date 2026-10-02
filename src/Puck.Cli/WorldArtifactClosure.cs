@@ -108,12 +108,20 @@ internal static partial class WorldArtifactClosure {
     // The file-system path one token names: the anchored form resolves against the file or the project directory, a
     // plain relative Include against the project directory. A token naming anything the walk cannot know is null.
     private static IEnumerable<string> Resolve(string text, string fileDirectory, string projectDirectory, bool plainIsProjectRelative) {
+        // MSBuild reads a backslash as a directory separator on every platform, and the project files spell most of
+        // their references that way; off Windows a backslash is an ordinary file-name character, so the walk reads
+        // it as MSBuild does before any path is combined.
+        text = text.Replace(
+            newChar: '/',
+            oldChar: '\\'
+        );
+
         var anchored = false;
 
         foreach (Match match in AnchoredPath().Matches(input: text)) {
             anchored = true;
 
-            var path = match.Groups["path"].Value.TrimStart('\\', '/');
+            var path = match.Groups["path"].Value.TrimStart(trimChar: '/');
 
             yield return Path.GetFullPath(path: Path.Combine(
                 path1: ((match.Groups["property"].Value == "MSBuildThisFileDirectory")

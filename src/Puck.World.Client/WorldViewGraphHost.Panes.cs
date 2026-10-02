@@ -138,9 +138,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
                 m_displayMapping = (m_display ?? m_displayMapping);
             }
 
-            // A lone whole-display view shown only for its tonemap publishes no pane, as the view the root stands for
-            // does: the display shows the world itself either way.
-            for (var view = (m_loneTonemapped ? 1 : 0); (view < views); view++) {
+            // A lone whole-display view shown only for its tonemap or sharpen publishes no pane, as the view the root stands
+            // for does: the display shows the world itself either way.
+            for (var view = (m_loneThroughItsPass ? 1 : 0); (view < views); view++) {
                 PublishPane(
                     instance: synthesized.Producers[view].Name,
                     latest: latest,

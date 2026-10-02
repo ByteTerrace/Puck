@@ -344,8 +344,8 @@ internal static class BrandingCommand {
 
     private static bool ContainsReparsePoint(string repositoryRoot, string candidate) {
         var relative = Path.GetRelativePath(
-            path: repositoryRoot,
-            relativeTo: candidate
+            path: candidate,
+            relativeTo: repositoryRoot
         );
         var current = repositoryRoot;
 

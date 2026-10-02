@@ -17,7 +17,7 @@ namespace Puck.World.Tests;
 /// transfer-time abort itself (<c>Puck.World.WorldInstanceHost.ApplyTransfer</c>) is out of reach for this project
 /// (the composition root) — this suite proves the resolver PRIMITIVE that abort reuses, mirroring
 /// `Puck.World.Schema.Tests`'s <c>WorldFrameIsometryLawTests</c> own "prove the primitive" shape; the abort itself is verified by
-/// RUNNING <c>Puck.World</c> (CLAUDE.md rule 3).
+/// RUNNING <c>Puck.World</c> (AGENTS.md rule 3).
 /// </summary>
 public sealed class PortalArrivalValidationLawTests {
     private const string DestinationName = "dest";

@@ -205,12 +205,12 @@ public sealed partial class FederationTransferLawTests {
         );
 
         Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
-        Assert.True(condition: fixture.Server.CommitTransfer(
+        Assert.True(condition: (fixture.Server.CommitTransfer(
             members: [member, member],
             reason: out var reason,
             sourceAuthority: DisclosureSource,
             transferId: request.TransferId
-        ), userMessage: reason);
+        ) == WorldTransferStatus.Committed), userMessage: reason);
 
         foreach (var body in ((int[])[4, 5])) {
             SetCell(fixture: fixture, key: "reader", row: $"owner{body}", text: fixture.Server.Population.PeerPrincipal(index: body).Describe(), value: 0L);

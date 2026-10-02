@@ -21,9 +21,9 @@
         <!-- Puck.Commands exposes DocumentIdentifier in its public binding model; several fixtures here name
              Puck.Abstractions types directly, so the contract owner is referenced explicitly rather than relied on
              transitively through Puck.Commands. -->
-        <ProjectReference Include="..\..\src\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Commands\Puck.Commands.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="../../src/Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../../src/Puck.Assets/Puck.Assets.csproj" />
+        <ProjectReference Include="../../src/Puck.Commands/Puck.Commands.csproj" />
+        <ProjectReference Include="../../src/Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>
 </Project>

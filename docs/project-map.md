@@ -254,7 +254,7 @@ kernels, direct hardware bring-up), `Puck.Platform.Switch`, and the quarantined 
 and both `scripts/` trees (`scripts/world`, `scripts/recording`).
 The quarantine rules—read as prior art, never build, run, fix, or revive —
 live in
-[CLAUDE.md](../CLAUDE.md) and
+[AGENTS.md](../AGENTS.md) and
 [experimental/README.md](../experimental/README.md); this map carries only
 the structural fact: no experimental tree is in `Puck.slnx`, the root build,
 or the architecture gate's scope—each carries its own

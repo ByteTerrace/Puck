@@ -8,8 +8,10 @@
 #include "sdf-grid.hlsli"
 #ifdef SDF_VIEWS_PASS
 
-float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
+float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float reactivity) {
     float3 color = skyColor(p.rayDirection);
+    float3 emission = float3(0.0, 0.0, 0.0);
+    reactivity = 0.0;
 
     if (!s.hit) {
         return color;
@@ -26,6 +28,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
     bool curvatureShading = worldCurvatureShadingEnabled();
     bool useFinalShading = worldFinalShadingMode(p.viewMode);
     bool sampledScreen = false;
+    reactivity = ((material >= SDF_SCREEN_MATERIAL) ? 1.0 : 0.0);
 
     sdfEvalCount += s.surfaceQueries;
 
@@ -196,6 +199,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
 
             float3 selfEmission = ((shadeMaterial.albedo * shadeMaterial.emissive) + meshEmission);
             color = selfEmission + (color - selfEmission) * attenuation;
+            // Use the material and atlas texel that actually shaded this pixel, after detail re-resolution and layers.
+            emission = selfEmission;
 
             // The stylized curvature terms (cavity darkening, ridge light, ink outline).
             if (curvatureShading) {
@@ -211,6 +216,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
 
         float fog = (1.0 - exp(-worldSkyFogDensity() * s.t));
         color = lerp(color, skyGradient(p.rayDirection), fog);
+        emission *= (1.0 - fog);
 
         // The silhouette's sky coverage, from this frame's primary records. The residual ratio stays in the clamped units
         // of hit acceptance, and the normal gates grazing hits. A geometry-to-geometry edge takes no sky blend, and a mesh
@@ -239,9 +245,12 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
         }
         if (adjacentSky) {
             color = lerp(color, skyGradient(p.rayDirection), edgeWeight);
+            emission *= (1.0 - edgeWeight);
         }
     }
 
+    static const float3 Luma = float3(0.2126, 0.7152, 0.0722);
+    reactivity = max(reactivity, saturate(dot(emission, Luma) / max(dot(color, Luma), 1.0e-4)));
     return color;
 }
 

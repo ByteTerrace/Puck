@@ -7,9 +7,10 @@ public sealed partial class SdfWorldPasses {
     /// <inheritdoc/>
     public IShaderPipelineRenderExtent? RenderExtentOf(string instance) => Refresh(instance: instance);
     /// <inheritdoc/>
-    public RenderGraphPackageFragment? FragmentOf(string instance) => (Refresh(instance: instance).RequiresResolve
-        ? SdfWorldPackage.Fragment
-        : SdfWorldPackage.NativeFragment);
+    /// <remarks>A view that asks for temporal reconstruction runs <see cref="SdfWorldPackage.TemporalFragment"/> at
+    /// any render scale; otherwise a reduced view runs <see cref="SdfWorldPackage.Fragment"/> and a native one
+    /// <see cref="SdfWorldPackage.NativeFragment"/>.</remarks>
+    public RenderGraphPackageFragment? FragmentOf(string instance) => Refresh(instance: instance).Fragment;
 
     private sealed partial class Entry {
         private SdfViewSnapshot Snapshot {
@@ -20,17 +21,22 @@ public sealed partial class SdfWorldPasses {
                 return ((views is { Count: > 0 }) ? views[Math.Min(val1: view!.Value.View, val2: (views.Count - 1))] : default);
             }
         }
-        // The ceiling alone chooses the fragment and sizes the scratch, so the revision a graph is built against covers
-        // both; the resolved scale moves only the grid inside it (SdfViewSnapshot.RenderGrid).
+        // The ceiling and the temporal ask choose the fragment, and the ceiling sizes the scratch, so the revision a graph
+        // is built against covers both; the resolved scale moves only the grid inside it (SdfViewSnapshot.RenderGrid).
         private double Ceiling => Snapshot.RenderCeiling;
 
         public double CurrentScale => Snapshot.RenderGrid;
         public double RenderedScale { get; set; }
-        public float CurrentSharpness => (RequiresResolve ? Snapshot.UpscaleSharpness : 0f);
+        public float CurrentSharpness => (ReferenceEquals(objA: Fragment, objB: SdfWorldPackage.NativeFragment) ? 0f : Snapshot.UpscaleSharpness);
         public float RenderedSharpness { get; set; }
-        public bool RequiresResolve => Snapshot.Reconstructs;
+        // Whether the resolved view asks for temporal reconstruction, which chooses its fragment as the ceiling does.
+        public bool RequestsTemporal => Snapshot.Quality.Temporal;
+        public RenderGraphPackageFragment Fragment => (RequestsTemporal
+            ? SdfWorldPackage.TemporalFragment
+            : (Snapshot.Reconstructs ? SdfWorldPackage.Fragment : SdfWorldPackage.NativeFragment));
 
-        long IShaderPipelineRenderExtent.Revision => BitConverter.DoubleToInt64Bits(value: Ceiling);
+        // A positive ceiling's bits leave the sign bit clear, so the shift loses nothing.
+        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 1) | (RequestsTemporal ? 1L : 0L);
 
         public (uint Width, uint Height) CeilingAt(uint width, uint height) => Pixels(width: width, height: height, scale: Ceiling);
         public (uint Width, uint Height) FrameAt(uint width, uint height) => Pixels(width: width, height: height, scale: CurrentScale);

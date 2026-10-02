@@ -1437,6 +1437,18 @@ The engine ships four producers, each with its settings record in
 | `camera` | `sensor` (`Color`), `seat`, `profile`, `controls` | imported | external |
 | `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (a staged copy under Vulkan) | external |
 
+A capture selects its format and encoding from its display when it opens. An
+HDR toggle, a move to a display that differs in it, or failed display discovery
+ends the feed, which the consumer reopens with fresh metadata; unknown discovery
+refuses the open. An SDR
+display is captured in B8G8R8A8 sRGB, which a Direct3D 12 host copies into
+shared targets the screen samples and a Vulkan host converts through
+`source-rgba`. An HDR display is captured in half-float scRGB on either host
+and converts on its CPU tier through `source-transfer` into working values at
+the host section's `paperWhiteNits`, so its highlights keep their luminance
+above SDR white. On an SDR output those highlights clip at the display encode,
+as any working value above 1 does.
+
 Every feed carries an `ImageSourceDescriptor` (`Puck.Abstractions.Sources`),
 the one contract for an image entering rendering from outside a pass: its
 producer, transport, extent, pixel format, color encoding, cadence, stamp and
@@ -1883,11 +1895,12 @@ on the one world and proves them with `probe.status`, `body.channels`, and
 
 All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
-`world.upscale-sharpness`, `world.target`, `world.shadow-mask`,
+`world.temporal`, `world.upscale-sharpness`, `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
 `world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
 world's own `render.low`, `render.medium` or `render.high` preset, each a
-shadow tier, an ambient-occlusion switch and a render-scale tier; the names are
+shadow tier, an ambient-occlusion switch, a temporal-reconstruction switch and a
+render-scale tier; the names are
 the engine's one quality vocabulary (`QualityTiers`), and a preset the world
 does not author is refused by name. The shipped worlds share one table,
 `Assets/worlds/quality.puck`: the standard world imports it, and a world on
@@ -1896,7 +1909,12 @@ without moving its own boot levers (`ShippedWorldQualityLawTests`). Render scale
 to both seat views and named cameras as each view's ceiling. A layout
 transition's `transitionRenderScale` multiplies only the grid rendered inside
 that ceiling, which allocates and rebuilds nothing, so it has no effect at the
-native tier, where a view reconstructs nothing.
+native tier, where a view reconstructs nothing. `world.temporal on` reconstructs
+the world's own views over time at any render scale: each jitters its samples,
+resolves them over its history, and under `world.cadence on` stands once a still
+view has converged; `world.upscale-sharpness` then sharpens what it resolves.
+Camera and session views never reconstruct. The render section's `temporal`
+member sets it at boot, and `world.save` folds it back.
 Named tiers are
 facades over continuous values. Do not assume a lower render scale is
 monotonic for a large instance field—read both `world.counters gpu` and
@@ -2037,7 +2055,7 @@ start in engine ticks, and its phase and reading at the authority's tick.
 
 ## Verifying
 
-`Puck.World` is greenfield (`CLAUDE.md` rule 3): verify by RUNNING the game
+`Puck.World` is greenfield (`AGENTS.md` rule 3): verify by RUNNING the game
 and driving stdin verbs—no gate stages, no `--validate` flags, and no
 golden corpus. Byte-identity observations (the canonical save round-trip,
 `git diff` on shipped worlds) are useful evidence but never acceptance

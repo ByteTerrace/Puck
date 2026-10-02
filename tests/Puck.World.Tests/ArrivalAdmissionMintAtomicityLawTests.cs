@@ -107,12 +107,12 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
                 try {
                     drainOpen.Wait(cancellationToken: cancellationToken);
 
-                    accepted = fixture.Server.CommitTransfer(
+                    accepted = (fixture.Server.CommitTransfer(
                         members: [member],
                         reason: out commitReason,
                         sourceAuthority: SourceAuthority,
                         transferId: TransferId
-                    );
+                    ) == WorldTransferStatus.Committed);
                     // Read the traveler the instant the destination called it committed, exactly as a routed read-back
                     // does: through the same authority gate, asking the same grant table WorldServer.AnswerSubmittedQuery
                     // asks before it will answer at all.
@@ -218,12 +218,12 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
         );
 
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 members: [member],
                 reason: out var reason,
                 sourceAuthority: SourceAuthority,
                 transferId: TransferId
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
         Assert.True(condition: fixture.Server.TryTransferredPrincipal(
@@ -269,12 +269,12 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
         );
 
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 members: [member],
                 reason: out var reason,
                 sourceAuthority: SourceAuthority,
                 transferId: TransferId
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
         Assert.True(condition: fixture.Server.TryTransferredPrincipal(

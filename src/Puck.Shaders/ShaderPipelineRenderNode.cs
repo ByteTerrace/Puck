@@ -364,6 +364,13 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     renderHeight: counts.RenderHeight
                 ) ?? (counts.Width, counts.Height)))
             ) ||
+            (
+                (current.Kind == ShaderPipelineResourceKind.Buffer) &&
+                (
+                    (old.ElementBytes != current.ElementBytes) ||
+                    (old.ResolveSizeBytes(counts: previousCounts) != current.ResolveSizeBytes(counts: counts))
+                )
+            ) ||
             (old.SizeBytes != current.SizeBytes) ||
             (old.Initialization != current.Initialization)
         ) {

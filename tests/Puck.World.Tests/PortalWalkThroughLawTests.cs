@@ -105,7 +105,7 @@ public sealed class PortalWalkThroughLawTests {
             userMessage: reservation.Reason
         );
         Assert.True(
-            condition: server.CommitTransfer(
+            condition: (server.CommitTransfer(
                 members: [new WorldTransferCommitMember(
                     BodyMotionProgramName: "grounded",
                     HasMappedArrival: false,
@@ -118,7 +118,7 @@ public sealed class PortalWalkThroughLawTests {
                 reason: out var reason,
                 sourceAuthority: SourceAuthority,
                 transferId: (ArrivalTransferId + ((ulong)ordinal))
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
 

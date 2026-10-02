@@ -158,12 +158,32 @@ public static class WorldReplayEntryDescriber {
             WorldReplayEntry.RateLever lever => (lever.Paused
             ? "rate paused"
             : "rate resumed"),
-            WorldReplayEntry.Transfer transfer => $"transfer #{transfer.TransferId} -> '{transfer.DestinationName}' scope={transfer.ScopeKey} generation={transfer.GenerationId} {transfer.Outcome} departed=[{string.Join(
+            WorldReplayEntry.Transfer transfer => $"transfer #{transfer.TransferId} -> '{transfer.Target}'{(transfer.TargetRemote
+            ? " (remote)"
+            : string.Empty)} '{transfer.DestinationName}' scope={transfer.ScopeKey} generation={transfer.GenerationId} {transfer.Outcome} departed=[{string.Join(
             separator: ",",
-            values: transfer.DepartedBootSlots
+            values: transfer.DepartedSlots
+        )}]",
+            WorldReplayEntry.Arrival arrival => DescribeArrival(arrival: arrival),
+            WorldReplayEntry.FederatedIntents federated => $"federated [{string.Join(
+            separator: ",",
+            values: federated.Held.Select(selector: static held => $"body:{held.Index}")
         )}]",
             WorldReplayEntry.LinkDelivery link => $"link '{link.Adjacency}' delivered",
             _ => entry.GetType().Name,
         };
     }
+
+    private static string DescribeArrival(WorldReplayEntry.Arrival arrival) =>
+        (Server.WorldAuthorityCheckpointCodec.TryDecodeCrossingArrival(
+            arrival: out var decoded,
+            bytes: arrival.Encoded,
+            defaults: WorldPlayerDefaults.Default,
+            reason: out _
+        )
+            ? $"arrival #{arrival.TransferId} from '{arrival.SourceAuthority}' body:[{string.Join(
+                separator: ",",
+                values: decoded!.Slots
+            )}]"
+            : $"arrival #{arrival.TransferId} from '{arrival.SourceAuthority}'");
 }

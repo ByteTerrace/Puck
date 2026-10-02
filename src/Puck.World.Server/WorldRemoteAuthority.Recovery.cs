@@ -32,11 +32,11 @@ public sealed partial class WorldRemoteAuthority {
     /// <param name="sourceAuthority">The original authenticated source namespace.</param>
     /// <param name="transferId">The original source-scoped transaction id.</param>
     /// <param name="members">The exact retained commit payload.</param>
-    /// <param name="accepted">The destination's acceptance, meaningful only for Answered.</param>
-    /// <param name="reason">The refusal detail, or empty while pending.</param>
+    /// <param name="status">The destination's verdict, meaningful only for Answered.</param>
+    /// <param name="reason">The refusal or uncertainty detail, or empty while pending.</param>
     /// <returns>Pending while in flight, Answered for a valid verdict, or Unreachable for an ambiguous response.</returns>
     public WorldTransferStep PollCommit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members,
-        out bool accepted, out string reason) {
+        out WorldTransferStatus status, out string reason) {
         if (!TryPollTransferStep(
             answer: out var answer,
             kind: WorldFederationRequest.Commit,
@@ -44,14 +44,14 @@ public sealed partial class WorldRemoteAuthority {
             sourceAuthority: sourceAuthority,
             transferId: transferId
         )) {
-            accepted = false;
+            status = WorldTransferStatus.Missing;
             reason = string.Empty;
             return WorldTransferStep.Pending;
         }
         return DecodeCommitAnswer(
-            accepted: out accepted,
             answer: answer,
-            reason: out reason
+            reason: out reason,
+            status: out status
         );
     }
 
@@ -123,8 +123,8 @@ public sealed partial class WorldRemoteAuthority {
         );
         return true;
     }
-    private static WorldTransferStep DecodeCommitAnswer(WorldFederationAnswer answer, out bool accepted, out string reason) {
-        accepted = false;
+    private static WorldTransferStep DecodeCommitAnswer(WorldFederationAnswer answer, out WorldTransferStatus status, out string reason) {
+        status = WorldTransferStatus.Missing;
         if (
             !answer.Ok ||
             (answer.Kind != WorldFederationResponse.Commit)
@@ -134,11 +134,11 @@ public sealed partial class WorldRemoteAuthority {
         }
         if (!WorldFederationCodec.TryDecodeCommitReply(
             answer.Body.Span,
-            out accepted,
+            out status,
             out reason,
             out var failure
         )) {
-            accepted = false;
+            status = WorldTransferStatus.Missing;
             reason = $"invalid commit reply: {failure}";
             return WorldTransferStep.Unreachable;
         }

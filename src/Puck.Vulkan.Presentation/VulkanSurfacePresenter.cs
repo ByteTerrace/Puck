@@ -98,13 +98,13 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
     public Surface ReadSurface(Surface surface) {
         if (
             surface.IsEmpty ||
-            surface.IsCpuPixels
+            (surface.IsCpuPixels && Surface.IsSurfaceFormat(format: surface.Format))
         ) {
             return surface;
         }
         // A working image no capture sink reads is captured through the display encode's SDR.
         if (
-            surface.IsSameDeviceImage &&
+            (surface.IsSameDeviceImage || surface.IsCpuPixels) &&
             !Surface.IsSurfaceFormat(format: surface.Format)
         ) {
             return (m_captureEncoder ??= new SurfaceEncoder(

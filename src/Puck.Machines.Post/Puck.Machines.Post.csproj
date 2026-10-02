@@ -8,7 +8,7 @@
         <!-- MachineSnapshot<>/SnapshotDivergence (HashDivergenceReport's shared byte-walk), the
              MachineInstance<>/MachineFork<> lifecycle the shared stage probes drive, and Fnv1aHash (the
              snapshot-hash comparison and fingerprints). -->
-        <ProjectReference Include="..\Puck.Machines\Puck.Machines.csproj" />
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Machines/Puck.Machines.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>
 </Project>

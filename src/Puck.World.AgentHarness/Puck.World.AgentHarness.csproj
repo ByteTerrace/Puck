@@ -14,8 +14,8 @@
         <PackageReference Include="Microsoft.Extensions.AI" Version="[10.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\Puck.World.AgentBridge\Puck.World.AgentBridge.csproj" />
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.World.AgentBridge/Puck.World.AgentBridge.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />

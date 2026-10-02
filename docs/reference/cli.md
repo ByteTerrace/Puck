@@ -796,16 +796,18 @@ leg-private, disposable `<run>/install/` tree, never the shared build path,
 and observes two successive process launches rather than one—the
 `self-update` canary is the only user today.
 
-A leg that runs one World process can declare a `relaunch`: a `world` file
-name, a `script`, and its own `commands`. After the first process ends, the
-runner boots the World again under the same state directory. That boot runs
-on the named document in the leg's run directory, which the first script
-writes with `world.save {run}/<name>`. The second boot runs its script with the
+A leg that runs one World process can declare a `relaunch`: a `script`, its
+own `commands`, and optionally a `world` file name. After the first process
+ends, the runner boots the World again under the same state directory. That
+boot runs on the named document in the leg's run directory, which the first
+script writes with `world.save {run}/<name>`, or, with no `world`, on the leg's
+own world again. The second boot runs its script with the
 same runner-owned ending. Each boot's commands are accounted against its own
 process, and each boot gets the exit, timeout and boot-origin checks.
 Assertions read both boots' streams in order, and captures from either land in
 the one run directory. The leg's budget counts both boots. `pipeline-override`
-uses it to prove that a committed value survives an exit.
+uses it to prove that a committed value survives an exit, and `portal-walk` to
+walk the same crossing a second time with reconstruction off.
 
 A single-process leg can set `runSchedule: true` to arm the world document's
 existing command schedule. The runner passes `--schedule-dir {run}/schedule`,
@@ -971,7 +973,8 @@ extraction (from the response's first line, or with `"line"` from the first
 indented line of its record that starts with that text), equality/inequality, strict ordering of two extracted numbers
 (`greater`: left above right), inclusive bounds, minimum margins,
 byte-level file equality/inequality (`filesDiffer`), per-channel bounds over a
-region of one capture (`imageRegion`), and image agreement
+region of one capture (`imageRegion`), a capture's mean difference from a
+box-filtered reference over a region (`imageDifference`), and image agreement
 between two captured frames (`framesAgree`, stating `agree` explicitly—
 `RgbaFrameDifference` counts the pixels that moved by at least 2 LSB; `CanaryFrameNoise` compares
 that against a 64-pixel noise budget). Two live windowed captures of identical
@@ -990,6 +993,15 @@ center lies inside), `reduce` (`every` pixel or the per-channel `mean`), a
 `toleranceCodes` widening in 8-bit codes, and an explicit `holds`. Bounds come
 from the author's arithmetic, never from a recorded run. A missing capture, a
 wrong extent, or a region with no pixel center fails in either direction.
+An `imageDifference` names a run-relative `capture`, its `extent`, a run-relative
+`reference` whose extent is a whole multiple of the capture's on both axes, a
+normalized `region`, `maximumMeanCodes` and an explicit `holds`. The reference is
+box-filtered down to the capture's extent; each region pixel's difference is the
+mean of its absolute red, green and blue differences in 8-bit codes, and the claim
+holds when their mean is at most `maximumMeanCodes` (0 demands every pixel equal).
+The verdict prints the measured mean and the largest pixel difference. A missing
+capture or reference, a wrong extent, or a reference that is no whole multiple
+fails in either direction.
 A leg's `world` is a repository-relative `.world.json` document or `.puck`
 source; a leg booting a composition source may name the declared world it boots
 with `entry`, passed to the World as `--entry`. A manifest may start a companion authority
@@ -1055,8 +1067,9 @@ The store is the `world-builds` subdirectory of the
 A build is keyed by the sources it is made from. The key covers the World
 project, every project it references (including `Puck.Cli` and
 `Puck.Analyzers`, which carry no assembly into it), and every file those
-project files import or link from elsewhere in the checkout. It also covers
-every file directly in the repository root. For these paths, the key hashes
+project files import or link from elsewhere in the checkout, read as MSBuild
+reads them, with a backslash as a directory separator on every platform. It also
+covers every file directly in the repository root. For these paths, the key hashes
 git's object ids in `HEAD` together with the content of every uncommitted,
 staged, or untracked change that `git status` reports. The machine's runtime
 identifier and the build command line are part of the key too. Edits to
