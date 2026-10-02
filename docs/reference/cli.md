@@ -726,7 +726,10 @@ names the game's Release catalog, the compiled worlds the build writes, which
 holds no test worlds: `--run` checks it with the compile the line names.
 
 `--run` builds and runs the chosen suites, then `puck test` on the chosen
-worlds, then the catalog check, and exits 1 when any of them fails. `--gpu`,
+worlds, then the catalog check, and exits 1 when any of them fails. A suite
+prints one verdict line; a failed one follows it with its whole report, each
+failed test with its message and stack or the build errors that stopped it, so
+the log `puck gate` keeps names every failure. `--gpu`,
 which needs `--run`, then runs the chosen canaries and then parity, one after
 the other: they boot real Worlds and hold both GPU backends, so they run only
 when asked for, on a machine with no competing build or GPU work.

@@ -79,6 +79,7 @@ public sealed class LawProofLawTests {
 
         var fix = checkout.Commit(message: "lib: fix the thing");
         var runner = new FakeRunner();
+
         var (exitCode, output, error) = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
 
         Assert.True(condition: (exitCode == CliExit.Success), userMessage: error);
@@ -108,11 +109,12 @@ public sealed class LawProofLawTests {
         _ = checkout.Commit(message: "lib: an unrelated change");
 
         var runner = new FakeRunner();
+
         var (exitCode, output, error) = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
 
         Assert.Equal(actual: exitCode, expected: CliExit.Failed);
-        Assert.Contains(expectedSubstring: "Without the fix: 1 of 1 passed", actualString: output);
-        Assert.Contains(expectedSubstring: "cannot fail: it passes with the fix withheld", actualString: error);
+        Assert.Contains(actualString: output, expectedSubstring: "Without the fix: 1 of 1 passed");
+        Assert.Contains(actualString: error, expectedSubstring: "cannot fail: it passes with the fix withheld");
         Assert.Single(collection: runner.Runs);
         AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
     }
@@ -125,12 +127,13 @@ public sealed class LawProofLawTests {
         _ = checkout.Commit(message: "lib: fix");
 
         var runner = new FakeRunner();
+
         var (exitCode, output, error) = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
 
         Assert.Equal(actual: exitCode, expected: CliExit.Refused);
         Assert.Empty(collection: output);
-        Assert.Contains(expectedSubstring: "did not build with the fix withheld", actualString: error);
-        Assert.Contains(expectedSubstring: $"  /{FixPath}(1,1): error CS0000: unbuildable", actualString: error);
+        Assert.Contains(actualString: error, expectedSubstring: "did not build with the fix withheld");
+        Assert.Contains(actualString: error, expectedSubstring: $"  /{FixPath}(1,1): error CS0000: unbuildable");
         Assert.Empty(collection: runner.Runs);
         AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
     }
@@ -143,11 +146,12 @@ public sealed class LawProofLawTests {
         checkout.Write(name: "tests/Lib.Tests/NewLawTests.cs", text: "public sealed class NewLawTests { }\n");
 
         var runner = new FakeRunner();
+
         var (exitCode, output, error) = Prove(checkout: checkout, fix: new LawFix(Paths: [FixPath], Revision: null), runner: runner, scratch: scratch);
 
         Assert.True(condition: (exitCode == CliExit.Success), userMessage: error);
-        Assert.Contains(expectedSubstring: "Without the fix: 1 of 1 failed", actualString: output);
-        Assert.Contains(expectedSubstring: "With the fix: 1 of 1 passed", actualString: output);
+        Assert.Contains(actualString: output, expectedSubstring: "Without the fix: 1 of 1 failed");
+        Assert.Contains(actualString: output, expectedSubstring: "With the fix: 1 of 1 passed");
         Assert.Equal(actual: checkout.Read(name: FixPath), expected: "fixed");
         AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: $" M {FixPath}\n?? tests/Lib.Tests/NewLawTests.cs\n");
     }
@@ -159,13 +163,15 @@ public sealed class LawProofLawTests {
         _ = checkout.Git("switch", "--quiet", "--create", "elsewhere");
         checkout.Write(name: FixPath, text: "fixed");
         var elsewhere = checkout.Commit(message: "lib: fix elsewhere");
+
         _ = checkout.Git("switch", "--quiet", "main");
 
         var runner = new FakeRunner();
+
         var (exitCode, _, error) = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: elsewhere), runner: runner, scratch: scratch);
 
         Assert.Equal(actual: exitCode, expected: CliExit.Refused);
-        Assert.Contains(expectedSubstring: "is not in the history of HEAD", actualString: error);
+        Assert.Contains(actualString: error, expectedSubstring: "is not in the history of HEAD");
         Assert.Empty(collection: runner.Builds);
         AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
     }

@@ -12,10 +12,10 @@ namespace Puck.Cli.Tests;
 /// and a runner that records each step in place of building, copying or running anything.</summary>
 public sealed class GateRunLawTests {
     private sealed class FakeRunner(GateStepResult build) : IGateRunner {
-        public List<string[]> Steps { get; } = [];
-        public string[]? FormatSources { get; private set; }
         public bool Copied { get; private set; }
         public Func<string[], int> ExitCode { get; init; } = static _ => 0;
+        public string[]? FormatSources { get; private set; }
+        public List<string[]> Steps { get; } = [];
 
         public GateStepResult Build(string repositoryRoot) => build;
         public string CopyCli(string repositoryRoot, string directory) {
@@ -33,7 +33,6 @@ public sealed class GateRunLawTests {
             return new GateStepResult(ExitCode: ExitCode(arg: [.. arguments]), Output: $"output of {arguments[0]}");
         }
     }
-
     // main: A; feature leaves at A and commits B (src/Branch.cs); main then commits C (src/Target.cs). HEAD is feature.
     private sealed class Branches : IDisposable {
         public GitScratchCheckout Checkout { get; } = new();
@@ -70,12 +69,13 @@ public sealed class GateRunLawTests {
         using var branches = new Branches();
         using var directory = new TemporaryDirectory(prefix: "puck-gate-law-");
         var runner = new FakeRunner(build: new GateStepResult(ExitCode: 1, Output: "restore ok\nsrc/Branch.cs(1,1): error CS1002: ; expected\nBuild FAILED."));
+
         var (exitCode, output, _) = Gate(branches: branches, directory: directory, runner: runner);
 
         Assert.Equal(actual: exitCode, expected: CliExit.Failed);
-        Assert.Contains(expectedSubstring: "gate: build FAILED (exit 1); nothing else ran.", actualString: output);
-        Assert.Contains(expectedSubstring: "  src/Branch.cs(1,1): error CS1002: ; expected", actualString: output);
-        Assert.DoesNotContain(expectedSubstring: "restore ok", actualString: output);
+        Assert.Contains(actualString: output, expectedSubstring: "gate: build FAILED (exit 1); nothing else ran.");
+        Assert.Contains(actualString: output, expectedSubstring: "  src/Branch.cs(1,1): error CS1002: ; expected");
+        Assert.DoesNotContain(actualString: output, expectedSubstring: "restore ok");
         Assert.False(condition: runner.Copied);
         Assert.Empty(collection: runner.Steps);
         Assert.Contains(expectedSubstring: "restore ok", actualString: File.ReadAllText(path: directory.PathOf(name: "gate.log")));
@@ -95,6 +95,7 @@ public sealed class GateRunLawTests {
 
         using var directory = new TemporaryDirectory(prefix: "puck-gate-law-");
         var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: string.Empty));
+
         var (exitCode, output, _) = Gate(branches: branches, directory: directory, runner: runner);
 
         Assert.Equal(actual: exitCode, expected: CliExit.Success);
@@ -107,6 +108,7 @@ public sealed class GateRunLawTests {
         using var branches = new Branches();
         using var directory = new TemporaryDirectory(prefix: "puck-gate-law-");
         var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: string.Empty));
+
         var (exitCode, _, _) = Gate(branches: branches, directory: directory, runner: runner);
         var fileList = directory.PathOf(name: "format-sources.json");
 
@@ -129,19 +131,20 @@ public sealed class GateRunLawTests {
         using var branches = new Branches();
         using var directory = new TemporaryDirectory(prefix: "puck-gate-law-");
         var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: string.Empty)) { ExitCode = static arguments => ((arguments[0] == "lengths") ? 1 : 0) };
+
         var (exitCode, output, _) = Gate(branches: branches, directory: directory, runner: runner);
 
         Assert.Equal(actual: exitCode, expected: CliExit.Failed);
         Assert.Equal(actual: runner.Steps.Count, expected: 6);
-        Assert.Contains(expectedSubstring: "gate: lengths FAILED (exit 1)", actualString: output);
-        Assert.Contains(expectedSubstring: "gate: FAILED: lengths; full output in ", actualString: output);
+        Assert.Contains(actualString: output, expectedSubstring: "gate: lengths FAILED (exit 1)");
+        Assert.Contains(actualString: output, expectedSubstring: "gate: FAILED: lengths; full output in ");
         Assert.Contains(expectedSubstring: "===== lengths (exit 1)\noutput of lengths", actualString: File.ReadAllText(path: directory.PathOf(name: "gate.log")).ReplaceLineEndings(replacementText: "\n"));
     }
     [Fact]
     public void GpuWorkRunsOnlyWhenAskedFor() {
         using var branches = new Branches();
 
-        foreach (var gpu in (bool[])[false, true]) {
+        foreach (var gpu in ((bool[])[false, true])) {
             using var directory = new TemporaryDirectory(prefix: "puck-gate-law-");
             var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: string.Empty));
 
@@ -158,10 +161,11 @@ public sealed class GateRunLawTests {
         using var branches = new Branches();
         using var directory = new TemporaryDirectory(prefix: "puck-gate-law-");
         var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: string.Empty));
+
         var (exitCode, _, error) = Gate(branches: branches, directory: directory, runner: runner, target: "no-such-branch");
 
         Assert.Equal(actual: exitCode, expected: CliExit.Refused);
-        Assert.Contains(expectedSubstring: "no-such-branch", actualString: error);
+        Assert.Contains(actualString: error, expectedSubstring: "no-such-branch");
         Assert.False(condition: runner.Copied);
         Assert.Empty(collection: runner.Steps);
     }

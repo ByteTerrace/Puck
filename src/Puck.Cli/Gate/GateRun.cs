@@ -6,7 +6,6 @@ namespace Puck.Cli.Gate;
 
 /// <summary>One step's outcome: its exit code and everything it wrote, both streams together.</summary>
 internal sealed record GateStepResult(int ExitCode, string Output);
-
 /// <summary>Runs the gate's steps. <see cref="ProcessGateRunner"/> is the real one; the laws over <see cref="GateRun"/>
 /// substitute their own, so no law builds the solution or touches a GPU.</summary>
 internal interface IGateRunner {
@@ -26,7 +25,6 @@ internal interface IGateRunner {
     /// <returns>The verb's outcome.</returns>
     GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments);
 }
-
 /// <summary>
 /// <c>puck gate</c>'s run: the change-scoped CPU gate for a branch. It builds the solution and stops there, showing the
 /// build's errors, when the build fails; copies the CLI that build wrote into the run's own directory, so every later
@@ -39,8 +37,8 @@ internal static class GateRun {
     /// <summary>The branch a change is gated against unless <c>--merge-base</c> names another.</summary>
     public const string DefaultTarget = "origin/features/gfx-pipeline";
 
-    private const string Verb = "gate";
     private const int FailureTail = 15;
+    private const string Verb = "gate";
 
     private static IReadOnlyList<string> Lines(string text) => [.. text.Split(separator: '\n')
         .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
@@ -65,7 +63,6 @@ internal static class GateRun {
         .Where(predicate: static path => !(path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".g.cs") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".generated.cs")))
         .Where(predicate: path => File.Exists(path: Path.Combine(path1: repositoryRoot, path2: path)))
         .Order(comparer: StringComparer.Ordinal)];
-
     /// <summary>Runs the gate.</summary>
     /// <param name="repositoryRoot">The checkout to gate.</param>
     /// <param name="target">The branch the change lands on; the change is read against its merge base with

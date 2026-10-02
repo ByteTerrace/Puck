@@ -17,7 +17,6 @@ internal sealed record LawFailure(string Test, string Message);
 /// <summary>One run of the law: how many tests ran, which failed, and why the run reported nothing when it did
 /// not.</summary>
 internal sealed record LawRun(int Total, IReadOnlyList<LawFailure> Failures, string? Error);
-
 /// <summary>Builds and runs a law in a tree. <see cref="DotnetLawRunner"/> is the real one; the laws over
 /// <see cref="LawProof"/> substitute their own.</summary>
 internal interface ILawRunner {
@@ -34,7 +33,6 @@ internal interface ILawRunner {
     /// <returns>The run's outcome.</returns>
     LawRun Run(string tree, string project, string law, string results);
 }
-
 /// <summary>
 /// <c>puck laws prove</c>'s proof: that a law fails without its fix and passes with it. The proof runs in a detached
 /// git worktree under a scratch directory, never in the caller's tree: the worktree starts at the caller's HEAD and
@@ -48,7 +46,6 @@ internal static partial class LawProof {
 
     [GeneratedRegex(pattern: @"\A[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*\z")]
     private static partial Regex LawName();
-
     private static IReadOnlyList<string> Lines(string text) => [.. text.Split(separator: '\n')
         .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
         .Where(predicate: static line => (line.Length > 0))];
@@ -232,7 +229,7 @@ internal static partial class LawProof {
         }
     }
     private static bool TryPhase(ILawRunner runner, string tree, string project, string law, string results, string phase, out LawRun run, out int refusal) {
-        run = new LawRun(Failures: [], Error: null, Total: 0);
+        run = new LawRun(Error: null, Failures: [], Total: 0);
         Console.Error.WriteLine(value: $"laws prove: building {project} {phase}.");
 
         var build = runner.Build(
@@ -244,7 +241,7 @@ internal static partial class LawProof {
             refusal = Refuse(what: project, why: $"did not build {phase}, so the law cannot be judged:");
 
             foreach (var line in build.Errors) {
-                Console.Error.WriteLine(value: $"  {line.Replace(oldValue: tree, newValue: string.Empty, comparisonType: StringComparison.OrdinalIgnoreCase)}");
+                Console.Error.WriteLine(value: $"  {line.Replace(comparisonType: StringComparison.OrdinalIgnoreCase, newValue: string.Empty, oldValue: tree)}");
             }
 
             return false;
@@ -284,12 +281,12 @@ internal static partial class LawProof {
         var document = XDocument.Parse(text: report);
         XNamespace schema = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010";
         var results = document.Descendants(name: (schema + "UnitTestResult"))
-            .Where(predicate: static result => ((string?)result.Attribute(name: "outcome") is not (null or "NotExecuted")))
+            .Where(predicate: static result => (((string?)result.Attribute(name: "outcome")) is not (null or "NotExecuted")))
             .ToArray();
-        var failures = results.Where(predicate: static result => ((string?)result.Attribute(name: "outcome") == "Failed"))
+        var failures = results.Where(predicate: static result => (((string?)result.Attribute(name: "outcome")) == "Failed"))
             .Select(selector: result => new LawFailure(
-                Message: (Lines(text: (string?)result.Descendants(name: (schema + "Message")).FirstOrDefault() ?? string.Empty).FirstOrDefault()?.Trim() ?? "no message"),
-                Test: ((string?)result.Attribute(name: "testName") ?? "?")
+                Message: (Lines(text: (((string?)result.Descendants(name: (schema + "Message")).FirstOrDefault()) ?? string.Empty)).FirstOrDefault()?.Trim() ?? "no message"),
+                Test: (((string?)result.Attribute(name: "testName")) ?? "?")
             ))
             .OrderBy(comparer: StringComparer.Ordinal, keySelector: static failure => failure.Test)
             .ToArray();
@@ -300,7 +297,6 @@ internal static partial class LawProof {
             Total: results.Length
         );
     }
-
     /// <summary>Proves <paramref name="law"/> against <paramref name="fix"/> and prints the evidence on standard
     /// output.</summary>
     /// <param name="repositoryRoot">The caller's checkout; it is read, never written.</param>

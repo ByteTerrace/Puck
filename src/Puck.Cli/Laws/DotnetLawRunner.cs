@@ -6,6 +6,7 @@ namespace Puck.Cli.Laws;
 internal sealed class DotnetLawRunner : ILawRunner {
     private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(minutes: 60);
     private static readonly TimeSpan TestTimeout = TimeSpan.FromMinutes(minutes: 30);
+
     private const string ReportName = "law.trx";
 
     private static string[] Lines(string text) => [.. text.Split(separator: '\n')

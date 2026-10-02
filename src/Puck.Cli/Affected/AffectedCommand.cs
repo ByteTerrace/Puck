@@ -33,6 +33,7 @@ internal static class AffectedCommand {
     private static IReadOnlyList<string> Lines(string text) => [.. text.Split(separator: '\n')
         .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
         .Where(predicate: static line => (line.Length > 0))];
+
     /// <summary>Reads the working tree's changes against <paramref name="since"/>: tracked files that differ from it,
     /// staged or not, plus untracked files git does not ignore; and of those, the ones deleted since it.</summary>
     /// <param name="repositoryRoot">The repository root.</param>
@@ -75,6 +76,7 @@ internal static class AffectedCommand {
 
         return true;
     }
+
     // The projects whose own files name a path's containing directory, spelled by its first two segments (such as
     // `tests/Puck.World.Verdicts` or `worlds/parlor`), or by its top-level name for a file one level down.
     private static Func<string, IReadOnlyList<string>> ConsumerSearch(string repositoryRoot, IReadOnlyList<AffectedProject> projects) {
@@ -302,6 +304,7 @@ internal static class AffectedCommand {
                 .Order(comparer: StringComparer.Ordinal),
         ]);
     }
+
     /// <summary>Resolves the base a plan compares against: <paramref name="since"/> as given, or with
     /// <paramref name="mergeBase"/> the merge base of <c>HEAD</c> and that revision, so commits the target gained after
     /// the branch left it never count as the branch's change.</summary>
@@ -340,10 +343,12 @@ internal static class AffectedCommand {
         // dotnet test builds each suite and applies the settings its project binds (RunSettingsFilePath), so an
         // opt-in tier such as Maths' Deep and Exhaustive stays out exactly as it does in CI. The suites build one after
         // another over a shared project graph, so build servers stay enabled for the next suite to reuse; the capture's
-        // post-exit drain bounds a server that inherited its pipes.
+        // post-exit drain bounds a server that inherited its pipes. The console logger is named at minimal verbosity:
+        // under a quiet build it would otherwise print a failed test's name on standard error and its message nowhere,
+        // and minimal prints each failure with its message and stack, and nothing for a pass.
         foreach (var suite in plan.Suites) {
             var run = CliProcess.RunCaptured(
-                arguments: ["test", Path.Combine(path1: repositoryRoot, path2: "tests", path3: suite, path4: $"{suite}.csproj"), "-c", "Release", "-v", "q", "-nologo"],
+                arguments: ["test", Path.Combine(path1: repositoryRoot, path2: "tests", path3: suite, path4: $"{suite}.csproj"), "-c", "Release", "-v", "q", "-nologo", "--logger", "console;verbosity=minimal"],
                 fileName: "dotnet",
                 input: string.Empty,
                 timeout: TimeSpan.FromMinutes(minutes: 30),
@@ -354,11 +359,13 @@ internal static class AffectedCommand {
 
             Console.Out.WriteLine(value: $"affected: {suite} {((run.ExitCode == 0) ? "passed" : "FAILED")} — {total}");
 
-            foreach (var line in output.Where(predicate: static line => (line.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "Failed ") || line.Contains(comparisonType: StringComparison.Ordinal, value: " error ")))) {
-                Console.Out.WriteLine(value: $"  {line.Trim()}");
-            }
-
+            // A failed suite's whole report follows its verdict line: every failure with its message and stack, or
+            // the build errors that stopped it.
             if (run.ExitCode != 0) {
+                foreach (var line in output.Concat(second: Lines(text: run.Stderr))) {
+                    Console.Out.WriteLine(value: $"  {line}");
+                }
+
                 failed.Add(item: suite);
             }
         }
@@ -469,7 +476,7 @@ internal static class AffectedCommand {
         }
 
         if (!TryResolveBase(error: out var baseError, mergeBase: mergeBase, repositoryRoot: repositoryRoot, resolved: out var resolved, since: since)) {
-            return CliExit.Refuse(verb: Verb, what: (mergeBase ?? since ?? "HEAD"), why: baseError);
+            return CliExit.Refuse(verb: Verb, what: (mergeBase ?? (since ?? "HEAD")), why: baseError);
         }
 
         if (!TryPlan(changed: out var changed, error: out var error, plan: out var plan, repositoryRoot: repositoryRoot, since: resolved)) {
