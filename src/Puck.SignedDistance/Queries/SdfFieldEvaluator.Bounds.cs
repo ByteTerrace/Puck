@@ -52,7 +52,7 @@ public sealed partial class SdfFieldEvaluator {
             Z: new FixedInterval(lower: lowerPoint.Z, upper: upperPoint.Z)
         );
         var local = world;
-        var distanceScale = FixedQ4816.One;
+        var distanceScale = Point(value: FixedQ4816.One);
         var result = FixedInterval.FromPoint(value: FarDistance);
         var saved = FixedInterval.FromPoint(value: FarDistance);
 
@@ -62,7 +62,7 @@ public sealed partial class SdfFieldEvaluator {
             switch (instruction.Op) {
                 case SdfOp.ResetPoint: {
                         local = world;
-                        distanceScale = FixedQ4816.One;
+                        distanceScale = Point(value: FixedQ4816.One);
                         break;
                     }
                 case SdfOp.Translate: {
@@ -81,7 +81,7 @@ public sealed partial class SdfFieldEvaluator {
                             Y: (local.Y / FixedInterval.FromPoint(value: scale.Y)),
                             Z: (local.Z / FixedInterval.FromPoint(value: scale.Z))
                         );
-                        distanceScale *= instruction.Data0W;
+                        distanceScale *= Point(value: instruction.Data0W);
                         break;
                     }
                 case SdfOp.Repeat: {
@@ -161,7 +161,7 @@ public sealed partial class SdfFieldEvaluator {
                             break;
                         }
 
-                        var candidate = (ShapeBounds(instruction: instruction, p: local) * Point(value: distanceScale));
+                        var candidate = (ShapeBounds(instruction: instruction, p: local) * distanceScale);
 
                         result = BlendBounds(blend: instruction.Blend, candidate: candidate, current: result, smoothRadius: instruction.Data1X);
                         break;
@@ -293,15 +293,15 @@ public sealed partial class SdfFieldEvaluator {
         }
 
         if (instruction.Blend == ((uint)SdfBlendOp.Morph)) {
-            var from = instruction.Data0Y;
-            var to = instruction.Data0Z;
-            var t = FixedQ4816.Clamp(
-                value: ((FixedQ4816.Zero - from) / (to - from)),
+            var from = Point(value: instruction.Data0Y);
+            var to = Point(value: instruction.Data0Z);
+            var t = FixedInterval.Clamp(
+                value: ((Point(value: FixedQ4816.Zero) - from) / (to - from)),
                 minimum: FixedQ4816.Zero,
                 maximum: FixedQ4816.One
             );
 
-            return ((Point(value: (FixedQ4816.One - t)) * saved) + (Point(value: t) * candidate));
+            return (((Point(value: FixedQ4816.One) - t) * saved) + (t * candidate));
         }
 
         if (isStairs) {
@@ -309,15 +309,15 @@ public sealed partial class SdfFieldEvaluator {
             var n = instruction.Data1Z;
 
             if ((n >= FixedQ4816.One) && (r > FixedQ4816.Zero)) {
-                var s = (r / n);
-                var twoS = Point(value: (s * Two));
+                var s = (Point(value: r) / Point(value: n));
+                var twoS = (s * Point(value: Two));
                 var isSubtraction = (instruction.Blend == ((uint)SdfBlendOp.StairsSubtraction));
                 var u = (isSubtraction
                     ? ((-candidate) - Point(value: r))
                     : (candidate - Point(value: r)));
-                var argument = ((u - saved) + Point(value: s));
+                var argument = ((u - saved) + s);
                 var m = (argument - (twoS * FixedInterval.Floor(value: (argument / twoS))));
-                var w = (m - Point(value: s));
+                var w = (m - s);
                 var stairs = (Point(value: Half) * ((u + saved) + FixedInterval.Abs(value: w)));
 
                 return (isSubtraction
@@ -414,12 +414,12 @@ public sealed partial class SdfFieldEvaluator {
                         y: unchecked((uint)(cy + y)) ^ (seed ^ 0x9E3779B9u),
                         z: unchecked((uint)(cz + z)) ^ (seed ^ 0x85EBCA77u)
                     );
-                    var feature = new FixedVector3(
-                        X: ((FixedQ4816.FromInteger(value: x) + Half) + (randomness * (FixedQ4816.FromRawBits(value: (h.X >> 16)) - Half))),
-                        Y: ((FixedQ4816.FromInteger(value: y) + Half) + (randomness * (FixedQ4816.FromRawBits(value: (h.Y >> 16)) - Half))),
-                        Z: ((FixedQ4816.FromInteger(value: z) + Half) + (randomness * (FixedQ4816.FromRawBits(value: (h.Z >> 16)) - Half)))
+                    var feature = new IntervalVector3(
+                        X: (Point(value: (FixedQ4816.FromInteger(value: x) + Half)) + (Point(value: randomness) * (Point(value: FixedQ4816.FromRawBits(value: (h.X >> 16))) - Point(value: Half)))),
+                        Y: (Point(value: (FixedQ4816.FromInteger(value: y) + Half)) + (Point(value: randomness) * (Point(value: FixedQ4816.FromRawBits(value: (h.Y >> 16))) - Point(value: Half)))),
+                        Z: (Point(value: (FixedQ4816.FromInteger(value: z) + Half)) + (Point(value: randomness) * (Point(value: FixedQ4816.FromRawBits(value: (h.Z >> 16))) - Point(value: Half))))
                     );
-                    var distance = (feature - fraction).Length;
+                    var distance = FixedInterval.Magnitude(x: (feature.X - fraction.X), y: (feature.Y - fraction.Y), z: (feature.Z - fraction.Z));
 
                     // The two smallest of the running set, each an order statistic monotone in every argument.
                     var lowest = FixedInterval.Min(first: first, second: distance);
@@ -702,11 +702,6 @@ public sealed partial class SdfFieldEvaluator {
             X: (left.X - FixedInterval.FromPoint(value: right.X)),
             Y: (left.Y - FixedInterval.FromPoint(value: right.Y)),
             Z: (left.Z - FixedInterval.FromPoint(value: right.Z))
-        );
-        public static IntervalVector3 operator -(FixedVector3 left, IntervalVector3 right) => new(
-            X: (FixedInterval.FromPoint(value: left.X) - right.X),
-            Y: (FixedInterval.FromPoint(value: left.Y) - right.Y),
-            Z: (FixedInterval.FromPoint(value: left.Z) - right.Z)
         );
         public static IntervalVector3 operator *(IntervalVector3 left, FixedQ4816 right) => new(
             X: (left.X * FixedInterval.FromPoint(value: right)),

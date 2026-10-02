@@ -9,8 +9,8 @@ namespace Puck.SignedDistance.Tests;
 /// <summary>
 /// The certified queries prove what they answer. A certified sweep never carries a sphere through a surface, however
 /// thin the surface and however long the step, where a fixed-step stepper that samples the field only at each step's ends
-/// passes straight through the same wall (the red leg, which keeps the fixture honest). Every point of a certified sweep
-/// keeps the point field above the radius, and a certified line of sight's Clear and Blocked agree with the point field
+/// passes straight through the same wall (the red leg, which keeps the fixture honest). Every sampled point of the swept
+/// sphere keeps the point field above zero, and a certified line of sight's Clear and Blocked agree with the point field
 /// along the segment.
 /// </summary>
 public sealed class SdfCertifiedQueryLawTests {
@@ -18,6 +18,65 @@ public sealed class SdfCertifiedQueryLawTests {
     private const int SweepBudget = 4096;
     private const float WallHalfThickness = 0.005f;
 
+    [Fact]
+    public void ALineOfSightDoesNotWrapTheDifferenceBetweenRepresentableEndpoints() {
+        var builder = new SdfProgramBuilder();
+
+        _ = builder.Translate(offset: new Vector3(x: ((float)(-(7L << 44))), y: 0f, z: 0f))
+            .Sphere(material: builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)), radius: 1f);
+
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
+        var from = FixedPosition.FromLocal(local: new FixedVector3(X: FixedQ4816.FromRawBits(value: -(3L << 61)), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero));
+        var to = FixedPosition.FromLocal(local: new FixedVector3(X: FixedQ4816.FromRawBits(value: (3L << 61)), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero));
+
+        // The sphere lies left of both endpoints. A wrapped displacement instead visits its centre at t = 1/4.
+        Assert.True(condition: evaluator.TryCertifiedLineOfSight(boundsQueryBudget: 4, from: from, sight: out var sight, to: to));
+        Assert.NotEqual(expected: SdfCertifiedVisibility.Blocked, actual: sight.Visibility);
+    }
+    [Fact]
+    public void ASphereSweepProvesItsVolumeWhenTheFieldGradientExceedsOne() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.Plane(material: material, normal: Vector3.UnitY, offset: 0f)
+            .Plane(blend: SdfBlendOp.ChamferIntersection, material: material, normal: Vector3.UnitY, offset: 0f, smooth: 0f);
+
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
+
+        Assert.True(condition: evaluator.TryCertifiedSweep(
+            boundsQueryBudget: SweepBudget,
+            displacement: Fixed(value: new Vector3(x: 0f, y: -1.25f, z: 0f)),
+            origin: FixedPosition.FromLocal(local: Fixed(value: new Vector3(x: 0f, y: 2f, z: 0f))),
+            radius: FixedQ4816.One,
+            sweep: out var sweep
+        ));
+        Assert.Equal(expected: SdfCertifiedSweepOutcome.Contact, actual: sweep.Outcome);
+        Assert.True(condition: sweep.Reached.TryDelta(delta: out var reached, origin: FixedPosition.Zero));
+        // Both planes have the same zero set, y = 0, despite the bevel's larger field gradient.
+        Assert.True(condition: (reached.Y > FixedQ4816.One));
+        Assert.True(condition: (reached.Y < FixedQ4816.FromDouble(value: 1.01)));
+    }
+    [Fact]
+    public void ASweepCannotCertifyTravelPastTheEvaluatorFrame() {
+        var builder = new SdfProgramBuilder();
+
+        _ = builder.Plane(material: builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)), normal: Vector3.UnitY, offset: 0f);
+
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
+        var start = new FixedVector3(X: FixedQ4816.FromRawBits(value: (long.MaxValue - 100L)), Y: FixedQ4816.One, Z: FixedQ4816.Zero);
+
+        Assert.True(condition: evaluator.TryCertifiedSweep(
+            boundsQueryBudget: 256,
+            displacement: new FixedVector3(X: FixedQ4816.FromRawBits(value: 200L), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero),
+            origin: FixedPosition.FromLocal(local: start),
+            radius: FixedQ4816.Zero,
+            sweep: out var sweep
+        ));
+        Assert.NotEqual(expected: SdfCertifiedSweepOutcome.Clear, actual: sweep.Outcome);
+        Assert.True(condition: (sweep.Fraction < FixedQ4816.One));
+        Assert.True(condition: sweep.Reached.TryDelta(delta: out var reached, origin: FixedPosition.Zero));
+        Assert.InRange(actual: reached.X.Value, low: start.X.Value, high: (long.MaxValue - 1L));
+    }
     [InlineData(1f)]
     [InlineData(10f)]
     [InlineData(1000f)]
@@ -74,17 +133,22 @@ public sealed class SdfCertifiedQueryLawTests {
         var evaluator = Scene();
         var random = new Random(Seed: 1234);
         var radius = FixedQ4816.FromDouble(value: Radius);
+        FixedVector3[] offsets = [
+            FixedVector3.Zero,
+            new(X: radius, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero),
+            new(X: -radius, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero),
+            new(X: FixedQ4816.Zero, Y: radius, Z: FixedQ4816.Zero),
+            new(X: FixedQ4816.Zero, Y: -radius, Z: FixedQ4816.Zero),
+            new(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: radius),
+            new(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: -radius),
+        ];
 
         for (var trial = 0; (trial < 64); trial++) {
             var start = Fixed(value: new Vector3(x: Next(random: random, scale: 4f), y: (1.5f + Next(random: random, scale: 1f)), z: Next(random: random, scale: 4f)));
             var displacement = Fixed(value: new Vector3(x: Next(random: random, scale: 6f), y: Next(random: random, scale: 3f), z: Next(random: random, scale: 6f)));
 
             Assert.True(condition: evaluator.TryCertifiedSweep(boundsQueryBudget: SweepBudget, displacement: displacement, origin: FixedPosition.FromLocal(local: start), radius: radius, sweep: out var sweep));
-            Assert.True(condition: evaluator.TryDistance(distance: out var atStart, material: out _, position: FixedPosition.FromLocal(local: start)));
-
-            // A sphere that starts within its radius of a surface is certified nowhere.
-            if (atStart <= radius) {
-                Assert.Equal(expected: SdfCertifiedSweepOutcome.Contact, actual: sweep.Outcome);
+            if ((sweep.Outcome == SdfCertifiedSweepOutcome.Contact) && (sweep.Reached == FixedPosition.FromLocal(local: start))) {
                 Assert.Equal(expected: FixedQ4816.Zero, actual: sweep.Fraction);
                 continue;
             }
@@ -93,12 +157,16 @@ public sealed class SdfCertifiedQueryLawTests {
                 var t = FixedQ4816.FromRawBits(value: ((sweep.Fraction.Value * sample) / 64L));
                 var point = (start + (displacement * t));
 
-                Assert.True(condition: evaluator.TryDistance(distance: out var distance, material: out _, position: FixedPosition.FromLocal(local: point)));
-                Assert.True(condition: (distance > radius), userMessage: $"trial {trial}: the certified sweep reached {sweep.Fraction}, but at {t} the field reads {distance}, not above the radius");
+                foreach (var offset in offsets) {
+                    Assert.True(condition: evaluator.TryDistance(distance: out var distance, material: out _, position: FixedPosition.FromLocal(local: (point + offset))));
+                    Assert.True(condition: (distance > FixedQ4816.Zero), userMessage: $"trial {trial}: the certified sweep reached {sweep.Fraction}, but at {t} the sphere's offset {offset} reads {distance}");
+                }
             }
 
-            Assert.True(condition: evaluator.TryDistance(distance: out var atReached, material: out _, position: sweep.Reached));
-            Assert.True(condition: (atReached > radius), userMessage: $"trial {trial}: the reached centre reads {atReached}, not above the radius");
+            foreach (var offset in offsets) {
+                Assert.True(condition: evaluator.TryDistance(distance: out var atReached, material: out _, position: (sweep.Reached + offset)));
+                Assert.True(condition: (atReached > FixedQ4816.Zero), userMessage: $"trial {trial}: the reached sphere's offset {offset} reads {atReached}");
+            }
         }
     }
     [Fact]

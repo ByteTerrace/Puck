@@ -198,9 +198,14 @@ Two certified queries are built on it:
 - **`TryCertifiedSweep`** moves a sphere along a displacement by conservative
   advancement. Each step is the certified clearance divided by the program's
   Lipschitz bound, and the step's whole segment is then proved clear by one
-  bounds query over its box. A sphere swept this way never passes through a
+  bounds query over its box expanded by the radius, with a positive lower field
+  bound throughout. The centre's field alone cannot prove a sphere clear when
+  the field's gradient exceeds one. A sphere swept this way never passes through a
   surface, however thin the surface or however long the step. A step that only
   samples the field at its ends tunnels through such a surface.
+  If the initial sphere cannot be proved clear, the result is `Contact` at zero
+  travel with the original centre. A box leaving the evaluator's representable
+  frame cannot certify an advance.
 - **`TryCertifiedLineOfSight`** splits a segment into boxes until each is proved
   clear, or a point of it is proved inside. Anything it cannot prove within its
   budget is `Undecided`.
