@@ -163,6 +163,11 @@ public sealed partial class WorldTransferEscrow {
 
     public WorldTransferEscrow(WorldServer server) => m_server = server;
 
+    /// <summary>Gets or sets a commit member ordinal whose admission every commit refuses inside the landing loop, after
+    /// the members ahead of it have landed, so a law can roll a landed cohort back. Verification only: a world never
+    /// sets it, and <see langword="null"/> refuses nothing.</summary>
+    public int? TestRefuseLandingOrdinal { get; set; }
+
     /// <summary>Captures every table this escrow owns.</summary>
     public WorldTransferEscrowCheckpoint Capture() {
         var leases = new List<WorldTransferLeaseCheckpoint>(capacity: m_leases.Count);
@@ -737,7 +742,14 @@ public sealed partial class WorldTransferEscrow {
             var mobility = reservationMember.Mobility!.Value.Advance();
             SessionReply reply;
 
-            if (lease.Request.PeerAdmission) {
+            if (TestRefuseLandingOrdinal == index) {
+                reply = new SessionReply(
+                    Accepted: false,
+                    AssignedIndex: -1,
+                    Reason: $"TEST-ONLY forced landing refusal at member {index}",
+                    RosterEcho: string.Empty
+                );
+            } else if (lease.Request.PeerAdmission) {
                 var occupant = new WorldTransferredOccupant(
                     CatalogRig: reservationMember.CatalogRig,
                     TravelTurn: member.TravelTurn
