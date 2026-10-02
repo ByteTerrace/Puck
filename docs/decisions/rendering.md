@@ -606,12 +606,17 @@ rays' distances, which is an estimate: a texel mixing a near and a far hit has a
 mean that gives a surface behind the near wall full weight, and renormalizing
 the survivors makes it worse. Puck can do better because the field answers a
 segment query exactly. Each cell's eight corner probes are connected only by
-segments an exact field trace reaches end to end, and a surface reads only the
-corners of its own component, choosing it by a separating plane fitted inside
-the cutting surface or, in the rare complex cell, by its own exact traces. A
-sealed wall of any thickness that crosses a cell cuts every segment across it,
-so a sealed room takes no light through its walls, and the only bound left is a
-plane-fit tolerance beside curved surfaces. The cache keeps no moments.
+segments an exact field trace reaches end to end, and a surface reads only a
+component its own point reaches: in a cell with more than one component, or a
+pocket of free space no corner reaches, the receiver proves its component with
+one short trace to its nearest corner. A sealed wall of any thickness or
+curvature that crosses a cell cuts every segment across it, so a sealed room
+takes no light through its walls; the only bound left is a sealed enclosure
+small enough to slip between a cell's sub-samples. A separating plane fitted to
+the blocked segments' hits is not enough on its own: a sheet that leaves every
+corner on one side, or encloses a pocket, would let a plane send a receiver
+across it, so the plane only orders which component a receiver tries first. The
+cache keeps no moments.
 
 **Continuation seeks support instead of guessing.** Finer levels trace short
 rays and continue into coarser levels, the interval-merging idea of radiance

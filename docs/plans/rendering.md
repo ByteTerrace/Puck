@@ -2293,7 +2293,8 @@ so it records nothing and holds no memory. Its parts:
 - **`classify`** runs for each newly allocated or geometry-dirtied brick. It
   evaluates the field at each probe and decides its class: **dormant** when
   the clamped distance proves no surface lies within its eight cells widened by
-  the relocation allowance and no continuation has asked for it; **relocated**
+  the relocation allowance, so no receiver reads it and a continuation never
+  stops on it; **relocated**
   when it sits inside or against geometry and a gradient step of less than half
   a spacing, rechecked for clearance, gets it clear; **inactive** when none
   does; **active** otherwise. A relocation invalidates every ray from the old
@@ -2301,9 +2302,14 @@ so it records nothing and holds no memory. Its parts:
   the 28 segments between the cell's eight corner probes (12 edges, 12 face
   diagonals and 4 body diagonals) through the clamped field, connecting two
   corners only when the trace reaches its end, so a march that gives up counts
-  as blocked, and traces each blocked segment again from its other end. The connected corners form the cell's components. Where the
-  blocked segments' first hits fit one plane within a tolerance τ, the cell
-  stores that oriented separating plane; otherwise the cell is **complex**.
+  as blocked, and traces each blocked segment again from its other end. The
+  connected corners form the cell's components. Where exactly two remain and
+  the blocked segments' first hits fit one plane within a tenth of the spacing,
+  the cell stores that oriented plane as the order a receiver tries the
+  components in. Last, it tests 27 sub-samples of the cell's free space, a
+  third of the spacing apart, for one that reaches no corner by a clear segment;
+  such a cell is **pocketed**. A cell with more than one component or a pocket
+  **verifies**: its receivers prove their component with a trace of their own.
 - **`trace`** marches one stratum of a probe's rays: one 64-lane workgroup per
   probe and stratum, every lane a ray from the same origin. Because the rays
   share an origin, the group's instance mask is the instances whose bound meets
@@ -2347,16 +2353,19 @@ so it records nothing and holds no memory. Its parts:
   its borders are written, and no workgroup reads a neighbour's sweep in
   progress.
 - **The views pass applies the cache** where a lit surface shades. It finds the
-  finest level whose cell holding the point is allocated, offsets the point
-  along its normal by a bias b to q, chooses its component by the side of the
-  cell's plane that q lies on (in a complex cell, by an exact trace from q to
-  each active corner, counted), and weights that component's active, traced
-  corners by trilinear position and by facing, renormalized over them. It adds
-  the irradiance to the diffuse radiance the material shades by, and evaluates
-  the field nowhere outside a complex cell. A component whose corners are all
-  inside geometry is occluded and gives zero; a cell that is unallocated or not
-  yet traced is pending and reads the next coarser level, and past the coarsest
-  the view shades as it does with indirect light off.
+  finest level whose cell holding the point is allocated and moves the point
+  along its normal to q, by a twentieth of the spacing or, where a short trace
+  finds another surface nearer along the normal, halfway to it, so q never
+  crosses a surface. In a cell that does not verify it reads the one
+  component; in a cell that verifies it traces from q to the nearest corner of
+  each component in turn, the plane's side first, and reads the first
+  component that trace reaches. It weights that component's lit, traced
+  corners by trilinear position and by facing, renormalized over them, and
+  adds the irradiance to the diffuse radiance the material shades by. It
+  evaluates the field only for q's short trace and in a verifying cell. A
+  receiver that reaches no component, or a component with no traced corner,
+  reads the next coarser level, and past the coarsest the view shades as it
+  does with indirect light off.
 
 **The artist's model.** Global illumination is a typed section with three kinds
 of layer, each counted, each with the lowest tier it runs at, and each an
@@ -2456,18 +2465,19 @@ bounce and the computed one are never added together.
   mixes a 0.1 m hit and a 10 m one has a 5 m mean, and a surface 1 m behind the
   near wall gets full weight, which renormalization then makes worse. The cache
   keeps no distance moments. Instead each cell's corners are connected only by
-  exact field traces, and a receiver reads only the corners of its own
-  component. A surface that cuts every segment between two groups of corners
-  separates them, and a sealed wall of any thickness that crosses a cell does
-  exactly that. For a cell cut by one planar sheet, the fitted plane lies
-  inside the sheet, because each blocked segment is traced from both ends and
-  so hits both of its faces, so
-  every receiver in free space on either side chooses its own side, however
-  thin the sheet. The precise guarantee, its bound and its laws are under
-  the guarantees below. The same
-  rule darkens the floor under a table, which the table separates from the
-  probes above it, and errs dark beside a small occluder inside one cell,
-  never light through a wall.
+  exact field traces, and a receiver reads only a component its own point
+  reaches. A surface that cuts every segment between two groups of corners
+  separates them, so a sealed wall of any thickness that crosses a cell splits
+  it, and a receiver on either side reaches only its own side's corners. A
+  fitted plane alone would not do: it orders the components, but a sheet that
+  leaves every corner on one side, a curved sheet, or a pocket no corner shares
+  would let a plane send a receiver across it, so a cell with more than one
+  component or a pocket always makes the receiver prove its component with one
+  short trace. The precise guarantee, its bound and its laws are under the
+  guarantees below. The same rule keeps the floor under a table from reading
+  the probes above it. Near an opening the error is interpolation, not
+  leakage: a receiver beside a doorway reads probes the opening lights, and
+  reads brighter than the reference there.
 - **A probe stores hits, so the cache relights without marching.** Each probe
   has fixed strata of 64 directions, a spherical Fibonacci set rotated by a
   rotation derived from the probe's key through an integer hash, the same on
@@ -2650,7 +2660,7 @@ bounce and the computed one are never added together.
   starves a generation's work. The list is a region the passes read and the
   dispatch sizes come from it, so the scheduled counts are `Deterministic`;
   what the kernels do inside a dispatch (a dormant probe's skipped rays, a
-  complex cell, an unresolved ray) is `PerBackendDeterministic`, like every
+  verifying cell's traces, an unresolved ray) is `PerBackendDeterministic`, like every
   march. A capture starts its dependency closure cold from one frozen
   presentation snapshot (materials, poses, slot fades, filled screens), runs a
   fixed trace schedule, a fixed solve, its portal iterations and then P15's
@@ -2668,58 +2678,64 @@ bounce and the computed one are never added together.
   off.
 
 **The guarantees and their bounds.** These are the transport rules G1 holds on
-the CPU before any layout is settled, each with its counterexample laws.
+the CPU model against the reference, each with its counterexample laws, and the
+measured values below are those laws' fixtures at a 1.5 m spacing.
 
-- **Walls.** *Guarantee:* within a cell, a receiver never reads a corner probe
-  that a surface separates from every corner on the receiver's side, where
-  "separates" means every straight segment between them is blocked by an exact
-  field trace. A sealed room therefore takes no light from probes outside it
-  through any wall, of any thickness, that crosses a cell as one planar sheet.
-  *Bound:* the separating plane is fitted within the tolerance τ, a tenth of
-  the spacing; where a curved sheet is fitted, a receiver whose offset point q
-  lies within τ of the sheet may choose the wrong side, so light can reach at
-  most a τ-wide band beside a curved surface. A complex cell resolves each
-  corner with an exact trace from q, which leaks nothing. Inside one component,
-  an occluder that separates no corners (a pillar inside a cell) is not
-  resolved, so light passes around it within that cell. *Laws:*
-  `IrradianceVisibilityLawTests` build a sealed dark room with 0.05 m walls,
-  planar and curved, beside a bright exterior, with receivers throughout a
-  1.5 m cell on both faces, on the floor at the wall's foot, under a table and
-  beside a doorway, and hold the dark side's irradiance to G1's reference
-  within a stated error and the lit side's light retained (red legs: the
-  partition skipped, an unfitted plane, moments in place of the partition,
-  renormalization across components).
+- **Walls.** *Guarantee:* every corner a receiver reads is joined to the
+  receiver's point by a chain of straight segments inside the cell that exact
+  field traces prove clear: in a verifying cell the receiver's own trace to one
+  corner of the component, and the partition's traces among that component's
+  corners. A sealed surface admits no such chain, so a sealed room takes no
+  light through its walls from probes outside it, whatever the walls' thickness
+  or curvature, and q's own trace keeps a receiver from reading across a second
+  surface near its own. *Bound:* in a cell with one component, the receiver is
+  trusted to share the corners' free space; a sealed enclosure small enough to
+  lie inside one cell between all 27 of its sub-samples, a third of the spacing
+  apart, is not detected. Inside a component, an occluder that separates no
+  corners (a pillar inside a cell) lets light round it within the cell, and near
+  an opening a receiver reads probes the opening lights. *Laws:*
+  `IrradianceVisibilityLawTests` hold a sealed room with 0.05 m walls, planar at
+  four offsets throughout the cell and spherical at three, beside an exterior
+  lit at 1, exactly dark inside (below 10⁻¹² at the wall's foot, on the wall's
+  face, in a corner and on the ceiling) with its outside lit, where the
+  partition switched off leaks up to 0.78 at the same receivers; the floor under
+  a table reads none of the corners above it and stays within 0.05 of the
+  reference (0.23 against 0.26, against 0.35 with the partition off); and every
+  receiver beside a doorway reads light, within 0.06 of the reference against
+  the exterior's 1 (the largest, 0.045, just behind the frame), where the
+  partition switched off overshoots the far corner by more than 0.06.
 - **Continuation.** *Guarantee:* a ray reads sky only at a world exit; it reads
-  a coarser probe only from the component of the coarser cell that holds its
-  point, and only that probe's nearest stored ray whose hit lies beyond the
-  point along the ray (`dot(h − e, ω) > 0`), or which itself continued or
-  exited, so no interval the fine ray already crossed is counted twice.
-  *Bound:* the coarser probe's ray starts at its own position, not the fine
-  ray's point, so geometry within the coarser cell's diagonal of the fine
-  ray's line can be missed or added (parallax). *Laws:*
-  `IrradianceContinuationLawTests` put a small receiver inside a large sealed
-  emissive shell whose middle no coarse support reaches, a thin blocker
-  between a ray's end and a coarse probe, every coarse probe inactive, a
-  refused pool and a wall beyond the coarsest level's reach, and hold each to
-  G1's reference with no sky in a sealed shell (red legs: a finite-reach miss
-  read as sky, dormant support read anyway, the beyond-the-point test
-  dropped).
+  a coarser probe only from a component of the coarser cell its point reaches,
+  and only that probe's nearest stored ray whose hit lies beyond the point along
+  the ray (`dot(h − e, ω) > 0`), or which itself continued or exited, so no
+  interval the fine ray already crossed is counted twice. A dormant probe never
+  supports a continuation, so a ray in empty space marches on. *Bound:* the
+  coarser probe's ray starts at its own position, not the fine ray's point, so
+  geometry within the coarser cell's diagonal of the fine ray's line can be
+  missed or added (parallax). *Laws:* `IrradianceContinuationLawTests` hold the
+  receiver at the middle of a sealed hall of radius 12, whose middle the coarse
+  level leaves dormant, to the hall's light exactly, with no fine ray exiting
+  (red leg: a finite-reach miss read as sky gives the sky's 5), the same with
+  the coarse level not allocated at all, and a continuation beside a bright
+  plate that the coarse corner behind the fine ray's end sees to the dark far
+  wall exactly (red leg: without the beyond-the-point test the plate's light
+  enters).
 - **Bounce-source visibility.** *Guarantee:* each hit's visibility toward a
   shadowed light is its own, never its probe's. *Bound:* a light view's answer
   differs from a march from the hit only within its texel size at the hit and
   its divergence, which is under half the penumbra angle by the choice of D.
-  *Laws:* `IrradianceHitVisibilityLawTests` put a sunlit and a shadowed patch
-  inside one probe's cell, move a thin occluder off every probe-to-hit segment
-  and onto a hit-to-light one, and reassign a slot, holding each hit to its own
-  `LineOfSight` (red legs: the probe's visibility substituted, the shadow path
-  left valid).
+  *Laws:* `IrradianceVisibilityLawTests` light a probe in a table's shadow
+  whose rays reach both the shaded floor beneath and the sunlit floor beyond,
+  and hold every hit to its own visibility (red leg: the probe's own visibility
+  is blocked, so substituting it darkens every sunlit hit); G3's device law
+  holds the light views to the same per-hit answer.
 - **Acceptance and exhaustion.** *Guarantee:* a hit lies within `ε·t` of its
   surface, and an exhausted ray adds no light. *Bound:* the unresolved share is
   a counted row, held under a stated ceiling on the fixtures and recorded with
-  every capture. *Laws:* a ray grazing an emissive wall stores no hit until it
-  is within `ε·t` of it, and a low-step-scale ray that exhausts stays
-  unresolved (red legs: acceptance at the ray's cone radius, exhaustion read as
-  a miss).
+  every capture. *Laws:* `IrradianceLatticeLawTests` hold a ray grazing 0.1
+  above a wall unaccepted along 20 units (red leg: acceptance at a 128-ray
+  cone's radius stops it on empty space), and `IrradianceReferenceLawTests` a
+  ray grazing just above a floor unresolved, never a miss.
 
 **Tiers and budgets.** The RTX 2060 is the floor device and records every
 ceiling. `low` is the floor tier, where indirect light is off and every row is a
@@ -2764,13 +2780,15 @@ The worst frames at `medium` against today's work: today's ambient occlusion
 evaluates the field about 2,100,000 times on every frame `ambient` runs; a
 trace frame at most 532,480 times (8,192 rays of 65), only while there is
 something to trace; a classify frame at most four bricks of 64 probe
-evaluations, relocation and 1,792 partition traces of at most 16 steps (a
-cell for each probe, 28 segments a cell), with blocked ones traced twice; a light
+evaluations, relocation, 1,792 partition traces of at most 16 steps (a
+cell for each probe, 28 segments a cell, blocked ones traced twice) and 1,728
+pocket sub-samples, each tracing until it reaches a corner; a light
 view refresh one depth-only 512² render, about a quarter of the view's own
 primary pass; a shade frame 524,288 hits, each a walk of the lights, a light
 view lookup per shadowed light and one cache lookup, which is about as much
 shading as `views` does but no field evaluation; and the apply one cell record,
-one component choice and eight filtered irradiance reads per lit pixel. Whether
+a short offset trace along the normal, a verifying trace in a cell that
+verifies, and eight filtered irradiance reads per lit pixel. Whether
 that fits the RTX 2060's `medium` frame is decided from the counted rows G2 to G5
 record, not from estimates. If it does not, `medium` steps down this ladder in
 order, each step re-recorded, and keeps the owner's 1.5 m `room` spacing
@@ -2783,12 +2801,12 @@ counters, as every SDF pass does since P15-1, and each row carries its level
 or slot as the detail label P18 adds to the ledger:
 
 - `gpu.march.steps` under `indirect$classify`, `indirect$trace` (a hit's
-  gradient evaluation counts as a step) and `views` for complex cells (detail
+  gradient evaluation counts as a step) and `views` for a receiver's offset and a verifying cell's traces (detail
   `indirect`), and each light view's march rows under its own instance;
   `gpu.texels.written` under `indirect$shade`;
 - `gpu.indirect.hits`, the hits `shade` lit, `gpu.indirect.samples`, the cache
   lookups `views` made, `gpu.indirect.unresolved` and
-  `gpu.indirect.complex`, all `PerBackendDeterministic` kernel kinds;
+  `gpu.indirect.verified` (receivers that traced to prove their component), all `PerBackendDeterministic` kernel kinds;
 - in an `indirect` `WorkCounterSet` on the host, all `Deterministic`:
   `indirect.rays.scheduled`, `indirect.probes.scheduled` by reason
   (`demand`, `geometry`, `light`, `shadow`, `screen`, `converge`),
@@ -2807,56 +2825,72 @@ completed still world; and `gpu.indirect.samples` wherever `views` does not run.
 say otherwise, with its counted rows, its laws and canaries, and any parity
 re-record explained in the same change.
 
-1. **G1, the reference and a CPU model of the transport.** Starts now: it
-   touches no file an in-flight lane touches and changes no frame.
-   - Delivers, in a new `src/Puck.SignedDistance/Illumination` folder:
-     - **The reference.** An irradiance estimator over a program that every
-       later law holds the cache to: stratified, seeded low-discrepancy
-       sampling of the cosine hemisphere at a point, rays through
-       `SdfFieldEvaluator.Raycast` (the one CPU march; no second interpreter,
-       as the bake rule requires), normals from `TryFieldGradient` (six
-       samples on the CPU, not the GPU's one), albedo and emission from the
-       program's material rows, a stated number of bounces, and the direct
-       light at a hit and the sky at an exit as functions its caller supplies,
-       so it carries no light record of its own. It accumulates in scalar
-       double arithmetic in a written order and normalizes as the cache does.
-       It covers the programs the fixed-point evaluator supports and names the
-       op it refuses; a `Bounded` hit or a failed gradient is unresolved, never
-       shaded.
-     - **The CPU model.** The cache's rules as the GPU's reference, as
-       `ImageSourceConversion` is the conversion kernels': the lattice, keys
-       and positions, the direction strata, the texel layouts and border
-       rule, classification and relocation, the cell partition over
-       `LineOfSight` with its plane fit and complex cells, acceptance and
-       exhaustion, the continuation rule with its beyond-the-point test, the
-       apply, and the finite two-generation solve.
-     - **The schedule.** Demand, allocation and eviction, the dirty rules, the
-       priority order, progress, the budget and the update list, as pure
-       functions of plain inputs.
+1. **G1, the reference and a CPU model of the transport.** It touches no file an
+   in-flight lane touches and changes no frame.
+   - Delivers, in `src/Puck.SignedDistance/Illumination`:
+     - **The reference** (`IrradianceReference`). An irradiance estimator over
+       a program that every later law holds the cache to: cosine-weighted
+       directions from a Halton sequence, a fixed pair of prime bases a bounce,
+       rays through `SdfFieldEvaluator.Raycast` (the one CPU march; no second
+       interpreter, as the bake rule requires), normals from `TryFieldGradient`
+       (six samples on the CPU, not the GPU's one), a stated number of bounces,
+       and the surfaces, the direct light at a hit and the sky at an exit as
+       functions its caller supplies (`IrradianceSurfaces`, which also builds
+       them from the materials a program was built with: diffuse albedo
+       `albedo × (1 − metal)` and self-emission `albedo × emissive`), so it
+       carries no light record of its own. It accumulates in scalar double
+       arithmetic in a written order and normalizes as the cache does. A
+       program the evaluator refuses is refused by name, and a `Bounded` hit or
+       a failed gradient is counted unresolved, never shaded.
+     - **The CPU model** (`IrradianceCacheModel`, over `IrradianceField`,
+       `IrradianceLattice`, `IrradianceCells` and `IrradianceAcceptance`). The
+       cache's rules as the GPU's reference, as `ImageSourceConversion` is the
+       conversion kernels': levels, bricks, keys and positions; the direction
+       strata, a host-computed spherical Fibonacci base set turned by one of the
+       cube's 48 symmetries from the probe key's hash, so every machine turns it
+       exactly; the octahedral layouts and border rule; classification and
+       relocation on the clamped distance; the cell partition, its plane order,
+       its pockets and the receiver's verifying trace; acceptance and
+       exhaustion; continuation with its beyond-the-point test; the apply; and
+       the finite two-generation solve. Segments are cast end to end with
+       `Raycast`, never `LineOfSight`, whose 0.05 skin would miss a wall that
+       close to a corner. The model reads a probe's irradiance as the
+       cosine-weighted mean of its rays' radiance, the quantity the GPU's
+       irradiance texels store; G4's device law holds the texel lookup to it.
+     - **The schedule** (`IrradianceSchedule`). Demand, allocation and eviction
+       (the nearest bricks kept), the geometry dirty rule, the priority order
+       (a first stratum anywhere before a later stratum anywhere, then the
+       coarsest level, the nearest camera and the key), the budgets and the
+       update list, as pure functions of plain inputs.
    - Touches: only the new folder and new test files in
-     `tests/Puck.SignedDistance.Tests`, with its README's list of laws.
-   - Done when: `IrradianceReferenceLawTests` hold the furnace's finite-sweep
-     formula at ρ = 0, a middle ρ and ρ = 1 (red leg: a bounce dropped), a
-     floor under a constant sky to the sky's colour, an ideal emissive
-     half-plane beside a floor to half its radiance and a finite wall to its
-     analytic form factor (red leg: rays through geometry), and refuse a
-     `Bounded` hit and an unsupported op (red leg: shading the exhausted
-     ray); the four guarantee laws above pass on the CPU model against the
-     reference; `IrradianceLatticeLawTests` hold keys and positions round
-     trip, the strata to pinned values and a stated cosine-weighted
-     discrepancy bound, the borders, and classification sound with relocated
-     support (red leg: a dormant threshold of one spacing drops a probe a
-     crease's cell needs); `IrradianceFeedbackLawTests` reverse workgroup
-     order and split sweeps across frames without changing the result (red
-     leg: in-place neighbour reads) and stop at the authored bounce count for
-     unit albedo; `IrradianceScheduleLawTests` hold the budget never exceeded,
-     the same inputs to the same list in any arrival order, a pan with no new
-     bricks and a completed still world to empty lists, two cameras sharing a
-     brick to one allocation, and eviction never taking a demanded brick nearer
-     a camera than one it keeps. Nothing outside the tests references the
-     folder.
-   - Counted-cost gate: no GPU row moves. The model's laws state the per-frame
-     counts and the partition and unresolved shares G2's ceilings start from.
+     `tests/Puck.SignedDistance.Tests`, with its README.
+   - Done when: `IrradianceReferenceLawTests` hold the furnace's finite-bounce
+     series at ρ = 0, 0.5 and 1 (red leg: one bounce more differs), a floor
+     under a constant sky to the sky's colour, a finite emissive wall to its
+     form factor integrated by quadrature independently of the field, and a
+     floor under an emissive disc to `R²/(R² + h²)`, name an unresolved grazing
+     ray and refuse a warp by name; `IrradianceFeedbackLawTests` hold the cache
+     model to the furnace's series at ρ = 0, 0.5 and 1 and to the same result
+     whichever order its probes are swept in and however its sweeps split; the
+     guarantee laws above (`IrradianceVisibilityLawTests`,
+     `IrradianceContinuationLawTests`) pass with their red legs;
+     `IrradianceLatticeLawTests` hold bricks and keys, the 28 corner pairs, each
+     stratum spanning the sphere, exact orientations, the octahedral round trip
+     and its borders, acceptance, and classification keeping a corner 2.4 units
+     from a surface in its cell (red leg: a dormant threshold of one spacing
+     drops it); `IrradianceScheduleLawTests` hold the budgets, the same plans in
+     any input order, empty plans on a completed still world and an idle pan, one
+     allocation for a shared brick, the nearest bricks kept under pool pressure,
+     and a geometry change re-tracing exactly the probes whose reach it meets.
+     Nothing outside the tests references the folder.
+   - Counted-cost gate: no GPU row moves.
+   - Status: landed. Every law above passes on the CPU, and the whole
+     `Puck.SignedDistance.Tests` suite with it. The model settles two layout
+     questions: a separating plane alone would send a receiver across a sheet
+     that leaves every corner on one side or encloses a pocket, so a verifying
+     cell's receiver traces to prove its component; and the doorway's error is
+     interpolation beside the opening, within 0.06 of the reference, not
+     leakage.
 2. **G2, the cache traced and partitioned.** After P18-4 and P18-5 reach the
    features head, since it extends the package declarations and the World
    group they move.
@@ -2872,7 +2906,7 @@ re-record explained in the same change.
      an epoch reset of the whole cache on every program upload, which G5
      narrows; the `world.indirect off|medium|high` lever; and the debug views
      `indirect-probes` (each probe a small sphere coloured by its class) and
-     `indirect-cells` (each surface coloured by its cell's component, complex
+     `indirect-cells` (each surface coloured by its cell's component, verifying
      cells marked). Nothing is lit or applied.
    - Touches: `SdfWorldPackage` (a partial file), `RenderGraphPackages`,
      `SdfKernel`, `passes/` and a new `indirect/` kernel module directory, the
@@ -2894,7 +2928,7 @@ re-record explained in the same change.
      zero in every recorded workload.
    - Counted-cost gate: at `medium` at most 8,192 rays and 532,480 trace
      evaluations a frame, at most four bricks classified, the unresolved and
-     complex shares within the fixtures' ceilings, none on a completed still
+     verifying shares within the fixtures' ceilings, none on a completed still
      world or a pan with no new demand, all of G2's ledger in `world.budget`,
      and every row zero with the lever off.
 3. **G3, the light views.** After G2.
@@ -2958,7 +2992,8 @@ re-record explained in the same change.
      indirect-off control at their tick and after.
    - Counted-cost gate: at `medium` at most 524,288 hits shaded a frame, a
      solve within `(1 + bounces)` sweeps, one cache lookup a lit pixel and no
-     field evaluation outside a complex cell; every row zero at `low`.
+     field evaluation beyond the receiver's offset trace and a verifying cell's
+     traces; every row zero at `low`.
 5. **G5, change classes and standing.** After G4 and P18-6; slots after
    P18-7.
    - Delivers: the dirty rules in place of G2's epoch reset; the cache's
@@ -3034,7 +3069,7 @@ re-record explained in the same change.
    - Delivers: `world.explain`'s indirect line, which reads the cached value at
      the pointer's hit through the shared GPU pick and runs G1's reference at
      that point where its program is supported, and names the level, the cell's
-     component and whether it is complex, the probes active, inside geometry
+     component and whether it verifies, the probes active, inside geometry
      and untraced, each source's share and the document field that changes the
      answer; `world.lighting`'s echo of each cache (levels, bricks by state,
      probes by class, the solve's sweep, the frame's scheduled rays, the light
@@ -7221,8 +7256,7 @@ editor's E5, E10 and E11, and its floor defaults (P18-14) are best decided
 beside P15-8.
 
 **Global illumination.** P6-GI's first slice (G1), the CPU reference and the
-CPU model of the cache's transport whose laws settle its layout, depends on
-nothing and can start at once. The cache itself (G2) follows P18-4 and P18-5
+CPU model of the cache's transport whose laws settle its layout, has landed. The cache itself (G2) follows P18-4 and P18-5
 onto the features head; its light views (G3) and lighting (G4) follow it; its
 change classes (G5) follow P18-6 and take P18-7's shadow slots; its sky (G6)
 follows P18-9; its portals (G7) follow G4 and, for infinity views, P18-11; its

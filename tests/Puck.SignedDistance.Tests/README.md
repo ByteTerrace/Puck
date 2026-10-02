@@ -17,6 +17,14 @@ a probe texel per level, to a fresh bake and to the CPU decoder; it is the GPU-f
 half of a sampling check whose device half, `BakeSamplingDeviceLawTests` in
 `tests/Puck.World.Tests`, samples the same probes on Vulkan, Direct3D 12 and WARP.
 
+The `Irradiance*LawTests` hold the radiance cache's CPU reference and CPU model
+(`Puck.SignedDistance.Illumination`) to closed forms and to each other: the
+furnace's finite-bounce series, form factors, sealed rooms that stay exactly
+dark through 0.05 m walls, a sealed hall whose middle never reads the sky, a
+continuation that never counts an interval twice, the lattice's layout and the
+host schedule. Each law carries a red leg that switches one transport rule off
+and shows the law failing. They are the GPU cache's reference, not a check of it.
+
 ## Verification
 
 ```powershell

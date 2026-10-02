@@ -120,7 +120,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] P4 shared opaque visibility (every build step, P4-0 to P4-2e and the visibility record's names, landed; the mesh canaries hold every scene the check names, the full-size resize included, and no reader of the retired layouts remains; the measured cost is held with P14's counted-cost ceilings).
 - [x] P5 reproducible authoring and packaged dependencies.
 - [ ] P6 representation experiments.
-  - [ ] P6-GI G1: the CPU irradiance reference over `SdfFieldEvaluator` and a CPU model of the cache's transport (lattice, field-partitioned cells, continuation that seeks support, the finite two-generation solve) and its schedule, whose wall, continuation, visibility and acceptance laws settle the layout.
+  - [x] P6-GI G1: the CPU irradiance reference over `SdfFieldEvaluator` and a CPU model of the cache's transport (lattice, field-partitioned cells, continuation that seeks support, the finite two-generation solve) and its schedule, whose wall, continuation, visibility and acceptance laws settle the layout.
   - [ ] P6-GI G2: the `indirect` instance per residency, classified and partitioned by exact field traces and traced with a ball-masked group march into stored hits, one shared instance-grid walker, and its debug views, off at every tier.
   - [ ] P6-GI G3: the light views, one depth-only camera view per shadow slot giving every stored hit its own visibility.
   - [ ] P6-GI G4: bounce from lights and emission through the one light interface, the views apply with the cell partition, `render.indirect`, palette `bleed` and `receive`, `bounce` renamed `fill`, a light's `bounce`, parity's `indirect: on` rows, and indirect light on by default at `medium` and `high`.
