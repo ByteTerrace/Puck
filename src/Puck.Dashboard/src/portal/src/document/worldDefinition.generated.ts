@@ -8695,6 +8695,10 @@ export type WorldQualityPreset = {
    * The render-scale tier the preset selects.
    */
   renderScale?: WorldRenderScaleTier;
+  /**
+   * Whether the preset enables the presentation-only dynamic-resolution controller.
+   */
+  dynamicResolution?: boolean;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -8923,6 +8927,10 @@ export type WorldRenderDefaults = {
    * The far distance in world units: the depth at which every camera march ends — the far plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the sky fog has absorbed it (render.sky.fogDensity). Optional; absent resolves to the engine's pinned 40 — exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.
    */
   farDistance?: number | null;
+  /**
+   * Whether dynamic resolution starts enabled. Absent is off; the live world.dynamic-resolution lever moves only the per-frame render extent inside its existing ceiling.
+   */
+  dynamicResolution?: boolean;
 };
 
 export type WorldRenderEnvironment = {
@@ -9072,7 +9080,7 @@ export type WorldRenderLighting = {
 };
 
 /**
- * The enumerated world render-scale tiers a player or a quality preset picks, never a free numeric value, over the continuous render scale a view carries (SdfViewSnapshot.RenderScale). A view renders its output at its rect times its render scale, rounded up on each axis to a step of the render graph's extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and the root's place pass reconstructs that output into the rect at world.upscale-sharpness. The continuous scale stays reachable in code (layout transitions); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the world document's quality presets, the console world.render-scale verb and the boot resolution read. Each extent below is a lone whole-display view at 1280x800.
+ * The named world render-scale tiers used by quality presets and the console over the continuous scale a view carries (SdfViewSnapshot.RenderScale). The render graph rounds the internal render extent up on each axis through RenderGraphExtent.Quantize, with sixteen steps per power-of-two octave. At reduced scale the instance's resolve pass reconstructs that grid to its output extent; the output keeps its declared pixel size. WorldRenderScaleTiers defines the shared names and scales. The world.render-scale console verb also accepts numeric scales, and layout transitions can supply a continuous scale in code. Each extent below describes the internal render grid of a lone whole-display view with a 1280x800 output.
  */
 export type WorldRenderScaleTier = "Native" | "ThreeQuarter" | "Half" | "Quarter" | "Eighth";
 

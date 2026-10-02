@@ -110,6 +110,11 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     // to both the local eye and the border pair's two face rows) before the render graph renders this view.
     // Null (the default, and every non-window session's steady state) leaves Dress on the ordinary camera path below.
     private Func<CameraSnapshot?>? m_windowFit;
+
+    /// <summary>Gets or sets this view owner's dynamic render-scale resolver. The arguments are its output pixels;
+    /// zero or a missing resolver keeps its native grid. The view owner retains controller state across frames.</summary>
+    public Func<uint, uint, float>? ResolveRenderScale { get; set; }
+
     // The camera the last dressed frame renders from, which a hit on the session's image continues through.
     private CameraSnapshot? m_dressedCamera;
     // The last dressed program's fixed-point field, built when a pick first asks for it, and the far distance a pick
@@ -365,6 +370,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
         ) {
             Quality = ReducedQuality,
+            ResolvedRenderScale = (ResolveRenderScale?.Invoke(width, height) ?? 0),
         };
 
         return new SdfFrame(

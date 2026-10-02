@@ -11,14 +11,14 @@ namespace Puck.World;
 /// <summary>
 /// The render levers: engine-wide render options any presentation shape honors — shadows and their crowd radius,
 /// ambient occlusion and its quality, the far field, the unchanged-frame cadence gate, the shadow mask and march, render
-/// scale, upscale sharpness, and the quality preset — each a live console verb that echoes its current value when
+/// scale, upscale sharpness, dynamic resolution, and the quality preset — each a live console verb that echoes its current value when
 /// called with no argument. Every write is a session lever submitted through the server's grant check and lands in
 /// <see cref="WorldRenderSettings"/>, which the frame source reads each captured frame, except the SDF debug view,
 /// which sets the render node's mode through <see cref="WorldRenderProbe"/>. Nothing here needs a window or a
 /// presenter, so both the windowed and the offscreen presentation shapes compose it, and an offscreen collector or
 /// canary can set the same levers a player can. Headless composes no renderer and refuses these as unknown.
 /// </summary>
-internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule {
+internal sealed partial class WorldRenderLeverCommandModule(WorldPopulation population, WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule {
     /// <summary>Owns the automatic population threshold and readout shape shared by adaptive render-quality levers.</summary>
     private string DescribeAdaptiveQuality(string verb, int mode, string exact = "exact", string fast = "fast") {
         var (configured, isFast) = mode switch {
@@ -42,7 +42,7 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
     private string DescribeQuality() {
         return $"[world.quality: shadows={ShadowTiers.Name(reach: settings.ShadowReach)} ao={(settings.AmbientOcclusion
             ? "on"
-            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]";
+            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} dynamic-resolution={(settings.DynamicResolution ? "on" : "off")}]";
     }
     private string DescribeShadowMarch() =>
         DescribeAdaptiveQuality(
@@ -358,6 +358,7 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return DynamicResolutionCommand();
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.shadows",
@@ -650,7 +651,7 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.render-scale",
-            description: "Sets internal SDF resolution live (no rebuild): world.render-scale [native|three-quarter|half|quarter|eighth|0.125..1|12.5%..100%]. Every player view renders at that fraction and the compositor reconstructs it to output resolution using world.upscale-sharpness; native is the bit-exact copy path. Numeric values make fine-grained 120 FPS sweeps possible.",
+            description: "Sets internal SDF render scale: world.render-scale [native|three-quarter|half|quarter|eighth|0.125..1|12.5%..100%]. Lower scales reduce each player view's render grid while preserving its output size. world.upscale-sharpness controls output sharpening.",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: $"[world.render-scale: {RenderScaleName(scale: settings.RenderScale)} | named: {WorldRenderScaleTiers.ValidNames} | numeric: 12.5%..100%]");
@@ -705,14 +706,14 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.quality",
-            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion and render-scale levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.render-scale still override afterward).",
+            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, render-scale and dynamic-resolution levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.render-scale still override afterward).",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeQuality());
                 }
 
                 // The preset table is world data (WorldDefinition.Render), read off the LIVE definition so a mutated
-                // preset table applies immediately: look the named tier up and write its three levers into the live
+                // preset table applies immediately: look the named tier up and write its render levers into the live
                 // settings.
                 if (QualityTiers.Parse(name: args[0].ToString()) is not { } tier) {
                     return CommandResult.Error(output: $"[world.quality: unknown preset '{args[0]}' — {string.Join(separator: "|", values: QualityTiers.Names)}]");
@@ -738,7 +739,10 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                     : 0.0)
                 );
 
-                // The echo formats INSIDE the LAST lever's completion — all three have applied (or the last was
+                SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.DynamicResolution,
+                    a: (preset.DynamicResolution ? 1.0 : 0.0));
+
+                // The echo formats INSIDE the LAST lever's completion — all levers have applied (or the last was
                 // refused) by the time formatEcho runs, since loopback drains each inline before its Submit* returns.
                 return SubmitLever(
                     link: link,

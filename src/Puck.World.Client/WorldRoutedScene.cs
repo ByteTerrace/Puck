@@ -112,7 +112,12 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
 
             // The emitter's own view frames the world's default projection at a session screen's quality.
             foreach (var window in m_latchedWindows) {
-                m_dressedViews.Add(item: (window.View ?? frame.Views[0]));
+                var view = (window.View ?? frame.Views[0]);
+
+                if (window.ResolveRenderScale is { } resolve) {
+                    view = view with { ResolvedRenderScale = resolve(arg1: width, arg2: height) };
+                }
+                m_dressedViews.Add(item: view);
             }
         } else if (m_dressedViews.Count == 0) {
             m_dressedViews.AddRange(collection: frame.Views);
@@ -227,6 +232,9 @@ public sealed class WorldRoutedWindow : IDisposable {
     /// quality. <see langword="null"/>, the default, renders the world's default projection at a session screen's
     /// reduced quality (<see cref="WorldSessionSceneEmitter.ReducedQuality"/>).</summary>
     public SdfViewSnapshot? View { get; set; }
+    /// <summary>Gets or sets the owning session's active-scale resolver. The scene invokes it only when dressing an
+    /// unfrozen frame, including when the window uses its default projection. Null preserves the view's scale.</summary>
+    public Func<uint, uint, float>? ResolveRenderScale { get; set; }
 
     /// <summary>Detaches the window from its scene; the scene's later windows move down at the next presenter latch.</summary>
     public void Dispose() {

@@ -4,15 +4,13 @@ using Puck.Abstractions.Documents;
 namespace Puck.World;
 
 /// <summary>
-/// The enumerated world render-scale tiers a player or a quality preset picks, never a free numeric value, over the
-/// continuous render scale a view carries (<c>SdfViewSnapshot.RenderScale</c>). A view renders its output at its rect
-/// times its render scale, rounded up on each axis to a step of the render graph's extent quantization
-/// (<c>RenderGraphExtent.Quantize</c>, sixteen steps per power-of-two octave), and the root's <c>place</c> pass
-/// reconstructs that output into the rect at <c>world.upscale-sharpness</c>. The continuous scale stays reachable in
-/// code (layout transitions); the enumerated set lives only at the user surface. <see cref="WorldRenderScaleTiers"/> is
-/// the one definition of the names and scales, which the world document's quality presets, the console
-/// <c>world.render-scale</c> verb and the boot resolution read. Each extent below is a lone whole-display view at
-/// 1280x800.
+/// The named world render-scale tiers used by quality presets and the console over the continuous scale a view
+/// carries (<c>SdfViewSnapshot.RenderScale</c>). The render graph rounds the internal render extent up on each axis
+/// through <c>RenderGraphExtent.Quantize</c>, with sixteen steps per power-of-two octave. At reduced scale the
+/// instance's resolve pass reconstructs that grid to its output extent; the output keeps its declared pixel size.
+/// <see cref="WorldRenderScaleTiers"/> defines the shared names and scales. The <c>world.render-scale</c> console
+/// verb also accepts numeric scales, and layout transitions can supply a continuous scale in code. Each extent
+/// below describes the internal render grid of a lone whole-display view with a 1280x800 output.
 /// </summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldRenderScaleTier>))]
 public enum WorldRenderScaleTier {

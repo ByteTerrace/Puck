@@ -1172,6 +1172,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     public void PrepareGraph(in FrameContext context) => PrepareGraphCore(context: FrozenContext(context: in context));
 
     private void PrepareGraphCore(in FrameContext context) {
+        m_resolutionContext = context;
         // The frame context's target extent IS the launcher's live client area (window.Width/Height at this frame's
         // BeginFrame) — the one place the World side can learn it. Published for the cursor feed's client→frame
         // mapping (see WorldCursorFeed.Decide); the per-seat views carry the FIXED frame extent instead.
@@ -1447,6 +1448,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         CutRevision = ViewCut(index: m_views.Count, source: m_namedCameraRigCache[cameraName], revision: m_namedCameraRigCache[cameraName].Revision),
                         Quality = quality,
                         RenderScale = (m_settings.RenderScale * transitionScale),
+                        ResolvedRenderScale = ResolveDynamicScale(view: m_views.Count, region: region, width: width, height: height, ceiling: (m_settings.RenderScale * transitionScale)),
                         UpscaleSharpness = m_settings.UpscaleSharpness,
                     });
                     if (!hasSeatViewFallback) {
@@ -1510,6 +1512,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 Grid = SeatGrid(slot: slot),
                 Quality = quality,
                 RenderScale = (m_settings.RenderScale * transitionScale),
+                ResolvedRenderScale = ResolveDynamicScale(view: m_views.Count, region: region, width: width, height: height, ceiling: (m_settings.RenderScale * transitionScale)),
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
             // A seat presented elsewhere keeps its place among the views, so every view keeps its index, and its view
@@ -1602,6 +1605,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 CutRevision = ViewCut(index: m_views.Count, source: this, revision: 0),
                 Quality = quality,
                 RenderScale = m_settings.RenderScale,
+                ResolvedRenderScale = ResolveDynamicScale(view: m_views.Count, region: new NormalizedRect(Height: 1, Width: 1, X: 0, Y: 0), width: width, height: height, ceiling: m_settings.RenderScale),
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
         } else {

@@ -4591,9 +4591,15 @@ resolution, and stay there.
   view's floor, defaulting to Quarter; there is no second setting spelling.
   Scale reaches the scheduler's `RenderGraphExtent.Quantize`, with its
   sixteen steps per octave and 0.875 hysteresis, without another quantizer.
+  Reaching the floor or ceiling takes that endpoint directly; hysteresis
+  must not strand the active scale short of an allowed bound.
   Counted fallback budgets derive from the committed RTX 2060 ceiling rows
   and scale by output pixel area, so recording new floor evidence also updates
   the controller's budgets. No copied numeric budget constants are maintained.
+  The current recording calibrates the workload's low preset at its quantized
+  Half scale. Each view derives its budget from that calibration and its own
+  quantized ceiling; these are derived budgets, not separately measured
+  medium- and high-quality recordings.
   The timing trace and counted fallback hold the same exact response,
   including both step bounds and floor/ceiling clamps. Extent changes allocate
   nothing inside the ceiling. Ordinary canaries and parity pin the lever off;

@@ -49,6 +49,21 @@ installed host/device regions and CPU scratch/shadow payloads.
 composition: two emitters, global SDF ordinals, rebased mesh draws, and a replaced
 identity map that cannot rename an earlier captured answer.
 
+`WorldDynamicResolutionLawTests` drives confirmed-present intervals and
+completed march counters through the same presentation controller. It pins
+continuous demand, shared extent quantization, fresh-sample gating, and
+allocation-free steady updates. `WorldDynamicResolutionBudgetLawTests` reads
+the committed backend recordings and checks their quantized pixel-area
+normalization. `WorldDynamicResolutionLeverLawTests` checks boot defaults,
+console and quality writes, and session-save folding without a device.
+
+The dynamic-resolution frame laws exercise the live presenter, independently
+scoped filming cameras, session output extents, and routed windows with fitted
+or default cameras. Fresh injected timing changes active scale; convergence
+holds both the snapshot and the controller's demand until capture completes.
+A controller-driven sweep keeps the graph revision and GPU object count fixed
+while its counted pass pixels follow the active grid.
+
 ## Keep the feedback loop short
 
 Use the smallest fixture that exercises the behavior under test:

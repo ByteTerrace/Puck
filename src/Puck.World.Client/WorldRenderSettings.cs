@@ -31,6 +31,7 @@ public sealed class WorldRenderSettings {
     private AmbientOcclusionMode m_ambientOcclusionQuality;
     private volatile int m_bakes;
     private bool m_cadenceGate;
+    private bool m_dynamicResolution;
     private bool m_farBound;
     private float m_renderScale;
     private int m_revision;
@@ -58,6 +59,7 @@ public sealed class WorldRenderSettings {
         UpscaleSharpness = defaults.UpscaleSharpness;
         FarBound = true;
         CadenceGate = true;
+        DynamicResolution = defaults.DynamicResolution;
 
     }
 
@@ -99,6 +101,9 @@ public sealed class WorldRenderSettings {
     /// <c>world.cadence off</c>) to render every frame, so <c>world.counters gpu</c> measures a still scene. Session state, never
     /// durable config; rides <see cref="Puck.SdfVm.SdfFrame.EnableCadenceGate"/>.</summary>
     public bool CadenceGate { get => m_cadenceGate; set { m_cadenceGate = value; m_revision++; } }
+    /// <summary>Whether each view adapts its render extent to fresh presentation load. Defaults off; the
+    /// <c>world.dynamic-resolution</c> lever changes session presentation without touching simulation or allocation ceilings.</summary>
+    public bool DynamicResolution { get => m_dynamicResolution; set { m_dynamicResolution = value; m_revision++; } }
     /// <summary>The engine-wide internal render-scale fraction, applied to every player view's
     /// <see cref="Puck.SdfVm.SdfViewSnapshot.RenderScale"/> each frame. Named tiers initialize it, while
     /// <c>world.render-scale</c> also accepts a live numeric fraction/percentage for performance sweeps. Native 1.0 is

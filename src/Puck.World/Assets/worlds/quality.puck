@@ -1,5 +1,5 @@
 // The graphics presets every shipped world shares: `world.quality low|medium|high` applies one, each writing its
-// shadow tier, its ambient-occlusion switch and its render-scale tier into the live render levers. A world boots on
+// shadow tier, its ambient-occlusion switch, render-scale tier and dynamic-resolution toggle into the live render levers. A world boots on
 // its own render levers and nothing here changes them until a tier is chosen. `low` is the floor tier a player, or a
 // Steam Deck, drops to; `high` is the fullest render. The standard world imports this table, so every world built on
 // it inherits the table, and a world with another basis imports it by name.
@@ -8,15 +8,18 @@ render {
     shadows: Off
     ambientOcclusion: false
     renderScale: Half
+    dynamicResolution: false
   }
   medium {
     shadows: Medium
     ambientOcclusion: true
     renderScale: ThreeQuarter
+    dynamicResolution: false
   }
   high {
     shadows: High
     ambientOcclusion: true
     renderScale: Native
+    dynamicResolution: false
   }
 }

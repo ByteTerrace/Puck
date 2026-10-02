@@ -1853,17 +1853,24 @@ on the one world and proves them with `probe.status`, `body.channels`, and
 
 All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
-`world.upscale-sharpness`, `world.target`, `world.shadow-mask`,
+`world.upscale-sharpness`, `world.dynamic-resolution`, `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
 `world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
 world's own `render.low`, `render.medium` or `render.high` preset, each a
-shadow tier, an ambient-occlusion switch and a render-scale tier; the names are
+shadow tier, ambient-occlusion and dynamic-resolution switches, and a render-scale tier; the names are
 the engine's one quality vocabulary (`QualityTiers`), and a preset the world
 does not author is refused by name. The shipped worlds share one table,
 `Assets/worlds/quality.puck`: the standard world imports it, and a world on
 another basis imports it by name, so every presenting world answers each tier
 without moving its own boot levers (`ShippedWorldQualityLawTests`). Render scale applies
 to both seat views and named cameras, multiplied by any layout-transition scale.
+`world.dynamic-resolution on|off` enables the presentation controller without
+changing the authored render-scale ceiling. It starts off, as do the shared
+quality presets. The controller uses fresh confirmed-present feedback when
+available and completed march counts otherwise; its
+[policy and recorded-budget source](../Puck.World.Client/README.md#dynamic-resolution)
+are shared by both backends. The toggle is a grant-checked session lever and
+folds into an authored `render` section on save.
 Named tiers are
 facades over continuous values. Do not assume a lower render scale is
 monotonic for a large instance field—read both `world.counters gpu` and

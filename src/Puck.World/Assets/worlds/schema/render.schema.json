@@ -227,6 +227,11 @@
         "null"
       ],
       "default": null
+    },
+    "dynamicResolution": {
+      "description": "Whether dynamic resolution starts enabled. Absent is off; the live world.dynamic-resolution lever moves only the per-frame render extent inside its existing ceiling.",
+      "type": "boolean",
+      "default": false
     }
   },
   "additionalProperties": false,

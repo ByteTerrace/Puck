@@ -270,7 +270,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // the pacer wait, capping ~120 Hz runs near ~100 FPS. The deadline instead advances on an absolute slot
                 // grid (see the pacer block below), letting produce + GPU work overlap the wait. Render-side only —
                 // never touches the sim.
-                var presentTiming = (m_presenter as IPresentTimingFeedback);
+                _ = m_rootHostContext.TryResolveCapability<IPresentTimingFeedback>(capability: out var presentTiming);
                 var lastObservedPresentCount = 0u;
                 var previousPresentTimestamp = 0L;
                 var presentSampleCounter = 0;
