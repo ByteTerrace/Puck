@@ -8,7 +8,7 @@
       "format": "R8G8B8A8Unorm",
       "dimensions": {
         "mode": "Absolute",
-        "width": 61,
+        "width": 66,
         "height": 1
       }
     }
@@ -25,9 +25,14 @@
         }
       ],
       "config": {
-        "ambientScale": { "type": "float", "default": 0, "description": "The sdf.world pass's ambient scale." },
         "aspectRatio": { "type": "float", "default": 0, "description": "The sdf.world pass's aspect ratio." },
         "cameraTileShadowMask": { "type": "uint", "default": 0, "description": "The sdf.world pass's camera tile shadow mask." },
+        "curvatureCavity": { "type": "float", "default": 0, "description": "The sdf.world pass's curvature cavity gain." },
+        "curvatureInk": { "type": "float", "default": 0, "description": "The sdf.world pass's curvature ink gain." },
+        "curvatureInkColor": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's curvature ink color." },
+        "curvatureInkHigh": { "type": "float", "default": 0, "description": "The sdf.world pass's curvature ink band high." },
+        "curvatureInkLow": { "type": "float", "default": 0, "description": "The sdf.world pass's curvature ink band low." },
+        "curvatureRim": { "type": "float", "default": 0, "description": "The sdf.world pass's curvature rim gain." },
         "debugMode": { "type": "uint", "default": 0, "description": "The sdf.world pass's debug mode." },
         "debugSliceAxis": { "type": "float", "default": 0, "description": "The sdf.world pass's debug slice axis." },
         "debugSliceOffset": { "type": "float", "default": 0, "description": "The sdf.world pass's debug slice offset." },
@@ -37,7 +42,6 @@
         "disableShadowCull": { "type": "uint", "default": 0, "description": "The sdf.world pass's disable shadow cull." },
         "disableSoftShadows": { "type": "uint", "default": 0, "description": "The sdf.world pass's disable soft shadows." },
         "enableShadowProxy": { "type": "uint", "default": 0, "description": "The sdf.world pass's enable shadow proxy." },
-        "environment": { "type": "float4", "length": 53, "default": [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], "description": "The sdf.world pass's environment rows." },
         "farDistance": { "type": "float", "default": 0, "description": "The sdf.world pass's far distance." },
         "fastAmbientOcclusion": { "type": "uint", "default": 0, "description": "The sdf.world pass's fast ambient occlusion." },
         "fastSoftShadowMarch": { "type": "uint", "default": 0, "description": "The sdf.world pass's fast soft shadow march." },
@@ -57,12 +61,13 @@
         "imageExtent": { "type": "uint2", "default": [0, 0], "description": "The sdf.world pass's render extent, in pixels." },
         "instanceMaskWordCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's per-tile instance-mask width." },
         "jitter": { "type": "float2", "default": [0, 0], "description": "The sdf.world pass's pixel jitter." },
+        "lightCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's light count." },
         "meshDraws": { "type": "uint", "default": 0, "description": "The sdf.world pass's mesh draw count." },
         "nearDistance": { "type": "float", "default": 0, "description": "The sdf.world pass's near distance." },
         "previousView": { "type": "float4", "length": 6, "default": [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], "description": "The sdf.world pass's previous camera rows." },
         "screenCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's screen-light bound." },
         "shadowDistanceScale": { "type": "float", "default": 0, "description": "The sdf.world pass's shadow distance scale." },
-        "sunScale": { "type": "float", "default": 0, "description": "The sdf.world pass's sun scale." },
+        "shadowLight": { "type": "int", "default": 0, "description": "The sdf.world pass's shadow light." },
         "tanHalfFieldOfView": { "type": "float", "default": 0, "description": "The sdf.world pass's tan half field of view." },
         "temporal": { "type": "uint", "default": 0, "description": "The sdf.world pass's temporal fragment switch." },
         "tileGrid": { "type": "uint2", "default": [0, 0], "description": "The sdf.world pass's tiles per viewport." },

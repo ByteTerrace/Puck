@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <Description>The model Puck's HLSL declarations are generated from: pass interfaces and their generated declarations, the frame block every pass reads, and the engine's render-graph package catalog. It compiles no shader, so the declarations a kernel includes are always generated before any kernel builds.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Shaders.Model</PackageId>
+        <PackageTags>hlsl;interface;render-graph;shaders</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Shared substrate</PuckLayer>
+        <RootNamespace>Puck.Shaders</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+    </ItemGroup>
+</Project>

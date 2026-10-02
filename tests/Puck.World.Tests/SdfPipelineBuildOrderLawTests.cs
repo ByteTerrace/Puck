@@ -37,6 +37,7 @@ public sealed class SdfPipelineBuildOrderLawTests {
                 SdfKernel.Views,
                 SdfKernel.ViewsCore,
                 SdfKernel.ViewsFolds,
+                SdfKernel.Composite,
             ]
         );
     }

@@ -6,9 +6,9 @@ using Puck.Shaders;
 namespace Puck.SdfVm;
 
 // One pass of an sdf.world instance (SdfWorldPasses): a part of the package's fragment, recorded into the instance's
-// command buffer for the pass. Every part writes its pass block (SdfFrameBlock): the view's camera, the frame's levers and
-// environment and the world values. Every compute part binds the residency's World set of the ring slot the frame's upload
-// wrote, which holds its tables, and the world interface's pass group: the fragment storages its ports bind and, at every
+// command buffer for the pass. Every part writes its pass block (SdfFrameBlock): the view's camera, the frame's levers,
+// light count and curvature shading, and the world values. Every compute part binds the residency's World set of the ring
+// slot the frame's upload wrote, which holds its tables (the lights and the sky among them), and the world interface's pass group: the fragment storages its ports bind and, at every
 // member its ports do not, a dummy of the residency's; the node's work counters for the frame slot, whose row it writes
 // into its pass block; and the screens, whose host images are rewritten every frame. The mesh part draws the frame's
 // mesh draws into its target through the mesh pipeline, with a set of its own per frame slot binding its pass block. A
@@ -37,10 +37,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly RenderGraphFragmentPass m_fragmentPass;
     private readonly SdfWorldPasses m_owner;
     private readonly string m_part;
-    // Whether the pass belongs to the temporal fragment (SdfWorldPackage.TemporalFragment), and whether to the native
-    // one, whose views pass writes the output and so completes the render.
+    // Whether the pass belongs to the temporal fragment (SdfWorldPackage.TemporalFragment).
     private readonly bool m_temporal;
-    private readonly bool m_native;
 
     // The view the pass records, followed in place when the instance resolves another its passes can record
     // (SdfWorldPasses.CanFollow); one they cannot record rebuilds them instead.
@@ -77,7 +75,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var fragment = owner.FragmentOf(instance: context.Instance)!;
 
         m_temporal = ReferenceEquals(objA: fragment, objB: SdfWorldPackage.TemporalFragment);
-        m_native = ReferenceEquals(objA: fragment, objB: SdfWorldPackage.NativeFragment);
         m_fragmentPass = fragment.Passes.Single(predicate: pass => string.Equals(
             a: pass.Name,
             b: m_part,
@@ -234,7 +231,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             return quality.DisableAmbientOcclusion;
         }
 
-        return (quality.DisableSoftShadows || (frame.Environment.ShadowLightIndex < 0));
+        return (quality.DisableSoftShadows || (frame.Lights.ShadowLight < 0));
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         Follow();
@@ -299,10 +296,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 box: recording.Inputs[InputIndexOf(member: SdfWorldPackage.CullBounds)].Version,
                 sample: new SdfReprojectionView(Camera: frame.Views[view].Camera, Jitter: temporal.Jitter, Width: width, Height: height),
                 cut: frame.Views[view].CutRevision);
-            if (m_native) {
-                residency.MarkRendered(view: view);
-                m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
-            }
         }
 
         return RenderGraphPackageOutcome.Drew;
@@ -365,15 +358,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             }
         }
     }
-    // Binds the pass set and dispatches the part's kernel: the sky over the extent, the masks over the tile grid in
-    // groups, the beam one group a tile, the cull arguments once, and the hit passes indirectly over the surviving tiles.
+    // Binds the pass set and dispatches the part's kernel: the masks over the tile grid in groups, the beam one group a tile, the cull arguments once, and the hit passes indirectly over the surviving tiles.
     private void RecordCompute(in RenderGraphPackageRecording recording, SdfWorldTables tables) {
         var slot = recording.Slot;
         var set = m_sets!.PassSet(slot: slot);
         var recorder = recording.Recorder;
         var commandBuffer = recording.CommandBuffer;
         var pipeline = m_part switch {
-            SdfWorldPackage.Parts.Sky => tables.Pipeline(kernel: SdfKernel.Sky),
             SdfWorldPackage.Parts.Mask => tables.Pipeline(kernel: SdfKernel.InstanceCull),
             SdfWorldPackage.Parts.Beam => tables.Pipeline(kernel: SdfKernel.Beam),
             SdfWorldPackage.Parts.CullArgs => tables.Pipeline(kernel: SdfKernel.CullArgs),
@@ -428,7 +419,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var tileGridY = ((recording.Height + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize);
 
         var (x, y) = m_part switch {
-            SdfWorldPackage.Parts.Sky => (((recording.Width + (WorkgroupEdge - 1)) / WorkgroupEdge), ((recording.Height + (WorkgroupEdge - 1)) / WorkgroupEdge)),
             SdfWorldPackage.Parts.Mask => (((tileGridX + (WorkgroupEdge - 1)) / WorkgroupEdge), ((tileGridY + (WorkgroupEdge - 1)) / WorkgroupEdge)),
             SdfWorldPackage.Parts.Beam => (tileGridX, tileGridY),
             _ => (1u, 1u),
@@ -505,7 +495,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         for (var draw = 0u; (draw < count); draw++) {
             BinaryPrimitives.WriteUInt32LittleEndian(
                 destination: m_meshPushedIndex,
-                value: SdfWorldInterfaces.MeshPushedIndex(
+                value: SdfKernelInterfaces.MeshPushedIndex(
                     draw: draw,
                     view: 0u
                 )
@@ -649,7 +639,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.Parts.Arguments => SdfWorldPackage.ViewsArgsWritten,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBoundsWritten,
         SdfWorldPackage.Parts.Visibility or SdfWorldPackage.Parts.SurfaceVisibility or SdfWorldPackage.Parts.AmbientVisibility or SdfWorldPackage.Parts.ShadowVisibility => SdfWorldPackage.VisibilityRecordsWritten,
-        SdfWorldPackage.Parts.SkyReactivity or SdfWorldPackage.Parts.Reactivity => SdfWorldPackage.ReactivityWritten,
+        SdfWorldPackage.Parts.Reactivity => SdfWorldPackage.ReactivityWritten,
         _ => null,
     };
 }

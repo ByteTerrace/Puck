@@ -528,7 +528,7 @@ and stays with the spike.
 **Seats and camera views share one SDF residency, and each renders as its own
 instance into its own output.** One `SdfWorldResidency` serves a world. Each
 composed view is an `sdf.world` instance of the render graph that runs the
-package's passes, sky through views, over the residency's tables into its own
+package's passes, mask through composite, over the residency's tables into its own
 output. The graph places each output into its seat rect with the `place`
 package. Everything a frame's views have in common is therefore shared by
 construction: the brick pool, the program upload, the glyph atlas, screen
@@ -549,10 +549,14 @@ N seats cost N instances' passes rather than one dispatch whose Z dimension is
 N, and the counted work shows that cost. Layered views return only if the
 counts call for them.
 
-**`SdfEnvironment` folds into the generated frame block.** A separate
-environment packing is a second hand-kept layout beside the frame data, and
-generating the frame block removed the three hand-written copies of each field
-(P14-7).
+**The lights and the sky are generated records in World-group tables.** A
+hand-numbered environment table is a second hand-kept layout beside the frame
+data, and carried in every pass block it makes every dispatch bind constant data
+that only the sky, shadow and views passes read. The lights table and the sky's
+block, stops and softboxes are C# records whose HLSL declarations are generated
+from the types, written as regions that owe only the words that changed, and
+referenced only by the kernels that read them, so a pass block holds the view
+and frame values alone.
 
 **Temporal reconstruction is Puck's own complete implementation.** The Steam
 Deck floor needs render scale to be cheap without looking cheap, and SDF

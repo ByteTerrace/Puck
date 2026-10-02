@@ -227,7 +227,7 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
 
         // F1 FAR-FIELD EXIT: past the tile's beam-proven far bound no ray in the tile can produce a hit the fine
         // march would ACCEPT (coneMarchFarBound proved it against the footprint-inflated threshold), so the ray
-        // renders skyColor whether it exits here or marches on — OUTPUT-IDENTICAL, only fewer steps. farBound =
+        // renders the sky whether it exits here or marches on — OUTPUT-IDENTICAL, only fewer steps. farBound =
         // the far distance (no bound proven, or the A/B lever pushed it out of reach) makes this a no-op past the
         // far plane the far-distance break already handles. Both exits are reached only on a validated step (the
         // plain-step fallback above) or a cone-proven teleport landing.

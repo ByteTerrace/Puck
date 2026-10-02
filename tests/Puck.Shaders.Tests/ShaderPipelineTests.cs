@@ -318,7 +318,7 @@ public sealed class ShaderPipelineTests {
         // extent is the pass's own.
         Assert.Null(@object: planned.Declaration);
         Assert.Equal(
-            expected: (RenderGraphPackageCatalog.SdfWorld, SdfWorldPackage.Parts.Views, "out", ((uint)64), ((uint)32)),
+            expected: (RenderGraphPackageCatalog.SdfWorld, SdfWorldPackage.Parts.Composite, "out", ((uint)64), ((uint)32)),
             actual: (planned.Package!.Package, planned.Package.Part, planned.Package.Outputs.Single().Name, planned.ResolveExtent(frameHeight: 32, frameWidth: 64).Width, planned.ResolveExtent(frameHeight: 32, frameWidth: 64).Height)
         );
     }

@@ -23,7 +23,7 @@ public sealed class GpuKernelCounters : IGpuWorkReadback, IDisposable {
     public const int CountWords = 2;
 
     // The sample column of each kernel kind, in GpuWork.KernelKinds order.
-    private static readonly int[] KernelColumns = [GpuWork.MarchStepsColumn, GpuWork.TexelsWrittenColumn];
+    private static readonly int[] KernelColumns = [GpuWork.MarchStepsColumn, GpuWork.TexelsWrittenColumn, GpuWork.SkyEvaluationsColumn];
 
     private readonly IGpuBuffer[] m_counters;
     private readonly IGpuReadbackBuffer[] m_readbacks;

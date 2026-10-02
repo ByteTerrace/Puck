@@ -49,7 +49,7 @@ struct TileBounds {
 // pixel footprint (spread = chord + footprint) and requiring clearance = min(map(center), sdfMapStepBound) -
 // spread*t > SurfaceEpsilon (stepping by clearance/(1 + spread), the 1-Lipschitz cone guarantee for the inflated cone)
 // guarantees that for every ray and every t' in [farBound, farDistance] the hit-accept fieldDistance <
-// max(SurfaceEpsilon, footprint*t') can NEVER fire — so the ray renders skyColor whether it exits at farBound or marches
+// max(SurfaceEpsilon, footprint*t') can NEVER fire — so the ray renders the sky whether it exits at farBound or marches
 // on, i.e. the far exit is OUTPUT-IDENTICAL on the shipped shading path (only step counts and the termination debug view
 // change). The same rule is what the primary march's exhaustion arm accepts a closest-approach candidate against, so the proof
 // covers that arm too. FOLD-SAFE like the gap phases (the bounded clearance rides sdfMapStepBound). Total function: no

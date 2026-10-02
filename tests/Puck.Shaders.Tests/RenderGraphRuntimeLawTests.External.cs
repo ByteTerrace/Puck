@@ -12,7 +12,7 @@ namespace Puck.Shaders.Tests;
 public sealed partial class RenderGraphRuntimeLawTests {
     private const string World = "test.world";
     // The SDF engine's pass count, which prices the world producer.
-    private const int WorldPasses = 10;
+    private const int WorldPasses = 11;
 
     private static RenderGraphInstance External(string name, RenderGraphRefresh? refresh = null) => new(
         ExternalPackage: World,

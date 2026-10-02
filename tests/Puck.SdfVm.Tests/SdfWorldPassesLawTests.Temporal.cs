@@ -118,7 +118,7 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: Vector2.Zero, actual: rig.Jitter());
     }
     // A view that asks for temporal reconstruction runs the temporal fragment even at native scale: a resolve after views,
-    // and history the next frame reads, one image and one surface a frame slot at the output extent.
+    // the sky and the composite after it, and history the next frame reads, one image and one surface a frame slot at the output extent.
     [Fact]
     public void ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput() {
         using var rig = new TemporalRig(views: 1, temporal: true);
@@ -126,11 +126,13 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Same(expected: SdfWorldPackage.TemporalFragment, actual: rig.Passes.FragmentOf(instance: "world"));
         var plan = rig.World.Plan!;
 
-        Assert.EndsWith(expectedEndString: $"${SdfWorldPackage.Resolve}", actualString: plan.Passes[^1].Name);
+        var resolve = plan.Passes.Single(predicate: static pass => pass.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.Resolve}"));
+
+        Assert.EndsWith(expectedEndString: $"${SdfWorldPackage.Parts.Composite}", actualString: plan.Passes[^1].Name);
         var history = plan.Storages.Where(predicate: static storage => storage.Declaration.History).Select(selector: static storage => storage.Name).Order(comparer: StringComparer.Ordinal);
 
         Assert.Equal(actual: history, expected: [$"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistoryColor}", $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.HistorySurface}"]);
-        Assert.Contains(collection: plan.Passes[^1].Accesses, filter: static access => access.PreviousFrame);
+        Assert.Contains(collection: resolve.Accesses, filter: static access => access.PreviousFrame);
         Assert.True(condition: rig.Temporal());
         // Every render advances the sequence with no capture converging.
         var frames = rig.HistoryFrames();

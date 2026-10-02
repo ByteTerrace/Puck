@@ -160,8 +160,8 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // while its handle and extent hold, so an unchanged screen packs nothing.
     private readonly SourceMapping?[] m_screenMappings = new SourceMapping?[MaxScreenSurfaces];
     private readonly bool[] m_screenBound = new bool[MaxScreenSurfaces];
-    // The screen-light table (screen glow colors, environment, grid-overlay and lever rows) and the bounded-volume table
-    // (views and sky), each packed here every frame and written into its region.
+    // The screen-light table (each screen's glow color and gain) and the bounded-volume table (views and sky), each packed
+    // here every frame and written into its region.
     private readonly byte[] m_screenLightScratch = new byte[ScreenLightByteLength];
     private readonly Vector3[] m_screenLightColors = new Vector3[MaxScreenSurfaces];
     private readonly byte[] m_volumeScratch = new byte[(MaxVolumes * VolumeByteLength)];
@@ -349,6 +349,10 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             byteCount: SdfMeshRegion.DrawBytes,
             region: MeshRegionIndex
         ));
+        m_lightRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_lightRecords), region: LightRegionIndex));
+        m_skyRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyRecord), region: SkyRegionIndex));
+        m_skyStopRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyStopRecords), region: SkyStopRegionIndex));
+        m_softboxRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_softboxRecords), region: SoftboxRegionIndex));
         m_meshRegionBytes = SdfMeshRegion.DrawBytes;
         m_previousDynamicTransforms = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
             name: NameOf(part: "previous-dynamic-transforms"), sizeBytes: ((ulong)m_dynamicTransformRegion.ByteCount), usage: GpuBufferUsage.Storage));
@@ -508,8 +512,8 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
                     bufferSize: bakeBlock.SizeBytes,
                     descriptorSetHandle: bakeSet
                 );
-                WriteInterfaceBuffer(buffer: requestBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfWorldInterfaces.BakeRequest, set: bakeSet);
-                WriteInterfaceBuffer(buffer: m_brickPoolBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfWorldInterfaces.BakePool, set: bakeSet);
+                WriteInterfaceBuffer(buffer: requestBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfKernelInterfaces.BakeRequest, set: bakeSet);
+                WriteInterfaceBuffer(buffer: m_brickPoolBuffer, layout: SdfWorldInterfaces.BrickBakeLayout, member: SdfKernelInterfaces.BakePool, set: bakeSet);
             }
         }
 
@@ -520,18 +524,18 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         scope.Complete();
     }
 
-    // Writes a buffer at an interface member's binding, as the kind its member declares and at its element's stride, the
-    // structured view the kernel's generated declaration reads on Direct3D 12.
-    // Writes a buffer at a resource of an interface whose group layouts the set was allocated against.
+    // Writes a buffer at a resource of an interface whose group layouts the set was allocated against, as the kind its
+    // member declares and at its element's stride (a record's or a value type's), the structured view the kernel's
+    // generated declaration reads on Direct3D 12.
     internal void WriteInterfaceBuffer(nint set, ShaderInterfaceLayout layout, string member, IGpuBuffer buffer) {
-        var resource = SdfWorldInterfaces.ResourceOf(layout: layout, member: member);
+        var resource = SdfKernelInterfaces.ResourceOf(layout: layout, member: member);
 
         m_bindings.WriteBuffer(
             binding: resource.Binding,
             bufferHandle: buffer.BufferHandle,
             bufferSize: buffer.SizeBytes,
             descriptorSetHandle: set,
-            elementStride: resource.Member.Type!.Value.SizeBytes(),
+            elementStride: (resource.Member.Structure?.SizeBytes ?? resource.Member.Type!.Value.SizeBytes()),
             kind: resource.Kind
         );
     }

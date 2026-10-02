@@ -11,18 +11,27 @@ public static partial class WorldSchema {
     /// <param name="type">The document's root type.</param>
     /// <param name="schemaId">The schema's identity, the tag the document carries.</param>
     /// <param name="title">The schema's title.</param>
-    /// <returns>The generated schema root. Descriptions are read from the XML documentation file of
-    /// <paramref name="type"/>'s assembly beside the world's own; when a file is missing, every description is
-    /// omitted, as <see cref="HasXmlDocumentation"/> reports for the world's files.</returns>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public static JsonObject ExportDocument(JsonSerializerOptions options, Type type, string schemaId, string title) {
+    /// <param name="documentation">The types whose assemblies declare the document's shapes, each assembly's XML
+    /// documentation read for their descriptions; <paramref name="type"/>'s assembly alone when
+    /// <see langword="null"/>.</param>
+    /// <returns>The generated schema root. Descriptions are read from the XML documentation files of the documented
+    /// assemblies beside the world's own; when a file is missing, every description is omitted, as
+    /// <see cref="HasXmlDocumentation"/> reports for the world's files.</returns>
+    /// <exception cref="ArgumentNullException">An argument other than <paramref name="documentation"/> is
+    /// <see langword="null"/>.</exception>
+    public static JsonObject ExportDocument(JsonSerializerOptions options, Type type, string schemaId, string title, IReadOnlyList<Type>? documentation = null) {
         ArgumentNullException.ThrowIfNull(argument: options);
         ArgumentNullException.ThrowIfNull(argument: type);
         ArgumentNullException.ThrowIfNull(argument: schemaId);
         ArgumentNullException.ThrowIfNull(argument: title);
 
         var root = ExportDocument(
-            index: LoadXmlDocIndex(files: [.. XmlDocumentationFiles, ($"{type.Assembly.GetName().Name}.xml", type)]),
+            index: LoadXmlDocIndex(files: [
+                .. XmlDocumentationFiles,
+                .. (documentation ?? [type])
+                    .DistinctBy(keySelector: static anchor => anchor.Assembly)
+                    .Select(selector: static anchor => ($"{anchor.Assembly.GetName().Name}.xml", anchor)),
+            ]),
             options: options,
             schemaId: schemaId,
             title: title,

@@ -216,7 +216,7 @@ internal static class ShaderInterfaceSpike {
         );
 
     // Stages the sources into a fresh directory, then compiles the named one with the one shader recipe
-    // (ShaderCompiler.StepsOf, which the build runs through build/ShaderRecipe.props).
+    // (ShaderCompiler.StepsOf, which the build runs through build/ShaderRecipe.targets).
     private static async Task<Build> CompileInAsync(string sourceFileName, string profile, string entryPoint, Func<string, CancellationToken, Task> stage, CancellationToken cancellationToken) {
         var dxc = (Dxc ?? throw new ShaderToolMissingException(
             directory: null,

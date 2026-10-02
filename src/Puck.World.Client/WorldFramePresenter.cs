@@ -1676,9 +1676,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
-            // The environment: render.lighting and render.sky with every keyed value at its clock's presented phase
-            // (a world.row.set render lands on the next frame).
-            Environment = lighting,
+            // The lights and the sky: render.lighting, render.sky and render.environment with every keyed value at its
+            // clock's presented phase (a world.row.set render lands on the next frame).
+            Lights = lighting.Lights,
+            Sky = lighting.Sky,
             // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state at,
             // never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.
             Clock = m_client.StateMirror.Presented,

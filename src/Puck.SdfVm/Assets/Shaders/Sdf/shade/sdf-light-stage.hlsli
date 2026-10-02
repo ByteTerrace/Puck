@@ -1,21 +1,27 @@
-// The light stage: shades one pixel from its surface sample (SdfSurfaceSample) into the view's working color, the sky on
-// a miss. It samples a bound screen, re-resolves the material, lights the surface through the one light interface
-// (sdf-light.hlsli), the key light under the soft shadow the shadow stage wrote, and applies the editor grid, the
-// distance fog and the silhouette coverage; the volumes and the debug views follow it.
+// The light stage: shades one pixel's hit from its surface sample (SdfSurfaceSample) into the view's lit color, and
+// nothing on a miss. It samples a bound screen, re-resolves the material, lights the surface through the one light
+// interface (sdf-light.hlsli), the key light under the soft shadow the shadow stage wrote, applies the editor grid, and
+// reports the pixel's coverage: one for a solid hit, less on a silhouette edge against the sky, zero on a miss. It also
+// reports the pixel's reactivity for a temporal view's resolve: one for a screen, whose content changes on its own, and
+// for emission, which the material model cannot tell animated from steady, the share of the color the material and atlas
+// texel that actually shaded the pixel emit. The sky, the distance fog and the volumes are the composite's, after this
+// stage; the debug views follow it.
 #ifndef SHADE_SDF_LIGHT_STAGE_HLSLI
 #define SHADE_SDF_LIGHT_STAGE_HLSLI
 #include "sdf-light.hlsli"
 #include "sdf-grid.hlsli"
 #ifdef SDF_VIEWS_PASS
 
-float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float reactivity) {
-    float3 color = skyColor(p.rayDirection);
+float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out float reactivity) {
+    float3 color = float3(0.0, 0.0, 0.0);
     float3 emission = float3(0.0, 0.0, 0.0);
-    reactivity = 0.0;
 
+    coverage = 0.0;
+    reactivity = 0.0;
     if (!s.hit) {
         return color;
     }
+    coverage = 1.0;
 
     float3 surfacePoint = (p.rayOrigin + (p.rayDirection * s.t));
     float3 normal = s.normal;
@@ -49,11 +55,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float reactivity) {
         float3 keyDirection = worldSunDirection();
         float sunDiffuse = max(dot(normal, keyDirection), 0.0);
         float keyVisibility = 1.0;
-        // The environment scales dim the room so the diegetic screen glow dominates; the overworld sets them low per frame.
-        float ambientScale = passGroup.ambientScale;
-        float sunScale = passGroup.sunScale;
 
-        if ((sunDiffuse > 0.0) && (worldShadowLightIndex() >= 0) && !worldSoftShadowsDisabled() && !s.mesh) {
+        if ((sunDiffuse > 0.0) && (passGroup.shadowLight >= 0) && !worldSoftShadowsDisabled() && !s.mesh) {
             keyVisibility = s.keyVisibility;
             sunDiffuse *= keyVisibility;
         }
@@ -148,8 +151,6 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float reactivity) {
             shadeSurface.material = shadeMaterial;
             shadeSurface.ambientOcclusion = ambientOcclusion;
             shadeSurface.keyVisibility = keyVisibility;
-            shadeSurface.sunScale = sunScale;
-            shadeSurface.ambientScale = ambientScale;
 
             float3 radiance = float3(0.0, 0.0, 0.0);
             float3 rim = float3(0.0, 0.0, 0.0);
@@ -159,7 +160,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float reactivity) {
 
             [loop]
             for (uint lightIndex = 0u; (lightIndex < lightCount); lightIndex++) {
-                SdfLight light;
+                SdfLightSource light;
 
                 if (!sdfLightAt(lightIndex, light)) {
                     continue;
@@ -173,7 +174,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float reactivity) {
                 attenuation *= response.attenuation;
             }
 
-            color = (sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection, worldSunDirection(), sunScale) + meshEmission);
+            color = (sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection, worldSunDirection(), 1.0) + meshEmission);
 
             // The warm or cool bounce (SdfMaterial.Bounce): a restrained fill on the side of the surface the key light does
             // not reach. Black, the default, adds nothing.
@@ -210,20 +211,16 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float reactivity) {
     }
 
     if (useFinalShading) {
-        // The editor grid tints the lit color before the distance fog, so a far grid still recedes. It reads the
-        // geometric normal, which the soften above never widens.
+        // The editor grid tints the lit color before the composite's distance fog, so a far grid still recedes. It reads
+        // the geometric normal, which the soften above never widens.
         color = sdfApplyGrid(color, surfacePoint, s.normal, p.rayDirection, (p.pixelFootprint * s.t));
 
-        float fog = (1.0 - exp(-worldSkyFogDensity() * s.t));
-        color = lerp(color, skyGradient(p.rayDirection), fog);
-        emission *= (1.0 - fog);
-
         // The silhouette's sky coverage, from this frame's primary records. The residual ratio stays in the clamped units
-        // of hit acceptance, and the normal gates grazing hits. A geometry-to-geometry edge takes no sky blend, and a mesh
-        // pixel's coverage is zero.
-        float coverage = saturate(s.terminalRadius / s.threshold);
+        // of hit acceptance, and the normal gates grazing hits. A geometry-to-geometry edge stays wholly covered, and a mesh
+        // pixel's residual is zero.
+        float residual = saturate(s.terminalRadius / s.threshold);
         float grazing = (1.0 - saturate(-dot(normal, p.rayDirection)));
-        float edgeWeight = (coverage * grazing);
+        float edgeWeight = (residual * grazing);
         bool adjacentSky = false;
         if (edgeWeight > DisplayCode) {
             uint2 renderDims = worldViewDims(p.view);
@@ -243,9 +240,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float reactivity) {
                 }
             }
         }
+        // The sky's share of an edge beside sky is what the hit does not cover: the composite blends the full sky there.
         if (adjacentSky) {
-            color = lerp(color, skyGradient(p.rayDirection), edgeWeight);
-            emission *= (1.0 - edgeWeight);
+            coverage = (1.0 - edgeWeight);
         }
     }
 

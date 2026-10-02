@@ -2,7 +2,7 @@
 
 Keep authoritative sources in Git. Shader bytecode (`.spv`, `.dxil`) and its
 `.hash` sidecars are ignored local outputs; DXC generates them through
-`Shaders.targets`, with the options `ShaderRecipe.props` holds for each stage;
+`Shaders.targets`, with the options `ShaderRecipe.targets` holds for each stage;
 `puck shaders generate` writes that file from `ShaderCompiler.StepsOf`, the
 recipe the runtime shader compiler runs. CI packages the bytecode, so players
 do not need a compiler.

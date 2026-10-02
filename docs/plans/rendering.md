@@ -2772,7 +2772,7 @@ Phase 3, the groups, follows phase 2:
     `SdfFrameBufferPlanLawTests` held too until P14-6 deleted that plan).
 20. Done: the SDF engine is on groups. Its kernels read
     `sdf-world.interface.hlsli` and `sdf-bricks.interface.hlsli`,
-    generated from `SdfWorldInterfaces` and owned by `puck shaders generate`,
+    generated from `SdfKernelInterfaces` and owned by `puck shaders generate`,
     and the pass-pipeline cache creates every pipeline from its interface's
     layout, which the kernels bind by member name. Every per-view dispatch bound
     the ring slot's frame set and its view's views set until P14-6 gave each
@@ -4136,8 +4136,8 @@ item 2 landed.
    the state mirror, and `FrameCaptureRequest` has no tick source of its own.
 6. Landed, the cutover: every SDF view is a render-graph instance of
    `sdf.world`. Its fragment (`SdfWorldPackage.Fragment`) is what the graph
-   compiler splices in place of the pass naming it, ten passes, `sdf.world$sky`
-   through `sdf.world$views`, planned as `SdfPassPlanLawTests` holds them. The
+   compiler splices in place of the pass naming it, eleven passes, `sdf.world$mask`
+   through `sdf.world$composite`, planned as `SdfPassPlanLawTests` holds them. The
    package records into the instance's command buffer, so Direct3D 12's
    promotion from `COMMON`, the indirect-argument state and the scratch hazards
    are the planner's; the scratch is transient, one allocation per instance
@@ -4361,7 +4361,7 @@ item 2 landed.
     because the build refuses bytecode stale against its sources and every
     include, the generated `sdf-isa.hlsli` among them, and `puck shaders
     generate --check` refuses that file stale against the C# model. The
-    instruction set's fingerprint (`SdfIsaHlsl.Fingerprint`) hashes the include,
+    instruction set's fingerprint (`SdfIsaFingerprint.Value`) hashes the include,
     which generates every lane enum, header lane accessor and vector count the
     kernels read, and the model's described encoding (`SdfEncodingProbe`: where
     the builder and packer put every field, bitfield and table entry, found by
@@ -5136,34 +5136,32 @@ packaging, and compiled worlds in the runtime and delivery programme.
 
 ### P18 — Sky and atmosphere
 
-**Starts from:** the sky as the code holds it: its lanes, its passes, its
+**Starts from:** the sky as the code holds it: its records, its passes, its
 clocks and its duplicates.
 
-- **One packed table.** `SdfEnvironment` (`src/Puck.SignedDistance`) packs the
-  lights, the curvature gains, the sky, the softboxes and the studio horizon
-  into 53 hand-numbered `float4` rows, 848 of the pass block's 1,120 bytes.
-  `SdfFrameBlock.BakeEnvironment` writes those rows into every pass block, so
-  all ten `sdf.world` passes (sky, mask, beam, cull-args, mesh, primary,
-  surface, ambient, shadow, views) carry them, though only sky, shadow and
-  views read them. `frame/sdf-lights.hlsli` decodes the sky's rows through 22
-  hand-written accessors, and `SdfEnvironment.BlendOf` classifies every lane's
-  cycle blend (lerp, arc or hold) by row and lane number.
-- **Sky evaluated twice.** `shade/sdf-sky.hlsli` holds the stars, a private 2D
-  lattice noise, the clouds, the gradient and the composite in one file. The
-  `sky` pre-pass (`passes/sdf-sky.comp.hlsl`) evaluates `skyColor` for every
-  pixel, and the views stage (`sdfLightStage`) evaluates it again for every
-  pixel of a live tile, hits included, before it knows whether the pixel hit.
-  A hit then calls `skyGradient` once for fog and once for the silhouette edge.
+- **Separate records.** `SdfLights` and `SdfSky` (`src/Puck.SignedDistance`)
+  pack the lights, sky block, gradient stops and studio softboxes into four
+  World-group regions. Their HLSL structures are generated from the C#
+  records. The 496-byte pass block holds the light count, shadow-light index
+  and curvature shading; the sky and light records are read only by the
+  kernels that use them, as P18-4 specifies.
+- **The sky once, where it is seen** (P18-5). `shade/sdf-sky.hlsli` holds the
+  stars, a private 2D lattice noise, the clouds and the gradient, grouped into
+  the runs they compose in. Views shades hits only, into a lit image with its
+  coverage; the `sky` pass evaluates the field runs only where coverage is below
+  one, and the `composite` pass puts the lit image over the runs and fogs and
+  integrates the bounded media. The fog still blends toward the gradient alone,
+  until the environment map gives it the sky's in-scattered colour.
 - **Re-marched for sky-only changes.** The cadence (`SdfWorldTables.Cadence.cs`)
   hashes the twinkle tick and the pass block, cloud offsets included, so a
   drifting cloud or a twinkling star re-renders every pass of the view. A
   bounded volume forces a render every frame (`ForcesRender`), because volumes
   animate on the presentation time (`sceneTime`, `frame.Time`), which is not the
   tick and is not replayed.
-- **Four gradients over elevation:** the sky's stops; the pinned two-stop
-  gradient written as HLSL literals behind `SkyEnabled`, a branch kept so an
-  unauthored world stays bit-identical; the studio reflection horizon (rows 51
-  and 52); and the hemisphere ambient light.
+- **Three gradients over elevation:** the sky's stops, which an unauthored world
+  reads as the default look's two (P18-5 removed the pinned HLSL gradient and its
+  `SkyEnabled` branch); the studio reflection horizon; and the hemisphere
+  ambient light.
 - **Five spellings of the sun:** `SdfEnvironment.DefaultSunDirection`, the HLSL
   `SdfSunDirection`, `worldSunDirection` (whichever light shadows),
   `SunDiscLightIndex` (the light the disc is drawn about) and the unused
@@ -5731,8 +5729,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      parity holds every station unchanged.
    - Counted-cost gate: a still view with a visible volume renders when the
      presented tick moves its motion, never on a frame whose tick has not moved;
-     the pass block keeps its 1,120 bytes, and the written pass-block bytes per
-     pass fall from 1,048 to 1,024 (`world-counters`).
+     P18-4 holds the current pass-block size and table bindings.
 3. **P18-3, keys on clocks, for every presentation value.**
    - Landed: the keys substrate. Every colour, scalar, angle, direction and
      vector a document binds may be keyed on a `timeline` clock
@@ -5821,6 +5818,22 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `world.timeline`.
 4. **P18-4, the sky block, the lights table and generated decoders.** The
    environment leaves the pass blocks, and nothing it draws changes.
+   - Landed: the lights table (`SdfLight` records),
+     the sky block (`SdfSkyBlock`) and the sky's stops and softboxes
+     (`SdfSkyStop`, `SdfSoftbox`) are World-group regions whose HLSL structs
+     `puck shaders generate` writes from the C# types; `SdfLights` and `SdfSky`
+     hold the authored values and pack the records with their host bakes (the
+     disc's direction and exponent, the light the clouds are lit by). The pass
+     block keeps the light count, the shadow light and the curvature shading,
+     which the surface pass reads, and is 496 bytes. The lights table is
+     referenced by the shadow and views kernels, the sky block and stops by sky
+     and views, and the softboxes by views alone; `composite` joins the sky's
+     readers when P18-5 lands it. A star or cloud seed is exact now: the old
+     float rows rounded a seed past 2^24. The resolve pass declares the same
+     World group, since it binds the residency's one World set. Parity holds
+     every station under its contract on both backends; on Direct3D 12 two
+     pixels (one each at the converge and vocabulary stations) move by one code,
+     and Vulkan's captures are unchanged.
    - Delivers: the lights as a typed table (a World-group region of generated
      structs), the sky as a typed block (frame, layers, bodies, phases, the
      environment coefficients), both written as regions that owe only changed
@@ -5843,13 +5856,50 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
    - Counted-cost gate: the win is block size and binding, not upload bytes.
      Every region already writes only the words that changed, so the new
      tables upload what changed, as the rest do. The generated pass block
-     shrinks from 1,120 bytes to about 272, so the constant data the host writes
-     into the ten pass blocks of a view each frame falls from 11,200 bytes to
-     about 2,720, and each dispatch binds a block a quarter of the size. The sky
-     group is bound by 3 of the 10 passes (`views`, `sky`, `composite`) and the
-     lights table by 2 (`shadow`, `views`). A law holds the block size and each
-     pass's bound groups to the generated interface.
-5. **P18-5, the sky once, and a composite last.**
+     shrinks from 1,296 bytes to 496, so the constant data the host writes into
+     the ten pass blocks of a view each frame falls from 12,960 bytes to 4,960.
+     The sky block and stops are read by 2 of the 10 passes (`views`, `sky`),
+     the softboxes by `views` alone, and the lights by 2 (`shadow`, `views`).
+     `composite` joins the sky's readers in P18-5. A law holds the block size
+     and each kernel's table bindings to the generated interface.
+5. **P18-5, the sky once, and a composite last.** Landed.
+   - Landed: views shades hits only into the lit image (`SdfWorldPackage.Parts.Lit`,
+     premultiplied by coverage and by each hit's fog transmittance, coverage in
+     alpha, a miss uncovered); `sky`
+     (`passes/sdf-sky-runs.comp.hlsl`) writes the gradient's offset and the
+     cloud run's scale and offset as half-float images on the render grid where a
+     pixel or a neighbour of views' color is not wholly covered, and marks the
+     texels it evaluated; `composite` (`passes/sdf-composite.comp.hlsl`) adds the
+     fog's in-scatter of the gradient by the surface transport's weight, composes
+     the runs beneath the lit image by its coverage (filtered from the evaluated
+     texels, the disc and stars evaluated at the pixel), and integrates the
+     bounded media over the surface share to its transport's distance and over
+     the sky share to the far distance. Both read the sky interface
+     (`SdfWorldInterfaces.SkyParameters`) and record through `SdfSkyRecorder`. A
+     native view reads views' lit image and visibility records, current only
+     inside the dispatch box; a reduced or temporal view's resolve writes the lit
+     image and each pixel's surface transport at the output extent, its history
+     holding coverage and transport with color and never the sky.
+     The surface transport is two numbers a render sample, computed from the
+     sample's own ray distance and premultiplied by its coverage: the fog's
+     in-scatter weight, coverage times one minus transmittance, and coverage
+     over distance. The resolve reads each transport tap beside its color tap
+     over one footprint (`reconstruction.hlsli`'s footprint and combine), and
+     accumulates it with the Gaussian and history weights color has, so a
+     pixel's fog is its samples' coverage-weighted fog exactly. Media clip at
+     the harmonic mean of the samples' distances, exact for a footprint of one
+     surface; a medium lying between two surfaces of one footprint is the one
+     case not reproduced sample by sample. The CPU reference is
+     `SdfSurfaceTransport` (`SdfSurfaceTransportLawTests`). The default look
+     is the two-stop gradient and fog `SdfSky` starts from, as data. The CPU
+     reference for the run composition is `SdfSkyRuns`. `gpu.sky.evaluations` is a
+     kernel-counted kind beside the march steps and texels written; the field
+     runs' texels are the `sky` pass's row, and per-run and per-layer rows wait for
+     the detail labels P18-7 adds. A pixel covered with all its neighbours reads
+     zero field evaluations in the sky pass (`SdfSkyEvaluationDeviceLawTests`).
+     Composite counts each gradient evaluation for surface fog and each in-place
+     field fallback; both can occur at one pixel. Zero fog density evaluates no
+     fog gradient (`SdfSkySamplingLawTests`).
    - Delivers: `views` shading hits only into `lit`, premultiplied, with
      coverage in its alpha; `sky` evaluating the sky's field runs where
      coverage is below one, with a one-pixel dilation, into their scale and
@@ -5868,8 +5918,13 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `shade/sdf-sky.hlsli`, `SdfWorldPassRecorder`, `WorldRenderDefaults`,
      `tests/Puck.Parity`, `docs/rendering/sdf/handbook/frame-rendering.md`.
    - Done when: `SdfPassPlanLawTests` plans `sky` and `composite` after `views`;
-     a device law counts zero sky evaluations for a pixel that hits and one for
-     a pixel that misses (red leg: a hit pixel evaluated fails);
+     a device law counts zero field evaluations in the sky pass for a pixel
+     covered with all its neighbours and one for a pixel that misses;
+     a shader law requires the composite's fog and fallback evaluations to count;
+     `SdfSurfaceTransportLawTests` hold a quarter-covered pixel of a two-sample
+     row upscaled to four to its covered share's fog and a medium behind its
+     edge to its sky share, on the CPU reference within 1e-5 a channel (red leg:
+     the distance of the one sample under the pixel's center fails both);
      `SkyRunCompositionLawTests` hold the run composition to one ordered
      evaluation of the whole stack, on a CPU reference within a stated float
      tolerance, for stars beneath clouds and for a mixed stack (`over`, `add`,
@@ -5877,9 +5932,14 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      leg: composing the field runs before the point layers dims no star); a
      `sky-coverage` canary holds a silhouette edge's blend to the sky at its
      pixel; parity holds on both backends after its explained re-record.
-   - Counted-cost gate: `gpu.sky.evaluations` falls from (1 + L) × P to about
-     (1 − h) × P per view (see the expected wins), and every hit reads zero;
-     each field run's texels written are a row of their own under `sky`.
+   - Counted-cost gate: `gpu.sky.evaluations` includes about (1 − h) × P field
+     evaluations per view, the dilated edge, composite fallbacks and fog gradients
+     at output resolution. The committed ceilings require a recording that
+     includes the composite's fog work; each pass reports its own row. The
+     surface transport adds no storage: its word replaces the surface distance's,
+     and the history surface keeps three words by holding the distance and the
+     gathered weight as half floats. An edge pixel whose media reach past its
+     surface integrates them once more, counted in the composite's march steps.
 6. **P18-6, a cadence per pass.**
    - Landed foundation: the graph can retain private intermediate resources
      and leave a pass standing while its signature, extent, inputs and outputs
@@ -5900,7 +5960,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
    - Done when: a law over the fake device drives one change of each class
      over a still camera and holds each frame to exactly its class's
      dispatches, with the barriers the plan states: a cloud drift, a twinkle, a
-     fog edit and a moving volume to `sky` and `composite`; a keyed light
+     fog colour edit and a moving volume to `sky` and `composite`; a fog density
+     edit, which each hit's transmittance in the lit image carries, to `views`,
+     `resolve`, `sky` and `composite`; a keyed light
      colour to `views`, `sky` and `composite` (and, from P18-9, a keyed colour
      on a lighting-visible layer to those and `sky.environment`); an orbiting
      shadowed body to those and `shadow` (red leg:
@@ -5909,10 +5971,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      retained output to its last write; a `sky-cadence` canary reads zero march
      steps on the sky leg's drift frames.
    - Counted-cost gate, per class, against the baseline P18-1 records: a
-     meshless view at the floor tier runs 7 SDF compute dispatches today (`sky`,
-     `mask`, `beam`, `cull-args`, `primary`, `surface`, `views`; `ambient` and
-     `shadow` skip at `low`, and the mesh pass is a draw that a meshless frame
-     skips), and 9 plus the mesh draw at `high`. A visual-only frame runs 2
+     meshless view at the floor tier runs 9 SDF compute dispatches (`mask`,
+     `beam`, `cull-args`, `primary`, `surface`, `views`, `resolve` at the floor
+     tier's reduced scale, `sky`, `composite`; `ambient` and `shadow` skip at
+     `low`, and the mesh pass is a draw that a meshless frame skips), and adds
+     `ambient`, `shadow` and the mesh draw at `high`. A visual-only frame runs 2
      (`sky`, `composite`). A lighting-visible frame runs 3 (`views`, `sky`,
      `composite`), plus `sky.environment`'s two (the map and its reduction)
      when it re-renders and `resolve` when reconstruction is on. A
@@ -6009,7 +6072,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       colour below a surface), and the bounded media authored under it by
       creations, lit by bodies.
     - Deletes: `WorldRenderSkyLayer.Fog` and the fog density lane.
-    - Touches: the records, `composite`, `shade/shade-volumes.hlsli`,
+    - Carries each kind's transmittance and in-scatter weight per render sample
+      as the surface transport carries the fog's (`shade/sdf-transport.hlsli`),
+      so the resolve reconstructs them with the color's weights.
+    - Touches: the records, `composite`, `shade/sdf-transport.hlsli`,
+      `shade/shade-volumes.hlsli`,
       `CreationStampEmitter`'s volume emission, `tests/Puck.Parity`.
     - Done when: a law holds height fog's integral along a ray to its closed
       form (red leg: a ray parallel to the base); an `atmosphere` canary holds
@@ -6110,11 +6177,11 @@ the rows P18-1 records. P is a view's render pixels (518,400 for a 1920 by 1080
 view at the floor tier's half scale), h the fraction of them that hit, and L the
 fraction in live tiles, at least h.
 
-- **Sky evaluations.** Today (1 + L) × P per frame: every pixel in the pre-pass
-  and every live-tile pixel again in `views`, hits included. After P18-5, about
-  (1 − h) × P plus the dilated edge. At h = 0.6 and L = 0.75, from 907,200 to
-  about 210,000, a fall of 77%. A hit reads zero sky evaluations instead of one
-  full sky and up to two gradients. A view that hits nothing is unchanged at P.
+- **Sky evaluations.** The sky pass evaluates about (1 − h) × P field runs plus
+  the dilated edge. Composite adds its in-place fallbacks and one gradient
+  evaluation per fogged output pixel. A covered pixel can therefore count a fog
+  gradient even when it needs no sky run. Cost comparisons include both passes;
+  a view that hits nothing and needs no fallback evaluates P field runs.
 - **Visual-only frames** (a drift, a twinkle, a camera-only keyed colour, an
   atmosphere edit, a moving volume). Today every pass the view runs: 7 SDF
   compute dispatches for a meshless view at the floor tier, 9 and the mesh draw
@@ -6127,13 +6194,13 @@ fraction in live tiles, at least h.
 - **Bounded media.** Today a single volume re-renders every view every frame.
   After P18-2 and P18-6, `composite` alone, and only on frames whose presented
   tick moves.
-- **Pass-block size and binding.** Today the pass block is 1,120 bytes, 848 of
-  them the environment, written into each of 10 blocks: 11,200 bytes of
-  constant data per view per frame, every dispatch binding the whole block.
-  After P18-4 the block is about 272 bytes (about 2,720 per view per frame), and
-  the sky group and lights table are bound only by the passes that read them.
-  This is not an upload win: every region already uploads only the words that
-  changed, and the new tables do the same.
+- **Pass-block size and binding.** With P15-5's temporal values the pass block
+  was 1,296 bytes, 848 of them the environment, written into each of the
+  view's pass blocks, every dispatch binding the whole block. With P18-4 it is
+  496 bytes, of which 40 are the light count, the shadow light and the
+  curvature shading, and the lights and sky tables are referenced only by the
+  kernels that read them. This is not an upload win: every region already
+  uploads only the words that changed, and the new tables do the same.
 - **Clouds.** Today 128 hash evaluations per covered pixel (four thickness taps,
   two fractal sums of four octaves, four lattice corners) and 32 per clear one.
   At `low`, 24 per covered pixel, a fall of 81%.
@@ -6161,8 +6228,8 @@ fraction in live tiles, at least h.
   the render extent after `views` and read the record; from P15-4 they follow
   `resolve` at the output extent and read only the resolved surface, the depth
   and coverage `resolve` writes in both modes once its first reader lands (the
-  P18 step that lands `composite` adds it to `resolve`), and the sky's field
-  extent follows the output extent scaled by the sky tier. P15's reactivity is
+  P18 step that lands `composite` adds it to `resolve`), while the sky's field
+  runs stay on the render grid, reading views' color, which a sky tier scales. P15's reactivity is
   its own image, which `resolve` consumes, and P18's coverage is `lit`'s alpha,
   which `resolve` carries through; P15's text states both. P15-5's convergence
   rule and P18-6's cadence compose: a converging view renders every pass for

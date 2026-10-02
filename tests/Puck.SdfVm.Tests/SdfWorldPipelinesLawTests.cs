@@ -26,7 +26,7 @@ public sealed class SdfWorldPipelinesLawTests {
             kernels: SdfTestPipelines.Kernels(beam: 1)
         );
 
-        Assert.Equal(expected: (11L, 11), actual: (Created(cache: cache), device.Persisted));
+        Assert.Equal(expected: (12L, 12), actual: (Created(cache: cache), device.Persisted));
 
         using var reflector = SdfTestPipelines.Reflector();
 
@@ -49,7 +49,7 @@ public sealed class SdfWorldPipelinesLawTests {
             Assert.Equal(expected: 1, actual: changed.ChangedPipelines);
         }
 
-        Assert.Equal(expected: (12L, 12), actual: (Created(cache: cache), device.Persisted));
+        Assert.Equal(expected: (13L, 13), actual: (Created(cache: cache), device.Persisted));
 
         // A second set of the same kernels on the device joins every entry the first leases.
         using var joined = SdfTestPipelines.Build(
@@ -58,7 +58,7 @@ public sealed class SdfWorldPipelinesLawTests {
             kernels: SdfTestPipelines.Kernels(beam: 1)
         );
 
-        Assert.Equal(expected: 12L, actual: Created(cache: cache));
+        Assert.Equal(expected: 13L, actual: Created(cache: cache));
     }
     // A reload is held to the host's interface before it leases anything: a kernel compiled against another instruction
     // set (its pass block carries another stamp), one binding the program words and the frame's instance grid in each
@@ -80,9 +80,9 @@ public sealed class SdfWorldPipelinesLawTests {
         var changed = SdfTestPipelines.Kernels(beam: 2);
         var foreign = changed.With(
             bytecode: SpirvEdits.Renamed(
-                from: ("passGroup" + SdfIsaHlsl.Stamp),
+                from: ("passGroup" + SdfWorldInterfaces.Stamp),
                 module: changed[SdfKernel.Beam].Span,
-                to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaHlsl.Fingerprint ^ 1U))
+                to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value ^ 1U))
             ),
             kernel: SdfKernel.Beam
         );
@@ -145,7 +145,7 @@ public sealed class SdfWorldPipelinesLawTests {
         );
 
         Assert.True(condition: pipelines.IncludesBrickPipelines);
-        Assert.Equal(expected: 12L, actual: Created(cache: cache));
+        Assert.Equal(expected: 13L, actual: Created(cache: cache));
     }
     [Fact]
     public async Task TheCacheHoldsAtMostItsConcurrencyInTheDriverAndBuildsEveryPipeline() {
@@ -167,7 +167,7 @@ public sealed class SdfWorldPipelinesLawTests {
             started.Add(item: driver.Next());
         }
 
-        while (started.Count < 11) {
+        while (started.Count < 12) {
             driver.Step();
             started.Add(item: driver.Next());
         }
@@ -177,7 +177,7 @@ public sealed class SdfWorldPipelinesLawTests {
 
         Assert.Equal(
             actual: (driver.MostInDriver, started.Distinct().Count(), Created(cache: cache)),
-            expected: (GpuPassPipelineCache.BuildConcurrency, 11, 11L)
+            expected: (GpuPassPipelineCache.BuildConcurrency, 12, 12L)
         );
     }
     [Fact]

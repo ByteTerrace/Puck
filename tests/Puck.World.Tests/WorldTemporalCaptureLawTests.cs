@@ -46,17 +46,27 @@ public sealed class WorldTemporalCaptureLawTests {
         Assert.True(condition: (resumed.Time > first.Time));
     }
 
+    // The pass block a frame writes, followed by the lights and sky records its tables pack.
     private static byte[] Block(SdfFrame frame) {
-        var environment = new float[Puck.SignedDistance.SdfEnvironment.LaneCount];
-
-        SdfFrameBlock.BakeEnvironment(frame: frame, rows: environment);
         var block = new byte[SdfFrameBlock.SizeBytes];
+        var lights = new Puck.SignedDistance.SdfLight[Puck.SignedDistance.SdfLights.MaxLights];
+        var stops = new Puck.SignedDistance.SdfSkyStop[Puck.SignedDistance.SdfSky.MaxStops];
+        var softboxes = new Puck.SignedDistance.SdfSoftbox[Puck.SignedDistance.SdfSky.MaxSoftboxes];
 
         SdfFrameBlock.Write(
             block: block,
-            tables: new SdfPassValues(ScreenCount: 0, InstanceMaskWordCount: 1, MeshDraws: ((uint)frame.MeshDraws.Count), DebugMode: 0, Environment: environment),
+            tables: new SdfPassValues(ScreenCount: 0, InstanceMaskWordCount: 1, MeshDraws: ((uint)frame.MeshDraws.Count), DebugMode: 0),
             frame: frame, view: 0, width: 64, height: 64
         );
-        return block;
+        frame.Lights.Pack(records: lights);
+        frame.Sky.Pack(block: out var sky, lights: frame.Lights, softboxes: softboxes, stops: stops);
+
+        return [
+            .. block,
+            .. System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: lights.AsSpan()),
+            .. System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: new ReadOnlySpan<Puck.SignedDistance.SdfSkyBlock>(reference: in sky)),
+            .. System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: stops.AsSpan()),
+            .. System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: softboxes.AsSpan()),
+        ];
     }
 }

@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.InteropServices;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 using Puck.Shaders;
@@ -83,35 +82,44 @@ public sealed class SdfFrameBlockLawTests {
             ],
             Time: 7f
         ) {
-            AmbientScale = 0.5f,
             DebugSliceAxis = 2f,
             DebugSliceOffset = 3f,
             DisableScreenLights = true,
             DisableShadowCull = true,
             EnableShadowProxy = true,
             FarDistance = 30f,
-            SunScale = 0.75f,
+            Lights = Lights(),
             UseFiniteDifferenceNormals = true,
         };
+    }
+    // Lights whose count, shadow light and curvature gains are none of them zero.
+    private static SdfLights Lights() {
+        var lights = SdfLights.Default();
+
+        lights.Set(index: 1, light: (lights[0] with { Shadows = 1u }));
+        lights.Curvature = new SdfCurvature(
+            Cavity: 0.25f,
+            Ink: 0.5f,
+            InkColor: new Vector3(x: 0.1f, y: 0.2f, z: 0.3f),
+            InkHigh: 12f,
+            InkLow: 4f,
+            Rim: 0.75f
+        );
+
+        return lights;
     }
 
     [Fact]
     public void EveryDeclaredValueIsWrittenWhereItsDeclarationReadsIt() {
         var frame = Frame();
-        var environment = new float[SdfEnvironment.LaneCount];
         var block = new byte[SdfFrameBlock.SizeBytes];
 
-        SdfFrameBlock.BakeEnvironment(
-            frame: frame,
-            rows: environment
-        );
         SdfFrameBlock.Write(
             block: block,
             frame: frame,
             height: 200u,
             tables: new SdfPassValues(
                 DebugMode: 4,
-                Environment: environment,
                 InstanceMaskWordCount: 2u,
                 MeshDraws: 5u,
                 ScreenCount: 3u
@@ -146,8 +154,6 @@ public sealed class SdfFrameBlockLawTests {
 
             if (ZeroValues.Contains(value: member.Name)) {
                 Assert.True(condition: !bytes.ContainsAnyExcept(value: ((byte)0)), userMessage: member.Name);
-            } else if (string.Equals(a: member.Name, b: SdfWorldPackage.Environment, comparisonType: StringComparison.Ordinal)) {
-                Assert.True(condition: bytes.SequenceEqual(other: MemoryMarshal.AsBytes(span: environment.AsSpan())), userMessage: member.Name);
             } else {
                 // Every component of a written value is non-zero here, so a component the writer misses reads as zero.
                 for (var component = 0; (component < member.Type.ComponentCount()); component++) {
@@ -163,6 +169,10 @@ public sealed class SdfFrameBlockLawTests {
         Assert.Equal(
             actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.TileGrid))),
             expected: ((300u + (SdfWorldPackage.TileSize - 1u)) / SdfWorldPackage.TileSize)
+        );
+        Assert.Equal(
+            actual: (BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.LightCount))), BitConverter.ToInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowLight)))),
+            expected: (2u, 1)
         );
     }
     // Each shading lever, on the frame or in a view's quality, lands in its own pass-block member and nowhere else: from
@@ -204,7 +214,6 @@ public sealed class SdfFrameBlockLawTests {
                 height: 200u,
                 tables: new SdfPassValues(
                     DebugMode: 0,
-                    Environment: new float[SdfEnvironment.LaneCount],
                     InstanceMaskWordCount: 1u,
                     MeshDraws: 0u,
                     ScreenCount: 0u
@@ -247,8 +256,7 @@ public sealed class SdfFrameBlockLawTests {
                     height: 200u,
                     tables: new SdfPassValues(
                         DebugMode: 0,
-                        Environment: new float[SdfEnvironment.LaneCount],
-                        InstanceMaskWordCount: 1u,
+                            InstanceMaskWordCount: 1u,
                         MeshDraws: 0u,
                         ScreenCount: 0u
                     ),
@@ -276,10 +284,10 @@ public sealed class SdfFrameBlockLawTests {
     public void ThePassBlockCarriesTheCamerasOwnNearAndTheSurfacesRenderFromTheFloorAtLeast() {
         Assert.Matches(
             actualString: SdfIsaHlsl.Generate(),
-            expectedRegexPattern: $@"(?m)^#define SDF_MINIMUM_NEAR +{System.Text.RegularExpressions.Regex.Escape(str: SdfFrameBlock.MinimumNear.ToString(format: "R", provider: System.Globalization.CultureInfo.InvariantCulture))}$"
+            expectedRegexPattern: $@"(?m)^#define SDF_MINIMUM_NEAR +{System.Text.RegularExpressions.Regex.Escape(str: SdfWorldPackage.MinimumNear.ToString(format: "R", provider: System.Globalization.CultureInfo.InvariantCulture))}$"
         );
 
-        foreach (var (near, surfaces) in ((ReadOnlySpan<(float, float)>)[(0f, SdfFrameBlock.MinimumNear), (0.01f, SdfFrameBlock.MinimumNear), (8.9f, 8.9f)])) {
+        foreach (var (near, surfaces) in ((ReadOnlySpan<(float, float)>)[(0f, SdfWorldPackage.MinimumNear), (0.01f, SdfWorldPackage.MinimumNear), (8.9f, 8.9f)])) {
             var authored = Frame();
             var frame = (authored with { Views = [(authored.Views[0] with { Camera = (authored.Views[0].Camera with { Near = near }) })] });
             var block = new byte[SdfFrameBlock.SizeBytes];
@@ -290,7 +298,6 @@ public sealed class SdfFrameBlockLawTests {
                 height: 200u,
                 tables: new SdfPassValues(
                     DebugMode: 0,
-                    Environment: new float[SdfEnvironment.LaneCount],
                     InstanceMaskWordCount: 1u,
                     MeshDraws: 0u,
                     ScreenCount: 0u
@@ -326,7 +333,6 @@ public sealed class SdfFrameBlockLawTests {
                 height: 200u,
                 tables: new SdfPassValues(
                     DebugMode: 0,
-                    Environment: new float[SdfEnvironment.LaneCount],
                     InstanceMaskWordCount: 1u,
                     MeshDraws: 0u,
                     ScreenCount: 0u
@@ -383,10 +389,4 @@ public sealed class SdfFrameBlockLawTests {
             expected: PassBlock(layout: SdfWorldInterfaces.WorldLayout)
         );
     }
-    [Fact]
-    public void TheEnvironmentArrayHoldsEveryEnvironmentRow() =>
-        Assert.Equal(
-            actual: SdfWorldPackage.EnvironmentRows,
-            expected: ((uint)SdfEnvironment.RowCount)
-        );
 }

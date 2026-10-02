@@ -595,17 +595,30 @@ build's shaders and compares a Linux DXC build of the same commit against them
 ([CI tooling](../development/ci.md)), the binding contract's cross-host gate
 leg.
 
-`generate` writes the HLSL includes the C# model owns:
+`generate` writes the files the C# model owns (`ShaderDeclarations`):
 `src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-isa.hlsli`, the SDF instruction set's
-version, enums and packed-layout constants, generated from
-`Puck.SignedDistance` by `Puck.SdfVm.SdfIsaHlsl`; and every generated shader
-interface (`<name>.interface.hlsli`). An engine package that declares
-pass-group members, such as `overlay`, `place` and `sdf.film-grain`, owns the
-one include named by its interface, found by that file name. A checked-in
-interface include that no package owns, and a package whose include is missing
-or named twice, fail by name. `--check` writes nothing, regenerates each include in
-memory and exits 1 naming each file that differs from the model and its first
-differing line; CI runs it beside `puck schema --check`.
+enums and packed-layout constants, generated from `Puck.SignedDistance` by
+`Puck.SdfVm.SdfIsaHlsl`; the instruction set's fingerprint, recorded in
+`src/Puck.SdfVm/SdfIsaFingerprint.cs`; every generated shader interface
+(`<name>.interface.hlsli`); and the build's shader recipe,
+`build/ShaderRecipe.targets`. An engine package that declares pass-group members,
+such as `overlay`, `place` and `sdf.film-grain`, owns the one include named by
+its interface, found by that file name; the SDF kernels' interfaces sit at fixed
+paths. A checked-in interface include that no package owns, and a package whose
+include is missing or named twice, fail by name. `--check` writes nothing,
+regenerates each file in memory and exits 1 naming each file that differs from
+the model and its first differing line; CI runs it beside `puck schema --check`.
+
+The model is in `Puck.Shaders.Model` and `Puck.SdfVm.Model`, which compile no
+shader, so the kernel builds generate first: every project whose kernels
+include a generated declaration references `Puck.Shaders.Generator`, whose build
+writes each declaration the model has changed before those kernels compile. A
+change that adds a declaration and a kernel reading it builds with an ordinary
+`dotnet build`; the verb is needed to write the recipe and to check the tree,
+and never to seed a header by hand. A continuous-integration build only checks:
+it fails naming each generated file that disagrees with the model and writes
+nothing
+([generated declarations](shaders.md#generated-declarations)).
 
 `interface` prints the [frame-block](shaders.md#frame-values-extent-and-ports) declarations
 each pass of a graph document or one-off shader reads, or, with

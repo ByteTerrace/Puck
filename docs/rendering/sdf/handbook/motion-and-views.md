@@ -121,7 +121,7 @@ the near plane and falling toward 0, so a nearer surface always has the
 greater depth. The pass block carries the camera's own near plane
 (`CameraSnapshot.Near`, zero when its image begins at the eye) as
 `nearDistance`, and the bounded volumes composite from it. Surfaces render
-from that plane but never nearer than `SdfFrameBlock.MinimumNear`
+from that plane but never nearer than `SdfWorldPackage.MinimumNear`
 (`SdfFrameBlock.NearOf`, `SDF_MINIMUM_NEAR` in the kernels): every surface
 march starts where its ray crosses it, and the mesh pass clips there. Normalized device coordinates put +Y
 up and a view's UV origin is its top-left corner. Ordinary rendering samples

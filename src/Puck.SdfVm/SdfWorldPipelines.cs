@@ -262,7 +262,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             }
 
             if (refusals is not null) {
-                throw new InvalidOperationException(message: $"The reloaded kernels do not read this host's interface (instruction set stamp '{SdfIsaHlsl.Stamp}'), so the set keeps its kernels: {string.Join(separator: " ", values: refusals)}");
+                throw new InvalidOperationException(message: $"The reloaded kernels do not read this host's interface (instruction set stamp '{SdfWorldInterfaces.Stamp}'), so the set keeps its kernels: {string.Join(separator: " ", values: refusals)}");
             }
 
             var replacements = new List<(int Index, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease)>();
