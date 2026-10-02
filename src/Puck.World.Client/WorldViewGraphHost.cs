@@ -21,8 +21,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     public string DocumentDirectory { get; private set; }
     /// <summary>Every graph row with a source that the runtime runs, by its authored name.</summary>
     public IReadOnlyDictionary<string, Entry> Entries => m_entries;
-    /// <summary>Gets this frame's footprints: the synthesized root showing the world, then each pane at its slot's
-    /// extent. The render root reads this list, which the host rewrites in place every frame.</summary>
+    /// <summary>Gets this frame's footprints: the synthesized root showing the world, then each view and pane at its
+    /// allocation envelope over the layout transition in flight. The render root reads this list, rewritten in place every
+    /// frame.</summary>
     public IReadOnlyList<RenderGraphFootprint> Footprints => m_footprints;
     /// <summary>Gets the instances the host names whether or not the display shows them this frame: every camera and
     /// session view a screen, a HUD frame or a probe export is bound to, parked or not. A seat's view and a pane are named
@@ -603,14 +604,16 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_cameras.Clear();
     }
     /// <summary>Places a pane this frame: the synthesized root shows the instance inside a normalized rect of the display,
-    /// renders it at that rect's extent, and reconstructs it at the given sharpness. An instance the root does not place
+    /// renders it at its allocation envelope, and reconstructs it at the given sharpness. An instance the root does not place
     /// is ignored, and so is a refused one (<see cref="Entry.Refusal"/>): the root draws the world beneath its slot, and
     /// nothing the root shows waits on it.</summary>
     /// <param name="instance">The <c>views.graphs</c> instance the slot names.</param>
     /// <param name="region">The slot's normalized rect.</param>
     /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
+    /// <param name="envelope">The extent the root reads the instance at, as fractions of the display
+    /// (<see cref="WorldViewOutputRegions.Pane"/>), or <see langword="null"/> for the rect's own.</param>
     /// <returns><see langword="true"/> when the root places the instance this frame.</returns>
-    public bool Place(string instance, NormalizedRect region, float sharpness) {
+    public bool Place(string instance, NormalizedRect region, float sharpness, NormalizedRect? envelope = null) {
         if (
             (m_synthesized is not { Plan: not null } synthesized) ||
             !synthesized.Panes.Contains(value: instance) ||
@@ -634,11 +637,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 Width: region.Width
             )
         );
+        var output = (envelope ?? region);
+
         m_footprints.Add(item: new RenderGraphFootprint(
             Consumer: WorldViewGraphs.MainInstance,
-            Height: region.Height,
+            Height: output.Height,
             Producer: instance,
-            Width: region.Width
+            Width: output.Width
         ));
 
         return true;
@@ -657,8 +662,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// for its base (<see cref="RenderGraphPlacement.Uncovered"/>).</param>
     /// <param name="sharpen">Whether the view resolves temporally, so its place pass sharpens it at its rect's own extent
     /// (<see cref="RenderGraphPlacement.Sharpen"/>).</param>
+    /// <param name="outputRegion">The stable allocation envelope, independent of the current placement.</param>
     /// <returns><see langword="true"/> when the root places the view this frame.</returns>
-    public bool PlaceView(int view, NormalizedRect region, float sharpness, bool shown, bool uncovered, bool sharpen = false) {
+    public bool PlaceView(int view, NormalizedRect region, float sharpness, bool shown, bool uncovered, NormalizedRect outputRegion, bool sharpen = false) {
         if (
             (m_synthesized is not { Plan: not null } synthesized) ||
             (((uint)view) >= ((uint)synthesized.ViewPasses.Count))
@@ -679,9 +685,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         m_footprints.Add(item: new RenderGraphFootprint(
             Consumer: WorldViewGraphs.MainInstance,
-            Height: region.Height,
+            Height: outputRegion.Height,
             Producer: synthesized.Producers[view].Name,
-            Width: region.Width
+            Width: outputRegion.Width
         ));
 
         return true;
@@ -695,13 +701,16 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// its views. The display counts as covered only when one rect covers it whole: a lone view standing for the world, a shown
     /// view over the whole display, or a pane that covers it (<paramref name="panesCover"/>); otherwise pixels no rect
     /// covers show the letterbox color, even while the first view is not shown.</summary>
-    /// <param name="views">The views of the world's last composed frame, in view order.</param>
+    /// <param name="views">The views of the world's current composed frame, in view order.</param>
     /// <param name="sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
     /// <param name="rendered">Whether the world has rendered a view into its output, by 0-based view, or
     /// <see langword="null"/> when no view has an output yet.</param>
     /// <param name="panesCover">Whether a pane the root shows this frame covers the whole display.</param>
+    /// <param name="envelopes">The extent the root reads each view at, by view, as fractions of the display
+    /// (<see cref="WorldViewOutputRegions.Views"/>), or <see langword="null"/> for each view's own rect; a view past
+    /// the list also reads at its own rect.</param>
     /// <exception cref="ArgumentNullException"><paramref name="views"/> is <see langword="null"/>.</exception>
-    public void PlaceViews(IReadOnlyList<SdfViewSnapshot> views, float sharpness, Func<int, bool>? rendered, bool panesCover) {
+    public void PlaceViews(IReadOnlyList<SdfViewSnapshot> views, float sharpness, Func<int, bool>? rendered, bool panesCover, IReadOnlyList<NormalizedRect>? envelopes = null) {
         ArgumentNullException.ThrowIfNull(argument: views);
 
         var whole = new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f);
@@ -710,6 +719,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_lone = false;
         if (views.Count == 0) {
             _ = PlaceView(
+                outputRegion: whole,
                 region: whole,
                 sharpness: sharpness,
                 shown: false,
@@ -757,6 +767,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
             _ = PlaceView(
                 uncovered: !covered,
+                outputRegion: (((envelopes is not null) && (view < envelopes.Count))
+                    ? envelopes[view]
+                    : snapshot.Region),
                 region: snapshot.Region,
                 sharpen: snapshot.Quality.Temporal,
                 sharpness: sharpness,

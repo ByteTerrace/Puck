@@ -54,9 +54,9 @@ public sealed class FixedStepPump {
     /// <see langword="null"/> always steps.</param>
     /// <param name="holdsClock">Whether this pump holds its clock for owed frames: before every step it asks
     /// <see cref="IFixedStepSimulation.HoldsClock"/>, and a step the simulation holds is withheld (see
-    /// <see cref="Advance"/>). The offscreen host holds; a host paced to a display or to nothing does not.</param>
+    /// <see cref="Advance"/>). Windowed and offscreen hosts hold; a headless host does not.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public FixedStepPump(IFixedStepSimulation simulation, InputRouter inputRouter, CommandRegistry registry, ulong captureOriginTicks, Action? beforeStep = null, Func<bool>? mayStep = null, bool holdsClock = false) {
+    public FixedStepPump(IFixedStepSimulation simulation, InputRouter inputRouter, CommandRegistry registry, ulong captureOriginTicks, Action? beforeStep = null, Func<bool>? mayStep = null, bool holdsClock = true) {
         ArgumentNullException.ThrowIfNull(argument: simulation);
         ArgumentNullException.ThrowIfNull(argument: inputRouter);
         ArgumentNullException.ThrowIfNull(argument: registry);
@@ -94,8 +94,8 @@ public sealed class FixedStepPump {
     /// <param name="output">The buffered console output flushed after every drain.</param>
     /// <param name="terminal">The terminal whose exit request stops stepping.</param>
     /// <param name="inputBacklog">The standard-input backlog the first step is held on.</param>
-    /// <param name="holdsClock">Whether the pump holds its clock for owed frames, which only the offscreen host
-    /// does.</param>
+    /// <param name="holdsClock">Whether the pump holds its clock for owed frames, as windowed and offscreen hosts
+    /// do.</param>
     /// <returns>The pump, or <see langword="null"/> when no simulation is registered.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="registry"/>, <paramref name="inputClock"/>,
     /// <paramref name="textSource"/>, <paramref name="output"/>, <paramref name="terminal"/>, or

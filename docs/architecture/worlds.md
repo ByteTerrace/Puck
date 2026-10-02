@@ -718,6 +718,40 @@ replays from its tape forwards nothing, its drive's last tick included: its dest
 replaying with it. A destination driving its own tape restores the sessions it recorded; when the
 drive ends, each one no observer holds ends, so nothing its recorded viewer pressed stays held.
 
+The windowed and offscreen render roots prepare delivery and the graph set, then the package's
+frame capture runs the world's existing view composer before scheduling. That capture places each
+SDF view using the same eased rect its camera projects, including fractional pixel extents, and places
+shader panes from that composition.
+Each occupant's allocation is the largest width and height its slots reach over the layout
+transition in flight, from its starting rect to its ending one, with padded departing cameras and
+the slot a view ordinal holds on either side of the midpoint cut included (`WorldViewOutputRegions`).
+An endpoint with no rendered slot reserves the whole-display spectator. Interrupted transitions
+retain each occupant's largest reservation until the chain settles, so repeated interruptions never
+shrink its allocation mid-ease. A settled layout requests each view and pane's own rect, subject to
+the scheduler's quantization and shrink hysteresis, so the shipped split layout renders
+each seat at half the display. Easing changes placement and the resolved grid inside the
+render-scale ceiling without resizing a node; allocations grow as a transition starts and shrink
+as it settles. An occupant that grows on one axis and shrinks on the other changes allocation at
+both boundaries. Collapsed arriving slots keep a
+finite camera while positive extents retain their fractional-pixel aspect. Frozen convergence
+frames publish their retained placements on every prepared frame. Editor comparisons record their
+viewports after that placement. `WorldCameraPlacementLawTests` pins agreement on every transition
+frame, one rebuild for a shrinking transition across quantization steps, and the split layout's half-display
+allocation. A pane's frame values carry its placed extent (`placedExtent`), the extent its paired
+camera projects for, so a pane shader projects at the placed aspect while its output keeps the
+allocation's.
+
+Both rendered hosts hold the completed simulation tick while a tick-scheduled capture is owed.
+Repeated window resizes can delay frame production, but cannot advance the capture to a later tick
+or leave it blocking the next scheduled capture. A pending capture presents bound state and body
+poses at fraction one; its image, region tick and state hash describe the scheduled tick
+(`WorldTemporalCaptureLawTests.AWindowedCapturePinsItsClockAndBodyPoseAndReleasesTheFractionAfterServing`). The
+swapchain follows the window's client extent while the world's logical frame extent stays fixed.
+`WorldCaptureSchedulerLawTests.AWindowResizeStormWritesEveryScheduledTicksFrameWithoutBlockingTheNextCapture`
+checks every PNG's tick and hash through delayed frames. When a frame cannot be served, the existing
+readiness-dependent hold budgets produce a named refusal and withdraw the request; a run settles
+anything still owed before disposal (`WorldCaptureHoldLawTests`).
+
 A joined-world projection renders the destination from the destination's own delivered snapshots and
 its own measured clock, never through the host's presentation clock—independently scheduled or
 remote worlds do not share a presentation coordinate. It lights the destination under the

@@ -179,6 +179,7 @@ descriptor set every frame:
 | `pointerPresses` | `uint` | How many presses the pointer has made over the instance. |
 | `cameraPosition`, `cameraTarget`, `cameraUp` | `float3` | The paired camera. |
 | `cameraFov` | `float` | The paired camera's vertical field of view in radians; zero when none is paired. |
+| `placedExtent` | `float2` | The extent, in display pixels, of the rect the root places the instance's output in this frame, or the node's own extent when nothing places it. A pane renders at its layout's allocation envelope, which holds one extent while its rect eases, and the placement stretches the whole output into the rect, so a pass maps its output onto that rect and projects at `placedExtent.x / placedExtent.y`, the paired camera's aspect, never at `extent`'s. |
 
 A World has one presentation clock, its state mirror
 (`WorldStateMirror.PresentedEngineTick`): the engine tick between the last two
@@ -819,11 +820,15 @@ removed builds, before the owner releases the compiler's cache directory.
 The `place` package (`PlacePackage`) draws a pane into `main`. Its placements
 come from `IRenderGraphPlacements`, which the host implements. Each frame
 `WorldFramePresenter.PrepareGraph`, installed as
-`RenderGraphRuntimeNode.Prepare`, walks the slots of the last composed layout.
+`RenderGraphRuntimeNode.Prepare`, reconciles delivery and the graph set. The
+package captures the world before scheduling, runs the existing layout
+composer, then places the views and panes of that same frame.
 For every instance a slot shows it places the pane at the slot's rect, with
 the sharpness `world.upscale-sharpness` sets, adds a footprint (consumer
-`main`, producer the pane, at the slot's width and height) so the scheduler
-renders the pane at that extent, advances the pane's clock, and feeds its
+`main`, producer the pane, at its largest width and height over the layout
+transition in flight, retained through interruptions until the chain settles,
+then its own rect subject to scheduler quantization and shrink hysteresis) so easing its rect never
+resizes a node, advances the pane's clock, and feeds its
 camera, pointer and time. A pane the active layout does not show is not shown:
 its place pass draws nothing and its instance is not scheduled. Once every
 slot is placed, the host publishes the mapping of each view and pane the
@@ -834,9 +839,10 @@ that mapping, which a steady frame publishes without allocating;
 [pointing at a displayed source](commands.md#pointing-at-a-displayed-source)
 covers what reads it.
 
-The layout composer runs inside the world producer's frame, so a layout change
-places panes one frame later. A
-layout transition's render-scale dip does not apply to panes, and a pane slot
+The layout composer and placement share one captured frame: the rect each
+camera projects is the rect the display places, including fractional pixels
+during an interrupted transition. A layout transition's render-scale dip does
+not apply to panes, and a pane slot
 adds no view to the SDF engine.
 
 Split-screen seats are placed the same way. The SDF engine renders each view
@@ -844,8 +850,12 @@ of a layout into its own output image, and each view is a producer of its own:
 `world` for the first, then `world$2`, `world$3` and so on, up to the most
 views any layout or the player roster can compose. When a world has more than
 one, `main` composes the scene and runs one `place` pass per view ahead of the
-pane passes. `PrepareGraph` places each view at its rect and adds that rect's native
-footprint. The view's own package allocates traversal targets at its quantized
+pane passes. The capture places each view at its current rect and adds a stable
+footprint reserving the largest extent it reaches over the layout transition
+in flight, including the whole-display spectator at an endpoint without a rendered
+slot. Reservations retain their largest extent through interruptions until the
+chain settles, then request the view's own rect subject to scheduler quantization
+and shrink hysteresis. The view's own package allocates traversal targets at its quantized
 render ceiling and records the current render grid inside those targets; a
 layout transition's dip moves only that grid, so it rebuilds and allocates
 nothing. A view whose ceiling is below native appends `resolve`, reconstructing
@@ -858,7 +868,7 @@ its place pass sharpens it by `world.upscale-sharpness` where it copies it
 engine has rendered it, and a single view covering the whole display with no
 tonemap and no sharpen is not placed, so `main` passes
 `world` through unchanged; with a tonemap or a sharpen it is placed like any
-other, since its place pass applies them. A layout change places its views one frame later, like its panes.
+other, since its place pass applies them.
 The first view's place pass sets the `place` config's `letterbox`, so outside
 its rect it writes the letterbox color, `(0.015, 0.016, 0.02)`, which the
 kernel states, rather than its base; every later place pass keeps its base

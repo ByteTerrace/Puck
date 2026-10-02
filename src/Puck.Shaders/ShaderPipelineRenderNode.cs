@@ -173,7 +173,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// <summary>Gets the submitted frame count.</summary>
     public ulong FrameCounter => m_frame;
     /// <summary>Gets or sets the frame values the host supplies to every pass's frame block, the presented tick and
-    /// presentation time among them; the node writes them whole each frame it renders and derives none of them.</summary>
+    /// presentation time among them; the node writes them whole each frame it renders and derives none of them, except
+    /// that values naming no placed extent are written with the node's own (<see cref="ShaderFrameValues.PlacedExtent"/>).</summary>
     public ShaderFrameValues Frame { get; set; }
     /// <summary>Gets whether a compiled graph has allocated all of its GPU resources.</summary>
     public bool IsReady => ((m_pipeline is not null) && m_ready);
