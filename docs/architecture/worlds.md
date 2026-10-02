@@ -718,8 +718,12 @@ tick, a cycle's phase, epoch tick and substep remainder, or an eased cell's targ
 it eases by and its follower's epoch tick, position and velocity. A `.$target` read answers the stored
 target. The recipient evaluates the trait with the engine's own fixed-point computation, over the
 dynamics rows its projection carries, so a bound read presents what the authority presents at every
-tick. Only a write changes an observation, and a write composes the projection, so the per-tick step
-sends anchors alone and nothing while a value only moves as its trait says; the `world.projection` work
+tick. Only a write or a jump of the authoritative state changes an observation, and each composes the
+projection: every jump (a whole-document rebuild by `world.reset`, `world.load` or `world.reload`, an
+undo, a replay drive, and a checkpoint restore) marks the definition for
+the one delivery door (`WorldDocument.MarkDefinitionDeliveryPending`), and a restore, which completes
+outside the tick, delivers at once. So the per-tick step sends anchors alone and nothing while a value
+only moves as its trait says; the `world.projection` work
 source counts every composition. A late view hydrates the exact current phase; while a
 clock's row holds no number, an early view keeps predicting its last anchor and a late view seeds from
 the phase the world loaded with, or zero clamped into the row's closed envelope. The last anchor per

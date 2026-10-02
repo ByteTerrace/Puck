@@ -938,7 +938,7 @@ public sealed partial class WorldDocument {
     // scene/screens rebuild on the client through the delivered definition, and cameras/render/population defaults are
     // document-only.
     internal void Install(WorldDefinition definition, bool rebuildPopulation, WorldRuleCompilation? compilation = null, StateArena? arena = null) {
-        m_pendingDefinitionDelivery = true;
+        MarkDefinitionDeliveryPending();
         AdoptDefinition(definition: definition);
         Host.InputHold.Reconfigure(settings: definition.CompiledInputHold);
         definition = Host.RecompileRules(arena: arena, compilation: compilation, definition: definition);

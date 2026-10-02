@@ -134,7 +134,7 @@ public sealed partial class WorldServer {
             // The host has crossed its runtime barrier. Candidate validation happened before commit, so this is only
             // a declaration adoption and delivery flag; no unrelated fallible install or second reconstruction runs.
             m_document.AdoptDefinition(definition: candidateDefinition);
-            m_document.PendingDefinitionDelivery = true;
+            m_document.MarkDefinitionDeliveryPending();
             return result;
         }
     }
