@@ -1,0 +1,448 @@
+{
+  "id": "sdf-picking-current-cull",
+  "title": "A stationary sample rejects an old hit outside the current GPU cull box",
+  "binding": "A fixed camera sees one centered block. Both legs read the exact center pixel, then edit the same placement row and read that pixel again. The positive leg moves the only block right, leaving the old center outside the new cull box; the discriminating leg keeps it centered. Visibility storage can retain the old center row, so only validation against the same submission's GPU cull bounds rejects it. The composed visibility image and the occurrence-scoped pick answer must both identify the current center as background after motion. No anchor keeps the old center in the dispatch box.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sdf-picking-current-cull/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.debug-view",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "first-answer",
+        "stream": "stdout",
+        "verb": "world.view.pick",
+        "occurrence": 2,
+        "count": 4,
+        "extract": [
+          {
+            "name": "firstKind",
+            "field": "kind"
+          },
+          {
+            "name": "firstPlacement",
+            "field": "placement"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "latest-answer",
+        "stream": "stdout",
+        "verb": "world.view.pick",
+        "occurrence": 4,
+        "count": 4,
+        "extract": [
+          {
+            "name": "latestKind",
+            "field": "kind"
+          },
+          {
+            "name": "latestPlacement",
+            "field": "placement"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "first-is-current-hit",
+        "operator": "equal",
+        "left": {
+          "value": "firstKind"
+        },
+        "right": {
+          "literal": "1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "first-names-placement",
+        "operator": "equal",
+        "left": {
+          "value": "firstPlacement"
+        },
+        "right": {
+          "literal": "mover"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "latest-kind-matches-current-cull",
+        "operator": "equal",
+        "left": {
+          "value": "latestKind"
+        },
+        "right": {
+          "literal": "0"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "latest-placement-matches-current-cull",
+        "operator": "equal",
+        "left": {
+          "value": "latestPlacement"
+        },
+        "right": {
+          "literal": "none"
+        }
+      },
+      {
+        "type": "imageRegion",
+        "name": "before-centre-is-hit",
+        "capture": "before.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.48,
+          0.46,
+          0.52,
+          0.54
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.1,
+          0.8,
+          0.15,
+          1
+        ],
+        "maximum": [
+          0.2,
+          1,
+          0.35,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "after-centre-is-background",
+        "capture": "after.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.48,
+          0.46,
+          0.52,
+          0.54
+        ],
+        "reduce": "every",
+        "maximum": [
+          1,
+          0.5,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sdf-picking-current-cull/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.debug-view",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.view.pick",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "response",
+        "name": "first-answer",
+        "stream": "stdout",
+        "verb": "world.view.pick",
+        "occurrence": 2,
+        "count": 4,
+        "extract": [
+          {
+            "name": "firstKind",
+            "field": "kind"
+          },
+          {
+            "name": "firstPlacement",
+            "field": "placement"
+          }
+        ]
+      },
+      {
+        "type": "response",
+        "name": "latest-answer",
+        "stream": "stdout",
+        "verb": "world.view.pick",
+        "occurrence": 4,
+        "count": 4,
+        "extract": [
+          {
+            "name": "latestKind",
+            "field": "kind"
+          },
+          {
+            "name": "latestPlacement",
+            "field": "placement"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "first-is-current-hit",
+        "operator": "equal",
+        "left": {
+          "value": "firstKind"
+        },
+        "right": {
+          "literal": "1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "first-names-placement",
+        "operator": "equal",
+        "left": {
+          "value": "firstPlacement"
+        },
+        "right": {
+          "literal": "mover"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "latest-kind-matches-current-cull",
+        "operator": "equal",
+        "left": {
+          "value": "latestKind"
+        },
+        "right": {
+          "literal": "1"
+        }
+      },
+      {
+        "type": "relation",
+        "name": "latest-placement-matches-current-cull",
+        "operator": "equal",
+        "left": {
+          "value": "latestPlacement"
+        },
+        "right": {
+          "literal": "mover"
+        }
+      },
+      {
+        "type": "imageRegion",
+        "name": "before-centre-is-hit",
+        "capture": "before.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.48,
+          0.46,
+          0.52,
+          0.54
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.1,
+          0.8,
+          0.15,
+          1
+        ],
+        "maximum": [
+          0.2,
+          1,
+          0.35,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "after-centre-is-background",
+        "capture": "after.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.48,
+          0.46,
+          0.52,
+          0.54
+        ],
+        "reduce": "every",
+        "maximum": [
+          1,
+          0.5,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      }
+    ]
+  }
+}

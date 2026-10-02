@@ -1,0 +1,15 @@
+world.cadence off
+world.debug-view visibility
+world.wait ready 60
+world.view.pick world 0.5 0.5
+world.wait 5
+world.view.pick world
+world.screenshot {run}/before.png
+world.wait captures 30
+world.row.set placements mover position [0,0,0]
+world.wait 10
+world.view.pick world 0.5 0.5
+world.wait 5
+world.view.pick world
+world.screenshot {run}/after.png
+world.wait captures 30

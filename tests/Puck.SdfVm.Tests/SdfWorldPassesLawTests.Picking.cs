@@ -155,6 +155,50 @@ public sealed partial class SdfWorldPassesLawTests {
         view.Passes.OnDeviceLost();
         Assert.Null(@object: picker.Result);
     }
+    [Fact]
+    public void StationaryPickRejectsEarlierPixelOutsideCurrentCullBox() {
+        var gpu = new FakeGpuDevice(holdFences: true);
+        var pipelines = SdfTestPipelines.Cache();
+        var current = Frame();
+        using var view = new SdfTestView(device: gpu, extent: Extent, pipelines: pipelines,
+            residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
+                frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
+                kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
+        var context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
+            Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = gpu }),
+            StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent);
 
+        Assert.True(condition: SpinWait.SpinUntil(condition: () => view.Produce(context: in context),
+            timeout: TimeSpan.FromSeconds(value: 30)), userMessage: view.NotReadyReason);
+        var outside = false;
+        // Model primary's retained row: after the body moves to the top-left tile, the old center hit remains in
+        // visibility. Only the current cull box distinguishes it from the first frame's real hit.
+        gpu.WriteReadback = bytes => {
+            BinaryPrimitives.WriteSingleLittleEndian(destination: bytes, value: 4);
+            BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[4..], value: 0x40000001);
+            BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[12..], value: 23);
+            if (bytes.Length >= 32) {
+                BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[^8..], value: (outside ? 1U : 4U));
+                BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[^4..], value: (outside ? 1U : 4U));
+            }
+        };
+        var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
+
+        _ = picker.Demand(x: 0.5f, y: 0.5f);
+        _ = view.Produce(context: in context);
+        ((FakeGpuDevice.Fence)gpu.LastSubmittedFence!).Completed = true;
+        _ = view.Produce(context: in context);
+        Assert.True(condition: picker.Result!.Value.Hit);
+
+        outside = true;
+        current = current with { Time = 1 };
+        _ = picker.Demand(x: 0.5f, y: 0.5f);
+        _ = view.Produce(context: in context);
+        ((FakeGpuDevice.Fence)gpu.LastSubmittedFence!).Completed = true;
+        _ = view.Produce(context: in context);
+        Assert.False(condition: picker.Result!.Value.Hit);
+        Assert.Equal(expected: 0U, actual: picker.Result.Value.Flags);
+        Assert.Equal(expected: Vector3.Zero, actual: picker.Result.Value.Normal);
+    }
 
 }
