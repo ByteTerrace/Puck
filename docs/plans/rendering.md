@@ -5685,7 +5685,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `sky-cycle` (the courtyard's toggle between two keys). The `sky-clock`
      canary, which holds the view equal one period apart, landed with P18-2.
    - Touches: `tests/Puck.Parity`, `tests/Puck.Counters`,
-     `tests/Puck.World.Canaries`, `src/Puck.Cli/Canary/CanaryCeilings.cs`.
+     `tests/Puck.World.Canaries`, `CanaryCeilings.json`.
    - Done when: the station holds on both backends; each canary is shown failing
      once on a broken leg (the stars' brightness zeroed); the sky leg's rows are recorded on the RTX 2060 at the floor
      tier, and show today's costs: every pass re-rendering on a drift frame.

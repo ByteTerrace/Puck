@@ -17,7 +17,7 @@ public static class CartridgeLanguageServices {
         var items = new JsonArray();
 
         Add(
-            insertText: "schema: \"puck.cartridge.v1\"",
+            insertText: $"schema: \"{CartridgeDocument.SchemaId}\"",
             label: "schema"
         );
         Add(

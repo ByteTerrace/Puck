@@ -4,6 +4,7 @@ using Xunit;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.Physics;
+using Puck.Physics.Motion;
 using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -80,6 +81,65 @@ public sealed class BodyBroadphaseRadiusLawTests {
         Value: value.Value
     );
 
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void RetainedColliderInputsCannotChangeLiveGeometry(bool replaceKit) {
+        var supplied = new[] { new FixedBodyColliderVolume(
+            Kind: FixedBodyColliderKind.Sphere,
+            Center: FixedVector3.Zero,
+            Endpoint: FixedVector3.Zero,
+            HalfExtents: FixedVector3.Zero,
+            Rotation: FixedQuaternion.Identity,
+            Radius: FixedQ4816.One
+        ) };
+        var collider = new FixedWorldCollider(Volumes: supplied);
+        var program = CompiledBodyMotionProgram.Compile(
+            kind: BodyProgramKind.Motion,
+            name: "radius-law",
+            operations: [BodyMotionOp.CommitPose],
+            version: CompiledBodyMotionProgram.SupportedVersion
+        );
+        var programs = new Dictionary<string, CompiledBodyMotionProgram> { [program.Name] = program };
+        var tuning = default(FixedMotionTuning) with {
+            Shaping = [],
+            ShapingRecencyFacts = [],
+            ShapingRecencyWindows = [],
+        };
+        var body = new WorldBody(
+            tuning: tuning,
+            program: program,
+            programs: programs,
+            maxSmoothError: FixedQ4816.Zero,
+            collider: (replaceKit ? null : collider)
+        );
+
+        if (replaceKit) {
+            body.RecompileKit(
+                tuning: tuning,
+                actions: null,
+                actionThresholds: null,
+                actionShapes: null,
+                roleMask: null,
+                roleOrdinals: default,
+                actionState: null,
+                program: program,
+                programs: programs,
+                collider: collider,
+                maxSmoothError: FixedQ4816.Zero
+            );
+        }
+
+        Assert.Equal(expected: FixedQ4816.One, actual: body.BroadphaseRadius);
+        supplied[0] = supplied[0] with { Radius = FixedQ4816.FromInteger(value: 10L) };
+
+        // The input really changes; the compiled collider and every body sharing it keep their own geometry.
+        Assert.NotEqual(expected: supplied[0], actual: body.ScaledColliderVolumes()[0]);
+        Assert.Equal(
+            expected: body.BroadphaseRadius,
+            actual: FixedDynamicBodyContacts.BroadphaseRadius(volumes: body.ScaledColliderVolumes())
+        );
+    }
     [Fact]
     public void AScaleWriteRederivesTheRadius() {
         using var fixture = Fixtures.FreshServer(definition: Document());

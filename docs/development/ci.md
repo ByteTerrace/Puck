@@ -92,7 +92,11 @@ deployment retains its separate serialization and is never cancelled by that rul
 and AGB (Advanced GamingBrick) binaries
 on Linux, its exact deployable AppBundle under Node, and its candidate CLI for
 the generated schema, name-registry, project-map layering, and branding
-distribution checks. `puck schema --check` also compares the dashboard portal's
+distribution checks, and for the two generated ledgers `puck formats --check`
+(`FormatVersions.json`, the token and source digest of every strictly versioned
+format) and `puck canary-ceilings --check` (`CanaryCeilings.json`, the recorded
+cost of the automatic and merge canary selections; a count must equal its plan).
+`puck schema --check` also compares the dashboard portal's
 generated world types, which `puck schema` writes from the same schema, so that
 check needs no Node.js or npm step. `puck branding --check` verifies the canonical hashes,
 active asset copies, and source wiring recorded in the

@@ -56,7 +56,10 @@ public sealed partial class WorldBody {
     /// and a rigid body's own static-contact sweep — reads THIS, never the kit's raw volumes directly, so a shrunk or
     /// grown body's contact geometry agrees everywhere.</summary>
     /// <returns>The scaled volumes, or empty for a body with no collider.</returns>
-    public ReadOnlySpan<FixedBodyColliderVolume> ScaledColliderVolumes() => (m_scaledColliderVolumes ?? m_collider?.Volumes);
+    public ReadOnlySpan<FixedBodyColliderVolume> ScaledColliderVolumes() => ((m_scaledColliderVolumes is { } scaled)
+        ? scaled
+        : ((m_collider is { } collider) ? collider.Volumes : [])
+    );
 
     // Rebuilds everything derived from the scale and the collider: the scaled volumes and the broadphase radius.
     // Every write of either input calls it, and nothing else writes what it derives.
