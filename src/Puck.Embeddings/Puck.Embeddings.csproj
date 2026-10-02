@@ -14,8 +14,8 @@
         <PackageReference Include="Azure.Identity" Version="1.21.0" />
         <PackageReference Include="Microsoft.Extensions.AI" Version="[10.*, )" />
         <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="[10.*, )" />
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
         <!-- Puck.State owns the embedding-space identity (EmbeddingIdentity) each generator is built for. -->
-        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
+        <ProjectReference Include="../Puck.State/Puck.State.csproj" />
     </ItemGroup>
 </Project>

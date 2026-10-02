@@ -15,17 +15,17 @@
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*,)" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\Puck.Machines\Puck.Machines.csproj" />
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.Machines/Puck.Machines.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.Machines" />
     </ItemGroup>
     <ItemGroup>
-        <EmbeddedResource Include="Firmware\puck-agb.bin" LogicalName="Puck.AdvancedGamingBrick.Firmware.puck-agb.bin" />
+        <EmbeddedResource Include="Firmware/puck-agb.bin" LogicalName="Puck.AdvancedGamingBrick.Firmware.puck-agb.bin" />
         <!-- Ship firmware notices; usage and provenance guides remain in the linked source documentation. -->
-        <None Remove="Firmware\LICENSE" />
-        <None Include="Firmware\LICENSE" Pack="true" PackagePath="Firmware\" />
+        <None Remove="Firmware/LICENSE" />
+        <None Include="Firmware/LICENSE" Pack="true" PackagePath="Firmware/" />
     </ItemGroup>
 </Project>

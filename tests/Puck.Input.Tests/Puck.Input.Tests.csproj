@@ -14,12 +14,12 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="..\Shared\VirtualClock.cs" Link="VirtualClock.cs" />
+        <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.Input\Puck.Input.csproj" />
+        <ProjectReference Include="../../src/Puck.Input/Puck.Input.csproj" />
         <!-- OutputTests.cs exercises XInputGamepadConnection, the sole reason this otherwise platform-neutral test
              project needs a Puck.Platform.Windows reference. -->
-        <ProjectReference Include="..\..\src\Puck.Platform.Windows\Puck.Platform.Windows.csproj" />
+        <ProjectReference Include="../../src/Puck.Platform.Windows/Puck.Platform.Windows.csproj" />
     </ItemGroup>
 </Project>

@@ -12,8 +12,8 @@
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*,)" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
+        <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
     </ItemGroup>
 </Project>

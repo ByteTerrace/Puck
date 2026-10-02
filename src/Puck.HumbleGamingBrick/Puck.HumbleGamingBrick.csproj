@@ -26,14 +26,14 @@
         <Using Include="Puck.Machines" />
     </ItemGroup>
     <ItemGroup>
-        <EmbeddedResource Include="Firmware\*.bin" LogicalName="Puck.HumbleGamingBrick.Firmware.%(Filename)%(Extension)" />
+        <EmbeddedResource Include="Firmware/*.bin" LogicalName="Puck.HumbleGamingBrick.Firmware.%(Filename)%(Extension)" />
         <!-- Ship firmware notices; usage and provenance guides remain in the linked source documentation. -->
-        <None Remove="Firmware\LICENSE" />
-        <None Include="Firmware\LICENSE" Pack="true" PackagePath="Firmware\" />
+        <None Remove="Firmware/LICENSE" />
+        <None Include="Firmware/LICENSE" Pack="true" PackagePath="Firmware/" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\Puck.Machines\Puck.Machines.csproj" />
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.Machines/Puck.Machines.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>
 </Project>

@@ -6,7 +6,7 @@
         <IsPackable>false</IsPackable>
         <!-- Coverage and ownership checks discover the Puck.Maths public surface through reflection. -->
         <IsAotCompatible>false</IsAotCompatible>
-        <RunSettingsFilePath>$(MSBuildProjectDirectory)\default.runsettings</RunSettingsFilePath>
+        <RunSettingsFilePath>$(MSBuildProjectDirectory)/default.runsettings</RunSettingsFilePath>
         <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
@@ -17,10 +17,10 @@
     </ItemGroup>
     <ItemGroup>
         <!-- Allocation claims measure through Puck.Abstractions.Counting.AllocationWindow. -->
-        <ProjectReference Include="..\..\src\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="../../src/Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../../src/Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="..\Shared\TestRecords.cs" Link="TestRecords.cs" />
+        <Compile Include="../Shared/TestRecords.cs" Link="TestRecords.cs" />
     </ItemGroup>
 </Project>

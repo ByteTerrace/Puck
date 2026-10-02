@@ -14,14 +14,14 @@
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="[10.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
         <!-- The release manifest's canonical bytes/hash (Release/ReleaseManifest.cs) and content-addressed
              delta staging (Release/ContentAddressedUpdateStager.cs). -->
-        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
         <!-- AttestationReleaseVerifier checks a release manifest's signature via the sequence replay-defence
              route (Release/AttestationReleaseVerifier.cs). -->
-        <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
-        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
-        <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />
+        <ProjectReference Include="../Puck.Attestation/Puck.Attestation.csproj" />
+        <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
+        <ProjectReference Include="../Puck.Input/Puck.Input.csproj" />
     </ItemGroup>
 </Project>

@@ -11,6 +11,6 @@
         <PackageReference Include="ModelContextProtocol.Core" Version="[2.*,3.0)" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
     </ItemGroup>
 </Project>

@@ -12,7 +12,8 @@ you were asked to make, it is stale, and you correct it in the same change.
 
 Use forward slashes for Puck paths on every platform, and follow the
 [file-path convention](docs/development/contributing.md#file-paths) at output,
-storage and native interop boundaries.
+storage and native interop boundaries. MSBuild files spell every path with forward
+slashes too, held by `MsBuildPathSpellingLawTests`.
 
 ## Orientation
 
