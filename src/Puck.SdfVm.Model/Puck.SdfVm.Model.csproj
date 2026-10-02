@@ -12,8 +12,8 @@
         kernel project can always generate its declarations before its kernels compile.
     -->
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\Puck.Shaders.Model\Puck.Shaders.Model.csproj" />
-        <ProjectReference Include="..\Puck.SignedDistance\Puck.SignedDistance.csproj" />
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.Shaders.Model/Puck.Shaders.Model.csproj" />
+        <ProjectReference Include="../Puck.SignedDistance/Puck.SignedDistance.csproj" />
     </ItemGroup>
 </Project>

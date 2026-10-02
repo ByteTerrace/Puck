@@ -38,7 +38,7 @@ public sealed class ReplayTickPacingLawTests {
         var recorded = tape.StopRecording();
 
         Assert.Null(@object: recorded.VerifyFault);
-        Assert.True(condition: recorded.Verdict!.Value.Match);
+        Assert.True(condition: recorded.Verdict!.Match);
         Assert.True(condition: tape.TryBeginDrive(
             documentPath: null,
             forkName: "child",

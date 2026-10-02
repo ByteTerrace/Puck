@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
+using Puck.Hosting;
 using Puck.World.Authoring;
 
 namespace Puck.World.Client;
@@ -91,7 +92,7 @@ public sealed class WorldColorFeed : IWorldUploadFeed, IImageSourceReference {
     /// <inheritdoc/>
     /// <remarks>The colour never changes, so a region that already holds it owes nothing.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="region"/> is <see langword="null"/>.</exception>
-    public bool TryWrite(long tick, GpuRegion region) {
+    public FrameRender Write(long tick, GpuRegion region) {
         ArgumentNullException.ThrowIfNull(argument: region);
 
         _ = region.Write(
@@ -99,7 +100,7 @@ public sealed class WorldColorFeed : IWorldUploadFeed, IImageSourceReference {
             offset: ImageSourceUploadLayout.HeaderBytes
         );
 
-        return true;
+        return FrameRender.Rendered;
     }
     /// <inheritdoc/>
     public bool TryWriteReference(Span<byte> rgba, out ImageSourceStamp stamp) {

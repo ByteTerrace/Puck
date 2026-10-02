@@ -78,12 +78,12 @@ public sealed class WorldCapturePixels : IDisposable {
     /// <param name="runtime">The runtime whose converter converts the frame, or <see langword="null"/> before one runs,
     /// when nothing converts.</param>
     /// <param name="context">The host's frame context.</param>
-    /// <param name="color">How the captured pixels are encoded.</param>
+    /// <param name="color">How the captured pixels are encoded, or <see langword="null"/> for sRGB.</param>
     /// <param name="paperWhiteNits">The paper white the captured scRGB pixels are read at when the source is an HDR
     /// display, or <see langword="null"/> for an SDR capture, whose pixels are 8-bit.</param>
     /// <returns><see langword="true"/> when a frame was captured, whether or not it converted.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public bool Pull(IFrameCaptureSource source, RenderGraphRuntime? runtime, in FrameContext context, ImageColorEncoding color = ImageColorEncoding.Srgb, double? paperWhiteNits = null) {
+    public bool Pull(IFrameCaptureSource source, RenderGraphRuntime? runtime, in FrameContext context, ImageColorEncoding? color = null, double? paperWhiteNits = null) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         if (!source.TryCapture(surface: out var surface)) {
@@ -100,7 +100,7 @@ public sealed class WorldCapturePixels : IDisposable {
             )
             : WorldImageLight.Average(bgra: surface.Pixels.Span));
         _ = m_pixels.TryConvert(
-            color: color,
+            color: (color ?? ImageColorEncoding.Srgb),
             context: in context,
             runtime: runtime,
             surface: in surface

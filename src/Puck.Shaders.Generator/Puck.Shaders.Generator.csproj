@@ -15,7 +15,7 @@
         stays the one way to write the build's shader recipe and to check the tree.
     -->
     <ItemGroup>
-        <ProjectReference Include="..\Puck.SdfVm.Model\Puck.SdfVm.Model.csproj" />
+        <ProjectReference Include="../Puck.SdfVm.Model/Puck.SdfVm.Model.csproj" />
     </ItemGroup>
     <!-- Runs once the generator is built, and again only when an assembly it runs has changed: a changed model is the
          only thing that moves a declaration's text. It writes a file only when its text differs, so a model change that
@@ -29,7 +29,7 @@
         <PropertyGroup>
             <_PuckDeclarationMode Condition="'$(ContinuousIntegrationBuild)' == 'true'"> --check</_PuckDeclarationMode>
         </PropertyGroup>
-        <Exec Command="dotnet &quot;$(TargetPath)&quot; &quot;$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..').TrimEnd('\'))&quot;$(_PuckDeclarationMode)" />
+        <Exec Command="dotnet &quot;$(TargetPath)&quot; &quot;$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../..').TrimEnd('/'))&quot;$(_PuckDeclarationMode)" />
         <Touch AlwaysCreate="true" Files="$(IntermediateOutputPath)declarations.stamp" />
         <ItemGroup>
             <FileWrites Include="$(IntermediateOutputPath)declarations.stamp" />
