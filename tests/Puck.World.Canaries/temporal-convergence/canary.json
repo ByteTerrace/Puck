@@ -1,0 +1,133 @@
+{
+  "id": "temporal-convergence",
+  "title": "A still temporal view at half scale converges in eight samples to a twice-extent spatial reference and then stands",
+  "binding": "The positive leg boots the still counters blocks at a 256x144 output with world.temporal on at half render scale, so the world view renders 128x72 and resolves to 256x144. A camera view of the same eye and target renders natively at 512x288 on a screen behind the camera, and its capture at tick 50 is the supersampled reference, box-filtered to 256x144. The world view is captured at tick 60 after eight converged samples and at tick 70 after one. Over the blocks' region the eight-sample capture's mean difference from the reference is at most 1.5 codes, and the one-sample capture's is not, so the claims separate an accumulated history from the spatial path. The discriminating leg boots with temporal off, so the eight-sample capture is the spatial upscale and both claims fail to hold.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/temporal-convergence/fixture.world.json",
+    "script": "capture.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageDifference",
+        "name": "eight-samples-match-the-supersampled-reference",
+        "capture": "state/captures/converged~60.png",
+        "reference": "state/captures/reference~50.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.28,
+          0.8,
+          0.68
+        ],
+        "maximumMeanCodes": 1.5,
+        "holds": true
+      },
+      {
+        "type": "imageDifference",
+        "name": "the-spatial-first-sample-does-not",
+        "capture": "state/captures/first~70.png",
+        "reference": "state/captures/reference~50.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.28,
+          0.8,
+          0.68
+        ],
+        "maximumMeanCodes": 1.5,
+        "holds": false
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/temporal-convergence/discriminating.world.json",
+    "script": "capture.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageDifference",
+        "name": "eight-samples-match-the-supersampled-reference",
+        "capture": "state/captures/converged~60.png",
+        "reference": "state/captures/reference~50.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.28,
+          0.8,
+          0.68
+        ],
+        "maximumMeanCodes": 1.5,
+        "holds": false
+      },
+      {
+        "type": "imageDifference",
+        "name": "the-spatial-first-sample-does-not",
+        "capture": "state/captures/first~70.png",
+        "reference": "state/captures/reference~50.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.24,
+          0.28,
+          0.8,
+          0.68
+        ],
+        "maximumMeanCodes": 1.5,
+        "holds": false
+      }
+    ]
+  }
+}

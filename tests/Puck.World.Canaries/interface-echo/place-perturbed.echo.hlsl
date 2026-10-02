@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'place-perturbed' (sha256/3d63af993084178ca854fcb83e044a0d507a89e15fd67e04978f4254f99ee869), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
+// The echo pass of shader interface 'place-perturbed' (sha256/22efc39f39a849a29ec35cd4592e0f307088e74eaa7e398c23f157762ccbbffa), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "place-perturbed.interface.hlsli"
 
@@ -23,8 +23,9 @@ void main(uint3 id : SV_DispatchThreadID) {
     echo[uint2(13, 0)] = ((asuint(passGroup.compareMode) == 0x400033A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(14, 0)] = ((asuint(passGroup.letterbox) == 0x400043A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(15, 0)] = ((asuint(passGroup.rect.x) == 0x400053A5u) && (asuint(passGroup.rect.y) == 0x400063A5u) && (asuint(passGroup.rect.z) == 0x400073A5u) && (asuint(passGroup.rect.w) == 0x400083A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(16, 0)] = ((asuint(passGroup.sharpness) == 0x400093A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(17, 0)] = ((asuint(passGroup.tonemap) == 0x4000A3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(18, 0)] = ((asuint(passGroup.wipe) == 0x4000B3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(19, 0)] = ((asuint(passGroup.workCounterRow) == 0x4000D3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(16, 0)] = ((asuint(passGroup.sharpen) == 0x400093A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(17, 0)] = ((asuint(passGroup.sharpness) == 0x4000A3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(18, 0)] = ((asuint(passGroup.tonemap) == 0x4000B3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(19, 0)] = ((asuint(passGroup.wipe) == 0x4000C3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(20, 0)] = ((asuint(passGroup.workCounterRow) == 0x4000E3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
 }

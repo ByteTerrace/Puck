@@ -183,7 +183,7 @@ public sealed partial class SdfWorldPassesLawTests {
         resolvedView = 1;
         passes.BeginFrame(context: in context);
         Assert.False(condition: passes.HasRenderedResolvedView(instance: SdfTestView.Instance));
-        Assert.False(condition: passes.IsUnchanged(context: in context, instance: SdfTestView.Instance));
+        Assert.False(condition: passes.IsUnchanged(context: in context, instance: SdfTestView.Instance, unreadFrames: 0));
         Assert.Equal(actual: passes.CounterOf(instance: SdfTestView.Instance)!.Revision, expected: beforeView);
         Produce();
         Assert.True(condition: passes.HasRenderedResolvedView(instance: SdfTestView.Instance));

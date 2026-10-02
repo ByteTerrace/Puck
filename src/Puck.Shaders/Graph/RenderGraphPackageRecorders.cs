@@ -55,7 +55,11 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// <param name="FrameHeight">The instance output height; zero uses the pass height for standalone recordings.</param>
 /// <param name="RenderWidth">The width of the instance's render grid this frame; zero uses the output width.</param>
 /// <param name="RenderHeight">The height of the instance's render grid this frame; zero uses the output height.</param>
-public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null, GpuKernelCounterRow? WorkCounters = null, uint FrameWidth = 0, uint FrameHeight = 0, uint RenderWidth = 0, uint RenderHeight = 0) {
+/// <param name="UnreadFrames">The frames the instance's render graph has left it unread, with no displayed output showing
+/// or reading it, including through held consumer outputs.
+/// It moves only while the instance is parked, so a recording whose output depends on its preceding renders starts anew
+/// when it differs from its preceding render's.</param>
+public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null, GpuKernelCounterRow? WorkCounters = null, uint FrameWidth = 0, uint FrameHeight = 0, uint RenderWidth = 0, uint RenderHeight = 0, long UnreadFrames = 0) {
     /// <summary>Gets the command buffer to record into.</summary>
     public nint CommandBuffer { get; } = CommandBuffer;
     /// <summary>Gets the instance's counting recorder.</summary>
@@ -95,6 +99,8 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     public RenderGraphExternalReads? Reads { get; } = Reads;
     /// <summary>Gets where the pass's kernels count their own work this frame, or <see langword="null"/>.</summary>
     public GpuKernelCounterRow? WorkCounters { get; } = WorkCounters;
+    /// <summary>Gets the frames the instance's render graph has left it unread.</summary>
+    public long UnreadFrames { get; } = UnreadFrames;
 }
 /// <summary>What a package pass's recording did with its outputs this frame.</summary>
 public enum RenderGraphPackageOutcome : byte {
@@ -203,9 +209,14 @@ public interface IRenderGraphPackageFactory {
     /// instance unchanged (<see cref="RenderGraphFrame.Unchanged"/>) when every one of its passes' packages answers
     /// <see langword="true"/> and no capture of it is pending.</summary>
     /// <param name="instance">The instance's name.</param>
+    /// <param name="unreadFrames">The frames the runtime's schedules have left the instance unread, with no displayed
+    /// output showing or reading it, including through held consumer outputs. Its recordings carry the count too
+    /// (<see cref="RenderGraphPackageRecording.UnreadFrames"/>). It moves only
+    /// while the instance is parked, so an instance shown again is asked with a count its latest render did not
+    /// see.</param>
     /// <param name="context">The host's frame context of the frame being scheduled.</param>
     /// <returns><see langword="true"/> when the instance's latest render stands for this frame.</returns>
-    bool IsUnchanged(string instance, in FrameContext context) => false;
+    bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) => false;
     /// <summary>Releases whatever the factory holds on the device after the device was lost, without waiting for any
     /// submission. The runtime calls it once its nodes have released theirs.</summary>
     void OnDeviceLost() { }

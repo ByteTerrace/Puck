@@ -1,5 +1,6 @@
 // The frame graph's one placement pass: reconstructs its source image into a destination rect over its base image.
-// Outside the rect the destination is the base, or, with letterbox set, the letterbox color. Inside it, a source of the rect's own extent is an exact copy; otherwise
+// Outside the rect the destination is the base, or, with letterbox set, the letterbox color. Inside it, a source of the
+// rect's own extent is an exact copy, or, with sharpen set, a contrast-adaptive sharpen of it by sharpness; otherwise
 // sharpness 0 is bilinear over the four nearest texels, and sharpness 1 is Catmull-Rom over the sixteen nearest, clamped
 // to the central four texels' range so its negative lobes cannot ring; a sharpness between blends the two. A rect of the
 // whole destination resamples the whole source. Every tap is a formatted load clamped to its image's edge, so no sampler
@@ -7,7 +8,7 @@
 // and only it, goes through the filmic curve: a world's root places its SDF views this way, so the scene is tonemapped
 // where it enters the frame and the letterbox color, the base and every pane reach the display as they are.
 // The generated interface declares the frame group and the pass group: the extent, the config (letterbox, rect,
-// sharpness, tonemap, compareMode, wipe) and the images base, source and destination, each image input with a sampler it never reads. rect
+// sharpen, sharpness, tonemap, compareMode, wipe) and the images base, source and destination, each image input with a sampler it never reads. rect
 // is the destination rect as fractions of the destination's extent: left, top, width, height.
 #include "place.interface.hlsli"
 
@@ -21,6 +22,25 @@ float3 filmicTonemap(float3 color) {
 }
 
 #include "../Shared/reconstruction.hlsli"
+
+// The contrast-adaptive sharpen of a source at its rect's own extent (AMD FidelityFX CAS over the pixel's four edge
+// neighbours): each neighbour weighs -0.2 * sharpness times the pixel's headroom below its neighbourhood's peak, so flat
+// and saturated regions are left as they are and an edge is sharpened without overshooting its neighbourhood. Sharpness 0
+// weighs every neighbour zero and returns the pixel exactly.
+float3 placeSharpen(uint2 pixel, uint2 sourceDims, float sharpness) {
+    int2 last = (int2(sourceDims) - 1);
+    float3 up = source.Load(int3(clamp((int2(pixel) + int2(0, -1)), int2(0, 0), last), 0)).rgb;
+    float3 left = source.Load(int3(clamp((int2(pixel) + int2(-1, 0)), int2(0, 0), last), 0)).rgb;
+    float3 center = source.Load(int3(pixel, 0)).rgb;
+    float3 right = source.Load(int3(clamp((int2(pixel) + int2(1, 0)), int2(0, 0), last), 0)).rgb;
+    float3 down = source.Load(int3(clamp((int2(pixel) + int2(0, 1)), int2(0, 0), last), 0)).rgb;
+    float3 lowest = min(min(min(up, left), min(center, right)), down);
+    float3 highest = max(max(max(up, left), max(center, right)), down);
+    float3 amplitude = sqrt(saturate(min(lowest, (2.0 - highest)) / max(highest, 1.0e-5)));
+    float3 weight = (amplitude * (-0.2 * saturate(sharpness)));
+
+    return max(((((up + left) + (right + down)) * weight) + center) / (1.0 + (4.0 * weight)), 0.0);
+}
 
 // A comparison source already contains its held seat crop. The base still contains the whole live display.
 // All reads clamp inside their own crop, including split's resampling at a nonzero seat origin.
@@ -82,7 +102,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     } else {
         source.GetDimensions(sourceDims.x, sourceDims.y);
 
-        float3 color = puckReconstruct(source, (id.xy - rectMin), (rectMax - rectMin), sourceDims, passGroup.sharpness).rgb;
+        uint2 rectDims = (rectMax - rectMin);
+        float3 color = (((passGroup.sharpen != 0u) && all(sourceDims == rectDims))
+            ? placeSharpen((id.xy - rectMin), sourceDims, passGroup.sharpness)
+            : puckReconstruct(source, (id.xy - rectMin), rectDims, sourceDims, passGroup.sharpness).rgb);
 
         written = float4(((passGroup.tonemap != 0u) ? filmicTonemap(color) : color), 1.0);
     }

@@ -39,6 +39,46 @@ public sealed class SdfTemporalHistoryLawTests {
         history.Prepare(epoch: epoch with { Cut = 2 }, camera: next, previousPoses: 3, currentPoses: 3);
         Assert.False(condition: history.HasPreviousView);
     }
+    // A temporal epoch's output stands once its history holds a period of samples and a period has rendered since its
+    // inputs last changed; a change restarts that count without resetting the history, and a spatial epoch keeps the
+    // jitter rule.
+    [Fact]
+    public void ATemporalEpochStandsOnlyAPeriodAfterItsLastChange() {
+        var epoch = (Epoch with { Temporal = true });
+        var history = new SdfTemporalHistory();
+
+        void RenderPeriod() {
+            for (var sample = 0U; (sample < SdfTemporalHistory.Period); sample++) {
+                Assert.False(condition: history.Stands(epoch: epoch, previousPoses: 0), userMessage: $"sample {sample}");
+                history.Prepare(camera: default, currentPoses: 0, epoch: epoch, previousPoses: 0);
+                history.Rendered();
+            }
+        }
+
+        RenderPeriod();
+        Assert.True(condition: history.Stands(epoch: epoch, previousPoses: 0));
+        history.Changed();
+        RenderPeriod();
+        Assert.Equal(expected: (2U * SdfTemporalHistory.Period), actual: history.Frames);
+        Assert.True(condition: history.Stands(epoch: epoch, previousPoses: 0));
+        Assert.False(condition: history.Stands(epoch: (epoch with { Temporal = false }), previousPoses: 0));
+        Assert.False(condition: history.Stands(epoch: (epoch with { Cut = 9 }), previousPoses: 0));
+    }
+    [Fact]
+    public void AChangedRecordedGridNeedsAPeriodEvenWhenTheRequestedScaleAlreadySettled() {
+        var epoch = (Epoch with { Temporal = true });
+        var history = new SdfTemporalHistory();
+
+        foreach (var width in new[] { 160u, 320u }) {
+            for (var sample = 0U; (sample < SdfTemporalHistory.Period); sample++) {
+                history.Prepare(camera: default, currentPoses: 0, epoch: epoch, previousPoses: 0,
+                    renderWidth: width, renderHeight: 180);
+                history.Rendered();
+                Assert.Equal(expected: (sample == (SdfTemporalHistory.Period - 1)),
+                    actual: history.Stands(epoch: epoch, previousPoses: 0));
+            }
+        }
+    }
     [Fact]
     public void EightSamplesBeginAtTheCenterAndRepeat() {
         Vector2[] expected = [
