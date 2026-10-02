@@ -67,6 +67,9 @@
 
 // The output image's extent in pixels, assigned once at the top of main.
 static float2 resolution;
+// The width over height of the rect the image is placed in, assigned once at the top of main. A pane keeps its
+// allocation's extent while its rect eases, so the image's own aspect is not the one the display shows.
+static float aspect;
 
 // Floored modulo: the result takes the sign of y, unlike fmod, which truncates.
 float floorMod(float x, float y) {
@@ -878,7 +881,7 @@ float3 debugMaterialColor(float id) {
 
 // Shades one pixel; pixel coordinates have their origin at the bottom-left corner and y grows up the image.
 float4 shade(float2 pixel) {
-    float2 uv = (pixel - 0.5 * resolution) / resolution.y;
+    float2 uv = ((pixel / resolution) - 0.5) * float2(aspect, 1.0);
 
 #if VIEW_ISOLATE_COMPONENTS == 1
     // Closer study framing for isolated components
@@ -1114,7 +1117,7 @@ float4 shade(float2 pixel) {
     // Interactive Split Screen (Left: Beauty, Right: Heatmap)
     float divider = 0.0;
     if (frameGroup.pointerDown != 0) {
-        divider = (frameGroup.pointer.x / resolution.x - 0.5) * (resolution.x / resolution.y);
+        divider = (frameGroup.pointer.x / resolution.x - 0.5) * aspect;
     }
     if (uv.x > divider) {
         col = debugStepHeatmap(stepsTaken, 140.0);
@@ -1145,6 +1148,7 @@ void main(uint3 id : SV_DispatchThreadID) {
         return;
     }
     resolution = float2(width, height);
+    aspect = frameGroup.placedExtent.x / frameGroup.placedExtent.y;
     // y grows up the image in the shading functions: the pixel's origin is the bottom-left corner.
     float2 pixel = float2(float(id.x) + 0.5, float(height) - (float(id.y) + 0.5));
     output[id.xy] = shade(pixel);

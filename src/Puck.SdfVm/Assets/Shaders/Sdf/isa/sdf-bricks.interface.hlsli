@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-bricks' (sha256/abcf2a4a35a61379e56cea321409720cf845043e41e6230a41b1b1c36e5a03cc). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-bricks' (sha256/7640a060e114914b848f15d0b428a171f374cb078630eb040d20a0b765777f29). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_BRICKS
 #define PUCK_SHADER_INTERFACE_SDF_BRICKS
 
@@ -19,6 +19,8 @@ struct SdfBricksFrame {
     [[vk::offset(64)]] float3 cameraTarget;
     [[vk::offset(76)]] uint _pad76;
     [[vk::offset(80)]] float3 cameraUp;
+    [[vk::offset(92)]] uint _pad92;
+    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SdfBricksFrame> frameGroup : register(b0, space0);
 
@@ -26,8 +28,8 @@ struct SdfBricksFrame {
 struct SdfBricksPass {
     [[vk::offset(0)]] uint2 extent;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfBricksPass> passGroupIsa1776DDF9 : register(b0, space3);
-#define passGroup passGroupIsa1776DDF9
+[[vk::binding(0, 3)]] ConstantBuffer<SdfBricksPass> passGroupIsa1D91FDE2 : register(b0, space3);
+#define passGroup passGroupIsa1D91FDE2
 [[vk::binding(1, 3)]] StructuredBuffer<float4> bakeRequest : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<float> brickPool : register(u2, space3);
 

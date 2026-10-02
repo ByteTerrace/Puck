@@ -335,6 +335,24 @@ internal static class FixedVectorMath {
         );
         return true;
     }
+    // Whether the magnitude Length reports (the nearest raw Q16 root of x² + y² + z², saturating at MaxValue) is at
+    // most bound, decided on the squares alone. For a bound R with 0 ≤ R < MaxValue, round(√S) ≤ R exactly when
+    // S ≤ R² + R: the root rounds up past R only once √S > R + ½, and an integer S never equals (R + ½)². The sum of
+    // three squares and R² + R both stay below 2¹²⁸. A bound of MaxValue admits every vector, because the reported
+    // magnitude saturates there, and a negative bound admits none.
+    internal static bool IsMagnitudeAtMost(long x, long y, long z, long bound) {
+        if (bound < 0L) {
+            return false;
+        }
+
+        if (bound == long.MaxValue) {
+            return true;
+        }
+
+        var limit = ((UInt128)((ulong)bound));
+
+        return (((Square(value: x) + Square(value: y)) + Square(value: z)) <= ((limit * limit) + limit));
+    }
     internal static bool TryMagnitude(long x, long y, out FixedQ4816 result) {
         var squaredSum = (Square(value: x) + Square(value: y));
 

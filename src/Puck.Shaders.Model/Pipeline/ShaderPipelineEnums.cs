@@ -17,7 +17,7 @@ public enum ShaderPipelineDocumentPassKind : byte {
     Geometry = 3,
 }
 /// <summary>Identifies what the planner orders: a document's compute, fullscreen or geometry pass, or an engine
-/// package's pass. A planned pass carries it (<see cref="ShaderPipelinePlannedPass.Kind"/>); no document names
+/// package's pass. A planned pass carries it (<c>ShaderPipelinePlannedPass.Kind</c>); no document names
 /// it.</summary>
 public enum ShaderPipelinePassKind : byte {
     /// <summary>A compute dispatch.</summary>
@@ -26,7 +26,7 @@ public enum ShaderPipelinePassKind : byte {
     Fullscreen = 2,
     /// <summary>An indexed geometry pass.</summary>
     Geometry = 3,
-    /// <summary>Engine work a frame graph names under <c>packages</c> (<see cref="RenderGraphPackagePass"/>), never as a
+    /// <summary>Engine work a frame graph names under <c>packages</c> (<c>RenderGraphPackagePass</c>), never as a
     /// shader pass. The package records its own work and binds its own descriptors, so its planned pass has no
     /// declaration; the planner orders, versions and barriers it by the versions it reads and writes, which it reaches as
     /// a compute pass does.</summary>

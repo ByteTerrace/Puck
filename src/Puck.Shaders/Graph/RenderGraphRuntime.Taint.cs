@@ -64,16 +64,34 @@ public sealed partial class RenderGraphRuntime {
 
         return -1;
     }
-    // The frame the scheduler reads: on a capture frame, the frame naming every tainted instance the captured instance
-    // reads, itself included, to render again; any other frame as given. A source is never named: its consumers resolve
-    // its image through the capture gate as they bind it.
+    // The frame the scheduler reads: the frame naming every instance whose latest output stands for another's image to
+    // render again (RenderGraphRuntime.Standing.cs), and, on a capture frame, every tainted instance the captured instance
+    // reads, itself included; any other frame as given. A source is never named: its consumers resolve its image through
+    // the capture gate as they bind it.
     private RenderGraphFrame WithRerenders(in RenderGraphFrame frame) {
         var captured = CapturedInstance();
+        var standing = CollectStanding();
 
         m_capturing = (captured >= 0);
 
-        if (!m_capturing) {
+        if (!m_capturing && !standing) {
             return frame;
+        }
+
+        m_rerender.Clear();
+
+        if (frame.Rerender is { } declared) {
+            m_rerender.AddRange(collection: declared);
+        }
+        foreach (var name in m_standing) {
+            if (!m_rerender.Contains(item: name)) {
+                m_rerender.Add(item: name);
+            }
+        }
+        if (!m_capturing) {
+            return (frame with {
+                Rerender = m_rerender,
+            });
         }
 
         var count = m_set.Instances.Count;
@@ -82,12 +100,6 @@ public sealed partial class RenderGraphRuntime {
             m_visited = new bool[count];
         } else {
             Array.Clear(array: m_visited);
-        }
-
-        m_rerender.Clear();
-
-        if (frame.Rerender is { } declared) {
-            m_rerender.AddRange(collection: declared);
         }
 
         m_unvisited.Clear();

@@ -1,4 +1,4 @@
-// Generated from shader interface 'source-nv12' (sha256/218b8def0a175f9f885de22028907861e891ffedd79d13aff42d492425ce8c26). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'source-nv12' (sha256/5605a8ab0ad1c25c2771e952194dd6b4cfaa534ba4d8530ab3481410e07ef459). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SOURCE_NV12
 #define PUCK_SHADER_INTERFACE_SOURCE_NV12
 
@@ -19,6 +19,8 @@ struct SourceNv12Frame {
     [[vk::offset(64)]] float3 cameraTarget;
     [[vk::offset(76)]] uint _pad76;
     [[vk::offset(80)]] float3 cameraUp;
+    [[vk::offset(92)]] uint _pad92;
+    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SourceNv12Frame> frameGroup : register(b0, space0);
 

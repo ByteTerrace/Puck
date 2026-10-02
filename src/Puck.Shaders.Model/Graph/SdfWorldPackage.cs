@@ -58,6 +58,11 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value holding the forward distance of the view camera's own near plane, in world units,
     /// zero for a camera whose image begins at its eye (<c>float</c>).</summary>
     public const string NearDistance = "nearDistance";
+    /// <summary>The nearest forward distance, in world units, a view's surfaces are rendered from: the mesh pass's
+    /// reversed-Z depth needs a positive near, so a camera whose own near (<see cref="NearDistance"/>) is nearer is
+    /// rendered from this one. The kernels read it as <c>SDF_MINIMUM_NEAR</c>, which <c>SdfIsaHlsl</c> generates from this
+    /// value.</summary>
+    public const float MinimumNear = 0.02f;
     /// <summary>The pass-group value holding the depth, in world units, at which every camera march ends
     /// (<c>float</c>).</summary>
     public const string FarDistance = "farDistance";

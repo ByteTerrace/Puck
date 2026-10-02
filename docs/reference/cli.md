@@ -599,17 +599,33 @@ build's shaders and compares a Linux DXC build of the same commit against them
 ([CI tooling](../development/ci.md)), the binding contract's cross-host gate
 leg.
 
-`generate` writes the HLSL includes the C# model owns:
+`generate` writes the files the C# model owns (`ShaderDeclarations`):
 `src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-isa.hlsli`, the SDF instruction set's
-version, enums and packed-layout constants, generated from
-`Puck.SignedDistance` by `Puck.SdfVm.SdfIsaHlsl`; and every generated shader
-interface (`<name>.interface.hlsli`). An engine package that declares
-pass-group members, such as `overlay`, `place` and `sdf.film-grain`, owns the
-one include named by its interface, found by that file name. A checked-in
-interface include that no package owns, and a package whose include is missing
-or named twice, fail by name. `--check` writes nothing, regenerates each include in
-memory and exits 1 naming each file that differs from the model and its first
-differing line; CI runs it beside `puck schema --check`.
+enums and packed-layout constants, generated from `Puck.SignedDistance` by
+`Puck.SdfVm.SdfIsaHlsl`; the instruction set's fingerprint, recorded in
+`src/Puck.SdfVm/SdfIsaFingerprint.cs`; every generated shader interface
+(`<name>.interface.hlsli`); and the build's shader recipe,
+`build/ShaderRecipe.targets`. An engine package that declares pass-group members,
+such as `overlay`, `place` and `sdf.film-grain`, owns the one include named by
+its interface, found by that file name; the SDF kernels' interfaces sit at fixed
+paths. A checked-in interface include that no package owns, and a package whose
+include is missing or named twice, fail by name. `--check` writes nothing,
+regenerates each file in memory and exits 1 naming each file that differs from
+the model and its first differing line; CI runs it beside `puck schema --check`.
+
+The model is in `Puck.Shaders.Model` and `Puck.SdfVm.Model`, which compile no
+shader, so the kernel builds generate first: every project whose kernels
+include a generated declaration references `Puck.Shaders.Generator`, whose build
+writes each declaration the model has changed before those kernels compile. A
+change that adds a declaration and a kernel reading it builds with an ordinary
+`dotnet build`; the verb is needed to write the recipe and to check the tree,
+and never to seed a header by hand
+([generated declarations](shaders.md#generated-declarations)). Because a build
+writes every declaration the model changed, `--check` in a git work tree also
+fails on a file that matches the model only in the working tree while its
+staged copy differs or is missing: the index must carry each generated file.
+CI's artifacts and formatting jobs install their candidate CLI by building and
+packing the checkout, then run the check before the solution build.
 
 `interface` prints the [frame-block](shaders.md#frame-values-extent-and-ports) declarations
 each pass of a graph document or one-off shader reads, or, with
@@ -1094,7 +1110,10 @@ exact-cardinality responses, ordered sequences of responses (`sequence`) and
 of lines (`lines`: each listed line matches, exactly or as contained text, past
 the previous one's match), named response field
 extraction (from the response's first line, or with `"line"` from the first
-indented line of its record that starts with that text), equality/inequality, strict ordering of two extracted numbers
+indented line of its record that starts with that text, past the first that
+starts with the text an `"after"` names; a `"line"` naming a whole
+counter kind reads that `<kind> <value>` line's value as the field the kind
+names), equality/inequality, strict ordering of two extracted numbers
 (`greater`: left above right), inclusive bounds, minimum margins,
 byte-level file equality/inequality (`filesDiffer`), per-channel bounds over a
 region of one capture (`imageRegion`), a capture's mean difference from a
@@ -3102,8 +3121,8 @@ Regenerates every GENERATED Rust source registered in
 `Puck.Scripting.WasmStdlibSources.All`—the maintained set of generated sources
 that make up the WASM standard library, not a single one-off port. Today that
 registry holds three files under `wasm/puck-stdlib/src`. Two give the WASM addon
-guest a self-contained, bit-exact copy of `FixedQ4816`'s six algorithm-pinned
-transcendentals (`atan2`, `sin`/`cos`, `exp2`, `log2`, `pow`): `fixed_generated.rs`
+guest a self-contained, bit-exact copy of `FixedQ4816`'s seven algorithm-pinned
+functions (`atan2`, `sin`/`cos`, `exp2`, `log2`, `pow`, `smoothstep`): `fixed_generated.rs`
 (the ported functions plus their interval tables and polynomial coefficients)
 and `fixed_vectors.rs` (known-answer vectors, computed by calling the real
 `FixedQ4816` at generation time). The third, `abi_generated.rs`, mirrors the

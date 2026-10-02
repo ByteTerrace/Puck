@@ -30,7 +30,18 @@ storage), `src/Puck.World.Machines/WorldMachineHost.cs` (plus its
 - Replay visibility
 - Machines: server-authoritative
 - Read-backs
+- Observation delivery and session query disclosure
 - Verifying
+
+## Observation delivery and session query disclosure
+
+`WorldOutputHub` delivers borrowed snapshots synchronously. The federation projection sink retains at most
+`WorldFederationProjectionSink.PendingDeliveryLimit` (eight) encoded records per subscriber. Overflow detaches
+with `world.observation.backpressure`; the peer reopens for a fresh primer because definition and route records
+cannot be recovered from the latest snapshot alone. Session queries use `WorldSessionSink.AllowsQuery`, the
+same tier and observer-disclosure decision as deliveries: Frames reads nothing, Presentation reads only
+recipient-filtered state observations, and authoritative readbacks require a full Replica. Test these with
+`SessionObservationLawTests` and `WorldProjectionBackpressureLawTests`.
 
 ## The primitive: a set of `(target, kit)` applications
 

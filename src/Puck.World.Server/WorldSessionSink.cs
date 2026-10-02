@@ -8,21 +8,50 @@ namespace Puck.World.Server;
 /// while the session holds <c>observe all</c>, and each snapshot redacted under the world's live observer disclosure.
 /// A withheld span ends with the current disclosed definition before the next delivery, so the observer never renders
 /// a definition it missed an update to. The answers, compositions and levers this world's hub fans out belong to its
-/// own clients and never reach a session. An observer that throws ends its observation; the hub detaches it.</summary>
-internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservation observation, IClientSink inner) : IClientSink {
+/// own clients and never reach a session. An observer that throws, or that ends its own subscription as an
+/// <see cref="IWorldDetachableSink"/>, ends its observation; the hub detaches it.</summary>
+internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservation observation, IClientSink inner) : IWorldDetachableSink {
+    private readonly IWorldDetachableSink? m_detachable = (inner as IWorldDetachableSink);
+
     private bool m_withheld;
+
     private EntitySnapshot[] m_redacted = [];
 
+    /// <summary>Gets the reason the observer ended its own subscription with, or <see langword="null"/> while it still
+    /// takes deliveries; the session ends with it.</summary>
+    public string? DetachReason { get; private set; }
     /// <summary>Gets what the observer threw, once it has.</summary>
     public Exception? Fault { get; private set; }
 
+    private bool CanObserve => (
+        (Tier != WorldDisclosureTier.Frames) &&
+        server.ObservesAsSession(session: observation.Session)
+    );
     private WorldDisclosureTier Tier => observation.Tier;
 
+    // Queries are read doors into the same disclosed view as deliveries. Only state observations have their own
+    // recipient-filtered projection; the remaining readbacks describe authoritative state that a Presentation or
+    // redacted Replica mirror does not carry, so they require the whole replica.
+    internal bool AllowsQuery(WorldQuery query) => (
+        CanObserve &&
+        ((query is WorldQuery.StateObservations) || DisclosesFullReplica)
+    );
+
+    private bool DisclosesFullReplica => (
+        (Tier == WorldDisclosureTier.Replica) &&
+        new WorldSinkDisclosure(
+            ObserverBodyIndex: -1,
+            Policy: server.Definition.Population.ObserverDisclosure
+        ).IsFull
+    );
+
+    // Nothing reaches an observer once it has ended its own subscription.
     private bool Discloses() {
-        if (
-            (Tier != WorldDisclosureTier.Frames) &&
-            server.ObservesAsSession(session: observation.Session)
-        ) {
+        if (DetachReason is not null) {
+            return false;
+        }
+
+        if (CanObserve) {
             return true;
         }
 
@@ -30,17 +59,28 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         return false;
     }
-    // Runs one delivery to the observer, recording a fault and ending the observation before the hub detaches it.
-    private void Forward(Action deliver) {
-        try {
-            deliver();
-        } catch (Exception exception) {
-            Fault = exception;
-            observation.MarkEnded();
-            server.GrantTable.MarkSessionFaulted(session: observation.Session);
-            server.NoteFaultedSession(session: observation.Session);
-
-            throw;
+    // Ends the observation once its observer takes no more deliveries, by a fault or by its own detach reason: from
+    // this moment the session acts no more, and the next step ends it.
+    private void EndObservation() {
+        observation.MarkEnded();
+        server.GrantTable.MarkObserverEnded(session: observation.Session);
+        server.NoteObserverEnded(session: observation.Session);
+    }
+    // Records a delivery fault before it reaches the hub's detach handler. Delivery uses direct calls so a steady
+    // snapshot or value-only update does not allocate a capturing delegate.
+    private void EndAfterFault(Exception exception) {
+        Fault = exception;
+        EndObservation();
+    }
+    // Adopts the reason an observer ended its own subscription with during the delivery just made, so the hub detaches
+    // this sink after the same delivery.
+    private void FollowObserverDetach() {
+        if (
+            (DetachReason is null) &&
+            (m_detachable?.DetachReason is { } reason)
+        ) {
+            DetachReason = reason;
+            EndObservation();
         }
     }
     // Ends a withheld span: the observer takes the current disclosed definition before anything newer.
@@ -54,6 +94,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             definition: Disclose(definition: server.Definition)!,
             version: server.DocumentVersion
         );
+        FollowObserverDetach();
     }
 
     /// <summary>Discloses a definition as this session's tier shows it — see
@@ -120,13 +161,18 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             return;
         }
 
-        Forward(deliver: () => {
+        try {
             m_withheld = false;
             inner.DeliverDefinition(
                 definition: Disclose(definition: definition)!,
                 version: version
             );
-        });
+            FollowObserverDetach();
+        } catch (Exception exception) {
+            EndAfterFault(exception: exception);
+
+            throw;
+        }
     }
     public void DeliverSessionLever(WorldSessionLever lever) {
     }
@@ -144,21 +190,30 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             snapshot: in snapshot
         );
 
-        Forward(deliver: () => {
+        try {
             Resume();
+
+            if (DetachReason is not null) {
+                return;
+            }
+
             inner.DeliverSnapshot(snapshot: in redacted);
-        });
+            FollowObserverDetach();
+        } catch (Exception exception) {
+            EndAfterFault(exception: exception);
+
+            throw;
+        }
     }
     // A projection renumbers the rows it keeps, so a state stamp's row ordinals name the authority's rows, not the
-    // projection's: below Replica the observer takes the whole disclosed definition instead.
+    // projection's: below Replica the observer takes the whole disclosed definition instead. Body redaction does
+    // not renumber a Replica's state rows and must not turn value-only updates into structural rebuilds.
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
         if (!Discloses()) {
             return;
         }
 
-        var copy = stamp;
-
-        Forward(deliver: () => {
+        try {
             if (
                 m_withheld ||
                 (Tier != WorldDisclosureTier.Replica)
@@ -168,15 +223,21 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                     definition: Disclose(definition: definition)!,
                     version: version
                 );
+                FollowObserverDetach();
 
                 return;
             }
 
             inner.DeliverState(
                 definition: definition,
-                stamp: in copy,
+                stamp: in stamp,
                 version: version
             );
-        });
+            FollowObserverDetach();
+        } catch (Exception exception) {
+            EndAfterFault(exception: exception);
+
+            throw;
+        }
     }
 }

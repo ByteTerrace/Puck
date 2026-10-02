@@ -1,4 +1,4 @@
-// Generated from shader interface 'overlay' (sha256/fb4e212313e769fbff2cd2f519102d70ae461f87388b9c9e31ad49097894afe5). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'overlay' (sha256/9138a921c984876aaa3e294102319fc28ea05aeafc8193b0ffe1d54b4804e33d). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_OVERLAY
 #define PUCK_SHADER_INTERFACE_OVERLAY
 
@@ -19,6 +19,8 @@ struct OverlayFrame {
     [[vk::offset(64)]] float3 cameraTarget;
     [[vk::offset(76)]] uint _pad76;
     [[vk::offset(80)]] float3 cameraUp;
+    [[vk::offset(92)]] uint _pad92;
+    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<OverlayFrame> frameGroup : register(b0, space0);
 

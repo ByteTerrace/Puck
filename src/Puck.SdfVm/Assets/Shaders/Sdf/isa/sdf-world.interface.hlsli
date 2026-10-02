@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/466eb7c82a621a12c77e93ec114815fb97118b9fa4b105a03444d0187b24c659). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/0a1ac164b6c707917e9358e2a78aa6388d7b0eb1cbd9e03c9bfd4b6267fe5b97). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -19,6 +19,8 @@ struct SdfWorldFrame {
     [[vk::offset(64)]] float3 cameraTarget;
     [[vk::offset(76)]] uint _pad76;
     [[vk::offset(80)]] float3 cameraUp;
+    [[vk::offset(92)]] uint _pad92;
+    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SdfWorldFrame> frameGroup : register(b0, space0);
 
@@ -106,8 +108,8 @@ struct SdfWorldPass {
     [[vk::offset(1276)]] uint viewportCount;
     [[vk::offset(1280)]] uint workCounterRow;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa1776DDF9 : register(b0, space3);
-#define passGroup passGroupIsa1776DDF9
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa1D91FDE2 : register(b0, space3);
+#define passGroup passGroupIsa1D91FDE2
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<float> tiles : register(t3, space3);

@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Testing;
@@ -11,6 +13,112 @@ namespace Puck.Shaders.Tests;
 public sealed partial class RenderGraphRuntimeLawTests {
     private const string PackageView = "view";
 
+    // A final render's fence can signal after cadence stops scheduling its node. Both readbacks still become available,
+    // without another render, and keep the submission and grid that actually produced them.
+    [Fact]
+    public void AStandingViewsFinalSubmissionIsCountedAndTimedAfterItsFenceSignals() {
+        var gpu = new FakeGpuDevice(holdFences: true);
+        var recorders = new Recorders();
+        var view = new ViewPackage();
+
+        gpu.WriteReadback = (name, bytes) => {
+            if (name.Part != "timing") { return; }
+            for (var offset = 0; ((offset + 16) <= bytes.Length); offset += 16) {
+                BinaryPrimitives.WriteUInt64LittleEndian(destination: bytes[offset..], value: 0);
+                BinaryPrimitives.WriteUInt64LittleEndian(destination: bytes[(offset + 8)..], value: 1_000_000);
+            }
+        };
+        recorders.Registry.Register(factory: view, package: RenderGraphPackageCatalog.SdfWorld);
+        using var runtime = Runtime(gpu, recorders, Set(PackageInstance()), PackageView, new RenderGraphRuntimeGraph[1]);
+        var node = runtime.Node(instance: 0);
+        var index = 0L;
+
+        node.TimingEnabled = true;
+        TestLiveness.Until(step: () => {
+            ProducePackageFrame(frameIndex: index++, runtime: runtime);
+            return (node.FrameCounter > 0UL);
+        });
+        var fence = Assert.IsType<FakeGpuDevice.Fence>(@object: gpu.LastSubmittedFence);
+        var rendered = node.FrameCounter;
+        var recorded = view.Parts.Count;
+        var completed = new GpuWorkSample();
+
+        view.Unchanged = true;
+        for (var frame = 0; (frame < 12); frame++) {
+            ProducePackageFrame(frameIndex: index++, runtime: runtime);
+        }
+        Assert.Equal(expected: rendered, actual: node.FrameCounter);
+        Assert.False(condition: node.TryReadCompleted(sample: completed));
+        Assert.Equal(expected: 0L, actual: node.LatestTimingSubmission);
+        fence.Completed = true;
+        ProducePackageFrame(frameIndex: index++, runtime: runtime);
+
+        Assert.True(condition: node.TryReadCompleted(sample: completed));
+        Assert.Equal(expected: 1L, actual: completed.Submission);
+        Assert.Equal(expected: completed.Submission, actual: node.LatestTimingSubmission);
+        Assert.Equal(expected: (2d * SdfWorldPackage.NativeFragment.Passes.Count), actual: node.LatestTimingMilliseconds);
+        Assert.True(condition: node.TryGetRenderGrid(grid: out var grid, submission: completed.Submission));
+        Assert.Equal(actual: grid, expected: 1d);
+        for (var frame = 0; (frame < 12); frame++) {
+            ProducePackageFrame(frameIndex: index++, runtime: runtime);
+        }
+        Assert.Equal(expected: recorded, actual: view.Parts.Count);
+        Assert.Equal(expected: rendered, actual: node.FrameCounter);
+        Assert.Equal(expected: 1L, actual: node.TimingFrames);
+        Assert.True(condition: node.TryReadCompleted(sample: completed));
+        Assert.Equal(expected: 1L, actual: completed.Submission);
+    }
+    // The runtime polls a node between its renders only while it owes a readback, so standing instances cost no poll
+    // once their submissions are read back, however many there are.
+    [Fact]
+    public void StandingInstancesThatOweNoReadbackAreNeverPolled() {
+        var gpu = new FakeGpuDevice(holdFences: true);
+        var recorders = new Recorders();
+        var view = new ViewPackage();
+        string[] names = [PackageView, "second", "third", "fourth"];
+
+        recorders.Registry.Register(factory: view, package: RenderGraphPackageCatalog.SdfWorld);
+        using var runtime = Runtime(gpu, recorders, Set([.. names.Select(selector: static name => PackageInstance() with { Name = name })]), PackageView, new RenderGraphRuntimeGraph[names.Length]);
+        var index = 0L;
+
+        void Frame() {
+            var frame = new RenderGraphFrame(
+                DisplayHeight: Display,
+                DisplayHertz: 60,
+                DisplayWidth: Display,
+                Footprints: [],
+                Index: index,
+                Roots: [.. names.Select(selector: static name => new RenderGraphRoot(Height: 1.0, Instance: name, Width: 1.0))],
+                Tick: index
+            );
+
+            index++;
+            _ = runtime.ProduceFrame(context: default, frame: in frame);
+        }
+
+        TestLiveness.Until(step: () => {
+            Frame();
+            return names.Select(selector: name => runtime.Node(instance: runtime.Instances.IndexOf(name: name))).All(predicate: static node => (node.FrameCounter > 0UL));
+        });
+        view.Unchanged = true;
+        Frame();
+        // While their last submissions are in flight every standing node owes a readback and is polled once a frame.
+        var owing = runtime.ReadbackPolls;
+
+        Frame();
+        Assert.Equal(expected: (owing + names.Length), actual: runtime.ReadbackPolls);
+        foreach (var fence in gpu.SubmittedFences) {
+            fence.Completed = true;
+        }
+        Frame();
+        var settled = runtime.ReadbackPolls;
+
+        for (var frame = 0; (frame < 12); frame++) {
+            Frame();
+        }
+        Assert.Equal(expected: settled, actual: runtime.ReadbackPolls);
+        Assert.All(collection: names.Select(selector: name => runtime.Node(instance: runtime.Instances.IndexOf(name: name))), action: static node => Assert.False(condition: node.OwesReadbacks));
+    }
     [Fact]
     public void APackageInstanceRendersItsFragmentOnANodeAndStandsWhileUnchanged() {
         var gpu = new FakePipelineGpu();
@@ -217,8 +325,59 @@ public sealed partial class RenderGraphRuntimeLawTests {
         }
         Assert.True(condition: (view.Parts.Count > recorded));
     }
-    // A nested view remains visible in held consumer outputs. Skipped consumer renders, whether paced by refresh or
-    // standing unchanged, do not park it and cannot restart its temporal epoch. Removing the roots really parks it.
+    // A reconfiguration keeps a surviving instance's node, graph and history, and so the frames it went unread: a parked
+    // temporal view whose set is reconfigured around it still carries its count into the frame it is shown again in, while
+    // an instance new to the set starts at zero, whatever the others have counted.
+    [Fact]
+    public void AKeptInstanceKeepsItsUnreadFramesThroughAReconfigurationAndANewOneStartsFresh() {
+        const string Second = "second";
+        var gpu = new FakePipelineGpu();
+        var recorders = new Recorders();
+        var view = new ViewPackage();
+
+        recorders.Registry.Register(factory: view, package: RenderGraphPackageCatalog.SdfWorld);
+        using var runtime = Runtime(gpu, recorders, Set(PackageInstance()), PackageView, new RenderGraphRuntimeGraph[1]);
+        var index = 0L;
+
+        TestLiveness.Until(
+            reason: () => $"The view recorded {view.Parts.Count} part(s).",
+            step: () => {
+                ProducePackageFrame(frameIndex: index++, runtime: runtime);
+
+                return (view.Parts.Count >= SdfWorldPackage.NativeFragment.Passes.Count);
+            }
+        );
+        for (var frame = 0; (frame < 3); frame++) {
+            ProducePackageFrame(frameIndex: index++, parked: true, runtime: runtime);
+        }
+        Assert.True(condition: runtime.TryReconfigure(
+            graphs: new RenderGraphRuntimeGraph?[2],
+            refusal: out var refusal,
+            root: PackageView,
+            set: Set(PackageInstance(), PackageInstance() with { Name = Second })
+        ), userMessage: refusal?.Message);
+
+        var asked = view.AskedUnreadBy[PackageView].Count;
+        var newcomerAsked = false;
+
+        for (var frame = 0; ((frame < 40) && !newcomerAsked); frame++) {
+            var before = (view.AskedUnreadBy.TryGetValue(key: Second, value: out var seen) ? seen.Count : 0);
+
+            ProducePackageFrame(frameIndex: index++, parked: true, runtime: runtime);
+            // The kept view carries the three frames it was parked for before the reconfiguration, and one more a frame.
+            Assert.Equal(expected: (3L + frame), actual: view.AskedUnreadBy[PackageView][(asked + frame)]);
+            if (view.AskedUnreadBy.TryGetValue(key: Second, value: out var after) && (after.Count > before)) {
+                // The newcomer counted nothing before the reconfiguration, so its first question carries only the frames
+                // parked since.
+                Assert.Equal(expected: ((long)frame), actual: after[before]);
+                newcomerAsked = true;
+            }
+        }
+        Assert.True(condition: newcomerAsked, userMessage: "The new instance was never asked.");
+    }
+    // A nested view remains visible in held consumer outputs: the scheduler keeps it waiting, never unread, while a consumer
+    // the display shows skips its render, whether paced by refresh or standing unchanged, so its temporal epoch never
+    // restarts. Removing the roots really parks it.
     [InlineData(2, false)]
     [InlineData(3, false)]
     [InlineData(1, true)]
@@ -256,13 +415,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 !runtime.Node(instance: 1).HasPendingCandidate && !runtime.Node(instance: 2).HasPendingCandidate);
         });
         var recorded = view.Parts.Count;
-        var unread = false;
+        var waited = false;
 
         for (var frame = 0; (frame < 24); frame++) {
             Produce(stands: unchanged);
-            unread |= (runtime.Latest!.Instances[0].Status == RenderGraphInstanceStatus.Unread);
+            Assert.NotEqual(expected: RenderGraphInstanceStatus.Unread, actual: runtime.Latest!.Instances[0].Status);
+            waited |= (runtime.Latest!.Instances[0].Status == RenderGraphInstanceStatus.Waiting);
         }
-        Assert.True(condition: unread);
+        Assert.True(condition: waited);
         Assert.All(collection: view.AskedUnread, action: static count => Assert.Equal(actual: count, expected: 0L));
         Assert.All(collection: view.RecordedUnread, action: static count => Assert.Equal(actual: count, expected: 0L));
         if (unchanged) {
@@ -334,14 +494,39 @@ public sealed partial class RenderGraphRuntimeLawTests {
             owner: this,
             part: context.Part!
         );
+
+        public Dictionary<string, List<long>> AskedUnreadBy { get; } = [];
+
         public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) {
             AskedUnread.Add(item: unreadFrames);
+            if (!AskedUnreadBy.TryGetValue(key: instance, value: out var asked)) {
+                AskedUnreadBy[instance] = (asked = []);
+            }
+
+            asked.Add(item: unreadFrames);
 
             return Unchanged;
         }
+
+        // Each named instance's render grid; an instance not named renders its output's grid.
+        public Dictionary<string, double> Grids { get; } = [];
+
+        public IShaderPipelineRenderExtent? RenderExtentOf(string instance) => (Grids.TryGetValue(key: instance, value: out var grid)
+            ? new GridExtent(grid: grid)
+            : null);
         public void OnDeviceLost() => Lost++;
         public void BeginConvergence(string instance, RenderGraphConvergence convergence) => Convergence.Add(item: convergence);
 
+        private sealed class GridExtent(double grid) : IShaderPipelineRenderExtent {
+            public double Grid => grid;
+            public long Revision => 0L;
+
+            public (uint Width, uint Height) CeilingAt(uint width, uint height) => (width, height);
+            public (uint Width, uint Height) FrameAt(uint width, uint height) => (
+                ((uint)RenderGraphExtent.Pixels(display: ((int)width), fraction: grid)),
+                ((uint)RenderGraphExtent.Pixels(display: ((int)height), fraction: grid))
+            );
+        }
         private sealed class Recorder(ViewPackage owner, string part) : IRenderGraphPackageRecorder {
             public void Dispose() { }
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {

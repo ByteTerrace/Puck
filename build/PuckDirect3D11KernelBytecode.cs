@@ -7,6 +7,42 @@ using System.Text;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
 
+/// <summary>Collects existing Direct3D 11 entry-point bytecode for packaging, refusing missing or stale outputs without
+/// compiling anything. Compilation belongs to the build, so a pack without a build ships exactly the built kernels.</summary>
+public sealed class PuckCollectDirect3D11Kernels : Task {
+    /// <summary>The kernel sources, each carrying its semicolon-separated <c>Entries</c>.</summary>
+    [Required]
+    public ITaskItem[] Sources { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>The existing bytecode files, one per source and entry point.</summary>
+    [Output]
+    public ITaskItem[] Bytecode { get; private set; } = Array.Empty<ITaskItem>();
+
+    public override bool Execute() {
+        var outputs = new List<ITaskItem>();
+
+        foreach (var source in Sources) {
+            var sourcePath = source.GetMetadata(metadataName: "FullPath");
+
+            foreach (var entry in source.GetMetadata(metadataName: "Entries").Split(options: StringSplitOptions.RemoveEmptyEntries, separator: new[] { ';' })) {
+                var output = Path.Combine(
+                    path1: Path.GetDirectoryName(path: sourcePath)!,
+                    path2: $"{Path.GetFileNameWithoutExtension(path: sourcePath)}.{entry.Trim()}.dxbc"
+                );
+
+                if (!File.Exists(path: output) || (File.GetLastWriteTimeUtc(path: output) < File.GetLastWriteTimeUtc(path: sourcePath))) {
+                    Log.LogError(message: $"Shader bytecode '{output}' is missing or stale. Build normally before packing or publishing with --no-build.");
+                    continue;
+                }
+
+                outputs.Add(item: new TaskItem(itemSpec: output));
+            }
+        }
+
+        Bytecode = outputs.ToArray();
+
+        return !Log.HasLoggedErrors;
+    }
+}
 /// <summary>
 /// Compiles each Direct3D 11 compute kernel source's entry points to <c>cs_5_0</c> DXBC at build: the kernel-class probe
 /// kernels and the camera frame converter's conversion kernels, which run on a camera graph's own Direct3D 11 device, so

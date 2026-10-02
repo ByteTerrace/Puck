@@ -32,7 +32,8 @@ world.budget
   `sky`, `mask`, `beam`, `cull-args`, `mesh`, `primary`, `surface`, `ambient`,
   `shadow`, `views`) the dispatches, barriers, binds, push-constant bytes and
   uploads it recorded and the march steps and texels written its kernels
-  counted, or `skipped` for a pass that did not run. The recorded counts are
+  counted, or `skipped` for a pass that did not run, and, for a render-graph
+  instance's node, `owned-bytes`, the GPU memory the node holds now. The recorded counts are
   exact and the same on every backend for the same inputs, and the kernels'
   counts the same on every run of one backend, so a change that moves one is a
   real change in work — no averaging or band-trusting needed the way a
