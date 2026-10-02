@@ -11,8 +11,9 @@ namespace Puck.SignedDistance.Tests;
 /// <see cref="SdfFieldEvaluator.TryDistance"/> answer at a point of the box. Each op, shape and blend is swept through
 /// boxes from a single point to several units across, its corners and interior points evaluated by the point
 /// interpreter; a point box's interval stays within a few raws of its one answer, so a rule widened to the whole line
-/// fails as surely as one that misses an answer. The sync laws hold the bounds interpreter's rule sets to the point
-/// interpreter's: an op or shape the point side accepts has a rule or a named refusal, never neither.
+/// fails as surely as one that misses an answer; only a sweep, whose rule encloses every parameter its point search
+/// could pick rather than following the search, is exempt from that width. The sync laws hold the bounds interpreter's
+/// rule sets to the point interpreter's: every op and shape the point side accepts has a rule.
 /// </summary>
 public sealed class SdfFieldBoundsLawTests {
     // A point box's interval spans its one answer plus the outward raws of every step between: a rotation's two fused
@@ -20,6 +21,9 @@ public sealed class SdfFieldBoundsLawTests {
     private const long PointBoxWidthRaw = 96L;
     private const int BoxesPerCase = 48;
     private const int InteriorPointsPerBox = 12;
+
+    // The cases whose rule encloses a search instead of mirroring a step, so a point box is not a few raws wide.
+    private static readonly HashSet<string> EnclosingCases = ["shape Sweep", "shape Sweep bulged and twisted"];
 
     public static TheoryData<string> Cases() {
         var data = new TheoryData<string>();
@@ -70,7 +74,7 @@ public sealed class SdfFieldBoundsLawTests {
                     userMessage: $"{name}: the point answer {distance} at {point} lies outside {bounds}, the bounds of the box [{lower}, {upper}]"
                 );
 
-                if (lower == upper) {
+                if ((lower == upper) && !EnclosingCases.Contains(item: name)) {
                     Assert.True(
                         condition: ((((Int128)bounds.Upper.Value) - bounds.Lower.Value) <= PointBoxWidthRaw),
                         userMessage: $"{name}: the point box at {point} answers {distance} but bounds it by {bounds}, wider than {PointBoxWidthRaw} raws"
@@ -95,19 +99,17 @@ public sealed class SdfFieldBoundsLawTests {
         }
     }
     [Fact]
-    public void EveryInterpretedShapeHasAnInclusionRuleOrANamedRefusal() {
+    public void EveryInterpretedShapeHasAnInclusionRule() {
         var exercised = Programs.Values.SelectMany(selector: build => build().Instructions)
             .Where(predicate: instruction => ((instruction.Op == SdfOp.ShapeBlend) && !instruction.Detail))
             .Select(selector: instruction => ((SdfShapeType)instruction.Shape)).ToHashSet();
 
         foreach (var shape in Enum.GetValues<SdfShapeType>()) {
-            var bounded = SdfFieldEvaluator.BoundedShapes.ContainsKey(key: shape);
-            var refused = SdfFieldEvaluator.UnboundedShapes.ContainsKey(key: shape);
+            var bounded = SdfFieldEvaluator.BoundedShapes.Contains(value: shape);
 
-            Assert.False(condition: (bounded && refused), userMessage: $"shape {shape} is both bounded and refused");
             Assert.True(
-                condition: (SdfFieldEvaluator.IsSupportedShape(shape: shape) == (bounded || refused)),
-                userMessage: $"shape {shape}: the point interpreter {(SdfFieldEvaluator.IsSupportedShape(shape: shape) ? "accepts" : "refuses")} it, and the bounds interpreter {(bounded ? "bounds" : (refused ? "refuses" : "does not name"))} it"
+                condition: (SdfFieldEvaluator.IsSupportedShape(shape: shape) == bounded),
+                userMessage: $"shape {shape}: the point interpreter {(SdfFieldEvaluator.IsSupportedShape(shape: shape) ? "accepts" : "refuses")} it, and the bounds interpreter {(bounded ? "has" : "has no")} inclusion rule for it"
             );
 
             if (bounded) {
@@ -189,39 +191,6 @@ public sealed class SdfFieldBoundsLawTests {
         Assert.True(condition: ((((Int128)bounds.Lower.Value) * 65536) <= numerator));
         Assert.True(condition: ((((Int128)bounds.Upper.Value) * 65536) >= numerator));
     }
-    [Fact]
-    public void AShapeWithoutAnInclusionRuleIsRefusedByName() {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        _ = builder.Sweep(
-            a: Vector3.Zero,
-            b: Vector3.UnitY,
-            bulge: 0f,
-            c: (2f * Vector3.UnitY),
-            material: material,
-            radiusEnd: 0.2f,
-            radiusStart: 0.3f,
-            strandOffset: 0f,
-            strands: 1,
-            twist: 0f
-        );
-
-        var evaluator = new SdfFieldEvaluator(program: builder.Build());
-        var origin = FixedPosition.FromLocal(local: FixedVector3.Zero);
-        var refusal = Assert.Throws<NotSupportedException>(testCode: () => evaluator.TryDistanceBounds(distance: out _, lower: origin, upper: origin));
-
-        Assert.Contains(expectedSubstring: "Sweep", actualString: refusal.Message, comparisonType: StringComparison.Ordinal);
-        Assert.False(condition: evaluator.HasDistanceBounds(refusal: out var named));
-        Assert.Contains(actualString: named, comparisonType: StringComparison.Ordinal, expectedSubstring: "Sweep");
-
-        var quartic = new SdfProgramBuilder();
-
-        _ = quartic.Superellipsoid(exponent: 4f, material: quartic.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One)), radii: Vector3.One);
-
-        Assert.False(condition: new SdfFieldEvaluator(program: quartic.Build()).HasDistanceBounds(refusal: out var exponent));
-        Assert.Contains(actualString: exponent, comparisonType: StringComparison.Ordinal, expectedSubstring: "Superellipsoid");
-    }
 
     // One program per op, shape and blend, each placed off the origin, rotated and composed so every rule meets a
     // transformed point.
@@ -253,6 +222,14 @@ public sealed class SdfFieldBoundsLawTests {
         Shape(name: "shape Vesica", emit: (b, m) => b.Vesica(halfSeparation: 0.5f, material: m, radius: 1f));
         Shape(name: "shape RoundCone", emit: (b, m) => b.RoundCone(height: 1.4f, lowerRadius: 0.6f, material: m, upperRadius: 0.25f));
         Shape(name: "shape Superellipsoid", emit: (b, m) => b.Superellipsoid(exponent: 2f, material: m, radii: new Vector3(x: 1.2f, y: 0.7f, z: 0.9f)));
+
+        // The shipped worlds' exponents (2.05 banks and rocks, 2.1 avatar parts, 2.4 and 3 figures) and the range's ends.
+        foreach (var exponent in ((float[])[2.05f, 2.1f, 2.4f, 3f, 4f, 8f])) {
+            Shape(name: $"shape Superellipsoid {exponent}", emit: (b, m) => b.Superellipsoid(exponent: exponent, material: m, radii: new Vector3(x: 1.2f, y: 0.7f, z: 0.9f)));
+        }
+
+        Shape(name: "shape Sweep", emit: (b, m) => b.Sweep(a: Vector3.Zero, b: Vector3.UnitY, bulge: 0f, c: (2f * Vector3.UnitY), material: m, radiusEnd: 0.2f, radiusStart: 0.3f, strandOffset: 0f, strands: 1, twist: 0f));
+        Shape(name: "shape Sweep bulged and twisted", emit: (b, m) => b.Sweep(a: new Vector3(x: -1f, y: 0f, z: 0.2f), b: new Vector3(x: 0.4f, y: 1.6f, z: -0.5f), bulge: 0.15f, c: new Vector3(x: 1.2f, y: 0.3f, z: 0.6f), material: m, radiusEnd: 0.12f, radiusStart: 0.25f, strandOffset: 0.2f, strands: 1, twist: 1.5f));
 
         foreach (var lift in Enum.GetValues<SdfLift>()) {
             Shape(name: $"shape RoundedRectangle {lift}", emit: (b, m) => b.RoundedRectangle(cornerRadius: 0.2f, halfHeight: 0.6f, halfWidth: 0.9f, lift: lift, liftAmount: 0.3f, material: m, capChamfer: 0.05f));

@@ -5886,6 +5886,13 @@
     },
     {
       "CoveredBy": [
+        "interval.pow-encloses-the-series"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Pow(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "interval.arithmetic-is-the-directed-hull"
       ],
       "Id": "Puck.Maths.FixedInterval.Round(Puck.Maths.FixedInterval)",

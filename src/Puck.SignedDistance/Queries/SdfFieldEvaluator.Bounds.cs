@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Puck.Maths;
 
 namespace Puck.SignedDistance.Queries;
@@ -9,9 +10,17 @@ namespace Puck.SignedDistance.Queries;
 // rounding of a value inside a grid-ended interval stays inside it. Where the point code branches, the interval takes
 // every branch the box can reach and joins them. Each rule mirrors its TryDistance or EvaluateShape step; a step changed
 // there is a rule changed here, and SdfFieldBoundsLawTests holds every op, shape and blend's point answers inside these
-// bounds. An instruction with no inclusion rule is refused by name (BoundsRefusal), never approximated.
+// bounds. Two rules enclose rather than mirror: Sweep encloses whatever parameter its point search picks, and a
+// Superellipsoid of any exponent but two raises through the interval power. A shape with no rule answers the unbounded
+// interval, never an approximation, so it can only shrink the frame.
 public sealed partial class SdfFieldEvaluator {
     private static readonly FixedQ4816 SuperellipsoidSphereExponent = FixedQ4816.FromInteger(value: 2L);
+    // The sweep's parameter runs over the whole curve: every closest parameter the point search can pick lies in it.
+    private static readonly FixedInterval SweepParameter = new(lower: FixedQ4816.Zero, upper: FixedQ4816.One);
+    // A unit vector's component, and a cross product of two unit vectors' component, each rounded: inside [−2, 2].
+    private static readonly FixedInterval SweepFrameComponent = new(lower: FixedQ4816.FromInteger(value: -2L), upper: FixedQ4816.FromInteger(value: 2L));
+    // A sine or cosine: SinCos answers inside [−1, 1] for every angle.
+    private static readonly FixedInterval UnitRange = new(lower: -FixedQ4816.One, upper: FixedQ4816.One);
 
     // The frame's half-width in raws (see Frame), found once at construction.
     private readonly long m_frameRaw;
@@ -25,17 +34,11 @@ public sealed partial class SdfFieldEvaluator {
     /// <see cref="TryDistance"/> refuses; <see langword="true"/> otherwise.</returns>
     /// <exception cref="ArgumentException"><paramref name="lower"/> exceeds <paramref name="upper"/> on an
     /// axis.</exception>
-    /// <exception cref="NotSupportedException">The program holds an instruction with no inclusion rule; the message
-    /// names it.</exception>
     /// <remarks>The interval is certified, not estimated: its lower endpoint is at or below the least point answer in the
     /// box and its upper at or above the greatest. It is a conservative hull, so it widens with the box, and a rotation
     /// or a fold that reuses a coordinate widens it further; a smaller box answers tighter.</remarks>
     public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance) {
         distance = FixedInterval.FromPoint(value: FixedQ4816.Zero);
-
-        if (BoundsRefusal(instructions: m_instructions) is { } refusal) {
-            throw new NotSupportedException(message: refusal);
-        }
 
         if (
             !m_hasShape ||
@@ -68,9 +71,9 @@ public sealed partial class SdfFieldEvaluator {
     /// leave the carrier. Negative when no position can be answered.</summary>
     /// <remarks>Found once, at construction, by the bounds interpreter: the frame is the widest power-of-two cube over
     /// which the bounds of the whole program stay bounded. A bounded interval proves that no step of the interval walk
-    /// left the carrier, and every point step's value lies inside its step's interval, so no point step inside the cube
-    /// can wrap. A program with an instruction the bounds interpreter refuses has no such proof, and keeps the whole
-    /// carrier as its frame.</remarks>
+    /// left the carrier, and every point step that reads the position lies inside its step's interval, so none can wrap
+    /// inside the cube. Every instruction has an inclusion rule; one without would answer the unbounded interval, which
+    /// can only shrink the frame, never widen it.</remarks>
     public FixedQ4816 Frame => FixedQ4816.FromRawBits(value: m_frameRaw);
 
     // Whether every axis of a point lies inside the frame (the carrier's minimum, whose magnitude has no raw, never does).
@@ -79,13 +82,10 @@ public sealed partial class SdfFieldEvaluator {
     private static bool WithinRaw(long raw, long limit) =>
         ((raw != long.MinValue) && (Math.Abs(value: raw) <= limit));
     // The widest power-of-two cube whose bounds stay bounded, capped so the instance cull's subtraction of each bound's
-    // centre stays inside the carrier; minus one raw when not even a one-raw cube is bounded, and the whole carrier for a
-    // program the bounds interpreter refuses.
+    // centre stays inside the carrier; minus one raw when not even a one-raw cube is bounded. Every instruction joins the
+    // proof: one whose bounds were ever missing would answer the unbounded interval, which shrinks the frame, and never
+    // grants one.
     private static long FindFrame(SdfFieldEvaluator evaluator) {
-        if (BoundsRefusal(instructions: evaluator.m_instructions) is not null) {
-            return long.MaxValue;
-        }
-
         var centre = 0UL;
 
         foreach (var bound in evaluator.m_cullBounds) {
@@ -244,16 +244,6 @@ public sealed partial class SdfFieldEvaluator {
         return result;
     }
 
-    /// <summary>Returns whether every instruction of the evaluator's program has an inclusion rule, naming the first that
-    /// does not.</summary>
-    /// <param name="refusal">The refusal naming the first instruction without a rule, or <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when <see cref="TryDistanceBounds"/> can enclose the program.</returns>
-    public bool HasDistanceBounds(out string? refusal) {
-        refusal = BoundsRefusal(instructions: m_instructions);
-
-        return (refusal is null);
-    }
-
     /// <summary>Gets the ops the bounds interpreter has an inclusion rule for. Every op the point interpreter accepts
     /// must appear here; the sync law holds the two sets equal.</summary>
     public static IReadOnlyList<SdfOp> BoundedOps { get; } = [
@@ -272,52 +262,26 @@ public sealed partial class SdfFieldEvaluator {
         SdfOp.PopField,
         SdfOp.ShapeBlend,
     ];
-    /// <summary>Gets the shapes the bounds interpreter has an inclusion rule for, each with the condition on its
-    /// instruction that the rule needs (empty when it needs none).</summary>
-    public static IReadOnlyDictionary<SdfShapeType, string> BoundedShapes { get; } = new Dictionary<SdfShapeType, string> {
-        [SdfShapeType.Box] = "",
-        [SdfShapeType.ScreenSlab] = "",
-        [SdfShapeType.Capsule] = "",
-        [SdfShapeType.Sphere] = "",
-        [SdfShapeType.Torus] = "",
-        [SdfShapeType.Cylinder] = "",
-        [SdfShapeType.Plane] = "",
-        [SdfShapeType.Vesica] = "",
-        [SdfShapeType.RoundedRectangle] = "",
-        [SdfShapeType.Trapezoid] = "",
-        [SdfShapeType.ChamferedRectangle] = "",
-        [SdfShapeType.RoundCone] = "",
-        [SdfShapeType.ConvexPolygon] = "",
-        [SdfShapeType.Superellipsoid] = "the ellipsoid exponent 2 alone; another exponent needs an interval power",
-    };
-    /// <summary>Gets the shapes the point interpreter accepts that the bounds interpreter refuses by name, each with why.
-    /// The sync law holds every accepted shape to exactly one of <see cref="BoundedShapes"/> and this.</summary>
-    public static IReadOnlyDictionary<SdfShapeType, string> UnboundedShapes { get; } = new Dictionary<SdfShapeType, string> {
-        [SdfShapeType.Sweep] = "its closest parameter comes from a sample-and-refine search whose winner a box cannot follow",
-    };
+    /// <summary>Gets the shapes the bounds interpreter has an inclusion rule for. Every shape the point interpreter
+    /// accepts must appear here; the sync law holds the two sets equal.</summary>
+    public static IReadOnlyList<SdfShapeType> BoundedShapes { get; } = [
+        SdfShapeType.Box,
+        SdfShapeType.ScreenSlab,
+        SdfShapeType.Capsule,
+        SdfShapeType.Sphere,
+        SdfShapeType.Torus,
+        SdfShapeType.Cylinder,
+        SdfShapeType.Plane,
+        SdfShapeType.Vesica,
+        SdfShapeType.RoundedRectangle,
+        SdfShapeType.Trapezoid,
+        SdfShapeType.ChamferedRectangle,
+        SdfShapeType.RoundCone,
+        SdfShapeType.ConvexPolygon,
+        SdfShapeType.Superellipsoid,
+        SdfShapeType.Sweep,
+    ];
 
-    // The first instruction without an inclusion rule, named, or null.
-    private static string? BoundsRefusal(CompiledInstruction[] instructions) {
-        for (var index = 0; (index < instructions.Length); index++) {
-            var instruction = instructions[index];
-
-            if ((instruction.Op != SdfOp.ShapeBlend) || instruction.Detail) {
-                continue;
-            }
-
-            var shape = ((SdfShapeType)instruction.Shape);
-
-            if (UnboundedShapes.TryGetValue(key: shape, value: out var reason)) {
-                return $"SdfFieldEvaluator has no inclusion rule for instruction {index}'s shape {shape}: {reason}.";
-            }
-
-            if ((shape == SdfShapeType.Superellipsoid) && (instruction.Data0W != SuperellipsoidSphereExponent)) {
-                return $"SdfFieldEvaluator has no inclusion rule for instruction {index}'s Superellipsoid at exponent {instruction.Data0W}: {BoundedShapes[SdfShapeType.Superellipsoid]}.";
-            }
-        }
-
-        return null;
-    }
     private static FixedInterval Point(FixedQ4816 value) =>
         FixedInterval.FromPoint(value: value);
     private static FixedInterval Dot(IntervalVector3 left, FixedVector3 right) =>
@@ -538,7 +502,8 @@ public sealed partial class SdfFieldEvaluator {
                 lift: instruction.Data1Y,
                 capChamfer: instruction.Data0Z
             ) - Point(value: instruction.Data1W)),
-            SdfShapeType.Superellipsoid => SuperellipsoidSphereBounds(p: p, radii: Vector(instruction: instruction), inverseRadii: new FixedVector3(X: instruction.Data1Y, Y: instruction.Data1Z, Z: instruction.Data1W)),
+            SdfShapeType.Superellipsoid => SuperellipsoidBounds(p: p, radii: Vector(instruction: instruction), inverseRadii: new FixedVector3(X: instruction.Data1Y, Y: instruction.Data1Z, Z: instruction.Data1W), exponent: instruction.Data0W),
+            SdfShapeType.Sweep => SweepBounds(p: p, curve: (instruction.SweepCurve ?? throw new UnreachableException(message: "Compile always attaches a SweepCurve to a Sweep instruction.")), twist: instruction.Data0Z, strandOffset: instruction.Data0W),
             SdfShapeType.ConvexPolygon => (LiftedBounds(
                 p: p,
                 profile: point2D => ConvexPolygon2DBounds(p: point2D, vertices: (instruction.ConvexPolygonVertices ?? [])),
@@ -546,7 +511,8 @@ public sealed partial class SdfFieldEvaluator {
                 lift: instruction.Data1Y,
                 capChamfer: instruction.Data1Z
             ) - Point(value: instruction.Data1W)),
-            _ => throw new NotSupportedException(message: $"The bounds interpreter has no inclusion rule for shape {((SdfShapeType)instruction.Shape)}."),
+            // A shape with no rule proves nothing: the unbounded interval, which shrinks the frame and never grants it.
+            _ => FixedInterval.Entire,
         };
     }
     private static FixedInterval BoxBounds(IntervalVector3 p, FixedVector3 halfExtents, FixedQ4816 cornerRadius) {
@@ -574,6 +540,103 @@ public sealed partial class SdfFieldEvaluator {
             Y: (p.Y - (Point(value: endpoint.Y) * h)),
             Z: (p.Z - (Point(value: endpoint.Z) * h))
         ).Length - Point(value: radius));
+    }
+    // SdfSuperellipsoid over a box. The point side scales each ratio q_i/m into [0, 1] (each q_i is at most the largest,
+    // m), raises it, sums, and roots the sum; the largest axis's ratio is exactly one and so is its power, so the sum is
+    // at least one, which keeps the lower bound the gauge's own (m − 1)·min(r). A box reaching the centre (m = 0) joins
+    // the centre arm, −min(r).
+    private static FixedInterval SuperellipsoidBounds(IntervalVector3 p, FixedVector3 radii, FixedVector3 inverseRadii, FixedQ4816 exponent) {
+        if (exponent == SuperellipsoidSphereExponent) {
+            return SuperellipsoidSphereBounds(inverseRadii: inverseRadii, p: p, radii: radii);
+        }
+
+        var absolute = p.Abs();
+        var q = new IntervalVector3(
+            X: (absolute.X * Point(value: inverseRadii.X)),
+            Y: (absolute.Y * Point(value: inverseRadii.Y)),
+            Z: (absolute.Z * Point(value: inverseRadii.Z))
+        );
+        var m = FixedInterval.Max(first: q.X, second: FixedInterval.Max(first: q.Y, second: q.Z));
+        var minimumRadius = Point(value: FixedQ4816.Min(x: radii.X, y: FixedQ4816.Min(x: radii.Y, y: radii.Z)));
+
+        if (m.IsUnbounded) {
+            return FixedInterval.Entire;
+        }
+
+        FixedInterval? joined = null;
+
+        if (m.Lower <= FixedQ4816.Zero) {
+            joined = -minimumRadius;
+        }
+
+        if (m.Upper > FixedQ4816.Zero) {
+            var power = Point(value: exponent);
+
+            FixedInterval Ratio(FixedInterval component) => ((m.Lower > FixedQ4816.Zero)
+                ? FixedInterval.Clamp(maximum: FixedQ4816.One, minimum: FixedQ4816.Zero, value: (component / m))
+                : new FixedInterval(lower: FixedQ4816.Zero, upper: FixedQ4816.One));
+            var sum = ((FixedInterval.Pow(exponent: power, value: Ratio(component: q.X)) + FixedInterval.Pow(exponent: power, value: Ratio(component: q.Y))) + FixedInterval.Pow(exponent: power, value: Ratio(component: q.Z)));
+            var root = FixedInterval.Pow(exponent: (Point(value: FixedQ4816.One) / power), value: FixedInterval.Max(first: sum, second: Point(value: FixedQ4816.One)));
+
+            joined = Join(joined: joined, next: (((m * root) - Point(value: FixedQ4816.One)) * minimumRadius));
+        }
+
+        return joined!.Value;
+    }
+    // SdfSweep over a box, whatever parameter the point search picks: the centreline over the whole parameter range is
+    // the box of the Bézier's interval evaluation, the radius the interval of every radius, and the strand offset the
+    // interval its rotated frame reaches. The lower bound is the box's least distance to that hull, less the largest
+    // radius and the margin. The upper bound is the lesser of the far side of that hull and, because the search starts
+    // at the curve's start and only ever moves to a point it measures nearer, the distance to that start. The search's
+    // own squared distances are enclosed too, so a box where they would leave the carrier answers unbounded and the
+    // frame excludes it.
+    private static FixedInterval SweepBounds(IntervalVector3 p, SweepCurveFixed curve, FixedQ4816 twist, FixedQ4816 strandOffset) {
+        var t = SweepParameter;
+        var centre = BezierBounds(a: curve.A, b: curve.B, c: curve.C, t: t);
+        var reach = new IntervalVector3(X: (p.X - centre.X), Y: (p.Y - centre.Y), Z: (p.Z - centre.Z));
+        var searchSquared = ((FixedInterval.Square(value: reach.X) + FixedInterval.Square(value: reach.Y)) + FixedInterval.Square(value: reach.Z));
+
+        if (searchSquared.IsUnbounded) {
+            return FixedInterval.Entire;
+        }
+
+        var taper = (Point(value: curve.RadiusStart) + ((Point(value: curve.RadiusEnd) - Point(value: curve.RadiusStart)) * t));
+        var swell = FixedInterval.Max(first: FixedInterval.Sin(angle: (Point(value: SweepPi) * t)), second: Point(value: FixedQ4816.Zero));
+        var radius = (taper + (Point(value: curve.Bulge) * FixedInterval.Pow(exponent: Point(value: SweepBulgeExponent), value: swell)));
+        // SinCos answers inside [−1, 1] for every angle, so the phase (which never sees the point) needs no enclosure.
+        var spread = (((SweepFrameComponent * UnitRange) + (SweepFrameComponent * UnitRange)) * Point(value: strandOffset));
+        var offsetCentre = new IntervalVector3(X: (centre.X + spread), Y: (centre.Y + spread), Z: (centre.Z + spread));
+        var distance = new IntervalVector3(X: (p.X - offsetCentre.X), Y: (p.Y - offsetCentre.Y), Z: (p.Z - offsetCentre.Z)).Length;
+        var margin = (((Point(value: SweepBulgeMarginFactor) * FixedInterval.Abs(value: Point(value: curve.Bulge))) +
+            ((Point(value: SweepStrandMarginFactor) * Point(value: strandOffset)) * (Point(value: FixedQ4816.One) + FixedInterval.Abs(value: Point(value: twist))))) +
+            (Point(value: SweepTaperMarginFactor) * FixedInterval.Abs(value: (Point(value: curve.RadiusEnd) - Point(value: curve.RadiusStart)))));
+        var hull = ((distance - radius) - margin);
+
+        if (hull.IsUnbounded) {
+            return FixedInterval.Entire;
+        }
+
+        // From the start: the search's first best is the start a itself and it only ever moves to a centreline point whose
+        // squared distance rounds strictly lower. Each rounding is half a raw, so the pick's exact squared distance is at
+        // most the start's plus one raw; its root, the strand's reach and half a raw of the final root bound the answer.
+        var startSquared = ((FixedInterval.Square(value: (p.X - Point(value: curve.A.X))) + FixedInterval.Square(value: (p.Y - Point(value: curve.A.Y)))) + FixedInterval.Square(value: (p.Z - Point(value: curve.A.Z))));
+        var fromStart = ((((FixedInterval.Sqrt(value: (startSquared + Point(value: FixedQ4816.Epsilon))) + new IntervalVector3(X: spread, Y: spread, Z: spread).Length) + Point(value: FixedQ4816.Epsilon)) - radius) - margin);
+
+        return (fromStart.IsUnbounded
+            ? hull
+            : new FixedInterval(lower: hull.Lower, upper: FixedQ4816.Max(x: hull.Lower, y: FixedQ4816.Min(x: hull.Upper, y: fromStart.Upper))));
+    }
+    // SdfBezierPoint over a parameter interval: the two Lerps and the Lerp between them, each a single rounding of
+    // from + (to − from)·t on the point side, enclosed here as written.
+    private static IntervalVector3 BezierBounds(FixedVector3 a, FixedVector3 b, FixedVector3 c, FixedInterval t) {
+        static FixedInterval Lerp(FixedInterval from, FixedInterval to, FixedInterval amount) =>
+            (from + ((to - from) * amount));
+
+        return new(
+            X: Lerp(amount: t, from: Lerp(amount: t, from: Point(value: a.X), to: Point(value: b.X)), to: Lerp(amount: t, from: Point(value: b.X), to: Point(value: c.X))),
+            Y: Lerp(amount: t, from: Lerp(amount: t, from: Point(value: a.Y), to: Point(value: b.Y)), to: Lerp(amount: t, from: Point(value: b.Y), to: Point(value: c.Y))),
+            Z: Lerp(amount: t, from: Lerp(amount: t, from: Point(value: a.Z), to: Point(value: b.Z)), to: Lerp(amount: t, from: Point(value: b.Z), to: Point(value: c.Z)))
+        );
     }
     private static FixedInterval SuperellipsoidSphereBounds(IntervalVector3 p, FixedVector3 radii, FixedVector3 inverseRadii) {
         var absolute = p.Abs();

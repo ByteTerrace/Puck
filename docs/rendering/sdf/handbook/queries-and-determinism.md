@@ -189,10 +189,20 @@ compiled stream, rule for rule:
 - each rule encloses that expression over the box with outward rounding;
 - where the point code branches, the bounds take every branch the box reaches.
 
-A program holding a shape with no inclusion rule is refused by name, never
-approximated: `HasDistanceBounds` names it. Today that is `Sweep`, whose
-closest parameter comes from a search, and a `Superellipsoid` at an exponent
-other than 2.
+Every shape and op the point evaluator accepts has a rule. Two enclose rather
+than mirror:
+- A `Superellipsoid` at an exponent other than 2 raises through the interval
+  power `FixedInterval.Pow`. Its ratios are clamped to [0, 1], and the largest
+  axis's power is exactly one, so the sum is taken as at least one.
+- A `Sweep` finds its closest parameter by a sample-and-refine search a box
+  cannot follow, so its rule holds every parameter the search could pick. The
+  lower bound is the distance to the curve's whole hull less the largest
+  radius and the margin. The upper bound is the distance to the curve's start,
+  the search's first candidate, which it leaves only for a nearer point. That
+  is sound and loose: a sweep's bounds are wide, never wrong.
+
+A shape without a rule would answer `FixedInterval.Entire`, never an
+approximation, so it could only shrink the frame below.
 
 No step of an evaluation leaves the carrier unseen. An interval whose exact
 hull leaves the carrier is the unbounded `FixedInterval.Entire`, and every
@@ -208,11 +218,12 @@ the whole program's bounds stay bounded.
   say) has a negative frame and answers nowhere.
 - Typical programs reach 2⁶⁰ raws or more. A polygon's or trapezoid's squared
   distance leaves the carrier near 2³⁹ raws, so its frame is a few million
-  units.
+  units. A sweep's search compares squared distances too, so its frame is about
+  2²² units.
 
-Every point answer therefore lies inside its box's bounds, or both refuse. A
-program the bounds interpreter refuses has no such proof and keeps the whole
-carrier as its frame.
+Every point answer therefore lies inside its box's bounds, or both refuse. Every
+instruction joins the proof, so adding an instruction to a program can only
+shrink its frame.
 
 Two certified queries are built on it:
 - **`TryCertifiedSweep`** moves a sphere along a displacement by conservative

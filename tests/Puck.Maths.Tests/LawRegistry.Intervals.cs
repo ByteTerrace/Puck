@@ -31,6 +31,12 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.25,
         NeighborhoodFraction: 0.3
     );
+    private static readonly Domain IntervalPower = new(
+        Key: "interval-power",
+        Block: 512,
+        EdgeFraction: 0.25,
+        NeighborhoodFraction: 0.3
+    );
 
     private static LawCase[] FixedIntervalCases() => [
         SweptCase(
@@ -62,6 +68,12 @@ internal static partial class LawRegistry {
             domain: IntervalArcFunctions,
             id: "interval.arc-functions-enclose-the-series",
             width: 2
+        ),
+        SweptCase(
+            claim: Subjects.FixedIntervalPowEnclosesTheSeries,
+            domain: IntervalPower,
+            id: "interval.pow-encloses-the-series",
+            width: 3
         ),
         ClaimCase(
             claim: Subjects.FixedIntervalEdges,

@@ -305,5 +305,35 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "interval.pow-encloses-the-series",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Pow"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedInterval.Pow over base intervals folded below 2^21 raws (32 units) at a drawn scale and exponent intervals in (0, 8]: at the four corners and an interior point, the exact power\u0027s enclosure and the shipped point power lie inside, the answer is bounded, and its endpoints sit within the documented widening (three raws, 2^-42 and y_max\u00B72^-59 of the greatest corner, on both sides; exactly zero at a zero base) of the exact corner extremes",
+        "Against": "Oracles.EnclosePow: the base\u0027s logarithm enclosed by the repeated-squaring series at 2^-56, the product with the exponent floored and ceilinged to a 48-bit exponent, and each side\u0027s exponential enclosed by the square-root ladder; the subject reads the shipped Pow at its corners",
+        "Shared": "",
+        "Citation": "the shipped Pow\u0027s envelope is pinned by scalar.pow-envelope and scalar.pow-whole-correctly-rounded",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "one to every drawn positive power is exactly one; outside its domain the power is unbounded: a base interval reaching below zero, an exponent interval reaching zero, and a corner whose power saturates the carrier; zero to a positive power is exactly zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

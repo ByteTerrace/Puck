@@ -13,7 +13,7 @@ adversarial review's job, not this file's.
 
 | leg kind | flavor | legs | statements |
 | --- | --- | --- | --- |
-| classical | — | 845 | 556 |
+| classical | — | 846 | 557 |
 | presented-twin | — | 9 | 8 |
 | in-tree-independent | — | 31 | 25 |
 | shared-substrate | fused-substrate | 36 | 34 |
@@ -23,15 +23,15 @@ adversarial review's job, not this file's.
 | shared-substrate | intra-presented | 82 | 47 |
 | shared-substrate | shared-upstream | 22 | 15 |
 | relative-canary | — | 18 | 17 |
-| structural | — | 1202 | 607 |
-| **total** | | **2338** | **784** |
+| structural | — | 1203 | 608 |
+| **total** | | **2340** | **785** |
 
 ## Counts by surface
 
 | surface | statements | agreement legs | structural legs | statements with no independent leg |
 | --- | --- | --- | --- | --- |
 | law: Deep | 112 | 148 | 123 | 21 |
-| law: Default | 643 | 917 | 1078 | 191 |
+| law: Default | 644 | 918 | 1079 | 191 |
 | law: Exhaustive | 7 | 23 | 11 | 1 |
 | law: Smoke | 22 | 30 | 8 | 2 |
 
@@ -679,6 +679,8 @@ adversarial review's job, not this file's.
 | interval.circular-encloses-the-series | law: Default | classical | — | FixedInterval.Sin and Cos over angle intervals starting across the carrier's turn reduction with widths from one raw to several turns: at both endpoints and an interior angle, the exact value's enclosure and the shipped point value lie inside; an extremum provably inside makes the endpoint exactly ±1; and with the extrema accounted the endpoints sit within two raws of the exact supremum and infimum | Oracles.EncloseSinCos, the radian reduction against a Machin-derived π at 384 bits and the alternating Taylor series, and Oracles.ProvablyReachesExtrema, which places each crest and trough against the same 384-bit circle and reports only what it can prove. The subject reads the shipped SinCos at its endpoints and places extrema against PiQ61 with a four-raw slack | — | — |
 | interval.edges | law: Default | structural | — | the fixed points: sin reaches one across the raws either side of π/2; cos at zero is one; sin over the whole bounded carrier is [−1, 1]; atan2 over a box holding the origin and over a box across the cut is the whole circle [−205888, 205888]; the top absorbs (an unbounded sum, product with zero, clamp and sine stay unbounded); overflow is the top (the maximum plus a raw, the minimum less a raw, the negated minimum, the squared maximum, the maximum rounded up); the carrier's extremes are ordinary bounded values; a quotient by an interval holding zero is unbounded; a reversed interval is refused | — | — | — |
 | interval.inclusion-isotonic | law: Default | structural | — | shrinking either operand never widens a result: for every FixedInterval operation, the result at sub-intervals placed by drawn fractions inside the drawn operands lies inside the result at the drawn operands, over intervals across the whole carrier folded by a drawn shift | — | — | — |
+| interval.pow-encloses-the-series | law: Default | classical | — | FixedInterval.Pow over base intervals folded below 2^21 raws (32 units) at a drawn scale and exponent intervals in (0, 8]: at the four corners and an interior point, the exact power's enclosure and the shipped point power lie inside, the answer is bounded, and its endpoints sit within the documented widening (three raws, 2^-42 and y_max·2^-59 of the greatest corner, on both sides; exactly zero at a zero base) of the exact corner extremes | Oracles.EnclosePow: the base's logarithm enclosed by the repeated-squaring series at 2^-56, the product with the exponent floored and ceilinged to a 48-bit exponent, and each side's exponential enclosed by the square-root ladder; the subject reads the shipped Pow at its corners | — | the shipped Pow's envelope is pinned by scalar.pow-envelope and scalar.pow-whole-correctly-rounded |
+| interval.pow-encloses-the-series | law: Default | structural | — | one to every drawn positive power is exactly one; outside its domain the power is unbounded: a base interval reaching below zero, an exponent interval reaching zero, and a corner whose power saturates the carrier; zero to a positive power is exactly zero | — | — | — |
 | mass-properties.box-vs-oracle | law: Default | classical | — | FixedMassProperties.TryBoxBody — the mass and all three diagonal moments of a solid box about its centre, from half-extents | Oracles.TryBoxBody, stated entirely in FULL extents — V = Lx*Ly*Lz and I_xx = (M/12)(Ly^2 + Lz^2), the textbook forms — where the subject works in half-extents with the factors of two and twelve already folded to eight and three. A mis-folded halving, or a transposed axis pair in one of the three diagonal entries, is exactly what that difference catches; all three entries are compared separately | — | — |
 | mass-properties.box-vs-oracle | law: Default | structural | — | Same fold envelope and refusal contract as mass-properties.sphere-vs-oracle. The box is the one primitive here that involves no pi at all, so its agreement rests on no shared constant whatsoever | — | — | — |
 | mass-properties.capsule-degenerates-to-sphere | law: Default | structural | — | THE DEGENERACY THAT PROVES THE CAPSULE'S OWN COEFFICIENTS. At a hemisphere-centre distance of zero a capsule IS a sphere, so TryCapsuleBody's mass and BOTH its moments must equal TrySphereBody's raws EXACTLY — not within a tolerance, because the two exact rationals coincide identically before either is rounded (the capsule's axial numerator collapses to 16/30 = 8/15 and its perpendicular numerator to 384/720 = 8/15, which is the sphere's own (8/15)*rho*pi*r^5). The identity that makes them coincide, 83/320 + (3/8)^2 = 2/5, is asserted FIRST as exact integers ((83*64 + 9*320)*5 == 2*(320*64)), so a failure says which half broke: the algebra or the kernel. A wrong 83/320 or a wrong 3r/8 offset would leave the perpendicular moment off while the axial one still matched, which is why both are compared. Swept over a bounded 4x4x3x3 ladder of densities, radii, length scales and result scales — a fixed step count, no search | — | — | — |

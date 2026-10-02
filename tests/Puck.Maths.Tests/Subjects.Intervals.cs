@@ -64,6 +64,7 @@ internal static partial class Subjects {
             ("sqrt", (x, _) => FixedInterval.Sqrt(value: x)), ("round", (x, _) => FixedInterval.Round(value: x)), ("floor", (x, _) => FixedInterval.Floor(value: x)),
             ("clamp", (x, _) => FixedInterval.Clamp(value: x, minimum: FixedQ4816.Zero, maximum: FixedQ4816.One)), ("sin", (x, _) => FixedInterval.Sin(angle: x)),
             ("cos", (x, _) => FixedInterval.Cos(angle: x)), ("asin", (x, _) => FixedInterval.Asin(value: x)), ("acos", (x, _) => FixedInterval.Acos(value: x)),
+            ("pow", (x, y) => FixedInterval.Pow(exponent: y, value: x)),
         ];
 
         foreach (var (operationName, operation) in absorbing) {
@@ -128,6 +129,7 @@ internal static partial class Subjects {
             ("atan2(A, B)", (x, y) => FixedInterval.Atan2(x: y, y: x)),
             ("asin A", (x, _) => FixedInterval.Asin(value: x)),
             ("acos A", (x, _) => FixedInterval.Acos(value: x)),
+            ("A^B", (x, y) => FixedInterval.Pow(exponent: y, value: x)),
         ];
 
         foreach (var (name, operation) in operations) {
@@ -269,6 +271,53 @@ internal static partial class Subjects {
 
         return null;
     }
+    /// <summary>The interval power holds the series enclosure and the shipped point power at every corner and an
+    /// interior point of its box, and sits within its pinned widening of the exact corner extremes.</summary>
+    /// <param name="left">Two raws: the base interval's endpoints, folded below <c>2²¹</c> at a drawn scale.</param>
+    /// <param name="right">Three raws: the exponent interval's endpoints, folded onto <c>(0, 8]</c>, and the fraction placing
+    /// an interior sample.</param>
+    /// <returns>The counterexample, or <see langword="null"/>.</returns>
+    public static string? FixedIntervalPowEnclosesTheSeries(long[] left, long[] right) {
+        // Bases below 2⁵ units and exponents up to eight keep every power below (2⁵)⁸ = 2⁴⁰ units, inside the carrier.
+        var shift = ((int)(43UL + (unchecked((ulong)left[0]) % 21UL)));
+        var value = IntervalOf(first: ((long)(unchecked((ulong)left[0]) >> shift)), second: ((long)(unchecked((ulong)left[1]) >> shift)));
+        var exponent = IntervalOf(first: (1L + ((long)(unchecked((ulong)right[0]) % (8UL << 16)))), second: (1L + ((long)(unchecked((ulong)right[1]) % (8UL << 16)))));
+        var actual = FixedInterval.Pow(exponent: exponent, value: value);
+        var label = $"pow {value} ^ {exponent} = {actual}";
+        var low = (BigInteger.One << 120);
+        var high = -(BigInteger.One << 120);
+
+        // Every true power over this domain stays below 2⁴⁰ units, inside the carrier, so the answer is bounded.
+        if (actual.IsUnbounded) { return $"{label}: unbounded over a domain whose powers all stay inside the carrier"; }
+
+        foreach (var (x, y) in ((ReadOnlySpan<(long, long)>)[(value.Lower.Value, exponent.Lower.Value), (value.Lower.Value, exponent.Upper.Value), (value.Upper.Value, exponent.Lower.Value), (value.Upper.Value, exponent.Upper.Value), (PointInside(fraction: right[2], interval: value).Value, PointInside(fraction: unchecked((right[2] * 31L)), interval: exponent).Value)])) {
+            var enclosure = ((x == 0L) ? new Oracles.Enclosure(High: BigInteger.Zero, Low: BigInteger.Zero) : Oracles.EnclosePow(baseRaw: x, exponentRaw: y));
+            var point = FixedQ4816.Pow(x: FixedQ4816.FromRawBits(value: x), y: FixedQ4816.FromRawBits(value: y));
+
+            if (EnclosureOutside(enclosure: enclosure, interval: actual) is { } outside) { return $"{label}: at ({x}, {y}) {outside}"; }
+            if (!actual.Contains(value: point)) { return $"{label}: the shipped power {point} at ({x}, {y}) lies outside"; }
+
+            low = BigInteger.Min(left: low, right: enclosure.Low);
+            high = BigInteger.Max(left: high, right: enclosure.High);
+        }
+
+        // The widening: three raws plus 2⁻⁴² of the greatest corner and y_max·2⁻⁵⁹ of it, with a raw of rounding to spare.
+        var slack = (((((BigInteger)4) << Oracles.GuardBitCount) + (high >> 42)) + ((high * exponent.Upper.Value) >> 59));
+
+        if ((((BigInteger)actual.Upper.Value) << Oracles.GuardBitCount) > (high + slack)) { return $"{label}: the upper endpoint is past the widened greatest corner"; }
+        if ((((BigInteger)actual.Lower.Value) << Oracles.GuardBitCount) < BigInteger.Min(left: BigInteger.Zero, right: (low - slack))) { return $"{label}: the lower endpoint is past the widened least corner"; }
+
+        // One to any positive power is exactly one, which the superellipsoid's bounds lean on (its largest axis's ratio).
+        foreach (var y in ((ReadOnlySpan<long>)[exponent.Lower.Value, exponent.Upper.Value])) {
+            if (FixedQ4816.Pow(x: FixedQ4816.One, y: FixedQ4816.FromRawBits(value: y)) != FixedQ4816.One) { return $"{label}: one to the power {y} raws is not exactly one"; }
+        }
+
+        // Outside its domain the power is unbounded: a base that can be negative, an exponent that can be zero.
+        if (!FixedInterval.Pow(exponent: exponent, value: (value - FixedInterval.FromPoint(value: FixedQ4816.One))).IsUnbounded && (value.Lower.Value < (1L << 16))) { return $"{label}: a base reaching below zero was answered"; }
+        if (!FixedInterval.Pow(exponent: new(lower: FixedQ4816.Zero, upper: exponent.Upper), value: value).IsUnbounded) { return $"{label}: an exponent reaching zero was answered"; }
+
+        return null;
+    }
     /// <summary>The fixed points of the interval type: the circular functions at the exact crest and trough raws, the
     /// arctangent's whole circle at the origin and across the cut, the unbounded sentinels, and the refusal of a
     /// reversed interval.</summary>
@@ -293,6 +342,8 @@ internal static partial class Subjects {
         if (!(-FixedInterval.FromPoint(value: FixedQ4816.MinValue)).IsUnbounded) { return "the negated minimum stayed bounded"; }
         if (!FixedInterval.Square(value: FixedInterval.FromPoint(value: FixedQ4816.MaxValue)).IsUnbounded) { return "the squared maximum stayed bounded"; }
         if (!FixedInterval.Round(value: FixedInterval.FromPoint(value: FixedQ4816.MaxValue)).IsUnbounded) { return "the maximum rounded up stayed bounded"; }
+        if (!FixedInterval.Pow(exponent: FixedInterval.FromPoint(value: FixedQ4816.FromInteger(value: 4L)), value: FixedInterval.FromPoint(value: FixedQ4816.FromInteger(value: (1L << 20)))).IsUnbounded) { return "a power past the carrier stayed bounded"; }
+        if (FixedInterval.Pow(exponent: FixedInterval.FromPoint(value: FixedQ4816.One), value: FixedInterval.FromPoint(value: FixedQ4816.Zero)) != FixedInterval.FromPoint(value: FixedQ4816.Zero)) { return "zero to a positive power is not zero"; }
         // The carrier's extremes are ordinary values: a bounded interval may reach them, and an exact sum that returns
         // inside the carrier stays bounded.
         if ((FixedInterval.FromPoint(value: FixedQ4816.MaxValue) - FixedInterval.FromPoint(value: FixedQ4816.One)).IsUnbounded) { return "the maximum less one became unbounded"; }

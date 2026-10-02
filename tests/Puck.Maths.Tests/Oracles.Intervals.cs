@@ -185,6 +185,26 @@ internal static partial class Oracles {
 
         return (crest, trough);
     }
+    /// <summary>An enclosure of <c>x^y·2^(16 + guardBitCount)</c> for a positive base raw and a positive exponent raw,
+    /// as <c>2^(y·log₂ x)</c>: the logarithm enclosed by the repeated-squaring series at 2⁻⁵⁶, the product floored and
+    /// ceilinged to a 48-bit exponent, and each side's exponential enclosed by the square-root ladder — the route
+    /// <c>scalar.pow-envelope</c>'s oracle takes, sharing nothing with the subject's kernels.</summary>
+    /// <param name="baseRaw">The base's raw, positive.</param>
+    /// <param name="exponentRaw">The exponent's raw, positive.</param>
+    /// <returns>The enclosure at guard scale.</returns>
+    public static Enclosure EnclosePow(long baseRaw, long exponentRaw) {
+        const int LogarithmGuardBitCount = 40;
+        const int ExponentBitCount = 48;
+        var logarithm = EncloseLog2(guardBitCount: LogarithmGuardBitCount, raw: baseRaw);
+        var first = (logarithm.Low * exponentRaw);
+        var second = (logarithm.High * exponentRaw);
+        var dropped = (((16 + 16) + LogarithmGuardBitCount) - ExponentBitCount);
+
+        return new(
+            Low: EncloseExp2(exponentBitCount: ExponentBitCount, guardBitCount: GuardBitCount, scaledExponent: (BigInteger.Min(left: first, right: second) >> dropped)).Low,
+            High: EncloseExp2(exponentBitCount: ExponentBitCount, guardBitCount: GuardBitCount, scaledExponent: -((-BigInteger.Max(left: first, right: second)) >> dropped)).High
+        );
+    }
 
     private static BigInteger FloorDivide(BigInteger numerator, BigInteger denominator) {
         var floor = BigInteger.Divide(dividend: numerator, divisor: denominator);

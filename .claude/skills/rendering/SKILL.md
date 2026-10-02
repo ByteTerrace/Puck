@@ -82,10 +82,12 @@ over `RotatePlane`). A new instruction touches every partner in one change:
    blend switch falls through to union for an unknown value, so a missing arm
    silently turns the new blend into a union in contact and queries. An
    interpreted instruction also gets its inclusion rule in the bounds
-   interpreter (`SdfFieldEvaluator.Bounds.cs`, `BoundedOps`/`BoundedShapes`),
-   or a named refusal in `UnboundedShapes`. `SdfFieldBoundsLawTests` fails an
-   accepted op or shape with neither, and sweeps a new blend's point answers
-   against its bounds.
+   interpreter (`SdfFieldEvaluator.Bounds.cs`, `BoundedOps`/`BoundedShapes`).
+   `SdfFieldBoundsLawTests` fails an accepted op or shape without one, and
+   sweeps a new shape's or blend's point answers against its bounds. A rule may
+   enclose rather than mirror (`Sweep` does), but it is never missing: a shape
+   with no rule answers the unbounded interval, which empties its program's
+   frame.
 7. **Document surface** — enum values are nameable in creation documents and
    `.puck` as soon as they exist, and their XML docs feed the generated world
    schemas. Either carry the new parameters through `CreationCanonicalizer` and

@@ -290,6 +290,53 @@ public readonly record struct FixedInterval {
             upper: CeilingRoot(radicand: greatest)
         );
     }
+    /// <summary>Returns the interval of every power <c>x^y</c> over a non-negative base and a positive exponent.</summary>
+    /// <param name="value">The base interval; every value at least zero.</param>
+    /// <param name="exponent">The exponent interval; every value above zero.</param>
+    /// <returns>The shipped <see cref="FixedQ4816.Pow"/> at the corners, widened by the pinned envelope, or
+    /// <see cref="Entire"/> when a base can be negative, an exponent can be zero or below, or a corner saturates.</returns>
+    /// <remarks>Over a non-negative base and a positive exponent the exact power rises with the base, and with the
+    /// exponent above a base of one and falls with it below, so its extremes sit at the box's corners. The shipped power
+    /// at any point of the box is within <c>scalar.pow-envelope</c>'s envelope of the exact one there: half a raw plus
+    /// <c>2⁻⁴⁴</c> of the result, plus the exponent's own quantization, below <c>|y|·(⌈|log₂ x|⌉ + 2)·2⁻⁶⁷</c> of the
+    /// result in raw units of <c>y</c>, where <c>|log₂ x| ≤ 48</c> over the carrier. So it lies within two envelopes of
+    /// the shipped power at the extreme corner, each measured at the greatest result and the greatest exponent; both
+    /// corners are widened by three raws, <c>2⁻⁴²</c> of the greatest corner and <c>y_max·2⁻⁵⁹</c> of it, which covers
+    /// the two envelopes with room. A base of exactly zero answers exactly zero.</remarks>
+    public static FixedInterval Pow(FixedInterval value, FixedInterval exponent) {
+        if (value.IsUnbounded || exponent.IsUnbounded || (value.Lower.Value < 0L) || (exponent.Lower.Value <= 0L)) {
+            return Entire;
+        }
+
+        // Zero to a positive power is exactly zero, on both sides.
+        if (value.Upper.Value == 0L) {
+            return value;
+        }
+
+        Span<long> bases = [value.Lower.Value, value.Upper.Value];
+        Span<long> exponents = [exponent.Lower.Value, exponent.Upper.Value];
+        var least = long.MaxValue;
+        var greatest = long.MinValue;
+
+        foreach (var x in bases) {
+            foreach (var y in exponents) {
+                var corner = FixedQ4816.Pow(x: FixedQ4816.FromRawBits(value: x), y: FixedQ4816.FromRawBits(value: y)).Value;
+
+                // A saturated corner is a power past the carrier.
+                if (corner == long.MaxValue) {
+                    return Entire;
+                }
+
+                least = Math.Min(val1: least, val2: corner);
+                greatest = Math.Max(val1: greatest, val2: corner);
+            }
+        }
+
+        var margin = ((3 + (((Int128)greatest) >> 42)) + ((((Int128)greatest) * exponent.Upper.Value) >> 59));
+
+        // A power of a non-negative base is never negative.
+        return Exact(lower: Int128.Max(x: Int128.Zero, y: (least - margin)), upper: (greatest + margin));
+    }
     /// <summary>Returns the interval of every sine.</summary>
     /// <param name="angle">The angle interval, in radians.</param>
     /// <returns>The shipped sine at each endpoint widened by one raw, opened to ±1 wherever the interval reaches a
