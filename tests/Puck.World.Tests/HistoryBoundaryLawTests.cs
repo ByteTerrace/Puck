@@ -229,7 +229,7 @@ public sealed class HistoryBoundaryLawTests {
         harness.Steps(count: 3);
         harness.Fixture.Server.EnqueueRebuild(
             principal: Principal.Console,
-            request: new WorldRebuildRequest(Kind: WorldRebuildKind.Reload, Definition: null, PathHint: path, Force: true)
+            request: new WorldRebuildRequest(Kind: WorldRebuildKind.Reload, Definition: null, Origin: new WorldRebuildOrigin.File(Path: path), Force: true)
         );
         harness.StepWithoutInput();
         var loaded = harness.Tick;
@@ -301,7 +301,7 @@ public sealed class HistoryBoundaryLawTests {
 
         harness.Fixture.Server.EnqueueRebuild(
             principal: Principal.Console,
-            request: new WorldRebuildRequest(Kind: WorldRebuildKind.Load, Definition: null, PathHint: other, Force: true)
+            request: new WorldRebuildRequest(Kind: WorldRebuildKind.Load, Definition: null, Origin: new WorldRebuildOrigin.File(Path: other), Force: true)
         );
         harness.StepWithoutInput();
         using (var shadow = harness.History.OpenShadow(documentPath: null, keyframeTick: first)) {
@@ -335,7 +335,7 @@ public sealed class HistoryBoundaryLawTests {
         var other = replacement.WriteBytes(name: "world.json", bytes: WorldDefinitionSerialization.Serialize(definition: Fixtures.BuildDocument()));
 
         harness.Fixture.Server.EnqueueRebuild(principal: Principal.Console,
-            request: new WorldRebuildRequest(Kind: WorldRebuildKind.Load, Definition: null, PathHint: other, Force: true));
+            request: new WorldRebuildRequest(Kind: WorldRebuildKind.Load, Definition: null, Origin: new WorldRebuildOrigin.File(Path: other), Force: true));
         harness.StepWithoutInput();
         using var shadow = history.OpenShadow(documentPath: other, keyframeTick: first);
 
@@ -352,7 +352,7 @@ public sealed class HistoryBoundaryLawTests {
         var other = directory.WriteBytes(name: "world.json", bytes: WorldDefinitionSerialization.Serialize(definition: Fixtures.BuildDocument()));
 
         harness.Fixture.Server.EnqueueRebuild(principal: Principal.Console,
-            request: new WorldRebuildRequest(Kind: WorldRebuildKind.Load, Definition: null, PathHint: other, Force: true));
+            request: new WorldRebuildRequest(Kind: WorldRebuildKind.Load, Definition: null, Origin: new WorldRebuildOrigin.File(Path: other), Force: true));
         harness.StepWithoutInput();
         Assert.Empty(collection: (harness.Fixture.Server.Definition.Music ?? []));
         Assert.Contains(expectedSubstring: "calm", actualString: harness.Fixture.Server.DescribeMusicState());

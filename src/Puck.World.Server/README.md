@@ -1651,18 +1651,20 @@ section in an order derived from its own entries, never from insertion order.
 A checkpoint is durable and crosses machines (silo recovery, federation,
 determinism attestation), so it names no machine-local path. An owned world's
 asset directory is written relative to a root the restoring host supplies
-(`WorldCheckpointAnchor`): the owned-world catalog's directory, where a
+(`WorldOwnedDocumentAnchor`): the owned-world catalog's directory, where a
 loaded owned document lives, or the hosting world's document directory, where
 a seeded one resolves its assets. The closer root wins. A capture refuses an
 owned world whose directory lies under neither root; the codec refuses a
 directory that is rooted or climbs out of its root; and a restore refuses by
 name, before restoring anything, an owned world whose directory does not
 resolve where it is restored. The journal base's origin (`WorldBaseOrigin`)
-follows the same rule: a base loaded from a file names that file relative to
-the world's document directory, which the loader set to the file's own, and a
-restore resolves it against the restoring world's directory or refuses by name.
-A base whose origin is a hosted world's store identity names no file on any
-machine, so the checkpoint keeps that name as written and anchors it nowhere.
+carries the rebuild's typed `WorldRebuildOrigin`, which its producer states and
+nothing infers from a spelling. A base loaded from a `File` names that file
+relative to the world's document directory, which the loader set to the file's
+own, however the builder spelled the path; a restore resolves it against the
+restoring world's directory or refuses by name. A base read from a hosted
+world's `Store` names that store, which no machine keeps anywhere, so the
+checkpoint writes it as it is and a restore never resolves it.
 `CheckpointAssetAnchorLawTests` holds these rules.
 
 ## The tick (`WorldTick*.cs`)

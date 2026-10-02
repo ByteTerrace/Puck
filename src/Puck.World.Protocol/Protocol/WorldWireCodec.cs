@@ -201,6 +201,76 @@ public static class WorldWireCodec {
         fromWire: WorldWireTags.TryFromWire,
         reader: ref reader
     );
+    /// <summary>Reads a rebuild origin: a case byte (zero for none, one for a file, two for a store), then the case's
+    /// fields — a file's path, or a store's owner oid and world id.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <param name="field">The field name a refusal names.</param>
+    /// <returns>The origin, or <see langword="null"/> for none; an undeclared case byte or a world id that is not a
+    /// safe name latches a refusal.</returns>
+    public static WorldRebuildOrigin? ReadRebuildOrigin(ref WireReader reader, string field) {
+        var wire = reader.ReadByte();
+
+        if (wire == 0) {
+            return null;
+        }
+
+        if (wire == 1) {
+            return new WorldRebuildOrigin.File(Path: reader.ReadString(field: field));
+        }
+
+        if (wire != 2) {
+            Undeclared(
+                reader: ref reader,
+                type: nameof(WorldRebuildOrigin),
+                wire: wire
+            );
+
+            return null;
+        }
+
+        var owner = reader.ReadGuid();
+        var world = reader.ReadString(field: field);
+
+        if (reader.Failed) {
+            return null;
+        }
+
+        if (!SafeName.TryParse(
+            candidate: world,
+            name: out var name,
+            reason: out var reason
+        )) {
+            reader.Fail(
+                detail: $"{field} names store world '{world}', which is not a safe name: {reason}",
+                refusal: WireRefusal.PayloadMalformed
+            );
+
+            return null;
+        }
+
+        return new WorldRebuildOrigin.Store(
+            Owner: owner,
+            World: name
+        );
+    }
+    /// <summary>Writes a rebuild origin in the layout <see cref="ReadRebuildOrigin"/> reads.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="origin">The origin, or <see langword="null"/> for none.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="writer"/> is <see langword="null"/>.</exception>
+    public static void WriteRebuildOrigin(WireWriter writer, WorldRebuildOrigin? origin) {
+        ArgumentNullException.ThrowIfNull(argument: writer);
+
+        if (origin is WorldRebuildOrigin.File file) {
+            writer.WriteByte(value: 1);
+            writer.WriteString(value: file.Path);
+        } else if (origin is WorldRebuildOrigin.Store store) {
+            writer.WriteByte(value: 2);
+            writer.WriteGuid(value: store.Owner);
+            writer.WriteString(value: store.World.Value);
+        } else {
+            writer.WriteByte(value: 0);
+        }
+    }
     /// <summary>Reads a <see cref="WorldSection"/> through its <see cref="WorldWireTags"/> byte.</summary>
     /// <param name="reader">The reader.</param>
     /// <returns>The section; an undeclared byte latches a refusal.</returns>

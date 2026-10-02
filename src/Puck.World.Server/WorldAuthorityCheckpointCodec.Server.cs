@@ -360,35 +360,32 @@ public static partial class WorldAuthorityCheckpointCodec {
     // ---- server section ----
 
     // A base origin names a loaded file only relative to the world's document directory, the root the restoring host
-    // supplies, or names a hosted world's store identity that resolves against nothing. Either way a decoded path is
-    // forward-slashed, not rooted, and never climbs out of a root.
-    private static (WorldBaseOrigin Origin, WorldCheckpointAnchor Anchor) ReadBaseOrigin(ref WireReader reader) {
+    // supplies, so a decoded file path is forward-slashed, not rooted, and never climbs out of that root. A store origin
+    // resolves against nothing and is decoded as it was written.
+    private static WorldBaseOrigin ReadBaseOrigin(ref WireReader reader) {
         var kind = reader.ReadByte();
-        var path = reader.ReadNullableString(field: "server base origin path", maxBytes: MaxStringBytes);
+        var source = WorldWireCodec.ReadRebuildOrigin(field: "server base origin", reader: ref reader);
         var depth = reader.ReadInt32();
-        var anchor = reader.ReadByte();
         var loaded = (kind is ((byte)WorldBaseOriginKind.Load) or ((byte)WorldBaseOriginKind.Reload));
 
         if (
             !reader.Failed &&
             ((kind > ((byte)WorldBaseOriginKind.JournalHorizon)) ||
-            (loaded != (path is not null)) ||
-            ((path is not null) && ((path.Length == 0) || !WorldCheckpointPaths.IsRelativeUnderRoot(path: path))) ||
-            (anchor is not (((byte)WorldCheckpointAnchor.None) or ((byte)WorldCheckpointAnchor.World))) ||
-            ((anchor == ((byte)WorldCheckpointAnchor.World)) && (path is null)) ||
+            (loaded != (source is not null)) ||
+            ((source is WorldRebuildOrigin.File { Path: var path }) && ((path.Length == 0) || !WorldCheckpointPaths.IsRelativeUnderRoot(path: path))) ||
             (depth < 0))
         ) {
             reader.Fail(
-                detail: $"server base origin (kind {kind}, '{path}', anchor {anchor}, depth {depth}) is not a loaded file named under its root",
+                detail: $"server base origin (kind {kind}, '{source}', depth {depth}) is not a loaded file named under its root or a store",
                 refusal: WireRefusal.PayloadMalformed
             );
         }
 
-        return (new WorldBaseOrigin(
+        return new WorldBaseOrigin(
             Depth: depth,
             Kind: ((WorldBaseOriginKind)kind),
-            Path: path
-        ), ((WorldCheckpointAnchor)anchor));
+            Source: source
+        );
     }
     private static byte[] EncodeServer(WorldServerCheckpoint section) {
         var writer = new WireWriter();
@@ -405,9 +402,11 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         writer.WriteByte(value: ((byte)section.BaseOrigin.Kind));
-        writer.WriteNullableString(value: section.BaseOrigin.Path);
+        WorldWireCodec.WriteRebuildOrigin(
+            origin: section.BaseOrigin.Source,
+            writer: writer
+        );
         writer.WriteInt32(value: section.BaseOrigin.Depth);
-        writer.WriteByte(value: ((byte)section.BaseOriginAnchor));
         writer.WriteArray(
             items: section.ArenaKeys,
             writeItem: WriteArenaKey
@@ -523,7 +522,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 maxBytes: MaxSectionBytes
             ));
 
-        var (baseOrigin, baseOriginAnchor) = ReadBaseOrigin(reader: ref reader);
+        var baseOrigin = ReadBaseOrigin(reader: ref reader);
         var arenaKeys = reader.ReadArray(
             field: "server arena keys",
             maximum: StateCapacity.MaxCellKeys,
@@ -672,7 +671,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             ArenaKeys: arenaKeys,
             BaseDefinitionJson: baseDefinitionJson,
             BaseOrigin: baseOrigin,
-            BaseOriginAnchor: baseOriginAnchor,
             Decisions: decisions,
             DefinitionJson: definitionJson,
             Intents: intents,

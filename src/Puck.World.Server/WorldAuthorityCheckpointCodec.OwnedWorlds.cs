@@ -27,8 +27,8 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         if (
             !reader.Failed &&
-            ((anchor > ((byte)WorldCheckpointAnchor.World)) ||
-            ((anchor == ((byte)WorldCheckpointAnchor.None)) != (relative is null)) ||
+            ((anchor > ((byte)WorldOwnedDocumentAnchor.World)) ||
+            ((anchor == ((byte)WorldOwnedDocumentAnchor.None)) != (relative is null)) ||
             ((relative is not null) && !WorldCheckpointPaths.IsRelativeUnderRoot(path: relative)))
         ) {
             reader.Fail(
@@ -38,7 +38,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         return new WorldOwnedDocumentCheckpoint(
-            Anchor: ((WorldCheckpointAnchor)anchor),
+            Anchor: ((WorldOwnedDocumentAnchor)anchor),
             DefinitionJson: definitionJson,
             RelativeDirectory: relative
         );

@@ -727,7 +727,7 @@ public sealed class WorldOwnedWorlds {
 
         for (var index = 0; (index < documents.Length); index++) {
             var document = m_identities[index].Document!;
-            var anchor = WorldCheckpointAnchor.None;
+            var anchor = WorldOwnedDocumentAnchor.None;
             string? relative = null;
 
             if (document.DocumentDirectory is { } directory) {
@@ -738,13 +738,13 @@ public sealed class WorldOwnedWorlds {
 
                 // The closer root wins: a catalog kept inside the world's directory names its own documents itself.
                 (anchor, relative) = ((underCatalog, underWorld) switch {
-                    ( { } c, { } w) => ((c.Length <= w.Length) ? (WorldCheckpointAnchor.Catalog, c) : (WorldCheckpointAnchor.World, w)),
-                    ( { } c, null) => (WorldCheckpointAnchor.Catalog, c),
-                    (null, { } w) => (WorldCheckpointAnchor.World, w),
-                    _ => (WorldCheckpointAnchor.None, null),
+                    ( { } c, { } w) => ((c.Length <= w.Length) ? (WorldOwnedDocumentAnchor.Catalog, c) : (WorldOwnedDocumentAnchor.World, w)),
+                    ( { } c, null) => (WorldOwnedDocumentAnchor.Catalog, c),
+                    (null, { } w) => (WorldOwnedDocumentAnchor.World, w),
+                    _ => (WorldOwnedDocumentAnchor.None, null),
                 });
 
-                if (anchor == WorldCheckpointAnchor.None) {
+                if (anchor == WorldOwnedDocumentAnchor.None) {
                     checkpoint = null;
                     reason = $"owned world '{m_identities[index].Id}' resolves its assets in a directory under neither the owned-world catalog nor the hosting world's directory, so a durable checkpoint cannot name it";
 
@@ -773,11 +773,11 @@ public sealed class WorldOwnedWorlds {
         directory = null;
         reason = string.Empty;
 
-        if (document.Anchor == WorldCheckpointAnchor.None) {
+        if (document.Anchor == WorldOwnedDocumentAnchor.None) {
             return true;
         }
 
-        var root = ((document.Anchor == WorldCheckpointAnchor.Catalog)
+        var root = ((document.Anchor == WorldOwnedDocumentAnchor.Catalog)
             ? m_directory
             : m_worldDirectory);
 

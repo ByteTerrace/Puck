@@ -53,7 +53,7 @@ public sealed class WorldServerCounterSourceLawTests {
                 Definition: candidate,
                 Force: true,
                 Kind: WorldRebuildKind.Reload,
-                PathHint: "counter-source-reload-probe.world.json"
+                Origin: new WorldRebuildOrigin.File(Path: "counter-source-reload-probe.world.json")
             )
         );
         fixture.Step();

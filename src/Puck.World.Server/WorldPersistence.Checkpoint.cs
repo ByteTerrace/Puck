@@ -582,7 +582,6 @@ public sealed partial class WorldPersistence {
             Host.Engagement.AssertCheckpointQuiescent();
 
             if (!TryNameBaseOrigin(
-                anchor: out var baseOriginAnchor,
                 origin: out var baseOrigin,
                 reason: out var originReason
             )) {
@@ -655,7 +654,6 @@ public sealed partial class WorldPersistence {
                 DefinitionJson: definitionJson,
                 BaseDefinitionJson: BaseJson(definitionJson: definitionJson),
                 BaseOrigin: baseOrigin,
-                BaseOriginAnchor: baseOriginAnchor,
                 Journal: journal,
                 LastCompletedTick: Host.Tick.CompletedTick,
                 LastCompletedEngineTicks: Host.Tick.CompletedEngineTicks,
@@ -711,25 +709,14 @@ public sealed partial class WorldPersistence {
     }
 
     // A base loaded from a file names that file relative to the base's own document directory, which the loader set to
-    // the file's directory, so a checkpoint carries the file's name and not where this machine keeps it. A base whose
-    // origin is no file on this machine — a hosted world's store identity — is already a portable name and is kept.
-    private bool TryNameBaseOrigin(out WorldCheckpointAnchor anchor, out WorldBaseOrigin origin, out string reason) {
-        anchor = WorldCheckpointAnchor.None;
+    // the file's directory, so a checkpoint carries the file's name and not where this machine keeps it. A base read
+    // from a hosted world's store names that store, which no machine keeps anywhere, so it is written as it is.
+    private bool TryNameBaseOrigin(out WorldBaseOrigin origin, out string reason) {
         origin = Host.Document.BaseOrigin;
         reason = string.Empty;
 
-        if (origin.Path is not { } path) {
+        if (origin.Source is not WorldRebuildOrigin.File { Path: var path }) {
             return true;
-        }
-
-        if (!Path.IsPathFullyQualified(path: path)) {
-            if (((path.Length > 0) && WorldCheckpointPaths.IsRelativeUnderRoot(path: path))) {
-                return true;
-            }
-
-            reason = $"the journal base names an origin that is neither a file on this machine nor a portable name, so a durable checkpoint cannot name it ({origin})";
-
-            return false;
         }
 
         if (
@@ -741,13 +728,12 @@ public sealed partial class WorldPersistence {
             return false;
         }
 
-        anchor = WorldCheckpointAnchor.World;
-        origin = (origin with { Path = relative });
+        origin = (origin with { Source = new WorldRebuildOrigin.File(Path: relative) });
 
         return true;
     }
-    private static WorldBaseOrigin ResolveBaseOrigin(WorldBaseOrigin origin, WorldCheckpointAnchor anchor, string? directory) {
-        if ((anchor != WorldCheckpointAnchor.World) || (origin.Path is not { } relative)) {
+    private static WorldBaseOrigin ResolveBaseOrigin(WorldBaseOrigin origin, string? directory) {
+        if (origin.Source is not WorldRebuildOrigin.File { Path: var relative }) {
             return origin;
         }
 
@@ -756,10 +742,10 @@ public sealed partial class WorldPersistence {
         }
 
         return (origin with {
-            Path = WorldCheckpointPaths.Resolve(
+            Source = new WorldRebuildOrigin.File(Path: WorldCheckpointPaths.Resolve(
                 relative: relative,
                 root: directory
-            ),
+            )),
         });
     }
     private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission) {
@@ -772,7 +758,6 @@ public sealed partial class WorldPersistence {
         Host.Population.Fields?.ValidateCheckpoint(checkpoint: checkpoint.Fields!);
 
         var restoredOrigin = ResolveBaseOrigin(
-            anchor: server.BaseOriginAnchor,
             directory: admission.Definition.DocumentDirectory,
             origin: server.BaseOrigin
         );

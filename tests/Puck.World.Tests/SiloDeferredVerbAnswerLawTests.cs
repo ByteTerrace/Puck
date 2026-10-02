@@ -133,7 +133,7 @@ public sealed class SiloDeferredVerbAnswerLawTests {
             Definition: fixture.Server.Definition,
             Force: false,
             Kind: WorldRebuildKind.Reload,
-            PathHint: "hosted/row"
+            Origin: new WorldRebuildOrigin.Store(Owner: Guid.Empty, World: SafeName.Parse(candidate: "row"))
         );
 
         var (bare, link) = TapRow(answers: answers, fixture: fixture);

@@ -62,11 +62,11 @@ public enum WorldEditEchoKind {
 /// <param name="CorrelationId">The submitting envelope's correlation id, or <c>0</c> when none (see
 /// <see cref="ConnectionId"/>'s own remarks for why direct callers default here).</param>
 /// <param name="RebuildOrigin">For a successful <see cref="WorldEditEchoKind.Rebuild"/> outcome that replaced the
-/// base (<c>world.load</c>/<c>world.reload</c>), the new origin path — the seam <c>Puck.World</c>'s composition root
+/// base (<c>world.load</c>/<c>world.reload</c>), the new origin — the seam <c>Puck.World</c>'s composition root
 /// uses to keep the console's tracked document origin (<c>world.save</c>'s default target, <c>world.status</c>'s
 /// reported source, <c>world.reload</c>'s re-read target) truthful after a runtime rebuild. <see langword="null"/>
 /// for every other outcome, including a successful <c>world.reset</c> (reset targets the base without moving it).</param>
-public readonly record struct WorldEditEcho(string Message, bool Rejected, WorldEditEchoKind Kind, WorldMutation? Mutation = null, bool Denied = false, int ConnectionId = SubmissionEnvelope.LocalConnectionId, long CorrelationId = 0, string? RebuildOrigin = null);
+public readonly record struct WorldEditEcho(string Message, bool Rejected, WorldEditEchoKind Kind, WorldMutation? Mutation = null, bool Denied = false, int ConnectionId = SubmissionEnvelope.LocalConnectionId, long CorrelationId = 0, WorldRebuildOrigin? RebuildOrigin = null);
 /// <summary>
 /// The authoritative world server — one logical instance owning the live <see cref="WorldDefinition"/>, the entity
 /// table (<see cref="WorldPopulation"/>), the profile catalog, and the mutation journal. Every non-intent submission

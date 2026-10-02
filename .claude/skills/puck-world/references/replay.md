@@ -132,7 +132,7 @@ Per tick: ONE ordered authority/server-event list plus the intent list
 (`WorldReplayTickInput`). `WorldReplayEntry` discriminants:
 `Command` (0), `Grant(grant, actor)` (1), `Revoke(grant, actor)` (2),
 `PeerAdmitted` (3), `PeerDisconnected` (4), `Rebuild(kind,
-pathHint, force, contentHash, actor)` (5), `ScreenOp(op, contentSignature,
+origin, force, contentHash, actor)` (5), `ScreenOp(op, contentSignature,
 actor)` (6), `Session(request)` (7), `Designation(designation, actor)` (8),
 `RateLever(paused)` (9), `Transfer` (10),
 `Mutation(mutation, actor, outcome)` (11), `Undo(count, actor)` (12),
@@ -280,7 +280,7 @@ re-driven run's OWN base's canonical bytes (`WorldDefinitionSerialization.
 Serialize`), computed fresh at apply time — never the recorded document
 itself, and never the live session's base. On re-drive, `ApplyRebuild`
 resolves its candidate exactly as a live rebuild does (Reset: its own
-`m_base`; Load/Reload: a FRESH re-read of the tape's path hint — the tape
+`m_base`; Load/Reload: a FRESH re-read of the tape's file origin — the tape
 carries no embedded document, deliberately, so a moved file is caught rather
 than silently reproduced from a stored copy) and refuses BY NAME,
 `ReplayRefusal.RebuildContentMismatch`/`RebuildSourceUnavailable`, naming
@@ -516,7 +516,7 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   (`EnqueueRebuild` + `DrainAdministrative`, synchronous — solids, machines
   reconcile, addon plan, document grants, journal clear, base replace; the
   `[world.definition: world.load applied …]` line is the evidence, and the
-  boot document's path is the path hint so relative machine content keeps
+  boot document's path is the file origin so relative machine content keeps
   resolving), then the complete authority checkpoint a fresh server reaches
   after `SeatRecordedSeats` joins the recorded seats on their pinned rates.
   `WorldServer.RestoreCheckpoint` resets clocks, decisions,
@@ -617,7 +617,8 @@ The contracts a change must keep:
 - **Refuse uncaptured state.** Seek checks under the authority gate for pending
   input and provider contributions, live sessions, addon guests, screen
   operations, unsupported machines and external obligations. Recorded spans
-  refuse external authority events and changed rebuild content. Seek retires
+  refuse external authority events, changed rebuild content, and a hosted
+  world's reload, which is replayed from its store and no history holds one. Seek retires
   providers from the abandoned timeline and suppresses save effects while
   re-simulating; only an explicit extension epoch admits fresh providers.
 - **Steady ticks allocate nothing.** Capture buffers are reused when only the

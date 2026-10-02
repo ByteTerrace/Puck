@@ -142,7 +142,7 @@ public sealed class WorldFieldLatticeLawTests {
                 Definition: loaded,
                 Force: true,
                 Kind: WorldRebuildKind.Load,
-                PathHint: "lattice-draw-load-probe.world.json"
+                Origin: new WorldRebuildOrigin.File(Path: "lattice-draw-load-probe.world.json")
             ),
             principal: Principal.Console
         );

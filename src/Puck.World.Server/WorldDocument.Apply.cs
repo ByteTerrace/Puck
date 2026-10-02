@@ -385,7 +385,7 @@ public sealed partial class WorldDocument {
         //   drain — see EnqueueRebuild's remarks).
         //   Load/Reload: request.Definition is non-null on the LIVE path (the console already read + validated the
         //   file and computed request.ContentHash from those exact bytes) and null on a REPLAY drive (the tape never
-        //   embeds the document — WorldReplaySnapshot.Drive passes only Kind/PathHint/Force/ContentHash, so a
+        //   embeds the document — WorldReplaySnapshot.Drive passes only Kind/Origin/Force/ContentHash, so a
         //   re-drive proves the file on disk still matches what was recorded rather than trusting a stored copy).
         WorldDefinition candidate;
         string contentHash;
@@ -396,8 +396,10 @@ public sealed partial class WorldDocument {
         } else if (request.Definition is { } supplied) {
             candidate = supplied;
             contentHash = (request.ContentHash ?? throw new InvalidOperationException(message: $"{verb}: a Load/Reload request carrying a document must also carry its content hash."));
-        } else if (request.PathHint is not { } path) {
-            throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: $"{verb}: a Load/Reload request with no embedded document must carry a path hint to re-read for replay.");
+        } else if (request.Origin is not WorldRebuildOrigin.File { Path: var path }) {
+            throw ReplayRefusal.RebuildSourceUnavailable.Raise(message: ((request.Origin is WorldRebuildOrigin.Store store)
+                ? $"{verb}: a hosted world's rebuild is replayed from its store ('{store}'), which this drive cannot read."
+                : $"{verb}: a Load/Reload request with no embedded document must carry a file origin to re-read for replay."));
         } else {
             candidate = RereadForReplay(
                 contentHash: out contentHash,
@@ -416,7 +418,7 @@ public sealed partial class WorldDocument {
         ) {
             var pinned = ((request.Kind == WorldRebuildKind.Reset)
                 ? "the re-driven run's own base"
-                : $"'{request.PathHint}'"
+                : $"'{request.Origin}'"
             );
 
             throw ReplayRefusal.RebuildContentMismatch.Raise(message: $"{verb}: content hash mismatch on {pinned} — found {contentHash}, expected {expected} (recorded). The pinned content has changed since this recording was made; re-record it.");
@@ -455,7 +457,7 @@ public sealed partial class WorldDocument {
             !request.Force &&
             (m_journal.Count > 0)
         ) {
-            var denial = $"{m_journal.Count} unsaved mutation(s) would be discarded — world.save first, world.reset to discard them without loading a new document, or world.load {request.PathHint} force to discard them and load anyway";
+            var denial = $"{m_journal.Count} unsaved mutation(s) would be discarded — world.save first, world.reset to discard them without loading a new document, or world.load {request.Origin} force to discard them and load anyway";
 
             if (Host.Output.HasNarrationSink) {
                 Host.Output.Narrate(channel: "world.load rejected", text: $"[world.load rejected: {denial}]");
@@ -672,7 +674,7 @@ public sealed partial class WorldDocument {
 
             SwapSolids(solids: rebuildSolids);
             if (request.Kind != WorldRebuildKind.Reset) {
-                Host.Machines.SetDocumentPath(documentPath: request.PathHint);
+                Host.Machines.SetDocumentPath(documentPath: (request.Origin as WorldRebuildOrigin.File)?.Path);
             }
             // The lattice allocation and every evolved cell survive a rebuild, the hash and scatter paints included;
             // a draw fill repaints only where the loaded document names a different pass than the one on the field.
@@ -801,7 +803,7 @@ public sealed partial class WorldDocument {
                 Kind: ((request.Kind == WorldRebuildKind.Load)
                     ? WorldBaseOriginKind.Load
                     : WorldBaseOriginKind.Reload),
-                Path: request.PathHint
+                Source: request.Origin
             );
             m_baseOrigin = origin;
             // Installed as of this point: a later live commit resolves against the candidate's own directory too.
@@ -821,7 +823,7 @@ public sealed partial class WorldDocument {
             CorrelationId: correlationId,
             RebuildOrigin: ((request.Kind == WorldRebuildKind.Reset)
             ? null
-            : request.PathHint)
+            : request.Origin)
         ));
 
         return true;

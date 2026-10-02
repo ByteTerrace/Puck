@@ -247,14 +247,14 @@
             "token": "puck.world-artifact-key.v2"
         },
         "WorldAuthorityCheckpointCodec.Magic": {
-            "shape": "32d2334d74d298d4",
+            "shape": "b891346baf6d2aac",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
             "token": "PCKP"
         },
         "WorldAuthorityCheckpointCodec.SupportedVersion": {
-            "shape": "32d2334d74d298d4",
+            "shape": "b891346baf6d2aac",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
-            "token": "19"
+            "token": "20"
         },
         "WorldAuthorityReceiptSnapshot.CurrentSchema": {
             "shape": "719e98c037324127",
@@ -267,12 +267,12 @@
             "token": "puck.authority.recovery-root.v1"
         },
         "WorldAuthorityStoreWireCodec.JournalMagic": {
-            "shape": "f8ff9d5b78e79767",
+            "shape": "0439023b4ed74e4b",
             "source": "src/Puck.World.Protocol/Codecs/WorldAuthorityStoreWireCodec.cs",
             "token": "PJNL"
         },
         "WorldAuthorityStoreWireCodec.JournalVersion": {
-            "shape": "f8ff9d5b78e79767",
+            "shape": "0439023b4ed74e4b",
             "source": "src/Puck.World.Protocol/Codecs/WorldAuthorityStoreWireCodec.cs",
             "token": "3"
         },
@@ -292,7 +292,7 @@
             "token": "puck.camera.program.v1"
         },
         "WorldCaptureManifest.SchemaId": {
-            "shape": "61d8a2678a6ab3fd",
+            "shape": "1511b4e7d88e9c26",
             "source": "src/Puck.World.Console/WorldCaptureScheduler.cs",
             "token": "puck.parity.manifest.v1"
         },
@@ -327,7 +327,7 @@
             "token": "puck.world.extensions.v1"
         },
         "WorldFederationCodec.WireKey": {
-            "shape": "34b26534484fb734",
+            "shape": "ce22e68eb4d5829d",
             "source": "src/Puck.World.Server/WorldFederationCodec.cs",
             "token": "PUCKFED5"
         },
@@ -337,9 +337,9 @@
             "token": "puck.world.projection.v1"
         },
         "WorldProtocol.WireProtocolKey": {
-            "shape": "6250b03ed93c616d",
+            "shape": "7b417241473a004c",
             "source": "src/Puck.World.Protocol/Protocol/WorldProtocol.cs",
-            "token": "PUCKWRL4"
+            "token": "PUCKWRL5"
         },
         "WorldReleaseDeploymentStore.Schema": {
             "shape": "62ddfb0b7cd0f657",
@@ -382,14 +382,14 @@
             "token": "puck.world.rewind.closed-group.v1"
         },
         "WorldReplaySnapshot.Magic": {
-            "shape": "834d095102d53846",
+            "shape": "9284deed235f548f",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "WLRP"
         },
         "WorldReplaySnapshot.ShapeToken": {
-            "shape": "834d095102d53846",
+            "shape": "9284deed235f548f",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
-            "token": "5"
+            "token": "6"
         },
         "WorldScheduleSection.ManifestSchemaId": {
             "shape": "a63d4c4af217e350",

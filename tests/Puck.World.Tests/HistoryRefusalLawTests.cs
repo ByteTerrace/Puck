@@ -1,6 +1,7 @@
 using Puck.Commands;
 using Puck.Testing;
 using Puck.World.Protocol;
+using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -62,7 +63,7 @@ public sealed class HistoryRefusalLawTests {
         harness.Steps(count: 6);
         harness.Fixture.Server.EnqueueRebuild(
             principal: Principal.Console,
-            request: new WorldRebuildRequest(Kind: WorldRebuildKind.Reload, Definition: null, PathHint: path, Force: true)
+            request: new WorldRebuildRequest(Kind: WorldRebuildKind.Reload, Definition: null, Origin: new WorldRebuildOrigin.File(Path: path), Force: true)
         );
         harness.StepWithoutInput();
 
@@ -132,6 +133,42 @@ public sealed class HistoryRefusalLawTests {
             Assert.Null(@object: report!.ControlDivergedAt);
             Assert.Equal(expected: (1, 0), actual: (documents.ArmedReads, documents.ChangedReads));
         }
+    }
+    // A hosted world's reload names its store, not a file, and a history has no store to read it from: a seek that
+    // would re-simulate across one refuses by that type before moving, and the live world stays where it was.
+    [Fact]
+    public void ASeekAcrossAHostedStoreReloadRefusesByItsType() {
+        using var harness = new WorldHistoryHarness(seats: 0);
+        var hosted = Fixtures.BuildDocument();
+
+        harness.Steps(count: 6);
+
+        var before = harness.Tick;
+
+        harness.Fixture.Server.EnqueueRebuild(
+            principal: Principal.Console,
+            request: new WorldRebuildRequest(
+                ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: hosted)),
+                Definition: hosted,
+                Force: true,
+                Kind: WorldRebuildKind.Reload,
+                Origin: new WorldRebuildOrigin.Store(Owner: Guid.Parse(input: "00000000-0000-0000-0000-000000000003"), World: SafeName.Parse(candidate: "hosted"))
+            )
+        );
+        harness.StepWithoutInput();
+        harness.Steps(count: 3);
+
+        var head = harness.Tick;
+
+        _ = harness.SeekAndProve(target: before);
+
+        var live = WorldStateHashComposition.HashAuthoritative(server: harness.Fixture.Server, tick: before);
+
+        Assert.False(condition: harness.History.TrySeek(
+            documentPath: null, refusal: out var refusal, report: out _, target: head
+        ));
+        Assert.Contains(actualString: refusal, expectedSubstring: "a hosted world's reload is replayed from its store");
+        Assert.Equal(expected: (before, live), actual: (harness.History.CursorTick!.Value, WorldStateHashComposition.HashAuthoritative(server: harness.Fixture.Server, tick: before)));
     }
     // The append invariant a seek relies on: a live tick behind the head cuts the future first and lands at the new
     // head, so nothing recorded ever lies ahead of the cursor that a seek did not scan to get there.

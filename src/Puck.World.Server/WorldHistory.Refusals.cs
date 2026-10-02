@@ -42,7 +42,10 @@ public sealed partial class WorldHistory {
         if (entry is not WorldReplayEntry.Rebuild { Kind: WorldRebuildKind.Load or WorldRebuildKind.Reload } rebuild) {
             return null;
         }
-        if (rebuild.PathHint is not { } path) {
+        if (rebuild.Origin is WorldRebuildOrigin.Store store) {
+            return $"a hosted world's {rebuild.Kind.ToString().ToLowerInvariant()} is replayed from its store ('{store}'), which this history cannot read";
+        }
+        if (rebuild.Origin is not WorldRebuildOrigin.File { Path: var path }) {
             return "the recorded rebuild has no content source";
         }
         if (!WorldDefinitionLoader.TryLoadFileForAdmission(
@@ -87,7 +90,7 @@ public sealed partial class WorldHistory {
         }
 
         if (!m_verifiedRebuilds.TryGetValue(key: rebuild, value: out var verified)) {
-            throw new InvalidOperationException(message: $"the recorded {rebuild.Kind} of '{rebuild.PathHint}' re-applied without its span's preflight — a host defect");
+            throw new InvalidOperationException(message: $"the recorded {rebuild.Kind} of '{rebuild.Origin}' re-applied without its span's preflight — a host defect");
         }
 
         return (verified, rebuild.ContentHash);

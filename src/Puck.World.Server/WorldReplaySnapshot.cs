@@ -94,17 +94,17 @@ public abstract record WorldReplayEntry {
     /// <summary>A whole-document rebuild-and-swap (<c>world.reset</c>/<c>world.load</c>/<c>world.reload</c>) —
     /// CAS-pinned: <see cref="ContentHash"/> is the canonical <c>sha256-64/{hex}</c> pin of the exact bytes the live
     /// session consumed (Load/Reload, off disk) or of the base's canonical bytes at the moment the rebuild applied
-    /// (Reset). Deliberately carries NO document: <see cref="WorldReplaySnapshot.Drive"/> re-reads
-    /// <see cref="PathHint"/> fresh for Load/Reload and re-reads its own live base for Reset, so a re-drive proves the
+    /// (Reset). Deliberately carries NO document: <see cref="WorldReplaySnapshot.Drive"/> re-reads a file
+    /// <see cref="Origin"/> fresh for Load/Reload and re-reads its own live base for Reset, so a re-drive proves the
     /// pinned content still matches rather than trusting a stored copy — the content-address proof the negative
     /// control (editing a byte of the file on disk) exercises.</summary>
     /// <param name="Kind">Which of the three document sources this rebuild came from.</param>
-    /// <param name="PathHint">The origin path for Load/Reload; <see langword="null"/> for Reset.</param>
+    /// <param name="Origin">Where a Load/Reload's document came from; <see langword="null"/> for Reset.</param>
     /// <param name="Force">Load's dirty-journal override, carried verbatim — the tape records what was submitted,
     /// never a normalization of it (the same convention <see cref="Revoke"/> follows for <c>Exclusive</c>).</param>
     /// <param name="ContentHash">The CAS pin a re-drive refuses by name against, on mismatch.</param>
     /// <param name="Actor">The principal that submitted the rebuild.</param>
-    internal sealed record Rebuild(WorldRebuildKind Kind, string? PathHint, bool Force, string ContentHash, Principal Actor) : WorldReplayEntry;
+    internal sealed record Rebuild(WorldRebuildKind Kind, WorldRebuildOrigin? Origin, bool Force, string ContentHash, Principal Actor) : WorldReplayEntry;
     /// <summary>A live screen-machine lifecycle change (<c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/
     /// <c>.options</c>/<c>.link</c>/<c>.unlink</c>) — screen ops join the ordered domain and the tape as their own
     /// authority entry kind, applying synchronously on re-drive exactly as they do live (see
@@ -285,10 +285,10 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
     // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
-    // Shape 5 carries the recorded authority and its document paths, the companion tapes of a set, departures by
-    // target authority, arrivals, and federated input. Refuse earlier tapes at intake instead of reporting their old
+    // Shape 6 carries the recorded authority and its typed rebuild origins, the companion tapes of a set, departures
+    // by target authority, arrivals, and federated input. Refuse earlier tapes at intake instead of reporting their old
     // shape as a simulation divergence.
-    private const uint ShapeToken = 5u;
+    private const uint ShapeToken = 6u;
 
     /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
     /// tapes pairs one authority's departure with another's arrival.</summary>
@@ -432,7 +432,7 @@ public sealed partial class WorldReplaySnapshot {
 
                     break;
                 case WorldReplayEntry.Rebuild rebuild:
-                    // Without a verified document a Load/Reload re-reads rebuild.PathHint fresh inside
+                    // Without a verified document a Load/Reload re-reads a file rebuild.Origin fresh inside
                     // WorldServer.ApplyRebuild (called from DrainPendingOps below), which is the content-address
                     // proof — a stored copy would let a moved file pass unnoticed. A verified document is one the
                     // caller read and proved against the recorded hash before the step, so it carries that hash and
@@ -448,7 +448,7 @@ public sealed partial class WorldReplaySnapshot {
                             Definition: verified,
                             Force: rebuild.Force,
                             Kind: rebuild.Kind,
-                            PathHint: rebuild.PathHint
+                            Origin: rebuild.Origin
                         ),
                         principal: rebuild.Actor,
                         expectedContentHash: pin
@@ -970,16 +970,15 @@ public sealed partial class WorldReplaySnapshot {
     private static WorldReplayEntry ReadRebuildEntry(ref WireReader reader) {
         var kind = WorldWireCodec.ReadRebuildKind(reader: ref reader);
         var force = reader.ReadBoolean();
-        var pathHint = reader.ReadNullableString(field: "rebuild path hint");
+        var origin = WorldWireCodec.ReadRebuildOrigin(field: "rebuild origin", reader: ref reader);
         var contentHash = reader.ReadString(field: "rebuild content hash");
         var actor = WorldWireCodec.ReadPrincipal(reader: ref reader);
 
         if (
             !reader.Failed &&
-            (((kind == WorldRebuildKind.Reset) && (pathHint is not null)) ||
-            ((kind != WorldRebuildKind.Reset) && (pathHint is null)))
+            ((kind == WorldRebuildKind.Reset) != (origin is null))
         ) {
-            throw new InvalidDataException(message: $"Corrupt .puckreplay rebuild entry: kind '{kind}' does not carry the path-hint shape its kind requires (none for Reset, one for Load/Reload).");
+            throw new InvalidDataException(message: $"Corrupt .puckreplay rebuild entry: kind '{kind}' does not carry the origin its kind requires (none for Reset, one for Load/Reload).");
         }
 
         return new WorldReplayEntry.Rebuild(
@@ -987,7 +986,7 @@ public sealed partial class WorldReplaySnapshot {
             ContentHash: contentHash,
             Force: force,
             Kind: kind,
-            PathHint: pathHint
+            Origin: origin
         );
     }
     private static WorldReplayEntry ReadScreenOpEntry(ref WireReader reader) {
@@ -1459,7 +1458,7 @@ public sealed partial class WorldReplaySnapshot {
     }
     // Deliberately its OWN small leaf, never WorldSubmissionCodec's TryEncodeRebuild/TryDecodeRebuild: that leaf's
     // shape REQUIRES an embedded document for Load/Reload (the ordinary submission needs it to cross the loopback),
-    // while the tape must NEVER carry one — Drive re-reads PathHint fresh, which is the content-address proof. The
+    // while the tape must NEVER carry one — Drive re-reads a file origin fresh, which is the content-address proof. The
     // kind byte is the one WorldWireTags table both leaves share.
     private static void WriteRebuildLeaf(WireWriter writer, WorldReplayEntry.Rebuild rebuild) {
         if (!WorldWireTags.TryToWire(
@@ -1471,7 +1470,10 @@ public sealed partial class WorldReplaySnapshot {
 
         writer.WriteByte(value: kind);
         writer.WriteBoolean(value: rebuild.Force);
-        writer.WriteNullableString(value: rebuild.PathHint);
+        WorldWireCodec.WriteRebuildOrigin(
+            origin: rebuild.Origin,
+            writer: writer
+        );
         writer.WriteString(value: rebuild.ContentHash);
     }
     // The transfer leaf: its semantic fields (see WorldReplayEntry.Transfer's own remarks) followed by an

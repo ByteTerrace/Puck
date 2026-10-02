@@ -88,8 +88,8 @@ public static class WorldReplayEntryDescriber {
 
         return text.ToString();
     }
-    private static string DescribeRebuild(WorldReplayEntry.Rebuild rebuild) => $"rebuild {rebuild.Kind.ToString().ToLowerInvariant()}{((rebuild.PathHint is { } path)
-        ? $" '{path}'"
+    private static string DescribeRebuild(WorldReplayEntry.Rebuild rebuild) => $"rebuild {rebuild.Kind.ToString().ToLowerInvariant()}{((rebuild.Origin is { } origin)
+        ? $" '{origin}'"
         : "")} {rebuild.ContentHash}{(rebuild.Force
         ? " force"
         : "")} by {rebuild.Actor.Describe()}";

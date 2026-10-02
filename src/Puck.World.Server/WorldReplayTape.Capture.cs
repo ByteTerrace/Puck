@@ -110,7 +110,7 @@ public sealed partial class WorldReplayTape {
         // known any earlier (m_base is private, server-internal state that can move between submission and drain).
         m_liveServer.RebuildTap = (request, actor, contentHash) => m_currentAuthority.Add(item: new WorldReplayEntry.Rebuild(
             Kind: request.Kind,
-            PathHint: request.PathHint,
+            Origin: request.Origin,
             Force: request.Force,
             ContentHash: contentHash,
             Actor: actor

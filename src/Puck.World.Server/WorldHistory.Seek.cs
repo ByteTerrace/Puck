@@ -146,7 +146,9 @@ public sealed partial class WorldHistory {
                     Definition: definition,
                     Force: true,
                     Kind: WorldRebuildKind.Load,
-                    PathHint: KeyframeDocumentPath(documentPath: documentPath, segment: segment)
+                    Origin: ((KeyframeDocumentPath(documentPath: documentPath, segment: segment) is { } keyframePath)
+                        ? new WorldRebuildOrigin.File(Path: keyframePath)
+                        : null)
                 )
             );
             _ = m_server.DrainAdministrative();

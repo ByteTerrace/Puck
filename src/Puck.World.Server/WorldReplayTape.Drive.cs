@@ -155,7 +155,7 @@ public sealed partial class WorldReplayTape {
     // running session, and the hash comparison that follows reports the resulting divergence honestly.
     private string? NarrateRebuildContentPin(WorldReplayEntry.Rebuild rebuild) {
         if (
-            (rebuild.PathHint is { } path) &&
+            (rebuild.Origin is WorldRebuildOrigin.File { Path: var path }) &&
             (m_drive is { } drive)
         ) {
             if (!WorldDefinitionFileSource.TryReadContentPin(
@@ -288,7 +288,9 @@ public sealed partial class WorldReplayTape {
                 request: new WorldRebuildRequest(
                     Kind: WorldRebuildKind.Load,
                     Definition: definition,
-                    PathHint: documentPath,
+                    Origin: ((documentPath is null)
+                        ? null
+                        : new WorldRebuildOrigin.File(Path: documentPath)),
                     Force: true,
                     ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: source.DefinitionJson)
                 ),
