@@ -102,6 +102,43 @@ public sealed partial class SdfVisibilityLawTests {
         }
     }
     [Fact]
+    public void ACardPublishesItsTexelMaterialBeforePickingAndLightingReadTheRecord() {
+        var primary = CodeOf(path: "march/sdf-primary.hlsli");
+        // The card's entry must reach primary's winning material before it is stored, not be a private correction
+        // in the lighting pass. Picking copies that same V row. Deleting the card branch breaks this contract.
+        Assert.Matches(actualString: primary, expectedRegexPattern: @"(?s)if\s*\(sdfMeshIsImpostor\(meshHit\.draw\)\)\s*\{\s*material\s*\+=\s*sdfImpostorSurfaceAt\([^;]+\)\.material\s*;\s*\}.*visibility\.material\s*=\s*material\s*;.*sdfStoreVisibility\(");
+        Assert.DoesNotContain(expectedSubstring: "impostorSurface.material", actualString: CodeOf(path: "shade/sdf-light-stage.hlsli"));
+    }
+    [Fact]
+    public void AMeshCardSwitchIsAnIdentityChangeThatTheResolvesHistoryRejects() {
+        // A baked placement's mesh and card are two draws of the list, so the draw a view records after it switches names
+        // another visibility source, and the identity word the resolve compares is another word. The resolve accepts a
+        // history sample only where that word is equal, so a switch restarts the pixel's history like any identity change.
+        var mesh = new SdfMesh(indices: new uint[] { 0, 1, 2 }, positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY });
+        SdfMeshDraw[] draws = [
+            new(Identity: "near", Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity) { Lod = new SdfMeshLod(Center: Vector3.Zero, Far: false, Radius: 1f, SwitchPixels: 16f) },
+            new(Identity: "far", Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity) { Lod = new SdfMeshLod(Center: Vector3.Zero, Far: true, Radius: 1f, SwitchPixels: 16f) },
+        ];
+        var selector = new SdfMeshLodSelector(work: new Puck.Abstractions.Counting.WorkCounterSet(kinds: SdfMeshLodSelector.ProcessWork.WorkKinds, name: SdfMeshLodSelector.SourceName));
+        var identities = new List<uint>();
+
+        foreach (var depth in new[] { 5f, 5000f }) {
+            var recorded = new bool[draws.Length];
+
+            selector.Select(cameraForward: Vector3.UnitZ, cameraPosition: new Vector3(x: 0f, y: 0f, z: -depth), draws: draws, impostorsAvailable: true, pixelsPerUnitDepth: 500f, recorded: recorded);
+            Assert.Single(collection: recorded, predicate: static chosen => chosen);
+            identities.Add(item: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: ((uint)Array.IndexOf(array: recorded, value: true))));
+        }
+
+        Assert.NotEqual(actual: identities[1], expected: identities[0]);
+
+        var resolve = CodeOf(path: "passes/sdf-resolve.comp.hlsl");
+
+        Assert.Matches(actualString: resolve, expectedRegexPattern: @"hitIdentity\s*=\s*visibility\.identity\s*;");
+        Assert.Matches(actualString: resolve, expectedRegexPattern: @"accepted\s*=\s*\(\(historyIdentity\s*==\s*hitIdentity\)");
+        Assert.Matches(actualString: resolve, expectedRegexPattern: @"historySurfaceRW\[word\]\s*=\s*hitIdentity\s*;");
+    }
+    [Fact]
     public void NoKernelSpellsTheIdentityFieldsOrTheSlotSentinelByHand() {
         var spellers = Directory.EnumerateFiles(path: Root, searchPattern: "*.hlsl*", searchOption: SearchOption.AllDirectories)
             .Select(selector: path => Path.GetRelativePath(path: path, relativeTo: Root).Replace(newChar: '/', oldChar: '\\'))

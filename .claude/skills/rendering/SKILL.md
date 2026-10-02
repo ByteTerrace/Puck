@@ -120,7 +120,8 @@ register.
   and the composite (`passes/sdf-composite.comp.hlsl`), which puts the lit
   image over the sky and integrates the bounded media, run after views (or the
   resolve) through the sky interface, so no march code reaches them. The mesh pass before primary is a graphics
-  pass (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) whose target bounds
+  pass (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`, and the impostor card pipeline's
+  `sdf-mesh-impostor.frag.hlsl`) whose target bounds
   primary's march, and only primary reads it: a mesh pixel's record carries the
   mesh kind, its draw and its triangle, which the later stages read, and the
   shadow stage marches nothing for it. The ambient and shadow passes skip a
@@ -211,7 +212,9 @@ These are one-line cautions; the owning pages hold the derivations.
 - **The version moves with the bytes.** `SdfBaker.Version` keys every bake and is
   the `BAKE` chunk's version; any change to what the baker, `CreationBaker` or
   `CreationBakeCodec` produces bumps it and re-records the product pin in
-  `CreationBakeLawTests`.
+  `CreationBakeLawTests`. A held bake is keyed by the version, never by the code that wrote it, so
+  two lanes that change the bytes must not share a number; a held bake this baker cannot
+  decode draws the field, counted and named (`sdf.bakes.undecodable`).
 - **Portable bytes.** A bake is content-addressed and one build's pack stands in
   for any device's bake, so its bytes must not depend on the machine: scalar
   IEEE arithmetic in a written order, no transcendental function, no `Vector3`
@@ -263,7 +266,7 @@ These are one-line cautions; the owning pages hold the derivations.
 - **Bakes are presentation only.** `BAKE` does not derive on boot
   (`ICompiledWorldChunk.DerivesOnBoot`); a presentation bakes a missing
   prototype through `WorldBakeSchedule`, never on the frame thread, and draws a
-  ready one only through `WorldBakeSchedule.TryGetMesh` (which counts the
+  ready one only through `WorldBakeSchedule.TryGetDraw` (which counts the
   switch, `sdf.bakes.drawn`) while it draws its bakes: by default exactly when
   the loaded world's `BAKE` chunk supplies every bake from its pack, else when `world.bakes on`
   (`WorldRenderSettings.DrawsBakes`); the engine is not ready until the
@@ -273,6 +276,24 @@ These are one-line cautions; the owning pages hold the derivations.
   `frame/sdf-mesh-textures.hlsli`). A baked placement's
   instances are camera-hidden (`SdfInstanceRange.CameraHidden`): the cull keeps
   them out of every camera mask, never out of the shadow or ambient gathers.
+- **A baked placement is two draws; the view chooses.** `WorldPlacementStamper` emits
+  a mesh draw (`SdfMeshDraw.Lod.Far` false) and an impostor card draw
+  (`SdfMeshCard.Mesh`, `SdfMeshDraw.Impostor`, `Lod.Far` true) bounded by the
+  impostor's sphere. `SdfMeshLodSelector` (the mesh part's recorder, one per view)
+  records exactly one of the pair: the card once the sphere projects under the
+  impostor's view edge in render pixels (`SdfMeshLod`, hysteresis included), so the
+  choice is made on the CPU from that view's own camera, never in a shader. The
+  choice follows draw identity through list revisions and reordering, and a frame
+  without packed impostor atlases records each pair's mesh. The
+  `sdf.mesh.lod` source counts the draws recorded. Impostors have their own atlases
+  (`SdfMeshAtlas` packs any `SdfTextureSet`, the mesh's `SdfMeshTextures` or an
+  `SdfMeshImpostor`, never both in one atlas). The card pipeline is a second entry
+  of the pass-pipeline cache beside the mesh pass's (`SdfMeshRasterPass.ImpostorKey`),
+  because its fragment stage discards and writes depth, which the mesh stage's forced
+  early test forbids; the hit passes shade a card pixel from the impostor's views
+  (`frame/sdf-mesh-impostor-surface.hlsli`) with each texel's material (the impostor's R8 plane, read unfiltered),
+  and reprojection takes its point through the draw's inverse matrix. A change to
+  the trace moves `SdfImpostorOracle` and `SdfImpostorLawTests` with it.
 
 ## Engine seams that bite
 
@@ -1009,7 +1030,12 @@ These are one-line cautions; the owning pages hold the derivations.
   `sdfWorkSteps` beside the evaluation, never inside the interpreter; a texel
   counts only where one is written (`sdfVisibilityStoreWord`, the output writes),
   and `SdfWorkCountingLawTests` hold both. Vulkan devices are created with
-  `fragmentStoresAndAtomics` for the fragment stages' counts. A graphics
+  `fragmentStoresAndAtomics` for the fragment stages' counts and
+  `shaderDemoteToHelperInvocation` for a fragment `discard`, and every shader
+  module's SPIR-V capabilities are checked against
+  `VulkanShaderCapabilities.Enabled` before it is created: a capability that needs a
+  device feature is required at device creation and listed there
+  (`VulkanShaderCapabilitiesLawTests` holds every shipped module to it). A graphics
   pipeline whose layout binds a read-write buffer or storage image
   (`GpuPipelineLayoutDescription.ShaderWrites`) draws in a render pass that
   allows shader writes: `GpuPassPipelineKey.OfGraphics` derives

@@ -73,10 +73,15 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
             // record's attributes and seam stand. A mesh pixel's surface is its triangle's, never the field's: a textured
             // mesh reads its texel's material, albedo and emission from the atlases.
             bool meshTextured = false;
+            bool meshImpostor = false;
             SdfMeshTexel meshTexel = (SdfMeshTexel)0;
+            SdfImpostorSurface impostorSurface = (SdfImpostorSurface)0;
 
             if (s.mesh) {
-                if (sdfMeshTextured(s.meshDraw)) {
+                if (sdfMeshIsImpostor(s.meshDraw)) {
+                    meshImpostor = true;
+                    impostorSurface = sdfImpostorSurfaceAt(s.meshDraw, p.rayOrigin, p.rayDirection, s.t, p.pixelFootprint);
+                } else if (sdfMeshTextured(s.meshDraw)) {
                     meshTextured = true;
                     meshTexel = sdfMeshTexelAt(s.meshDraw, s.meshTriangle, surfacePoint, (p.pixelFootprint * s.t));
                     material = sdfMeshTexelMaterial(s.meshDraw, meshTexel);
@@ -110,6 +115,10 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
             if (meshTextured) {
                 shadeMaterial.albedo = sdfMeshTexelAlbedo(meshTexel);
                 meshEmission = sdfMeshTexelEmission(meshTexel);
+                shadeMaterial.emissive = 0.0;
+            } else if (meshImpostor) {
+                shadeMaterial.albedo = impostorSurface.albedo;
+                meshEmission = impostorSurface.emission;
                 shadeMaterial.emissive = 0.0;
             }
 

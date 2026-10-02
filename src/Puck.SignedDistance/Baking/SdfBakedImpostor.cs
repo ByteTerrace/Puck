@@ -24,9 +24,11 @@ namespace Puck.SignedDistance.Baking;
 /// toward the view's camera.</param>
 /// <param name="Depth">The hit's depth: 0 at the sphere's near side, 255 at its far side and where the ray
 /// missed.</param>
+/// <param name="Material">The program material id of the hit, one byte a texel (an id past 255 clamps to 255), never
+/// blended or compressed lossily; a miss holds 0, which no renderer reads, since a miss has no coverage.</param>
 /// <param name="Emission">The light the hit's material emits, in linear light as the surface textures hold it: zero where
 /// the ray missed or the material emits none.</param>
-public sealed record SdfBakedImpostor(Vector3 Center, float Radius, int Views, int ViewTexels, SdfBakedTexture Albedo, SdfBakedTexture Normal, SdfBakedTexture Depth, SdfBakedTexture Emission) {
+public sealed record SdfBakedImpostor(Vector3 Center, float Radius, int Views, int ViewTexels, SdfBakedTexture Albedo, SdfBakedTexture Normal, SdfBakedTexture Depth, SdfBakedTexture Material, SdfBakedTexture Emission) {
     /// <summary>Returns the unit direction from the center toward the camera of view <c>(i, j)</c>.</summary>
     /// <param name="i">The view's column.</param>
     /// <param name="j">The view's row.</param>
@@ -71,6 +73,7 @@ public sealed record SdfBakedImpostor(Vector3 Center, float Radius, int Views, i
         var albedo = new byte[((side * side) * 4)];
         var normals = new byte[((side * side) * 2)];
         var depth = new byte[(side * side)];
+        var materials = new byte[(side * side)];
         var emission = new byte[((side * side) * 8)];
         var r = ((double)radius);
         var epsilon = FixedQ4816.FromDouble(value: ((r * 2.0) / (viewTexels * 4)));
@@ -124,6 +127,7 @@ public sealed record SdfBakedImpostor(Vector3 Center, float Radius, int Views, i
                         albedo[(at + 3)] = 255;
                         (normals[(texel * 2)], normals[((texel * 2) + 1)]) = OctahedralNormal.Encode(x: ((double)normal.X), y: ((double)normal.Y), z: ((double)normal.Z));
                         depth[texel] = ImageSourceConversion.ToUnorm8(value: ((((double)hit.Distance) - r) / (2.0 * r)));
+                        materials[texel] = ((byte)Math.Clamp(max: 255, min: 0, value: hit.Material));
                         SdfSurfaceTextures.WriteEmission(glow: glow, level: emission, material: hit.Material, texel: texel);
                     }
                 }
@@ -137,6 +141,7 @@ public sealed record SdfBakedImpostor(Vector3 Center, float Radius, int Views, i
             Albedo: SdfBakedTexture.Compress(chain: albedoChain, height: side, tileTexels: viewTexels, usage: SdfBakeTextureUsage.Albedo, width: side),
             Center: center,
             Depth: SdfBakedTexture.Store(coverage: coverage, height: side, level0: depth, tileTexels: viewTexels, usage: SdfBakeTextureUsage.Depth, width: side),
+            Material: SdfBakedTexture.Store(coverage: coverage, height: side, level0: materials, tileTexels: viewTexels, usage: SdfBakeTextureUsage.Material, width: side),
             Emission: SdfBakedTexture.Store(coverage: coverage, height: side, level0: emission, tileTexels: viewTexels, usage: SdfBakeTextureUsage.Emission, width: side),
             Normal: SdfBakedTexture.Store(coverage: coverage, height: side, level0: normals, tileTexels: viewTexels, usage: SdfBakeTextureUsage.Normal, width: side),
             Radius: radius,

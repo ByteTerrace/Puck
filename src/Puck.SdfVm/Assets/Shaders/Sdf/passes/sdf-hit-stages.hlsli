@@ -8,6 +8,7 @@
 #include "../march/sdf-part-bounds.hlsli"
 #endif
 #include "../frame/sdf-mesh-textures.hlsli"
+#include "../frame/sdf-mesh-impostor-surface.hlsli"
 #include "../march/sdf-primary.hlsli"
 #include "../surface/sdf-surface.hlsli"
 #include "../surface/sdf-shadow.hlsli"

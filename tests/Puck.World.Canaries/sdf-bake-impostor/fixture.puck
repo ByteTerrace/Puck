@@ -1,0 +1,119 @@
+// The bake-impostor canary's world: one static prototype of two boxes, one material each, which bakes, 281 units from a fixed
+// camera, so small on screen that its bake draws as its impostor, at a coarse level of the impostor's chains.
+
+schema: "puck.world.definition.v1"
+documentId: "sdf-bake-impostor"
+
+cameras [
+  {
+    anchor: null
+    name: "bake-cam"
+    renderHeight: 576
+    renderWidth: 1024
+    rig {
+      name: "bake-cam"
+      operations [
+        anchor(subject: worldPoint(point: [0, 0.5, 281]))
+        lookAt(subject: worldPoint(point: [0, 0.5, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+]
+
+host {
+  authority: null
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 576
+  journalDepth: 2000
+  listen: null
+  presentMode: Immediate
+  presentation: offscreen
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 1024
+}
+
+placements {
+  placement "block" {
+    prototype: "block"
+    position [0, 0, 0]
+  }
+}
+
+prototypes {
+  prototype "block" {
+    document {
+      name: "block"
+      palette [
+        {
+          color: "#C03020"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#2040C0"
+          roughness: 0.2
+          sheen: 0
+          specular: 0.6
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "left" {
+        material: 0
+        position [-0.6, 0.5, 0]
+        scale [1, 1, 1]
+      }
+      shape Box "right" {
+        material: 1
+        position [0.6, 0.5, 0]
+        scale [1, 1, 1]
+      }
+    }
+  }
+}
+
+render {
+  farDistance: 600
+}
+
+simulation {
+  rateHz: 30
+}
+
+views {
+  layout "bake" {
+    seatCount: 0
+    slots [
+      {
+        camera: "bake-cam"
+        height: 1
+        width: 1
+        x: 0
+        y: 0
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: "World"
+  }
+
+  seatRig "bake-seat" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5, pitch: 0.3, yaw: 0)
+      lookAt(subject: reference())
+      fieldOfView(fieldOfViewRadians: 0.9)
+    ]
+  }
+}

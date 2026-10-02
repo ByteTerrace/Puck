@@ -123,6 +123,20 @@ public sealed class TextureMipChainLawTests {
         Assert.Equal(expected: [1], actual: TextureMipChain.Build(filter: TextureMipFilter.Majority, format: GpuPixelFormat.R8Unorm, height: 2, level0: [4, 3, 2, 1], tileTexels: 2, width: 2)[1]);
     }
     [Fact]
+    public void AMissCastsNoVoteSoACoarseTexelNamesTheMaterialOfItsCoveredTexels() {
+        var plain = TextureMipChain.Build(filter: TextureMipFilter.Majority, format: GpuPixelFormat.R8Unorm, height: 2, level0: [0, 5, 0, 5], tileTexels: 2, width: 2);
+
+        // Two misses (material 0, no coverage) and two hits of material 5: the plain majority ties and the smaller value, the
+        // miss's 0, wins; with coverage the misses cast no vote, so the hits' material does. The first is the red leg.
+        Assert.Equal(expected: [0], actual: plain[1]);
+        Assert.Equal(expected: [5], actual: TextureMipChain.Build(coverage: [[0, 255, 0, 255]], filter: TextureMipFilter.Majority, format: GpuPixelFormat.R8Unorm, height: 2, level0: [0, 5, 0, 5], tileTexels: 2, width: 2)[1]);
+        // One hit among three misses names the hit; two covered texels of different materials tie to the smaller; and a texel
+        // whose four children all miss votes among all four, so it names the smallest value they hold.
+        Assert.Equal(expected: [7], actual: TextureMipChain.Build(coverage: [[0, 0, 0, 255]], filter: TextureMipFilter.Majority, format: GpuPixelFormat.R8Unorm, height: 2, level0: [0, 0, 0, 7], tileTexels: 2, width: 2)[1]);
+        Assert.Equal(expected: [3], actual: TextureMipChain.Build(coverage: [[255, 255, 0, 0]], filter: TextureMipFilter.Majority, format: GpuPixelFormat.R8Unorm, height: 2, level0: [9, 3, 1, 1], tileTexels: 2, width: 2)[1]);
+        Assert.Equal(expected: [0], actual: TextureMipChain.Build(coverage: [[0, 0, 0, 0]], filter: TextureMipFilter.Majority, format: GpuPixelFormat.R8Unorm, height: 2, level0: [0, 4, 0, 0], tileTexels: 2, width: 2)[1]);
+    }
+    [Fact]
     public void AChainRefusesWhatItCannotTile() {
         Assert.Throws<ArgumentException>(testCode: () => TextureMipChain.Build(filter: TextureMipFilter.Average, format: GpuPixelFormat.R8Unorm, height: 4, level0: new byte[24], tileTexels: 4, width: 6));
         Assert.Throws<ArgumentException>(testCode: () => TextureMipChain.Build(filter: TextureMipFilter.Srgb, format: GpuPixelFormat.R8Unorm, height: 4, level0: new byte[16], tileTexels: 4, width: 4));

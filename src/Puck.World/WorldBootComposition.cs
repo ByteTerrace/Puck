@@ -1074,6 +1074,7 @@ public static class WorldBootComposition {
         ));
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<ShaderCompiler>().Work);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: SdfKernelSet.LoadWork);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: SdfMeshLodSelector.ProcessWork);
         services.TryAddSingleton<GpuPassPipelineCache>();
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<GpuPassPipelineCache>().Work);
     }

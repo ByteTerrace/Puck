@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/7b482fcb36398d08e017f42a7f911e8ad7f5a6d8bef8edad36646884af2ca46a). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/62a7755e33569b2d24968b06bbf1af15c542ab12b2c3893b496e3c73aba00d51). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -101,13 +101,18 @@ struct SdfResolveFrame {
 [[vk::binding(17, 1)]] Texture2D<float4> sdfMeshOcclusion : register(t17, space1);
 [[vk::binding(18, 1)]] Texture2D<float4> sdfMeshMaterials : register(t18, space1);
 [[vk::binding(19, 1)]] Texture2D<float4> sdfMeshEmission : register(t19, space1);
-[[vk::binding(20, 1)]] StructuredBuffer<SdfLight> sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2 : register(t20, space1);
+[[vk::binding(20, 1)]] Texture2D<float4> sdfImpostorAlbedo : register(t20, space1);
+[[vk::binding(21, 1)]] Texture2D<float4> sdfImpostorNormals : register(t21, space1);
+[[vk::binding(22, 1)]] Texture2D<float4> sdfImpostorDepth : register(t22, space1);
+[[vk::binding(23, 1)]] Texture2D<float4> sdfImpostorMaterials : register(t23, space1);
+[[vk::binding(24, 1)]] Texture2D<float4> sdfImpostorEmission : register(t24, space1);
+[[vk::binding(25, 1)]] StructuredBuffer<SdfLight> sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2 : register(t25, space1);
 #define sdfLights sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2
-[[vk::binding(21, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutc21dea5f8b5a7c8005406de8a2810f1fa8c9cd0b443a9e283a9cb686059d22c6 : register(t21, space1);
+[[vk::binding(26, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutc21dea5f8b5a7c8005406de8a2810f1fa8c9cd0b443a9e283a9cb686059d22c6 : register(t26, space1);
 #define sdfSky sdfSkyLayoutc21dea5f8b5a7c8005406de8a2810f1fa8c9cd0b443a9e283a9cb686059d22c6
-[[vk::binding(22, 1)]] StructuredBuffer<SdfSkyStop> sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224 : register(t22, space1);
+[[vk::binding(27, 1)]] StructuredBuffer<SdfSkyStop> sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224 : register(t27, space1);
 #define sdfSkyStops sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224
-[[vk::binding(23, 1)]] StructuredBuffer<SdfSoftbox> sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf : register(t23, space1);
+[[vk::binding(28, 1)]] StructuredBuffer<SdfSoftbox> sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf : register(t28, space1);
 #define sdfSoftboxes sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf
 
 // The Pass group: descriptor set 3, register space 3.

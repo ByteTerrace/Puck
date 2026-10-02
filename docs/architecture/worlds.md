@@ -169,7 +169,10 @@ this machine's cache or another world's pack holds the same bake keys.
 ones made locally. The default therefore keeps captures independent of local
 baking. While bakes draw, an untinted static
 placement whose prototype's bake is ready draws the baked mesh through the mesh
-pass, textured from the bake's five surface textures, and keeps its field as
+pass, textured from the bake's five surface textures, or, in a view where the
+placement is small on screen, as the bake's impostor card
+([the impostor](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)),
+and keeps its field as
 camera-hidden instances that still cast shadows and occlude; a creation with
 text or noise relief keeps drawing through its field. The engine is not ready
 until the bake schedule has reconciled and, while the presentation draws its

@@ -20,8 +20,8 @@ public sealed class SdfWorldPipelineCatalogLawTests {
     private const uint Extent = 32;
     // Every engine kernel but the brick baker, which the fake kernel set leaves empty.
     private const long KernelPipelines = 12L;
-    // The kernels, the region copy and the mesh pass.
-    private const int ResidencyPipelines = 14;
+    // The kernels, the region copy, the mesh pass and its impostor card pass.
+    private const int ResidencyPipelines = 15;
 
     [Fact]
     public void TwoResidenciesOverOneCatalogRenderWithOneCreationPerPipeline() {

@@ -64,7 +64,9 @@ finds the bounding rectangle of surviving tiles. Empty margins outside that
 rectangle launch no threads; holes inside it remain in the dispatch.
 
 **mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
-each, into the mesh visibility target at the view's extent: per pixel the ray parameter the march records,
+each (and the impostor cards a view records, through a second pipeline with
+`sdf-mesh-impostor.frag.hlsl`, after the meshes; a baked placement's mesh and card are alternatives, and the view records
+one, as [the impostor](bricks-and-baking.md#prototype-bakes) describes), into the mesh visibility target at the view's extent: per pixel the ray parameter the march records,
 the draw plus one, and the triangle, kept nearest by a reversed-Z depth test. Primary alone reads the
 target: it resolves the triangle's material from the mesh region (the draw's, plus the triangle's palette entry
 when its mesh carries one) and records the draw and the triangle in the pixel's visibility record, from which
@@ -437,10 +439,10 @@ from its memory profile and the table's size, with a reader always in flight:
 
 Every pass of every view reads the tables through one descriptor set, the
 `sdf.world` interface's World group at set 1: each ring slot's buffers, the
-brick pool, the glyph atlas, the samplers and the mesh atlases. The tables own
+brick pool, the glyph atlas, the samplers and the mesh and impostor atlases. The tables own
 one such set per ring slot and write both once; a frame binds the slot its
 upload wrote. They rewrite the sets only when what they bind moves (a region
-grows, or the glyph or mesh atlases change), after the device is idle, since
+grows, or the glyph, mesh or impostor atlases change), after the device is idle, since
 every view's submission in flight binds them.
 
 Dynamic transforms are never compared as a table: the residency packs only the

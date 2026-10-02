@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using Puck.Hosting;
+using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Shaders;
 
@@ -60,6 +61,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly IReadOnlyList<IGpuImage> m_meshTargets = [];
     private readonly IGpuFramebuffer[] m_framebuffers = [];
     private readonly byte[] m_meshPushedIndex = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
+    // The mesh part's choice among each baked placement's mesh and impostor draws, and per frame slot which tables' impostor
+    // depth atlas, at which revision, its set last bound.
+    private SdfMeshLodSelector m_lod = new();
+    private readonly SdfWorldTables?[] m_impostorDepthTables = [];
+    private readonly long[] m_impostorDepthRevisions = [];
+    private bool[] m_recorded = [];
 
     private bool m_disposed;
 
@@ -127,6 +134,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         try {
             m_meshSets = new nint[slots];
+            m_impostorDepthTables = new SdfWorldTables?[slots];
+            m_impostorDepthRevisions = new long[slots];
 
             for (var slot = 0; (slot < slots); slot++) {
                 m_meshSets[slot] = bindings.AllocateSet(
@@ -276,6 +285,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         if (IsMesh) {
             RecordMesh(
+                camera: frame.Views[view].Camera,
                 recording: in recording,
                 tables: tables
             );
@@ -346,6 +356,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             }
         }
 
+        m_lod = new SdfMeshLodSelector();
         m_view = current;
     }
     // Which screen indices a residency binds.
@@ -432,8 +443,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         );
     }
     // Draws the frame's mesh draws into the instance's target, one draw call a draw, pulling their triangles from the mesh
-    // region. A frame with no draws never records (Skips).
-    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables) {
+    // region: every draw the view records (SdfMeshLodSelector) through the mesh pipeline, then the impostor cards among
+    // them through the card pipeline. A frame with no draws never records (Skips).
+    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, CameraSnapshot camera) {
         var draws = tables.MeshDraws;
         var count = tables.MeshDrawCount;
 
@@ -461,10 +473,35 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             }
         }
 
+        if (m_recorded.Length < ((int)count)) {
+            m_recorded = new bool[((int)count)];
+        }
+
+        m_lod.Select(
+            cameraForward: camera.Forward,
+            cameraPosition: camera.Position,
+            draws: draws,
+            impostorsAvailable: (tables.ImpostorAtlas is not null),
+            pixelsPerUnitDepth: SdfMeshLod.PixelsPerUnitDepth(
+                renderHeight: recording.Height,
+                tanHalfFieldOfView: camera.TanHalfFieldOfView
+            ),
+            recorded: m_recorded
+        );
         tables.WriteMeshTables(
             set: set,
             slot: tables.CurrentSlot
         );
+
+        if (
+            !ReferenceEquals(objA: m_impostorDepthTables[slot], objB: tables) ||
+            (m_impostorDepthRevisions[slot] != tables.ImpostorAtlasRevision)
+        ) {
+            tables.WriteMeshImpostorDepth(set: set);
+            m_impostorDepthTables[slot] = tables;
+            m_impostorDepthRevisions[slot] = tables.ImpostorAtlasRevision;
+        }
+
         tables.WriteMeshWorkCounters(
             counters: WorkCountersOf(recording: in recording).Buffer,
             set: set
@@ -479,6 +516,42 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             commandBufferHandle: commandBuffer,
             framebuffer: framebuffer
         );
+        RecordMeshDraws(
+            cards: false,
+            commandBuffer: commandBuffer,
+            count: count,
+            draws: draws,
+            pipeline: pipeline,
+            recorder: recorder,
+            set: set
+        );
+
+        if (HasCard(count: count, draws: draws)) {
+            RecordMeshDraws(
+                cards: true,
+                commandBuffer: commandBuffer,
+                count: count,
+                draws: draws,
+                pipeline: tables.ImpostorPipeline,
+                recorder: recorder,
+                set: set
+            );
+        }
+
+        recorder.EndRenderPass(commandBufferHandle: commandBuffer);
+    }
+    // Whether the view records an impostor card this frame.
+    private bool HasCard(uint count, IReadOnlyList<SdfMeshDraw> draws) {
+        for (var draw = 0; (draw < count); draw++) {
+            if (m_recorded[draw] && (draws[draw].Impostor is not null)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // Binds a pipeline and the pass set, then draws the recorded draws of one kind: the cards, or everything else.
+    private void RecordMeshDraws(bool cards, uint count, IReadOnlyList<SdfMeshDraw> draws, IGpuPipeline pipeline, IGpuRecorder recorder, nint commandBuffer, nint set) {
         recorder.BindPipeline(
             bindPoint: GpuBindPoint.Graphics,
             commandBufferHandle: commandBuffer,
@@ -493,6 +566,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         );
 
         for (var draw = 0u; (draw < count); draw++) {
+            if (
+                !m_recorded[((int)draw)] ||
+                ((draws[((int)draw)].Impostor is not null) != cards)
+            ) {
+                continue;
+            }
+
             BinaryPrimitives.WriteUInt32LittleEndian(
                 destination: m_meshPushedIndex,
                 value: SdfKernelInterfaces.MeshPushedIndex(
@@ -516,8 +596,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 )
             );
         }
-
-        recorder.EndRenderPass(commandBufferHandle: commandBuffer);
     }
     // Writes, once per slot, every storage the pass's ports bind at the member its access reads or writes it through, and
     // the tables' dummy and fillers at every member no port binds. The storages a slot resolves stay

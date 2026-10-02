@@ -437,6 +437,11 @@ void sdfPrimaryStage(SdfPixel p) {
         hitSurface = true;
         traveled = meshHit.t;
         material = sdfMeshMaterial(meshHit.draw, meshHit.triangleIndex);
+        // The visibility record owns the winning material for picking and shading alike. A card's two geometric
+        // triangles carry no palette entry; its unfiltered material plane supplies that entry at the traced hit.
+        if (sdfMeshIsImpostor(meshHit.draw)) {
+            material += sdfImpostorSurfaceAt(meshHit.draw, p.rayOrigin, p.rayDirection, traveled, p.pixelFootprint).material;
+        }
         hitInstanceIndex = -1;
         hitFrameSlot = SDF_TRANSFORM_SLOT_NONE;
         materialBlendWeight = 0.0;
