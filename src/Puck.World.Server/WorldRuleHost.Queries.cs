@@ -134,6 +134,16 @@ public sealed partial class WorldRuleHost {
     /// <param name="principal">The querying principal.</param>
     /// <returns>The answer, or its refusal.</returns>
     public QueryAnswer AnswerSubmittedQuery(WorldQuery query, Principal principal) {
+        if (
+            (principal.Kind == PrincipalKind.Session) &&
+            !Host.AllowsSessionQuery(query: query, session: principal)
+        ) {
+            return new QueryAnswer(
+                Text: WorldSessionObservation.QueryRefusal,
+                Refused: true
+            );
+        }
+
         var subject = query.ObservationSubject();
         var verdict = Host.GrantTable.Allows(
             capability: WorldCapability.Observe,

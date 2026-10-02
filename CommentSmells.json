@@ -103,7 +103,6 @@
         "src/Puck.World.Server/WorldDocument.Mutation.cs": 1,
         "src/Puck.World.Server/WorldInstanceHost.ForwardingRecovery.cs": 1,
         "src/Puck.World.Server/WorldInstanceHost.Transfers.cs": 2,
-        "src/Puck.World.Server/WorldOutputHub.cs": 1,
         "src/Puck.World.Server/WorldPopulation.Resolve.cs": 2,
         "src/Puck.World.Server/WorldPopulation.cs": 1,
         "src/Puck.World.Server/WorldReplaySnapshot.cs": 1,

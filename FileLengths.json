@@ -12,7 +12,6 @@
         "src/Puck.Maths/Oracle/PresentedAlgebra.cs": 2228,
         "src/Puck.Physics/Fields/FieldLattice.cs": 2231,
         "src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs": 2101,
-        "src/Puck.SignedDistance/SdfProgram.cs": 2195,
         "src/Puck.State/Expressions/Runtime/ExpressionSpelling.cs": 2272,
         "src/Puck.Text/CffFontOutlines.cs": 2434,
         "src/Puck.Transpiler/Parsing/PuckParser.Rules.cs": 2059,
