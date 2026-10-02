@@ -607,12 +607,13 @@ mean that gives a surface behind the near wall full weight, and renormalizing
 the survivors makes it worse. Puck can do better because the field answers a
 segment query exactly. Each cell's eight corner probes are connected only by
 segments an exact field trace reaches end to end, and a surface reads only a
-component its own point reaches: in a cell with more than one component, or a
-pocket of free space no corner reaches, the receiver proves its component with
+component its own point reaches: every receiver proves its component with
 one short trace to its nearest corner. A sealed wall of any thickness or
 curvature that crosses a cell cuts every segment across it, so a sealed room
-takes no light through its walls; the only bound left is a sealed enclosure
-small enough to slip between a cell's sub-samples. A separating plane fitted to
+takes no light through its walls from unreachable corners. A receiver inside
+an enclosure with no corner support falls back to the next level, then to
+indirect light off. Finite sub-sampling cannot prove the absence of an
+enclosure between samples. A separating plane fitted to
 the blocked segments' hits is not enough on its own: a sheet that leaves every
 corner on one side, or encloses a pocket, would let a plane send a receiver
 across it, so the plane only orders which component a receiver tries first. The

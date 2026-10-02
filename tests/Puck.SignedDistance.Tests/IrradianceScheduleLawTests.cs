@@ -93,7 +93,7 @@ public sealed class IrradianceScheduleLawTests {
         }
     }
     [Fact]
-    public void AGeometryChangeRetracesExactlyTheProbesItsReachMeets() {
+    public void AGeometryChangeRetracesEveryProbeItsPossiblePathMeets() {
         var schedule = Schedule(classifyBudget: 1_000, pools: [512, 256], traceBudget: 1_000_000);
 
         do {
@@ -108,8 +108,47 @@ public sealed class IrradianceScheduleLawTests {
         var room = plan.Traces.Where(predicate: static update => (update.Probe.Level == 0)).ToList();
 
         Assert.NotEmpty(collection: room);
-        Assert.All(collection: room, action: update => Assert.True(condition: IrradianceSchedule.Dirties(changed: moved, probe: IrradianceLattice.Position(key: update.Probe, level: Levels[0]), reach: Levels[0].Reach)));
+        Assert.All(collection: room, action: update => Assert.True(condition: IrradianceSchedule.Dirties(changed: moved, probe: IrradianceLattice.Position(key: update.Probe, level: Levels[0]), reach: (200.0 + (IrradianceCells.RelocationAllowance * Levels[0].Spacing)))));
+        var expected = schedule.Allocated
+            .Where(predicate: static key => (key.Level == 0))
+            .SelectMany(selector: static key => IrradianceLattice.ProbesOf(brick: key))
+            .Where(predicate: probe => IrradianceSchedule.Dirties(changed: moved, probe: IrradianceLattice.Position(key: probe, level: Levels[0]), reach: (200.0 + (IrradianceCells.RelocationAllowance * Levels[0].Spacing))))
+            .Order()
+            .ToArray();
+
+        Assert.Equal(expected: expected, actual: room.Select(selector: static update => update.Probe).Distinct().Order().ToArray());
         Assert.Contains(collection: room, filter: static update => (update.Reason == IrradianceUpdateReason.Geometry));
+    }
+    [InlineData(0, 8.0)]
+    [InlineData(1, 10.25)]
+    [Theory]
+    public void GeometryInvalidationCoversContinuationAndRelocation(int level, double changedX) {
+        IrradianceLevel[] levels = [
+            new(Name: "fine", Radius: 0.0, Reach: 1.0, Spacing: 1.0, Strata: 1),
+            new(Name: "coarse", Radius: 0.0, Reach: 0.0, Spacing: 1.0, Strata: 1),
+        ];
+        var schedule = new IrradianceSchedule(classifyBudget: 2, exitDistance: 10.0, levels: levels, pools: [1, 1], traceBudget: 128);
+        var inputs = new IrradianceFrameInputs(
+            Bounds: [new IrradianceSphere(Center: Double3.Zero, Radius: double.PositiveInfinity)],
+            Cameras: [Double3.Zero],
+            WorldMax: new Double3(X: 0.1, Y: 0.1, Z: 0.1),
+            WorldMin: Double3.Zero
+        );
+
+        _ = schedule.Frame(inputs: inputs);
+
+        Assert.True(condition: schedule.IsComplete);
+
+        var changed = new IrradianceSphere(Center: new Double3(X: changedX, Y: 0.0, Z: 0.0), Radius: 0.1);
+
+        schedule.MarkGeometry(current: changed, previous: changed);
+
+        var plan = schedule.Frame(inputs: inputs);
+        var probe = new IrradianceProbeKey(Level: level, X: 0, Y: 0, Z: 0);
+
+        Assert.Contains(collection: plan.Traces, filter: update => (update.Probe == probe));
+        // Red legs: nominal fine reach misses x = 8, and a far-distance sphere around the lattice position misses
+        // x = 10.25, which a probe relocated 0.45 toward +X can hit within its 10-unit ray.
     }
 
     private static IrradianceSchedule Schedule(int[] pools, int traceBudget = 40, int classifyBudget = 3) => new(

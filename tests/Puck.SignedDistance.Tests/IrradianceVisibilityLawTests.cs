@@ -47,6 +47,29 @@ public sealed class IrradianceVisibilityLawTests {
         HoldsDarkInside(center: center, field: field, inside: inside, outside: outside);
     }
     [Fact]
+    public void ASealedPocketBetweenSubSamplesReadsNoExteriorCorner() {
+        // The shell fits inside one cell. Its void misses all former 27 pocket samples: the closest sample,
+        // (0.25, 0.25, 0.25), lies in the shell, not the void. All eight exterior corners still form one component.
+        var center = new Double3(X: 0.3, Y: 0.3, Z: 0.3);
+        var field = IrradianceScenes.SphereRoom(center: center, radius: 0.08, thickness: 0.02);
+        var cell = new IrradianceProbeKey(Level: 0, X: 0, Y: 0, Z: 0);
+        var corners = Enumerable.Range(count: IrradianceLattice.CellCorners, start: 0)
+            .Select(selector: corner => IrradianceCells.Place(
+                field: field,
+                lattice: IrradianceLattice.Position(key: IrradianceLattice.Corner(cell: cell, corner: corner), level: Room),
+                spacing: Room.Spacing
+            ))
+            .ToArray();
+        var partition = IrradianceCells.Partition(corners: corners, field: field, spacing: Room.Spacing);
+
+        Assert.Equal(expected: 1, actual: partition.ComponentCount);
+        Assert.All(collection: corners, action: static corner => Assert.True(condition: corner.IsLit));
+        Assert.Equal(expected: 0, actual: IrradianceCells.ReadableCorners(corners: corners, field: field, partition: partition, point: center));
+        // A point outside the same enclosure reaches the same component, so rejecting every receiver cannot pass.
+        Assert.Equal(expected: 255, actual: IrradianceCells.ReadableCorners(corners: corners, field: field, partition: partition, point: new Double3(X: 0.1, Y: 0.1, Z: 0.1)));
+        // Red leg: the old one-component shortcut returns 255 for the enclosed receiver too.
+    }
+    [Fact]
     public void TheFloorUnderATableReadsOnlyTheProbesBeneathIt() {
         var field = IrradianceScenes.TableHall(halfWidth: 1.6, height: 0.8, thickness: 0.05);
         var surfaces = new IrradianceSurfaces(

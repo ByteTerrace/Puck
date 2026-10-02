@@ -122,12 +122,13 @@ public sealed class IrradianceField {
         }
 
         var distance = ((double)hit.Distance);
+        var point = (hit.Point - FixedPosition.Zero);
 
         return new IrradianceRay(
             Distance: distance,
             Kind: ((hit.Confidence == WorldQueryConfidence.Exact) ? IrradianceRayKind.Hit : IrradianceRayKind.Unresolved),
             Material: hit.Material,
-            Point: (origin + (unit * distance))
+            Point: new Double3(X: ((double)point.X), Y: ((double)point.Y), Z: ((double)point.Z))
         );
     }
     /// <summary>Tests whether the straight segment between two points crosses no surface. The whole segment is

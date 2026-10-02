@@ -88,14 +88,16 @@ public sealed class IrradianceSchedule {
     /// <returns><see langword="true"/> when the probe must be traced again.</returns>
     public static bool Dirties(Double3 probe, double reach, IrradianceSphere changed) =>
         ((probe - changed.Center).Length <= (reach + changed.Radius));
-    /// <summary>Marks a change of geometry: every probe whose reach meets the bounds before or after the change is
-    /// traced again, and every brick the change can reach is classified again.</summary>
+    /// <summary>Marks a change of geometry: every probe whose possible path meets the bounds before or after the change
+    /// is traced again, and every brick the change can reach is classified again. Without stored path bounds, every
+    /// level uses the far distance because support-seeking can march beyond its nominal reach, widened by the probe's
+    /// relocation allowance.</summary>
     /// <param name="previous">The changed geometry's bounds before the change.</param>
     /// <param name="current">Its bounds after the change.</param>
     public void MarkGeometry(IrradianceSphere previous, IrradianceSphere current) {
         foreach (var (key, brick) in m_bricks) {
             var level = m_levels[key.Level];
-            var reach = (IsCoarsest(level: key.Level) ? m_exitDistance : level.Reach);
+            var reach = (m_exitDistance + (IrradianceCells.RelocationAllowance * level.Spacing));
             var index = 0;
             var any = false;
 
@@ -228,7 +230,6 @@ public sealed class IrradianceSchedule {
         );
     }
 
-    private bool IsCoarsest(int level) => ((level == (m_levels.Count - 1)) || (m_levels[level].Reach <= 0.0));
     // A level's demanded bricks, nearest a camera first, ties by key: every brick inside the world box (and within the
     // level's radius of a camera, when it has one) whose box, widened by a cell and the relocation allowance, meets a
     // bound.

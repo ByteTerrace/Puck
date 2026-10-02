@@ -42,6 +42,41 @@ public sealed class IrradianceContinuationLawTests {
         Assert.True(condition: (FineRaysEndingIn(kind: IrradianceHitKind.Hit, model: model) > 0));
     }
     [Fact]
+    public void ASupportSeekingRayStopsAtTheWorldExit() {
+        // With no allocated coarse support, the 4-unit continuation step would hit the plane at x = 3 beyond
+        // the world's far distance of 2. The ball behind the fine probe keeps it active without blocking +X.
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.Plane(material: material, normal: -Vector3.UnitX, offset: 3f);
+        _ = builder.ResetPoint();
+        _ = builder.Translate(offset: new Vector3(x: -1f, y: 0f, z: 0f));
+        _ = builder.Sphere(material: material, radius: 0.2f);
+
+        foreach (var reach in new[] { 1.5, 4.0 }) {
+            var model = new IrradianceCacheModel(
+                field: new IrradianceField(program: builder.Build()),
+                levels: [Fine with { Reach = reach }, Coarse],
+                options: new IrradianceModelOptions(ExitDistance: 2.0),
+                surfaces: IrradianceScenes.Uniform(albedo: 0.0, emission: 10.0, sky: Sky)
+            );
+
+            model.Allocate(level: 0, max: Double3.Zero, min: Double3.Zero);
+            model.Classify();
+            model.Trace();
+            model.Solve(bounces: 0);
+
+            var probe = new IrradianceProbeKey(Level: 0, X: 0, Y: 0, Z: 0);
+            var ray = model.NearestRayOf(direction: new Double3(X: 1.0, Y: 0.0, Z: 0.0), key: probe);
+            var record = model.HitsOf(key: probe)[ray];
+
+            Assert.Equal(expected: IrradianceHitKind.Exit, actual: record.Kind);
+            Assert.Equal(expected: 2.0, actual: record.Point.Length, precision: 9);
+            Assert.Equal(expected: Sky, actual: model.RadianceOf(key: probe, ray: ray)!.Value.X, precision: 9);
+            // Red leg: the unbounded continuation step (or initial fine reach) returns the plane's emission of 10.
+        }
+    }
+    [Fact]
     public void AContinuationNeverCountsTheFineRaysIntervalAgain() {
         var model = Corridor(intervalCheck: true);
         var fine = new IrradianceProbeKey(Level: 0, X: 0, Y: 2, Z: 0);

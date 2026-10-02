@@ -3,8 +3,9 @@ namespace Puck.SignedDistance.Illumination;
 /// <summary>
 /// The rule a probe ray's march accepts a surface by on the GPU: where the clamped field distance falls to
 /// <c>max(SurfaceEpsilon, AngularEpsilon × t)</c>. The angular term is a pixel's size at the floor tier's render scale,
-/// so an accepted point is never farther than <c>AngularEpsilon × t</c> from its surface, and a ray grazing past a
-/// surface is not stopped on it. The CPU model's rays accept at the CPU march's own threshold, which is tighter.
+/// so this is an acceptance band, not a proof that the ray intersects a surface: a parallel grazing ray eventually
+/// enters it as t grows. A clamped distance is a lower bound and cannot alone prove an upper bound on surface error.
+/// G2's hit proof remains open. The CPU model's rays accept at the CPU march's own threshold, which is tighter.
 /// </summary>
 public static class IrradianceAcceptance {
     /// <summary>The distance, in world units, every ray accepts a surface within.</summary>

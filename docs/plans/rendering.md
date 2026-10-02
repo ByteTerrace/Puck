@@ -2306,10 +2306,9 @@ so it records nothing and holds no memory. Its parts:
   connected corners form the cell's components. Where exactly two remain and
   the blocked segments' first hits fit one plane within a tenth of the spacing,
   the cell stores that oriented plane as the order a receiver tries the
-  components in. Last, it tests 27 sub-samples of the cell's free space, a
-  third of the spacing apart, for one that reaches no corner by a clear segment;
-  such a cell is **pocketed**. A cell with more than one component or a pocket
-  **verifies**: its receivers prove their component with a trace of their own.
+  components in. Every receiver proves its component with a trace of its own,
+  even when all corners form one component: finite sub-sampling cannot rule
+  out a sealed pocket between its samples.
 - **`trace`** marches one stratum of a probe's rays: one 64-lane workgroup per
   probe and stratum, every lane a ray from the same origin. Because the rays
   share an origin, the group's instance mask is the instances whose bound meets
@@ -2321,8 +2320,9 @@ so it records nothing and holds no memory. Its parts:
   advances by the clamped clearance under `sdfMapStepBound` and accepts a hit
   only where the clamped distance falls below `max(surface epsilon, ε·t)`,
   with ε = 0.004, the angular size of a pixel at the floor tier's render scale:
-  a hit position is never off its surface by more than ε·t, and a ray grazing
-  past a wall does not land on it. At a hit it reads the gradient through
+  this band alone also accepts a ray grazing 0.1 above a wall at t = 25. A
+  clamped lower bound cannot prove an upper bound on surface error. G2's hit
+  proof remains open. At a hit it reads the gradient through
   `mapGradCore` (one evaluation) and the winning material, and stores a hit
   record. A ray that reaches its level's reach stores a continuation, a ray
   that reaches the residency's far distance a world exit, and a ray whose step
@@ -2355,14 +2355,15 @@ so it records nothing and holds no memory. Its parts:
 - **The views pass applies the cache** where a lit surface shades. It finds the
   finest level whose cell holding the point is allocated and moves the point
   along its normal to q, by a twentieth of the spacing or, where a short trace
-  finds another surface nearer along the normal, halfway to it, so q never
-  crosses a surface. In a cell that does not verify it reads the one
-  component; in a cell that verifies it traces from q to the nearest corner of
+  finds another surface nearer along the normal, halfway to it. The CPU model
+  starts that trace at a fixed 0.002 offset; a nearer thin surface can lie in
+  that untested initial interval, so a certified launch remains open. It
+  traces from q to the nearest corner of
   each component in turn, the plane's side first, and reads the first
   component that trace reaches. It weights that component's lit, traced
   corners by trilinear position and by facing, renormalized over them, and
   adds the irradiance to the diffuse radiance the material shades by. It
-  evaluates the field only for q's short trace and in a verifying cell. A
+  evaluates the field for q's short trace and the component proof. A
   receiver that reaches no component, or a component with no traced corner,
   reads the next coarser level, and past the coarsest the view shades as it
   does with indirect light off.
@@ -2471,9 +2472,9 @@ bounce and the computed one are never added together.
   it, and a receiver on either side reaches only its own side's corners. A
   fitted plane alone would not do: it orders the components, but a sheet that
   leaves every corner on one side, a curved sheet, or a pocket no corner shares
-  would let a plane send a receiver across it, so a cell with more than one
-  component or a pocket always makes the receiver prove its component with one
-  short trace. The precise guarantee, its bound and its laws are under the
+  would let a plane send a receiver across it, so every cell makes the receiver
+  prove its component with one short trace. The precise guarantee, its bound
+  and its laws are under the
   guarantees below. The same rule keeps the floor under a table from reading
   the probes above it. Near an opening the error is interpolation, not
   leakage: a receiver beside a doorway reads probes the opening lights, and
@@ -2581,9 +2582,12 @@ bounce and the computed one are never added together.
   | Geometry (a program upload, a carve, a moved casting body) | invalidate the hits, partitions and light views it reaches; `classify` and `trace` them, then a new solve | every pass |
   | Camera | new bricks only | every pass |
 
-  A geometry change invalidates every probe whose reach ball meets the changed
-  bounds' previous or current sphere, rays that missed included, and every
-  light-view region it overlaps; the hits of that geometry epoch and every
+  A geometry change invalidates every probe whose possible path ball meets the
+  changed bounds' previous or current sphere, rays that missed included. Until
+  stored path bounds exist, that ball uses the world far distance on every level,
+  widened by the relocation allowance: support-seeking can march beyond the
+  fine reach. It also invalidates every light-view region it overlaps; the hits
+  of that geometry epoch and every
   radiance derived from them are withdrawn before the next apply, so an
   exhausted budget never leaves an occluded hit emitting through a body. A
   positional light dirties the probes whose stored hits meet its old or new
@@ -2683,15 +2687,15 @@ measured values below are those laws' fixtures at a 1.5 m spacing.
 
 - **Walls.** *Guarantee:* every corner a receiver reads is joined to the
   receiver's point by a chain of straight segments inside the cell that exact
-  field traces prove clear: in a verifying cell the receiver's own trace to one
+  field traces prove clear: the receiver's own trace to one
   corner of the component, and the partition's traces among that component's
   corners. A sealed surface admits no such chain, so a sealed room takes no
   light through its walls from probes outside it, whatever the walls' thickness
-  or curvature, and q's own trace keeps a receiver from reading across a second
-  surface near its own. *Bound:* in a cell with one component, the receiver is
-  trusted to share the corners' free space; a sealed enclosure small enough to
-  lie inside one cell between all 27 of its sub-samples, a third of the spacing
-  apart, is not detected. Inside a component, an occluder that separates no
+  or curvature, provided q remains on the receiver's side. *Bound:* the fixed
+  initial surface offset is not proven clear and can cross a nearer thin wall.
+  An enclosed receiver reaching no corner has no
+  support at that level and tries the next, shading with indirect light off
+  past the coarsest. Inside a component, an occluder that separates no
   corners (a pillar inside a cell) lets light round it within the cell, and near
   an opening a receiver reads probes the opening lights. *Laws:*
   `IrradianceVisibilityLawTests` hold a sealed room with 0.05 m walls, planar at
@@ -2719,7 +2723,8 @@ measured values below are those laws' fixtures at a 1.5 m spacing.
   the coarse level not allocated at all, and a continuation beside a bright
   plate that the coarse corner behind the fine ray's end sees to the dark far
   wall exactly (red leg: without the beyond-the-point test the plate's light
-  enters).
+  enters). A support-seeking step and the initial fine reach are capped at the
+  world far distance, so a surface beyond it cannot replace sky.
 - **Bounce-source visibility.** *Guarantee:* each hit's visibility toward a
   shadowed light is its own, never its probe's. *Bound:* a light view's answer
   differs from a march from the hit only within its texel size at the hit and
@@ -2729,8 +2734,9 @@ measured values below are those laws' fixtures at a 1.5 m spacing.
   and hold every hit to its own visibility (red leg: the probe's own visibility
   is blocked, so substituting it darkens every sunlit hit); G3's device law
   holds the light views to the same per-hit answer.
-- **Acceptance and exhaustion.** *Guarantee:* a hit lies within `ε·t` of its
-  surface, and an exhausted ray adds no light. *Bound:* the unresolved share is
+- **Acceptance and exhaustion.** An exhausted ray adds no light. The angular
+  acceptance band alone proves neither an intersection nor an upper bound on
+  surface error; the hit proof remains open. *Bound:* the unresolved share is
   a counted row, held under a stated ceiling on the fixtures and recorded with
   every capture. *Laws:* `IrradianceLatticeLawTests` hold a ray grazing 0.1
   above a wall unaccepted along 20 units (red leg: acceptance at a 128-ray
@@ -2781,14 +2787,13 @@ evaluates the field about 2,100,000 times on every frame `ambient` runs; a
 trace frame at most 532,480 times (8,192 rays of 65), only while there is
 something to trace; a classify frame at most four bricks of 64 probe
 evaluations, relocation, 1,792 partition traces of at most 16 steps (a
-cell for each probe, 28 segments a cell, blocked ones traced twice) and 1,728
-pocket sub-samples, each tracing until it reaches a corner; a light
+cell for each probe, 28 segments a cell, blocked ones traced twice); a light
 view refresh one depth-only 512² render, about a quarter of the view's own
 primary pass; a shade frame 524,288 hits, each a walk of the lights, a light
 view lookup per shadowed light and one cache lookup, which is about as much
 shading as `views` does but no field evaluation; and the apply one cell record,
-a short offset trace along the normal, a verifying trace in a cell that
-verifies, and eight filtered irradiance reads per lit pixel. Whether
+a short offset trace along the normal, a component proof trace for every receiver,
+and eight filtered irradiance reads per lit pixel. Whether
 that fits the RTX 2060's `medium` frame is decided from the counted rows G2 to G5
 record, not from estimates. If it does not, `medium` steps down this ladder in
 order, each step re-recorded, and keeps the owner's 1.5 m `room` spacing
@@ -2849,8 +2854,8 @@ re-record explained in the same change.
        strata, a host-computed spherical Fibonacci base set turned by one of the
        cube's 48 symmetries from the probe key's hash, so every machine turns it
        exactly; the octahedral layouts and border rule; classification and
-       relocation on the clamped distance; the cell partition, its plane order,
-       its pockets and the receiver's verifying trace; acceptance and
+       relocation on the clamped distance; the cell partition, its plane order
+       and every receiver's component proof trace; acceptance and
        exhaustion; continuation with its beyond-the-point test; the apply; and
        the finite two-generation solve. Segments are cast end to end with
        `Raycast`, never `LineOfSight`, whose 0.05 skin would miss a wall that
@@ -2881,16 +2886,20 @@ re-record explained in the same change.
      drops it); `IrradianceScheduleLawTests` hold the budgets, the same plans in
      any input order, empty plans on a completed still world and an idle pan, one
      allocation for a shared brick, the nearest bricks kept under pool pressure,
-     and a geometry change re-tracing exactly the probes whose reach it meets.
+     and a geometry change re-tracing the probes whose possible paths it meets,
+     including support-seeking beyond the fine reach and relocated origins.
      Nothing outside the tests references the folder.
    - Counted-cost gate: no GPU row moves.
-   - Status: landed. Every law above passes on the CPU, and the whole
-     `Puck.SignedDistance.Tests` suite with it. The model settles two layout
-     questions: a separating plane alone would send a receiver across a sheet
-     that leaves every corner on one side or encloses a pocket, so a verifying
-     cell's receiver traces to prove its component; and the doorway's error is
-     interpolation beside the opening, within 0.06 of the reference, not
-     leakage.
+   - Status: the CPU slice is implemented. Review corrections give every receiver
+     a component proof, preserve the evaluator's actual ray hit point, cap all
+     continuation steps at the world far distance, and invalidate the possible
+     full path around a relocated origin. Laws pin those corrections and await
+     execution. Acceptance and surface launches remain open: the angular rule
+     accepts a ray grazing 0.1 units above a wall at t = 25, and the fixed 0.002
+     launch offset can cross a nearer thin surface before any ray tests it.
+     G2 needs a hit proof that distinguishes grazing and a surface launch that
+     proves its initial interval clear. The doorway fixture's interpolation
+     error is within 0.06 of the reference.
 2. **G2, the cache traced and partitioned.** After P18-4 and P18-5 reach the
    features head, since it extends the package declarations and the World
    group they move.

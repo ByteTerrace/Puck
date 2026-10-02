@@ -239,7 +239,7 @@ public sealed class IrradianceCacheModel {
 
         for (var ray = 0; (ray < level.Rays); ray++) {
             var direction = IrradianceLattice.Direction(key: probe.Key, level: level, ray: ray);
-            var reach = (coarsest ? m_options.ExitDistance : level.Reach);
+            var reach = (coarsest ? m_options.ExitDistance : Math.Min(val1: level.Reach, val2: m_options.ExitDistance));
             var cast = m_field.Cast(direction: direction, maxDistance: reach, origin: origin);
 
             if (cast.Kind != IrradianceRayKind.Miss) {
@@ -261,6 +261,13 @@ public sealed class IrradianceCacheModel {
             var travelled = reach;
 
             while (true) {
+                if (travelled >= m_options.ExitDistance) {
+                    hits[ray] = new IrradianceHitRecord(Kind: IrradianceHitKind.Exit, Material: 0, Normal: Double3.Zero, Point: point);
+                    ExitedRays++;
+
+                    break;
+                }
+
                 var support = ContinuationOf(direction: direction, level: coarser, point: point);
 
                 if (support.Length > 0) {
@@ -271,14 +278,8 @@ public sealed class IrradianceCacheModel {
                     break;
                 }
 
-                if (travelled >= m_options.ExitDistance) {
-                    hits[ray] = new IrradianceHitRecord(Kind: IrradianceHitKind.Exit, Material: 0, Normal: Double3.Zero, Point: point);
-                    ExitedRays++;
-
-                    break;
-                }
-
-                var next = m_field.Cast(direction: direction, maxDistance: step, origin: point);
+                var advance = Math.Min(val1: step, val2: (m_options.ExitDistance - travelled));
+                var next = m_field.Cast(direction: direction, maxDistance: advance, origin: point);
 
                 if (next.Kind != IrradianceRayKind.Miss) {
                     hits[ray] = RecordOf(cast: next, direction: direction);
@@ -287,7 +288,7 @@ public sealed class IrradianceCacheModel {
                 }
 
                 point = next.Point;
-                travelled += step;
+                travelled += advance;
             }
         }
 
@@ -390,9 +391,7 @@ public sealed class IrradianceCacheModel {
         }
 
         if (!m_cells.TryGetValue(key: cell, value: out var partition)) {
-            var cellMin = IrradianceLattice.Position(key: cell, level: m_levels[level]);
-
-            partition = IrradianceCells.Partition(cellMin: cellMin, corners: corners, field: m_field, spacing: m_levels[level].Spacing);
+            partition = IrradianceCells.Partition(corners: corners, field: m_field, spacing: m_levels[level].Spacing);
             m_cells[cell] = partition;
         }
 

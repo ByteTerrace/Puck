@@ -33,13 +33,7 @@ public readonly record struct IrradiancePlane(Double3 Normal, double Offset);
 /// <param name="ComponentCount">The count of components.</param>
 /// <param name="Plane">The separating plane fitted to the blocked segments' surface points when there are exactly two
 /// components and the fit holds; the order a receiver tries components in, never a substitute for its own test.</param>
-/// <param name="Pocketed">Whether a sub-sample of the cell's free space reaches no corner, so a receiver can stand in a
-/// region none of the corners shares.</param>
-public sealed record IrradianceCellPartition(int[] Components, int ComponentCount, IrradiancePlane? Plane, bool Pocketed) {
-    /// <summary>Gets whether a receiver in this cell proves its component with a segment of its own: always when the
-    /// cell has more than one component or a pocket.</summary>
-    public bool Verifies => ((ComponentCount > 1) || Pocketed);
-}
+public sealed record IrradianceCellPartition(int[] Components, int ComponentCount, IrradiancePlane? Plane);
 /// <summary>
 /// The rules that place probes against the field and partition the cells between them, and the rule a receiver chooses
 /// the corners it reads by. Each rule decides through exact field queries, so a sealed surface between a receiver and a
@@ -54,8 +48,6 @@ public static class IrradianceCells {
     public const double ReceiverBias = 0.05;
     /// <summary>The tolerance, as a fraction of the spacing, a separating plane fits its surface points within.</summary>
     public const double PlaneTolerance = 0.1;
-    /// <summary>The sub-samples along each side of a cell that a pocket test uses.</summary>
-    public const int PocketSamples = 3;
 
     private const int RelocationSteps = 4;
     private const double SurfaceOffset = 0.002;
@@ -121,15 +113,13 @@ public static class IrradianceCells {
         return new IrradianceProbePlacement(Class: IrradianceProbeClass.Inactive, Clearance: distance, Position: lattice);
     }
     /// <summary>Partitions a cell: traces every corner pair between free corners, connects the pairs the field proves
-    /// clear, fits the separating plane when exactly two components remain, and tests the cell's free sub-samples for a
-    /// pocket no corner reaches.</summary>
+    /// clear, and fits the separating plane when exactly two components remain.</summary>
     /// <param name="field">The field.</param>
     /// <param name="corners">The eight corners' placements, in <see cref="IrradianceLattice.Corner"/> order.</param>
-    /// <param name="cellMin">The cell's least lattice corner, in world units.</param>
     /// <param name="spacing">The cell's level's spacing, in world units.</param>
     /// <returns>The partition.</returns>
     /// <exception cref="ArgumentException"><paramref name="corners"/> does not hold eight placements.</exception>
-    public static IrradianceCellPartition Partition(IrradianceField field, IReadOnlyList<IrradianceProbePlacement> corners, Double3 cellMin, double spacing) {
+    public static IrradianceCellPartition Partition(IrradianceField field, IReadOnlyList<IrradianceProbePlacement> corners, double spacing) {
         ArgumentNullException.ThrowIfNull(argument: field);
         ArgumentNullException.ThrowIfNull(argument: corners);
 
@@ -202,13 +192,12 @@ public static class IrradianceCells {
         return new IrradianceCellPartition(
             ComponentCount: roots.Count,
             Components: components,
-            Plane: plane,
-            Pocketed: HasPocket(cellMin: cellMin, corners: corners, field: field, spacing: spacing)
+            Plane: plane
         );
     }
-    /// <summary>Returns the corners a receiver reads: the corners of the one component, or, in a cell that verifies,
-    /// the corners of the first component, nearest first (the plane's side first when it has one), whose nearest free
-    /// corner the receiver's own point reaches by a segment the field proves clear. Every corner returned is joined to
+    /// <summary>Returns the corners a receiver reads: the corners of the first component, nearest first (the plane's
+    /// side first when it has one), whose nearest free corner the receiver's own point reaches by a segment the field
+    /// proves clear. Every corner returned is joined to
     /// the receiver's point by a chain of clear segments inside the cell.</summary>
     /// <param name="field">The field.</param>
     /// <param name="partition">The receiver's cell's partition.</param>
@@ -219,10 +208,6 @@ public static class IrradianceCells {
         ArgumentNullException.ThrowIfNull(argument: field);
         ArgumentNullException.ThrowIfNull(argument: partition);
         ArgumentNullException.ThrowIfNull(argument: corners);
-
-        if (!partition.Verifies) {
-            return MaskOf(component: 0, partition: partition);
-        }
 
         var order = new List<(double Rank, int Component)>();
 
@@ -251,8 +236,9 @@ public static class IrradianceCells {
 
         return 0;
     }
-    /// <summary>Moves a receiver's surface point off its surface along its normal, by the bias or, where the field
-    /// proves another surface nearer along the normal, to halfway to it, so the point never crosses a surface.</summary>
+    /// <summary>Moves a receiver's surface point along its normal from a fixed 0.002 offset, by the bias or, where
+    /// a ray from that offset meets another surface, halfway to it. The initial offset interval is not tested and can
+    /// cross a nearer thin surface; a launch that proves that interval clear remains open.</summary>
     /// <param name="field">The field.</param>
     /// <param name="surface">The receiver's surface point, in world units.</param>
     /// <param name="normal">The receiver's unit normal.</param>
@@ -298,31 +284,6 @@ public static class IrradianceCells {
         }
 
         return best;
-    }
-    private static bool HasPocket(IrradianceField field, IReadOnlyList<IrradianceProbePlacement> corners, Double3 cellMin, double spacing) {
-        for (var z = 0; (z < PocketSamples); z++) {
-            for (var y = 0; (y < PocketSamples); y++) {
-                for (var x = 0; (x < PocketSamples); x++) {
-                    var sample = (cellMin + (new Double3(X: (x + 0.5), Y: (y + 0.5), Z: (z + 0.5)) * (spacing / PocketSamples)));
-
-                    if (!field.TryClampedDistance(distance: out var distance, material: out _, point: sample) || (distance <= SurfaceOffset)) {
-                        continue;
-                    }
-
-                    var reaches = false;
-
-                    for (var corner = 0; (!reaches && (corner < IrradianceLattice.CellCorners)); corner++) {
-                        reaches = (corners[corner].IsFree && field.SegmentClear(from: sample, to: corners[corner].Position));
-                    }
-
-                    if (!reaches) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false;
     }
     private static IrradiancePlane? FitPlane(List<(int First, int Second, Double3? FromFirst, Double3? FromSecond)> blocked, int[] components, IReadOnlyList<IrradianceProbePlacement> corners, double tolerance) {
         var points = new List<Double3>();

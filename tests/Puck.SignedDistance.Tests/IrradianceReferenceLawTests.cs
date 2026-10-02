@@ -1,6 +1,8 @@
 using System.Numerics;
 
+using Puck.Maths;
 using Puck.SignedDistance.Illumination;
+using Puck.SignedDistance.Queries;
 using Xunit;
 
 namespace Puck.SignedDistance.Tests;
@@ -108,6 +110,45 @@ public sealed class IrradianceReferenceLawTests {
         Assert.InRange(actual: estimate.Irradiance.X, high: (formFactor + 0.01), low: (formFactor - 0.01));
         // Red leg: the infinite half-plane's value (one half) and an unoccluded sky's (one) are both far outside.
         Assert.False(condition: (Math.Abs(value: (estimate.Irradiance.X - 0.5)) < 0.05));
+    }
+    [Fact]
+    public void ASegmentEndingExactlyOnASurfaceIsBlocked() {
+        var field = Floor();
+        var from = new Double3(X: 0.0, Y: 1.0, Z: 0.0);
+
+        Assert.False(condition: field.SegmentClear(from: from, to: Double3.Zero));
+        Assert.True(condition: field.SegmentClear(from: from, to: new Double3(X: 0.0, Y: 0.01, Z: 0.0)));
+    }
+    [InlineData(0.12345)]
+    [InlineData(10000.0)]
+    [Theory]
+    public void ARayReturnsThePointTheEvaluatorActuallyHit(double height) {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.Plane(material: material, normal: Vector3.UnitY, offset: 0f);
+
+        var program = builder.Build();
+        var field = new IrradianceField(program: program);
+        var evaluator = new SdfFieldEvaluator(program: program);
+        var origin = new Double3(X: 0.0, Y: height, Z: 0.0);
+        var direction = new Double3(X: 1.0, Y: -1.0, Z: 0.0).Normalize();
+        var reach = (height * 2.0);
+
+        Assert.True(condition: evaluator.Raycast(
+            dir: new FixedVector3(X: FixedQ4816.FromDouble(value: direction.X), Y: FixedQ4816.FromDouble(value: direction.Y), Z: FixedQ4816.Zero),
+            hit: out var hit,
+            maxDist: FixedQ4816.FromDouble(value: reach),
+            origin: FixedPosition.FromLocal(local: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromDouble(value: height), Z: FixedQ4816.Zero))
+        ));
+
+        var actual = field.Cast(direction: direction, maxDistance: reach, origin: origin);
+        var point = (hit.Point - FixedPosition.Zero);
+
+        Assert.Equal(expected: IrradianceRayKind.Hit, actual: actual.Kind);
+        Assert.Equal(expected: new Double3(X: ((double)point.X), Y: ((double)point.Y), Z: ((double)point.Z)), actual: actual.Point);
+        // Red leg: origin + doubleDirection * hit.Distance discards the evaluator's quantized origin, direction
+        // and per-step positions, and returns a different point, increasingly far from the surface on a long ray.
     }
     [Fact]
     public void AnUnresolvedRayIsNamedNotShaded() {
