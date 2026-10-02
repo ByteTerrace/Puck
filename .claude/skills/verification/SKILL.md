@@ -117,7 +117,12 @@ the behavior it pins is wrong. A law that passes with the fix withheld pins
 nothing, however plausible it reads.
 
 1. Withhold the fix and keep the law: `git stash push -- <fix files>`, or a
-   scratch worktree at the base with only the law applied.
+   scratch worktree at the base with only the law applied. A mutation made by
+   text substitution is not the withheld fix until a diff against the fixed file
+   shows exactly the change you meant and nothing else: quoting and escaping can
+   produce a different mutant. Make the change as an exact edit, or let
+   `puck laws prove --file-list` or `--fix` withhold it, and record how in the
+   commit message.
 2. Build the withheld tree until the build exits 0, repairing even an unrelated
    compile error in it, and only then run the law: a run after a failed build
    measures the fixed binaries, so a pass there says nothing about the law. The
