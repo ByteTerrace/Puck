@@ -45,6 +45,11 @@ public sealed class FixedFieldContactSolver(
     /// ordinary tick's motion along a floor in steps of the core's clearance, so a sweep that runs out has met
     /// geometry its budget cannot resolve, and the body stops at the ground it proved.</summary>
     public const int DefaultSweepBoundsQueryBudget = 64;
+    /// <summary>The most core spheres one capsule's certified sweep runs: one per bounds query a single core's sweep may
+    /// spend at <see cref="DefaultSweepBoundsQueryBudget"/>, so a capsule's sweep costs at most that budget squared.
+    /// A capsule whose core needs more is refused, as authored by collider validation
+    /// (<see cref="CapsuleCoreFitsSweep"/>) and at a step by <see cref="ContactRefusal.OversizedCapsuleCore"/>.</summary>
+    public const int MaximumCapsuleSweepPieces = DefaultSweepBoundsQueryBudget;
 
     private static readonly FixedQ4816 CoreInset = FixedQ4816.FromDouble(value: 0.002);
     private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
@@ -716,26 +721,72 @@ public sealed class FixedFieldContactSolver(
         least = sweep.Fraction;
         reached = (centre - start);
     }
-    // Sweeps every core sphere of every volume: a sphere or box volume's centre, and a capsule's core segment covered by
+    // The pieces a capsule core sweeps in: one more than its length in radii, which keeps every piece's half-length
+    // below the core sphere's radius (half the capsule's) by a margin no rounding of the piece centres reaches, so the
+    // pieces cover the whole core however long it is. Taken in Int128, where the length plus the radius cannot wrap.
+    // False past MaximumCapsuleSweepPieces. A capsule with no radius sweeps its lower end alone.
+    private static bool TryCapsuleSweepPieces(FixedQ4816 coreLength, FixedQ4816 radius, out int pieces) {
+        pieces = 1;
+
+        if (radius.Value <= 0L) {
+            return true;
+        }
+
+        var count = ((((((Int128)coreLength.Value) + radius.Value) - 1L) / radius.Value) + 1L);
+
+        if (count > MaximumCapsuleSweepPieces) {
+            return false;
+        }
+
+        pieces = ((int)count);
+
+        return true;
+    }
+
+    /// <summary>Returns whether a capsule's core, as authored, sweeps in at most <see cref="MaximumCapsuleSweepPieces"/>
+    /// pieces at every orientation a body turns it to.</summary>
+    /// <param name="core">The core segment from the lower centre to the upper, body-local.</param>
+    /// <param name="radius">The capsule's radius.</param>
+    /// <param name="pieces">The pieces the core needs at its longest rotated length; one past the ceiling when it
+    /// needs more.</param>
+    /// <returns><see langword="true"/> when <paramref name="pieces"/> is within the ceiling.</returns>
+    /// <remarks>A body's orientation is a normalized fixed-point quaternion, whose squared norm is within 2⁻¹⁵ of one,
+    /// and each rotated endpoint lies within three raws a component of its exact image, so a rotated core is at most
+    /// <c>(1 + 2⁻¹⁵)·length + 12</c> raws long. The core is measured at <c>length + length/2¹⁴ + 16</c> raws, past
+    /// that, so a capsule this accepts is never refused at a step for its orientation; only a body's runtime scale,
+    /// which can shrink the radius to a few raws, still reaches <see cref="ContactRefusal.OversizedCapsuleCore"/>.</remarks>
+    public static bool CapsuleCoreFitsSweep(FixedVector3 core, FixedQ4816 radius, out long pieces) {
+        var length = ((Int128)core.Length.Value);
+        var rotated = Int128.Min(x: ((length + (length >> 14)) + 16L), y: long.MaxValue);
+
+        if (TryCapsuleSweepPieces(coreLength: FixedQ4816.FromRawBits(value: ((long)rotated)), pieces: out var counted, radius: radius)) {
+            pieces = counted;
+
+            return true;
+        }
+
+        pieces = (MaximumCapsuleSweepPieces + 1L);
+
+        return false;
+    }
+
+    // Walks every core sphere of every volume: a sphere or box volume's centre, and a capsule's core segment covered by
     // spheres spaced closer than their radius. Each core sphere's radius is half the volume's least radius, so a body
-    // resting against a surface keeps half its radius of clearance and its sweep never stalls there. Returns the
-    // displacement every core is proved clear along: the whole step when every sweep cleared it, else the least proved
-    // one. Every core moves by the same displacement and the sweeps form each step's box the same way from a point
-    // start, so the least one's reached displacement lies inside every other core's proved boxes.
-    private bool TrySweepCores(ICertifiedSweepQuery certified, in FixedVector3 previousPosition, in FixedVector3 delta, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, out FixedVector3 reached) {
-        var least = UnitInterval32.One;
-
-        reached = delta;
-
+    // resting against a surface keeps half its radius of clearance and its sweep never stalls there. Without a sweep
+    // it only proves the step sweepable: every core's start representable and every capsule within its piece ceiling,
+    // the refusal that stops the step otherwise. With one it sweeps every core, each start the representable one that
+    // walk proved, and lowers the least proved displacement.
+    private ContactRefusal WalkCores(ICertifiedSweepQuery? certified, in FixedVector3 previousPosition, in FixedVector3 delta, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, ref UnitInterval32 least, ref FixedVector3 reached) {
         foreach (ref readonly var volume in volumes) {
             var lowerOffset = orientation.Rotate(vector: volume.Center);
+            ContactRefusal refusal;
 
             switch (volume.Kind) {
                 case FixedBodyColliderKind.Sphere:
-                    SweepCore(certified: certified, delta: in delta, least: ref least, offset: lowerOffset, previousPosition: in previousPosition, radius: (volume.Radius / Two), reached: ref reached);
+                    refusal = Core(certified: certified, delta: in delta, least: ref least, offset: lowerOffset, previousPosition: in previousPosition, radius: (volume.Radius / Two), reached: ref reached);
                     break;
                 case FixedBodyColliderKind.Box:
-                    SweepCore(
+                    refusal = Core(
                         certified: certified,
                         delta: in delta,
                         least: ref least,
@@ -748,16 +799,17 @@ public sealed class FixedFieldContactSolver(
                 case FixedBodyColliderKind.Capsule: {
                         var core = (orientation.Rotate(vector: volume.Endpoint) - lowerOffset);
                         var radius = (volume.Radius / Two);
-                        // One more piece than the core's length in radii keeps every piece's half-length below the
-                        // core sphere's radius by a margin no rounding of the piece centres reaches, so the pieces cover
-                        // the whole core however long it is; a longer capsule pays for its length in sweeps.
-                        var pieces = ((volume.Radius.Value > 0L)
-                            ? checked((int)((((core.Length.Value + volume.Radius.Value) - 1L) / volume.Radius.Value) + 1L))
-                            : 1);
+
+                        if (!TryCapsuleSweepPieces(coreLength: core.Length, pieces: out var pieces, radius: volume.Radius)) {
+                            return ContactRefusal.OversizedCapsuleCore;
+                        }
+
                         var denominator = FixedQ4816.FromInteger(value: (2L * pieces));
 
-                        for (var piece = 0; (piece < pieces); piece++) {
-                            SweepCore(
+                        refusal = ContactRefusal.None;
+
+                        for (var piece = 0; ((piece < pieces) && (refusal == ContactRefusal.None)); piece++) {
+                            refusal = Core(
                                 certified: certified,
                                 delta: in delta,
                                 least: ref least,
@@ -773,9 +825,46 @@ public sealed class FixedFieldContactSolver(
                 default:
                     throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}.");
             }
+
+            if (refusal != ContactRefusal.None) {
+                return refusal;
+            }
         }
 
-        return (least < UnitInterval32.One);
+        return ContactRefusal.None;
+    }
+    // One core sphere of the walk: proves its start representable without a sweep, or sweeps it with one.
+    private ContactRefusal Core(ICertifiedSweepQuery? certified, in FixedVector3 previousPosition, in FixedVector3 delta, FixedVector3 offset, FixedQ4816 radius, ref UnitInterval32 least, ref FixedVector3 reached) {
+        if (certified is null) {
+            return (TrySum(left: previousPosition, right: offset, sum: out _)
+                ? ContactRefusal.None
+                : ContactRefusal.UnrepresentableSweep);
+        }
+
+        SweepCore(certified: certified, delta: in delta, least: ref least, offset: offset, previousPosition: in previousPosition, radius: radius, reached: ref reached);
+
+        return ContactRefusal.None;
+    }
+    // The exact componentwise sum or difference of two vectors, when the carrier holds it: Int128 holds any of them.
+    private static bool TrySum(FixedVector3 left, FixedVector3 right, out FixedVector3 sum, bool subtract = false) {
+        static bool TryAxis(long x, long y, bool subtract, out FixedQ4816 axis) {
+            var exact = (subtract
+                ? (((Int128)x) - y)
+                : (((Int128)x) + y));
+            var fits = ((exact >= long.MinValue) && (exact <= long.MaxValue));
+
+            axis = FixedQ4816.FromRawBits(value: (fits ? ((long)exact) : 0L));
+
+            return fits;
+        }
+
+        var fitsX = TryAxis(subtract: subtract, axis: out var x, x: left.X.Value, y: right.X.Value);
+        var fitsY = TryAxis(subtract: subtract, axis: out var y, x: left.Y.Value, y: right.Y.Value);
+        var fitsZ = TryAxis(subtract: subtract, axis: out var z, x: left.Z.Value, y: right.Z.Value);
+
+        sum = new FixedVector3(X: x, Y: y, Z: z);
+
+        return (fitsX && fitsY && fitsZ);
     }
     // Computes the would-be ordinary push for a sphere center already confirmed not embedded (distance >= 0, sampled
     // by the caller) without applying it to position/velocity/grounded: the caller samples the other center at the
@@ -961,21 +1050,35 @@ public sealed class FixedFieldContactSolver(
         // step, and a body that would have tunneled stops at the face it approached, still on its exterior, where the
         // ordinary solve's measured normal resolves the face the body actually reached. A sweep that runs out of its
         // budget keeps only the ground it proved, so the body never moves through space it did not prove clear.
-        var delta = (position - previousPosition);
+        //
+        // One rule holds for every field the sweep runs over, the program's and the lattice's alike: a step whose
+        // displacement or any core's start leaves the carrier is refused before anything moves, never wrapped to a
+        // point no sweep proved and never clamped to one. The body keeps its start, its velocity comes back as it
+        // came, no sweep runs and no endpoint push is applied. A capsule core past its piece ceiling is refused the
+        // same way.
+        if (m_sweep is { } certified) {
+            if (!TrySum(left: position, right: previousPosition, subtract: true, sum: out var delta)) {
+                return Refuse(position: ref position, previousPosition: in previousPosition, refusal: ContactRefusal.UnrepresentableSweep);
+            }
 
-        if (
-            (delta != FixedVector3.Zero) &&
-            (m_sweep is { } certified) &&
-            TrySweepCores(
-                certified: certified,
-                delta: in delta,
-                orientation: in orientation,
-                previousPosition: in previousPosition,
-                reached: out var reached,
-                volumes: volumes
-            )
-        ) {
-            position = (previousPosition + reached);
+            if (delta != FixedVector3.Zero) {
+                var least = UnitInterval32.One;
+                var reached = delta;
+                var refusal = WalkCores(certified: null, delta: in delta, least: ref least, orientation: in orientation, previousPosition: in previousPosition, reached: ref reached, volumes: volumes);
+
+                if (refusal != ContactRefusal.None) {
+                    return Refuse(position: ref position, previousPosition: in previousPosition, refusal: refusal);
+                }
+
+                _ = WalkCores(certified: certified, delta: in delta, least: ref least, orientation: in orientation, previousPosition: in previousPosition, reached: ref reached, volumes: volumes);
+
+                // The whole step when every sweep cleared it, else the least proved one. Every core moves by the same
+                // displacement and the sweeps form each step's box the same way from a point start, so the least one's
+                // reached displacement lies inside every other core's proved boxes.
+                if (least < UnitInterval32.One) {
+                    position = (previousPosition + reached);
+                }
+            }
         }
 
         return Resolve(
@@ -986,6 +1089,18 @@ public sealed class FixedFieldContactSolver(
             volumes: volumes
         );
     }
+
+    // A refused step: the body keeps its start and reports no contact, naming why.
+    private static ContactResolution Refuse(ref FixedVector3 position, in FixedVector3 previousPosition, ContactRefusal refusal) {
+        position = previousPosition;
+
+        return new ContactResolution(
+            Grounded: false,
+            ObstructionNormal: FixedVector3.Zero,
+            Refusal: refusal
+        );
+    }
+
     /// <inheritdoc/>
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) {
         // Gradient-derived ambient up is authored (WorldContactRequirement.GradientDerivedUp), never assumed. When

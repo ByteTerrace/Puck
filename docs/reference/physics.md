@@ -191,12 +191,25 @@ step starts. It sweeps every core sphere of every collider volume through
 `Puck.Maths`'s `ICertifiedSweepQuery`, a certified conservative advancement:
 - a sphere or box sweeps its centre at half its least radius;
 - a capsule sweeps one core sphere per piece of its segment, one more piece
-  than the segment's length in radii, so the pieces cover the whole core;
+  than the segment's length in radii, so the pieces cover the whole core. A
+  capsule sweeps at most `MaximumCapsuleSweepPieces` pieces, one per bounds
+  query a single core may spend at `DefaultSweepBoundsQueryBudget` (64), so its
+  sweep costs at most that budget squared. Collider validation refuses a kit
+  capsule whose core needs more, measured at the longest length any body
+  orientation rounds it to (`CapsuleCoreFitsSweep`);
 - the least fraction any core proves is the body's, and the body moves that far.
   The fractions compare on the sweep's own 2⁻³² grid (`UnitInterval32`), since
   a long step's cores can differ by less than 2⁻¹⁶ of it;
 - the endpoint solve then runs unchanged, so a body that would have crossed a
   face stops on it and resolves against the face it reached.
+
+A step the sweep cannot run is refused before anything moves, by the same rule
+for a program's solids and a lattice's alike: a displacement, or a core
+sphere's start, that the Q48.16 carrier cannot hold, and a capsule core past its
+piece ceiling (which only a body's runtime scale reaches once validation has
+admitted it). The resolution names it in `ContactRefusal`, the body keeps the
+position it started the step from, its velocity comes back as it came, and no
+sweep or endpoint push runs; nothing is wrapped or clamped.
 
 Each sweep takes an explicit bounds-query budget
 (`DefaultSweepBoundsQueryBudget`, 64) and the contact skin as its contact
@@ -216,8 +229,11 @@ moves less than its radius is only resolved at its endpoint, already past the
 wall. A step long enough that its fraction rounds to the Q16 grid also jumps a
 thin wall between samples. `CertifiedContactSweepLawTests` holds each with a
 radius stepper as its red leg, along with the budget's prefix property, the
-frame, the capsule core, a compound body whose cores' fractions agree on the
-Q16 grid, and the lattice's bounds out to the carrier's ends; the `thin-wall-sweep` canary
+frame, the capsule core and its piece ceiling, a compound body whose cores'
+fractions agree on the Q16 grid, the lattice's bounds out to the carrier's ends,
+and a lattice step refused at them with its state unchanged;
+`CapsuleSweepCeilingLawTests` holds the validation refusal; the
+`thin-wall-sweep` canary
 holds it in the running World.
 
 `FixedSurfaceQuery` is the nearest-surface-point primitive over the same

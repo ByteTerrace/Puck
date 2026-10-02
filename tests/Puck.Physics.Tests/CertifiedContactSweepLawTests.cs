@@ -39,6 +39,18 @@ public sealed class CertifiedContactSweepLawTests {
 
         return new SdfFieldEvaluator(program: builder.Build());
     }
+    // The step's state: the body's position and velocity, and the lattice's cells.
+    private static ulong StateHash(FieldLattice lattice, FixedVector3 position, FixedVector3 velocity) {
+        var hash = Fnv1aHash.Create();
+
+        foreach (var value in ((FixedQ4816[])[position.X, position.Y, position.Z, velocity.X, velocity.Y, velocity.Z])) {
+            hash.Add(value: value.Value);
+        }
+
+        lattice.AppendStateHash(hash: ref hash);
+
+        return hash.Value;
+    }
     // One cell at the origin, one unit on a side, its column one unit high: a box from y = -1 to y = 1.
     private static FieldLattice OneCellLattice() {
         var lattice = new FieldLattice(input: new FieldLatticeInput(
@@ -227,6 +239,87 @@ public sealed class CertifiedContactSweepLawTests {
 
             Assert.True(condition: (Read(value: reached.Z) > face), userMessage: $"speed {speed}: the capsule's waist passed the bar to {Read(value: reached.Z)}");
         }
+    }
+    [Fact]
+    public void AnOversizedCapsuleCoreIsRefusedByNameAndTheStepChangesNothing() {
+        // A two-raw radius on a 2⁴⁷-raw core needs 2³⁵ sweep pieces: past an int, where the piece count once threw
+        // OverflowException inside the tick, and past MaximumCapsuleSweepPieces by far.
+        var evaluator = Wall();
+        var work = new FixedContactSweepWork();
+        var capsule = new FixedBodyColliderVolume[] { new(Kind: FixedBodyColliderKind.Capsule, Center: FixedVector3.Zero, Endpoint: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromRawBits(value: (1L << 47)), Z: FixedQ4816.Zero), HalfExtents: default, Rotation: FixedQuaternion.Identity, Radius: FixedQ4816.FromRawBits(value: 2L)) };
+        var previous = Z(z: -10.0);
+        var position = Z(z: -11.0);
+        var velocity = Z(z: -60.0);
+        var resolution = Solver(evaluator: evaluator, work: work).ResolveSweep(orientation: FixedQuaternion.Identity, position: ref position, previousPosition: in previous, up: FixedVector3.UnitY, velocity: ref velocity, volumes: capsule);
+
+        Assert.Equal(expected: ContactRefusal.OversizedCapsuleCore, actual: resolution.Refusal);
+        Assert.Equal(actual: position, expected: previous);
+        Assert.Equal(expected: Z(z: -60.0), actual: velocity);
+        Assert.Equal(expected: 0L, actual: work.Read(kind: FixedContactSweepWork.Sweeps));
+        Assert.False(condition: FixedFieldContactSolver.CapsuleCoreFitsSweep(core: capsule[0].Endpoint, pieces: out _, radius: capsule[0].Radius));
+    }
+    [Fact]
+    public void ACapsuleAtThePieceCeilingSweepsItsWholeCore() {
+        // A core 62.86 radii long, measured with the rotation margin, takes exactly the ceiling's pieces; a tenth of a
+        // unit longer takes one more and is refused.
+        var radius = FixedQ4816.FromDouble(value: 0.35);
+        var core = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromDouble(value: 22.0), Z: FixedQ4816.Zero);
+
+        Assert.True(condition: FixedFieldContactSolver.CapsuleCoreFitsSweep(core: core, pieces: out var pieces, radius: radius));
+        Assert.Equal(actual: pieces, expected: FixedFieldContactSolver.MaximumCapsuleSweepPieces);
+        Assert.False(condition: FixedFieldContactSolver.CapsuleCoreFitsSweep(core: (core + new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromDouble(value: 0.1), Z: FixedQ4816.Zero)), pieces: out _, radius: radius));
+
+        // A thin bar at the core's middle, crossed edge-on: neither end comes near it, so every piece must sweep.
+        var evaluator = Wall(halfExtents: new Vector3(x: 8f, y: 0.005f, z: WallHalfThickness), y: 11.35f);
+        var work = new FixedContactSweepWork();
+        var lower = new FixedVector3(X: FixedQ4816.Zero, Y: radius, Z: FixedQ4816.Zero);
+        var capsule = new FixedBodyColliderVolume[] { new(Kind: FixedBodyColliderKind.Capsule, Center: lower, Endpoint: (lower + core), HalfExtents: default, Rotation: FixedQuaternion.Identity, Radius: radius) };
+        var reached = Sweep(previous: Z(z: -95.0), solver: Solver(evaluator: evaluator, work: work), target: Z(z: -150.0), volumes: capsule);
+
+        Assert.True(condition: (Read(value: reached.Z) > (WallZ + WallHalfThickness)), userMessage: $"the capsule's middle passed the bar to {Read(value: reached.Z)}");
+        Assert.Equal(expected: ((long)FixedFieldContactSolver.MaximumCapsuleSweepPieces), actual: work.Read(kind: FixedContactSweepWork.Sweeps));
+    }
+    public static TheoryData<string> CarrierEndSteps() => ["a core past +2^47", "a core past -2^47", "a displacement across the carrier"];
+    [MemberData(memberName: nameof(CarrierEndSteps))]
+    [Theory]
+    public void ALatticeStepWhoseArithmeticLeavesTheCarrierIsRefusedAndChangesNothing(string step) {
+        // The lattice solid has no frame to refuse a far origin, so the solver's own rule must: a core start or a
+        // displacement the carrier cannot hold once wrapped to a point no sweep proved, which a lattice answers. A core
+        // one unit past either end wrapped to the far end, three quarters inside it, where the lattice proved the
+        // whole step clear and the body took it; a step from -1.5·2⁶² raws to +1.5·2⁶² wrapped to one of 2⁶² raws
+        // backward, which the sweep followed toward the carrier's end.
+        var lattice = OneCellLattice();
+        var solid = new FieldLatticeSolid(lattice: lattice);
+        var work = new FixedContactSweepWork();
+        var solver = new FixedFieldContactSolver(
+            contactSkin: Skin,
+            field: solid,
+            gradientProbe: FixedQ4816.Zero,
+            gradientUp: false,
+            groundedThreshold: FixedQ4816.FromDouble(value: 0.5),
+            maxIterations: 4,
+            query: new SdfFieldEvaluator(program: new SdfProgramBuilder().Build()),
+            sweep: new CertifiedFieldSweep(field: solid),
+            sweepBoundsQueryBudget: FixedFieldContactSolver.DefaultSweepBoundsQueryBudget,
+            sweepWork: work
+        );
+        var quarter = FixedQ4816.FromDouble(value: 0.25);
+        var far = FixedQ4816.FromRawBits(value: (3L << 61));
+
+        var (offset, previous, target) = step switch {
+            "a core past +2^47" => (new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero), new FixedVector3(X: FixedQ4816.Zero, Y: (FixedQ4816.MaxValue - quarter), Z: FixedQ4816.Zero), new FixedVector3(X: FixedQ4816.One, Y: (FixedQ4816.MaxValue - quarter), Z: FixedQ4816.Zero)),
+            "a core past -2^47" => (new FixedVector3(X: -FixedQ4816.One, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), new FixedVector3(X: (FixedQ4816.MinValue + quarter), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), new FixedVector3(X: (FixedQ4816.MinValue + quarter), Y: FixedQ4816.Zero, Z: FixedQ4816.One)),
+            _ => (FixedVector3.Zero, new FixedVector3(X: -far, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), new FixedVector3(X: far, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)),
+        };
+        var body = new FixedBodyColliderVolume[] { new(Kind: FixedBodyColliderKind.Sphere, Center: offset, Endpoint: default, HalfExtents: default, Rotation: FixedQuaternion.Identity, Radius: Radius) };
+        var velocity = Z(z: -3.0);
+        var before = StateHash(lattice: lattice, position: previous, velocity: velocity);
+        var position = target;
+        var resolution = solver.ResolveSweep(orientation: FixedQuaternion.Identity, position: ref position, previousPosition: in previous, up: FixedVector3.UnitY, velocity: ref velocity, volumes: body);
+
+        Assert.Equal(expected: ContactRefusal.UnrepresentableSweep, actual: resolution.Refusal);
+        Assert.Equal(expected: before, actual: StateHash(lattice: lattice, position: position, velocity: velocity));
+        Assert.Equal(expected: 0L, actual: work.Read(kind: FixedContactSweepWork.Sweeps));
     }
     [Fact]
     public void ASweepThatRunsOutOfBudgetKeepsOnlyTheGroundItProved() {
