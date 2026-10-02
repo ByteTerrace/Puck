@@ -51,6 +51,7 @@ internal static class CountersCeilings {
             Backend: run.Backend,
             Ceilings: [
                 .. run.Counts.Where(predicate: IsCeiled).Select(selector: static count => new WorldCountCeiling(
+                    Detail: count.Detail,
                     Ceiling: count.Value,
                     Class: count.Class,
                     Kind: count.Kind,
@@ -58,6 +59,7 @@ internal static class CountersCeilings {
                     Pass: count.Pass
                 )),
                 .. run.Passes.Where(predicate: static pass => (pass.State != GpuPassState.Executed)).SelectMany(selector: static pass => GpuWork.SubmissionKinds.ToArray().Select(selector: kind => new WorldCountCeiling(
+                    Detail: pass.Detail,
                     Ceiling: 0L,
                     Class: CountersReading.ClassIn(kind: kind.Class, pass: pass.Class),
                     Kind: kind.Name,
@@ -117,10 +119,10 @@ internal static class CountersCeilings {
             }
 
             var judged = (recorded.Device == run.Device);
-            var measured = new Dictionary<(string Node, string? Pass, string Kind), WorldCount>();
+            var measured = new Dictionary<(string Node, string? Pass, string Kind, string? Detail), WorldCount>();
             var passes = run.Passes.ToDictionary(
                 elementSelector: static pass => pass.State,
-                keySelector: static pass => (pass.Node, pass.Label)
+                keySelector: static pass => (pass.Node, pass.Label, pass.Detail)
             );
             var unjudged = 0;
 
@@ -129,20 +131,20 @@ internal static class CountersCeilings {
                 (count.Node is not null) &&
                 SubmissionKinds.Contains(item: count.Kind)
             ))) {
-                measured[(count.Node!, count.Pass, count.Kind)] = count;
+                measured[(count.Node!, count.Pass, count.Kind, count.Detail)] = count;
             }
 
             foreach (var ceiling in recorded.Ceilings) {
-                var where = $"{run.Backend}: {EnumWireName<WorkClass>.Of(value: ceiling.Class)} kind={ceiling.Kind} pass={(ceiling.Pass ?? Outside)} node={ceiling.Node}";
+                var where = $"{run.Backend}: {EnumWireName<WorkClass>.Of(value: ceiling.Class)} kind={ceiling.Kind} pass={(ceiling.Pass ?? Outside)}{CountersComparison.DetailText(detail: ceiling.Detail)} node={ceiling.Node}";
 
                 if (!measured.Remove(
-                    key: (ceiling.Node, ceiling.Pass, ceiling.Kind),
+                    key: (ceiling.Node, ceiling.Pass, ceiling.Kind, ceiling.Detail),
                     value: out var count
                 )) {
                     // A pass that did not execute reads zero, which any ceiling holds.
                     if (
                         (ceiling.Pass is null) ||
-                        !passes.TryGetValue(key: (ceiling.Node, ceiling.Pass), value: out var state) ||
+                        !passes.TryGetValue(key: (ceiling.Node, ceiling.Pass, ceiling.Detail), value: out var state) ||
                         (state == GpuPassState.Executed)
                     ) {
                         failures.Add(item: $"{where} was recorded but not measured");
@@ -168,7 +170,7 @@ internal static class CountersCeilings {
             }
 
             foreach (var count in measured.Values.Where(predicate: IsCeiled)) {
-                failures.Add(item: $"{run.Backend}: {EnumWireName<WorkClass>.Of(value: count.Class)} kind={count.Kind} pass={(count.Pass ?? Outside)} node={count.Node} reads {Spell(value: count.Value)} with no ceiling recorded");
+                failures.Add(item: $"{run.Backend}: {EnumWireName<WorkClass>.Of(value: count.Class)} kind={count.Kind} pass={(count.Pass ?? Outside)}{CountersComparison.DetailText(detail: count.Detail)} node={count.Node} reads {Spell(value: count.Value)} with no ceiling recorded");
             }
 
             if (unjudged > 0) {

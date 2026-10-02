@@ -94,6 +94,10 @@ retry checks. The hosted composition control moves a nested machine document to
 the common worlds directory and verifies its asset path still names the same
 asset without embedding the build directory.
 
+`CountersLawTests` also preserves optional layer/body detail identities through
+reading, comparison and ceilings. Required zeros and unavailable details stay
+separate from other rows in the same physical pass.
+
 ## Verification
 
 From the repository root, run in PowerShell or another shell:

@@ -16,7 +16,27 @@ public sealed class GpuWorkSample {
     private WorkClass[] m_classes = [];
     private long[] m_counts = new long[GpuWork.SubmissionColumnCount];
     private string[] m_labels = [];
+    private GpuWorkDetail[] m_details = [];
     private GpuPassState[] m_states = [];
+
+    /// <summary>Gets the submitted detail identities, in counter-row order, separately from the physical passes.</summary>
+    public ReadOnlySpan<GpuWorkDetail> Details => m_details;
+
+    /// <summary>Reads a detail count only when its owning pass executed.</summary>
+    /// <param name="detail">The zero-based index in <see cref="Details"/>.</param>
+    /// <param name="column">The submission-kind column.</param>
+    /// <param name="value">The count, or zero when its owner did not execute.</param>
+    /// <returns>Whether the owning pass executed.</returns>
+    public bool TryGetDetailCount(int detail, int column, out long value) {
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(((uint)detail), ((uint)m_details.Length));
+        ValidateColumn(column: column);
+        if (m_states[m_details[detail].Pass] != GpuPassState.Executed) { value = 0; return false; }
+        value = m_counts[((((PassCount + detail) + 1) * GpuWork.SubmissionColumnCount) + column)];
+        return true;
+    }
+
+    internal ulong CpuArrayBytes => checked((ulong)((m_counts.Length * sizeof(long)) + (m_states.Length * sizeof(byte))));
+    internal GpuWorkDetail[] DetailRows => m_details;
 
     /// <summary>Gets the number of passes the submission was recorded under; zero when the sample holds no submission.</summary>
     public int PassCount { get; private set; }
@@ -92,6 +112,7 @@ public sealed class GpuWorkSample {
         Load(
             classes: [],
             counts: [],
+            details: [],
             labels: [],
             revision: 0L,
             states: [],
@@ -103,6 +124,7 @@ public sealed class GpuWorkSample {
     internal void CopyFrom(GpuWorkSample source) {
         var classes = source.m_classes;
         var counts = source.m_counts;
+        var details = source.m_details;
         var labels = source.m_labels;
         var states = source.m_states;
         var passCount = Math.Min(
@@ -116,10 +138,14 @@ public sealed class GpuWorkSample {
             )
         );
 
+        // A concurrent publication may expose different generations of these references; the caller retries.
+        if ((details.Length > (((counts.Length / GpuWork.SubmissionColumnCount) - passCount) - 1)) ||
+            (labels.Length != passCount)) { details = []; }
         Load(
             classes: classes,
+            details: details,
             counts: counts.AsSpan(
-                length: ((passCount + 1) * GpuWork.SubmissionColumnCount),
+                length: (((passCount + details.Length) + 1) * GpuWork.SubmissionColumnCount),
                 start: 0
             ),
             labels: labels,
@@ -133,9 +159,9 @@ public sealed class GpuWorkSample {
     }
     // counts holds the outside row, then one row per pass, or is empty for no submission. labels and classes are
     // immutable and held by reference.
-    internal void Load(ReadOnlySpan<long> counts, string[] labels, WorkClass[] classes, long revision, ReadOnlySpan<GpuPassState> states, long submission) {
+    internal void Load(ReadOnlySpan<long> counts, string[] labels, WorkClass[] classes, GpuWorkDetail[] details, long revision, ReadOnlySpan<GpuPassState> states, long submission) {
         var passCount = states.Length;
-        var countLength = ((passCount + 1) * GpuWork.SubmissionColumnCount);
+        var countLength = (((passCount + details.Length) + 1) * GpuWork.SubmissionColumnCount);
 
         if (m_states.Length < passCount) {
             m_states = new GpuPassState[passCount];
@@ -158,6 +184,7 @@ public sealed class GpuWorkSample {
             counts.CopyTo(destination: destination);
         }
 
+        m_details = details;
         m_classes = classes;
         m_labels = labels;
         PassCount = passCount;

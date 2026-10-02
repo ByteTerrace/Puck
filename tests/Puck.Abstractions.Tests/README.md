@@ -13,7 +13,9 @@ ledger and its pass-through wrappers over `FakeGpuDevice`, the shared stand-in
 in `tests/Shared`, which holds fences until the test signals them and, for the
 wrapper laws, counts each call. `GpuStandingPassLawTests` distinguishes a
 retained pass from an inactive pass in text and JSON, and keeps both from
-inventing executed zero counts.
+inventing executed zero counts. Detail laws also hold submitted layer names
+across replacement, refuse invalid identities, and read all five 64-bit kernel
+counts after growing one completed slot without replacing the other slots.
 
 `GpuResidencyLawTests` covers residency without a device. It fills memory
 profiles from fixture Vulkan types and heaps and Direct3D 12 values, pins one

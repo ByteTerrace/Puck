@@ -74,6 +74,10 @@ package that loads from its binaries with no compiler. A fake tool runner writes
 bytecode that hashes its input, wrapped as a SPIR-V module with no bindings, so
 equal bytecode means an equal compile input.
 
+`RenderGraphWorkDetailLawTests` exercises prepared counter detail names through
+the real node: waited-slot growth, peak-budget refusal, failed pair creation,
+immutable completed labels and allocation-free steady recording.
+
 ## Verification
 
 ```powershell

@@ -59,7 +59,7 @@ public static class ShaderWorkCounters {
     }
 
     // The counting functions every generated interface declares, after its declarations: an interface declaring the work
-    // counters adds to them, and any other, a document pass's among them, declares the same two functions empty. A kernel
+    // counters adds to them, and any other, a document pass's among them, declares the same counting functions empty. A kernel
     // therefore counts unguarded, and compiles alike as its package's pass and as a document pass naming its source.
     internal static void AppendHlsl(StringBuilder text, bool counts) {
         if (!counts) {
@@ -70,6 +70,8 @@ public static class ShaderWorkCounters {
                 void puckCountWork(uint steps, uint texels) {
                 }
                 void puckCountFragmentWork(uint steps, uint texels) {
+                }
+                void puckCountDetailWork(uint row, uint steps, uint evaluations, uint hashes, uint textureLoads) {
                 }
 
                 """);
@@ -82,11 +84,14 @@ public static class ShaderWorkCounters {
         _ = text.Append(value: $$"""
 
             // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
-            // back): each counted kind in GpuWork.KernelKinds order, march steps then texels written, as a 64-bit count in
-            // two words, low word first. An interface declaring no work counters declares the same two functions empty.
+            // back): each counted kind in GpuWork.KernelKinds order, march steps, texels, sky evaluations, hashes and texture loads, as a 64-bit count in
+            // two words, low word first. An interface declaring no work counters declares the same counting functions empty.
             static const uint PuckWorkRowWords = {{number(GpuKernelCounters.RowWords)}}u;
             static const uint PuckWorkStepsWord = 0u;
             static const uint PuckWorkTexelsWord = {{number(GpuKernelCounters.CountWords)}}u;
+            static const uint PuckWorkSkyEvaluationsWord = {{number((GpuKernelCounters.CountWords * 2))}}u;
+            static const uint PuckWorkSkyHashesWord = {{number((GpuKernelCounters.CountWords * 3))}}u;
+            static const uint PuckWorkSkyTextureLoadsWord = {{number((GpuKernelCounters.CountWords * 4))}}u;
             // Adds to one count: the low word atomically, then the high word by one when that addition carries.
             void puckAddWork(uint word, uint amount) {
                 if (amount == 0u) {
@@ -99,6 +104,25 @@ public static class ShaderWorkCounters {
 
                 if (before > (0xFFFFFFFFu - amount)) {
                     InterlockedAdd({{Buffer}}[word + 1u], 1u);
+                }
+            }
+            // Counts a compute invocation's named detail. Equal active-lane rows share wave sums; mixed rows add
+            // independently, so divergent layer/body selection never attributes another lane's work to the first row.
+            // Detail rows never contain output texels: those belong to the ordinary pass/run row.
+            void puckCountDetailWork(uint row, uint steps, uint evaluations, uint hashes, uint textureLoads) {
+                bool sharedRow = WaveActiveAllEqual(row);
+                if (sharedRow) {
+                    steps = WaveActiveSum(steps);
+                    evaluations = WaveActiveSum(evaluations);
+                    hashes = WaveActiveSum(hashes);
+                    textureLoads = WaveActiveSum(textureLoads);
+                }
+                if (!sharedRow || WaveIsFirstLane()) {
+                    uint word = row * PuckWorkRowWords;
+                    puckAddWork(word + PuckWorkStepsWord, steps);
+                    puckAddWork(word + PuckWorkSkyEvaluationsWord, evaluations);
+                    puckAddWork(word + PuckWorkSkyHashesWord, hashes);
+                    puckAddWork(word + PuckWorkSkyTextureLoadsWord, textureLoads);
                 }
             }
             // Adds an invocation's march steps and texels written to its pass's row: the wave sums both, and its first active

@@ -149,7 +149,7 @@ internal static class CountersReading {
 
         // A count reads its kind's class, loosened to its pass's: a deterministic kind in a per-backend-deterministic
         // pass, whose work follows the device, is per-backend-deterministic there.
-        void Add(string source, string? node, string? pass, JsonElement values, WorkClass passClass = WorkClass.Deterministic) {
+        void Add(string source, string? node, string? pass, JsonElement values, WorkClass passClass = WorkClass.Deterministic, string? detail = null) {
             foreach (var count in values.EnumerateObject()) {
                 if (!classes.TryGetValue(
                     key: count.Name,
@@ -161,6 +161,7 @@ internal static class CountersReading {
                 }
 
                 counts.Add(item: new WorldCount(
+                    Detail: detail,
                     Class: ClassIn(kind: workClass, pass: passClass),
                     Kind: count.Name,
                     Node: node,
@@ -229,6 +230,9 @@ internal static class CountersReading {
 
                 foreach (var pass in sample.GetProperty(propertyName: "passes").EnumerateArray()) {
                     var label = pass.GetProperty(propertyName: "label").GetString()!;
+                    var detail = (pass.TryGetProperty(propertyName: "detail", value: out var detailValue) ? detailValue.GetString() : null);
+
+                    if (detail is "") { reason = $"node '{name}' pass '{label}' has an empty detail"; return false; }
                     var spelled = pass.GetProperty(propertyName: "state").GetString()!;
                     var spelledClass = pass.GetProperty(propertyName: "class").GetString()!;
 
@@ -255,6 +259,7 @@ internal static class CountersReading {
 
                     passes.Add(item: new WorldCountersPass(
                         Class: passClass,
+                        Detail: detail,
                         Label: label,
                         Node: name,
                         State: state
@@ -265,6 +270,7 @@ internal static class CountersReading {
                         value: out var passCounts
                     )) {
                         Add(
+                            detail: detail,
                             node: name,
                             pass: label,
                             passClass: passClass,

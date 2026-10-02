@@ -33,11 +33,14 @@ struct SourceRgbaPass {
 [[vk::binding(3, 3)]] RWStructuredBuffer<uint> workCounters : register(u3, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
-// back): each counted kind in GpuWork.KernelKinds order, march steps then texels written, as a 64-bit count in
-// two words, low word first. An interface declaring no work counters declares the same two functions empty.
-static const uint PuckWorkRowWords = 4u;
+// back): each counted kind in GpuWork.KernelKinds order, march steps, texels, sky evaluations, hashes and texture loads, as a 64-bit count in
+// two words, low word first. An interface declaring no work counters declares the same counting functions empty.
+static const uint PuckWorkRowWords = 10u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
+static const uint PuckWorkSkyEvaluationsWord = 4u;
+static const uint PuckWorkSkyHashesWord = 6u;
+static const uint PuckWorkSkyTextureLoadsWord = 8u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -50,6 +53,25 @@ void puckAddWork(uint word, uint amount) {
 
     if (before > (0xFFFFFFFFu - amount)) {
         InterlockedAdd(workCounters[word + 1u], 1u);
+    }
+}
+// Counts a compute invocation's named detail. Equal active-lane rows share wave sums; mixed rows add
+// independently, so divergent layer/body selection never attributes another lane's work to the first row.
+// Detail rows never contain output texels: those belong to the ordinary pass/run row.
+void puckCountDetailWork(uint row, uint steps, uint evaluations, uint hashes, uint textureLoads) {
+    bool sharedRow = WaveActiveAllEqual(row);
+    if (sharedRow) {
+        steps = WaveActiveSum(steps);
+        evaluations = WaveActiveSum(evaluations);
+        hashes = WaveActiveSum(hashes);
+        textureLoads = WaveActiveSum(textureLoads);
+    }
+    if (!sharedRow || WaveIsFirstLane()) {
+        uint word = row * PuckWorkRowWords;
+        puckAddWork(word + PuckWorkStepsWord, steps);
+        puckAddWork(word + PuckWorkSkyEvaluationsWord, evaluations);
+        puckAddWork(word + PuckWorkSkyHashesWord, hashes);
+        puckAddWork(word + PuckWorkSkyTextureLoadsWord, textureLoads);
     }
 }
 // Adds an invocation's march steps and texels written to its pass's row: the wave sums both, and its first active

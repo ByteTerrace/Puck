@@ -6,9 +6,9 @@ namespace Puck.Abstractions.Gpu;
 public interface IGpuWorkReadback {
     /// <summary>Adds the counts a completed submission left in one readback slot to its pass rows.</summary>
     /// <param name="slot">The readback slot the submission copied its counts into.</param>
-    /// <param name="counts">The submission's counts: the work outside every pass, then one row per pass, each row
+    /// <param name="counts">The submission's counts: the work outside every pass, then physical pass rows and detail rows, each row
     /// <see cref="GpuWork.SubmissionKinds"/> long in its column order.</param>
-    /// <param name="passCount">The passes the submission was recorded under; counts for a later row are
+    /// <param name="rowCount">The physical and detail rows the submission was recorded under; counts for a later row are
     /// dropped.</param>
-    void AddTo(int slot, Span<long> counts, int passCount);
+    void AddTo(int slot, Span<long> counts, int rowCount);
 }

@@ -53,7 +53,9 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// it, since every pass only adds to it atomically.</param>
 /// <param name="FrameWidth">The instance output width; zero uses the pass width for standalone recordings.</param>
 /// <param name="FrameHeight">The instance output height; zero uses the pass height for standalone recordings.</param>
-public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null, GpuKernelCounterRow? WorkCounters = null, uint FrameWidth = 0, uint FrameHeight = 0) {
+/// <param name="WorkDetailRow">The absolute first counter row for this pass's submitted detail names.</param>
+/// <param name="WorkDetailCount">The number of detail rows, including admitted rows that do no work.</param>
+public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null, GpuKernelCounterRow? WorkCounters = null, uint FrameWidth = 0, uint FrameHeight = 0, uint WorkDetailRow = 0, int WorkDetailCount = 0) {
     /// <summary>Gets the command buffer to record into.</summary>
     public nint CommandBuffer { get; } = CommandBuffer;
     /// <summary>Gets the instance's counting recorder.</summary>
@@ -87,6 +89,10 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     public RenderGraphExternalReads? Reads { get; } = Reads;
     /// <summary>Gets where the pass's kernels count their own work this frame, or <see langword="null"/>.</summary>
     public GpuKernelCounterRow? WorkCounters { get; } = WorkCounters;
+    /// <summary>Gets the absolute first detail row in the same counter buffer.</summary>
+    public uint WorkDetailRow { get; } = WorkDetailRow;
+    /// <summary>Gets the submitted detail-row count.</summary>
+    public int WorkDetailCount { get; } = WorkDetailCount;
 }
 /// <summary>What a package pass's recording did with its outputs this frame.</summary>
 public enum RenderGraphPackageOutcome : byte {
@@ -120,6 +126,13 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// <param name="context">The frame being recorded.</param>
     /// <returns><see langword="true"/> when the pass records nothing this frame.</returns>
     bool Skips(in FrameContext context) => false;
+    /// <summary>Names this prepared frame's kernel detail rows, including gated rows. Called after the slot fence
+    /// completes and before counter clear or any pass records. The recorder may prepare borrowed dependencies through
+    /// its existing idempotent path, as for <see cref="Signature"/>. Names stay unchanged through this frame's recording;
+    /// the node captures their values for completion. Empty for a pass without details.</summary>
+    /// <param name="context">The frame being prepared.</param>
+    /// <returns>Unique nonempty detail names in the order the kernel addresses them.</returns>
+    IReadOnlyList<string> WorkDetails(in FrameContext context) => [];
     /// <summary>Returns the identity of every package-owned input determining this pass's output, or null to execute.
     /// The node asks after <see cref="Skips"/> and before recording. The recorder may use its existing preparation of
     /// borrowed dependencies here, preserving that preparation's counting and queue ordering; it records no access to

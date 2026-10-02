@@ -169,6 +169,14 @@
                 "value": {
                   "description": "The count; for an allocation reading, the fewest bytes a run of the window allocated.",
                   "type": "integer"
+                },
+                "detail": {
+                  "description": "The submitted layer or body name, or null for the ordinary pass row.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -187,7 +195,7 @@
             "description": "Every render node\u0027s passes in its newest completed submission, in pass order.",
             "type": "array",
             "items": {
-              "description": "What one pass of a render node did in its newest completed submission. A pass\u0027s state is deterministic: the same inputs execute, skip, or leave unreached the same passes on every backend.",
+              "description": "What one pass of a render node did in its newest completed submission. A pass\u0027s state is deterministic: the same inputs execute, retain, skip, or leave unreached the same passes on every backend.",
               "type": [
                 "object",
                 "null"
@@ -220,6 +228,14 @@
                     "allocation-zero-nonzero"
                   ],
                   "title": "WorkClass"
+                },
+                "detail": {
+                  "description": "The submitted layer or body name, or null for the ordinary pass row.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [

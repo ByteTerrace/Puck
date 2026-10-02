@@ -10,7 +10,7 @@ namespace Puck.Abstractions.Tests;
 /// over <see cref="UploadModelGpu"/>, whose buffers hold bytes, whose clear zeroes them and whose copy copies them. A frame
 /// clears its slot's counters, the passes' kernels add to their rows, and the copy carries the rows into the slot's
 /// readback, which the ledger reads into the passes' kernel columns once the submission completes: each row one pass's
-/// 64-bit counts, its march steps and then its texels written. The clear, the copy and their three barriers count outside
+/// 64-bit counts, march steps, texels, sky evaluations, hashes and texture loads. The clear, the copy and their three barriers count outside
 /// every pass, and the Direct3D 12 buffer states the barriers name replay without a conflict.
 /// </summary>
 public sealed class GpuKernelCountersLawTests {
@@ -56,7 +56,7 @@ public sealed class GpuKernelCountersLawTests {
 
         BinaryPrimitives.WriteUInt64LittleEndian(destination: memory.AsSpan(start: 0), value: 5UL);
         BinaryPrimitives.WriteUInt64LittleEndian(destination: memory.AsSpan(start: 8), value: 7UL);
-        BinaryPrimitives.WriteUInt64LittleEndian(destination: memory.AsSpan(start: 32), value: 0x1_0000_0003UL);
+        BinaryPrimitives.WriteUInt64LittleEndian(destination: memory.AsSpan(start: 80), value: 0x1_0000_0003UL);
 
         for (var pass = 0; (pass < 3); pass++) {
             ledger.EnterPass(pass: pass);

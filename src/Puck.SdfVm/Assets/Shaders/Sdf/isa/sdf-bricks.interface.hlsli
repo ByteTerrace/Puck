@@ -43,5 +43,7 @@ void puckCountWork(uint steps, uint texels) {
 }
 void puckCountFragmentWork(uint steps, uint texels) {
 }
+void puckCountDetailWork(uint row, uint steps, uint evaluations, uint hashes, uint textureLoads) {
+}
 
 #endif // PUCK_SHADER_INTERFACE_SDF_BRICKS

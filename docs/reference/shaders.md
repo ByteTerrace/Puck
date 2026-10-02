@@ -1651,7 +1651,8 @@ the work counters: every pass of `sdf.world`, `place`, `overlay`, the source
 conversions and every post-process package, which must) declares the work
 counters in its interface (`ShaderWorkCounters`), whose generated include
 carries the functions its shaders count through, and keeps a counter buffer and
-a readback buffer per frame slot, one row a pass (`GpuKernelCounters`). A
+a readback buffer per frame slot (`GpuKernelCounters`). Rows begin with the
+physical passes, followed by their named detail rows. A
 compute kernel counts through `puckCountWork`, one wave sum added by the wave's
 first active lane, and a fragment stage through `puckCountFragmentWork`, the
 same over the wave's lanes that are not helper lanes. Every generated include
@@ -1665,8 +1666,18 @@ ahead of the first pass and copies them to its readback behind the last, which
 counts one clear, one copy and three buffer barriers outside every pass: the
 clear before the compute and fragment stages that add, those stages before the
 copy, and the copy before the host's read. The ledger adds each row's
-`gpu.march.steps` and `gpu.texels.written` to its pass once the submission
-completes. What the
+`gpu.march.steps`, `gpu.texels.written`, `gpu.sky.evaluations`, `gpu.sky.hashes` and
+`gpu.sky.texture-loads` once the submission completes. Each row uses ten 32-bit
+words: five low/high pairs. `WorkDetails` supplies the prepared pass's layer or
+body names before counter clear. The ledger captures those names with the
+submission, so later membership changes cannot rename completed work. Physical
+pass indices stay unchanged; `WorkDetailRow` is the absolute first detail row.
+`puckCountDetailWork` adds steps, evaluations, hashes and texture loads to a
+detail; output texels belong to the ordinary pass or run. Its active lanes may
+address different details. A slot grows only after its prior fence and readback
+complete, within the existing replacement-peak budget. GPU storage and retained
+CPU arrays are included in inspection. JSON report and ceiling rows carry an
+optional `detail`, part of their comparison identity. What the
 node does between submissions to install or rebuild a graph, the sets it
 writes and the pass blocks it sends to every frame slot, counts in no
 submission, whether the install succeeds, fails partway or follows a device

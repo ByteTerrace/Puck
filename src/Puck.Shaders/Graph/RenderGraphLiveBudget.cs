@@ -134,7 +134,8 @@ public sealed class RenderGraphLiveBudget {
                     .Append(value: " region-cpu-scratch-bytes=").Append(value: memory.CpuScratchBytes);
             }
             if (runtime.NodeOf(instance: row.Instance) is { } node) {
-                _ = into.Append(value: " cadence-cpu-bytes=").Append(value: node.CadenceCpuBytes);
+                _ = into.Append(value: " cadence-cpu-bytes=").Append(value: node.CadenceCpuBytes)
+                    .Append(value: " kernel-counter-cpu-bytes=").Append(value: node.KernelCounterCpuBytes);
             }
             AppendLedger(
                 into: into,
