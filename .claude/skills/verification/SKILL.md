@@ -108,10 +108,16 @@ nothing, however plausible it reads.
 
 1. Withhold the fix and keep the law: `git stash push -- <fix files>`, or a
    scratch worktree at the base with only the law applied.
-2. Run the law. It must fail at the assertion it was written for, with the
-   intended message. A failure anywhere else (a compile error, a setup throw, a
-   different assertion) is not a red leg. The outcome must be **Failed**; a
-   **Skipped** run is not a red leg.
+2. Build the withheld tree until the build exits 0, repairing even an unrelated
+   compile error in it, and only then run the law: a run after a failed build
+   measures the fixed binaries, so a pass there says nothing about the law. The
+   law must fail at the assertion it was written for, with the intended message.
+   A failure anywhere else (a compile error, a setup throw, a different
+   assertion) is not a red leg. Read the Total, Failed and Skipped counts of
+   every leg, not the exit code: the outcome must be **Failed**, and a
+   **Skipped** or unselected test executed nothing, so it is not a red leg
+   whatever the exit code says. Run the law where it executes, or report the
+   leg as unproved.
 3. Restore the fix, then touch the restored files before rebuilding and running
    the law again. It must pass. Restoring an older timestamp can let MSBuild
    keep the mutated assembly, so a run without this rebuild can test the
