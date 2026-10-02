@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Text.RegularExpressions;
+using Puck.Shaders;
 using Puck.SignedDistance;
 using Xunit;
 
@@ -125,6 +126,62 @@ public sealed partial class SdfSurfaceTransportLawTests {
         Assert.Equal(actual: distance, expected: 80f, tolerance: 1e-3f);
         // No surface clips nothing.
         Assert.Equal(expected: 0f, actual: SdfSurfaceTransport.SurfaceDistance(pixel: default));
+    }
+    [Fact]
+    public void TheFirstFrameOfAnEpochReadsEachSampleAsItsNativeViewDoes() {
+        var random = new Random(Seed: 1865);
+        float[] distances = [0f, SdfWorldPackage.MinimumNear, 0.1f, 1f, 37.25f, 100f, 1000f, 8192f];
+        var packedDiffers = false;
+
+        for (var trial = 0; (trial < 4000); trial++) {
+            var coverage = ((trial % 4) switch { 0 => 0f, 1 => 1f, _ => random.NextSingle() });
+            var distance = (((trial % 3) == 0) ? distances[random.Next(maxValue: distances.Length)] : (random.NextSingle() * 8192f));
+            var sample = new SdfRenderSample(Color: Vector3.One, Coverage: coverage, Distance: distance);
+            var word = SdfSurfaceTransport.SpatialWord(exact: true, fogDensity: FogDensity, samples: [sample], weights: [1f]);
+            var native = SdfSurfaceTransport.ReadSurface(coverage: coverage, fogDensity: FogDensity, nativeDistance: distance, word: null);
+            var copied = SdfSurfaceTransport.ReadSurface(coverage: coverage, fogDensity: FogDensity, nativeDistance: 0f, word: word);
+
+            // The copy carries its sample's distance whole, and the composite derives the rest at the one site a native
+            // pixel reaches, so the two agree to the bit, not within a tolerance.
+            Assert.NotEqual(actual: word & SdfSurfaceTransport.SampleBit, expected: 0u);
+            Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: native.Fog), actual: BitConverter.SingleToUInt32Bits(value: copied.Fog));
+            Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: native.Distance), actual: BitConverter.SingleToUInt32Bits(value: copied.Distance));
+
+            // A reconstruction's packed word never reads as a sample word, and it rounds what a sample word keeps.
+            var packed = SdfSurfaceTransport.PackWord(pixel: SdfSurfaceTransport.Sample(fogDensity: FogDensity, sample: sample));
+            var unpacked = SdfSurfaceTransport.ReadSurface(coverage: coverage, fogDensity: FogDensity, nativeDistance: 0f, word: packed);
+
+            Assert.Equal(actual: packed & SdfSurfaceTransport.SampleBit, expected: 0u);
+            packedDiffers |= (unpacked != native);
+        }
+
+        Assert.True(condition: packedDiffers, userMessage: "Half-float packing must be what the sample word avoids.");
+    }
+    [Fact]
+    public void TheFirstFrameOfAnEpochRunsTheSpatialPathsOneSite() {
+        var resolve = CodeOf(path: "passes/sdf-resolve.comp.hlsl");
+        var sky = CodeOf(path: "passes/sdf-sky-pass.hlsli");
+        var composite = CodeOf(path: "passes/sdf-composite.comp.hlsl");
+        var main = resolve[resolve.IndexOf(comparisonType: StringComparison.Ordinal, value: "void CSMain(")..];
+
+        // The resolve computes the spatial color and word once, before it knows whether the view is temporal, and an
+        // unaccepted temporal pixel, every pixel of an epoch's first frame, writes exactly those values.
+        Assert.Single(collection: Regex.Matches(input: main, pattern: @"\bsdfResolveSpatial\("));
+        Assert.Contains(actualString: main, expectedSubstring: "transportRW[((id.y * extent.x) + id.x)] = spatialWord;");
+        Assert.Contains(actualString: main, expectedSubstring: "float4 resolved = (accepted ? lerp(spatial, accumulated, saturate(total)) : spatial);");
+        Assert.Contains(actualString: main, expectedSubstring: "(accepted ? sdfPackTransport(lerp(spatialTransport, accumulatedTransport, saturate(total))) : spatialWord)");
+        // A pixel copied whole carries its sample's distance, read where a native view's composite reads it.
+        Assert.Matches(actualString: resolve, expectedRegexPattern: @"if \(SDF_VISIBILITY_CURRENT\(pixel, cullBounds\)\) \{[^}]*t = \(sdfVisibilityHit\(visibility\) \? visibility\.t : 0\.0\);\s*\}\s*transport = sdfSampleTransport\(color\.a, t\);\s*word = sdfTransportSampleWord\(t\);");
+        // The composite derives a sample's transport at one site, which a native pixel and a sample word both reach.
+        Assert.Single(collection: Regex.Matches(input: (sky + composite), pattern: @"\bsdfSampleTransport\("));
+        Assert.Contains(actualString: sky, expectedSubstring: "float2 surface = (sample ? sdfSampleTransport(coverage, t) : sdfUnpackTransport(word));");
+        // That site's arithmetic is precise, so no compiler contracts or reorders it differently in another kernel.
+        var transport = CodeOf(path: "shade/sdf-transport.hlsli");
+
+        Assert.Contains(actualString: transport, expectedSubstring: "precise float transmittance = ");
+        Assert.Contains(actualString: transport, expectedSubstring: "precise float fog = ");
+        Assert.Contains(actualString: transport, expectedSubstring: "precise float inverseDistance = ");
+        Assert.Matches(actualString: transport, expectedRegexPattern: $@"static const uint SdfTransportSampleBit = 0x{SdfSurfaceTransport.SampleBit:X8}u;");
     }
     [Fact]
     public void TheKernelsCarryTheTransportWithTheColorsWeights() {

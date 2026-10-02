@@ -296,7 +296,14 @@ the two is the one case the clip does not reproduce sample by sample.
 
 The transport costs no extra memory: it is one word of two half floats an output
 pixel, the size of a single float distance, and the history surface fits it in
-its three words by holding the distance and the weight as half floats. `SdfSurfaceTransport` is the CPU reference, and
+its three words by holding the distance and the weight as half floats. A pixel the
+resolve copies whole from one render sample, which every pixel is when the output
+has the render grid's extent and no jitter, as on the first frame of a temporal
+epoch at native scale, carries that sample's ray distance in the word instead,
+marked by its top bit. The composite then derives the sample's transport at the
+same line of code, with the same `precise` arithmetic, that a native view's
+composite runs on the same sample, so that first frame equals the spatial frame
+to the bit on any GPU rather than within the rounding of two half floats. `SdfSurfaceTransport` is the CPU reference, and
 `SdfSurfaceTransportLawTests` hold the blend to the per-sample result. Because
 each hit's transmittance is in the lit image, a change of fog density reaches
 views and the resolve, while a change of the fog's color, the gradient, reaches

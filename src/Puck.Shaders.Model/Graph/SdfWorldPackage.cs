@@ -573,9 +573,11 @@ public static partial class SdfWorldPackage {
         /// one.</summary>
         public const string Lit = "lit";
         /// <summary>Each output pixel's surface transport, which the resolve writes for the composite in a reduced or
-        /// temporal view, reconstructed from the render samples with the lit image's weights: one word a pixel, two half
-        /// floats, the low the fog's in-scatter weight (coverage times one minus transmittance), the high the coverage over
-        /// the ray distance, scaled (<c>shade/sdf-transport.hlsli</c>).</summary>
+        /// temporal view, reconstructed from the render samples with the lit image's weights: one word a pixel
+        /// (<c>shade/sdf-transport.hlsli</c>). With its top bit clear, two half floats, the low the fog's in-scatter weight
+        /// (coverage times one minus transmittance), the high the coverage over the ray distance, scaled; with it set, a
+        /// pixel the resolve copied whole from one render sample, carrying that sample's ray distance's float bits, from
+        /// which the composite derives the transport as a native view's composite does.</summary>
         public const string Transport = "transport";
         /// <summary>The sky's lowest field run, which composes over nothing, so its offset alone.</summary>
         public const string SkyBase = "skyBase";
