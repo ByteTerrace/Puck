@@ -367,9 +367,12 @@ internal static partial class CanaryCommand {
         // Every leg launches one World: the --world-artifact named, or the build keyed by this checkout's sources, reused
         // when an earlier run built it and leased until the last leg has exited (see WorldArtifactBuild).
         if (!WorldArtifactBuild.TryResolveNamed(
-            build: out var build,
             error: out var buildError,
             lease: out var world,
+            logDirectory: CreateRunDirectory(
+                id: "world",
+                leg: "build"
+            ),
             named: worldArtifact,
             path: out var artifact,
             repositoryRoot: repositoryRoot,
@@ -380,10 +383,6 @@ internal static partial class CanaryCommand {
             verb: "canary"
         )) {
             Console.Error.WriteLine(value: $"ERROR: {buildError}");
-
-            if (build is not null) {
-                PrintCaptured(result: build);
-            }
 
             return CliExit.Refused;
         }
@@ -575,7 +574,7 @@ internal static partial class CanaryCommand {
         }
 
         PrintTally(
-            built: (build is not null),
+            built: (world is { Reused: false }),
             endings: endings,
             plan: plan,
             seed: budget.Seed,

@@ -493,8 +493,8 @@ public static class DocsCitationsCommand {
 
         if (!WorldArtifactBuild.TryResolve(
             artifact: out var world,
-            build: out _,
             error: out error,
+            logDirectory: runDirectory,
             repositoryRoot: root,
             timeout: TimeSpan.FromSeconds(value: 300),
             verb: Verb

@@ -1234,6 +1234,16 @@ megabytes. The store keeps the four most recently used builds, plus any build a
 run still holds, and prunes the rest. A build directory left by a killed run is
 deleted after six hours.
 
+Every build restores first. NuGet's no-op check compares each closure
+project's restore inputs with the ones its last restore recorded. An unchanged
+closure therefore restores without another process, a written file, or a
+network request, while a closure that has gained a project or a package since
+its last restore is restored before it builds. A run that builds keeps the
+build's standard output and error in `world-build.log` in its own scratch run
+directory. A failed build's refusal quotes the output's first error lines, or
+its last lines when none is an error, and names that log. `puck test` keeps its
+run directory when it holds that log.
+
 None of these verbs builds in place. `Puck.World` has a build-time reference to
 `Puck.Cli`, whose build compiles the shipped `.puck` worlds, so an in-place
 World build would also write into the CLI's own Release output directory

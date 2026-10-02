@@ -56,6 +56,7 @@ public sealed class WorldArtifactBuildLawTests {
             Commit(message: "initial");
         }
 
+        public string LogDirectory => m_directory.PathOf(name: "run");
         public string Root => m_directory.RootPath;
         public WorldArtifactStore Store => new(root: m_directory.PathOf(name: "store"));
 
@@ -137,9 +138,9 @@ public sealed class WorldArtifactBuildLawTests {
         Assert.True(
             condition: WorldArtifactBuild.TryResolve(
             artifact: out var artifact,
-            build: out _,
             builder: builder.Build,
             error: out var error,
+            logDirectory: checkout.LogDirectory,
             repositoryRoot: checkout.Root,
             store: store,
             timeout: TimeSpan.FromMinutes(value: 2),
@@ -493,6 +494,139 @@ public sealed class WorldArtifactBuildLawTests {
         Assert.Equal(
             actual: second,
             expected: first
+        );
+    }
+    [Fact]
+    public void AFailedBuildsRefusalQuotesItsFirstErrorsAndNamesTheLogThatKeepsItsWholeOutput() {
+        using var checkout = new Checkout();
+        const string Error = @"C:\x\Library.cs(1,1): error CS1002: ; expected [C:\x\Puck.Library.csproj]";
+        var stdout = $"  Determining projects to restore...\n  3>{Error}\n\nBuild FAILED.\n\n    {Error}\n    0 Warning(s)\n    1 Error(s)\n";
+
+        Assert.False(condition: WorldArtifactBuild.TryResolve(
+            artifact: out _,
+            builder: (string outputDirectory, TimeSpan timeout, out CliProcessResult? build, out string error) => {
+                build = new CliProcessResult(
+                    ExitCode: 1,
+                    OutputLines: [],
+                    Stderr: "a line on standard error\n",
+                    Stdout: stdout,
+                    TimedOut: false
+                );
+                error = "the Puck.World build exited 1.";
+
+                return false;
+            },
+            error: out var refusal,
+            logDirectory: checkout.LogDirectory,
+            repositoryRoot: checkout.Root,
+            store: checkout.Store,
+            timeout: TimeSpan.FromMinutes(value: 2),
+            verb: "law"
+        ));
+
+        var log = Path.Combine(
+            path1: checkout.LogDirectory,
+            path2: WorldArtifactBuild.BuildLogName
+        );
+
+        Assert.StartsWith(
+            actualString: refusal,
+            expectedStartString: "the Puck.World build exited 1. First errors:"
+        );
+        Assert.Equal(
+            actual: refusal.Split(separator: Error).Length,
+            expected: 2
+        );
+        Assert.Contains(
+            actualString: refusal,
+            expectedSubstring: CliPaths.ToDisplay(fullPath: log)
+        );
+        Assert.True(
+            condition: File.Exists(path: log),
+            userMessage: $"{log} was not kept"
+        );
+        Assert.Contains(
+            actualString: File.ReadAllText(path: log),
+            expectedSubstring: "Determining projects to restore"
+        );
+        Assert.Contains(
+            actualString: File.ReadAllText(path: log),
+            expectedSubstring: "a line on standard error"
+        );
+    }
+    [Fact]
+    public void AProjectAddedToTheClosureSinceItsLastRestoreIsRestoredBeforeTheBuild() {
+        using var directory = new TemporaryDirectory();
+        var budget = TimeSpan.FromMinutes(value: 3);
+
+        File.Copy(
+            destFileName: directory.PathOf(name: "global.json"),
+            sourceFileName: RepositoryPaths.Resolve(relativePath: "global.json")
+        );
+        _ = directory.WriteText(
+            name: "Directory.Build.props",
+            text: "<Project />\n"
+        );
+        _ = directory.WriteText(
+            name: "Directory.Build.targets",
+            text: "<Project />\n"
+        );
+
+        foreach (var library in ((string[])["Library", "Added"])) {
+            _ = directory.WriteText(
+                name: $"{library}/{library}.csproj",
+                text: "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <TargetFramework>net10.0</TargetFramework>\n  </PropertyGroup>\n</Project>\n"
+            );
+            _ = directory.WriteText(
+                name: $"{library}/{library}.cs",
+                text: $"namespace {library};\n\npublic static class Value {{\n    public const int One = 1;\n}}\n"
+            );
+        }
+
+        WriteApplication(
+            directory: directory,
+            libraries: ["Library"]
+        );
+        Assert.True(
+            condition: WorldArtifactBuild.TryBuildProject(
+            build: out _,
+            error: out var error,
+            outputDirectory: directory.PathOf(name: "out-first"),
+            project: "Application/Application.csproj",
+            repositoryRoot: directory.RootPath,
+            timeout: budget
+        ),
+            userMessage: error
+        );
+
+        // The application's assets file now predates its reference to Added, which has never been restored.
+        WriteApplication(
+            directory: directory,
+            libraries: ["Library", "Added"]
+        );
+        Assert.True(
+            condition: WorldArtifactBuild.TryBuildProject(
+            build: out var second,
+            error: out error,
+            outputDirectory: directory.PathOf(name: "out-second"),
+            project: "Application/Application.csproj",
+            repositoryRoot: directory.RootPath,
+            timeout: budget
+        ),
+            userMessage: $"{error}\n{second?.Stdout}"
+        );
+    }
+
+    private static void WriteApplication(TemporaryDirectory directory, IReadOnlyList<string> libraries) {
+        var references = string.Concat(values: libraries.Select(selector: static library => $"    <ProjectReference Include=\"../{library}/{library}.csproj\" />\n"));
+
+        _ = directory.WriteText(
+            name: "Application/Application.csproj",
+            text: $"<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net10.0</TargetFramework>\n  </PropertyGroup>\n  <ItemGroup>\n{references}  </ItemGroup>\n</Project>\n"
+        );
+        _ = directory.WriteText(
+            name: "Application/Program.cs",
+            text: $"return {string.Join(separator: " + ", values: libraries.Select(selector: static library => $"{library}.Value.One"))} - {libraries.Count};\n"
         );
     }
 }
