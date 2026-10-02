@@ -1,3 +1,4 @@
+using Puck.Maths;
 using Puck.Networking;
 using Puck.Physics.Navigation;
 using Puck.World.Protocol;
@@ -18,6 +19,21 @@ public static partial class WorldAuthorityCheckpointCodec {
             Point: point
         );
     }
+
+    /// <summary>Folds population checkpoint entries into a state hash in exactly the bytes a checkpoint writes them in,
+    /// so the hash covers what a restore resumes and moves only when the encoding does.</summary>
+    /// <param name="hash">The hash to fold into.</param>
+    /// <param name="entries">The entries, in slot order.</param>
+    internal static void AppendPopulationEntries(ref Fnv1aHash hash, IReadOnlyList<WorldPopulationEntryCheckpoint> entries) {
+        var writer = new WireWriter();
+
+        writer.WriteArray(
+            items: entries,
+            writeItem: WritePopulationEntry
+        );
+        hash.Add(values: writer.WrittenSpan);
+    }
+
     private static void WritePopulationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry) {
         writer.WriteInt32(value: entry.Index);
         writer.WriteByte(value: entry.KitIndex);

@@ -66,7 +66,38 @@ internal sealed record DeterminismStream(string ManifestPin, IReadOnlyList<Deter
         "pose",
         "authoritative",
     ];
+    /// <summary>Gets the document hashes every scenario attests first, in this order: the world's fingerprint, then the
+    /// compiled world's definition hash and catalog fingerprint.</summary>
+    public static IReadOnlyList<string> RequiredDocuments { get; } = ["fingerprint", "definition", "catalog"];
+    /// <summary>Gets the families of the document hashes that may follow the required ones, each named
+    /// <c>&lt;family&gt;:&lt;row&gt;</c>: an asset row's canonical hash, a creation's canonical hash, or its bake
+    /// key.</summary>
+    public static IReadOnlyList<string> DocumentFamilies { get; } = ["patch", "tune", "music", "table", "creation", "bake"];
 
+    // Why a scenario's document hashes are not this version's attestation, or null: the required three first and in
+    // order, then only the known families, each naming a row.
+    private static string? DocumentRefusal(IReadOnlyList<DeterminismDocumentHash> documents) {
+        for (var index = 0; (index < RequiredDocuments.Count); index++) {
+            if ((index >= documents.Count) || (documents[index].Name != RequiredDocuments[index])) {
+                return $"its document hashes must begin {string.Join(separator: ", ", values: RequiredDocuments)}, in that order; document {(index + 1)} is {((index < documents.Count) ? $"'{documents[index].Name}'" : "missing")}";
+            }
+        }
+
+        for (var index = RequiredDocuments.Count; (index < documents.Count); index++) {
+            var name = documents[index].Name;
+            var colon = name.IndexOf(value: ':');
+
+            if (
+                (colon <= 0) ||
+                (colon == (name.Length - 1)) ||
+                !DocumentFamilies.Contains(value: name[..colon])
+            ) {
+                return $"document '{name}' is not {string.Join(separator: ", ", values: DocumentFamilies)} followed by ':' and a row";
+            }
+        }
+
+        return null;
+    }
     private static string Hex(ulong value) => value.ToString(
         format: "x16",
         provider: CultureInfo.InvariantCulture
@@ -184,6 +215,12 @@ internal sealed record DeterminismStream(string ManifestPin, IReadOnlyList<Deter
                     Value: parts[2]
                 ));
                 index++;
+            }
+
+            if (DocumentRefusal(documents: documents) is { } documentRefusal) {
+                error = $"scenario '{header[1]}' before line {(index + 1)}: {documentRefusal}";
+
+                return false;
             }
 
             var ticks = new List<ulong[]>(capacity: tickCount);

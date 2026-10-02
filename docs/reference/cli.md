@@ -1671,7 +1671,9 @@ forward-slashed and relative to the manifest), `ticks` (1 to 100000), `seats`
 `exercises`. An intent holds `body`, `from`, `through` (ticks counted from one)
 and `channels`, which maps a declared channel name to a decimal string parsed
 exactly as `FixedQ4816`. A cell holds `tick`, `row`, `key` and `value`, applied through the
-mutation `world.state.cell.set` submits. `exercises` names the per-tick
+mutation `world.state.cell.set` submits; a write the authority refuses, or does
+not answer by the end of its tick, fails the scenario with its tick and cell
+rather than recording a run the script did not describe. `exercises` names the per-tick
 components the scenario exists to move, by their names on the stream's
 `components` line, aggregates excluded. `record` refuses a scenario whose run
 leaves any of them unchanged, so a scenario cannot go vacuous unnoticed. Any
@@ -1691,13 +1693,17 @@ end
 ```
 
 A scenario's document hashes are the world's fingerprint, the compiled world's
-definition hash and catalog fingerprint, each asset row's canonical hash
-(`patch:`, `tune:`, `music:`, `table:`), and each creation's canonical hash and
-bake key (`creation:`, `bake:`). A tick's vector holds each authoritative state
-component on its own (population pose, arena, host-owned rows, declarations,
-topologies, latches, rule groups, decisions, board enforcement, body action
-state, navigation, flocks and search), then the population pose hash, then the
-authoritative state hash the replay tape verifies. The aggregates come last, so
+definition hash and catalog fingerprint, in that order and always present, then
+each asset row's canonical hash (`patch:`, `tune:`, `music:`, `table:`) and each
+creation's canonical hash and bake key (`creation:`, `bake:`). A stream missing
+one of the first three, or naming a document of another family, is refused. A
+tick's vector holds each authoritative state component on its own (population
+pose, arena, host-owned rows, declarations, topologies, latches, rule groups,
+decisions, board enforcement, body action state, body continuation, navigation,
+flocks and search), then the population pose hash, then the authoritative state
+hash the replay tape verifies. Body continuation is every active body's
+checkpoint entry in the checkpoint's own bytes, so two runs whose bodies share a
+pose but differ in a velocity, a remainder or a timer diverge at that tick. The aggregates come last, so
 the first differing hash of a tick names the system that split.
 
 `determinism compare` compares two streams of one manifest. For each scenario it

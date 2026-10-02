@@ -297,7 +297,10 @@ diagnostic; the replay verdict instead compares
 named components (`WorldStateHashComposition.Authoritative`): poses, everything
 the state arena stores, the host-owned field cells, the state section's own
 declaration, the declared topologies, rule/interaction latches, rule-group
-progress, decision runtime, board enforcement, body action state, cached
+progress, decision runtime, board enforcement, body action state, every body's
+continuation (its checkpoint entry in the codec's own bytes, which allocates, so
+the scope is taken while a replay records or verifies and on request, never by
+an ordinary tick), cached
 navigation and shared destination-tree/scheduler/pending-request state,
 flock perception/cadence/sample state (including the cached result of state
 affinity expressions), slot generations, and previous positions. Affinity programs

@@ -151,6 +151,7 @@ internal static class DeterminismRecorder {
                 return false;
         }
     }
+
     /// <summary>Reads the completed tick's attestation vector.</summary>
     /// <param name="server">The authority after a completed step.</param>
     /// <returns>The hashes in stream component order.</returns>
@@ -176,7 +177,6 @@ internal static class DeterminismRecorder {
 
         return vector;
     }
-
     /// <summary>Loads a scenario's world the way the game boots it: a <c>.puck</c> source compiled, then composed and
     /// admitted beside its own directory.</summary>
     /// <param name="path">The world document or source.</param>
@@ -282,7 +282,7 @@ internal static class DeterminismRecorder {
             }
         }
 
-        var writes = new List<(int Tick, WorldMutation Mutation)>(capacity: scenario.Cells.Count);
+        var writes = new List<(int Tick, DeterminismCellWrite Cell, WorldMutation Mutation)>(capacity: scenario.Cells.Count);
 
         foreach (var cell in scenario.Cells) {
             if (!TryCellValue(cell: cell, definition: definition, error: out var cellError, value: out var value)) {
@@ -291,7 +291,7 @@ internal static class DeterminismRecorder {
                 return false;
             }
 
-            writes.Add(item: (cell.Tick, new WorldMutation.UpsertStateCell(
+            writes.Add(item: (cell.Tick, cell, new WorldMutation.UpsertStateCell(
                 Key: cell.Key,
                 Kind: WorldDocumentWriteKind.Set,
                 Principal: Principal.Console,
@@ -304,8 +304,19 @@ internal static class DeterminismRecorder {
         var ticks = new List<ulong[]>(capacity: scenario.Ticks);
 
         for (var tick = 1; (tick <= scenario.Ticks); tick++) {
-            foreach (var (_, mutation) in writes.Where(predicate: write => (write.Tick == tick))) {
-                server.EnqueueMutation(mutation: mutation);
+            // Each write the script names must be applied: a refused write leaves the run off its script, so the
+            // recording would attest a run nobody asked for. The authority answers every write it drains by the end
+            // of the step, and one it never answers is as unapplied as one it refuses.
+            var answers = new List<(DeterminismCellWrite Cell, bool? Applied)>();
+
+            foreach (var (_, cell, mutation) in writes.Where(predicate: write => (write.Tick == tick))) {
+                var answer = answers.Count;
+
+                answers.Add(item: (cell, null));
+                server.EnqueueMutation(
+                    mutation: mutation,
+                    outcomeObserved: applied => answers[answer] = (cell, applied)
+                );
             }
             foreach (var intent in scenario.Intents.Where(predicate: intent => ((intent.From <= tick) && (tick <= intent.Through)))) {
                 if (server.Body(index: intent.Body) is not { } body) {
@@ -325,6 +336,15 @@ internal static class DeterminismRecorder {
 
             server.Advance(stepTicks: stepTicks);
             server.EnforceJournalDepth();
+
+            foreach (var (cell, applied) in answers) {
+                if (applied is not true) {
+                    error = $"{scenario.Name}: tick {tick} writes {cell.Row}/{cell.Key} = {cell.Value}, which the authority {((applied is false) ? "refused" : "never answered by the end of the step, so it is counted refused")}";
+
+                    return false;
+                }
+            }
+
             ticks.Add(item: Vector(server: server));
         }
 

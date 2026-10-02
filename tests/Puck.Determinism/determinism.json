@@ -24,7 +24,7 @@
                 {"body": 0, "from": 40, "through": 41, "channels": {"forward": "1", "dash": "1"}}
             ],
             "cells": [],
-            "exercises": ["BodyActionState"]
+            "exercises": ["BodyActionState", "BodyContinuation"]
         },
         {
             "name": "records-pools",

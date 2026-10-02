@@ -447,7 +447,7 @@ scripting it through stdin.
 | `capture` (default) | The population digest, then every authored `state.world` cell's live value and clock. It matches the hash in capture manifests. |
 | `pose` | Every active body's pose, rigid residue, and carry relationship. |
 | `world` | The arena's contents, the host-owned rows, the state declaration, and the topologies. |
-| `authoritative` | Everything in `world` and `pose`, plus the rule and interaction latches, rule-group progress, decisions, board enforcement, body and identity action state, navigation, flock perception, and search progress. |
+| `authoritative` | Everything in `world` and `pose`, plus the rule and interaction latches, rule-group progress, decisions, board enforcement, body and identity action state, every body's continuation (its checkpoint entry in the checkpoint codec's own bytes: velocities, integration remainders, channel timers, carried input), navigation, flock perception, and search progress. |
 
 The authoritative scope is built from a fixed, ordered list of named components
 (`WorldStateHashComposition`), so what a hash covers changes only by a

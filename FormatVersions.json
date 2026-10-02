@@ -91,6 +91,16 @@
             "source": "src/Puck.World.Schema/CompiledWorldChunks.cs",
             "token": "2"
         },
+        "DeterminismManifest.Schema": {
+            "shape": "883eb57c589c2438",
+            "source": "src/Puck.Cli/Determinism/DeterminismManifest.cs",
+            "token": "puck.determinism.manifest.v1"
+        },
+        "DeterminismStream.Version": {
+            "shape": "543ba98e4323b922",
+            "source": "src/Puck.Cli/Determinism/DeterminismStream.cs",
+            "token": "puck.determinism.stream.v1"
+        },
         "EmbeddingLock.SupportedFormat": {
             "shape": "cc2aef0045cc79c1",
             "source": "src/Puck.World.Transpiler/Embeddings/EmbeddingLock.cs",
@@ -247,12 +257,12 @@
             "token": "puck.world-artifact-key.v2"
         },
         "WorldAuthorityCheckpointCodec.Magic": {
-            "shape": "ca31268313ec8751",
+            "shape": "bacf5b53b9de4d4f",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
             "token": "PCKP"
         },
         "WorldAuthorityCheckpointCodec.SupportedVersion": {
-            "shape": "ca31268313ec8751",
+            "shape": "bacf5b53b9de4d4f",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
             "token": "16"
         },
@@ -292,7 +302,7 @@
             "token": "puck.camera.program.v1"
         },
         "WorldCaptureManifest.SchemaId": {
-            "shape": "cb7c3b9f90bf4d96",
+            "shape": "79f9e08dacd48697",
             "source": "src/Puck.World.Console/WorldCaptureScheduler.cs",
             "token": "puck.parity.manifest.v1"
         },
@@ -327,7 +337,7 @@
             "token": "puck.world.extensions.v1"
         },
         "WorldFederationCodec.WireKey": {
-            "shape": "7877d13dabed5f28",
+            "shape": "a7e84893a14f11de",
             "source": "src/Puck.World.Server/WorldFederationCodec.cs",
             "token": "PUCKFED5"
         },
