@@ -223,6 +223,8 @@ public sealed partial class RenderGraphRuntime {
         var submitted = node.FrameCounter;
         var surface = node.ProduceFrame(context: in context);
 
+        NoteOwedReadbacks(index: index);
+
         if (node.FrameCounter == submitted) {
             return;
         }

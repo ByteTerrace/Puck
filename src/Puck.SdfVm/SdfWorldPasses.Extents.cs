@@ -37,6 +37,7 @@ public sealed partial class SdfWorldPasses {
 
         // A positive ceiling's bits leave the sign bit clear, so the shift loses nothing.
         long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 1) | (RequestsTemporal ? 1L : 0L);
+        double IShaderPipelineRenderExtent.Grid => CurrentScale;
 
         public (uint Width, uint Height) CeilingAt(uint width, uint height) => Pixels(width: width, height: height, scale: Ceiling);
         public (uint Width, uint Height) FrameAt(uint width, uint height) => Pixels(width: width, height: height, scale: CurrentScale);

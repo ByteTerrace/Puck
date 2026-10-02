@@ -51,7 +51,7 @@ public sealed partial class WorldInspectorText {
         var normal = (hit?.Normal ?? default);
         var settings = snapshot.Settings;
         var quality = snapshot.View?.Quality;
-        var scale = (snapshot.View ?? new SdfViewSnapshot(Camera: camera, Region: default) { RenderScale = (settings?.RenderScale ?? 1f) }).RenderGrid;
+        var scale = (snapshot.View ?? new SdfViewSnapshot(Camera: camera, Region: default) { RenderScale = (settings?.RenderCeiling ?? 1f) }).RenderGrid;
         var shadows = ((quality is { } resolved) ? (resolved.DisableSoftShadows ? 0 : ((resolved.ShadowDistanceScale > 0) ? resolved.ShadowDistanceScale : 1)) : (settings?.ShadowReach ?? 0));
         var ambient = ((quality is { } shading) ? !shading.DisableAmbientOcclusion : (settings?.AmbientOcclusion ?? false));
         var surfaced = (hit?.Hit ?? false);

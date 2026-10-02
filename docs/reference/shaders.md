@@ -2011,7 +2011,10 @@ direct queue frequency and the normal device-removal translation boundary.
 Readback waits for the submission fence and rejects earlier graph/enable epochs.
 The readout keeps at most 32 completed pairs per pass. Disabling withdraws it at
 once, then releases pools as their fences complete; device loss releases them.
-These durations are observational and never choose quality or establish parity.
+These durations never establish parity. Dynamic resolution is their one
+quality reader: it holds the latest timed frame's summed pass time
+(`LatestTimingMilliseconds`, a new frame each time `TimingFrames` moves) to the
+display period, and keeps timing recording while it is on.
 
 `pipeline.inspect` includes timestamp readback and CPU sample payload bytes.
 Both inspection and the live budget include `cadence-cpu-bytes`: installed

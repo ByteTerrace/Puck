@@ -184,6 +184,80 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.True(condition: rig.Stood(), userMessage: $"frame {frame} after the period");
         }
     }
+    [Fact]
+    public void AGridMoveSettlesForOnePeriodWithoutDiscardingHistoryOrRebuilding() {
+        using var rig = new TemporalRig(views: 1, cadence: true, temporal: true, renderScale: 0.75f);
+
+        for (var frame = 0U; (frame <= SdfTemporalHistory.Period); frame++) {
+            rig.Produce();
+        }
+        Assert.True(condition: rig.Stood());
+        var revision = rig.World.WorkRevision;
+
+        foreach (var grid in new[] { 0.5f, 0.625f }) {
+            var preceding = rig.HistoryFrames();
+
+            rig.RenderGrid = grid;
+            for (var sample = 0U; (sample < SdfTemporalHistory.Period); sample++) {
+                rig.Produce();
+                Assert.False(condition: rig.Stood(), userMessage: $"grid {grid}, sample {sample}");
+                Assert.Equal(expected: ((preceding + sample) + 1u), actual: rig.HistoryFrames());
+                Assert.True(condition: rig.PreviousValid());
+                Assert.Equal(expected: revision, actual: rig.World.WorkRevision);
+            }
+            // The node records the quantized grid with each submission it renders, as its completed work names them.
+            var completed = new GpuWorkSample();
+            var node = rig.Runtime.Node(instance: 0);
+
+            Assert.True(condition: node.TryReadCompleted(sample: completed));
+            Assert.True(condition: node.TryGetRenderGrid(grid: out var recorded, submission: completed.Submission));
+            Assert.Equal(expected: RenderGraphExtent.Quantize(fraction: grid), actual: recorded);
+            rig.Produce();
+            Assert.True(condition: rig.Stood());
+            // A different requested fraction in the same quantized grid needs no new samples.
+            rig.RenderGrid = (grid - 0.001f);
+            rig.Produce();
+            Assert.True(condition: rig.Stood());
+        }
+    }
+    [Fact]
+    public void TheCompletionSummaryNamesEveryRenderNotOnlyTheNewest() {
+        using var rig = new TemporalRig(views: 1, renderScale: 0.75f);
+        var node = rig.Runtime.Node(instance: 0);
+        var completed = new GpuWorkSample();
+
+        rig.RenderGrid = 0.625f;
+        for (var frame = 0; (frame < 4); frame++) {
+            rig.Produce();
+        }
+        _ = node.TakeCompletions();
+
+        // A render at 0.5 and then renders at 0.625 complete between two reads: the newest completed submission names
+        // 0.625, but the summary spans both grids and names none.
+        rig.RenderGrid = 0.5f;
+        rig.Produce();
+        rig.RenderGrid = 0.625f;
+        for (var frame = 0; (frame < 3); frame++) {
+            rig.Produce();
+        }
+        var mixed = node.TakeCompletions();
+
+        Assert.True(condition: node.TryReadCompleted(sample: completed));
+        Assert.True(condition: node.TryGetRenderGrid(grid: out var newest, submission: completed.Submission));
+        Assert.Equal(actual: newest, expected: 0.625d);
+        Assert.True(condition: (mixed.Renders >= 2), userMessage: $"{mixed.Renders} renders");
+        Assert.Equal(expected: 0d, actual: mixed.Grid);
+
+        // Renders at one grid since the read name it, and a read with nothing new names nothing.
+        for (var frame = 0; (frame < 4); frame++) {
+            rig.Produce();
+        }
+        var uniform = node.TakeCompletions();
+
+        Assert.True(condition: (uniform.Renders > 0));
+        Assert.Equal(expected: 0.625d, actual: uniform.Grid);
+        Assert.Equal(expected: default, actual: node.TakeCompletions());
+    }
     [InlineData(16u)]
     [InlineData(128u)]
     [Theory]
@@ -307,6 +381,9 @@ public sealed partial class SdfWorldPassesLawTests {
             set => m_feed!.Filling = value;
         }
         public SdfWorldPasses Passes { get; }
+        public float RenderGrid {
+            set => m_sourceFrame = m_sourceFrame with { Views = [m_sourceFrame.Views[0] with { ResolvedRenderScale = value }] };
+        }
         public RenderGraphRuntime Runtime { get; }
         public SdfWorldResidency? Second { get; }
         public SdfWorldResidency Selected { get; set; }

@@ -74,5 +74,10 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
+    <!-- Dynamic resolution budgets an offscreen frame's march steps per output pixel from the counters ceilings the floor
+         tier committed (WorldFrameLoadSource), so recording new floor evidence moves the budget with no copied number. -->
+    <ItemGroup>
+        <EmbeddedResource Include="../../tests/Puck.Counters/counters.ceilings.json" LogicalName="counters.ceilings.json" Visible="false" />
+    </ItemGroup>
     <Import Project="../../build/WorldAssets.targets" />
 </Project>

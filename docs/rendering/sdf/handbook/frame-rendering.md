@@ -204,6 +204,50 @@ tier a view uses is a host decision, not baked into the content. In `Puck.World`
 `world.render-scale` sets it for every player view and `world.upscale-sharpness`
 sets the reconstruction blend.
 
+### Dynamic resolution
+
+With dynamic resolution on (`world.dynamic-resolution`), one controller,
+`WorldDynamicResolution`, moves the world's own views' render grid each frame
+between a floor and the render-scale ceiling. The grid is
+`SdfViewSnapshot.ResolvedRenderScale`, the same grid a layout transition dips,
+so the two compose; it moves inside the allocation the ceiling sized, so no
+frame reallocates, rebuilds or resets history. A view at a native ceiling
+reconstructs nothing, so while dynamic resolution is on a native tier
+allocates its views at three-quarter.
+
+Each fresh load sample moves the grid through one response: within 10% of its
+budget the grid holds, and outside it the grid moves toward the scale whose
+area meets the budget by at most a sixteenth of itself down or a thirty-second
+up. The sample is the views' GPU frame time against the display period, from
+the same pass timestamps `world.gpu-timing` reads; a present-paced swapchain
+reports every kept present as exactly its period, so only the GPU's time shows
+the headroom to raise the grid again. A device that times nothing falls back to
+the present interval, and a host with neither, an offscreen one, to the views'
+counted march steps against the floor tier's committed ceilings per output
+pixel. Counted work per frame then scales with the grid, which
+`world.counters gpu` shows as the sky pass's texels written.
+
+A sample counts only at the grid the views render now. Each view's node
+records the quantized grid of every submission it renders, and a reading,
+summed over each view's renders not read before, names their common grid; a
+reading from another grid, such as one read back after the grid moved, is not
+a sample, and a view standing on a render already read adds nothing. While a
+standing view still owes a readback, the runtime polls its completed counters
+and timestamps each frame, so its final submission becomes readable when its
+fence signals; a view that owes nothing is not polled at all. A present
+interval names no frame, so each view's node also keeps a summary of every
+render completed since it was last read, and an interval counts only when every
+view's summary names the current grid. A view removed from the graph hands its
+completed renders to the runtime first, so a render it finished before leaving
+still counts in the next read; the runtime keeps them only for the views the
+controller reads, never for a pane or a source. Render completion fences survive an install's
+counter invalidation; device loss drops renders whose completion is
+unobserved. When the budget lies between two
+adjacent grids, the controller settles on the cheaper one rather than
+alternating: a sample over the budget marks its grid, and the grid rises onto
+the mark only once a sample, compared exactly against the budget, predicts it
+within the budget.
+
 ## Temporal reconstruction
 
 A view whose quality asks for it (`SdfViewQuality.Temporal`) reconstructs over

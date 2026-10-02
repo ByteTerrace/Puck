@@ -71,7 +71,9 @@ Several pieces exist with nothing using them:
 GPU work remains counted for correctness and quality decisions. The optional
 `world.gpu-timing` readout records named pass timestamp pairs through
 `IGpuTimestampFactory` on both backends, after submission fences. Timing is off
-by default and remains observational; it never changes a rendering decision.
+by default and never judges correctness. Its one rendering reader is dynamic
+resolution (rendering plan P15-6), off by default, which holds the views' GPU
+frame time to the display period and asks for the timestamps while it is on.
 
 The building blocks the packages reuse are in place. The overlay draws rects,
 rings, wedges, panels, icons and text (`OverlayFrameBuilder`), and has no line
@@ -679,8 +681,8 @@ readback waits for its submission fence, rejects a replaced graph or an earlier
 enable epoch, and averages at most 32 completed pairs. Disabling hides readings
 immediately and releases pools after their fences. Device loss releases all
 query/readback ownership. GPU timestamp readback and retained CPU sample payloads
-are reported separately. Times and FPS are observational and never become
-correctness assertions or quality inputs.
+are reported separately. Times and FPS never become correctness assertions;
+dynamic resolution is the one quality input that reads the timing.
 
 **Depends on:** nothing; E5 for the panel; the rendering plan's one-pixel
 readback for step 3.
