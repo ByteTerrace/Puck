@@ -169,7 +169,7 @@ public sealed class ShadersGenerateLawTests {
         Assert.Empty(collection: problems);
         Assert.Equal(
             actual: includes.Select(selector: static include => include.Path),
-            expected: [IsaPath, SdfIsaHlsl.FingerprintSourcePath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-bricks.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-mesh.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-resolve.interface.hlsli", WorldPath, FilmGrainPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path), ShaderCompiler.BuildRecipePath]
+            expected: [IsaPath, SdfIsaHlsl.FingerprintSourcePath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-bricks.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-mesh.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-resolve.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-sky.interface.hlsli", WorldPath, FilmGrainPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path), ShaderCompiler.BuildRecipePath]
         );
     }
 }

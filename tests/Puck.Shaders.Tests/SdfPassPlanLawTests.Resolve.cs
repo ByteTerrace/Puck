@@ -13,8 +13,8 @@ public sealed partial class SdfPassPlanLawTests {
         Outputs: [SdfWorldPackage.Color], Resources: [new ShaderPipelineResource(Name: SdfWorldPackage.Color,
             Format: RenderGraphPackageCatalog.WorkingFormat.ToString(), Dimensions: ShaderPipelineDimensions.Relative())],
         Packages: [new RenderGraphPackagePass(Name: Sdf, Package: RenderGraphPackageCatalog.SdfWorld, Outputs: [SdfWorldPackage.Color])]));
-    // A reduced or temporal view's passes: the native fragment's through views, then the resolve, the sky's field runs
-    // and the composite, which run at the output extent over what the resolve wrote.
+    // A reduced or temporal view's passes: the native fragment's through views, then the resolve, the sky's field runs on
+    // the render grid, and the composite at the output extent over what the resolve wrote.
     private static IEnumerable<string> ResolvedOrder => [
         .. Order.TakeWhile(predicate: static part => (part != SdfWorldPackage.Parts.Sky)),
         SdfWorldPackage.Resolve,
@@ -52,11 +52,17 @@ public sealed partial class SdfPassPlanLawTests {
         Assert.Contains(collection: resolve.Accesses, filter: access => ((access.Storage == current.Index) && !access.Use.Writes));
         Assert.Contains(collection: resolve.Accesses, filter: access => ((access.Storage == visibility.Index) && !access.Use.Writes));
         Assert.Equal(expected: ShaderPipelineDimensions.Relative(), actual: resolve.Extent);
-        Assert.All(collection: plan.Pipeline.Passes.Where(predicate: static pass => (pass.Package!.Part is SdfWorldPackage.Parts.Sky or SdfWorldPackage.Parts.Composite)),
-            action: static pass => Assert.Equal(expected: ShaderPipelineDimensions.Relative(), actual: pass.Extent));
+        // The sky evaluates its field runs on the render grid, where views' color says what it covers; the composite reads
+        // them at the output extent.
+        var sky = plan.Pipeline.Passes.Single(predicate: static pass => (pass.Package!.Part == SdfWorldPackage.Parts.Sky));
+
+        Assert.Equal(expected: ShaderPipelineDimensions.Render(), actual: sky.Extent);
+        Assert.Contains(collection: sky.Accesses, filter: access => ((access.Storage == current.Index) && !access.Use.Writes));
+        Assert.DoesNotContain(collection: sky.Accesses, filter: access => (access.Storage == lit.Index));
+        Assert.Equal(expected: ShaderPipelineDimensions.Relative(), actual: plan.Pipeline.Passes.Single(predicate: static pass => (pass.Package!.Part == SdfWorldPackage.Parts.Composite)).Extent);
         Assert.Equal(expected: [SdfWorldPackage.Parts.Composite], actual: plan.Pipeline.Passes.Where(predicate: pass => pass.Accesses.Any(predicate: access => ((access.Storage == output.Index) && access.Use.Writes))).Select(selector: static pass => pass.Package!.Part));
-        // Everything after the resolve is at the output extent; everything before it at the render ceiling.
-        string[] outputExtent = [SdfWorldPackage.Color, SdfWorldPackage.Parts.Lit, SdfWorldPackage.Parts.SkyBase, SdfWorldPackage.Parts.SkyScale, SdfWorldPackage.Parts.SkyOffset];
+        // What the resolve and the composite write is at the output extent; everything else at the render ceiling.
+        string[] outputExtent = [SdfWorldPackage.Color, SdfWorldPackage.Parts.Lit];
 
         Assert.All(collection: plan.Pipeline.Storages.Where(predicate: static storage => (storage.Declaration.Dimensions is not null)),
             action: storage => Assert.Equal(
@@ -68,9 +74,9 @@ public sealed partial class SdfPassPlanLawTests {
     }
     // A reduced view owns what the native graph at its render ceiling owns, with the ceiling's color held once as the
     // render-grid color, since views shades it and the resolve reads it inside one frame, and at the output extent
-    // instead of the ceiling everything after the resolve: the color a frame slot, and once each the lit image, the
-    // sky's three runs and the surface distance, four bytes an output pixel. At 1920x1080 and half scale that is
-    // 99,532,800 bytes more.
+    // instead of the ceiling what the resolve and the composite write: the color a frame slot, and once each the lit
+    // image and the surface distance, four bytes an output pixel. The sky's three runs stay at the ceiling. At 1920x1080
+    // and half scale that is 62,208,000 bytes more.
     [Fact]
     public void AReducedViewAddsOnlyItsOutputExtentPassesOverTheNativeGraphAtItsCeiling() {
         var render = new ShaderPipelineStorageCounts(Height: 540, Width: 960) { InstanceMaskWords = 1, Instances = 5, Tiles = 8160, Viewports = 1 };
@@ -78,9 +84,9 @@ public sealed partial class SdfPassPlanLawTests {
         const ulong Output = ((1920UL * 1080) * 8);
         const ulong RenderColor = ((960UL * 540) * 8);
         const ulong Distance = ((1920UL * 1080) * 4);
-        const ulong Expected = (((InFlight * (Output - RenderColor)) + (4 * (Output - RenderColor))) + Distance + RenderColor);
+        const ulong Expected = ((((InFlight * (Output - RenderColor)) + (Output - RenderColor)) + Distance) + RenderColor);
 
-        Assert.Equal(actual: Expected, expected: 99_532_800UL);
+        Assert.Equal(actual: Expected, expected: 62_208_000UL);
         Assert.Equal(
             actual: (Bytes(plan: ResolvedPlan, counts: reduced) - Bytes(plan: Plan, counts: render)),
             expected: Expected

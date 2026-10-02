@@ -5810,11 +5810,12 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
    - Landed: views shades hits only into the lit image (`SdfWorldPackage.Parts.Lit`,
      premultiplied, coverage in alpha, a miss uncovered); `sky`
      (`passes/sdf-sky-runs.comp.hlsl`) writes the gradient's offset and the
-     cloud run's scale and offset as half-float images at the output extent where
-     a pixel or a neighbour is not wholly covered; `composite`
-     (`passes/sdf-composite.comp.hlsl`) fogs the lit image toward the gradient by
-     its ray distance, composes the runs beneath it (the disc and stars evaluated
-     at the pixel) by its coverage, and integrates the bounded media. Both read the
+     cloud run's scale and offset as half-float images on the render grid where a
+     pixel or a neighbour of views' color is not wholly covered, and marks the
+     texels it evaluated; `composite` (`passes/sdf-composite.comp.hlsl`) fogs the
+     lit image toward the gradient by its ray distance, composes the runs beneath
+     it by its coverage (filtered from the evaluated texels, the disc and stars
+     evaluated at the pixel), and integrates the bounded media. Both read the
      sky interface (`SdfWorldInterfaces.SkyParameters`) and record through
      `SdfSkyRecorder`. A native view reads views' lit image and visibility records,
      current only inside the dispatch box; a reduced or temporal view's resolve
@@ -6138,8 +6139,8 @@ fraction in live tiles, at least h.
   the render extent after `views` and read the record; from P15-4 they follow
   `resolve` at the output extent and read only the resolved surface, the depth
   and coverage `resolve` writes in both modes once its first reader lands (the
-  P18 step that lands `composite` adds it to `resolve`), and the sky's field
-  extent follows the output extent scaled by the sky tier. P15's reactivity is
+  P18 step that lands `composite` adds it to `resolve`), while the sky's field
+  runs stay on the render grid, reading views' color, which a sky tier scales. P15's reactivity is
   its own image, which `resolve` consumes, and P18's coverage is `lit`'s alpha,
   which `resolve` carries through; P15's text states both. P15-5's convergence
   rule and P18-6's cadence compose: a converging view renders every pass for

@@ -132,7 +132,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         }
         for (var port = 0; (port < TemporalInputs.Length); port++) {
             var member = TemporalInputs[port];
-            var bound = (m_temporal ? recording.Inputs[(port + 1 + Inputs.Length)] : default);
+            var bound = (m_temporal ? recording.Inputs[((port + 1) + Inputs.Length)] : default);
 
             if (member == SdfWorldPackage.HistoryColor) {
                 bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: member), descriptorSetHandle: set,

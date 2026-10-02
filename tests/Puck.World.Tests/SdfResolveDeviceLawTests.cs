@@ -97,8 +97,8 @@ public sealed class SdfResolveDeviceLawTests {
         BinaryPrimitives.WriteUInt32LittleEndian(destination: box.AsSpan(start: 8), value: ((RenderWidth + 7) / 8));
         BinaryPrimitives.WriteUInt32LittleEndian(destination: box.AsSpan(start: 12), value: ((RenderHeight + 7) / 8));
         using var cullBounds = services.BufferFactory.CreateHostVisible(data: box, name: default, usage: GpuBufferUsage.Storage);
-        using var visibility = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: (((ulong)RenderWidth * RenderHeight) * SdfWorldPackage.VisibilityRecordByteLength), usage: GpuBufferUsage.Storage);
-        using var distance = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: (((ulong)width * height) * sizeof(float)), usage: GpuBufferUsage.Storage);
+        using var visibility = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)RenderWidth) * RenderHeight) * SdfWorldPackage.VisibilityRecordByteLength), usage: GpuBufferUsage.Storage);
+        using var distance = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)width) * height) * sizeof(float)), usage: GpuBufferUsage.Storage);
         using var output = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: height, name: default, usage: GpuImageUsage.Storage, width: width);
         using var upload = services.SurfaceTransferFactory.CreateUpload();
         var sourceView = upload.Upload(pixels: source, format: GpuPixelFormat.R8G8B8A8Unorm, width: RenderWidth, height: RenderHeight);

@@ -4,7 +4,9 @@
 //   the fog over its ray distance, the gradient scaled by its coverage, so an edge fogs as its covered share.
 // - Where the coverage is below one, the sky's runs compose beneath it: the gradient's offset, then the point run (the
 //   disc and the stars) evaluated here at the pixel, then the cloud run's scale and offset, and the lit color over the
-//   result by its coverage. A wholly covered pixel reads no run and evaluates no layer.
+//   result by its coverage. The field runs are read from the grid the sky evaluated them on, filtered over the texels it
+//   evaluated; where it evaluated none beside the pixel, the composite evaluates them here and counts the evaluation. A
+//   wholly covered pixel reads no run and evaluates no layer.
 // - The bounded volumes composite last, clipped to the span from the camera's near plane to the surface's ray distance,
 //   or to the far distance on a miss, so a medium never paints through solid geometry.
 // A debug view's lit image is its whole picture, so it passes through.
@@ -19,6 +21,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     float4 litColor = sdfSkyPassLit(int2(id.xy));
     float3 color = litColor.rgb;
+    uint evaluations = 0u;
 
     if (passGroup.debugMode == 0u) {
         ViewportData view = sdfSkyPassView();
@@ -31,10 +34,17 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             color = lerp(color, (sdfSkyGradient(direction) * litColor.a), fog);
         }
         if (litColor.a < 1.0) {
-            float3 sky = skyBase.Load(int3(id.xy, 0)).rgb;
+            float3 sky;
+            float3 scale;
+            float3 offset;
 
+            if (!sdfSkyPassRuns(id.xy, sky, scale, offset)) {
+                sky = sdfSkyGradient(direction);
+                sdfSkyCloudRun(direction, scale, offset);
+                evaluations = 1u;
+            }
             sky += sdfSkyPoints(direction);
-            sky = ((skyScale.Load(int3(id.xy, 0)).rgb * sky) + skyOffset.Load(int3(id.xy, 0)).rgb);
+            sky = ((scale * sky) + offset);
             color += ((1.0 - litColor.a) * sky);
         }
 
@@ -47,4 +57,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     output[id.xy] = float4(color, 1.0);
     sdfWorkTexels = 1u;
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
+    puckCountSky(evaluations);
 }

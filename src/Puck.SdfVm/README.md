@@ -124,7 +124,7 @@ allocates scratch once; a smaller current grid (`ResolvedRenderScale`, such as a
 layout transition's dip) changes dispatches and the packed visibility stride
 without replacing storage or rebuilding. The full-output color is priced beside
 the ceiling targets in the node's memory account. The scheduler prices each pass
-at its current grid. Views at a native ceiling retain their ten passes, allocate
+at its current grid. Views at a native ceiling retain their eleven passes, allocate
 no resolve resources and ignore the current grid. The shared reconstruction module
 serves both `place` and resolve; `SdfResolveDeviceLawTests` executes the shipped
 resolve kernel against the resample canary's analytic values.

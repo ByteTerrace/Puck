@@ -106,9 +106,9 @@ public sealed class GpuWorkReportLawTests {
         Assert.Equal(
             expected: string.Concat(
                 "{\"name\":\"world\",\"sample\":{\"submission\":1,\"revision\":7,\"passes\":[",
-                $"{{\"label\":\"alpha\",\"class\":\"per-backend-deterministic\",\"state\":\"executed\",\"counts\":{{\"gpu.dispatches\":2,\"gpu.dispatches.indirect\":0,{Zeros},\"gpu.push-constants\":0,\"gpu.descriptor-writes\":0,\"gpu.uploads.host-visible\":0,\"gpu.clears\":0,\"gpu.copies\":0,\"gpu.march.steps\":0,\"gpu.texels.written\":0,\"gpu.copies.buffer-bytes\":0}}}},",
+                $"{{\"label\":\"alpha\",\"class\":\"per-backend-deterministic\",\"state\":\"executed\",\"counts\":{{\"gpu.dispatches\":2,\"gpu.dispatches.indirect\":0,{Zeros},\"gpu.push-constants\":0,\"gpu.descriptor-writes\":0,\"gpu.uploads.host-visible\":0,\"gpu.clears\":0,\"gpu.copies\":0,\"gpu.march.steps\":0,\"gpu.texels.written\":0,\"gpu.copies.buffer-bytes\":0,\"gpu.sky.evaluations\":0}}}},",
                 "{\"label\":\"beta\",\"class\":\"deterministic\",\"state\":\"skipped\"},{\"label\":\"gamma\",\"class\":\"deterministic\",\"state\":\"not-reached\"}],",
-                $"\"outside\":{{\"gpu.dispatches\":0,\"gpu.dispatches.indirect\":0,{Zeros},\"gpu.push-constants\":8,\"gpu.descriptor-writes\":0,\"gpu.uploads.host-visible\":0,\"gpu.clears\":0,\"gpu.copies\":0,\"gpu.march.steps\":0,\"gpu.texels.written\":0,\"gpu.copies.buffer-bytes\":0}}}},",
+                $"\"outside\":{{\"gpu.dispatches\":0,\"gpu.dispatches.indirect\":0,{Zeros},\"gpu.push-constants\":8,\"gpu.descriptor-writes\":0,\"gpu.uploads.host-visible\":0,\"gpu.clears\":0,\"gpu.copies\":0,\"gpu.march.steps\":0,\"gpu.texels.written\":0,\"gpu.copies.buffer-bytes\":0,\"gpu.sky.evaluations\":0}}}},",
                 "\"lifetime\":{\"gpu.created.pipelines\":0,\"gpu.created.shader-modules\":1,\"gpu.created.images\":0,\"gpu.created.buffers\":0,\"gpu.created.descriptor-pools\":0,\"gpu.created.descriptor-sets\":0,\"gpu.created.timestamp-pools\":0}}"
             ),
             actual: Encoding.UTF8.GetString(bytes: buffer.WrittenSpan)

@@ -222,15 +222,19 @@ the color beneath it, so a field run is summarized exactly as one per-channel
 scale and offset, and the runs compose as the stack does
 (`SdfSkyRuns`, held by `SkyRunCompositionLawTests`).
 
-- The `sky` pass (`passes/sdf-sky-runs.comp.hlsl`) evaluates the field runs at
-  the output extent, and only where the pixel or one of its eight neighbours is
-  not wholly covered: the gradient's offset, then the clouds' scale and offset,
-  each a half-float image. A covered pixel evaluates no sky, and each pixel
-  evaluated counts one `gpu.sky.evaluations`.
+- The `sky` pass (`passes/sdf-sky-runs.comp.hlsl`) evaluates the field runs on
+  the render grid, and only where the pixel or one of its eight neighbours is not
+  wholly covered by the color views wrote: the gradient's offset, then the clouds'
+  scale and offset, each a half-float image, the base's alpha marking the texels
+  it evaluated. A covered pixel evaluates no sky, and each pixel evaluated counts
+  one `gpu.sky.evaluations`. A reduced view's sky therefore costs its render
+  grid's uncovered pixels, not its output's.
 - The `composite` pass (`passes/sdf-composite.comp.hlsl`) writes the view's
   color. It fogs the lit image toward the gradient by its ray distance, scaled by
   its coverage; where the coverage is below one it composes the runs beneath it,
-  the disc and the stars evaluated at the pixel so they stay sharp, and puts the
+  filtered from the texels the sky evaluated (or evaluated in place, and counted,
+  where it evaluated none beside the pixel), the disc and the stars evaluated at
+  the pixel so they stay sharp, and puts the
   lit image over them by its coverage, so a silhouette blends toward the full sky
   at its pixel. The bounded media integrate last, clipped to the surface's ray
   distance or the far distance on a miss.

@@ -15,9 +15,9 @@ public sealed class SkyRunCompositionLawTests {
 
     [Fact]
     public void StarsBeneathCloudsAreDimmedByThemAsAuthored() {
-        var gradient = new Vector3(0.10f, 0.13f, 0.20f);
-        var star = new Vector3(0.9f, 0.8f, 0.7f);
-        var cloud = new Vector3(0.8f, 0.8f, 0.85f);
+        var gradient = new Vector3(x: 0.10f, y: 0.13f, z: 0.20f);
+        var star = new Vector3(x: 0.9f, y: 0.8f, z: 0.7f);
+        var cloud = new Vector3(x: 0.8f, y: 0.8f, z: 0.85f);
         const float CloudAlpha = 0.7f;
         // Today's stack: the gradient, a field run over nothing; the disc and the stars, a point run; the clouds, a field
         // run over them.
@@ -45,26 +45,26 @@ public sealed class SkyRunCompositionLawTests {
         var random = new Random(Seed: 1805);
 
         for (var trial = 0; (trial < 500); trial++) {
-            var stack = new SdfSkyLayerSample[random.Next(minValue: 1, maxValue: 10)];
+            var stack = new SdfSkyLayerSample[random.Next(maxValue: 10, minValue: 1)];
 
             for (var layer = 0; (layer < stack.Length); layer++) {
                 stack[layer] = new SdfSkyLayerSample(
                     Alpha: random.NextSingle(),
                     Blend: ((SdfSkyBlend)random.Next(maxValue: 4)),
                     Class: ((random.Next(maxValue: 2) == 0) ? SdfSkyLayerClass.Field : SdfSkyLayerClass.Point),
-                    Color: new Vector3(random.NextSingle(), random.NextSingle(), random.NextSingle())
+                    Color: new Vector3(x: random.NextSingle(), y: random.NextSingle(), z: random.NextSingle())
                 );
             }
 
-            var beneath = new Vector3(random.NextSingle(), random.NextSingle(), random.NextSingle());
+            var beneath = new Vector3(x: random.NextSingle(), y: random.NextSingle(), z: random.NextSingle());
 
             Near(actual: SdfSkyRuns.Composite(beneath: beneath, runs: SdfSkyRuns.Runs(stack: stack)), expected: SdfSkyRuns.Evaluate(beneath: beneath, stack: stack));
         }
     }
     [Fact]
     public void AMultiplyFieldOverAnAddPointLayerMultipliesIt() {
-        var tint = new Vector3(0.5f, 0.25f, 1f);
-        var glow = new Vector3(0.4f, 0.4f, 0.4f);
+        var tint = new Vector3(x: 0.5f, y: 0.25f, z: 1f);
+        var glow = new Vector3(x: 0.4f, y: 0.4f, z: 0.4f);
         SdfSkyLayerSample[] stack = [
             new(Alpha: 1f, Blend: SdfSkyBlend.Add, Class: SdfSkyLayerClass.Point, Color: glow),
             new(Alpha: 1f, Blend: SdfSkyBlend.Multiply, Class: SdfSkyLayerClass.Field, Color: tint),
@@ -74,7 +74,7 @@ public sealed class SkyRunCompositionLawTests {
 
         // The two field layers are one run, one map.
         Assert.Equal(expected: 2, actual: runs.Count);
-        Near(actual: SdfSkyRuns.Composite(beneath: Vector3.Zero, runs: runs), expected: (((0.5f * (glow * tint)) + new Vector3(0.5f))));
+        Near(actual: SdfSkyRuns.Composite(beneath: Vector3.Zero, runs: runs), expected: (((0.5f * (glow * tint)) + new Vector3(value: 0.5f))));
     }
 
     private static void Near(Vector3 actual, Vector3 expected) {

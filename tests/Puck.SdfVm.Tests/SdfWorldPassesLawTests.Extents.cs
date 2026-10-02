@@ -51,11 +51,12 @@ public sealed partial class SdfWorldPassesLawTests {
             _ = view.Produce(context: in context);
             var row = view.Runtime.Latest!.Instances[0];
 
-            // The nine passes through views at the active grid, then the resolve, the sky and the composite at the output.
+            // The nine passes through views and the sky at the active grid, the resolve and the composite at the output.
             Assert.Equal(expected: 12, actual: row.Passes);
-            Assert.Equal(expected: (((9L * pixels) * pixels) + (3 * (Extent * Extent))), actual: row.PassPixels);
+            Assert.Equal(expected: (((10L * pixels) * pixels) + (2 * (Extent * Extent))), actual: row.PassPixels);
             // The resolve's pass set, the third from the frame's last: the sky and the composite follow it.
             var set = gpu.SetBinds.Where(predicate: static bind => (bind.Group == ((uint)ShaderInterfaceGroup.Pass))).Select(selector: static bind => bind.Set).Distinct().ToArray()[^3];
+
             gpu.SetBinds = null;
             var block = gpu.Memory(bufferHandle: gpu.BufferAt(binding: 0, set: set));
             var parameters = SdfWorldInterfaces.ResolveParameters;

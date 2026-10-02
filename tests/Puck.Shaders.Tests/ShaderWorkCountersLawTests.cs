@@ -26,7 +26,7 @@ public sealed class ShaderWorkCountersLawTests {
         Assert.Contains(expectedSubstring: $"static const uint PuckWorkRowWords = {GpuKernelCounters.RowWords}u;", actualString: generated);
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkStepsWord = 0u;");
         Assert.Contains(actualString: generated, expectedSubstring: $"static const uint PuckWorkTexelsWord = {GpuKernelCounters.CountWords}u;");
-        Assert.Contains(actualString: generated, expectedSubstring: $"static const uint PuckWorkSkyWord = {2 * GpuKernelCounters.CountWords}u;");
+        Assert.Contains(actualString: generated, expectedSubstring: $"static const uint PuckWorkSkyWord = {(2 * GpuKernelCounters.CountWords)}u;");
         Assert.Contains(actualString: generated, expectedSubstring: "void puckCountWork(uint steps, uint texels) {");
         Assert.Contains(actualString: generated, expectedSubstring: "void puckCountSky(uint evaluations) {");
         Assert.Contains(actualString: generated, expectedSubstring: "void puckCountFragmentWork(uint steps, uint texels) {");

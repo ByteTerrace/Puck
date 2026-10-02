@@ -38,7 +38,6 @@ public readonly record struct SdfSkyLayerSample(SdfSkyLayerClass Class, SdfSkyBl
 /// <param name="Offset">A field run's per-channel offset; zero for a point run.</param>
 /// <param name="Points">A point run's layers in their authored order; none for a field run.</param>
 public sealed record SdfSkyRun(bool Field, Vector3 Scale, Vector3 Offset, IReadOnlyList<SdfSkyLayerSample> Points);
-
 /// <summary>
 /// The CPU reference for how the sky and composite passes compose a sky's layer stack (rendering plan P18-5). The stack
 /// is cut into runs without reordering it; each field run is summarized exactly as the affine map it applies to the
@@ -57,9 +56,9 @@ public static class SdfSkyRuns {
         var c = layer.Color;
 
         return layer.Blend switch {
-            SdfSkyBlend.Over => (new Vector3(1f - a), (a * c)),
+            SdfSkyBlend.Over => (new Vector3(value: (1f - a)), (a * c)),
             SdfSkyBlend.Add => (Vector3.One, (a * c)),
-            SdfSkyBlend.Multiply => ((Vector3.One - (a * Vector3.One)) + (a * c), Vector3.Zero),
+            SdfSkyBlend.Multiply => (((Vector3.One - (a * Vector3.One)) + (a * c)), Vector3.Zero),
             SdfSkyBlend.Screen => ((Vector3.One - (a * c)), (a * c)),
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(layer), actualValue: layer.Blend, message: "Not a sky blend."),
         };

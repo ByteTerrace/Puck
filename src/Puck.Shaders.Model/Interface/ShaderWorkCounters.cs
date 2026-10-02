@@ -91,7 +91,7 @@ public static class ShaderWorkCounters {
             static const uint PuckWorkRowWords = {{number(GpuKernelCounters.RowWords)}}u;
             static const uint PuckWorkStepsWord = 0u;
             static const uint PuckWorkTexelsWord = {{number(GpuKernelCounters.CountWords)}}u;
-            static const uint PuckWorkSkyWord = {{number(2 * GpuKernelCounters.CountWords)}}u;
+            static const uint PuckWorkSkyWord = {{number((2 * GpuKernelCounters.CountWords))}}u;
             // Adds to one count: the low word atomically, then the high word by one when that addition carries.
             void puckAddWork(uint word, uint amount) {
                 if (amount == 0u) {

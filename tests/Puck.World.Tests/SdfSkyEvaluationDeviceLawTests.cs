@@ -11,11 +11,12 @@ namespace Puck.World.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: the shipped sky pass (<c>sdf-sky-runs.comp</c>) evaluates the sky once for a pixel the lit image
 /// leaves uncovered and never for one it covers, with the one-pixel dilation that keeps every texel beside an edge
-/// written: a pixel is evaluated when it or one of its eight neighbours has coverage below one. It counts each pixel it
-/// evaluates as one <c>gpu.sky.evaluations</c> and one texel written. On a 16x8 lit image, every pixel covered evaluates
-/// nothing, every pixel uncovered evaluates 128, and the left half covered evaluates the right half and the covered
-/// column beside it, 72. The lit image is read as the resolve leaves it, written for every pixel, and every binding the
-/// pass does not read holds a filler of its kind.
+/// evaluated: a pixel is evaluated when it or one of its eight neighbours has coverage below one. It counts each pixel it
+/// evaluates as one <c>gpu.sky.evaluations</c>, and writes every pixel's texel, an unevaluated one's as a zero base the
+/// composite filters out, counting each as one texel written. On a 16x8 lit image, every pixel covered evaluates nothing,
+/// every pixel uncovered evaluates 128, and the left half covered evaluates the right half and the covered column beside
+/// it, 72; each writes 128 texels. The lit image is read as written for every pixel, and every binding the pass does not
+/// read holds a filler of its kind.
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
 public sealed class SdfSkyEvaluationDeviceLawTests {
@@ -36,10 +37,10 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
     }
 
     private static void Verify(GpuDeviceServices services, string extension) {
-        Assert.Equal(expected: (0L, 0L), actual: Run(covered: static _ => true, extension: extension, services: services));
+        Assert.Equal(expected: (0L, 128L), actual: Run(covered: static _ => true, extension: extension, services: services));
         Assert.Equal(expected: (128L, 128L), actual: Run(covered: static _ => false, extension: extension, services: services));
         // Columns 0 to 7 covered: column 7 sees column 8 beside it, so columns 7 to 15 evaluate, nine of eight pixels.
-        Assert.Equal(expected: (72L, 72L), actual: Run(covered: static x => (x < 8), extension: extension, services: services));
+        Assert.Equal(expected: (72L, 128L), actual: Run(covered: static x => (x < 8), extension: extension, services: services));
     }
     // Runs the sky pass once over a lit image whose column x is covered when covered(x), and returns its counted sky
     // evaluations and texels written.
@@ -162,7 +163,7 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
 
             counted.Read(destination: words);
             // The row holds each kernel kind as a 64-bit count, in GpuWork.KernelKinds order: steps, texels, then sky.
-            long Count(int kind) => BinaryPrimitives.ReadInt64LittleEndian(source: words.AsSpan(start: (kind * GpuKernelCounters.CountWords * sizeof(uint))));
+            long Count(int kind) => BinaryPrimitives.ReadInt64LittleEndian(source: words.AsSpan(start: ((kind * GpuKernelCounters.CountWords) * sizeof(uint))));
 
             return (Evaluations: Count(kind: 2), Texels: Count(kind: 1));
         } finally {

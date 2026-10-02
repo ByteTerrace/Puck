@@ -510,7 +510,7 @@ and stays with the spike.
 **Seats and camera views share one SDF residency, and each renders as its own
 instance into its own output.** One `SdfWorldResidency` serves a world. Each
 composed view is an `sdf.world` instance of the render graph that runs the
-package's passes, sky through views, over the residency's tables into its own
+package's passes, mask through composite, over the residency's tables into its own
 output. The graph places each output into its seat rect with the `place`
 package. Everything a frame's views have in common is therefore shared by
 construction: the brick pool, the program upload, the glyph atlas, screen

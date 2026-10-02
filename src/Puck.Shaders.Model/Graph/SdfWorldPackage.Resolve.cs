@@ -77,6 +77,10 @@ public static partial class SdfWorldPackage {
     private static string[] ResolveInputs => [CurrentColor, Parts.ShadowVisibility, Parts.CullBounds];
     // The resolve's outputs in either mode, in port order: the lit image and the surface distance.
     private static string[] ResolveOutputs => [Parts.Lit, Parts.SurfaceDistance];
+    // The sky's inputs in either mode, in port order: the render-grid color views writes, whose coverage says where the sky
+    // is seen, and the dispatch box it is current inside. The sky evaluates its field runs on the render grid, and the
+    // composite reads them at the output extent.
+    private static string[] SkyInputs => [CurrentColor, Parts.CullBounds];
 
     private static class ResolveFragment {
         internal static readonly RenderGraphPackageFragment Value = new(
@@ -94,7 +98,7 @@ public static partial class SdfWorldPackage {
                 Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: CurrentColor, transient: true) with { Dimensions = ShaderPipelineDimensions.Render() },
                 Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.Lit, transient: true),
                 Buffer(count: [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)], name: Parts.SurfaceDistance, sizeBytes: null, strideBytes: sizeof(float)),
-                .. SkyResources,
+                .. SkyResources.Select(selector: static resource => resource with { Dimensions = ShaderPipelineDimensions.Render() }),
                 Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Color, transient: false),
             ],
             Passes: [
@@ -102,13 +106,14 @@ public static partial class SdfWorldPackage {
                     ? pass with { Outputs = [new ResourceReference(Name: CurrentColor)] }
                     : pass)),
                 Pass(inputs: ResolveInputs, name: Resolve, outputs: ResolveOutputs) with { Members = ResolveMembers },
-                Pass(inputs: [Parts.Lit], name: Parts.Sky, outputs: SkyRuns) with { Members = SkyMembers },
+                Pass(inputs: SkyInputs, name: Parts.Sky, outputs: SkyRuns) with { Members = SkyMembers },
                 Pass(inputs: [Parts.Lit, Parts.SurfaceDistance, .. SkyRuns], name: Parts.Composite, outputs: [Color]) with { Members = SkyMembers },
             ]
         );
 
-        // The native fragment's resources that already have the output extent in every fragment: the lit image, which a
-        // reduced fragment's views writes as the current color instead, the sky's runs and the color.
+        // The native fragment's resources this fragment declares again: the lit image, which the resolve writes at the
+        // output extent and views writes as the current color instead, the sky's runs, which it holds at the render
+        // extent, and the color.
         private static bool IsOutputExtent(string name) =>
             ((name == Parts.Lit) || (name == Color) || SkyRuns.Contains(value: name));
     }

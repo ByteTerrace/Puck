@@ -2,11 +2,12 @@ namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
     /// <summary>The pass-block value the sky and composite passes read, one when the lit image and the surface distance
-    /// they read are the resolve's at the output extent (<see cref="Fragment"/>, <see cref="TemporalFragment"/>), zero
-    /// when they are views' at the render extent with the visibility records, current only inside the dispatch box
-    /// (<see cref="NativeFragment"/>) (<c>uint</c>).</summary>
+    /// the composite reads are the resolve's at the output extent (<see cref="Fragment"/>, <see cref="TemporalFragment"/>),
+    /// zero when they are views' at the render extent with the visibility records, current only inside the dispatch box:
+    /// the sky's in every fragment, and a <see cref="NativeFragment"/> composite's (<c>uint</c>).</summary>
     public const string ResolvedSurface = "resolvedSurface";
-    /// <summary>The lit image the sky and composite passes read.</summary>
+    /// <summary>The lit image the sky and composite passes read: views' color at the render extent for the sky, and the
+    /// lit image at the output extent for the composite.</summary>
     public const string LitImage = "lit";
     /// <summary>The surface distance the composite reads in a reduced or temporal view.</summary>
     public const string SurfaceDistanceRead = "surfaceDistance";
@@ -35,8 +36,9 @@ public static partial class SdfWorldPackage {
     // The sky's field runs, one image each, in the order the sky writes them: the base run, then the upper run's scale and
     // offset. A property, so the fragments that name them read them whatever order the partial files initialize in.
     private static string[] SkyRuns => [Parts.SkyBase, Parts.SkyScale, Parts.SkyOffset];
-    // The images the sky's field runs are held in, at the output extent: half floats, one allocation every frame slot
-    // shares, since the composite reads them in the frame the sky writes them.
+    // The images the sky's field runs are held in, at the render extent (the output extent in a native view): half
+    // floats, one allocation every frame slot shares, since the composite reads them in the frame the sky writes them.
+    // Each texel's base alpha says whether the sky evaluated it.
     private static ShaderPipelineResource[] SkyResources => [
         .. SkyRuns.Select(selector: static run => Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: run, transient: true)),
     ];

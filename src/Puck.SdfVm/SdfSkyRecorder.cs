@@ -5,14 +5,14 @@ using Puck.Shaders;
 namespace Puck.SdfVm;
 
 // The sky's field runs and the composite (SdfWorldPackage.Parts.Sky and Parts.Composite), which read the sky interface
-// (SdfWorldInterfaces.SkyParameters) at the output extent. Both bind the residency's World set, whose tables hold the sky
-// block and stops, the volumes and the dynamic transforms, and a pass group binding each port at its member and a filler
-// at every member the pass does not read or write: a native view's lit image with the visibility records and the
-// dispatch box it is current inside, a reduced or temporal view's resolved lit image and surface distance, and the sky's
-// runs as the sky writes them and the composite reads them. Their block holds the frame's common values, the temporal
-// ones every part of a frame writes alike among them, and ResolvedSurface; the kernels take the sky's direction without
-// the jitter, so the sky never moves with a temporal view's samples. The composite writes the
-// view's color, so it completes the render.
+// (SdfWorldInterfaces.SkyParameters). The sky runs on the render grid, reading the color views writes with the dispatch box
+// it is current inside, in every fragment; the composite runs at the output extent, reading a native view's lit image with
+// the visibility records and the box, or a reduced or temporal view's resolved lit image and surface distance. Both bind
+// the residency's World set, whose tables hold the sky block and stops, the volumes and the dynamic transforms, and a pass
+// group binding each port at its member and a filler at every member the pass does not read or write. Their block holds
+// the frame's common values, the temporal ones every part of a frame writes alike among them, and ResolvedSurface, which
+// only a resolved composite sets; the kernels take the sky's direction without the jitter, so the sky never moves with a
+// temporal view's samples. The composite writes the view's color, so it completes the render.
 internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
     // The common frame values copy by name from the world layout, whose block the one frame writer lays out.
     private static readonly (int Source, int Destination, int Length)[] FrameCopies = [.. SdfWorldPackage.Values.Select(selector: static member => (
@@ -90,7 +90,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         foreach (var copy in FrameCopies) {
             frameBlock.Slice(length: copy.Length, start: copy.Source).CopyTo(destination: recording.PassBlock.Slice(length: copy.Length, start: copy.Destination));
         }
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: recording.PassBlock[ResolvedSurfaceOffset..], value: (m_resolved ? 1u : 0u));
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: recording.PassBlock[ResolvedSurfaceOffset..], value: ((m_resolved && (m_kernel == SdfKernel.Composite)) ? 1u : 0u));
         var set = m_sets.PassSet(slot: recording.Slot);
 
         m_work.Write(passSet: set, recording: recording);
@@ -152,7 +152,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
     }
     // The member a pass reads a fragment version through.
     private static string ReadMemberOf(string version) => version switch {
-        SdfWorldPackage.Parts.Lit => SdfWorldPackage.LitImage,
+        SdfWorldPackage.Parts.Lit or SdfWorldPackage.CurrentColor => SdfWorldPackage.LitImage,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBounds,
         SdfWorldPackage.Parts.ShadowVisibility => SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.Parts.SurfaceDistance => SdfWorldPackage.SurfaceDistanceRead,

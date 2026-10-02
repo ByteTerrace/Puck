@@ -1,9 +1,10 @@
-// The sky's field runs, one invocation an output pixel: evaluated only where the pixel or one of its eight neighbours is
-// not wholly covered by the lit image, the one-pixel dilation that keeps every texel the composite reads beside an edge
-// written. The lowest run, the gradient, composes over nothing, so it writes its offset alone (skyBaseRW); the cloud run
-// above the point run writes its scale and offset (skyScaleRW, skyOffsetRW). A pixel the lit image covers, with all its
-// neighbours, evaluates and writes nothing, and a debug view draws its own pixels, so its sky evaluates nothing. Each
-// pixel evaluated counts one sky evaluation (gpu.sky.evaluations) and its texel.
+// The sky's field runs, one invocation a render-grid pixel: evaluated only where the pixel or one of its eight neighbours
+// is not wholly covered by the color views wrote, the one-pixel dilation that keeps every texel the composite reads beside
+// an edge evaluated. The lowest run, the gradient, composes over nothing, so it writes its offset alone (skyBaseRW); the
+// cloud run above the point run writes its scale and offset (skyScaleRW, skyOffsetRW). The base's alpha says whether the
+// texel was evaluated: a pixel views covers, with all its neighbours, evaluates nothing and writes a zero base, and a
+// debug view draws its own pixels, so its sky evaluates nothing. Each pixel evaluated counts one sky evaluation
+// (gpu.sky.evaluations), and each pixel its texel.
 #include "sdf-sky-pass.hlsli"
 
 [numthreads(8, 8, 1)]
@@ -31,9 +32,11 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         skyBaseRW[id.xy] = float4(sdfSkyGradient(direction), 1.0);
         skyScaleRW[id.xy] = float4(scale, 1.0);
         skyOffsetRW[id.xy] = float4(offset, 1.0);
-        sdfWorkTexels = 1u;
         evaluations = 1u;
+    } else {
+        skyBaseRW[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
     }
+    sdfWorkTexels = 1u;
 
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
     puckCountSky(evaluations);
