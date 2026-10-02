@@ -692,6 +692,11 @@ through `ShaderPackager.LoadSource` and installs the result with `TryInstall`,
 its inputs taken from the row's `inputs`. The `pipeline.*` console verbs
 address these rows by name.
 
+Superseding a compilation or removing its row cancels it without waiting on the
+frame thread. The host retains each canceled build until it finishes. Disposal
+cancels and joins every remaining compilation, including earlier superseded or
+removed builds, before the owner releases the compiler's cache directory.
+
 The `place` package (`PlacePackage`) draws a pane into `main`. Its placements
 come from `IRenderGraphPlacements`, which the host implements. Each frame
 `WorldFramePresenter.PrepareGraph`, installed as

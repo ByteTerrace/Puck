@@ -52,9 +52,11 @@ public static class CreationBaker {
     /// <param name="quality">The quality tier.</param>
     /// <param name="bake">The bake, or <see langword="null"/> when the creation has none.</param>
     /// <param name="reason">Why the creation has no bake, or empty on success.</param>
+    /// <param name="cancellationToken">Cancels the bake at its next field evaluation.</param>
     /// <returns><see langword="true"/> when the creation baked.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
-    public static bool TryBake(CreationDocument document, SdfBakeQuality quality, [NotNullWhen(returnValue: true)] out SdfBake? bake, out string reason) {
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public static bool TryBake(CreationDocument document, SdfBakeQuality quality, [NotNullWhen(returnValue: true)] out SdfBake? bake, out string reason, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(argument: document);
         bake = null;
 
@@ -83,6 +85,7 @@ public static class CreationBaker {
                 )
             );
             bake = SdfBaker.Bake(
+                cancellationToken: cancellationToken,
                 center: Vector3.Zero,
                 materials: materials,
                 program: builder.Build(buildInstanceGrid: false),

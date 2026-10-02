@@ -224,6 +224,10 @@ public readonly struct CanceledBuild<T> where T : class {
     private readonly CancellationTokenSource? m_cancellation;
     private readonly Task<T>? m_task;
 
+    /// <summary>Gets whether the build and its cancellation callbacks have returned, so <see cref="Wait"/> does not
+    /// block. The empty handle is complete.</summary>
+    public bool IsCompleted => (m_task is null or { IsCompleted: true });
+
     internal CanceledBuild(Task<T> task, CancellationTokenSource cancellation) {
         m_cancellation = cancellation;
         m_task = task;
