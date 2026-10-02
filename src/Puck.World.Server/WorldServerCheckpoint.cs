@@ -19,10 +19,18 @@ public readonly record struct WorldRuleLatchEntry(string Rule, string Key, int L
 /// <param name="Running">Whether the group is open.</param>
 /// <param name="Breached">Whether the group stopped on its pass ceiling.</param>
 public readonly record struct WorldRuleGroupEntry(string Group, int Step, bool Running, bool Breached);
+/// <summary>One named machine binding's on-change memo on the wire. The memo decides whether the next tick pokes the
+/// machine or mirrors its memory, so it is simulation state even though no hash folds it.</summary>
+/// <param name="Machine">The instance name.</param>
+/// <param name="Binding">The binding name within the instance.</param>
+/// <param name="State">The binding's last outcome: the instance generation it belongs to, its availability, the last
+/// value it transferred, and the provider's reason.</param>
+public readonly record struct WorldMachineBindingEntry(string Machine, string Binding, WorldMachineBindingState State);
 /// <summary>This server's own checkpointed fields — journal, base/definition documents, buffered pending ops,
-/// step clock, the arena's full interned-key ledger, rule-edge latches, rule-group progress, and per-binding
-/// decisions. The ledger includes names no current cell references because they still consume the arena's bounded
-/// key namespace. Every other subsystem's own section lives beside this one on <see cref="WorldAuthorityCheckpoint"/>.</summary>
+/// step clock, the arena's full interned-key ledger, rule-edge latches, rule-group progress, per-binding
+/// decisions, and each named machine binding's on-change memo, ordered by machine then binding name. The ledger
+/// includes names no current cell references because they still consume the arena's bounded key namespace. Every
+/// other subsystem's own section lives beside this one on <see cref="WorldAuthorityCheckpoint"/>.</summary>
 public sealed record WorldServerCheckpoint(
     byte[] DefinitionJson,
     byte[] BaseDefinitionJson,
@@ -49,5 +57,6 @@ public sealed record WorldServerCheckpoint(
     string? MusicDirectorLastEmbellishmentPatchId,
     ulong? MusicDirectorLastEmbellishmentTick,
     IReadOnlyList<WorldDecisionCheckpoint> Decisions,
+    IReadOnlyList<WorldMachineBindingEntry> MachineBindings,
     ArenaUndoSnapshot? Undo = null
 );

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Machines;
 using Puck.Commands;
 using Puck.Audio.Simulation;
 using Puck.Networking;
@@ -491,6 +492,20 @@ public static partial class WorldAuthorityCheckpointCodec {
             value: section.MusicDirectorLastEmbellishmentTick,
             writeValue: static (w, v) => w.WriteUInt64(value: v)
         );
+        writer.WriteArray(
+            items: section.MachineBindings,
+            writeItem: static (w, entry) => {
+                w.WriteString(value: entry.Machine);
+                w.WriteString(value: entry.Binding);
+                w.WriteUInt64(value: entry.State.Generation);
+                w.WriteByte(value: ((byte)entry.State.Status));
+                w.WriteOptional(
+                    value: entry.State.LastValue,
+                    writeValue: static (v, value) => v.WriteInt64(value: value)
+                );
+                w.WriteNullableString(value: entry.State.Reason);
+            }
+        );
 
         return writer.ToArray();
     }
@@ -659,6 +674,59 @@ public static partial class WorldAuthorityCheckpointCodec {
         var musicDirectorLastEmbellishmentTick = reader.ReadOptional(
             readValue: static (ref WireReader r) => r.ReadUInt64()
         );
+        var machineBindings = reader.ReadArray(
+            field: "server machine bindings",
+            readItem: static (ref WireReader r) => {
+                var machine = r.ReadRequiredString(
+                    field: "machine binding machine",
+                    maxBytes: MaxStringBytes
+                );
+                var binding = r.ReadRequiredString(
+                    field: "machine binding name",
+                    maxBytes: MaxStringBytes
+                );
+                var generation = r.ReadUInt64();
+                var status = ((MachineAccessStatus)r.ReadByte());
+
+                if (!Enum.IsDefined(value: status)) {
+                    r.Fail(
+                        detail: "machine binding status is unknown",
+                        refusal: WireRefusal.EnumValueUnknown
+                    );
+                }
+
+                var lastValue = r.ReadOptional(
+                    readValue: static (ref WireReader v) => v.ReadInt64()
+                );
+                var reason = r.ReadNullableString(
+                    field: "machine binding reason",
+                    maxBytes: MaxStringBytes
+                );
+
+                return new WorldMachineBindingEntry(
+                    Binding: binding,
+                    Machine: machine,
+                    State: new WorldMachineBindingState(
+                        Generation: generation,
+                        LastValue: lastValue,
+                        Reason: reason,
+                        Status: status
+                    )
+                );
+            },
+            maximum: MaxCollectionCount
+        );
+
+        // One encoding per memo: strictly ascending by machine, then binding, so equal servers write equal bytes and a
+        // repeated binding cannot name two outcomes.
+        for (var index = 1; (!reader.Failed && (index < machineBindings.Length)); index++) {
+            if (WorldServer.CompareBindingOrder(left: machineBindings[(index - 1)], right: machineBindings[index]) >= 0) {
+                reader.Fail(
+                    detail: $"server machine binding '{machineBindings[index].Machine}.{machineBindings[index].Binding}' is out of binding order",
+                    refusal: WireRefusal.PayloadMalformed
+                );
+            }
+        }
 
         if (!reader.TryFinish(failure: out var failure)) {
             section = null!;
@@ -680,6 +748,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             LastCompletedTick: lastCompletedTick,
             LastDocumentReceipt: lastDocumentReceipt,
             LastStepTicks: lastStepTicks,
+            MachineBindings: machineBindings,
             MusicClockElapsedTicks: musicClockElapsedTicks,
             MusicDirectorArmed: musicDirectorArmed,
             MusicDirectorCurrentSegmentId: musicDirectorCurrentSegmentId,

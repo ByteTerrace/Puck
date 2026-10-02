@@ -474,7 +474,7 @@ operator only, because it prints the values the rules computed.
 | `world.history on [<MiB>]` | Starts recording, with a memory budget (64 MiB unless named). The next tick captures the first keyframe; a history already on takes the new budget. |
 | `world.history off` | Stops recording and releases everything it held. |
 | `world.history` or `world.history status` | Echoes the window (oldest and newest tick), the cursor, the keyframe spacing, the bytes held against the budget split into keyframes, input and branches, and the counted cost: ticks recorded, hash folds, keyframes captured, deferred and evicted, seeks, ticks re-simulated, and restores. |
-| `world.history seek <tick>` | Moves the live world to any tick in the window, backward or forward, and proves the result against the hash recorded there. A seek behind the newest tick pauses the world. |
+| `world.history seek <tick>` | Moves the live world to any tick in the window, backward or forward, and proves the result against the authoritative hash recorded there. A seek behind the newest tick pauses the world. |
 | `world.history step <±n>` | Seeks relative to the cursor. |
 | `world.history resume` | Continues live input from the cursor. The recorded future behind it is discarded when the next tick lands. |
 | `world.history branch <name>` | Continues live input from the cursor and keeps the recorded future as a named branch instead of discarding it. |
@@ -485,7 +485,11 @@ The history records a full checkpoint (a keyframe) every few seconds of
 simulation at most, and each tick's input and authoritative hash in between. A
 seek restores the nearest keyframe at or before its target and re-simulates the
 recorded input, so every tick it reaches is checked against the hash the live
-run recorded; a disagreement is reported by tick and the verb fails.
+run recorded; a disagreement is reported by tick and the verb fails. Machine
+cores are outside the authoritative hash: a keyframe restores them exactly, along
+with the memo that decides when a memory binding next writes to them, but a seek
+does not compare them, and when the world has stepped a machine its verdict says
+so.
 Consecutive keyframes share every region that did not change, so a keyframe
 costs what changed since the last one; the spacing balances that cost against
 input bytes, and the oldest keyframe span is dropped when the budget fills. A tick that captures no keyframe

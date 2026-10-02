@@ -217,6 +217,10 @@ public sealed class WorldHistoryCommandModule(WorldHistory history, WorldInstanc
         var proof = (report.Matches
             ? $"authoritative 0x{report.LiveHash:X16} matches the recording"
             : $"DIVERGED at tick {(report.DivergedAt ?? report.To)} — live 0x{report.LiveHash:X16}, recorded 0x{report.RecordedHash:X16}");
+
+        if (report.MachineCoresOutsideProof) {
+            proof += " (machine cores are outside the authoritative hash and were not compared)";
+        }
         var where = ((target < head)
             ? $" | {(paused ? "paused" : "held")} at tick {target} behind head {head} — world.history resume discards the future, world.history branch <name> keeps it"
             : " | at the head");

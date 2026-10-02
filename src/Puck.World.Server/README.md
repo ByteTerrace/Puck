@@ -262,8 +262,8 @@ packages, then repeats the comparison over candidate-written continuation state.
 Receipts carry full evidence hashes and matching forward and reverse import
 hashes; the coordinator refuses mismatches. The receipt covers the states actually
 exercised, not every state a changed game might reach. Checkpoints preserve named
-handheld machine cores, held input, exact pacing, and instance generations after
-draining accepted work. Restore requires the same firmware, cartridge, and core
+handheld machine cores, held input, exact pacing, instance generations, and each
+named binding's on-change memo after draining accepted work. Restore requires the same firmware, cartridge, and core
 format identity. Pumped addon guests, applied screen operations, live coupled
 machine links, and enabled machine rewind history still refuse capture by name.
 Worlds exercising those unsupported states cannot pass qualification yet.
@@ -1813,7 +1813,11 @@ use one coherent provider inspection for the whole scalar, retain the last accep
 world value on failure, and expose availability through `MachineBindingState`.
 Writes use the declared patch/bus semantics and checked/truncating conversion.
 On-change memoization includes generation and binding configuration, so a replaced
-device receives its first write even when the world value did not change. The
+device receives its first write even when the world value did not change. The memo
+decides whether the next tick pokes or mirrors, so it is simulation state: a
+checkpoint carries it ordered by machine and binding name, and every restore
+replaces the live memo with it rather than merging. A restored world therefore
+leaves alone a byte the machine's own program rewrote, as the uninterrupted run does. The
 screen-owned route described below remains during the output-reference migration.
 
 A booted `IMachineRuntime` (a diegetic screen's cartridge/cabinet—
@@ -2253,7 +2257,12 @@ restores exactly the captured key ledger, including retained names absent from
 the authored rows, even when an intervening relayout reordered the live keys.
 Each keyframe keeps its asset directory, and its music checkpoint includes any
 armed transition. A machine host restores over its running machines
-(`IWorldMachineCheckpointHost`). The capture
+(`IWorldMachineCheckpointHost`), and the named bindings' on-change memo is
+replaced by the keyframe's. Machine cores are outside the authoritative hash, so
+the proof covers what they fed into world state and not the cores themselves; the
+history keeps no per-tick machine digest, which would wait on every queued machine
+worker every tick. When the world has stepped a machine, the seek's verdict says
+its cores were not compared (`WorldHistorySeekReport.MachineCoresOutsideProof`). The capture
 is suspended for the re-simulation, the restored timeline is delivered without a
 step (`WorldTick.PresentRestoredTimeline`), and `TimelineRestored` refreshes the
 local route epochs. A re-simulated step sets `ReplaysInput`, so nothing is

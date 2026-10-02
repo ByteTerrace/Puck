@@ -598,13 +598,21 @@ The contracts a change must keep:
 - **Proof, not trust.** Every seek proves the restored keyframe against the hash
   its tick recorded and every re-simulated tick against its recorded hash and
   mutation outcomes. A disagreement is reported by tick and fails the verb.
+  Machine cores are outside the authoritative hash, so when the world has
+  stepped a machine the verdict says they were not compared
+  (`MachineCoresOutsideProof`); exact machine continuation is held by
+  `MachineBindingCheckpointLawTests`, not by the per-seek proof.
 - **Restore exactly.** In-place restore keeps the live base and journal by
   identity only when the keyframe's fingerprint (base reference, journal
   length and tail, solid revision) matches; otherwise the keyframe's document
   goes through the forced load door first. Restore prepares an arena from the
   captured definition and complete retained-key ledger, so relayout cannot
   leave future keys behind. Each keyframe retains its asset directory, and
-  machine hosts restore over running machines. Checkpoints preserve armed music
+  machine hosts restore over running machines. The named machine bindings'
+  on-change memo rides the server section and is replaced, never merged, on
+  every restore (seek, `FromCheckpoint`, a replay drive's boot image); state a
+  restore must leave behind belongs in the checkpoint, not in a field the
+  restore forgets to clear. Checkpoints preserve armed music
   transitions as well as the music clock. Capture refuses a document whose score
   differs from the still-running boot music plan.
 - **Refuse before moving; read once.** Every refusal precedes the first change

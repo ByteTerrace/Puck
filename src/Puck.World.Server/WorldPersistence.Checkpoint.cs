@@ -661,6 +661,7 @@ public sealed partial class WorldPersistence {
                 Intents: [.. Host.Tick.Intents],
                 Pending: [],
                 Decisions: Decisions.Capture(),
+                MachineBindings: Host.CaptureMachineBindings(),
                 RuleGateHeld: ruleGateHeld,
                 InteractionGateHeld: interactionGateHeld,
                 RuleGroups: ruleGroups,
@@ -779,6 +780,10 @@ public sealed partial class WorldPersistence {
         Decisions.ValidateCheckpoint(
             checkpoint: server,
             definition: restoredDefinition
+        );
+        WorldServer.ValidateMachineBindings(
+            definition: restoredDefinition,
+            entries: server.MachineBindings
         );
 
         var machineCheckpoint = (checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty);
@@ -916,6 +921,7 @@ public sealed partial class WorldPersistence {
         );
         Host.RuleHost.PruneLatches();
         Decisions.Restore(checkpoint: server.Decisions);
+        Host.RestoreMachineBindings(entries: server.MachineBindings);
         if (!Host.Search.TryRestore(
             checkpoint: (checkpoint.Search ?? ArenaSearchCheckpoint.Empty),
             reason: out var searchReason

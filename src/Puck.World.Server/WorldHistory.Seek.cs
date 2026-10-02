@@ -17,8 +17,13 @@ namespace Puck.World;
 /// the recording, or <see langword="null"/> when every tick matched.</param>
 /// <param name="RecordedHash">The authoritative hash the history recorded at <paramref name="To"/>.</param>
 /// <param name="LiveHash">The authoritative hash the live world holds at <paramref name="To"/> now.</param>
-public readonly record struct WorldHistorySeekReport(ulong From, ulong To, ulong? KeyframeTick, bool RebuiltDocument, int TicksResimulated, ulong? DivergedAt, ulong RecordedHash, ulong LiveHash) {
-    /// <summary>Gets whether the live world reproduces the recorded state at <see cref="To"/>.</summary>
+/// <param name="MachineCoresOutsideProof">Whether the world has stepped a machine. Machine cores are outside the
+/// authoritative hash, so the proof covers what the cores fed into world state and not the cores themselves: the
+/// history records no per-tick machine digest, because taking one would wait on every queued machine worker every
+/// tick.</param>
+public readonly record struct WorldHistorySeekReport(ulong From, ulong To, ulong? KeyframeTick, bool RebuiltDocument, int TicksResimulated, ulong? DivergedAt, ulong RecordedHash, ulong LiveHash, bool MachineCoresOutsideProof) {
+    /// <summary>Gets whether the live world reproduces the recorded authoritative state at <see cref="To"/>; see
+    /// <see cref="MachineCoresOutsideProof"/> for what that state leaves out.</summary>
     public bool Matches => ((DivergedAt is null) && (RecordedHash == LiveHash));
 }
 public sealed partial class WorldHistory {
@@ -405,6 +410,7 @@ public sealed partial class WorldHistory {
                 server: m_server,
                 tick: target
             ),
+            MachineCoresOutsideProof: m_server.AnyMachineEverPumped,
             RebuiltDocument: rebuilt,
             RecordedHash: RecordedHashAt(tick: target),
             TicksResimulated: ((int)(target - start)),
