@@ -89,21 +89,18 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
             Assert.Same(expected: upload, actual: runtime.Source(instance: source));
             Assert.Null(@object: runtime.Producer(instance: source));
-            Assert.True(
-                condition: SpinWait.SpinUntil(
-                    condition: () => {
-                        Produce(
-                            index: index,
-                            runtime: runtime,
-                            tick: index
-                        );
-                        index++;
+            TestLiveness.Until(
+                reason: () => "The source's conversion never built.",
+                step: () => {
+                    Produce(
+                        index: index,
+                        runtime: runtime,
+                        tick: index
+                    );
+                    index++;
 
-                        return runtime.IsSettled;
-                    },
-                    timeout: TimeSpan.FromSeconds(value: 30)
-                ),
-                userMessage: "The source's conversion never built."
+                    return runtime.IsSettled;
+                }
             );
 
             var node = runtime.Node(instance: source);
@@ -163,21 +160,18 @@ public sealed partial class RenderGraphRuntimeLawTests {
         using (runtime) {
             var index = 0L;
 
-            Assert.True(
-                condition: SpinWait.SpinUntil(
-                    condition: () => {
-                        Produce(
-                            index: index,
-                            runtime: runtime,
-                            tick: index
-                        );
-                        index++;
+            TestLiveness.Until(
+                reason: () => "The source's conversion never built.",
+                step: () => {
+                    Produce(
+                        index: index,
+                        runtime: runtime,
+                        tick: index
+                    );
+                    index++;
 
-                        return runtime.IsSettled;
-                    },
-                    timeout: TimeSpan.FromSeconds(value: 30)
-                ),
-                userMessage: "The source's conversion never built."
+                    return runtime.IsSettled;
+                }
             );
 
             FrameCaptureResult CaptureAt(long tick) {
@@ -216,6 +210,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             (ImagePixelFormat.Indexed8, ImageSourceConversion.PalettePass),
             (ImagePixelFormat.Nv12, ImageSourceConversion.Nv12Pass),
             (ImagePixelFormat.R10G10B10A2Unorm, ImageSourceConversion.TransferPass),
+            (ImagePixelFormat.R16G16B16A16Float, ImageSourceConversion.TransferPass),
         ])) {
             var recorders = new Recorders();
 
@@ -260,6 +255,69 @@ public sealed partial class RenderGraphRuntimeLawTests {
             }
         }
     }
+    /// <summary>A source's conversion reads the paper white its packages were registered with from its pass block, written
+    /// by the recorder on every frame it converts: the level an HDR source's luminance is converted relative to. The red
+    /// leg is the default SDR white, which a host asking for 203 cd/m² must not read.</summary>
+    [Fact]
+    public void ASourcesConversionReadsTheHostsPaperWhiteFromItsPassBlock() {
+        const double PaperWhite = 203.0;
+
+        var gpu = new FakePipelineGpu {
+            Recording = true,
+        };
+        var recorders = new Recorders();
+
+        SourceConversionPackage.RegisterAll(
+            packages: recorders.Registry,
+            paperWhiteNits: PaperWhite
+        );
+        recorders.Registry.RegisterSource(
+            factory: _ => new FakeUpload(format: ImagePixelFormat.R16G16B16A16Float),
+            package: Upload
+        );
+
+        using var runtime = Runtime(gpu, recorders, Set(RenderGraphInstance.Source(name: "pattern", producer: "test")), "pattern", new RenderGraphRuntimeGraph[1]);
+
+        var tick = 0L;
+
+        TestLiveness.Until(
+            reason: () => "The source never converted.",
+            step: () => {
+                tick++;
+
+                var frame = new RenderGraphFrame(
+                    DisplayHeight: Display,
+                    DisplayHertz: 60,
+                    DisplayWidth: Display,
+                    Footprints: [],
+                    Index: tick,
+                    Roots: [new RenderGraphRoot(Height: 1.0, Instance: "pattern", Width: 1.0)],
+                    Tick: tick
+                );
+
+                _ = runtime.ProduceFrame(
+                    context: default,
+                    frame: in frame
+                );
+
+                return (runtime.Node(instance: 0).FrameCounter > 0UL);
+            }
+        );
+
+        var layout = ShaderPipelineParameterLayout.ForPackage(
+            config: null,
+            members: RenderGraphPackageCatalog.SourceMembers(format: RenderGraphPackageCatalog.SourceFormatOf(package: ImageSourceConversion.TransferPass)),
+            package: ImageSourceConversion.TransferPass
+        );
+        var block = gpu.ConstantBlock(
+            set: gpu.BoundSets.Last(predicate: static set => (set.Group == ((uint)ShaderInterfaceGroup.Pass))).Set,
+            sizeBytes: ((int)layout.SizeBytes)
+        );
+        var read = System.Buffers.Binary.BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: ((int)layout.BlockOffsetOf(member: RenderGraphPackageCatalog.SourcePaperWhite))));
+
+        Assert.Equal(actual: read, expected: ((float)PaperWhite));
+        Assert.NotEqual(actual: read, expected: ((float)DisplayOutput.SdrWhiteNits));
+    }
     /// <summary>On a device whose memory stages the source's region, the source's node leases the region-copy pipeline,
     /// records the region's copy ahead of the conversion, and the device-local buffer the conversion reads holds exactly
     /// the bytes the upload wrote, header and image, after every tick, under the model that runs the copy kernel.</summary>
@@ -298,43 +356,40 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         // The graph installs and the copy pipeline builds on the thread pool, so frames run until three conversions have
         // been checked.
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    tick++;
+        TestLiveness.Until(
+            reason: () => "The staged source never converted three times.",
+            step: () => {
+                tick++;
 
-                    var frame = new RenderGraphFrame(
-                        DisplayHeight: Display,
-                        DisplayHertz: 60,
-                        DisplayWidth: Display,
-                        Footprints: [],
-                        Index: tick,
-                        Roots: [new RenderGraphRoot(Height: 1.0, Instance: "pattern", Width: 1.0)],
-                        Tick: tick
-                    );
+                var frame = new RenderGraphFrame(
+                    DisplayHeight: Display,
+                    DisplayHertz: 60,
+                    DisplayWidth: Display,
+                    Footprints: [],
+                    Index: tick,
+                    Roots: [new RenderGraphRoot(Height: 1.0, Instance: "pattern", Width: 1.0)],
+                    Tick: tick
+                );
 
-                    _ = runtime.ProduceFrame(
-                        context: default,
-                        frame: in frame
-                    );
+                _ = runtime.ProduceFrame(
+                    context: default,
+                    frame: in frame
+                );
 
-                    if (runtime.Node(instance: 0).FrameCounter == converted) {
-                        return false;
-                    }
+                if (runtime.Node(instance: 0).FrameCounter == converted) {
+                    return false;
+                }
 
-                    converted = runtime.Node(instance: 0).FrameCounter;
-                    // FakeUpload writes the tick as the first image word.
-                    BitConverter.TryWriteBytes(destination: expected.AsSpan(start: ImageSourceUploadLayout.HeaderBytes), value: ((uint)tick));
-                    Assert.Equal(
-                        actual: gpu.DeviceLocal(sizeBytes: ((ulong)byteCount)),
-                        expected: expected
-                    );
+                converted = runtime.Node(instance: 0).FrameCounter;
+                // FakeUpload writes the tick as the first image word.
+                BitConverter.TryWriteBytes(destination: expected.AsSpan(start: ImageSourceUploadLayout.HeaderBytes), value: ((uint)tick));
+                Assert.Equal(
+                    actual: gpu.DeviceLocal(sizeBytes: ((ulong)byteCount)),
+                    expected: expected
+                );
 
-                    return (converted >= 3UL);
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The staged source never converted three times."
+                return (converted >= 3UL);
+            }
         );
         Assert.True(condition: (gpu.UploadCopies > 1));
 
@@ -384,31 +439,28 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var index = 0L;
 
         // A new tick each frame converts, and the region the upload rewrote owes a copy.
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    index++;
+        TestLiveness.Until(
+            reason: () => "The staged source never copied three times.",
+            step: () => {
+                index++;
 
-                    var frame = new RenderGraphFrame(
-                        DisplayHeight: Display,
-                        DisplayHertz: 60,
-                        DisplayWidth: Display,
-                        Footprints: [],
-                        Index: index,
-                        Roots: [new RenderGraphRoot(Height: 1.0, Instance: "pattern", Width: 1.0)],
-                        Tick: index
-                    );
+                var frame = new RenderGraphFrame(
+                    DisplayHeight: Display,
+                    DisplayHertz: 60,
+                    DisplayWidth: Display,
+                    Footprints: [],
+                    Index: index,
+                    Roots: [new RenderGraphRoot(Height: 1.0, Instance: "pattern", Width: 1.0)],
+                    Tick: index
+                );
 
-                    _ = runtime.ProduceFrame(
-                        context: default,
-                        frame: in frame
-                    );
+                _ = runtime.ProduceFrame(
+                    context: default,
+                    frame: in frame
+                );
 
-                    return (gpu.UploadCopies >= 3);
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The staged source never copied three times."
+                return (gpu.UploadCopies >= 3);
+            }
         );
         Assert.Empty(collection: gpu.StateConflicts);
     }
@@ -468,15 +520,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         Assert.Null(@object: converter.Fault);
         Assert.Equal(expected: 0, actual: converter.ImageViewHandle);
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => converter.TryConvert(
-                    context: default,
-                    planes: pixels
-                ),
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The converter's conversion never built."
+        TestLiveness.Until(
+            reason: () => "The converter's conversion never built.",
+            step: () => converter.TryConvert(
+                context: default,
+                planes: pixels
+            )
         );
         Assert.NotEqual(expected: 0, actual: converter.ImageViewHandle);
         Assert.Equal(

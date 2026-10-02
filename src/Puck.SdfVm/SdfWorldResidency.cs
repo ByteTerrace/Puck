@@ -48,8 +48,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private readonly ISdfScreenSources? m_screenSources;
     private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
 
-    // Signaled while the tables exist, which a view's passes wait for before they install (SdfWorldPasses.Build).
-    private readonly ManualResetEventSlim m_ready = new(initialState: false);
+    // Completed while the tables exist, which a view's passes await before they install (SdfWorldPasses.BuildAsync). A
+    // reset replaces only a completed source, so every wait begun before the next build sees it complete; its
+    // continuations run on the thread pool, never on the frame thread that completes it.
+    private TaskCompletionSource m_ready = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     // The image-view handle each screen index was bound to by the latest recorded frame.
     private readonly nint[] m_boundScreenSources = new nint[SdfWorldTables.MaxScreenSurfaces];
     // Owned here rather than by the tables, so submission identities keep increasing across a device-loss rebuild.
@@ -262,16 +264,18 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_deviceContext.TryWaitIdle();
         m_tables?.Dispose();
         m_tables = null;
-        m_ready.Reset();
+        ResetReady();
         CancelShaderReload(reason: "the residency was released");
         m_pipelines.Release();
     }
     /// <summary>Gives back the creator's hold (<see cref="Release"/>).</summary>
     public void Dispose() => Release();
-    /// <summary>Waits until the tables are built (<see cref="IsReady"/>), on a thread that is not the frame thread.</summary>
+    /// <summary>Returns a task that completes once the tables are built (<see cref="IsReady"/>), for a build on the thread
+    /// pool, which awaits it and holds no thread meanwhile. It never completes on the frame thread's stack.</summary>
     /// <param name="cancellationToken">Cancels the wait.</param>
-    /// <exception cref="OperationCanceledException">The wait was canceled.</exception>
-    public void WaitReady(CancellationToken cancellationToken) => m_ready.Wait(cancellationToken: cancellationToken);
+    /// <returns>The task, canceled with <paramref name="cancellationToken"/>.</returns>
+    public Task WaitReadyAsync(CancellationToken cancellationToken) =>
+        Volatile.Read(location: ref m_ready).Task.WaitAsync(cancellationToken: cancellationToken);
     /// <summary>Blocks, on the frame thread between frames, until the pipeline builds the residency's frames started have
     /// finished, successfully or not: its pipeline set's, its region-copy and mesh pass pipelines', and a kernel reload's.
     /// It takes nothing and starts nothing, so the next frame (<see cref="Prepare"/>) builds the tables, refuses a failed
@@ -361,7 +365,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
         ReconcileGlyphAtlas(tables: tables);
         tables.DebugMode = m_debugMode;
         tables.DebugLabel = Name;
-        BindScreens(tables: tables);
+        BindScreens(
+            frame: frame,
+            tables: tables
+        );
 
         foreach (var (screenIndex, provider) in m_screenSurfaceTransforms) {
             if (provider() is { } transform) {
@@ -485,18 +492,23 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
     /// <summary>Returns the image a screen samples this frame from the images a view's render graph hands its pass, taking
     /// the image's lease into the frame's lease list the first time a pass of the frame samples it.</summary>
+    /// <param name="view">The view's index in the residency's frame, whose own read the screen samples
+    /// (<see cref="ISdfScreenSources.ReadOf"/>).</param>
     /// <param name="screen">The program-declared screen index.</param>
     /// <param name="reads">The images the pass's instance reads that its graph binds to no version, or
     /// <see langword="null"/>.</param>
     /// <param name="leases">The frame's lease list, which retires the lease after the frame's submission.</param>
     /// <returns>The image view, or zero when the screen shows nothing this frame.</returns>
-    public nint ScreenImage(int screen, RenderGraphExternalReads? reads, LeaseRetireList leases) {
+    public nint ScreenImage(int view, int screen, RenderGraphExternalReads? reads, LeaseRetireList leases) {
         ArgumentNullException.ThrowIfNull(argument: leases);
 
         nint handle = 0;
 
         if (
-            (m_screenSources?.ReadOf(screen: screen) is { } read) &&
+            (m_screenSources?.ReadOf(
+                screen: screen,
+                view: view
+            ) is { } read) &&
             (reads is not null) &&
             (reads.IndexOf(producer: read) is var index and >= 0)
         ) {
@@ -554,7 +566,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_frameSource.NotifyDeviceLost();
         m_tables?.Dispose();
         m_tables = null;
-        m_ready.Reset();
+        ResetReady();
         // A pipeline build or kernel reload still in flight is waited out and discarded before the host recreates the
         // device; the rebuilt tables build their pipelines anew on the recreated one.
         CancelShaderReload(reason: "the device was lost");
@@ -664,9 +676,20 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_packedFrame = null;
         m_programPending = false;
         Array.Clear(array: m_renderedSignatures);
-        m_ready.Set();
+        _ = Volatile.Read(location: ref m_ready).TrySetResult();
 
         return true;
+    }
+    private void ResetReady() {
+        var ready = Volatile.Read(location: ref m_ready);
+
+        if (ready.Task.IsCompleted) {
+            _ = Interlocked.CompareExchange(
+                comparand: ready,
+                location1: ref m_ready,
+                value: new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously)
+            );
+        }
     }
     private SdfWorldTablesOptions TablesOptions(SdfFrame frame) =>
         new(
@@ -683,9 +706,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
             ProgramWordCapacity: m_programWordCapacity,
             WorkLedger: m_work
         );
-    // Binds every screen's mapping, light and bound flag: a screen shows a source while it names an instance its views
-    // read, whose image each view's pass binds from the images its render graph hands it (ScreenImage).
-    private void BindScreens(SdfWorldTables tables) {
+    // Binds every screen's mapping, light and bound flag: a screen shows a source while it names an instance some view of
+    // the frame reads, whose image each view's pass binds from the images its render graph hands it (ScreenImage).
+    private void BindScreens(SdfWorldTables tables, SdfFrame frame) {
         if (m_screenSources is not { } sources) {
             return;
         }
@@ -694,9 +717,17 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         for (var position = 0; (position < screens.Count); position++) {
             var screen = screens[position];
+            var bound = false;
+
+            for (var view = 0; (!bound && (view < frame.Views.Count)); view++) {
+                bound = (sources.ReadOf(
+                    screen: screen,
+                    view: view
+                ) is not null);
+            }
 
             tables.SetScreenBound(
-                bound: (sources.ReadOf(screen: screen) is not null),
+                bound: bound,
                 screenIndex: screen
             );
             tables.SetScreenMapping(

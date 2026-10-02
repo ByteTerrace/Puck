@@ -70,6 +70,10 @@
         <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
         <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
         <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" />
+        <!-- The device-law kernels include the engine's SdfVm modules, so those modules key their bytecode's freshness:
+             without them an edited module leaves the laws running the bytecode of its old text. -->
+        <ShaderInclude Include="..\..\src\Puck.SdfVm\Assets\Shaders\**\*.hlsli" />
+        <ShaderInclude Include="..\..\src\Puck.Shaders\Assets\Shaders\Shared\reconstruction.hlsli" />
         <Content Include="..\Puck.SignedDistance.Tests\Fixtures\bake-sampling.json" Link="Fixtures\bake-sampling.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
@@ -85,6 +89,7 @@
         <Compile Include="..\Shared\UploadModelGpu.cs" Link="UploadModelGpu.cs" />
         <Compile Include="..\Shared\RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />
         <Compile Include="..\Shared\SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
+        <Compile Include="..\Shared\TestLiveness.cs" Link="TestLiveness.cs" />
         <Compile Include="..\Shared\SpirvEdits.cs" Link="SpirvEdits.cs" />
         <Compile Include="..\Shared\SdfTestView.cs" Link="SdfTestView.cs" />
         <Compile Include="..\Shared\ObservedPackageFactory.cs" Link="ObservedPackageFactory.cs" />

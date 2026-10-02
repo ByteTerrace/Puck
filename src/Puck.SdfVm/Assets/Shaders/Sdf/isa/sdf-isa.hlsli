@@ -227,4 +227,8 @@
 #define SDF_VISIBILITY_BOX_EDGE               8u
 #define SDF_VISIBILITY_CURRENT(pixel, bounds) (((pixel).x >= ((bounds)[0] * SDF_VISIBILITY_BOX_EDGE)) && ((pixel).y >= ((bounds)[1] * SDF_VISIBILITY_BOX_EDGE)) && ((pixel).x < ((bounds)[2] * SDF_VISIBILITY_BOX_EDGE)) && ((pixel).y < ((bounds)[3] * SDF_VISIBILITY_BOX_EDGE)))
 
+// The packed transform-slot word a rigid segment and a part binding store (SdfProgram.PackTransformSlot).
+#define SDF_TRANSFORM_SLOT_STATIC_WORD  0u
+#define SDF_TRANSFORM_SLOT_UNPACK(word) ((int)(word) + SDF_TRANSFORM_SLOT_NONE)
+
 #endif // SDF_ISA_HLSLI

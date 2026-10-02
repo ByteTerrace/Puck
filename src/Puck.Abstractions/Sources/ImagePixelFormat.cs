@@ -14,6 +14,9 @@ public enum ImagePixelFormat : byte {
     Nv12 = 4,
     /// <summary>Three 10-bit color channels and a 2-bit alpha, red in the lowest bits of each little-endian word.</summary>
     R10G10B10A2Unorm = 5,
+    /// <summary>Four 16-bit floating-point channels, red first, eight bytes a pixel: what a capture of an HDR display
+    /// reads, in scRGB.</summary>
+    R16G16B16A16Float = 6,
 }
 /// <summary>The color primaries a source's pixels are expressed in.</summary>
 public enum ImageColorPrimaries : byte {
@@ -26,7 +29,9 @@ public enum ImageColorPrimaries : byte {
 public enum ImageTransferFunction : byte {
     /// <summary>The sRGB transfer function (IEC 61966-2-1), which display-referred 8-bit content uses.</summary>
     Srgb = 0,
-    /// <summary>Linear light: a value is proportional to luminance.</summary>
+    /// <summary>Linear light at the scale scRGB names: a value is proportional to luminance, and one is the SDR white level
+    /// of 80 cd/m² (<see cref="Presentation.DisplayOutput.SdrWhiteNits"/>), with values above one and below zero in
+    /// range.</summary>
     Linear = 1,
     /// <summary>The SMPTE ST 2084 perceptual quantizer, which HDR10 content uses; 1 encodes 10,000 cd/m².</summary>
     Pq = 2,
@@ -59,6 +64,29 @@ public readonly record struct ImageColorEncoding(ImageColorPrimaries Primaries, 
         Transfer: ImageTransferFunction.Srgb
     );
 
+    /// <summary>Returns the encoding of pixels a display shows in a color space: what a capture of that display's output
+    /// reads.</summary>
+    /// <param name="colorSpace">The display's color space.</param>
+    /// <returns>sRGB over BT.709 for <see cref="Presentation.DisplayColorSpace.Srgb"/>, the perceptual quantizer over
+    /// BT.2020 for <see cref="Presentation.DisplayColorSpace.Hdr10"/>, and linear light over BT.709 for
+    /// <see cref="Presentation.DisplayColorSpace.ScRgb"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="colorSpace"/> is not defined.</exception>
+    public static ImageColorEncoding Of(Presentation.DisplayColorSpace colorSpace) => colorSpace switch {
+        Presentation.DisplayColorSpace.Srgb => Srgb,
+        Presentation.DisplayColorSpace.Hdr10 => new ImageColorEncoding(
+            Primaries: ImageColorPrimaries.Bt2020,
+            Transfer: ImageTransferFunction.Pq
+        ),
+        Presentation.DisplayColorSpace.ScRgb => new ImageColorEncoding(
+            Primaries: ImageColorPrimaries.Bt709,
+            Transfer: ImageTransferFunction.Linear
+        ),
+        _ => throw new ArgumentOutOfRangeException(
+            actualValue: colorSpace,
+            message: "The display color space is not defined.",
+            paramName: nameof(colorSpace)
+        ),
+    };
     /// <summary>Returns the encoding of a planar BT.709-primaries source with the given matrix and range.</summary>
     /// <param name="matrix">The Y'CbCr matrix.</param>
     /// <param name="range">The code range.</param>

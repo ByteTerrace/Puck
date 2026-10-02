@@ -55,7 +55,11 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// <param name="FrameHeight">The instance output height; zero uses the pass height for standalone recordings.</param>
 /// <param name="RenderWidth">The width of the instance's render grid this frame; zero uses the output width.</param>
 /// <param name="RenderHeight">The height of the instance's render grid this frame; zero uses the output height.</param>
-public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null, GpuKernelCounterRow? WorkCounters = null, uint FrameWidth = 0, uint FrameHeight = 0, uint RenderWidth = 0, uint RenderHeight = 0) {
+/// <param name="UnreadFrames">The frames the instance's render graph has left it unread, with no displayed output showing
+/// or reading it, including through held consumer outputs.
+/// It moves only while the instance is parked, so a recording whose output depends on its preceding renders starts anew
+/// when it differs from its preceding render's.</param>
+public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null, GpuKernelCounterRow? WorkCounters = null, uint FrameWidth = 0, uint FrameHeight = 0, uint RenderWidth = 0, uint RenderHeight = 0, long UnreadFrames = 0) {
     /// <summary>Gets the command buffer to record into.</summary>
     public nint CommandBuffer { get; } = CommandBuffer;
     /// <summary>Gets the instance's counting recorder.</summary>
@@ -95,6 +99,8 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     public RenderGraphExternalReads? Reads { get; } = Reads;
     /// <summary>Gets where the pass's kernels count their own work this frame, or <see langword="null"/>.</summary>
     public GpuKernelCounterRow? WorkCounters { get; } = WorkCounters;
+    /// <summary>Gets the frames the instance's render graph has left it unread.</summary>
+    public long UnreadFrames { get; } = UnreadFrames;
 }
 /// <summary>What a package pass's recording did with its outputs this frame.</summary>
 public enum RenderGraphPackageOutcome : byte {
@@ -112,7 +118,7 @@ public enum RenderGraphPackageOutcome : byte {
 public interface IRenderGraphPackageRecorder : IDisposable {
     /// <summary>Records the pass's work for one frame. It must not submit, wait, create a pipeline or record a barrier:
     /// the instance submits the command buffer with the rest of its frame, the pipelines were built off the frame thread
-    /// (<see cref="IRenderGraphPackageFactory.Build"/>), and the planned barriers the instance recorded before it left
+    /// (<see cref="IRenderGraphPackageFactory.BuildAsync"/>), and the planned barriers the instance recorded before it left
     /// each bound version in the layout its port's access needs (<see cref="RenderGraphPortAccess"/>): a sampled input
     /// shader-readable and a color-attachment output in <see cref="GpuImageLayout.RenderTarget"/>, which a render pass
     /// the package draws through must leave it in. A recording that draws nothing records nothing and says so, and never
@@ -140,11 +146,12 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     ulong? Signature(in FrameContext context) => null;
 }
 /// <summary>Makes the recorders of one package id. A candidate graph's package passes build with its shader passes:
-/// <see cref="Build"/> creates a pass's shader modules, pipelines and render passes on the thread pool before the graph
-/// installs, and <see cref="Create"/> takes those objects on the frame thread when it installs.</summary>
+/// <see cref="BuildAsync"/> creates a pass's shader modules, pipelines and render passes on the thread pool before the
+/// graph installs, and <see cref="Create"/> takes those objects on the frame thread when it installs.</summary>
 public interface IRenderGraphPackageFactory {
     /// <summary>Builds what a pass's recorder needs that the frame thread must not create: its shader modules,
-    /// pipelines and render passes. It runs on the thread pool, creates objects through
+    /// pipelines and render passes. It runs on the thread pool, awaits whatever it waits for (a pipeline lease, a
+    /// residency's tables) so a waiting build holds no thread, creates objects through
     /// <see cref="RenderGraphPackageRecorderContext.Services"/> only, checks the token between creations, and releases
     /// what it created when it fails or is canceled.</summary>
     /// <param name="context">The pass it builds for.</param>
@@ -152,12 +159,12 @@ public interface IRenderGraphPackageFactory {
     /// instance is disposed.</param>
     /// <returns>The built objects, which <see cref="Create"/> takes, or <see langword="null"/> when the package builds
     /// nothing. The instance disposes them when the candidate never installs.</returns>
-    IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken);
+    ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken);
     /// <summary>Creates a pass's recorder on the frame thread when its graph installs. It takes ownership of
     /// <paramref name="built"/>, allocates its frame and pass group sets from the instance's pool
     /// (<see cref="RenderGraphPackageSets"/>), and creates no pipeline.</summary>
     /// <param name="context">The pass it records.</param>
-    /// <param name="built">What <see cref="Build"/> returned for this pass.</param>
+    /// <param name="built">What <see cref="BuildAsync"/> returned for this pass.</param>
     /// <param name="groups">The instance's pool, which holds the pass's two sets once per frame slot, and the constant
     /// buffers its frame group and pass group blocks live in, one per frame slot.</param>
     /// <returns>The recorder, which the instance disposes with its graph.</returns>
@@ -167,7 +174,7 @@ public interface IRenderGraphPackageFactory {
     /// region's residency (<see cref="GpuResidency.Select"/>, with a reader in flight), flushes each frame slot's share
     /// after the frame's recordings and records every staged copy with its buffer barriers ahead of the frame's passes,
     /// so a recorder only writes a region's contents and binds <see cref="GpuRegion.Buffer"/>. It runs on the thread
-    /// pool with <see cref="Build"/>; a package that writes no region states none.</summary>
+    /// pool with <see cref="BuildAsync"/>; a package that writes no region states none.</summary>
     /// <param name="context">The pass it states the regions of.</param>
     /// <returns>The regions, in the order the recorder receives them.</returns>
     IReadOnlyList<RenderGraphPackageRegion> Regions(RenderGraphPackageRecorderContext context) => [];
@@ -202,9 +209,14 @@ public interface IRenderGraphPackageFactory {
     /// instance unchanged (<see cref="RenderGraphFrame.Unchanged"/>) when every one of its passes' packages answers
     /// <see langword="true"/> and no capture of it is pending.</summary>
     /// <param name="instance">The instance's name.</param>
+    /// <param name="unreadFrames">The frames the runtime's schedules have left the instance unread, with no displayed
+    /// output showing or reading it, including through held consumer outputs. Its recordings carry the count too
+    /// (<see cref="RenderGraphPackageRecording.UnreadFrames"/>). It moves only
+    /// while the instance is parked, so an instance shown again is asked with a count its latest render did not
+    /// see.</param>
     /// <param name="context">The host's frame context of the frame being scheduled.</param>
     /// <returns><see langword="true"/> when the instance's latest render stands for this frame.</returns>
-    bool IsUnchanged(string instance, in FrameContext context) => false;
+    bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) => false;
     /// <summary>Releases whatever the factory holds on the device after the device was lost, without waiting for any
     /// submission. The runtime calls it once its nodes have released theirs.</summary>
     void OnDeviceLost() { }

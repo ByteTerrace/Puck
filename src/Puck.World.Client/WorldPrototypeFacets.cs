@@ -67,6 +67,37 @@ public static class WorldPrototypeFacets {
             Filter: filter
         );
     }
+
+    /// <summary>Returns the face rows a definition's placements seat at the reserved band (<see cref="Derive"/>'s faces),
+    /// without the placeholders that pad the band's unseated slots: what a view of the world shows, where nothing keeps
+    /// the band's slots registered.</summary>
+    /// <param name="definition">The definition.</param>
+    /// <returns>The seated face rows.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<WorldScreen> Seated(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        return [.. Derive(
+            definition: definition,
+            derivedFaceBase: DerivedFaceBase,
+            derivedFaceScreens: definition.Authoring.DerivedFaceScreens
+        ).Faces.Where(predicate: static face => (face.Source is not WorldScreenSource.None))];
+    }
+    /// <summary>Returns where the glass a face's screen draws lies along the face's normal, measured from its frame's
+    /// origin: its back and its front, the front proud of the face. A window looking through the face as its counterpart,
+    /// from either side, starts its rays past it (<see cref="WorldWindowFrustumFit.TryFitFromEye"/>).</summary>
+    /// <param name="frame">The face's frame.</param>
+    /// <returns>The glass's back and front, in world units along the frame's normal.</returns>
+    public static (float Back, float Front) GlassSpan(WorldFaceFrame frame) {
+        var halfDepth = ((float)((double)frame.HalfDepth));
+        var front = (halfDepth + FaceProudEpsilon);
+
+        return ((front - (2f * MathF.Max(
+            x: (halfDepth * FaceInteriorFraction),
+            y: FaceMinimumHalfDepth
+        ))), front);
+    }
+
     private static WorldScreen PlaceholderScreen(int index) => new(
         Index: index,
         Origin: new Vector3(

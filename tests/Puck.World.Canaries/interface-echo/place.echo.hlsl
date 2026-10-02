@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'place' (sha256/eebcfb36bf92d180eaa7c63ddd1b4c2c4917c7f0cadcfb0219d998c36c9cc3a6), generated from the interface; never edit it.
+// The echo pass of shader interface 'place' (sha256/b52c1fbca089373556c489ea89199805530a4e5b6d3f5fedac70d13210cce0d1), generated from the interface; never edit it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "place.interface.hlsli"
 
@@ -23,8 +23,9 @@ void main(uint3 id : SV_DispatchThreadID) {
     echo[uint2(13, 0)] = ((asuint(passGroup.compareMode) == 0x400033A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(14, 0)] = ((asuint(passGroup.letterbox) == 0x400043A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(15, 0)] = ((asuint(passGroup.rect.x) == 0x400053A5u) && (asuint(passGroup.rect.y) == 0x400063A5u) && (asuint(passGroup.rect.z) == 0x400073A5u) && (asuint(passGroup.rect.w) == 0x400083A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(16, 0)] = ((asuint(passGroup.sharpness) == 0x400093A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(17, 0)] = ((asuint(passGroup.tonemap) == 0x4000A3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(18, 0)] = ((asuint(passGroup.wipe) == 0x4000B3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(19, 0)] = ((asuint(passGroup.workCounterRow) == 0x4000C3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(16, 0)] = ((asuint(passGroup.sharpen) == 0x400093A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(17, 0)] = ((asuint(passGroup.sharpness) == 0x4000A3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(18, 0)] = ((asuint(passGroup.tonemap) == 0x4000B3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(19, 0)] = ((asuint(passGroup.wipe) == 0x4000C3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(20, 0)] = ((asuint(passGroup.workCounterRow) == 0x4000D3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
 }

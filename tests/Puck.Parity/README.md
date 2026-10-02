@@ -16,7 +16,12 @@ capture depends on a bake made on the device.
 
 The world boots with soft shadows at `High` and ambient occlusion on
 (`render.shadows`, `render.ambientOcclusion`), so every SDF station passes
-through the shadow and ambient stages under the cross-backend pixel gate.
+through the shadow and ambient stages under the cross-backend pixel gate. It
+pins temporal reconstruction off (`render.temporal`), and every station but
+`converge` holds with it off: `puck parity`'s script turns it on
+(`world.temporal on`) sixty ticks before the first station that converges, after
+every other station's last capture, and refuses a world that captures a station
+without converging once it is on.
 
 The SDF stations' `captures` rows name the `world` instance, the SDF world as the
 station camera sees it. The layout also shows two instances of the binding graph
@@ -33,6 +38,7 @@ frame, and the `binding` and `bound` rows capture each instance's own output.
 | `vocabulary` | The `vocabRig` creation (`prototypes`/`placements`): a chamfered Box, a Prism with a `ChamferedRectangle` profile and a recessed panel, a Cylinder with a chamfer and a raised panel, a `symmetry`-folded pair riding a `parent`'s swing, and a `repeat` (with an `origin`) plate—placed twice, at placement scale 1 and 2. The swing reads `state.station` with immediate weight, so both backends render the same nonzero pose at the scheduled ticks. A wall-time driver would integrate different phases as the backends render at different rates. Separate static prototypes add a recessed `GrooveUnion` seam, a `PipeUnion` joint, and `cells` relief in both `F1` and `F2MinusF1` modes at their supported randomness limits. |
 | `binding` | The binding groups on both backends: every pass reads a frame group at set 0 and a pass group at set 3 through its generated interface. A compute pass seeds an integer pattern, a compute pass pixelates it (the pass group's config `cellSize` and a `uint3` of `levels`, a formatted load, a storage image), and a fullscreen pass samples it through the pass group's image and sampler and adds an integer grain of up to `amplitude` 255ths, hashed from the pixel, the seed and the frame group's tick. Every step works in whole 255ths, so no half-way unorm value is left to a backend to round, and the 96x96 output must equal a CPU reference exactly. |
 | `bound` | A bound row reaching a pass. The same graph at the reference tier, `high`, which the graph declares and the row names (`tier`), with the grain pass's `seed` bound to the `grainSeed` state row (`parameters`). The row starts at 0 and the world's `toGrainSeed` rule sets it to 13 at tick 1210. The captures sit on both sides of the move: tick 1195 must equal the reference drawn with seed 0, and tick 1215 the reference drawn with seed 13. Any literal in the binding's place fails at least one of them, a binding that does not resolve (which draws the graph's default seed, 7) fails both, and so does a row that never moved at tick 1215. |
+| `converge` | Temporal reconstruction at the `vocabulary` pose: each capture resets the world view's history at its armed tick and serves the eighth frame composed at it (`converge: 8`), over one frozen presentation snapshot, so both backends resolve the same eight jittered samples, reprojected, rectified and accumulated, through the temporal resolve. |
 
 `parity.contract.json` is the per-station comparison contract (tile size,
 per-tile mean/max delta ceilings, census floors). It is versioned beside the
@@ -78,7 +84,7 @@ naming the ticks involved:
 | `busy` | Another capture still held the render chain when this one was armed. |
 | `stale` | The frame that served it showed a later tick; the detail names both ticks. |
 | `failed` | The readback, PNG write, or PNG decode failed. |
-| `unserved` | No frame served it: the run ended first, or the offscreen host's hold ran out — 180 seconds while the engine's pipeline set builds, 60 seconds once the engine is ready. The detail names why, such as "the engine's pipeline set is building (5 of 14 pipelines created)". |
+| `unserved` | No frame served it: the run ended first, or the offscreen host's hold ran out — 180 seconds while the engine's pipeline set builds, 60 seconds once the engine is ready. The detail names why, such as "the engine's pipeline set is building (12 of 14 pipelines created; waiting on sdf-world-surface, sdf-world-views)". |
 | `deviceLost` | The graphics device was lost while it was armed or being read back; the host rebuilt the device and ran on, and the detail carries the loss's reason. |
 
 A landed frame is named `<station>~<tick>.png` (`WorldCaptureRow.CaptureName`,

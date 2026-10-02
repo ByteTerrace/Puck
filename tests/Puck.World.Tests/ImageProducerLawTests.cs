@@ -54,6 +54,7 @@ public sealed class ImageProducerLawTests {
         (string Id, ImageContentClass Content, ImageSourceTransport Transport)[] expected = [
             (WorldImageProducerSettings.TestPatternId, ImageContentClass.Deterministic, ImageSourceTransport.Uploaded),
             (WorldImageProducerSettings.QrId, ImageContentClass.Deterministic, ImageSourceTransport.Uploaded),
+            (WorldImageProducerSettings.ColorId, ImageContentClass.Deterministic, ImageSourceTransport.Uploaded),
             (WorldImageProducerSettings.CameraId, ImageContentClass.External, ImageSourceTransport.Imported),
             (WorldImageProducerSettings.CaptureId, ImageContentClass.External, ImageSourceTransport.Imported),
         ];

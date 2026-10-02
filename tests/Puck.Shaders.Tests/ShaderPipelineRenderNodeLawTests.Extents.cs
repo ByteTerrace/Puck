@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -88,16 +89,13 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             height: ResizedHeight,
             width: ResizedWidth
         );
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    _ = Produce(node: node);
+        TestLiveness.Until(
+            reason: () => "The resized graph never installed.",
+            step: () => {
+                _ = Produce(node: node);
 
-                    return (node.Extent == (ResizedWidth, ResizedHeight));
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The resized graph never installed."
+                return (node.Extent == (ResizedWidth, ResizedHeight));
+            }
         );
         Assert.Equal(
             actual: RecordedDispatches(gpu: gpu, node: node),

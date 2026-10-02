@@ -303,16 +303,13 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
         var index = 0UL;
 
         // Frames until the pane's pipeline has compiled and installed, then a few more so every frame after is steady.
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    Present(index: index++, presenter: presenter);
+        TestLiveness.Until(
+            reason: () => "The pane's pipeline never installed.",
+            step: () => {
+                Present(index: index++, presenter: presenter);
 
-                    return instances.Installed.Contains(item: Pane);
-                },
-                timeout: TimeSpan.FromSeconds(value: 60)
-            ),
-            userMessage: "The pane's pipeline never installed."
+                return instances.Installed.Contains(item: Pane);
+            }
         );
 
         for (var settle = 0; (settle < 4); settle++) {

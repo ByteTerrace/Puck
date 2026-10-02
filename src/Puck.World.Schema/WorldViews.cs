@@ -188,6 +188,10 @@ public enum WorldSeatYawReference : byte {
 /// <param name="Post">The post-process passes the synthesized root graph runs over the composed frame, in order, before
 /// the overlay, or <see langword="null"/> for none. A world that names <see cref="Root"/> authors its whole graph and
 /// names none.</param>
+/// <param name="NestingDepthRaw">How many screens deep a view of a world shows another world's view, or
+/// <see langword="null"/> for <see cref="Puck.Hosting.RenderGraphInstanceSet.DefaultNestingDepth"/>; refused past
+/// <see cref="Puck.Hosting.RenderGraphInstanceSet.MaxNestingDepth"/>. <see cref="NestingDepth"/> is what a reader
+/// resolves through.</param>
 public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatRig"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraProgram? SeatRigRaw = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatControl"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatViewControl? SeatControlRaw = null,
@@ -196,9 +200,18 @@ public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts =
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewGraph>? Graphs = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewGraphBudget? GraphBudget = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Root = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewPostPass>? Post = null) {
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewPostPass>? Post = null,
+    [property: System.Text.Json.Serialization.JsonPropertyName("nestingDepth"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? NestingDepthRaw = null) {
     private readonly IReadOnlyList<WorldViewLayout> m_layouts = (Layouts ?? []);
 
+    /// <summary>Gets how many screens deep the presentation of this world nests: a portal whose face shows another
+    /// world renders that world's own screens, its portals included, recursively to this many levels, so two portals
+    /// facing each other end here; a face past it draws its session's fallback colour, and a hit through the screens
+    /// walks at most this many deep. The authored <c>nestingDepth</c>, or
+    /// <see cref="Puck.Hosting.RenderGraphInstanceSet.DefaultNestingDepth"/> where the document authors none. 1 shows
+    /// the boot world's portals and nothing through them; 0 shows no portal at all.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int NestingDepth => (NestingDepthRaw ?? Puck.Hosting.RenderGraphInstanceSet.DefaultNestingDepth);
     /// <summary>Gets the placeholder an UNAUTHORED <c>views</c> section resolves to — an empty program, holding the
     /// property non-null between parse and validation. The engine carries no camera policy of its own: the standard
     /// chase framing is AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that

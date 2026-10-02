@@ -127,14 +127,13 @@ public sealed partial class OverlayPackageLawTests {
         var dispatches = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.Dispatches);
 
         // The first completed submission is the one that copies the region's static prefix; the bound is liveness.
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        TestLiveness.Until(
+            step: () => {
                 _ = rig.Node.ProduceFrame(context: default);
 
                 return rig.Node.TryReadCompleted(sample: sample);
-            },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            }
+        );
         Assert.Equal(
             actual: sample.PassLabels.ToArray(),
             expected: ["overlay", ShaderPipelineRenderNode.RegionCopiesPass]
@@ -206,16 +205,13 @@ public sealed partial class OverlayPackageLawTests {
             trackObjects: true
         );
 
-        void ProduceUntil(Func<bool> condition, string what) => Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    _ = rig.Node.ProduceFrame(context: default);
+        void ProduceUntil(Func<bool> condition, string what) => TestLiveness.Until(
+            reason: () => what,
+            step: () => {
+                _ = rig.Node.ProduceFrame(context: default);
 
-                    return condition();
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: what
+                return condition();
+            }
         );
 
         faults.Arm(kind: GpuCreationKind.Image);
@@ -308,16 +304,13 @@ public sealed partial class OverlayPackageLawTests {
             )
         );
 
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    _ = rig.Node.ProduceFrame(context: default);
+        TestLiveness.Until(
+            reason: () => "The heap never refused the graph.",
+            step: () => {
+                _ = rig.Node.ProduceFrame(context: default);
 
-                    return (rig.Node.LastSwapError is not null);
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The heap never refused the graph."
+                return (rig.Node.LastSwapError is not null);
+            }
         );
         Assert.IsType<GpuDescriptorHeapRefusalException>(@object: rig.Node.LastSwapError);
         Assert.StartsWith(
@@ -386,16 +379,13 @@ public sealed partial class OverlayPackageLawTests {
                     kind: kind,
                     nth: nth
                 );
-                Assert.True(
-                    condition: SpinWait.SpinUntil(
-                        condition: () => {
-                            _ = rig.Node.ProduceFrame(context: default);
+                TestLiveness.Until(
+                    reason: () => $"The {GpuCreationFaults.NameOf(kind: kind)} creation {nth} fault was never reported.",
+                    step: () => {
+                        _ = rig.Node.ProduceFrame(context: default);
 
-                            return (rig.Node.LastSwapError is not null);
-                        },
-                        timeout: TimeSpan.FromSeconds(value: 30)
-                    ),
-                    userMessage: $"The {GpuCreationFaults.NameOf(kind: kind)} creation {nth} fault was never reported."
+                        return (rig.Node.LastSwapError is not null);
+                    }
                 );
 
                 // Refused by the fault, which names the creation it failed, and everything created before it released

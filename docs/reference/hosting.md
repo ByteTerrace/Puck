@@ -239,14 +239,29 @@ node moves that work off: it starts a build on the thread pool, the node polls
 `TryTake` once per produced frame and installs the result at that frame
 boundary, and until then it presents what it already has. A newer request
 cancels the pending build with `Cancel`, and the discarded result is released
-when the build finishes. Before the device goes away, `CancelAndWait` blocks
-until the build's current unit of work returns, so nothing is created on a
+on the pool after the build and its cancellation callbacks finish. Callback
+failures are observed along with detached build failures. Before the device
+goes away, `CancelAndWait` blocks until both finish, so nothing is created on a
 device being torn down. An owner with nothing to present until the build
 finishes, such as an offscreen host producing its first frame, blocks on
 `WaitFinished` between frames instead of producing empty ones: it takes
 nothing, so the next `TryTake` sees the result or the failure as a polling
 owner would. The SDF pipeline set's build and live shader-pipeline
 compilations both use it.
+
+A build that waits for other work is asynchronous: it starts through the
+`Start` overload that takes a task, and awaits each wait, so a waiting build
+holds no pool thread. A render node's graph build awaits each pass pipeline's
+lease (`GpuBuildLease.WaitAsync`) and each package's `BuildAsync`; an SDF view's
+passes await their residency's tables (`SdfWorldResidency.WaitReadyAsync`); a
+kernel reload awaits its replacements. `GpuBuildCache` gives each build one of
+its turns before it creates anything: at most its concurrency of builds create
+at once, a build waiting for a turn holds no thread, and a cancel ends that
+wait at once. A cold set of more pipelines than turns therefore occupies only
+the threads whose creations are in the driver. A cancel runs the token's
+callbacks on the thread pool, so a canceled build's continuation never runs on
+the frame thread that canceled it. A compilation or a bake only works, so it
+starts through the synchronous overload.
 
 A node that samples an image another producer keeps writing, such as a camera
 ring slot or a HUD frame, receives it as a `GpuImageLease`: an image-view
@@ -336,8 +351,13 @@ placement shows another instance's output, the walk casts a new ray through the
 producer's camera from the hit's point on the image, and repeats in the
 producer's world. `WalkDisplay` starts from the topmost pane under a display
 point, or, where no pane holds it, from the view the display itself shows when
-that view is no pane (a lone view covering the whole display). A walk continues at most the limit it is given, which is normally
-`RenderGraphInstanceSet.NestingDepth`, the longest chain of same-frame reads.
+that view is no pane (a lone view covering the whole display). A walk continues through at most the limit of
+screens it is given, which is normally `RenderGraphInstanceSet.NestingDepth`; entering a pane's instance from the
+display passes through no screen and counts nothing. A set's nesting depth is declared by whoever composes it (a World
+from its boot document's `views.nestingDepth`), 3 when it declares none, from 0 through
+`RenderGraphInstanceSet.MaxNestingDepth`, 8; a set declaring another depth is refused as `NestingDepthInvalid`. It is
+never read off the reads, so two views reading each other's previous frames, or two portals facing each other, end at
+it.
 It ends on a producer's pixels, on an instance's world, off a source, at the
 limit, on an image the showing instance does not read, or at an instance with
 no camera. Every step maps in fixed point, so the same inputs walk the same

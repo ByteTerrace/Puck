@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/d1b7433fca795bf24fb2ffe0dd5e417cc32b4c4bfcecc56ee7adb46cd2ac5c08). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/466eb7c82a621a12c77e93ec114815fb97118b9fa4b105a03444d0187b24c659). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -89,21 +89,25 @@ struct SdfWorldPass {
     [[vk::offset(1172)]] float shadowDistanceScale;
     [[vk::offset(1176)]] float sunScale;
     [[vk::offset(1180)]] float tanHalfFieldOfView;
-    [[vk::offset(1184)]] uint2 tileGrid;
-    [[vk::offset(1192)]] uint viewBase;
-    [[vk::offset(1196)]] uint _pad1196;
-    [[vk::offset(1200)]] float3 viewForward;
+    [[vk::offset(1184)]] uint temporal;
+    [[vk::offset(1188)]] uint _pad1188;
+    [[vk::offset(1192)]] uint2 tileGrid;
+    [[vk::offset(1200)]] uint viewBase;
+    [[vk::offset(1204)]] uint _pad1204;
+    [[vk::offset(1208)]] uint _pad1208;
     [[vk::offset(1212)]] uint _pad1212;
-    [[vk::offset(1216)]] float3 viewPosition;
+    [[vk::offset(1216)]] float3 viewForward;
     [[vk::offset(1228)]] uint _pad1228;
-    [[vk::offset(1232)]] float3 viewRight;
+    [[vk::offset(1232)]] float3 viewPosition;
     [[vk::offset(1244)]] uint _pad1244;
-    [[vk::offset(1248)]] float3 viewUp;
-    [[vk::offset(1260)]] uint viewportCount;
-    [[vk::offset(1264)]] uint workCounterRow;
+    [[vk::offset(1248)]] float3 viewRight;
+    [[vk::offset(1260)]] uint _pad1260;
+    [[vk::offset(1264)]] float3 viewUp;
+    [[vk::offset(1276)]] uint viewportCount;
+    [[vk::offset(1280)]] uint workCounterRow;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa372466E0 : register(b0, space3);
-#define passGroup passGroupIsa372466E0
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa1776DDF9 : register(b0, space3);
+#define passGroup passGroupIsa1776DDF9
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<float> tiles : register(t3, space3);
@@ -113,10 +117,11 @@ struct SdfWorldPass {
 [[vk::binding(7, 3)]] RWStructuredBuffer<uint> viewsArgsRW : register(u7, space3);
 [[vk::binding(8, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t8, space3);
 [[vk::binding(9, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u9, space3);
-[[vk::binding(10, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u10, space3);
-[[vk::binding(11, 3)]] Texture2D<float4> screenSources[32] : register(t11, space3);
-[[vk::binding(43, 3)]] Texture2D<float4> meshVisibility : register(t43, space3);
-[[vk::binding(44, 3)]] RWStructuredBuffer<uint> workCounters : register(u44, space3);
+[[vk::binding(10, 3)]] RWStructuredBuffer<float> reactivityRW : register(u10, space3);
+[[vk::binding(11, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u11, space3);
+[[vk::binding(12, 3)]] Texture2D<float4> screenSources[32] : register(t12, space3);
+[[vk::binding(44, 3)]] Texture2D<float4> meshVisibility : register(t44, space3);
+[[vk::binding(45, 3)]] RWStructuredBuffer<uint> workCounters : register(u45, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps then texels written, as a 64-bit count in

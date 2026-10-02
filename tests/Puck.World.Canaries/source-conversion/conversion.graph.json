@@ -23,6 +23,11 @@
       "sizeBytes": 4128
     },
     {
+      "name": "hdr-region",
+      "kind": "Buffer",
+      "sizeBytes": 8224
+    },
+    {
       "name": "palette",
       "kind": "Image",
       "format": "R8G8B8A8Unorm",
@@ -45,6 +50,12 @@
       "kind": "Image",
       "format": "R16G16B16A16Float",
       "dimensions": { "mode": "Absolute", "width": 32, "height": 32 }
+    },
+    {
+      "name": "hdr",
+      "kind": "Image",
+      "format": "R16G16B16A16Float",
+      "dimensions": { "mode": "Absolute", "width": 32, "height": 32 }
     }
   ],
   "passes": [
@@ -53,7 +64,7 @@
       "source": "seed.hlsl",
       "entryPoint": "main",
       "kind": "Compute",
-      "outputs": [ { "name": "palette-region" }, { "name": "nv12-region" }, { "name": "rgba-region" }, { "name": "transfer-region" } ]
+      "outputs": [ { "name": "palette-region" }, { "name": "nv12-region" }, { "name": "rgba-region" }, { "name": "transfer-region" }, { "name": "hdr-region" } ]
     },
     {
       "name": "convert-palette",
@@ -61,7 +72,10 @@
       "entryPoint": "CSMain",
       "kind": "Compute",
       "inputs": [ { "name": "palette-region", "as": "region" } ],
-      "outputs": [ { "name": "palette", "as": "image" } ]
+      "outputs": [ { "name": "palette", "as": "image" } ],
+      "config": {
+        "paperWhiteNits": { "type": "float", "default": 80, "min": 80, "max": 10000, "description": "The paper-white level, in cd/m², a working value of one shows at." }
+      }
     },
     {
       "name": "convert-nv12",
@@ -69,7 +83,10 @@
       "entryPoint": "CSMain",
       "kind": "Compute",
       "inputs": [ { "name": "nv12-region", "as": "region" } ],
-      "outputs": [ { "name": "nv12", "as": "image" } ]
+      "outputs": [ { "name": "nv12", "as": "image" } ],
+      "config": {
+        "paperWhiteNits": { "type": "float", "default": 80, "min": 80, "max": 10000, "description": "The paper-white level, in cd/m², a working value of one shows at." }
+      }
     },
     {
       "name": "convert-rgba",
@@ -77,7 +94,10 @@
       "entryPoint": "CSMain",
       "kind": "Compute",
       "inputs": [ { "name": "rgba-region", "as": "region" } ],
-      "outputs": [ { "name": "rgba", "as": "image" } ]
+      "outputs": [ { "name": "rgba", "as": "image" } ],
+      "config": {
+        "paperWhiteNits": { "type": "float", "default": 80, "min": 80, "max": 10000, "description": "The paper-white level, in cd/m², a working value of one shows at." }
+      }
     },
     {
       "name": "convert-transfer",
@@ -85,8 +105,22 @@
       "entryPoint": "CSMain",
       "kind": "Compute",
       "inputs": [ { "name": "transfer-region", "as": "region" } ],
-      "outputs": [ { "name": "transfer", "as": "image" } ]
+      "outputs": [ { "name": "transfer", "as": "image" } ],
+      "config": {
+        "paperWhiteNits": { "type": "float", "default": 80, "min": 80, "max": 10000, "description": "The paper-white level, in cd/m², a working value of one shows at." }
+      }
+    },
+    {
+      "name": "convert-hdr",
+      "source": "../../../src/Puck.Shaders/Assets/Shaders/Sources/source-transfer.comp.hlsl",
+      "entryPoint": "CSMain",
+      "kind": "Compute",
+      "inputs": [ { "name": "hdr-region", "as": "region" } ],
+      "outputs": [ { "name": "hdr", "as": "image" } ],
+      "config": {
+        "paperWhiteNits": { "type": "float", "default": 1000, "min": 80, "max": 10000, "description": "The paper-white level, in cd/m², a working value of one shows at." }
+      }
     }
   ],
-  "outputs": ["palette", "nv12", "rgba", "transfer"]
+  "outputs": ["palette", "nv12", "rgba", "transfer", "hdr"]
 }

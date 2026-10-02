@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Text.Json;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -97,12 +98,9 @@ public sealed class PlacePackageLawTests {
 
         return node;
     }
-    private static void ProduceUntilPublished(ShaderPipelineRenderNode node) => Assert.True(
-        condition: SpinWait.SpinUntil(
-            condition: () => !node.ProduceFrame(context: default).IsEmpty,
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ),
-        userMessage: "The pass never published a frame."
+    private static void ProduceUntilPublished(ShaderPipelineRenderNode node) => TestLiveness.Until(
+        reason: () => "The pass never published a frame.",
+        step: () => !node.ProduceFrame(context: default).IsEmpty
     );
     // Where a member of the pass group binds.
     private static uint BindingOf(string member) => Layout.Layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass)).Resources.Single(predicate: resource => (resource.Member.Name == member)).Binding;

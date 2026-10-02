@@ -166,23 +166,20 @@ public sealed class StagedRegionDeviceLawTests {
 
             // The conversion and the copy pipeline build on the thread pool, so frames run until the node has converted
             // several ticks, each owing the region's copy, and a capture of the instance would be served.
-            Assert.True(
-                condition: SpinWait.SpinUntil(
-                    condition: () => {
-                        tick++;
-                        _ = runtime.ProduceFrame(
-                            context: default,
-                            frame: Frame(tick: tick)
-                        );
+            TestLiveness.Until(
+                reason: () => $"{backend}: the staged source never converted: {runtime.UnservedCaptureReasonOf(instance: Instance)}",
+                step: () => {
+                    tick++;
+                    _ = runtime.ProduceFrame(
+                        context: default,
+                        frame: Frame(tick: tick)
+                    );
 
-                        return (
-                            (runtime.Node(instance: 0).FrameCounter >= ConvertedFramesBeforeCapture) &&
-                            (runtime.UnservedCaptureReasonOf(instance: Instance) is null)
-                        );
-                    },
-                    timeout: TimeSpan.FromSeconds(value: 60)
-                ),
-                userMessage: $"{backend}: the staged source never converted: {runtime.UnservedCaptureReasonOf(instance: Instance)}"
+                    return (
+                        (runtime.Node(instance: 0).FrameCounter >= ConvertedFramesBeforeCapture) &&
+                        (runtime.UnservedCaptureReasonOf(instance: Instance) is null)
+                    );
+                }
             );
 
             var node = runtime.Node(instance: 0);

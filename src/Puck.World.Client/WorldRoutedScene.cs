@@ -130,6 +130,26 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
             Views = m_dressedViews,
         };
     }
+    /// <summary>Finds the camera the first seat presented in the world renders with this frame, as the presenter latched
+    /// it: the eye every window a screen of this world shows fits to, as the boot world's windows fit to its viewer.</summary>
+    /// <param name="camera">The camera, in the scene world's own coordinates, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the presenter latched a seat's view into the scene this frame.</returns>
+    public bool TrySeatCamera(out CameraSnapshot camera) {
+        if (m_views.Count != 0) {
+            camera = m_views[0].Camera;
+
+            return true;
+        }
+
+        camera = default;
+
+        return false;
+    }
+
+    /// <summary>Gets how many of the views the scene's last dressed frame carries are its seats', the views before its
+    /// windows.</summary>
+    public int SeatViewCount => m_latchedSeatCount;
+
     /// <summary>Finds the camera a view of the scene's last dressed frame rendered from, in the scene world's own
     /// coordinates: a seat's, or a window's (its <see cref="WorldRoutedWindow.View"/>, or the default projection).</summary>
     /// <param name="view">The view's index in the scene's frames (<see cref="WorldRoutedWindow.Index"/>).</param>

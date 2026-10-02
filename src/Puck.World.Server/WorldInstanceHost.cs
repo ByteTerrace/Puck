@@ -674,7 +674,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 // over untouched to the next StepInstances call, which reads the fresh rate and
                 // resumes correctly; tick numbering and ElapsedEngineTicks stay contiguous across the
                 // boundary since neither is reset by this break.
-                if (instance.Server.Definition.SimulationRateHz != rateHz) {
+                // Closing an unreachable cycle of screen sessions can reap the instance currently stepping.
+                if (instance.Server.IsRetiring || (instance.Server.Definition.SimulationRateHz != rateHz)) {
                     break;
                 }
             }

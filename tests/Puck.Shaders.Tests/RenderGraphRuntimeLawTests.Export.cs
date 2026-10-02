@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -70,16 +71,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
         }
 
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    Produce();
+        TestLiveness.Until(
+            reason: () => $"The view read {view.Read.Count} frame(s), the screen {screen.Seen.Count} and the export {gpu.CopiedImages.Count} copies.",
+            step: () => {
+                Produce();
 
-                    return ((view.Read.Count >= 2) && (screen.Seen.Count >= 2) && (gpu.CopiedImages.Count >= 2));
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: $"The view read {view.Read.Count} frame(s), the screen {screen.Seen.Count} and the export {gpu.CopiedImages.Count} copies."
+                return ((view.Read.Count >= 2) && (screen.Seen.Count >= 2) && (gpu.CopiedImages.Count >= 2));
+            }
         );
 
         var exported = runtime.NodeOf(instance: ExportedView)!.ExportedImage!;
@@ -112,7 +110,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public bool SamplesReads => true;
         public HashSet<nint> Wrote { get; } = [];
 
-        public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => null;
+        public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => ValueTask.FromResult<IDisposable?>(result: null);
         public ShaderPipelineStorageCounts CountsAt(uint width, uint height) => new(
             Height: height,
             Width: width
@@ -156,7 +154,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public bool SamplesReads => true;
         public List<nint> Seen { get; } = [];
 
-        public IDisposable? Build(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => null;
+        public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => ValueTask.FromResult<IDisposable?>(result: null);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder(owner: this);
 
         private sealed class Recorder(ScreenPackage owner) : IRenderGraphPackageRecorder {

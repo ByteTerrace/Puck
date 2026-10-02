@@ -1,6 +1,7 @@
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -68,19 +69,16 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var view = runtime.Instances.IndexOf(name: "view");
 
         frames.Settle();
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    _ = frames.Next();
+        TestLiveness.Until(
+            reason: () => "The view's node never produced a scheduled render.",
+            step: () => {
+                _ = frames.Next();
 
-                    return (
-                        (runtime.Latest!.Instances[view].Status == RenderGraphInstanceStatus.Rendered) &&
-                        runtime.IsSettled
-                    );
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The view's node never produced a scheduled render."
+                return (
+                    (runtime.Latest!.Instances[view].Status == RenderGraphInstanceStatus.Rendered) &&
+                    runtime.IsSettled
+                );
+            }
         );
         _ = frames.Next();
         Assert.Equal(

@@ -393,6 +393,14 @@
       },
       "default": null
     },
+    "nestingDepth": {
+      "description": "How many screens deep a view of a world shows another world\u0027s view, or null for DefaultNestingDepth; refused past MaxNestingDepth. NestingDepth is what a reader resolves through.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
     "layouts": {
       "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
       "type": [

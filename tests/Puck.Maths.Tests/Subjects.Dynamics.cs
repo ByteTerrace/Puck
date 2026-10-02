@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 
 namespace Puck.Maths.Tests;
 
@@ -153,6 +154,80 @@ internal static partial class Subjects {
             ? null
             : $"step vs evaluate diverged: dValue={deltaValue} (bound {valueBound}) dVelocity={deltaVelocity} (bound {velocityBound}) (f={frequencyRaw} zeta={dampingRaw} target={targetRaw})"
         );
+    }
+    /// <summary>Proves <see cref="SecondOrderDynamics.Evaluate"/>'s decay factor stays within half a ULP of
+    /// <c>exp(−ζω·t)</c>, read where nothing else rounds: critically damped, from zero offset with unit velocity,
+    /// over a whole number <c>n</c> of seconds, the value is <c>e·(0·(1 + x) + 1·n) = n·e</c> with every product
+    /// exact — including past the underflow floor, where the settled read answers exactly zero.</summary>
+    /// <param name="left">Its first lane folds onto f in (0, 2] Hz, so ζω = ω spans (0, 4π].</param>
+    /// <param name="right">Its first lane folds onto n in [1, 4] seconds.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? DynamicsDecayFactorVsSeries(long[] left, long[] right) {
+        const ulong TicksPerSecond = 240UL;
+
+        var frequencyRaw = (1L + ((long)(DynamicsMagnitude(value: left[0]) % (2UL << 16))));
+        var seconds = (1L + ((long)(DynamicsMagnitude(value: right[0]) % 4UL)));
+        var dynamics = SecondOrderDynamics.Create(
+            frequencyHz: FixedQ4816.FromRawBits(value: frequencyRaw),
+            dampingRatio: FixedQ4816.One,
+            initialResponse: FixedQ4816.Zero
+        );
+        var sample = dynamics.Evaluate(
+            elapsedTicks: (((ulong)seconds) * TicksPerSecond),
+            initialValue: FixedQ4816.Zero,
+            initialVelocity: FixedQ4816.One,
+            target: FixedQ4816.Zero,
+            ticksPerSecond: TicksPerSecond
+        );
+        var factor = Oracles.EncloseExpNegative(rateRaw: (dynamics.DecayRateRaw * seconds));
+
+        // Per unit of n: half a ULP for Exp2Q56's closing narrowing, plus the relative error of the once-rounded Q56
+        // exponent (ln 2·2⁻⁵⁷) and of the mantissa (2⁻⁴⁴) on a factor at most one — under 2⁻¹⁷ ULP together.
+        return Oracles.WithinEnvelope(
+            enclosure: new(
+                High: (factor.High * seconds),
+                Low: (factor.Low * seconds)
+            ),
+            name: $"{seconds}·the {seconds}-second decay factor at f={frequencyRaw} (ζω raw {dynamics.DecayRateRaw})",
+            subjectRaw: sample.Value.Value,
+            toleranceUnits: (seconds * (
+                (BigInteger.One << (Oracles.GuardBitCount - 1)) +
+                (BigInteger.One << (Oracles.GuardBitCount - 17))
+            ))
+        );
+    }
+    /// <summary>An overdamped fast pole can exceed the signed Q32 carrier or underflow while the slow pole still
+    /// retains the initial offset. Equal rounded Q32 rates make that slow pole exactly zero.</summary>
+    public static string? DynamicsOverdampedWideFastPole() {
+        foreach (var dampingRaw in ((ReadOnlySpan<long>)[(1L << 59), (1L << 60)])) {
+            var dynamics = SecondOrderDynamics.Create(
+                frequencyHz: FixedQ4816.Epsilon,
+                dampingRatio: FixedQ4816.FromRawBits(value: dampingRaw),
+                initialResponse: FixedQ4816.Zero
+            );
+
+            if (dynamics.DecayRateRaw != dynamics.OscillationRateRaw) {
+                return $"the wide fast-pole fixture at damping raw {dampingRaw} does not have a zero slow pole";
+            }
+
+            foreach (var seconds in ((ReadOnlySpan<ulong>)[1UL, (1UL << 32)])) {
+                foreach (var initialRaw in ((ReadOnlySpan<long>)[65536L, -65536L])) {
+                    var sample = dynamics.Evaluate(
+                        initialValue: FixedQ4816.FromRawBits(value: initialRaw),
+                        initialVelocity: FixedQ4816.Zero,
+                        target: FixedQ4816.Zero,
+                        elapsedTicks: seconds,
+                        ticksPerSecond: 1UL
+                    );
+
+                    if ((sample.Value.Value != initialRaw) || (sample.Velocity.Value != 0L)) {
+                        return ((string)$"wide fast pole at damping raw {dampingRaw}, t={seconds}, initial raw {initialRaw}: value raw {sample.Value.Value}, velocity raw {sample.Velocity.Value}; expected {initialRaw}, 0");
+                    }
+                }
+            }
+        }
+
+        return null;
     }
     /// <summary>ζ ≥ 1 from rest never overshoots a step target; a light-damping control (ζ = ¼) does.</summary>
     public static string? DynamicsCriticalAndOverdampedNeverOvershoot() {

@@ -57,21 +57,18 @@ public sealed partial class RenderGraphRuntimeLawTests {
     private static long Settle(RenderGraphRuntime runtime) {
         var index = 0L;
 
-        Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    Produce(
-                        index: index,
-                        runtime: runtime,
-                        tick: index
-                    );
-                    index++;
+        TestLiveness.Until(
+            reason: () => "The machine source's conversion never built.",
+            step: () => {
+                Produce(
+                    index: index,
+                    runtime: runtime,
+                    tick: index
+                );
+                index++;
 
-                    return runtime.IsSettled;
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: "The machine source's conversion never built."
+                return runtime.IsSettled;
+            }
         );
 
         return index;
@@ -217,21 +214,18 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
             var writes = output.Writes;
 
-            Assert.True(
-                condition: SpinWait.SpinUntil(
-                    condition: () => {
-                        Produce(
-                            index: index,
-                            runtime: runtime,
-                            tick: index
-                        );
-                        index++;
+            TestLiveness.Until(
+                reason: () => "The machine source never converted at its output's new extent.",
+                step: () => {
+                    Produce(
+                        index: index,
+                        runtime: runtime,
+                        tick: index
+                    );
+                    index++;
 
-                        return (runtime.IsSettled && (output.Writes > writes));
-                    },
-                    timeout: TimeSpan.FromSeconds(value: 30)
-                ),
-                userMessage: "The machine source never converted at its output's new extent."
+                    return (runtime.IsSettled && (output.Writes > writes));
+                }
             );
 
             var header = ImageSourceUploadLayout.HeaderOf(

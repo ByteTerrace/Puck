@@ -238,16 +238,13 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         }
         // Iterates until the scheduler has decided the given number of captures; the bound is liveness for a build
         // over a fake device, and decides nothing.
-        public void IterateUntilDecided(int captures, ulong? hostTicks = null) => Assert.True(
-            condition: SpinWait.SpinUntil(
-                condition: () => {
-                    Iterate(hostTicks: hostTicks);
+        public void IterateUntilDecided(int captures, ulong? hostTicks = null) => TestLiveness.Until(
+            reason: () => $"Only {Scheduler.Entries.Count} of {captures} captures were decided.",
+            step: () => {
+                Iterate(hostTicks: hostTicks);
 
-                    return (Scheduler.Entries.Count >= captures);
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ),
-            userMessage: $"Only {Scheduler.Entries.Count} of {captures} captures were decided."
+                return (Scheduler.Entries.Count >= captures);
+            }
         );
         public void Release() => m_gate.Set();
         // Iterates until the residency's build is held in the driver and the view names it, so a refusal's reason reads the
@@ -256,19 +253,18 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             Iterate();
             Assert.True(condition: m_entered.Wait(
                 cancellationToken: TestContext.Current.CancellationToken,
-                timeout: TimeSpan.FromSeconds(value: 30)
+                timeout: TestLiveness.Bound
             ));
-            Assert.True(condition: SpinWait.SpinUntil(
-                condition: () => {
+            TestLiveness.Until(
+                step: () => {
                     Iterate();
 
                     return (View.NotReadyReason?.StartsWith(
                         comparisonType: StringComparison.Ordinal,
                         value: "the engine's pipeline set is building"
                     ) ?? false);
-                },
-                timeout: TimeSpan.FromSeconds(value: 30)
-            ));
+                }
+            );
         }
         // The offscreen host's teardown order: settle what is owed a frame, then dispose the render root. The gate
         // opens first only because the residency's disposal waits out its build.
@@ -424,8 +420,8 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         Assert.False(condition: run.View.IsReady);
         Assert.Equal(
             expected: [
-                "first:10:Unserved:the engine's pipeline set is building (0 of 11 pipelines created) (the host held its clock at tick 10 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
-                "second:30:Unserved:the engine's pipeline set is building (0 of 11 pipelines created) (the host held its clock at tick 30 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
+                "first:10:Unserved:the engine's pipeline set is building (0 of 11 pipelines created; waiting on sdf-beam, sdf-instance-cull, sdf-cull-args, sdf-world-primary, sdf-world-surface, sdf-world-ambient, sdf-world-shadow, sdf-world-views, sdf-world-views-core, sdf-world-views-folds, sdf-sky) (the host held its clock at tick 10 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
+                "second:30:Unserved:the engine's pipeline set is building (0 of 11 pipelines created; waiting on sdf-beam, sdf-instance-cull, sdf-cull-args, sdf-world-primary, sdf-world-surface, sdf-world-ambient, sdf-world-shadow, sdf-world-views, sdf-world-views-core, sdf-world-views-folds, sdf-sky) (the host held its clock at tick 30 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
             ],
             actual: run.Scheduler.Entries.Select(selector: static entry => $"{entry.Station}:{entry.Tick}:{entry.Refusal}:{entry.Detail}")
         );
@@ -435,14 +431,13 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         );
 
         run.Release();
-        Assert.True(condition: SpinWait.SpinUntil(
-            condition: () => {
+        TestLiveness.Until(
+            step: () => {
                 run.Iterate();
 
                 return run.View.IsReady;
-            },
-            timeout: TimeSpan.FromSeconds(value: 30)
-        ));
+            }
+        );
         run.Iterate();
         run.EndRun();
 
@@ -478,7 +473,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         var entry = Assert.Single(collection: run.Scheduler.Entries);
 
         Assert.Equal(
-            expected: (WorldCaptureRefusal.Unserved, "the run ended before any frame served it (last completed tick 10); the engine's pipeline set is building (0 of 11 pipelines created)"),
+            expected: (WorldCaptureRefusal.Unserved, "the run ended before any frame served it (last completed tick 10); the engine's pipeline set is building (0 of 11 pipelines created; waiting on sdf-beam, sdf-instance-cull, sdf-cull-args, sdf-world-primary, sdf-world-surface, sdf-world-ambient, sdf-world-shadow, sdf-world-views, sdf-world-views-core, sdf-world-views-folds, sdf-sky)"),
             actual: (entry.Refusal!.Value, entry.Detail!)
         );
         run.AssertNothingReachedDisposal();

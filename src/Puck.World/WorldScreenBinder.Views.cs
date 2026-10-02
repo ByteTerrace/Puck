@@ -116,6 +116,7 @@ internal sealed partial class WorldScreenBinder {
         ) {
             ReleaseViewResidency(name: name);
             session = CreateSessionResidency(
+                feed: feed,
                 name: name,
                 source: source,
                 resolution: (feed.Resolution ?? new WorldScreenResolution(Height: WorldViewInstances.DefaultSessionHeight, Width: WorldViewInstances.DefaultSessionWidth))
@@ -131,10 +132,12 @@ internal sealed partial class WorldScreenBinder {
         return true;
     }
 
-    // A session screen's residency, rendering the session feed's frame source on its own clock.
-    private ViewResidency CreateSessionResidency(string name, SdfCompositionFrameSource source, WorldScreenResolution resolution) {
+    // A session screen's residency, rendering the session feed's frame source on its own clock, its destination's screens
+    // showing what the feed's level shows.
+    private ViewResidency CreateSessionResidency(SessionFeed feed, string name, SdfCompositionFrameSource source, WorldScreenResolution resolution) {
         var residency = new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,
+            screenSources: new FeedScreenSources(feed: feed),
             dynamicTransformCapacity: source.WorstCaseDynamicTransformCapacity,
             frameSource: new WorldSessionFrameSource(
                 captureHostFirst: CaptureHostFirst,
@@ -245,8 +248,10 @@ internal sealed partial class WorldScreenBinder {
                 Width: width
             ) { OutputExtent = new RenderGraphPixelExtent(Width: ((int)registration.Row.RenderWidth), Height: ((int)registration.Row.RenderHeight)) });
         }
-        foreach (var slot in m_slots.Values) {
-            if (slot.Session is not { FrameSource: not null } feed) {
+        EnsureFeeds();
+
+        foreach (var feed in m_feeds) {
+            if (feed.FrameSource is null) {
                 continue;
             }
 
@@ -268,8 +273,14 @@ internal sealed partial class WorldScreenBinder {
                     ? RenderGraphRefresh.EveryFrame
                     : refresh),
                 Width: width
-            ) { OutputExtent = new RenderGraphPixelExtent(Width: (feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth), Height: (feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight)) });
+            ) {
+                OutputExtent = new RenderGraphPixelExtent(Width: (feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth), Height: (feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight)),
+                Parent = feed.ParentFeed?.RegistrationName,
+                Reads = feed.Nested?.Reads,
+            });
         }
+
+        m_views.SetNestedSources(sources: m_nestedSources);
 
         if (m_views.TryPublish(instances: out var views)) {
             Mappings.ReconcileViews(views: views);

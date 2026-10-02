@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/f5ee2dd3e0f19efbb59069626a8fc7640f86933b983fbaa34c5845bd965a0f87). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/0116f206cc4b4a934efb9d7e0c5b8c0e3e7cb3fa70245542a549f95101f34df1). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -21,6 +21,27 @@ struct SdfResolveFrame {
     [[vk::offset(80)]] float3 cameraUp;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SdfResolveFrame> frameGroup : register(b0, space0);
+
+// The World group: descriptor set 1, register space 1.
+[[vk::binding(0, 1)]] StructuredBuffer<uint4> sdfWords : register(t0, space1);
+[[vk::binding(1, 1)]] StructuredBuffer<float4> sdfDynamicTransforms : register(t1, space1);
+[[vk::binding(2, 1)]] StructuredBuffer<float4> sdfPreviousDynamicTransforms : register(t2, space1);
+[[vk::binding(3, 1)]] StructuredBuffer<float4> sdfPreviousMeshTransforms : register(t3, space1);
+[[vk::binding(4, 1)]] StructuredBuffer<uint> sdfFrameInstanceGrid : register(t4, space1);
+[[vk::binding(5, 1)]] StructuredBuffer<float4> screenSurfaces : register(t5, space1);
+[[vk::binding(6, 1)]] StructuredBuffer<float4> screenMappings : register(t6, space1);
+[[vk::binding(7, 1)]] StructuredBuffer<float4> sdfScreenLights : register(t7, space1);
+[[vk::binding(8, 1)]] StructuredBuffer<uint4> sdfDecalCells : register(t8, space1);
+[[vk::binding(9, 1)]] StructuredBuffer<float> sdfBrickPool : register(t9, space1);
+[[vk::binding(10, 1)]] StructuredBuffer<float4> sdfVolumes : register(t10, space1);
+[[vk::binding(11, 1)]] StructuredBuffer<uint> sdfMeshRegion : register(t11, space1);
+[[vk::binding(12, 1)]] Texture2D<float4> sdfGlyphAtlas : register(t12, space1);
+[[vk::binding(13, 1)]] SamplerState samplers[2] : register(s13, space1);
+[[vk::binding(15, 1)]] Texture2D<float4> sdfMeshAlbedo : register(t15, space1);
+[[vk::binding(16, 1)]] Texture2D<float4> sdfMeshNormals : register(t16, space1);
+[[vk::binding(17, 1)]] Texture2D<float4> sdfMeshOcclusion : register(t17, space1);
+[[vk::binding(18, 1)]] Texture2D<float4> sdfMeshMaterials : register(t18, space1);
+[[vk::binding(19, 1)]] Texture2D<float4> sdfMeshEmission : register(t19, space1);
 
 // The Pass group: descriptor set 3, register space 3.
 struct SdfResolvePass {
@@ -68,24 +89,35 @@ struct SdfResolvePass {
     [[vk::offset(1172)]] float shadowDistanceScale;
     [[vk::offset(1176)]] float sunScale;
     [[vk::offset(1180)]] float tanHalfFieldOfView;
-    [[vk::offset(1184)]] uint2 tileGrid;
-    [[vk::offset(1192)]] float upscaleSharpness;
-    [[vk::offset(1196)]] uint viewBase;
-    [[vk::offset(1200)]] float3 viewForward;
+    [[vk::offset(1184)]] uint temporal;
+    [[vk::offset(1188)]] uint _pad1188;
+    [[vk::offset(1192)]] uint2 tileGrid;
+    [[vk::offset(1200)]] float upscaleSharpness;
+    [[vk::offset(1204)]] uint viewBase;
+    [[vk::offset(1208)]] uint _pad1208;
     [[vk::offset(1212)]] uint _pad1212;
-    [[vk::offset(1216)]] float3 viewPosition;
+    [[vk::offset(1216)]] float3 viewForward;
     [[vk::offset(1228)]] uint _pad1228;
-    [[vk::offset(1232)]] float3 viewRight;
+    [[vk::offset(1232)]] float3 viewPosition;
     [[vk::offset(1244)]] uint _pad1244;
-    [[vk::offset(1248)]] float3 viewUp;
-    [[vk::offset(1260)]] uint viewportCount;
-    [[vk::offset(1264)]] uint workCounterRow;
+    [[vk::offset(1248)]] float3 viewRight;
+    [[vk::offset(1260)]] uint _pad1260;
+    [[vk::offset(1264)]] float3 viewUp;
+    [[vk::offset(1276)]] uint viewportCount;
+    [[vk::offset(1280)]] uint workCounterRow;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa372466E0 : register(b0, space3);
-#define passGroup passGroupIsa372466E0
+[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa1776DDF9 : register(b0, space3);
+#define passGroup passGroupIsa1776DDF9
 [[vk::binding(1, 3)]] Texture2D<float4> currentColor : register(t1, space3);
 [[vk::binding(2, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u2, space3);
-[[vk::binding(3, 3)]] RWStructuredBuffer<uint> workCounters : register(u3, space3);
+[[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);
+[[vk::binding(4, 3)]] StructuredBuffer<uint> cullBounds : register(t4, space3);
+[[vk::binding(5, 3)]] StructuredBuffer<float> reactivity : register(t5, space3);
+[[vk::binding(6, 3)]] Texture2D<float4> historyColor : register(t6, space3);
+[[vk::binding(7, 3)]] StructuredBuffer<uint> historySurface : register(t7, space3);
+[[vk::binding(8, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> historyColorRW : register(u8, space3);
+[[vk::binding(9, 3)]] RWStructuredBuffer<uint> historySurfaceRW : register(u9, space3);
+[[vk::binding(10, 3)]] RWStructuredBuffer<uint> workCounters : register(u10, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps then texels written, as a 64-bit count in

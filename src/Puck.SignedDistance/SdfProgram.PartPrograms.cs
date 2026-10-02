@@ -294,7 +294,7 @@ public sealed partial class SdfProgram {
             );
             m_words[(entry + 3)] = BitConverter.SingleToUInt32Bits(value: placement.Scale);
             foreach (var binding in placement.Bindings) {
-                m_words[(cursor * WordsPerVector)] = ((uint)(binding.DynamicSlot + 1));
+                m_words[(cursor * WordsPerVector)] = PackTransformSlot(slot: binding.DynamicSlot);
                 m_words[((cursor * WordsPerVector) + 1)] = binding.Material;
                 cursor++;
             }
