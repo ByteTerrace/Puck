@@ -388,7 +388,7 @@ public static partial class WorldDecompiler {
     }
     private static bool VerifyCandidateTable(string sqlText, IReadOnlyList<JsonObject> originalRows, EmbeddingLock? embeddings = null) {
         try {
-            var puckSource = $"schema: \"puck.world.definition.v1\"\n\nsql {{\n{sqlText}\n}}\n";
+            var puckSource = $"schema: \"{WorldDefinition.SchemaVersion}\"\n\nsql {{\n{sqlText}\n}}\n";
             var diagnostics = new DiagnosticBag();
             var parseResult = PuckParser.ParseDocumentWithDiagnostics(
                 source: puckSource,

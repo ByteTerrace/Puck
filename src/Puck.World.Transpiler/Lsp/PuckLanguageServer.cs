@@ -721,7 +721,7 @@ public sealed partial class PuckLanguageServer {
         // plural array properties, and the `$type` call-form escape hatches.
         LspJson.AddCompletion(
             detail: "Directive: Schema declaration",
-            insertText: "schema: \"puck.world.definition.v1\"",
+            insertText: $"schema: \"{WorldDefinition.SchemaVersion}\"",
             items: items,
             kind: 14,
             label: "schema"

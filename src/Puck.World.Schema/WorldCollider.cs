@@ -199,8 +199,20 @@ public static class WorldContactSelection {
     /// <returns><see langword="true"/> when field contact is required; otherwise <see langword="false"/>.</returns>
     public static bool RequiresField(WorldCollision collision) => (collision.Requirements is { Count: > 0 });
 }
-/// <summary>The one-time fixed-point compilation of a kit's compound body volume.</summary>
-public readonly record struct FixedWorldCollider(FixedBodyColliderVolume[] Volumes) {
+/// <summary>The immutable one-time fixed-point compilation of a kit's compound body volume.</summary>
+public readonly struct FixedWorldCollider {
+    private readonly FixedBodyColliderVolume[]? m_volumes;
+
+    /// <summary>Copies the body-local volumes into collider-owned storage, so a caller retaining the input cannot
+    /// change a body's geometry without replacing its collider and refreshing its derived broadphase radius.</summary>
+    /// <param name="Volumes">The body-local primitive volumes.</param>
+    public FixedWorldCollider(ReadOnlySpan<FixedBodyColliderVolume> Volumes) {
+        m_volumes = Volumes.ToArray();
+    }
+
+    /// <summary>Gets the body-local primitive volumes, empty for a default collider.</summary>
+    public ReadOnlySpan<FixedBodyColliderVolume> Volumes => m_volumes;
+
     private static FixedBodyColliderVolume Box(FixedVector3 center, FixedVector3 halfExtents, FixedQuaternion rotation) =>
         new(
             Kind: FixedBodyColliderKind.Box,
@@ -337,7 +349,7 @@ public readonly record struct FixedWorldCollider(FixedBodyColliderVolume[] Volum
                 );
         }
 
-        return new FixedWorldCollider(Volumes: volumes.ToArray());
+        return new FixedWorldCollider(Volumes: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: volumes));
     }
 }
 /// <summary>The one-time fixed-point compilation of the world's contact tuning — read by the analytic contact field

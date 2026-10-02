@@ -41,7 +41,7 @@ internal sealed class PuckSchemaHover {
         if (document.Schema is not null and not WorldDefinition.SchemaVersion and not CreationDocument.CurrentSchema) {
             return null;
         }
-        var current = ((Cursor?)((document.Schema == "puck.creation.v1")
+        var current = ((Cursor?)((document.Schema == CreationDocument.CurrentSchema)
             ? m_creation
             : new Cursor(
                 Node: m_schema.Root,
