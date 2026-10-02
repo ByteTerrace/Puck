@@ -60,6 +60,9 @@ public sealed class WorldSessionMirror : IClientSink {
     // carries, applied on delivery under m_followGate, which every read of the view (FollowState) also holds.
     private readonly WorldDocumentStateView m_stateView;
 
+    private int m_followedLifetime;
+    private int m_lifetime;
+
     // The field rows one snapshot's cells moved (ApplyFieldCells's output), used only under m_followGate.
     private readonly int[] m_movedFields = new int[WorldFieldCapacity.MaxFields];
 
@@ -311,6 +314,11 @@ public sealed class WorldSessionMirror : IClientSink {
 
         if (ReferenceEquals(objA: current.Definition, objB: definition) && (current.Version == version)) {
             return;
+        }
+
+        // A different activation is a different world; FollowState tells the state mirror.
+        if (current.Version.Activation != version.Activation) {
+            _ = Interlocked.Increment(location: ref m_lifetime);
         }
 
         Volatile.Write(
@@ -587,6 +595,12 @@ public sealed class WorldSessionMirror : IClientSink {
                 everything = m_pendingEverything;
                 m_pendingCount = 0;
                 m_pendingEverything = false;
+            }
+
+            var lifetime = Volatile.Read(location: ref m_lifetime);
+
+            for (; (m_followedLifetime < lifetime); m_followedLifetime++) {
+                state.BeginLifetime();
             }
 
             var revision = DefinitionRevision;

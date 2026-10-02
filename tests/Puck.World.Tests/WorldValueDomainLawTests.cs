@@ -176,10 +176,12 @@ public sealed class WorldValueDomainLawTests {
     );
     private static string Key(WorldValueField field) => $"{field.Owner.Name}.{field.Member}";
     private static WorldValueField FieldOf(string key) => WorldValueFields.All.Single(predicate: field => (Key(field: field) == key));
-    private static WorldDefinition Render(WorldRenderLighting? lighting = null, WorldRenderSky? sky = null) => Fixtures.BuildDocument() with {
+
+    internal static WorldDefinition Render(WorldRenderLighting? lighting = null, WorldRenderSky? sky = null) => Fixtures.BuildDocument() with {
         RenderRaw = WorldRenderDefaults.Absent with { Lighting = lighting, Sky = sky },
     };
-    private static WorldDefinition Layer(WorldRenderSkyLayer layer) => Render(sky: new WorldRenderSky(Layers: [layer]));
+    internal static WorldDefinition Layer(WorldRenderSkyLayer layer) => Render(sky: new WorldRenderSky(Layers: [layer]));
+
     private static WorldResolvedEnvironment Environment(WorldDefinition definition, WorldStateMirror mirror, WorldValueDomainGuard domains) => new WorldEnvironmentResolve(domains: domains).Resolve(
         definition: definition,
         mirror: mirror,
@@ -577,8 +579,7 @@ public sealed class WorldValueDomainLawTests {
     }
 
     // A field read directly: the world is named by its mirror, the binding by its row, the site by its section.
-    private static float Resolve(WorldValueDomainGuard guard, WorldStateMirror mirror, WorldValueField field, float value, float fallback = 0.25f, string row = Row) => WorldValueDomainGuard.Resolve(
-        domains: guard,
+    private static float Resolve(WorldValueDomainGuard guard, WorldStateMirror mirror, WorldValueField field, float value, float fallback = 0.25f, string row = Row) => guard.Resolve(
         fallback: fallback,
         field: field,
         mirror: mirror,

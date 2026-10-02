@@ -59,11 +59,12 @@ public static class WorldCameraRigCompiler {
     /// true for the seat rig a joined seat steers, false for an authored camera that renders its own angles.</param>
     /// <param name="mirror">The state mirror whose registered slots the program's bound operands read each
     /// frame.</param>
-    /// <param name="domains">The guard that holds the last valid value of a bound operand and reports its transitions, or <see langword="null"/> to map without either.</param>
+    /// <param name="domains">The guard that holds the last valid value of a bound operand and reports its transitions.</param>
     /// <returns>A fresh presentation rig.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public static IWorldCameraProgramRig Compile(WorldCameraProgram program, WorldDefinition definition, WorldStateMirror mirror, bool interactive = false, WorldValueDomainGuard? domains = null) {
+    public static IWorldCameraProgramRig Compile(WorldCameraProgram program, WorldDefinition definition, WorldStateMirror mirror, WorldValueDomainGuard domains, bool interactive = false) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
@@ -94,7 +95,7 @@ public static class WorldCameraRigCompiler {
     public sealed class Cache {
         private IReadOnlyList<WorldCamera>? m_cameras;
         private IReadOnlyList<WorldCurveRow>? m_curves;
-        private WorldValueDomainGuard? m_domains;
+        private WorldValueDomainGuard? m_domains;  // unset until the first compile
         private IReadOnlyList<DynamicsRow>? m_dynamics;
         private bool m_interactive;
         private WorldStateMirror? m_mirror;
@@ -113,13 +114,13 @@ public static class WorldCameraRigCompiler {
         /// <see cref="Compile"/>).</param>
         /// <param name="interactive">Whether the program's orbit op folds in the live look (see
         /// <see cref="Compile"/>).</param>
-        /// <param name="domains">The guard that holds the last valid value of a bound operand and reports its transitions,
-        /// or <see langword="null"/> to map without either; a different guard compiles the rig again, since the rig keeps
-        /// the one it compiled with.</param>
+        /// <param name="domains">The guard that holds the last valid value of a bound operand and reports its transitions;
+        /// a different guard compiles the rig again, since the rig keeps the one it compiled with.</param>
         /// <returns>The rig.</returns>
         /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-        public IWorldCameraProgramRig Resolve(WorldCameraProgram program, WorldDefinition definition, WorldStateMirror mirror, bool interactive = false, WorldValueDomainGuard? domains = null) {
+        public IWorldCameraProgramRig Resolve(WorldCameraProgram program, WorldDefinition definition, WorldStateMirror mirror, WorldValueDomainGuard domains, bool interactive = false) {
             ArgumentNullException.ThrowIfNull(argument: definition);
+            ArgumentNullException.ThrowIfNull(argument: domains);
             ArgumentNullException.ThrowIfNull(argument: program);
             ArgumentNullException.ThrowIfNull(argument: mirror);
 
@@ -541,7 +542,7 @@ public static class WorldCameraRigCompiler {
         }
     }
     private sealed class CompiledRig : IWorldCameraProgramRig {
-        private readonly WorldValueDomainGuard? m_domains;
+        private readonly WorldValueDomainGuard m_domains;
         private readonly WorldStateMirror m_mirror;
         private readonly SdfCameraProgramRig m_rig;
         private readonly IReadOnlyList<ScalarSource> m_scalarSources;
@@ -549,7 +550,7 @@ public static class WorldCameraRigCompiler {
 
         private WorldDefinition m_definition;
 
-        public CompiledRig(SdfCameraProgramSet set, WorldDefinition definition, WorldStateMirror mirror, IReadOnlyList<ScalarSource> scalarSources, IReadOnlyList<SubjectSource> subjectSources, WorldValueDomainGuard? domains) {
+        public CompiledRig(SdfCameraProgramSet set, WorldDefinition definition, WorldStateMirror mirror, IReadOnlyList<ScalarSource> scalarSources, IReadOnlyList<SubjectSource> subjectSources, WorldValueDomainGuard domains) {
             m_definition = definition;
             m_domains = domains;
             m_mirror = mirror;
@@ -582,8 +583,7 @@ public static class WorldCameraRigCompiler {
 
                 scalars[index] = ((source.Value is { } value)
                     ? ((source.Field is { } field)
-                        ? WorldValueDomainGuard.Resolve(
-                            domains: m_domains,
+                        ? m_domains.Resolve(
                             fallback: source.Fallback,
                             field: field,
                             mirror: m_mirror,

@@ -15,7 +15,7 @@ namespace Puck.World.Client;
 /// <see cref="WorldThemeCapacity.ScrimMinAlpha"/> at that floor.
 /// </summary>
 public sealed class WorldThemeResolve {
-    private readonly WorldValueDomainGuard? m_domains;
+    private readonly WorldValueDomainGuard m_domains;
 
     private ThemeReads? m_reads;
     private int m_generation;
@@ -27,7 +27,7 @@ public sealed class WorldThemeResolve {
 
     // The mirror reads one resolve makes, noting every slot a bound token reads so the next frame can ask whether any
     // of them moved.
-    private sealed class ThemeReads(WorldStateMirror mirror, WorldValueDomainGuard? domains) {
+    private sealed class ThemeReads(WorldStateMirror mirror, WorldValueDomainGuard domains) {
         public List<(int Slot, double Value)> Bound { get; } = [];
         public WorldStateMirror Mirror { get; } = mirror;
 
@@ -53,8 +53,7 @@ public sealed class WorldThemeResolve {
             );
             NoteKeys(keys: scalar.Keys);
 
-            return WorldValueDomainGuard.Resolve(
-                domains: domains,
+            return domains.Resolve(
                 fallback: fallback,
                 field: field,
                 mirror: Mirror,
@@ -496,8 +495,8 @@ public sealed class WorldThemeResolve {
     );
 
     /// <summary>Initializes a new instance of the <see cref="WorldThemeResolve"/> class.</summary>
-    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions, or <see langword="null"/> to map without either.</param>
-    public WorldThemeResolve(WorldValueDomainGuard? domains = null) => m_domains = domains;
+    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
+    public WorldThemeResolve(WorldValueDomainGuard domains) => m_domains = (domains ?? throw new ArgumentNullException(paramName: nameof(domains)));
 
     /// <summary>Gets how many times this resolver has resolved the theme rather than answering from its cache.</summary>
     public int Resolutions => m_resolutions;

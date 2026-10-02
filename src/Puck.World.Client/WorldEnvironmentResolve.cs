@@ -29,7 +29,7 @@ public sealed class WorldEnvironmentResolve {
     private static readonly SdfSky Unauthored = new();
     private readonly List<(int Slot, double Value)> m_bound = [];
 
-    private readonly WorldValueDomainGuard? m_domains;
+    private readonly WorldValueDomainGuard m_domains;
 
     private readonly SdfLights[] m_outputLights = [new SdfLights(), new SdfLights()];
     private readonly SdfSky[] m_outputSky = [new SdfSky(), new SdfSky()];
@@ -51,8 +51,8 @@ public sealed class WorldEnvironmentResolve {
     private PresentedTick m_tick;
 
     /// <summary>Initializes a new instance of the <see cref="WorldEnvironmentResolve"/> class.</summary>
-    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions, or <see langword="null"/> to map without either.</param>
-    public WorldEnvironmentResolve(WorldValueDomainGuard? domains = null) => m_domains = domains;
+    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
+    public WorldEnvironmentResolve(WorldValueDomainGuard domains) => m_domains = (domains ?? throw new ArgumentNullException(paramName: nameof(domains)));
 
     /// <summary>Gets how many times this resolver has resolved the environment rather than copying its last
     /// resolution.</summary>
@@ -272,8 +272,7 @@ public sealed class WorldEnvironmentResolve {
             mirror: mirror
         );
 
-        return WorldValueDomainGuard.Resolve(
-            domains: m_domains,
+        return m_domains.Resolve(
             fallback: fallback,
             field: field,
             mirror: mirror,
@@ -300,8 +299,7 @@ public sealed class WorldEnvironmentResolve {
             mirror: mirror
         );
 
-        return WorldValueDomainGuard.Resolve(
-            domains: m_domains,
+        return m_domains.Resolve(
             fallback: fallback,
             field: field,
             mirror: mirror,

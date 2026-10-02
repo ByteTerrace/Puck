@@ -5,6 +5,7 @@ using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.Testing;
 using Puck.World.Client;
+using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -100,7 +101,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         Assert.Equal(actual: following.Index, expected: 0);
 
         var fallback = Capture(source: scene.FrameSource);
-        var emitter = new WorldSessionSceneEmitter(effectiveCameraName: null, mirror: north.Mirror);
+        var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(), effectiveCameraName: null, mirror: north.Mirror);
         var expected = Capture(source: new SdfCompositionFrameSource(dresser: emitter, emitters: [emitter]));
 
         Assert.Equal(actual: Assert.Single(collection: fallback.Views), expected: expected.Views[0]);
@@ -133,9 +134,9 @@ public sealed partial class WorldRoutedPresentationLawTests {
             }),
         });
         using var north = Endpoint(definition: destination, identity: Away, position: AwayPose);
-        var scene = new WorldRoutedScene(bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
+        var scene = new WorldRoutedScene(domains: new WorldValueDomainGuard(), bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
         var frame = Capture(source: scene.FrameSource);
-        var sky = new WorldEnvironmentResolve().Resolve(
+        var sky = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(
             definition: destination,
             mirror: north.FollowState(),
             revision: north.Mirror.DefinitionRevision
@@ -153,6 +154,74 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
         Assert.NotEqual(expected: retained, actual: changed.Sky.Stops.ToArray());
     }
+    // A routed view guards the values its destination binds as the viewer's own world does: a cloud scale that goes to
+    // zero, which its field does not admit, holds the last value the view presented and is reported.
+    [Fact]
+    public void ARoutedViewsBoundCloudScaleThatGoesToZeroHoldsItsLastValueAndIsReported() {
+        static WorldDefinition Scaled(double value) => WorldValueDomainLawTests.WithRow(
+            definition: (AwayDocument() with {
+                RenderRaw = (WorldRenderDefaults.Absent with {
+                    Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Scale: new BindableScalar(binding: $"state.{WorldValueDomainLawTests.Row}"))]),
+                }),
+            }),
+            value: value
+        );
+
+        var domains = new WorldValueDomainGuard();
+        var reports = new List<string>();
+
+        domains.Report = reports.Add;
+
+        using var north = Endpoint(definition: Scaled(value: 0.5d), identity: Away, position: AwayPose);
+        var scene = new WorldRoutedScene(domains: domains, bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
+
+        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
+
+        north.Mirror.DeliverDefinition(definition: Scaled(value: 0d), version: default);
+        _ = Capture(source: scene.FrameSource);
+
+        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
+        Assert.Single(collection: reports);
+        Assert.Contains(expectedSubstring: $"render.sky.layers[0].scale reads 0 from state.{WorldValueDomainLawTests.Row}", actualString: reports[0]);
+    }
+    // A destination replaced by another world, a different activation delivering a document, starts a routed view's
+    // bindings fresh: the new world's cloud scale, out of range at its first look, does not wear the old world's last value.
+    [Fact]
+    public void AReplacedDestinationStartsItsRoutedViewsBindingsFresh() {
+        static WorldDefinition Scaled(double value) => WorldValueDomainLawTests.WithRow(
+            definition: (AwayDocument() with {
+                RenderRaw = (WorldRenderDefaults.Absent with {
+                    Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Scale: new BindableScalar(binding: $"state.{WorldValueDomainLawTests.Row}"))]),
+                }),
+            }),
+            value: value
+        );
+
+        var domains = new WorldValueDomainGuard();
+        var first = new WorldDocumentVersion(Activation: Guid.NewGuid(), Sequence: 0L);
+        var second = new WorldDocumentVersion(Activation: Guid.NewGuid(), Sequence: 0L);
+
+        domains.Report = static _ => { };
+
+        using var north = Endpoint(definition: Scaled(value: 0.5d), identity: Away, position: AwayPose);
+        var scene = new WorldRoutedScene(domains: domains, bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
+
+        north.Mirror.DeliverDefinition(definition: Scaled(value: 0.5d), version: first);
+
+        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
+
+        // The same world, written out of range: the view keeps what it last presented.
+        north.Mirror.DeliverDefinition(definition: Scaled(value: 0d), version: new WorldDocumentVersion(Activation: first.Activation, Sequence: 1L));
+        _ = Capture(source: scene.FrameSource);
+
+        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
+
+        // Another world answers at the destination: it has presented nothing yet, so it shows the engine default.
+        north.Mirror.DeliverDefinition(definition: Scaled(value: 0d), version: second);
+        _ = Capture(source: scene.FrameSource);
+
+        Assert.Equal(expected: new SdfSky().Block.CloudScale, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
+    }
     // A routed view's sky clock (its stars' twinkle, its clouds' drift, its media's motion) is the destination's presented
     // tick: the sky it shows moves as its world does, whatever the viewer's own world has reached. Its presentation time
     // is still the viewer's frame's.
@@ -160,7 +229,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
     public void ARoutedViewsSkyClockIsTheDestinationsTick() {
         using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
         SdfFrame? viewer = null;
-        var scene = new WorldRoutedScene(bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: () => viewer);
+        var scene = new WorldRoutedScene(domains: new WorldValueDomainGuard(), bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: () => viewer);
 
         viewer = (Capture(source: scene.FrameSource) with {
             Clock = new PresentedTick(

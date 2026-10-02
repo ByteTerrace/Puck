@@ -119,7 +119,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     // The mirrored world's environment, resolved each dressed frame. The track double-buffers its output, so the frame
     // the residency holds keeps its environment through the next dress, as the boot presentation's does.
-    private readonly WorldValueDomainGuard? m_domains;
+    private readonly WorldValueDomainGuard m_domains;
     private readonly WorldEnvironmentResolve m_environment;
 
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
@@ -143,9 +143,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <param name="bodyColor">The color each avatar is painted with by body index, or <see langword="null"/> for the
     /// mirror's own (<see cref="WorldSessionMirror.BodyColor"/>).</param>
     /// <param name="castsAvatarShadows">Whether avatar transforms participate in soft shadows when the host enables them.</param>
-    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions, or <see langword="null"/> to map without either.</param>
-    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false, WorldValueDomainGuard? domains = null) {
+    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
+    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, WorldValueDomainGuard domains, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
+        ArgumentNullException.ThrowIfNull(argument: domains);
 
         m_domains = domains;
         m_environment = new WorldEnvironmentResolve(domains: domains);
@@ -229,10 +230,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// default projection.</param>
     /// <param name="width">The view's width, in pixels.</param>
     /// <param name="height">The view's height, in pixels.</param>
-    /// <param name="domains">The guard that holds the last valid value of a bound camera operand and reports its transitions, or <see langword="null"/> to map without either.</param>
+    /// <param name="domains">The guard that holds the last valid value of a bound camera operand and reports its transitions.</param>
     /// <returns>The camera, in the destination's space.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mirror"/> is <see langword="null"/>.</exception>
-    public static CameraSnapshot ResolveCamera(WorldSessionMirror mirror, string? cameraName, uint width, uint height, WorldValueDomainGuard? domains = null) {
+    public static CameraSnapshot ResolveCamera(WorldSessionMirror mirror, string? cameraName, uint width, uint height, WorldValueDomainGuard domains) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
         var definition = mirror.Definition;

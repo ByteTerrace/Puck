@@ -75,14 +75,18 @@ camera rig through `WorldCameraRigCompiler`) maps each resolved value through
 beyond a closed end clamps to it, and a value that is not finite or lies at or
 beyond an open end holds the binding's last valid value (the field's engine
 default before it has presented one). The guard keeps that value per binding in
-its world (one entry per field, site and state binding of a `WorldStateMirror`),
-releases it when the mirror stops registering the binding and with the mirror,
-reports a binding when it leaves its domain and when it returns, never once per
+its world (one entry per field, site and state binding of a `WorldStateMirror`).
+An entry lives while its binding is resolved: a document install that follows a
+stretch in which nothing resolved it releases it, so a removed or renamed binding
+and a re-added one start fresh whatever else reads their row. A different world in
+the mirror (`WorldStateMirror.BeginLifetime`, begun when a delivery names another
+activation) and a restored timeline (`WorldValueDomainGuard.Restart`) start every
+binding fresh, and so does the mirror's own disposal. The guard reports a binding when it leaves its domain and when it returns, never once per
 frame (`[world.value: …]`, wired in `WorldPostBuildWiring`), and does no counted
 work (`Checks`) while a binding's input is unchanged. A coupled threshold (a
 gradient's stop elevations, the curvature ink band) may not bind a row, so no end
-is ever clamped alone. Every site that builds a resolver or a camera rig passes
-the guard (`WorldValueDomainSinkLawTests`). A new bindable scalar member needs its
+is ever clamped alone. The guard is a required, non-null parameter of every
+type that resolves a bound value, so a site cannot omit it. A new bindable scalar member needs its
 row, or `WorldValueDomainLawTests` fails. A domain a kernel depends on is closed
 at a floor the kernel is proved against, never open at zero (an open end holds,
 and a closed end's clamp target must survive a GPU's flush to zero): cloud

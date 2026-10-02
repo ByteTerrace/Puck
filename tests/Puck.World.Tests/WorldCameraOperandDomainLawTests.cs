@@ -83,7 +83,7 @@ public sealed class WorldCameraOperandDomainLawTests {
             engineTick: (25UL * EngineTicks.PerSecond)
         );
 
-        return WorldCameraRigCompiler.Compile(
+        return WorldCameraRigCompiler.Compile(domains: new WorldValueDomainGuard(),
             definition: definition,
             mirror: mirror,
             program: definition.Cameras[0].Rig

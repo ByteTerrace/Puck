@@ -242,10 +242,14 @@ public static class WorldPostBuildWiring {
 
         // A bound value a presentation clamps into its field's domain reaches the same fan-out as a document reload's
         // diagnostic, and stderr, where a piped script reads it.
-        services.GetRequiredService<WorldValueDomainGuard>().Report = message => {
+        var valueDomains = services.GetRequiredService<WorldValueDomainGuard>();
+
+        valueDomains.Report = message => {
             report(arg1: message, arg2: true);
             consoleOutput.WriteErrorLine(value: message);
         };
+        // A restored timeline is a state the held values do not describe: every binding starts fresh.
+        services.GetRequiredService<WorldReplayTape>().TimelineRestored += valueDomains.Restart;
 
         services.GetRequiredService<WorldCompareCapture>().Report = result => {
             // Only late settlements reach this callback; synchronous refusals are counted by Submit itself.

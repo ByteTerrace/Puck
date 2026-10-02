@@ -248,7 +248,7 @@ public sealed class WorldThemeValidationLawTests {
         );
         var view = new WorldDocumentStateView(definition: () => definition);
         var mirror = new WorldStateMirror(view: view);
-        var theme = new WorldThemeResolve();
+        var theme = new WorldThemeResolve(domains: new WorldValueDomainGuard());
 
         Assert.True(condition: view.TryResolveRow(
             ordinal: out var panelRow,
@@ -354,7 +354,7 @@ public sealed class WorldThemeValidationLawTests {
             actual: definition.Theme
         );
 
-        var resolved = new WorldThemeResolve().Resolve(
+        var resolved = new WorldThemeResolve(domains: new WorldValueDomainGuard()).Resolve(
             definition: definition,
             revision: 1,
             mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition))
@@ -388,7 +388,7 @@ public sealed class WorldThemeValidationLawTests {
             userMessage: reason
         );
 
-        var resolved = new WorldThemeResolve().Resolve(
+        var resolved = new WorldThemeResolve(domains: new WorldValueDomainGuard()).Resolve(
             definition: definition,
             revision: 1,
             mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition))
@@ -464,7 +464,7 @@ public sealed class WorldThemeValidationLawTests {
 
         // A live write below the floor clamps to it as the theme resolves.
         var written = Bound(alpha: 0.2d);
-        var resolved = new WorldThemeResolve().Resolve(
+        var resolved = new WorldThemeResolve(domains: new WorldValueDomainGuard()).Resolve(
             definition: written,
             revision: 1,
             mirror: ClientFixtures.StateMirror(definition: written)

@@ -241,13 +241,13 @@ public sealed class WorldSeatViewState {
     /// <param name="bodyOrientation">The perceived body's orientation.</param>
     /// <param name="definition">The routed world's live document.</param>
     /// <param name="mirror">The state mirror the rig's bound operands read through.</param>
-    /// <param name="domains">The guard that holds the last valid value of a bound operand and reports its transitions,
-    /// or <see langword="null"/> to map without either.</param>
+    /// <param name="domains">The guard that holds the last valid value of a bound operand and reports its transitions.</param>
     /// <returns>The rig.</returns>
     /// <remarks>The compiled rig is cached against the AUTHORED program instance, so a delivery that only advances
     /// the document retargets in place — the seat's live orbit is an evaluator input, never a recompile.</remarks>
-    public IWorldCameraProgramRig ResolveChase(WorldViewDefaults views, Quaternion bodyOrientation, WorldDefinition definition, WorldStateMirror mirror, WorldValueDomainGuard? domains = null) {
+    public IWorldCameraProgramRig ResolveChase(WorldViewDefaults views, Quaternion bodyOrientation, WorldDefinition definition, WorldStateMirror mirror, WorldValueDomainGuard domains) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: views);
 
         var rig = m_rigCache.Resolve(

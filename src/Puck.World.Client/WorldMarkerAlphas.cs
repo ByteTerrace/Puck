@@ -9,13 +9,14 @@ public readonly record struct WorldMarkerAlphas(float Chip, float Ring) {
     /// <param name="mirror">The state mirror the opacities read through.</param>
     /// <param name="marker">The marker row.</param>
     /// <param name="index">The row's index in the document's <c>markers</c> section, which a report names.</param>
-    /// <param name="domains">The guard that holds the last valid value of a bound opacity and reports its transitions, or <see langword="null"/> to map without either.</param>
+    /// <param name="domains">The guard that holds the last valid value of a bound opacity and reports its transitions.</param>
     /// <returns>The opacities.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mirror"/> or <paramref name="marker"/> is
     /// <see langword="null"/>.</exception>
-    public static WorldMarkerAlphas Resolve(WorldStateMirror mirror, WorldMarkerRow marker, int index, WorldValueDomainGuard? domains) {
+    public static WorldMarkerAlphas Resolve(WorldStateMirror mirror, WorldMarkerRow marker, int index, WorldValueDomainGuard domains) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
         ArgumentNullException.ThrowIfNull(argument: marker);
+        ArgumentNullException.ThrowIfNull(argument: domains);
 
         var site = new WorldValueSite(
             Index: index,
@@ -26,8 +27,7 @@ public readonly record struct WorldMarkerAlphas(float Chip, float Ring) {
         var ring = 0f;
 
         if ((marker.Ring is not null) && (marker.Style.RingAlpha is { } ringAlpha)) {
-            ring = WorldValueDomainGuard.Resolve(
-                domains: domains,
+            ring = domains.Resolve(
                 fallback: 0f,
                 field: WorldValueFields.MarkerRingAlpha,
                 mirror: mirror,
@@ -41,8 +41,7 @@ public readonly record struct WorldMarkerAlphas(float Chip, float Ring) {
         }
 
         return new WorldMarkerAlphas(
-            Chip: WorldValueDomainGuard.Resolve(
-                domains: domains,
+            Chip: domains.Resolve(
                 fallback: 0f,
                 field: WorldValueFields.MarkerChipAlpha,
                 mirror: mirror,

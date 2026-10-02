@@ -264,7 +264,7 @@ public sealed partial class WorldWindowFrustumFitLawTests {
     [Fact]
     public void TheSessionViewFramesTheMarkerWhereTheWindowShowsIt() {
         var mirror = new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: Destination));
-        var emitter = new WorldSessionSceneEmitter(
+        var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
             mirror: mirror
         );
@@ -360,7 +360,7 @@ public sealed partial class WorldWindowFrustumFitLawTests {
         var eye = Eyes[0];
 
         bool Picks(float farDistance) {
-            var emitter = new WorldSessionSceneEmitter(
+            var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
                 effectiveCameraName: null,
                 mirror: new WorldSessionMirror(placeholder: (destination with { RenderRaw = new WorldRenderDefaults(FarDistance: farDistance) }))
             );
@@ -396,7 +396,7 @@ public sealed partial class WorldWindowFrustumFitLawTests {
     // on the glass, passes it and meets the marker beyond.
     [Fact]
     public void AWindowPickPassesWhatStandsBetweenTheEyeAndTheApertureAndMeetsWhatLiesBeyond() {
-        var emitter = new WorldSessionSceneEmitter(
+        var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
             mirror: new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: Destination))
         );

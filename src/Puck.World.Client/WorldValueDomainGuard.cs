@@ -30,9 +30,11 @@ public readonly record struct WorldValueSite(string Section, int Index = -1, str
 /// transition of a binding, once when it leaves its domain and once when it returns, never once per frame.
 /// <para>
 /// The last valid value is state, owned by the binding instance in its world: one entry per field, site and state
-/// binding of one <see cref="WorldStateMirror"/>. An entry is released when its binding stops being registered in the
-/// mirror (a document that no longer binds the row) and with the mirror itself, so what the guard keeps stays bounded by
-/// the live documents however many bindings come and go. An input that has not changed since the entry last saw it
+/// binding of one <see cref="WorldStateMirror"/>. An entry lives while its binding is resolved: an install of a document
+/// that follows a stretch in which nothing resolved the binding releases it, so a binding a document removed or renamed
+/// away, and one another field's reading of the same row would otherwise keep, goes within one further install. A
+/// different world in the mirror (<see cref="WorldStateMirror.BeginLifetime"/>) and a restored timeline
+/// (<see cref="Restart"/>) start every binding fresh, and so does the mirror's own disposal. An input that has not changed since the entry last saw it
 /// returns the value presented then and does no counted work (<see cref="Checks"/>).
 /// </para>
 /// <para>
@@ -74,10 +76,11 @@ public sealed class WorldValueDomainGuard {
         }
     }
 
+    /// <summary>Starts every binding of every world fresh, as a restored timeline does: what the guard kept about the
+    /// timeline that was running (the last valid value of a binding, and whether it was reported) describes a state
+    /// that no longer is.</summary>
+    public void Restart() => m_worlds.Clear();
     /// <summary>Returns a resolved value mapped into its field's domain.</summary>
-    /// <param name="domains">The guard that holds the last valid value of a bound field and reports its transitions, or
-    /// <see langword="null"/> to map without either: a value that cannot be clamped then presents
-    /// <paramref name="fallback"/>.</param>
     /// <param name="mirror">The state mirror the value was resolved through, which names the world the binding lives
     /// in.</param>
     /// <param name="field">The field the value resolves.</param>
@@ -87,11 +90,11 @@ public sealed class WorldValueDomainGuard {
     /// default.</param>
     /// <param name="site">Where the field sits, which a report names.</param>
     /// <returns>The value, mapped into the field's domain.</returns>
-    public static float Resolve(WorldValueDomainGuard? domains, WorldStateMirror mirror, WorldValueField field, in BindableScalar scalar, float value, float fallback, in WorldValueSite site) {
+    public float Resolve(WorldStateMirror mirror, WorldValueField field, in BindableScalar scalar, float value, float fallback, in WorldValueSite site) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
         ArgumentNullException.ThrowIfNull(argument: field);
 
-        if ((domains is null) || (scalar.State is not { } binding)) {
+        if (scalar.State is not { } binding) {
             var mapped = field.Domain.Map(value: value);
 
             return (mapped.Holds
@@ -99,7 +102,7 @@ public sealed class WorldValueDomainGuard {
                 : mapped.Value);
         }
 
-        return domains.Check(
+        return Check(
             binding: in binding,
             fallback: fallback,
             field: field,
@@ -113,15 +116,13 @@ public sealed class WorldValueDomainGuard {
     private float Check(in StateBinding binding, float fallback, WorldValueField field, WorldStateMirror mirror, in BindableScalar scalar, in WorldValueSite site, float value) {
         var world = m_worlds.GetValue(
             key: mirror,
-            createValueCallback: static candidate => new World(generation: candidate.Generation)
+            createValueCallback: static candidate => new World(mirror: candidate)
         );
         string? report = null;
         float used;
 
         lock (world) {
-            if (world.Generation != mirror.Generation) {
-                world.Release(mirror: mirror);
-            }
+            world.Follow(mirror: mirror);
 
             var key = new Key(
                 Binding: binding,
@@ -135,12 +136,15 @@ public sealed class WorldValueDomainGuard {
                 value: out var entry
             )
             ) {
-                entry = new Entry(binding: binding);
+                entry = new Entry();
                 world.Entries.Add(
                     key: key,
                     value: entry
                 );
             } else if (entry.Raw.Equals(obj: value)) {
+                entry.Epoch = world.Epoch;
+                world.Touched = true;
+
                 return entry.Used;
             }
 
@@ -162,8 +166,10 @@ public sealed class WorldValueDomainGuard {
                 entry.HasValid = true;
             }
 
+            entry.Epoch = world.Epoch;
             entry.Raw = value;
             entry.Used = used;
+            world.Touched = true;
 
             if (invalid != entry.Invalid) {
                 entry.Invalid = invalid;
@@ -203,31 +209,54 @@ public sealed class WorldValueDomainGuard {
             value3: Binding
         );
     }
-    private sealed class Entry(StateBinding binding) {
-        public StateBinding Binding { get; } = binding;
+    private sealed class Entry {
+        public int Epoch { get; set; }
         public bool HasValid { get; set; }
         public bool Invalid { get; set; }
         public float Raw { get; set; }
         public float Used { get; set; }
         public float Valid { get; set; }
     }
-    // One world's entries, which the guard drops with the world's mirror.
-    private sealed class World(int generation) {
-        public Dictionary<Key, Entry> Entries { get; } = [];
-        public int Generation { get; private set; } = generation;
+    // One world's entries, which the guard drops with the world's mirror. A binding is kept for as long as it is resolved:
+    // an epoch is the stretch between two installs of a document in which a binding was resolved at least once, and an
+    // install that follows an epoch drops the entries nothing resolved during that epoch. A binding a document removed or
+    // renamed away is not resolved again, so its entry goes within one further install, while a binding resolved every
+    // frame is kept through any number of them. A different world, or a restored timeline, drops them all.
+    private sealed class World(WorldStateMirror mirror) {
+        private int m_installs = mirror.Installs;
+        private int m_lifetime = mirror.Lifetime;
 
-        // Lets go of the entries whose binding the mirror no longer registers: a document that replaced or removed the
-        // binding retired its slot, and the entry is that binding's last valid value, which the binding no longer has.
-        public void Release(WorldStateMirror mirror) {
-            Generation = mirror.Generation;
+        public Dictionary<Key, Entry> Entries { get; } = [];
+
+        public int Epoch { get; private set; }
+        public bool Touched { get; set; }
+
+        public void Follow(WorldStateMirror mirror) {
+            if (m_lifetime != mirror.Lifetime) {
+                m_installs = mirror.Installs;
+                m_lifetime = mirror.Lifetime;
+                Entries.Clear();
+                Epoch = 0;
+                Touched = false;
+
+                return;
+            }
+
+            if (m_installs == mirror.Installs) {
+                return;
+            }
+
+            m_installs = mirror.Installs;
+
+            if (!Touched) {
+                return;
+            }
+
+            Epoch++;
+            Touched = false;
 
             foreach (var (key, entry) in Entries.ToArray()) {
-                var binding = entry.Binding;
-
-                if (mirror.SlotOf(
-                    binding: in binding,
-                    conversion: WorldStateConversion.Number
-                ) < 0) {
+                if (entry.Epoch < (Epoch - 1)) {
                     _ = Entries.Remove(key: key);
                 }
             }

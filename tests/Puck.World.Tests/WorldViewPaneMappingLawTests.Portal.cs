@@ -46,7 +46,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
         m_host.Screens = screens;
         m_views.Add(item: new SdfViewSnapshot(Camera: seat, Region: Left));
 
-        var session = new WorldSessionSceneEmitter(
+        var session = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
             mirror: new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: WorldWindowFrustumFitLawTests.Destination))
         );

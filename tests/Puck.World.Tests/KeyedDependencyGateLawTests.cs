@@ -36,8 +36,8 @@ public sealed class KeyedDependencyGateLawTests {
             Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Fixed(rawBits: 0L))]
         )]);
         var mirror = ClientFixtures.StateMirror(definition: definition);
-        var environment = new WorldEnvironmentResolve();
-        var theme = new WorldThemeResolve();
+        var environment = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
+        var theme = new WorldThemeResolve(domains: new WorldValueDomainGuard());
 
         mirror.Advance(engineTick: (EngineTicks.PerSecond / 4UL), tick: 1UL);
 
