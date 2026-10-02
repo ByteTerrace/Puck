@@ -131,7 +131,10 @@ the mirror of the world that seat is routed to
 bindings with the rest of its reads (`WorldPresentationManifest.SeatBindings`),
 so a crossed seat's panel shows the world it is in, like its bar, pages,
 wheels and contexts; `HudWriter` passes the panel's seat to
-`IHudBindingResolver.TryResolve`, -1 for a world-scope panel. A cell carrying a
+`IHudBindingResolver.TryResolve`, -1 for a world-scope panel. Its text is a
+borrowed character span, consumed before the next resolve. History bindings
+format into a reused buffer, and `HudWriter` copies a composed template into
+reused character storage, so a steady history line allocates nothing. A cell carrying a
 `dynamics` trait presents its eased follower, interpolated at the frame's fraction, unless the
 token carries the `.$target` facet above, in which case it presents stored truth
 exactly like a cell with no trait always does. The text shows the value read at

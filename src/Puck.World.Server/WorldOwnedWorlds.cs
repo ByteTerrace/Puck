@@ -715,7 +715,10 @@ public sealed class WorldOwnedWorlds {
 
     /// <summary>Captures every identity's owned document and the mutation counter.</summary>
     public WorldOwnedWorldsCheckpoint Capture() => new(
-        IdentityDocumentsJson: [.. m_identities.Select(selector: identity => WorldDefinitionSerialization.Serialize(definition: identity.Document!))],
+        Documents: [.. m_identities.Select(selector: identity => new WorldOwnedDocumentCheckpoint(
+            DefinitionJson: WorldDefinitionSerialization.Serialize(definition: identity.Document!),
+            DocumentDirectory: identity.Document!.DocumentDirectory
+        ))],
         Revision: m_revision
     );
     /// <summary>Creates and persists one owned world. <paramref name="name"/> is a <see cref="SafeName"/>, so
@@ -938,10 +941,12 @@ public sealed class WorldOwnedWorlds {
 
         m_identities.Clear();
 
-        foreach (var json in checkpoint.IdentityDocumentsJson) {
+        foreach (var document in checkpoint.Documents) {
             m_identities.Add(item: new WorldIdentity(
                 defaults: Defaults,
-                document: WorldDefinitionSerialization.Deserialize(utf8Json: json)
+                document: WorldDefinitionSerialization.Deserialize(
+                    utf8Json: document.DefinitionJson, documentDirectory: document.DocumentDirectory
+                )
             ));
         }
 

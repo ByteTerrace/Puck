@@ -555,6 +555,11 @@ public sealed partial class WorldPersistence {
 
                 return false;
             }
+            if (!Host.Tick.MusicMatchesDefinition) {
+                checkpoint = null;
+                reason = "a checkpoint cannot capture a music runtime whose boot score differs from the current document";
+                return false;
+            }
             if (
                 (Host.Document.Pending.Count != 0) ||
                 (Host.Extensions.PendingContributionCount != 0)
@@ -640,7 +645,7 @@ public sealed partial class WorldPersistence {
                 SolidRevision: Host.Document.SolidRevision,
                 MusicClockElapsedTicks: Host.Tick.MusicClock?.ElapsedTicks,
                 MusicDirectorCurrentSegmentId: Host.Tick.MusicDirector?.CurrentSegmentId,
-                MusicDirectorArmed: null,
+                MusicDirectorArmed: Host.Tick.MusicDirector?.ArmedTransition,
                 MusicDirectorTransitionCount: (Host.Tick.MusicDirector?.TransitionCount ?? 0UL),
                 MusicDirectorLastTransitionTick: Host.Tick.MusicDirector?.LastTransitionTick,
                 MusicDirectorLastTransitionFromSegmentId: Host.Tick.MusicDirector?.LastTransitionFromSegmentId,
@@ -697,22 +702,15 @@ public sealed partial class WorldPersistence {
         // own validation; do it before adopting any restored state so malformed base bytes refuse atomically.
         var restoredBase = (server.BaseDefinitionJson.AsSpan().SequenceEqual(other: server.DefinitionJson)
             ? restoredDefinition
-            : WorldDefinitionSerialization.Deserialize(utf8Json: server.BaseDefinitionJson));
+            : WorldDefinitionSerialization.Deserialize(documentDirectory: restoredDefinition.DocumentDirectory, utf8Json: server.BaseDefinitionJson));
 
-        ValidateRetainedTurns(compilation: admission.Compilation, server: server);
+        var restoredArena = PrepareCheckpointArena(compilation: admission.Compilation, server: server);
 
         Host.Events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
         Decisions.ValidateCheckpoint(
             checkpoint: server,
             definition: restoredDefinition
         );
-
-        if (!Host.Arena.TryRestoreKeys(
-            names: server.ArenaKeys,
-            reason: out var arenaKeyReason
-        )) {
-            throw new InvalidOperationException(message: $"the checkpoint's arena keys do not restore: {arenaKeyReason}");
-        }
 
         var machineCheckpoint = (checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty);
 
@@ -789,6 +787,7 @@ public sealed partial class WorldPersistence {
         if (Host.Population.Fields is { } lattice) {
             lattice.Restore(checkpoint: checkpoint.Fields!);
         }
+        Host.AdoptPreparedArena(arena: restoredArena, definition: restoredDefinition);
         Host.Population.Restore(
             checkpoint: checkpoint.Population,
             defaults: Host.Document.Definition.PlayerDefaults,
@@ -835,22 +834,6 @@ public sealed partial class WorldPersistence {
         Host.Events.Restore(checkpoint: checkpoint.EventFeed);
         Host.Profiles.Restore(checkpoint: checkpoint.OwnedWorlds);
         Host.RecompileRules(definition: restoredDefinition, compilation: admission.Compilation);
-        // RecompileRules may relayout onto the installed definition's catalog. Relayout and prepared replacement
-        // preserve the ledger; the idempotent restore checks that every committed name survives installation.
-        if (!Host.Arena.TryRestoreKeys(
-            names: server.ArenaKeys,
-            reason: out arenaKeyReason
-        )) {
-            throw new InvalidOperationException(message: $"the checkpoint's arena keys do not survive restored rule compilation: {arenaKeyReason}");
-        }
-        // A restore over a live arena (a history seek) drops the names interned after the checkpoint, so the
-        // retained ledger the authoritative hash folds is exactly the captured one.
-        if (!Host.Arena.TryRewindKeys(
-            names: server.ArenaKeys,
-            reason: out arenaKeyReason
-        )) {
-            throw new InvalidOperationException(message: $"the checkpoint's arena keys do not rewind the live ledger: {arenaKeyReason}");
-        }
         if (!Host.Arena.TryImportUndoSnapshot((server.Undo ?? new ArenaUndoSnapshot(Groups: [])), out var undoReason)) {
             throw new InvalidOperationException(message: $"the checkpoint's retained turns do not restore: {undoReason}");
         }

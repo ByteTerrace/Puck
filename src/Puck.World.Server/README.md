@@ -2229,14 +2229,18 @@ tick is proved against its recorded hash and mutation outcomes, and the first
 disagreement is reported by tick. A keyframe whose base, journal, and solid
 revision are the live document's restores in place and keeps the live base and
 journal by identity; otherwise the keyframe's document is installed through the
-forced load door first, as a replay drive does. Either way
-`StateArena.TryRewindKeys` drops the key names interned after the keyframe, so
-the retained ledger the hash folds is the captured one, and a machine host
-restores over its running machines (`IWorldMachineCheckpointHost`). The capture
+forced load door first, as a replay drive does. Either way a prepared arena
+restores exactly the captured key ledger, including retained names absent from
+the authored rows, even when an intervening relayout reordered the live keys.
+Each keyframe keeps its asset directory, and its music checkpoint includes any
+armed transition. A machine host restores over its running machines
+(`IWorldMachineCheckpointHost`). The capture
 is suspended for the re-simulation, the restored timeline is delivered without a
 step (`WorldTick.PresentRestoredTimeline`), and `TimelineRestored` refreshes the
 local route epochs. A re-simulated step sets `ReplaysInput`, so nothing is
-forwarded through a portal to a world that is not rewinding.
+forwarded through a portal to a world that is not rewinding. Save effects are
+suppressed during the seek. Providers from the abandoned timeline are retired;
+an explicit extension epoch admits fresh providers when the host is ready.
 
 The first live tick taken while the cursor sits behind the head replaces the
 recorded future: it is discarded, or kept as a named `WorldHistoryBranch` (the
@@ -2259,12 +2263,18 @@ composes its own what-if over the window.
 
 A seek is refused by name while a recording captures the timeline or a drive
 holds it, while input submitted since the cursor's tick closed has not run, while
-a buffered edit or ordered submission is pending, across a crossing, an arrival,
-a federated traveler or a remote peer in the window, while a remote occupant,
-transfer obligation or engagement depends on the timeline, and when the
-keyframe's key ledger is not a prefix of the live one. A keyframe cannot be
-captured while an addon guest has pumped or a screen operation has applied (the
-checkpoint's own refusals). A live neighbour linked through an adjacency is
+a buffered edit, ordered submission or provider contribution is pending, across
+a crossing, an arrival, a session event, a federated traveler or a remote peer in
+the window, and while a remote occupant, transfer obligation or engagement
+depends on the timeline. The checks and restore share the authority gate. Live
+sessions, mounted or previously pumped addon guests, applied screen operations,
+and stepped machines without checkpoint support refuse both capture and seek.
+A keyframe also refuses when the document's score differs from the running boot
+music plan. Owned documents retain their individual asset directories in the
+checkpoint, and shadow machine hosts resolve beside the keyframe's directory.
+Recorded spans refuse addon edits and require load/reload content to match its
+recorded hash before seek, diff or replay-edit begins. A live neighbour linked
+through an adjacency is
 re-read as it stands now: seam contact with a neighbour that has moved since
 shows up as the divergence the per-tick proof names.
 

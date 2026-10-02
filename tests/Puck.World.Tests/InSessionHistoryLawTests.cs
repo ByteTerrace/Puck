@@ -469,7 +469,7 @@ public sealed class InSessionHistoryLawTests {
         (float Fraction, string Text) Read(string token) {
             Assert.True(condition: resolver.TryResolve(binding: token, fraction: out var fraction, seat: -1, text: out var text));
 
-            return (fraction, text);
+            return (fraction, text.ToString());
         }
 
         Assert.Equal(expected: (0f, "off"), actual: Read(token: "history.cursor"));

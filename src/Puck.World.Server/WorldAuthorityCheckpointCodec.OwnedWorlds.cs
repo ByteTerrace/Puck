@@ -7,8 +7,11 @@ public static partial class WorldAuthorityCheckpointCodec {
         var writer = new WireWriter();
 
         writer.WriteArray(
-            items: section.IdentityDocumentsJson,
-            writeItem: static (w, json) => w.WriteBlock(value: json)
+            items: section.Documents,
+            writeItem: static (w, document) => {
+                w.WriteBlock(value: document.DefinitionJson);
+                w.WriteNullableString(value: document.DocumentDirectory);
+            }
         );
         writer.WriteInt64(value: section.Revision);
 
@@ -16,11 +19,11 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
     private static bool TryDecodeOwnedWorlds(byte[] bytes, out string reason, out WorldOwnedWorldsCheckpoint section) {
         var reader = new WireReader(bytes: bytes);
-        var identityDocumentsJson = reader.ReadArray(
+        var documents = reader.ReadArray(
             field: "owned worlds documents",
-            readItem: static (ref WireReader r) => r.ReadBlock(
-                field: "owned world document",
-                maxBytes: MaxSectionBytes
+            readItem: static (ref WireReader r) => new WorldOwnedDocumentCheckpoint(
+                DefinitionJson: r.ReadBlock(field: "owned world document", maxBytes: MaxSectionBytes),
+                DocumentDirectory: r.ReadNullableString(field: "owned world asset directory", maxBytes: MaxStringBytes)
             ),
             maximum: MaxCollectionCount
         );
@@ -34,7 +37,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         section = new WorldOwnedWorldsCheckpoint(
-            IdentityDocumentsJson: identityDocumentsJson,
+            Documents: documents,
             Revision: revision
         );
         reason = string.Empty;

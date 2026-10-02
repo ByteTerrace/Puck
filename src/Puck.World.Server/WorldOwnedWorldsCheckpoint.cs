@@ -5,4 +5,8 @@ namespace Puck.World.Server;
 /// resolves) and <see cref="WorldOwnedWorlds.LastReceipt"/> (a read-back-only diagnostic of the most recent submission, the same
 /// exclusion class as a body's <c>PressOutcome</c>/<c>StopOutcome</c> — nothing but a read-back verb consults
 /// it, and the next real submission repopulates it).</summary>
-public sealed record WorldOwnedWorldsCheckpoint(IReadOnlyList<byte[]> IdentityDocumentsJson, long Revision);
+public sealed record WorldOwnedWorldsCheckpoint(IReadOnlyList<WorldOwnedDocumentCheckpoint> Documents, long Revision);
+/// <summary>An owned document and the directory its relative asset references resolve beside.</summary>
+/// <param name="DefinitionJson">The serialized document.</param>
+/// <param name="DocumentDirectory">The captured asset context, or null for an in-memory document.</param>
+public sealed record WorldOwnedDocumentCheckpoint(byte[] DefinitionJson, string? DocumentDirectory);

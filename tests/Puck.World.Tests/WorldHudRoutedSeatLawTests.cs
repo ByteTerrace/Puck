@@ -64,7 +64,7 @@ public sealed class WorldHudRoutedSeatLawTests {
         seat: seat,
         text: out var text
     )
-        ? text
+        ? text.ToString()
         : null
     );
 

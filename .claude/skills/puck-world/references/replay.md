@@ -601,9 +601,18 @@ The contracts a change must keep:
 - **Restore exactly.** In-place restore keeps the live base and journal by
   identity only when the keyframe's fingerprint (base reference, journal
   length and tail, solid revision) matches; otherwise the keyframe's document
-  goes through the forced load door first. `StateArena.TryRewindKeys` makes the
-  key ledger exactly the captured one, and machine hosts restore over running
-  machines.
+  goes through the forced load door first. Restore prepares an arena from the
+  captured definition and complete retained-key ledger, so relayout cannot
+  leave future keys behind. Each keyframe retains its asset directory, and
+  machine hosts restore over running machines. Checkpoints preserve armed music
+  transitions as well as the music clock. Capture refuses a document whose score
+  differs from the still-running boot music plan.
+- **Refuse uncaptured state.** Seek checks under the authority gate for pending
+  input and provider contributions, live sessions, addon guests, screen
+  operations, unsupported machines and external obligations. Recorded spans
+  refuse external authority events and changed rebuild content. Seek retires
+  providers from the abandoned timeline and suppresses save effects while
+  re-simulating; only an explicit extension epoch admits fresh providers.
 - **Steady ticks allocate nothing.** Capture buffers are reused when only the
   history records, spans are sized on the keyframe tick, and per-tick paths
   avoid capturing lambdas. `ASteadyRecordedTickAllocatesNothing` pins it.
@@ -615,7 +624,8 @@ The contracts a change must keep:
   legs, branch, diff, replay-edit, budget, and allocation. Live: `world.history
   on`, `body.press forward 1 1 0`, `world.wait 90`, `world.history seek 30`
   (matches, paused), `body.where 0`, `world.history step 40`, `world.history
-  diff 30 90`, `world.history resume`.
+  diff 30 90`, `world.history resume`. `HistoryBoundaryLawTests.cs` covers
+  capture isolation, replay-edit placement, restore context and named refusals.
 
 ## Rules for changes
 

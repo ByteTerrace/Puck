@@ -330,19 +330,17 @@ public sealed partial class WorldReplayTape {
             tick: (m_liveServer.NextInputTick - 1UL)
         );
 
+        m_history?.NoteTick(
+            authoritativeHash: authoritativeHash,
+            input: new WorldReplayTickInput(Authority: authority, Intents: intents)
+        );
+
         if (
             (m_mode != WorldReplayMode.Recording) ||
             (m_ticks is not { } ticks)
         ) {
             // Only the history captures: it copies the group out, so the accumulators are reused and a steady tick
             // allocates nothing here.
-            m_history?.NoteTick(
-                authoritativeHash: authoritativeHash,
-                input: new WorldReplayTickInput(
-                    Authority: authority,
-                    Intents: intents
-                )
-            );
             authority.Clear();
             intents.Clear();
 
@@ -371,10 +369,6 @@ public sealed partial class WorldReplayTape {
         // Both stay one entry per tick, in lockstep with `ticks` above.
         m_liveHashes.Add(item: WorldReplaySnapshot.HashState(population: m_liveServer.Population));
         m_liveAuthoritativeHashes.Add(item: authoritativeHash);
-        m_history?.NoteTick(
-            authoritativeHash: authoritativeHash,
-            input: input
-        );
 
         // A REBUILD (world.reset/world.load/world.reload) applies inside THIS same tick's server.Step, before
         // NoteTick runs — so by now m_liveServer.Definition already reflects whatever it swapped to. A tape spans
@@ -669,8 +663,8 @@ public sealed partial class WorldReplayTape {
         m_recordPrefix.Clear();
 
         // A session admitted before the arm is re-established at the tape's first tick, as it stands now, so the
-        // authority it holds reaches the replay too. The prefix is the recording's own: the history beside it holds
-        // those sessions in its keyframes already.
+        // authority it holds reaches the replay too. The prefix is the recording's own: history keeps only actual
+        // events from live ticks and refuses session state its authority keyframes cannot preserve.
         foreach (var serverEvent in m_liveServer.GrantTable.LiveSessionEvents()) {
             m_recordPrefix.Add(item: new WorldReplayEntry.SessionEvent(Value: serverEvent));
         }

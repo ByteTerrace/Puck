@@ -174,6 +174,7 @@ public sealed partial class WorldHistory {
 
         public long AuthorityBytes { get; set; }
         public int Count { get; set; }
+        public string? DocumentDirectory { get; set; }
         public WorldHistoryFingerprint Fingerprint { get; set; }
 
         public ulong[] Hashes { get; set; } = new ulong[16];
@@ -198,6 +199,7 @@ public sealed partial class WorldHistory {
             Authority.Clear();
             AuthorityBytes = 0L;
             Count = 0;
+            DocumentDirectory = null;
             Keyframe = [];
             KeyframeLength = 0;
             KeyframeHash = 0UL;
@@ -563,7 +565,10 @@ public sealed partial class WorldHistory {
         WorldAuthorityCheckpoint? checkpoint;
 
         try {
-            if (!m_server.TryCaptureCheckpoint(
+            if (UncapturableLiveState() is { } unsupported) {
+                checkpoint = null;
+                reason = unsupported;
+            } else if (!m_server.TryCaptureCheckpoint(
                 checkpoint: out checkpoint,
                 hostRow: WorldAuthorityHostRowCheckpoint.Empty,
                 reason: out reason
@@ -598,6 +603,7 @@ public sealed partial class WorldHistory {
         segment.KeyframeLength = bytes.Length;
         segment.KeyframeHash = authoritativeHash;
         segment.KeyframeTick = tick;
+        segment.DocumentDirectory = m_server.Definition.DocumentDirectory;
         segment.Fingerprint = WorldHistoryFingerprint.Of(server: m_server);
         m_segments.Add(item: segment);
         m_counters = (m_counters with {

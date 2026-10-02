@@ -52,16 +52,22 @@ public sealed class WorldHistoryShadow : IDisposable {
 public sealed partial class WorldHistory {
     // A document-changing entry: what a replay-edit moves back in time.
     private static bool IsEdit(WorldReplayEntry entry) => (entry is WorldReplayEntry.Mutation or WorldReplayEntry.Undo or WorldReplayEntry.Composition or WorldReplayEntry.Rebuild);
+    // The machine-host factory consumes a file path only for its directory. Keep that context with the keyframe,
+    // even when the caller's current document lives elsewhere.
+    private static string? KeyframeDocumentPath(Segment segment, string? documentPath) => ((segment.DocumentDirectory is { } directory)
+        ? Puck.Abstractions.PuckPaths.Normalize(path: Path.Combine(path1: directory, path2: (Path.GetFileName(path: documentPath) ?? "history.world.json")))
+        : null);
     private WorldHistoryShadow OpenShadow(Segment segment, string? documentPath) {
         if (!WorldAuthorityCheckpointCodec.TryDecode(
             bytes: KeyframeBytes(segment: segment),
+            documentDirectory: segment.DocumentDirectory,
             checkpoint: out var checkpoint,
             reason: out var reason
         )) {
             throw new InvalidOperationException(message: $"the keyframe at tick {segment.KeyframeTick} does not decode ({reason}) — a host defect");
         }
 
-        var documentDirectory = m_server.Definition.DocumentDirectory;
+        var documentDirectory = segment.DocumentDirectory;
         var definition = WorldDefinitionSerialization.Deserialize(
             documentDirectory: documentDirectory,
             utf8Json: checkpoint!.Server.DefinitionJson
@@ -73,7 +79,7 @@ public sealed partial class WorldHistory {
         var machines = m_machineHostFactory(
             definition.Screens,
             m_engines,
-            documentPath,
+            KeyframeDocumentPath(documentPath: documentPath, segment: segment),
             null
         );
 
@@ -149,6 +155,11 @@ public sealed partial class WorldHistory {
         }
 
         var keyframe = KeyframeAtOrBefore(tick: from);
+
+        if (RecordedSpanRefusal(from: keyframe.KeyframeTick, to: to) is { } spanRefusal) {
+            refusal = spanRefusal;
+            return false;
+        }
         WorldHistoryImage? before = null;
         WorldHistoryImage? after = null;
 
@@ -243,6 +254,17 @@ public sealed partial class WorldHistory {
 
         var start = (editTick - ((ulong)ticksBack));
         var keyframe = KeyframeAtOrBefore(tick: start);
+
+        if (RecordedSpanRefusal(from: keyframe.KeyframeTick, to: editTick) is { } spanRefusal) {
+            refusal = spanRefusal;
+            return false;
+        }
+        foreach (var edit in edits) {
+            if (RecordedEntryRefusal(entry: edit) is { } editRefusal) {
+                refusal = editRefusal;
+                return false;
+            }
+        }
         ulong? controlDiverged = null;
         ulong? diverged = null;
         WorldHistoryDiff? diff = null;
@@ -273,15 +295,14 @@ public sealed partial class WorldHistory {
 
                 var editedInput = input;
 
-                if (tick == (start + 1UL)) {
-                    editedInput = (input with { Authority = [.. edits, .. input.Authority] });
-                }
-
                 if (
                     fromCursorTick &&
                     (tick == editTick)
                 ) {
                     editedInput = (editedInput with { Authority = [.. editedInput.Authority.Where(predicate: entry => !edits.Contains(value: entry))] });
+                }
+                if (tick == (start + 1UL)) {
+                    editedInput = (editedInput with { Authority = [.. edits, .. editedInput.Authority] });
                 }
 
                 editedExpected.Clear();
@@ -289,7 +310,7 @@ public sealed partial class WorldHistory {
                     expectedMutationOutcomes: editedExpected,
                     input: editedInput,
                     population: edited.Server.Population,
-                    rebuildContentPin: static _ => null,
+                    rebuildContentPin: static rebuild => rebuild.ContentHash,
                     replayedMutationOutcomes: editedReplayed,
                     server: edited.Server
                 );

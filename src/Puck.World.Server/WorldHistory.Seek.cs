@@ -32,6 +32,7 @@ public sealed partial class WorldHistory {
         WorldReplayEntry.FederatedIntents => "a federated traveler drove a body",
         WorldReplayEntry.PeerAdmitted => "a remote peer was admitted",
         WorldReplayEntry.PeerDisconnected => "a remote peer disconnected",
+        WorldReplayEntry.SessionEvent => "a session changed state that authority checkpoints do not preserve",
         _ => null,
     });
 
@@ -85,8 +86,11 @@ public sealed partial class WorldHistory {
         ) {
             return "a buffered edit has not applied yet — seek after it lands";
         }
+        if (m_server.Extensions.PendingContributionCount != 0) {
+            return "a provider contribution has not applied yet — seek after it lands";
+        }
 
-        if (m_server.Persistence.ReplayTimelineResetRefusal() is { } reset) {
+        if (UncapturableLiveState() is { } reset) {
             return reset;
         }
 
@@ -101,19 +105,20 @@ public sealed partial class WorldHistory {
             val2: target
         );
 
-        foreach (var (tick, entry) in EntriesBetween(from: start, to: upper)) {
+        foreach (var (tick, entry) in EntriesBetween(from: Math.Min(val1: m_cursor, val2: start), to: upper)) {
             if (Unrewindable(entry: entry) is { } reason) {
                 return $"at tick {tick} {reason}; rewinding across it would leave the other side of it standing";
             }
         }
 
-        return null;
+        return RecordedSpanRefusal(from: start, to: target);
     }
     // Restores a keyframe into the live server: in place when no structural edit landed since it, otherwise through
     // the load door first, so solids, machines, and the rule compilation match the keyframe's document.
     private string? RestoreLive(Segment segment, string? documentPath, out bool rebuilt) {
         if (!WorldAuthorityCheckpointCodec.TryDecode(
             bytes: KeyframeBytes(segment: segment),
+            documentDirectory: segment.DocumentDirectory,
             checkpoint: out var checkpoint,
             reason: out var decodeReason
         )) {
@@ -122,22 +127,13 @@ public sealed partial class WorldHistory {
             return $"the keyframe at tick {segment.KeyframeTick} does not decode ({decodeReason}) — a host defect";
         }
 
-        if (!m_server.Arena.CanRewindKeys(
-            names: checkpoint!.Server.ArenaKeys,
-            reason: out var keyReason
-        )) {
-            rebuilt = false;
-
-            return $"the keyframe at tick {segment.KeyframeTick} cannot rewind the arena's key ledger ({keyReason})";
-        }
-
         var live = WorldHistoryFingerprint.Of(server: m_server);
 
         rebuilt = !segment.Fingerprint.Matches(other: live);
 
         if (rebuilt) {
             var definition = WorldDefinitionSerialization.Deserialize(
-                documentDirectory: m_server.Definition.DocumentDirectory,
+                documentDirectory: segment.DocumentDirectory,
                 utf8Json: checkpoint!.Server.DefinitionJson
             );
 
@@ -148,7 +144,7 @@ public sealed partial class WorldHistory {
                     Definition: definition,
                     Force: true,
                     Kind: WorldRebuildKind.Load,
-                    PathHint: documentPath
+                    PathHint: KeyframeDocumentPath(documentPath: documentPath, segment: segment)
                 )
             );
             _ = m_server.DrainAdministrative();
@@ -224,7 +220,7 @@ public sealed partial class WorldHistory {
             expectedMutationOutcomes: expected,
             input: input,
             population: server.Population,
-            rebuildContentPin: static _ => null,
+            rebuildContentPin: static rebuild => rebuild.ContentHash,
             replayedMutationOutcomes: replayed,
             server: server
         );
@@ -332,24 +328,19 @@ public sealed partial class WorldHistory {
             ? m_cursor
             : keyframe.KeyframeTick);
 
-        if (SeekRefusal(
-            start: start,
-            target: target
-        ) is { } seekRefusal) {
-            refusal = seekRefusal;
-
-            return false;
-        }
-
         var from = m_cursor;
         var rebuilt = false;
         ulong? diverged = null;
-        string? failure = null;
+        var failure = m_server.ExecuteAuthorityOperation<string?>(operation: () => {
+            if (SeekRefusal(start: start, target: target) is { } seekRefusal) {
+                return seekRefusal;
+            }
+            m_tape.SuspendCapture();
+            m_server.Extensions.EnterReplay();
+            var save = m_server.SaveEffectTap;
 
-        m_tape.SuspendCapture();
-
-        try {
-            failure = m_server.ExecuteAuthorityOperation<string?>(operation: () => {
+            m_server.SaveEffectTap = static _ => { };
+            try {
                 if (
                     !fromCursor &&
                     (RestoreLive(
@@ -383,10 +374,12 @@ public sealed partial class WorldHistory {
                 diverged ??= resimulated;
 
                 return null;
-            });
-        } finally {
-            m_tape.ResumeCapture();
-        }
+            } finally {
+                m_server.SaveEffectTap = save;
+                m_server.Extensions.CompleteReplay();
+                m_tape.ResumeCapture();
+            }
+        });
 
         if (failure is not null) {
             refusal = failure;

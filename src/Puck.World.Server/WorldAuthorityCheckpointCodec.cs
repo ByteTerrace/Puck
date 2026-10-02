@@ -78,8 +78,9 @@ public static partial class WorldAuthorityCheckpointCodec {
     /// <param name="bytes">The encoded blob.</param>
     /// <param name="checkpoint">The decoded checkpoint on success.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <param name="documentDirectory">The captured definition's asset directory, when its paths are relative.</param>
     /// <returns><see langword="true"/> when the blob decoded exactly.</returns>
-    public static bool TryDecode(ReadOnlySpan<byte> bytes, out WorldAuthorityCheckpoint? checkpoint, out string reason) {
+    public static bool TryDecode(ReadOnlySpan<byte> bytes, out WorldAuthorityCheckpoint? checkpoint, out string reason, string? documentDirectory = null) {
         checkpoint = null;
 
         var reader = new WireReader(bytes: bytes);
@@ -204,7 +205,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         WorldDefinition definition;
 
         try {
-            definition = WorldDefinitionSerialization.Deserialize(utf8Json: server.DefinitionJson);
+            definition = WorldDefinitionSerialization.Deserialize(documentDirectory: documentDirectory, utf8Json: server.DefinitionJson);
         } catch (Exception exception) when ((exception is ArgumentException or InvalidDataException or NotSupportedException)) {
             reason = $"server section: definition failed to parse — {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 

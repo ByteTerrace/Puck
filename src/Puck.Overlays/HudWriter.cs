@@ -17,6 +17,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
     // only genuine capacity growth allocates — its high-water mark stabilizes after the first few frames' widest
     // template, rather than a fresh empty builder paying the grow-copy sequence back up on every call.
     private readonly System.Text.StringBuilder m_templateBuilder = new();
+    private char[] m_templateText = new char[TextRunChars];
 
     // A gauge's label run is clipped to this many characters; TextRunChars is the wider bound the reservation takes.
     private const int GaugeLabelChars = 16;
@@ -73,7 +74,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
     // runs, so this project restates none of it. A placeholder that fails to resolve appends nothing: the host's
     // validator already refused an unknown one before it could reach a live document, so an empty substitution keeps
     // the frame drawing rather than standing in for a refusal that belongs upstream.
-    private string ComposeTemplate(ReadOnlySpan<OverlayHudTemplateSegment> segments) {
+    private ReadOnlySpan<char> ComposeTemplate(ReadOnlySpan<OverlayHudTemplateSegment> segments) {
         var builder = m_templateBuilder.Clear();
 
         for (var index = 0; (index < segments.Length); index++) {
@@ -95,7 +96,11 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
             }
         }
 
-        return builder.ToString();
+        if (m_templateText.Length < builder.Length) {
+            m_templateText = new char[builder.Capacity];
+        }
+        builder.CopyTo(sourceIndex: 0, destination: m_templateText, destinationIndex: 0, count: builder.Length);
+        return m_templateText.AsSpan(start: 0, length: builder.Length);
     }
     private void EmitBand(OverlayFrameBuilder builder, OverlayHudBand band) {
         ArgumentNullException.ThrowIfNull(argument: builder);
@@ -220,7 +225,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
     }
     private void EmitGauge(OverlayFrameBuilder builder, in OverlayHudElement element, float x, float y, float w, float h) {
         var fraction = 0f;
-        var label = string.Empty;
+        ReadOnlySpan<char> label = [];
 
         if (
             (element.Binding is { Length: > 0 } binding) &&
@@ -391,7 +396,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
         builder.EndClip();
     }
     private void EmitText(OverlayFrameBuilder builder, in OverlayHudElement element, float x, float y, float h) {
-        var text = (element.Text ?? string.Empty);
+        ReadOnlySpan<char> text = element.Text;
 
         if (!element.Template.IsEmpty) {
             text = ComposeTemplate(segments: element.Template.Span);
