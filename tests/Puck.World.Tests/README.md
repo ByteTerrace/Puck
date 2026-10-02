@@ -36,11 +36,19 @@ The device laws share `tests/Shared`'s
 `HeadlessVulkanDevice` and `DirectXTestDevices`. A Vulkan device law's
 instance runs under `VK_LAYER_KHRONOS_validation` as the one switch
 `HeadlessVulkanDevice.Validation` says (on), unless the law passes
-`validation` itself; a host without the layer skips the law by name, and the
-layer writes what it finds to standard error as `[vulkan-debug] validation`
-lines. `HeadlessVulkanDeviceValidationLawTests` reads the switch back from the
-device: a device asked for validation reports the layer and a deliberate
-violation, and one asked for none reports no layer. `SharedFenceLawTests` orders a
+`validation` itself; a host without the layer skips the law by name. The layer
+writes what it finds to the device's own writer, and disposing the device
+destroys it and its instance, then fails the law that owns it when the writer
+holds any `[vulkan-debug] validation` line, naming the first message's
+identifier: that one check is how every Vulkan device law fails on a validation
+message. `HeadlessVulkanDeviceValidationLawTests` reads the switch back from the
+device and holds the check: a deliberate violation fails the law that owns the
+device, and a device asked for no validation reports no layer. The Direct3D 12
+debug layer stays off for `DirectXTestDevices.Hardware` and `Warp`: the layer
+is enabled for the whole process and removes every device the process already
+holds, and on some configurations it stops the next device from being created,
+so only a law that runs alone in `DebugLayerCollection` takes
+`DirectXTestDevices.Debug`. `SharedFenceLawTests` orders a
 Direct3D 11 writer and a Direct3D 12 or Vulkan reader by a shared fence alone.
 
 `SeamCrossingOrchestrationLawTests` exercises authored adjacency hysteresis through

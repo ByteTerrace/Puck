@@ -1047,6 +1047,7 @@ internal static partial class CanaryCommand {
             Stdout: SplitLines(text: process.Stdout)
         );
         var invariants = EvaluateRunnerInvariants(
+            backend: backend,
             debugLayers: debugLayers,
             executionWorld: executionWorld,
             leg: leg,
@@ -1173,6 +1174,7 @@ internal static partial class CanaryCommand {
             invariants = [
                 .. invariants,
                 .. EvaluateRunnerInvariants(
+                    backend: backend,
                     debugLayers: debugLayers,
                     executionWorld: relaunchWorld,
                     leg: (leg with { Commands = relaunch.Commands }),
@@ -1229,6 +1231,7 @@ internal static partial class CanaryCommand {
         CliProcessResult process,
         CanaryTranscript transcript,
         string executionWorld,
+        string? backend,
         bool debugLayers
     ) {
         var results = new List<CanaryAssertionResult> {
@@ -1258,7 +1261,8 @@ internal static partial class CanaryCommand {
         ));
         results.AddRange(collection: PipelineWaitInvariants(transcript: transcript));
 
-        if (DebugLayerOutput.Verdict(debugLayers: debugLayers, stderr: transcript.Stderr) is { } validation) {
+        // A leg boots under the layer only when it names a backend.
+        if ((backend is not null) && (DebugLayerOutput.Verdict(backend: backend, debugLayers: debugLayers, stderr: transcript.Stderr) is { } validation)) {
             results.Add(item: new CanaryAssertionResult(Detail: validation.Detail, Passed: validation.Passed));
         }
 

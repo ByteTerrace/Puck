@@ -162,7 +162,7 @@
             "token": "puck.probe.track.v1"
         },
         "QualificationReport.SchemaVersion": {
-            "shape": "68ca9f6d854d30dd",
+            "shape": "020ab7fd50a68546",
             "source": "src/Puck.Cli/Qualification/QualificationReport.cs",
             "token": "puck.qualification.report.v1"
         },

@@ -378,6 +378,7 @@ internal static class ParityCommand {
         }
 
         validation = DebugLayerOutput.Verdict(
+            backend: backend,
             debugLayers: debugLayers,
             stderr: (process?.OutputLines ?? [])
                 .Where(predicate: static line => (line.Stream == CliProcessOutputStream.Stderr))
