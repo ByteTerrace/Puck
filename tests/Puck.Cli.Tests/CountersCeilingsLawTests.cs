@@ -2,6 +2,7 @@ using System.Text.Json;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Cli.Counters;
+using Puck.Testing;
 using Puck.World;
 
 using Xunit;
@@ -184,45 +185,41 @@ public sealed class CountersCeilingsLawTests {
             width: 1920
         ), userMessage: reason);
 
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-ceilings-law-");
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-ceilings-law-");
 
-        try {
-            var path = Path.Combine(path1: directory.FullName, path2: "report.json");
+        var path = Path.Combine(path1: directory.RootPath, path2: "report.json");
 
-            CountersCommand.WriteReport(path: path, report: Report(directx: (run with { Backend = "directx", Device = Device(backend: "directx") }), vulkan: run));
-            Assert.True(condition: CountersCommand.TryReadReport(path: path, reason: out var readReason, report: out var report), userMessage: readReason);
+        CountersCommand.WriteReport(path: path, report: Report(directx: (run with { Backend = "directx", Device = Device(backend: "directx") }), vulkan: run));
+        Assert.True(condition: CountersCommand.TryReadReport(path: path, reason: out var readReason, report: out var report), userMessage: readReason);
 
-            var ceilings = CountersCeilings.Record(report: report);
-            var ambient = ceilings.Runs[0].Ceilings.Where(predicate: static ceiling => (ceiling.Pass == "sdf.world$ambient")).ToArray();
+        var ceilings = CountersCeilings.Record(report: report);
+        var ambient = ceilings.Runs[0].Ceilings.Where(predicate: static ceiling => (ceiling.Pass == "sdf.world$ambient")).ToArray();
 
-            Assert.Equal(
-                actual: ambient.Select(selector: static ceiling => ceiling.Kind),
-                expected: GpuWork.SubmissionKinds.ToArray().Select(selector: static kind => kind.Name)
-            );
-            Assert.All(collection: ambient, action: static ceiling => Assert.Equal(actual: ceiling.Ceiling, expected: 0L));
-            Assert.Equal(
-                actual: ambient.Single(predicate: static ceiling => (ceiling.Kind == GpuWork.TexelsWritten.Name)).Class,
-                expected: WorkClass.PerBackendDeterministic
-            );
-            Assert.Equal(
-                actual: ambient.Single(predicate: static ceiling => (ceiling.Kind == GpuWork.Dispatches.Name)).Class,
-                expected: WorkClass.Deterministic
-            );
-            Assert.Empty(collection: CountersCeilings.Check(ceilings: ceilings, report: report).Failures);
+        Assert.Equal(
+            actual: ambient.Select(selector: static ceiling => ceiling.Kind),
+            expected: GpuWork.SubmissionKinds.ToArray().Select(selector: static kind => kind.Name)
+        );
+        Assert.All(collection: ambient, action: static ceiling => Assert.Equal(actual: ceiling.Ceiling, expected: 0L));
+        Assert.Equal(
+            actual: ambient.Single(predicate: static ceiling => (ceiling.Kind == GpuWork.TexelsWritten.Name)).Class,
+            expected: WorkClass.PerBackendDeterministic
+        );
+        Assert.Equal(
+            actual: ambient.Single(predicate: static ceiling => (ceiling.Kind == GpuWork.Dispatches.Name)).Class,
+            expected: WorkClass.Deterministic
+        );
+        Assert.Empty(collection: CountersCeilings.Check(ceilings: ceilings, report: report).Failures);
 
-            // The pass executing and writing texels breaks its recorded zero.
-            var executing = report.Runs[0] with {
-                Counts = [.. report.Runs[0].Counts, new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: GpuWork.TexelsWritten.Name, Node: "world", Pass: "sdf.world$ambient", Source: "gpu", Value: 5L)],
-                Passes = [.. report.Runs[0].Passes.Select(selector: static pass => (pass with { State = GpuPassState.Executed }))],
-            };
+        // The pass executing and writing texels breaks its recorded zero.
+        var executing = report.Runs[0] with {
+            Counts = [.. report.Runs[0].Counts, new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: GpuWork.TexelsWritten.Name, Node: "world", Pass: "sdf.world$ambient", Source: "gpu", Value: 5L)],
+            Passes = [.. report.Runs[0].Passes.Select(selector: static pass => (pass with { State = GpuPassState.Executed }))],
+        };
 
-            Assert.Contains(
-                collection: CountersCeilings.Check(ceilings: ceilings, report: report with { Runs = [executing, report.Runs[1]] }).Failures,
-                expected: "vulkan: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$ambient node=world breaks its required zero: reads 5"
-            );
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Contains(
+            collection: CountersCeilings.Check(ceilings: ceilings, report: report with { Runs = [executing, report.Runs[1]] }).Failures,
+            expected: "vulkan: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$ambient node=world breaks its required zero: reads 5"
+        );
     }
     // Every recorded expectation must be measured: a node the run no longer reports fails each of its ceilings.
     [Fact]
@@ -267,24 +264,20 @@ public sealed class CountersCeilingsLawTests {
     }
     [Fact]
     public void WrittenCeilingsReadBackAsWrittenAndAForeignFileIsRefused() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-ceilings-law-");
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-ceilings-law-");
 
-        try {
-            var path = Path.Combine(path1: directory.FullName, path2: "counters.ceilings.json");
+        var path = Path.Combine(path1: directory.RootPath, path2: "counters.ceilings.json");
 
-            CountersCeilings.Write(ceilings: Recorded, path: path);
+        CountersCeilings.Write(ceilings: Recorded, path: path);
 
-            Assert.True(condition: CountersCeilings.TryRead(ceilings: out var read, path: path, reason: out var reason), userMessage: reason);
-            Assert.Equal(
-                actual: JsonSerializer.Serialize(value: read, jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings),
-                expected: JsonSerializer.Serialize(value: Recorded, jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings)
-            );
+        Assert.True(condition: CountersCeilings.TryRead(ceilings: out var read, path: path, reason: out var reason), userMessage: reason);
+        Assert.Equal(
+            actual: JsonSerializer.Serialize(value: read, jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings),
+            expected: JsonSerializer.Serialize(value: Recorded, jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings)
+        );
 
-            File.WriteAllText(contents: "{\"schema\":\"puck.counters.report.v1\",\"workload\":\"w\",\"script\":\"s\",\"runs\":[]}", path: path);
-            Assert.False(condition: CountersCeilings.TryRead(ceilings: out _, path: path, reason: out var foreign));
-            Assert.Contains(actualString: foreign, expectedSubstring: "a foreign document");
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        File.WriteAllText(contents: "{\"schema\":\"puck.counters.report.v1\",\"workload\":\"w\",\"script\":\"s\",\"runs\":[]}", path: path);
+        Assert.False(condition: CountersCeilings.TryRead(ceilings: out _, path: path, reason: out var foreign));
+        Assert.Contains(actualString: foreign, expectedSubstring: "a foreign document");
     }
 }

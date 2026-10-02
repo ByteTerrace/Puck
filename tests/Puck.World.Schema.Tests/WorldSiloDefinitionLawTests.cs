@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
@@ -7,6 +8,9 @@ namespace Puck.World.Schema.Tests;
 /// <summary>Proves <see cref="WorldSiloDefinitionValidator"/>'s checks and <see cref="WorldSiloDefinitionSerialization"/>'s
 /// round-trip over <c>puck.silo.def.v1</c>.</summary>
 public sealed class WorldSiloDefinitionLawTests : IDisposable {
+    // Best-effort: a key file still closing under the directory does not fail a law about validation.
+    private readonly TemporaryDirectory m_directory = new(bestEffortDelete: true, prefix: "puck-silo-def-tests-");
+
     private WorldSiloDefinition MakeValid() {
         return new WorldSiloDefinition(
             Worlds: [
@@ -38,16 +42,16 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
             Doors: new WorldSiloDoors(Budget: 5),
             Store: new WorldSiloExtension(
                 Type: "directory",
-                Settings: JsonSerializer.SerializeToElement(new Dictionary<string, string> { ["path"] = m_directory })
+                Settings: JsonSerializer.SerializeToElement(new Dictionary<string, string> { ["path"] = m_directory.RootPath })
             ),
-            StateDir: m_directory,
+            StateDir: m_directory.RootPath,
             Clustering: new WorldSiloClustering(Kind: "Localhost")
         );
     }
     private string WriteKey(string name) {
         using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var path = Path.Combine(
-            path1: m_directory,
+            path1: m_directory.RootPath,
             path2: name
         );
 
@@ -72,15 +76,7 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
             expectedSubstring: "clustering.kind is required"
         );
     }
-    public void Dispose() {
-        try {
-            Directory.Delete(
-                path: m_directory,
-                recursive: true
-            );
-        } catch (IOException) {
-        }
-    }
+    public void Dispose() => m_directory.Dispose();
     [Fact]
     public void DuplicateWorldId_Refuses() {
         var valid = MakeValid();
@@ -123,7 +119,7 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
     [Fact]
     public void MalformedKeyFile_Refuses() {
         var badPath = Path.Combine(
-            path1: m_directory,
+            path1: m_directory.RootPath,
             path2: "bad.key"
         );
 
@@ -151,7 +147,7 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
         var valid = MakeValid();
         var missing = valid with {
             Worlds = [valid.Worlds[0] with { Federation = new WorldSiloFederation(KeyFile: Path.Combine(
-                path1: m_directory,
+                path1: m_directory.RootPath,
                 path2: "does-not-exist.key"
             )) }],
         };
@@ -172,7 +168,7 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
 
         document["lifecycle"] = System.Text.Json.Nodes.JsonNode.Parse("""{"shutdownSeconds":120,"healthPort":8081}""");
         var path = Path.Combine(
-            path1: m_directory,
+            path1: m_directory.RootPath,
             path2: "lifecycle-defaults.json"
         );
 
@@ -255,7 +251,7 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
         ),
         };
         var path = Path.Combine(
-            path1: m_directory,
+            path1: m_directory.RootPath,
             path2: "extensions.json"
         );
 
@@ -289,7 +285,7 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
         var definition = MakeValid();
         var bytes = WorldSiloDefinitionSerialization.Serialize(definition: definition);
         var path = Path.Combine(
-            path1: m_directory,
+            path1: m_directory.RootPath,
             path2: "silo.json"
         );
 
@@ -411,15 +407,5 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
             actualString: reason,
             expectedSubstring: "schema"
         );
-    }
-
-    private readonly string m_directory;
-
-    public WorldSiloDefinitionLawTests() {
-        m_directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-silo-def-tests-{Guid.NewGuid():N}"
-        );
-        Directory.CreateDirectory(path: m_directory);
     }
 }

@@ -77,9 +77,10 @@ internal static partial class CanaryCommand {
     }
     // Packages one source for the whole run: the files of the directory holding it are copied into a run-level scratch
     // directory, that copy is packaged by this CLI's own `shaders package`, and the copy is deleted, so the package
-    // every leg copies from outlives its source tree.
+    // every leg copies from outlives its source tree. The scratch directory lives until the run concludes it
+    // (CanaryPackages.Conclude).
     private static CanaryBuiltPackage BuildPackage(string sourcePath, CanaryBudget budget, TimeSpan timeout) {
-        var scratch = Directory.CreateTempSubdirectory(prefix: $"{ScratchPrefix}package-").FullName;
+        var scratch = RunDirectory.CreatePath(prefix: $"{ScratchPrefix}package-");
         var copy = Path.Combine(
             path1: scratch,
             path2: "package-source"
@@ -127,6 +128,7 @@ internal static partial class CanaryCommand {
                 Directory: null,
                 Failure: reason,
                 Log: reason,
+                Scratch: scratch,
                 Unsupported: false
             );
         }
@@ -143,6 +145,7 @@ internal static partial class CanaryCommand {
                 Directory: null,
                 Failure: $"exited {process.ExitCode}{(process.TimedOut ? " after timing out" : string.Empty)}: {(message ?? process.Stderr).ReplaceLineEndings(replacementText: " ").Trim()}",
                 Log: log,
+                Scratch: scratch,
                 Unsupported: (status == "Unsupported")
             );
         }
@@ -156,6 +159,7 @@ internal static partial class CanaryCommand {
             Directory: built,
             Failure: null,
             Log: log,
+            Scratch: scratch,
             Unsupported: false
         );
     }
@@ -173,8 +177,9 @@ internal static partial class CanaryCommand {
         }
     }
 
-    // One package outcome: the built package's directory and the verb's output, or why it could not be built.
-    private sealed record CanaryBuiltPackage(string? Directory, string Log, string? Failure, bool Unsupported);
+    // One package outcome: the built package's directory and the verb's output, or why it could not be built, and the
+    // run-level scratch directory that holds both.
+    private sealed record CanaryBuiltPackage(string? Directory, string Log, string? Failure, bool Unsupported, string Scratch);
     // The run's shader packages, one per source however many legs, backends, and manifests name it: the first leg to
     // ask builds it, and every other leg waits for that build and copies it. A package is the same bytes whichever leg
     // built it, so sharing it changes no observation; a leg that alters its package alters its own copy.
@@ -189,5 +194,19 @@ internal static partial class CanaryCommand {
                     valueFactory: build
                 )
             ).Value;
+        /// <summary>Concludes every package this run built with the run's verdict: deleted when every proof held, kept
+        /// and named when one did not.</summary>
+        /// <param name="passed">Whether every proof held.</param>
+        public void Conclude(bool passed) {
+            foreach (var package in m_packages.Values) {
+                if (package.IsValueCreated) {
+                    RunDirectory.Conclude(
+                        passed: passed,
+                        path: package.Value.Scratch,
+                        report: Console.Error
+                    );
+                }
+            }
+        }
     }
 }

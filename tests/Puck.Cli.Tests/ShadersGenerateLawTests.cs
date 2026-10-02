@@ -1,6 +1,7 @@
 using Puck.Cli.Shaders;
 using Puck.SdfVm;
 using Puck.Shaders;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -44,27 +45,23 @@ public sealed class ShadersGenerateLawTests {
         CheckTree(files: [.. files, .. EngineKernels.Where(predicate: kernel => !files.Any(predicate: file => string.Equals(a: file.Path, b: kernel.Path, comparisonType: StringComparison.Ordinal)))]);
     // A tree holding exactly the given files, each written with its text, checked by the verb over exactly those files.
     private static (int ExitCode, string Error) CheckTree((string Path, string Text)[] files) {
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-shaders-generate-");
+        using var root = new TemporaryDirectory(prefix: "puck-shaders-generate-");
 
-        try {
-            foreach (var (path, text) in files) {
-                var full = Path.Combine(path1: root.FullName, path2: path);
+        foreach (var (path, text) in files) {
+            var full = Path.Combine(path1: root.RootPath, path2: path);
 
-                _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: full)!);
-                File.WriteAllText(contents: text, path: full);
-            }
-
-            var (exitCode, _, error) = ConsoleCapture.RunSplit(run: () => GenerateCommand.Run(
-                check: true,
-                files: [.. files.Select(selector: static file => file.Path)],
-                packages: RenderGraphPackageCatalog.Engine,
-                repositoryRoot: root.FullName
-            ));
-
-            return (exitCode, error);
-        } finally {
-            root.Delete(recursive: true);
+            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: full)!);
+            File.WriteAllText(contents: text, path: full);
         }
+
+        var (exitCode, _, error) = ConsoleCapture.RunSplit(run: () => GenerateCommand.Run(
+            check: true,
+            files: [.. files.Select(selector: static file => file.Path)],
+            packages: RenderGraphPackageCatalog.Engine,
+            repositoryRoot: root.RootPath
+        ));
+
+        return (exitCode, error);
     }
 
     [Fact]

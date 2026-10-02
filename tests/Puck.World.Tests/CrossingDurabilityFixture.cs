@@ -201,14 +201,19 @@ internal sealed class CrossingWorld : IDisposable {
             engines: [],
             screens: definition.Screens
         );
-        var profilesDirectory = Directory.CreateTempSubdirectory(prefix: $"puck-crossing-durability-{name}-").FullName;
+        // The restored row composes a host whose background work may still hold a file as the row is disposed, so the
+        // scratch delete is best-effort.
+        var scratch = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: $"puck-crossing-durability-{name}-"
+        );
 
         var (server, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: name,
             machines: machines,
             profiles: new WorldOwnedWorlds(
-                directory: profilesDirectory,
+                directory: scratch.RootPath,
                 machineId: Guid.NewGuid(),
                 template: definition
             )
@@ -217,8 +222,8 @@ internal sealed class CrossingWorld : IDisposable {
         return HostRow.Wrap(
             machines: machines,
             name: name,
-            server: server,
-            stateDirectory: profilesDirectory
+            scratch: scratch,
+            server: server
         );
     }
 

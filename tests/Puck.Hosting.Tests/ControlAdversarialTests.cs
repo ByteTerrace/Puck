@@ -5,6 +5,7 @@ using System.Text.Json;
 using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Networking;
+using Puck.Testing;
 
 namespace Puck.Hosting.Tests;
 
@@ -45,54 +46,51 @@ public sealed class ControlAdversarialTests {
 
         listener.Start();
         var capability = new LocalEndpointCapability(port: ((IPEndPoint)listener.LocalEndpoint).Port);
-        var path = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-response-test-{Guid.NewGuid():N}.json"
+        using var directory = new TemporaryDirectory(prefix: "puck-response-test-");
+
+        var path = directory.PathOf(name: "descriptor.json");
+
+        using var file = capability.WriteDescriptor(path: path);
+        var connect = LocalControlClient.ConnectAsync(
+            attachmentPath: path,
+            cancellationToken: Token
+        );
+        using var socket = await listener.AcceptTcpClientAsync(cancellationToken: Token);
+
+        await capability.AuthenticateAsync(
+            socket.GetStream(),
+            server: true,
+            Token
+        );
+        using var client = await connect;
+        var call = client.ExecuteAsync(
+            "exec",
+            "probe",
+            cancellationToken: Token
         );
 
-        try {
-            using var file = capability.WriteDescriptor(path: path);
-            var connect = LocalControlClient.ConnectAsync(
-                attachmentPath: path,
-                cancellationToken: Token
-            );
-            using var socket = await listener.AcceptTcpClientAsync(cancellationToken: Token);
+        Assert.True(condition: (await WireFrame.ReadAsync(
+            socket.GetStream(),
+            (ControlLimits.RequestBytes + WireFrame.PrefixBytes),
+            Token
+        )).Ok);
+        await WireFrame.WriteAsync(
+            socket.GetStream(),
+            2,
+            Encoding.UTF8.GetBytes(s: json),
+            Token
+        );
+        var error = await Record.ExceptionAsync(testCode: async () => await call);
 
-            await capability.AuthenticateAsync(
-                socket.GetStream(),
-                server: true,
-                Token
-            );
-            using var client = await connect;
-            var call = client.ExecuteAsync(
-                "exec",
-                "probe",
-                cancellationToken: Token
-            );
-
-            Assert.True(condition: (await WireFrame.ReadAsync(
-                socket.GetStream(),
-                (ControlLimits.RequestBytes + WireFrame.PrefixBytes),
-                Token
-            )).Ok);
-            await WireFrame.WriteAsync(
-                socket.GetStream(),
-                2,
-                Encoding.UTF8.GetBytes(s: json),
-                Token
-            );
-            var error = await Record.ExceptionAsync(testCode: async () => await call);
-
-            Assert.True(
-                condition: (error is InvalidDataException or JsonException),
-                userMessage: (error?.ToString() ?? "Malformed response was accepted.")
-            );
-            await Assert.ThrowsAsync<ObjectDisposedException>(testCode: () => client.ExecuteAsync(
-                "exec",
-                "never",
-                cancellationToken: Token
-            ));
-        } finally { File.Delete(path: path); }
+        Assert.True(
+            condition: (error is InvalidDataException or JsonException),
+            userMessage: (error?.ToString() ?? "Malformed response was accepted.")
+        );
+        await Assert.ThrowsAsync<ObjectDisposedException>(testCode: () => client.ExecuteAsync(
+            "exec",
+            "never",
+            cancellationToken: Token
+        ));
     }
     [InlineData(false)]
     [InlineData(true)]

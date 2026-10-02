@@ -33,10 +33,11 @@ internal static partial class CanaryCommand {
         var planOption = new Option<bool>(name: "--plan") { Description = "Print what the selection would run — proofs, legs, World boots, process spawns, builds, and the summed leg budget against its ceiling — without building or running." };
         var worldArtifactOption = new Option<string?>(name: "--world-artifact") { Description = "Run every leg on this Puck.World entry assembly, such as a producer-built package's, instead of the build of the checkout's sources. Never builds." };
         var debugLayersOption = new Option<bool>(name: WorldOffscreenLeg.DebugLayersFlag) { Description = "Boot every leg that names a backend with --debug-layers, the validation layer of that backend, and fail any such leg whose stderr has a validation message or says the layer never loaded." };
+        var keepTranscriptsOption = new Option<bool>(name: "--keep-transcripts") { Description = "Keep every leg's run directory whatever its verdict, for a caller that reads the transcripts afterwards and owns their removal; by default a held proof's legs are deleted and a failed proof's are kept." };
         var command = new Command(
             description: "Run bounded, two-leg behavioral proofs against the real Puck.World executable.",
             name: "canary"
-        ) { idsArgument, allOption, backendOption, capabilityOption, debugLayersOption, jobsOption, listOption, mergeOption, planOption, worldArtifactOption };
+        ) { idsArgument, allOption, backendOption, capabilityOption, debugLayersOption, jobsOption, keepTranscriptsOption, listOption, mergeOption, planOption, worldArtifactOption };
 
         backendOption.AcceptOnlyFromAmong(values: [.. WorldOffscreenLeg.Backends]);
 
@@ -52,6 +53,7 @@ internal static partial class CanaryCommand {
                                      backend's validation layer, and fail a leg on any validation message
                                      or an unloaded layer
               --plan                 print the selection's counts and ceiling without building or running
+              --keep-transcripts     keep every leg's run directory whatever its verdict
 
             The five selection forms are mutually exclusive. Every execution refuses an empty selection,
             and a gate selection (the automatic set or --merge) whose planned World boots or summed leg
@@ -149,6 +151,7 @@ internal static partial class CanaryCommand {
                 : []),
             ids: (parseResult.GetValue(argument: idsArgument) ?? []),
             jobs: parseResult.GetValue(option: jobsOption),
+            keepTranscripts: parseResult.GetValue(option: keepTranscriptsOption),
             list: parseResult.GetValue(option: listOption),
             merge: parseResult.GetValue(option: mergeOption),
             plan: parseResult.GetValue(option: planOption),
@@ -172,6 +175,7 @@ internal static partial class CanaryCommand {
             debugLayers: debugLayers,
             ids: [.. ids],
             jobs: DefaultJobs,
+            keepTranscripts: false,
             list: false,
             merge: false,
             plan: false,
@@ -197,6 +201,7 @@ internal static partial class CanaryCommand {
             debugLayers: [],
             ids: [],
             jobs: DefaultJobs,
+            keepTranscripts: false,
             list: false,
             merge: false,
             plan: false,
@@ -210,7 +215,7 @@ internal static partial class CanaryCommand {
         value: "input:"
     ) && (capability.Length > 6))
     );
-    private static int Run(bool all, IReadOnlyList<string> backends, string? capability, IReadOnlyCollection<string> debugLayers, string[] ids, int jobs, bool list, bool merge, bool plan, string? worldArtifact) {
+    private static int Run(bool all, IReadOnlyList<string> backends, string? capability, IReadOnlyCollection<string> debugLayers, string[] ids, int jobs, bool keepTranscripts, bool list, bool merge, bool plan, string? worldArtifact) {
         var selection = ToSelection(
             all: all,
             capability: capability,
@@ -318,6 +323,7 @@ internal static partial class CanaryCommand {
                     debugLayers: debugLayers,
                     explicitAll: (selection.Kind == CanarySelectionKind.All),
                     jobs: jobs,
+                    keepTranscripts: keepTranscripts,
                     manifests: selected,
                     plan: costs,
                     repositoryRoot: repositoryRoot,
@@ -348,8 +354,11 @@ internal static partial class CanaryCommand {
         : runExit
     );
 
-    private static int RunSelected(IReadOnlyList<CanaryManifest> manifests, CanaryPlan plan, string repositoryRoot, bool explicitAll, int jobs, string? worldArtifact, IReadOnlyCollection<string> debugLayers) {
-        CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
+    private static int RunSelected(IReadOnlyList<CanaryManifest> manifests, CanaryPlan plan, string repositoryRoot, bool explicitAll, int jobs, bool keepTranscripts, string? worldArtifact, IReadOnlyCollection<string> debugLayers) {
+        RunDirectory.Sweep(
+            age: RunDirectory.StaleAge,
+            prefix: ScratchPrefix
+        );
 
         var buildClock = Stopwatch.StartNew();
         IReadOnlyList<CanaryProof> proofs = [.. plan.Proofs.Select(selector: static proof => proof.Proof)];
@@ -554,6 +563,11 @@ internal static partial class CanaryCommand {
 
                         endings.Add(item: EndingOf(leg: legs[reported, 0]));
                         endings.Add(item: EndingOf(leg: legs[reported, 1]));
+                        ConcludeLegs(
+                            keepTranscripts: keepTranscripts,
+                            legs: [legs[reported, 0], legs[reported, 1]],
+                            passed: verdict.Passed
+                        );
                         failed |= !verdict.Passed;
                         infrastructureFailed |= verdict.InfrastructureFailed;
                         if (verdict.Unsupported is { } reason) {
@@ -572,6 +586,18 @@ internal static partial class CanaryCommand {
             return CliExit.Refused;
         } finally {
             Console.CancelKeyPress -= OnCancelKeyPress;
+
+            // A leg whose proof never reported belongs to a run that stopped; its evidence is kept.
+            for (var index = reported; (index < proofs.Count); index++) {
+                ConcludeLegs(
+                    keepTranscripts: keepTranscripts,
+                    legs: [results[index, 0], results[index, 1]],
+                    passed: false
+                );
+            }
+
+            // The run's shader packages are evidence only when a proof did not hold.
+            budget.Packages.Conclude(passed: ((reported == proofs.Count) && !failed && !infrastructureFailed && (unsupported.Count == 0) && !cancellation.IsCancellationRequested));
         }
 
         PrintTally(
@@ -1441,9 +1467,27 @@ internal static partial class CanaryCommand {
             Kind: CanarySelectionKind.Automatic
         );
     }
-    // The run directory names its canary and leg after the prefix SweepScratch finds.
+    // The run directory names its canary and leg after the prefix RunSelected sweeps.
     private static string CreateRunDirectory(string id, string leg) =>
-        Directory.CreateTempSubdirectory(prefix: $"{ScratchPrefix}{id}-{leg}-").FullName;
+        RunDirectory.CreatePath(prefix: $"{ScratchPrefix}{id}-{leg}-");
+    // Concludes a reported proof's legs with its verdict: a held proof's are deleted, a failed one's are kept and named,
+    // and --keep-transcripts leaves every one to its caller. A leg that never ran, or never created its directory, has
+    // nothing to conclude.
+    private static void ConcludeLegs(IEnumerable<CanaryLegRun?> legs, bool passed, bool keepTranscripts) {
+        if (keepTranscripts) {
+            return;
+        }
+
+        foreach (var leg in legs) {
+            if (leg is not null) {
+                RunDirectory.Conclude(
+                    passed: passed,
+                    path: leg.RunDirectory,
+                    report: Console.Error
+                );
+            }
+        }
+    }
     private static IReadOnlyList<string> SplitLines(string text) =>
         text.ReplaceLineEndings(replacementText: "\n").Split(
             options: StringSplitOptions.RemoveEmptyEntries,

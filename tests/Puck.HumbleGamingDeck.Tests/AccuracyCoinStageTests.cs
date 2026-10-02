@@ -2,11 +2,15 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Xml.Linq;
+using Puck.Testing;
 
 namespace Puck.HumbleGamingDeck.Tests;
 
 /// <summary>Checks the AccuracyCoin runner's ratchet and infrastructure reports through its executable.</summary>
-public sealed class AccuracyCoinStageTests {
+public sealed class AccuracyCoinStageTests : IDisposable {
+    private readonly TemporaryDirectory m_directory = new(prefix: "puck-hgd-accuracy-");
+
+    public void Dispose() => m_directory.Dispose();
     /// <summary>Checks unchanged outcomes, improvements, regressions, and changed failure or success codes.</summary>
     /// <param name="result">The fixture's result byte.</param>
     /// <param name="recorded">The ledger outcome.</param>
@@ -97,8 +101,8 @@ public sealed class AccuracyCoinStageTests {
         Assert.False(condition: File.Exists(path: Path.Combine(path1: root, path2: "artifacts/accuracy-coin.candidate.json")));
     }
 
-    private static string CreateCheckout(byte result, string recorded) {
-        var root = Path.Combine(path1: Path.GetTempPath(), path2: "puck-hgd-accuracy", path3: Guid.NewGuid().ToString(format: "N"));
+    private string CreateCheckout(byte result, string recorded) {
+        var root = m_directory.RootPath;
         var project = Path.Combine(path1: root, path2: "src/Puck.HumbleGamingDeck.Post");
         var corpus = Path.Combine(path1: root, path2: "cache/accuracy-coin/fixture");
 

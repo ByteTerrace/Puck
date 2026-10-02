@@ -7,6 +7,7 @@ using Puck.World.Protocol;
 using Puck.World.Server;
 
 using Xunit;
+using Puck.Testing;
 
 namespace Puck.World.Tests;
 
@@ -71,134 +72,124 @@ public sealed class ReloadDrawnReferenceLawTests {
 
     [Fact]
     public void AReloadOfABootDrawnDriverCadenceCrossesTheCodecAndRebuilds() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-reload-draw-");
+        using var directory = new TemporaryDirectory(prefix: "puck-reload-draw-");
+        var path = directory.PathOf(name: "drawn.world.json");
 
-        try {
-            var path = Path.Combine(path1: directory.FullName, path2: "drawn.world.json");
+        File.WriteAllBytes(bytes: WorldDefinitionSerialization.Serialize(definition: DrawnCadenceWorld()), path: path);
+        Assert.True(
+            condition: WorldDefinitionLoader.TryLoadFileForAdmission(
+                admission: out var admission,
+                contentHash: out var contentHash,
+                path: path,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+        Assert.InRange(actual: Cadence(definition: admission!.Definition), high: 8f, low: 5f);
 
-            File.WriteAllBytes(bytes: WorldDefinitionSerialization.Serialize(definition: DrawnCadenceWorld()), path: path);
-            Assert.True(
-                condition: WorldDefinitionLoader.TryLoadFileForAdmission(
-                    admission: out var admission,
-                    contentHash: out var contentHash,
-                    path: path,
-                    reason: out var reason
-                ),
-                userMessage: reason
-            );
-            Assert.InRange(actual: Cadence(definition: admission!.Definition), high: 8f, low: 5f);
+        using var fixture = Fixtures.FreshServer(definition: admission.Definition);
+        var link = new LoopbackTransport(server: fixture.Server);
+        var echoes = new WorldDeferredVerbEchoes();
+        string? verdict = null;
 
-            using var fixture = Fixtures.FreshServer(definition: admission.Definition);
-            var link = new LoopbackTransport(server: fixture.Server);
-            var echoes = new WorldDeferredVerbEchoes();
-            string? verdict = null;
+        echoes.Answered += answer => verdict ??= answer.Line;
+        fixture.Server.EchoTap = echo => echoes.Answer(
+            echo: in echo,
+            row: WorldDeferredVerbEchoes.DefaultRow
+        );
 
-            echoes.Answered += answer => verdict ??= answer.Line;
-            fixture.Server.EchoTap = echo => echoes.Answer(
-                echo: in echo,
-                row: WorldDeferredVerbEchoes.DefaultRow
-            );
+        var submitted = link.SubmitRebuild(
+            echoes: echoes,
+            principal: Principal.Console,
+            request: new WorldRebuildRequest(
+                ContentHash: contentHash,
+                Definition: admission.Definition,
+                Force: false,
+                Kind: WorldRebuildKind.Reload,
+                PathHint: path
+            ),
+            verb: Verb
+        );
 
-            var submitted = link.SubmitRebuild(
+        Assert.False(condition: submitted.IsError, userMessage: submitted.Output);
+        fixture.Step();
+        Assert.StartsWith(actualString: verdict, expectedStartString: $"[{Verb}: {Verb} applied — base is '{path}'");
+        Assert.Equal(actual: Cadence(definition: fixture.Server.Definition), expected: Cadence(definition: admission.Definition));
+    }
+    [Fact]
+    public void ACodecRefusedReloadAnswersItsLineAndCountsAWireError() {
+        using var directory = new TemporaryDirectory(prefix: "puck-reload-codec-");
+        var path = directory.PathOf(name: "drawn.world.json");
+
+        File.WriteAllBytes(bytes: WorldDefinitionSerialization.Serialize(definition: DrawnCadenceWorld()), path: path);
+        Assert.True(
+            condition: WorldDefinitionLoader.TryLoadFileForAdmission(
+                admission: out var drawn,
+                contentHash: out _,
+                path: path,
+                reason: out var drawnReason
+            ),
+            userMessage: drawnReason
+        );
+        // The parsed, undrawn shape: the driver's reference still names an empty cell, exactly the document the
+        // codec's strict parse must refuse. No load door returns it, so the law parses it itself.
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryReadContentPin(
+                contentHash: out var contentHash,
+                path: path,
+                reason: out var pinReason
+            ),
+            userMessage: pinReason
+        );
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryParseDocument(
+                definition: out var undrawn,
+                json: File.ReadAllText(path: path),
+                reason: out var undrawnReason,
+                sourceName: path
+            ),
+            userMessage: undrawnReason
+        );
+
+        using var fixture = Fixtures.FreshServer(definition: drawn!.Definition);
+        var link = new LoopbackTransport(server: fixture.Server);
+        var echoes = new WorldDeferredVerbEchoes();
+        var answers = new List<CommandResult>();
+        var registry = new CommandRegistry(
+            modules: [new ReloadModule(submit: () => link.SubmitRebuild(
                 echoes: echoes,
                 principal: Principal.Console,
                 request: new WorldRebuildRequest(
                     ContentHash: contentHash,
-                    Definition: admission.Definition,
+                    Definition: undrawn,
                     Force: false,
                     Kind: WorldRebuildKind.Reload,
                     PathHint: path
                 ),
                 verb: Verb
-            );
+            ))],
+            observers: [new AnswerObserver(answers: answers)]
+        );
 
-            Assert.False(condition: submitted.IsError, userMessage: submitted.Output);
-            fixture.Step();
-            Assert.StartsWith(actualString: verdict, expectedStartString: $"[{Verb}: {Verb} applied — base is '{path}'");
-            Assert.Equal(actual: Cadence(definition: fixture.Server.Definition), expected: Cadence(definition: admission.Definition));
-        } finally {
-            directory.Delete(recursive: true);
-        }
-    }
-    [Fact]
-    public void ACodecRefusedReloadAnswersItsLineAndCountsAWireError() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-reload-codec-");
+        using (var router = new InputRouter(bindings: new NoBindings(), principalResolver: new ConsolePrincipal(), registry: registry)) {
+            var source = new TextCommandSource(registry: registry);
 
-        try {
-            var path = Path.Combine(path1: directory.FullName, path2: "drawn.world.json");
+            using (var session = source.CreateSession(principal: Principal.Console, simulationSink: router.ConsoleTextSink)) {
+                session.Enqueue(line: Verb);
+                source.Collect();
 
-            File.WriteAllBytes(bytes: WorldDefinitionSerialization.Serialize(definition: DrawnCadenceWorld()), path: path);
-            Assert.True(
-                condition: WorldDefinitionLoader.TryLoadFileForAdmission(
-                    admission: out var drawn,
-                    contentHash: out _,
-                    path: path,
-                    reason: out var drawnReason
-                ),
-                userMessage: drawnReason
-            );
-            // The parsed, undrawn shape: the driver's reference still names an empty cell, exactly the document the
-            // codec's strict parse must refuse. No load door returns it, so the law parses it itself.
-            Assert.True(
-                condition: WorldDefinitionFileSource.TryReadContentPin(
-                    contentHash: out var contentHash,
-                    path: path,
-                    reason: out var pinReason
-                ),
-                userMessage: pinReason
-            );
-            Assert.True(
-                condition: WorldDefinitionFileSource.TryParseDocument(
-                    definition: out var undrawn,
-                    json: File.ReadAllText(path: path),
-                    reason: out var undrawnReason,
-                    sourceName: path
-                ),
-                userMessage: undrawnReason
-            );
+                var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
 
-            using var fixture = Fixtures.FreshServer(definition: drawn!.Definition);
-            var link = new LoopbackTransport(server: fixture.Server);
-            var echoes = new WorldDeferredVerbEchoes();
-            var answers = new List<CommandResult>();
-            var registry = new CommandRegistry(
-                modules: [new ReloadModule(submit: () => link.SubmitRebuild(
-                    echoes: echoes,
-                    principal: Principal.Console,
-                    request: new WorldRebuildRequest(
-                        ContentHash: contentHash,
-                        Definition: undrawn,
-                        Force: false,
-                        Kind: WorldRebuildKind.Reload,
-                        PathHint: path
-                    ),
-                    verb: Verb
-                ))],
-                observers: [new AnswerObserver(answers: answers)]
-            );
-
-            using (var router = new InputRouter(bindings: new NoBindings(), principalResolver: new ConsolePrincipal(), registry: registry)) {
-                var source = new TextCommandSource(registry: registry);
-
-                using (var session = source.CreateSession(principal: Principal.Console, simulationSink: router.ConsoleTextSink)) {
-                    session.Enqueue(line: Verb);
-                    source.Collect();
-
-                    var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
-
-                    registry.ApplySnapshot(snapshot: in snapshot);
-                }
+                registry.ApplySnapshot(snapshot: in snapshot);
             }
-
-            var answer = Assert.Single(collection: answers);
-
-            Assert.True(condition: answer.IsError);
-            Assert.StartsWith(actualString: answer.Output, expectedStartString: $"[{Verb}: world.transport.codec-refused ");
-            Assert.Contains(actualString: answer.Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "'state.strideCadence' names a cell that holds no value");
-            Assert.Equal(actual: registry.Submit(line: "wire.errors").Output, expected: "[wire.errors: 1 rejected]");
-        } finally {
-            directory.Delete(recursive: true);
         }
+
+        var answer = Assert.Single(collection: answers);
+
+        Assert.True(condition: answer.IsError);
+        Assert.StartsWith(actualString: answer.Output, expectedStartString: $"[{Verb}: world.transport.codec-refused ");
+        Assert.Contains(actualString: answer.Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "'state.strideCadence' names a cell that holds no value");
+        Assert.Equal(actual: registry.Submit(line: "wire.errors").Output, expected: "[wire.errors: 1 rejected]");
     }
 
     private sealed class ReloadModule(Func<CommandResult> submit) : ICommandModule {

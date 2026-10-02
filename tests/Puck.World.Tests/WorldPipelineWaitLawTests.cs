@@ -13,9 +13,10 @@ namespace Puck.World.Tests;
 /// Deadlines are never exercised here; they bound liveness in presentation time and decide no verdict below.
 /// </summary>
 public sealed class WorldPipelineWaitLawTests : IDisposable {
-    private readonly string m_directory = Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: $"puck-world-pipeline-wait-{Guid.NewGuid():N}"
+    // The runtime may still hold a file here as it is disposed, so the delete is best-effort.
+    private readonly TemporaryDirectory m_directory = new(
+        bestEffortDelete: true,
+        prefix: "puck-world-pipeline-wait-"
     );
     private readonly List<string> m_reports = [];
 
@@ -24,7 +25,7 @@ public sealed class WorldPipelineWaitLawTests : IDisposable {
 
     public WorldPipelineWaitLawTests() {
         var tools = Path.Combine(
-            path1: m_directory,
+            path1: m_directory.RootPath,
             path2: "no-tools"
         );
 
@@ -32,16 +33,16 @@ public sealed class WorldPipelineWaitLawTests : IDisposable {
         File.WriteAllText(
             contents: "[numthreads(8,8,1)] void main(uint3 id : SV_DispatchThreadID) { output[id.xy] = 0; }",
             path: Path.Combine(
-                path1: m_directory,
+                path1: m_directory.RootPath,
                 path2: "pass.hlsl"
             )
         );
         // An empty toolchain directory: every tool lookup refuses by name, the way a machine without DXC does.
         m_runtime = new WorldViewGraphHost(
-            documentDirectory: m_directory,
+            documentDirectory: m_directory.RootPath,
             packager: new ShaderPackager(compiler: new ShaderCompiler(
                 cacheDirectory: Path.Combine(
-                    path1: m_directory,
+                    path1: m_directory.RootPath,
                     path2: "cache"
                 ),
                 toolchainDirectory: tools
@@ -85,13 +86,7 @@ public sealed class WorldPipelineWaitLawTests : IDisposable {
     public void Dispose() {
         m_runtime.Dispose();
         m_instances.Dispose();
-        try {
-            Directory.Delete(
-                path: m_directory,
-                recursive: true
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-        }
+        m_directory.Dispose();
     }
     [Fact]
     public void AMissingCompilerReleasesACompiledWaitAsUnsupported() {
@@ -316,7 +311,7 @@ public sealed class WorldPipelineWaitLawTests : IDisposable {
     public async Task ACaptureWaitOnARefusedPaneFailsNamingTheRefusal() {
         var entry = m_runtime.Entries["ink"];
         var request = new Puck.Abstractions.Presentation.FrameCaptureRequest(path: Path.Combine(
-            path1: m_directory,
+            path1: m_directory.RootPath,
             path2: "ink.png"
         ));
 

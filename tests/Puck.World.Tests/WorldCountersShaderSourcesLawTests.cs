@@ -5,6 +5,7 @@ using Puck.SdfVm;
 using Puck.Shaders;
 
 using Xunit;
+using Puck.Testing;
 
 namespace Puck.World.Tests;
 
@@ -17,32 +18,24 @@ namespace Puck.World.Tests;
 public sealed class WorldCountersShaderSourcesLawTests {
     [Fact]
     public void TheShaderSourcesListTheirCountsAndEveryKindInTheLegend() {
-        var cache = Directory.CreateTempSubdirectory(prefix: "puck-test-").FullName;
+        using var cache = new TemporaryDirectory(prefix: "puck-test-");
+        var services = new ServiceCollection();
 
-        try {
-            var services = new ServiceCollection();
+        // Fresh sets under the process sources' names and kinds, so a sibling law loading shaders cannot move them.
+        _ = services.AddWorldCounters();
+        _ = services.AddSingleton<IWorkCounterSource>(implementationInstance: new ShaderCompiler(cacheDirectory: cache.RootPath).Work);
+        _ = services.AddSingleton<IWorkCounterSource>(implementationInstance: new WorkCounterSet(
+            kinds: SdfKernelSet.LoadWork.WorkKinds,
+            name: SdfKernelSet.LoadWorkSourceName
+        ));
 
-            // Fresh sets under the process sources' names and kinds, so a sibling law loading shaders cannot move them.
-            _ = services.AddWorldCounters();
-            _ = services.AddSingleton<IWorkCounterSource>(implementationInstance: new ShaderCompiler(cacheDirectory: cache).Work);
-            _ = services.AddSingleton<IWorkCounterSource>(implementationInstance: new WorkCounterSet(
-                kinds: SdfKernelSet.LoadWork.WorkKinds,
-                name: SdfKernelSet.LoadWorkSourceName
-            ));
+        using var provider = services.BuildServiceProvider();
+        var result = new CommandRegistry(modules: provider.GetServices<ICommandModule>()).Submit(line: "world.counters shaders --json");
 
-            using var provider = services.BuildServiceProvider();
-            var result = new CommandRegistry(modules: provider.GetServices<ICommandModule>()).Submit(line: "world.counters shaders --json");
-
-            Assert.False(condition: result.IsError);
-            Assert.Equal(
-                expected: """[world.counters: {"sources":[{"name":"shaders.compiler","counts":{"shaders.compiler.requests":0,"shaders.compiler.cache-hits":0,"shaders.compiler.runs.dxc":0}},{"name":"shaders.sdf-kernels","counts":{"shaders.sdf-kernels.loads":0,"shaders.sdf-kernels.bytecode-bytes":0}}],"kinds":{"shaders.compiler.requests":{"unit":"count","class":"per-backend-deterministic"},"shaders.compiler.cache-hits":{"unit":"count","class":"pacing"},"shaders.compiler.runs.dxc":{"unit":"count","class":"per-backend-deterministic"},"shaders.sdf-kernels.loads":{"unit":"count","class":"per-backend-deterministic"},"shaders.sdf-kernels.bytecode-bytes":{"unit":"bytes","class":"per-backend-deterministic"}}}]""",
-                actual: result.Output
-            );
-        } finally {
-            Directory.Delete(
-                path: cache,
-                recursive: true
-            );
-        }
+        Assert.False(condition: result.IsError);
+        Assert.Equal(
+            expected: """[world.counters: {"sources":[{"name":"shaders.compiler","counts":{"shaders.compiler.requests":0,"shaders.compiler.cache-hits":0,"shaders.compiler.runs.dxc":0}},{"name":"shaders.sdf-kernels","counts":{"shaders.sdf-kernels.loads":0,"shaders.sdf-kernels.bytecode-bytes":0}}],"kinds":{"shaders.compiler.requests":{"unit":"count","class":"per-backend-deterministic"},"shaders.compiler.cache-hits":{"unit":"count","class":"pacing"},"shaders.compiler.runs.dxc":{"unit":"count","class":"per-backend-deterministic"},"shaders.sdf-kernels.loads":{"unit":"count","class":"per-backend-deterministic"},"shaders.sdf-kernels.bytecode-bytes":{"unit":"bytes","class":"per-backend-deterministic"}}}]""",
+            actual: result.Output
+        );
     }
 }

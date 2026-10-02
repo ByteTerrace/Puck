@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Puck.Abstractions.Machines;
 using Puck.HumbleGamingBrick;
 using Xunit;
+using Puck.Testing;
 
 namespace Puck.World.Tests;
 
@@ -166,126 +167,113 @@ public sealed class MachineConfigurationLawTests {
     }
     [Fact]
     public void CompositionCacheSeparatesCatalogFingerprintsForOnePath() {
-        var directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: ("puck-machine-c1-" + Guid.NewGuid().ToString(format: "N"))
-        );
+        using var scratch = new TemporaryDirectory(prefix: "puck-machine-c1-");
+        var directory = scratch.RootPath;
 
-        Directory.CreateDirectory(path: directory);
-        try {
-            File.WriteAllText(
+        File.WriteAllText(
+            Path.Combine(
+                path1: directory,
+                path2: "root.world.json"
+            ),
+            """
+            { "imports": [ { "document": "fragment", "as": "cab" } ] }
+            """
+        );
+        File.WriteAllText(
+            Path.Combine(
+                path1: directory,
+                path2: "fragment.world.json"
+            ),
+            """
+            { "machines": [ { "name": "cab", "engine": "test",
+              "configuration": { "rom": "rom.bin" } } ] }
+            """
+        );
+        var first = TestCatalog.Engine(configuration: new MachineObjectDescriptor(
+            "puck.test.config.v1",
+            [
+            new(
+                    "rom",
+                    MachineFieldKind.String,
+                    "Asset.",
+                    Role: MachineFieldRole.AssetPath
+                )
+        ]
+        ));
+        var second = TestCatalog.Engine(configuration: new MachineObjectDescriptor(
+            "puck.test.config.v1",
+            [
+            new(
+                    "rom",
+                    MachineFieldKind.String,
+                    "Content.",
+                    Role: MachineFieldRole.ContentPath
+                )
+        ]
+        ));
+        var firstCatalog = new TestCatalog(first);
+        var secondCatalog = new TestCatalog(second);
+        var firstFingerprint = MachineConfigurationFields.CatalogFingerprint(descriptors: [("test", first)]);
+        var secondFingerprint = MachineConfigurationFields.CatalogFingerprint(descriptors: [("test", second)]);
+
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryComposeDocumentTree(
                 Path.Combine(
                     path1: directory,
                     path2: "root.world.json"
                 ),
-                """
-                { "imports": [ { "document": "fragment", "as": "cab" } ] }
-                """
-            );
-            File.WriteAllText(
+                out var firstTree,
+                out var firstReason,
+                firstFingerprint,
+                firstCatalog
+            ),
+            userMessage: firstReason
+        );
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryComposeDocumentTree(
                 Path.Combine(
                     path1: directory,
-                    path2: "fragment.world.json"
+                    path2: "root.world.json"
                 ),
-                """
-                { "machines": [ { "name": "cab", "engine": "test",
-                  "configuration": { "rom": "rom.bin" } } ] }
-                """
-            );
-            var first = TestCatalog.Engine(configuration: new MachineObjectDescriptor(
-                "puck.test.config.v1",
-                [
-                new(
-                        "rom",
-                        MachineFieldKind.String,
-                        "Asset.",
-                        Role: MachineFieldRole.AssetPath
-                    )
-            ]
-            ));
-            var second = TestCatalog.Engine(configuration: new MachineObjectDescriptor(
-                "puck.test.config.v1",
-                [
-                new(
-                        "rom",
-                        MachineFieldKind.String,
-                        "Content.",
-                        Role: MachineFieldRole.ContentPath
-                    )
-            ]
-            ));
-            var firstCatalog = new TestCatalog(first);
-            var secondCatalog = new TestCatalog(second);
-            var firstFingerprint = MachineConfigurationFields.CatalogFingerprint(descriptors: [("test", first)]);
-            var secondFingerprint = MachineConfigurationFields.CatalogFingerprint(descriptors: [("test", second)]);
+                out var secondTree,
+                out var secondReason,
+                secondFingerprint,
+                secondCatalog
+            ),
+            userMessage: secondReason
+        );
+        Assert.NotNull(@object: firstTree);
+        Assert.NotNull(@object: secondTree);
 
-            Assert.True(
-                condition: WorldDefinitionFileSource.TryComposeDocumentTree(
-                    Path.Combine(
-                        path1: directory,
-                        path2: "root.world.json"
+        // The claim is per key, not a process-wide count: the store holds one image per (path, fingerprint)
+        // pair, so one path under two catalogs occupies two slots and neither catalog reads the other's.
+        foreach (var document in new[] { "root.world.json", "fragment.world.json" }) {
+            var path = Path.Combine(
+                path1: directory,
+                path2: document
+            );
+
+            foreach (var fingerprint in new[] { firstFingerprint, secondFingerprint }) {
+                Assert.True(
+                    condition: WorldDefinitionFileSource.HoldsComposedDocument(
+                        catalogFingerprint: fingerprint,
+                        resolvedPath: path
                     ),
-                    out var firstTree,
-                    out var firstReason,
-                    firstFingerprint,
-                    firstCatalog
-                ),
-                userMessage: firstReason
-            );
-            Assert.True(
-                condition: WorldDefinitionFileSource.TryComposeDocumentTree(
-                    Path.Combine(
-                        path1: directory,
-                        path2: "root.world.json"
-                    ),
-                    out var secondTree,
-                    out var secondReason,
-                    secondFingerprint,
-                    secondCatalog
-                ),
-                userMessage: secondReason
-            );
-            Assert.NotNull(@object: firstTree);
-            Assert.NotNull(@object: secondTree);
-
-            // The claim is per key, not a process-wide count: the store holds one image per (path, fingerprint)
-            // pair, so one path under two catalogs occupies two slots and neither catalog reads the other's.
-            foreach (var document in new[] { "root.world.json", "fragment.world.json" }) {
-                var path = Path.Combine(
-                    path1: directory,
-                    path2: document
-                );
-
-                foreach (var fingerprint in new[] { firstFingerprint, secondFingerprint }) {
-                    Assert.True(
-                        condition: WorldDefinitionFileSource.HoldsComposedDocument(
-                            catalogFingerprint: fingerprint,
-                            resolvedPath: path
-                        ),
-                        userMessage: $"'{document}' holds no image under its own catalog fingerprint"
-                    );
-                }
-
-                Assert.False(
-                    condition: WorldDefinitionFileSource.HoldsComposedDocument(resolvedPath: path),
-                    userMessage: $"'{document}' holds an image under no fingerprint at all"
+                    userMessage: $"'{document}' holds no image under its own catalog fingerprint"
                 );
             }
-        } finally {
-            Directory.Delete(
-                directory,
-                recursive: true
+
+            Assert.False(
+                condition: WorldDefinitionFileSource.HoldsComposedDocument(resolvedPath: path),
+                userMessage: $"'{document}' holds an image under no fingerprint at all"
             );
         }
     }
     [Fact]
     public void CompositionRejectsFingerprintThatDoesNotBelongToSelectedCatalog() {
-        var directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: ("puck-machine-c1-fingerprint-" + Guid.NewGuid().ToString(format: "N"))
-        );
+        using var scratch = new TemporaryDirectory(prefix: "puck-machine-c1-fingerprint-");
+        var directory = scratch.RootPath;
 
-        Directory.CreateDirectory(path: directory);
         try {
             var path = Path.Combine(
                 path1: directory,
@@ -326,10 +314,6 @@ public sealed class MachineConfigurationLawTests {
             );
         } finally {
             WorldDefinitionFileSource.ForgetComposedDocuments();
-            Directory.Delete(
-                directory,
-                recursive: true
-            );
         }
     }
     [Fact]
@@ -565,10 +549,8 @@ public sealed class MachineConfigurationLawTests {
     }
     [Fact]
     public void NestedImportsCarryProviderMetadataAndRelativeAssetsThroughBothAliases() {
-        var directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: ("puck-machine-c1-nested-" + Guid.NewGuid().ToString(format: "N"))
-        );
+        using var scratch = new TemporaryDirectory(prefix: "puck-machine-c1-nested-");
+        var directory = scratch.RootPath;
 
         Directory.CreateDirectory(path: Path.Combine(
             path1: directory,
@@ -649,10 +631,6 @@ public sealed class MachineConfigurationLawTests {
             );
         } finally {
             WorldDefinitionFileSource.ForgetComposedDocuments();
-            Directory.Delete(
-                directory,
-                recursive: true
-            );
         }
     }
     [Fact]

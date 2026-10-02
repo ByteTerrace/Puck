@@ -81,6 +81,30 @@ subdirectory there:
 | `compilations` | The `.puck` compile cache the game and the CLI share |
 | `corpora` | The conformance corpora the emulator batteries fetch |
 
+## Temporary directories
+
+Every directory a run makes under the temporary directory follows one policy,
+`RunDirectory` in `build/RunDirectory.cs`. `Directory.Build.targets` links it
+into the CLI and every test and validation project, and `Directory.Build.props`
+into file apps. A directory gets a prefix that names its owner and a unique
+suffix. A run that passes deletes it. A run that fails keeps it and names its
+absolute path in a `run directory kept: <path>` line. The first directory a
+process creates under a prefix deletes that prefix's directories older than six
+hours, which clears a killed run's leftovers. The
+[CLI conventions](../reference/cli.md#conventions) list the verbs that follow
+it and the directories that are deleted whatever the outcome.
+
+A law takes its directory from `TemporaryDirectory`
+(`tests/Shared/TemporaryDirectory.cs`, linked into every test project), never
+from `Directory.CreateTempSubdirectory`, `Path.GetTempPath()` or
+`Path.GetTempFileName()`. Its disposal follows the law's verdict: a passing law
+deletes the directory, and a failing law keeps it and writes the kept line to
+the law's output. A directory disposed while its law runs waits for the
+verdict, which an assembly-level xUnit `BeforeAfterTestAttribute` reads once the
+law ends. A deletion failure fails a passing law, so a handle the code under
+test leaves open is caught; `bestEffortDelete` relaxes that for a law whose
+host may still hold a file as it is disposed.
+
 ## C# file apps
 
 Repository automation is Puck CLI: `puck --help` lists the verbs and
@@ -456,8 +480,9 @@ framed as unverified when no device run exists.
 - The .NET host picks the SDK from the working directory's nearest
   `global.json`, and MSBuild picks a project's SDK from the project's; with
   neither, both roll to the newest SDK installed, preview or not. A verb or
-  test that builds a scratch project outside the checkout creates it through
-  `CliScratchDirectories.CreateProject`, which copies the checkout's
+  test that builds a scratch project outside the checkout takes its directory
+  from the run-directory policy ([temporary directories](#temporary-directories)),
+  pins it with `CliScratchDirectories.PinSdk`, which copies the checkout's
   `global.json` in, and runs the SDK command from that directory. An SDK
   command against a checkout project runs from the checkout.
 - Incremental builds can retain corrupted reference assemblies. Confirm

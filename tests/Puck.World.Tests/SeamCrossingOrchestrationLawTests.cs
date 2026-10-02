@@ -63,11 +63,16 @@ public sealed class SeamCrossingOrchestrationLawTests {
 
     [Fact]
     public void CornerProjectionPathUsesTheIntermediateAuthoredOverlapDepth() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-corner-projection-tests-").FullName;
-        var sourcePath = Path.Combine(path1: directory, path2: "source.world.json");
-        var eastPath = Path.Combine(path1: directory, path2: "east.world.json");
-        var southPath = Path.Combine(path1: directory, path2: "south.world.json");
-        var cornerPath = Path.Combine(path1: directory, path2: "corner.world.json");
+        // The rows' hosts are disposed in the finally below, but a handle closing late must not fail a law that already
+        // ran, so the delete is best-effort.
+        using var directory = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: "puck-corner-projection-tests-"
+        );
+        var sourcePath = directory.PathOf(name: "source.world.json");
+        var eastPath = directory.PathOf(name: "east.world.json");
+        var southPath = directory.PathOf(name: "south.world.json");
+        var cornerPath = directory.PathOf(name: "corner.world.json");
         var sourceDefinition = ProjectionRow([("east", eastPath), ("south", southPath), ("corner", cornerPath)], ProjectionEdge("east", "east", "west", 90f), ProjectionEdge("south", "south", "north", 0f));
         var eastDefinition = ProjectionRow([("source", sourcePath), ("corner", cornerPath)], ProjectionEdge("west", "source", "east", -90f), ProjectionEdge(counterpart: "north", destination: "corner", hysteresis: 8f, name: "south", yaw: 0f));
         var southDefinition = ProjectionRow([("source", sourcePath), ("corner", cornerPath)], ProjectionEdge("north", "source", "south", 180f), ProjectionEdge("east", "corner", "west", 90f));
@@ -102,7 +107,6 @@ public sealed class SeamCrossingOrchestrationLawTests {
                 row.Instance.Dispose();
                 row.StateDirectory.Dispose();
             }
-            try { Directory.Delete(directory, recursive: true); } catch (IOException) { }
         }
     }
     [InlineData(0f, 1.1f, true)]

@@ -4,6 +4,7 @@ using Puck.Abstractions.Machines;
 using Puck.World.Machines;
 using Puck.World.Server;
 using Xunit;
+using Puck.Testing;
 
 namespace Puck.World.Tests;
 
@@ -32,75 +33,71 @@ public sealed class MachineExtensionCatalogLawTests {
     }
     [Fact]
     public void ADeviceWithoutPresentationInputOrRemovableContentStillAdvances() {
-        var path = Path.GetTempFileName();
-
-        File.WriteAllBytes(
+        using var directory = new TemporaryDirectory(prefix: "puck-machine-catalog-");
+        var path = directory.WriteBytes(
             bytes: [1],
-            path: path
+            name: "content.bin"
         );
-        try {
-            var engine = new TinyEngine(id: "tiny");
-            using var host = new WorldMachineHost(
-                [],
-                new WorldMachineCatalog(
-                    [engine],
-                    [new TinyContentProvider(
-                            engineId: "tiny",
-                            value: 41
-                        )]
-                )
-            );
-            var definition = Fixtures.BuildDocument() with {
-                ScreensRaw = null,
-                MachinesRaw = [new WorldMachine(
-                    "tiny",
-                    "tiny",
-                    JsonSerializer.SerializeToElement(new { schema = "puck.tiny.config.v1", content = new { path } })
-                )],
-            };
 
-            Assert.True(
-                condition: host.TryPrepare(
-                    candidate: definition,
-                    current: null,
-                    plan: out var plan,
-                    reason: out var reason
-                ),
-                userMessage: reason
-            );
-            using (plan) { host.Commit(plan: plan!); host.Finish(plan: plan!); }
-            var runtime = Assert.IsType<TinyMachine>(@object: engine.Created.Single());
+        var engine = new TinyEngine(id: "tiny");
+        using var host = new WorldMachineHost(
+            [],
+            new WorldMachineCatalog(
+                [engine],
+                [new TinyContentProvider(
+                        engineId: "tiny",
+                        value: 41
+                    )]
+            )
+        );
+        var definition = Fixtures.BuildDocument() with {
+            ScreensRaw = null,
+            MachinesRaw = [new WorldMachine(
+                "tiny",
+                "tiny",
+                JsonSerializer.SerializeToElement(new { schema = "puck.tiny.config.v1", content = new { path } })
+            )],
+        };
 
-            host.Advance(
-                840,
-                ReadOnlyMemory<ScreenPadSnapshot>.Empty
-            );
-            host.Advance(
-                420,
-                ReadOnlyMemory<ScreenPadSnapshot>.Empty
-            );
+        Assert.True(
+            condition: host.TryPrepare(
+                candidate: definition,
+                current: null,
+                plan: out var plan,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+        using (plan) { host.Commit(plan: plan!); host.Finish(plan: plan!); }
+        var runtime = Assert.IsType<TinyMachine>(@object: engine.Created.Single());
 
-            Assert.Equal(
-                1260UL,
-                runtime.ElapsedTicks
-            );
-            Assert.Equal(
-                2,
-                host.InstanceState(name: "tiny")!.Value.FramesStepped
-            );
-            Assert.Null(@object: host.VideoOutput(
-                instance: "tiny",
-                output: "video"
-            ));
-            Assert.Null(@object: host.AudioOutput(
-                instance: "tiny",
-                output: "audio"
-            ));
-            Assert.False(condition: (((IMachineRuntime)runtime) is IMachineContentSlot));
-            Assert.False(condition: (((IMachineRuntime)runtime) is IMachineInputPorts));
-        } finally {
-            File.Delete(path: path);
-        }
+        host.Advance(
+            840,
+            ReadOnlyMemory<ScreenPadSnapshot>.Empty
+        );
+        host.Advance(
+            420,
+            ReadOnlyMemory<ScreenPadSnapshot>.Empty
+        );
+
+        Assert.Equal(
+            1260UL,
+            runtime.ElapsedTicks
+        );
+        Assert.Equal(
+            2,
+            host.InstanceState(name: "tiny")!.Value.FramesStepped
+        );
+        Assert.Null(@object: host.VideoOutput(
+            instance: "tiny",
+            output: "video"
+        ));
+        Assert.Null(@object: host.AudioOutput(
+            instance: "tiny",
+            output: "audio"
+        ));
+        Assert.False(condition: (((IMachineRuntime)runtime) is IMachineContentSlot));
+        Assert.False(condition: (((IMachineRuntime)runtime) is IMachineInputPorts));
     }
     [Fact]
     public void AProviderForAnotherEngineRefusesTheWholeComposition() {
@@ -161,93 +158,86 @@ public sealed class MachineExtensionCatalogLawTests {
     }
     [Fact]
     public void IndependentHostsPrepareTheSameFormatThroughTheirOwnProviders() {
-        var path = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-machine-{Guid.NewGuid():N}.tiny"
-        );
-
-        File.WriteAllBytes(
+        using var directory = new TemporaryDirectory(prefix: "puck-machine-");
+        var path = directory.WriteBytes(
             bytes: [17],
-            path: path
+            name: "content.tiny"
         );
-        try {
-            var firstEngine = new TinyEngine(id: "tiny");
-            var secondEngine = new TinyEngine(id: "tiny");
-            var rawEngine = new TinyEngine(id: "tiny");
-            var firstProvider = new TinyContentProvider(
-                engineId: "tiny",
-                value: 41
-            );
-            var secondProvider = new TinyContentProvider(
-                engineId: "tiny",
-                value: 73
-            );
-            var firstDefinition = Fixtures.BuildDocument() with {
-                ScreensRaw = null,
-                MachinesRaw = [Machine(
-                    engine: "tiny",
-                    path: path
-                )],
-            };
-            using var first = new WorldMachineHost(
-                [],
-                new WorldMachineCatalog(
-                    contentProviders: [firstProvider],
-                    engines: [firstEngine]
-                )
-            );
-            using var second = new WorldMachineHost(
-                [],
-                new WorldMachineCatalog(
-                    contentProviders: [secondProvider],
-                    engines: [secondEngine]
-                )
-            );
-            using var raw = new WorldMachineHost(
-                [],
-                new WorldMachineCatalog([rawEngine])
-            );
 
-            Assert.True(
-                condition: first.TryPrepare(
-                    candidate: firstDefinition,
-                    current: null,
-                    plan: out var firstPlan,
-                    reason: out var firstReason
-                ),
-                userMessage: firstReason
-            );
-            using (firstPlan) { first.Commit(plan: firstPlan!); first.Finish(plan: firstPlan!); }
-            Assert.True(
-                condition: second.TryPrepare(
-                    candidate: firstDefinition,
-                    current: null,
-                    plan: out var secondPlan,
-                    reason: out var secondReason
-                ),
-                userMessage: secondReason
-            );
-            using (secondPlan) { second.Commit(plan: secondPlan!); second.Finish(plan: secondPlan!); }
+        var firstEngine = new TinyEngine(id: "tiny");
+        var secondEngine = new TinyEngine(id: "tiny");
+        var rawEngine = new TinyEngine(id: "tiny");
+        var firstProvider = new TinyContentProvider(
+            engineId: "tiny",
+            value: 41
+        );
+        var secondProvider = new TinyContentProvider(
+            engineId: "tiny",
+            value: 73
+        );
+        var firstDefinition = Fixtures.BuildDocument() with {
+            ScreensRaw = null,
+            MachinesRaw = [Machine(
+                engine: "tiny",
+                path: path
+            )],
+        };
+        using var first = new WorldMachineHost(
+            [],
+            new WorldMachineCatalog(
+                contentProviders: [firstProvider],
+                engines: [firstEngine]
+            )
+        );
+        using var second = new WorldMachineHost(
+            [],
+            new WorldMachineCatalog(
+                contentProviders: [secondProvider],
+                engines: [secondEngine]
+            )
+        );
+        using var raw = new WorldMachineHost(
+            [],
+            new WorldMachineCatalog([rawEngine])
+        );
 
-            Assert.Equal(
-                new byte[] { 41 },
-                firstEngine.LoadedImage
-            );
-            Assert.Equal(
-                new byte[] { 73 },
-                secondEngine.LoadedImage
-            );
-            Assert.Equal(
-                new byte[] { 41 },
-                firstEngine.LoadedImage
-            );
-            Assert.Equal(
-                new byte[] { 73 },
-                secondEngine.LoadedImage
-            );
-        } finally {
-            File.Delete(path: path);
-        }
+        Assert.True(
+            condition: first.TryPrepare(
+                candidate: firstDefinition,
+                current: null,
+                plan: out var firstPlan,
+                reason: out var firstReason
+            ),
+            userMessage: firstReason
+        );
+        using (firstPlan) { first.Commit(plan: firstPlan!); first.Finish(plan: firstPlan!); }
+        Assert.True(
+            condition: second.TryPrepare(
+                candidate: firstDefinition,
+                current: null,
+                plan: out var secondPlan,
+                reason: out var secondReason
+            ),
+            userMessage: secondReason
+        );
+        using (secondPlan) { second.Commit(plan: secondPlan!); second.Finish(plan: secondPlan!); }
+
+        Assert.Equal(
+            new byte[] { 41 },
+            firstEngine.LoadedImage
+        );
+        Assert.Equal(
+            new byte[] { 73 },
+            secondEngine.LoadedImage
+        );
+        Assert.Equal(
+            new byte[] { 41 },
+            firstEngine.LoadedImage
+        );
+        Assert.Equal(
+            new byte[] { 73 },
+            secondEngine.LoadedImage
+        );
     }
     [Fact]
     public void OfflineChecksReportDeferralAndAdmissionUsesOnlyTheSuppliedCatalog() {

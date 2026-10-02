@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Puck.Cli.Transpiler;
 using Puck.GamingBricks.Forge;
 using Puck.GamingBricks.Transpiler;
+using Puck.Testing;
 using Puck.World.Transpiler.Lsp;
 using Xunit;
 
@@ -18,76 +19,66 @@ public sealed class CartridgeToolingTests {
     [InlineData("agb")]
     [Theory]
     public void CompileAndLintDispatchCartridgeSchema(string target) {
-        var directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: ("puck-cartridge-tooling-" + Guid.NewGuid().ToString(format: "N"))
+        using var scratch = new TemporaryDirectory(prefix: "puck-cartridge-tooling-");
+        var directory = scratch.RootPath;
+
+        var path = Path.Combine(
+            path1: directory,
+            path2: "example.puck"
         );
 
-        Directory.CreateDirectory(path: directory);
-        try {
-            var path = Path.Combine(
-                path1: directory,
-                path2: "example.puck"
-            );
-
-            File.WriteAllText(
+        File.WriteAllText(
+            path,
+            Source(target: target)
+        );
+        Assert.Equal(
+            0,
+            CompileCommand.Run(
                 path,
-                Source(target: target)
-            );
-            Assert.Equal(
-                0,
-                CompileCommand.Run(
-                    path,
-                    null,
-                    false,
-                    true,
-                    true,
-                    false
-                )
-            );
-            Assert.True(condition: File.Exists(path: Path.ChangeExtension(
-                extension: ".cartridge.json",
-                path: path
-            )));
-            Assert.False(condition: File.Exists(path: Path.ChangeExtension(
-                extension: ".world.json",
-                path: path
-            )));
-            Assert.Equal(
-                0,
-                LintCommand.Execute(
-                    path: path,
-                    strict: true
-                )
-            );
-            File.AppendAllText(
-                contents: "\nvariable \"invalid\" { initial: 99999 }\n",
-                path: path
-            );
-            Assert.Equal(
-                1,
-                LintCommand.Execute(
-                    path: path,
-                    strict: true
-                )
-            );
-            Assert.Equal(
-                1,
-                CompileCommand.Run(
-                    path,
-                    null,
-                    false,
-                    true,
-                    true,
-                    false
-                )
-            );
-        } finally {
-            Directory.Delete(
-            directory,
-            recursive: true
+                null,
+                false,
+                true,
+                true,
+                false
+            )
         );
-        }
+        Assert.True(condition: File.Exists(path: Path.ChangeExtension(
+            extension: ".cartridge.json",
+            path: path
+        )));
+        Assert.False(condition: File.Exists(path: Path.ChangeExtension(
+            extension: ".world.json",
+            path: path
+        )));
+        Assert.Equal(
+            0,
+            LintCommand.Execute(
+                path: path,
+                strict: true
+            )
+        );
+        File.AppendAllText(
+            contents: "\nvariable \"invalid\" { initial: 99999 }\n",
+            path: path
+        );
+        Assert.Equal(
+            1,
+            LintCommand.Execute(
+                path: path,
+                strict: true
+            )
+        );
+        Assert.Equal(
+            1,
+            CompileCommand.Run(
+                path,
+                null,
+                false,
+                true,
+                true,
+                false
+            )
+        );
     }
     [Fact]
     public async Task UnsavedCartridgeBufferUsesForgeDiagnostics() {

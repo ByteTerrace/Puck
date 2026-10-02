@@ -3,6 +3,7 @@ using Puck.Abstractions.Counting;
 using Puck.Maths;
 using Puck.World.Protocol;
 using Xunit;
+using Puck.Testing;
 
 namespace Puck.World.Tests;
 
@@ -11,54 +12,46 @@ namespace Puck.World.Tests;
 /// and the work a turn does is bounded by the board and the tokens on it, which a larger board would grow and nothing
 /// else would, so a 16x16 level of 58 tokens is admitted under the per-tick ceiling.</summary>
 [Collection(AllocationCollection.Name)]
-public sealed class RulePushTurnLawTests(ITestOutputHelper output) {
+public sealed class RulePushTurnLawTests(RulePushTurnLawTests.StagedWorlds staged, ITestOutputHelper output) : IClassFixture<RulePushTurnLawTests.StagedWorlds> {
     // The package's composition source declares every world it ships; each is staged as its own document once per
     // suite, the way the game stages a composition before it boots, so Hedges proves its borders against the rest.
-    private static readonly Lazy<string> Staged = new(valueFactory: static () => {
-        var source = Path.Combine(
-            path1: AuthoredGameFixtures.Root,
-            path2: "worlds/rulepush/rulepush.puck"
-        );
-        var compilation = Puck.World.Transpiler.WorldCompiler.CompileFile(
-            allowMultiple: true,
-            path: source
-        );
+    public sealed class StagedWorlds : IDisposable {
+        private readonly TemporaryDirectory m_directory = new(prefix: "puck-rulepush-");
 
-        Assert.True(condition: compilation.Success);
-
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-rulepush-").FullName;
-
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => {
-            try {
-                Directory.Delete(
-                    path: directory,
-                    recursive: true
-                );
-            } catch (IOException) {
-                // Best-effort scratch cleanup; a locked handle on a slow CI disk must never fail the run.
-            } catch (UnauthorizedAccessException) {
-            }
-        };
-
-        foreach (var world in compilation.Worlds) {
-            Assert.True(
-                condition: Puck.World.Transpiler.Composition.WorldStaging.TryWrite(
-                    directory: directory,
-                    name: world.Name,
-                    path: out _,
-                    reason: out var reason,
-                    sourceDirectory: Path.GetDirectoryName(path: source)!,
-                    world: ((System.Text.Json.Nodes.JsonObject)world.Json.DeepClone())
-                ),
-                userMessage: reason
+        public StagedWorlds() {
+            var source = Path.Combine(
+                path1: AuthoredGameFixtures.Root,
+                path2: "worlds/rulepush/rulepush.puck"
             );
+            var compilation = Puck.World.Transpiler.WorldCompiler.CompileFile(
+                allowMultiple: true,
+                path: source
+            );
+
+            Assert.True(condition: compilation.Success);
+
+            foreach (var world in compilation.Worlds) {
+                Assert.True(
+                    condition: Puck.World.Transpiler.Composition.WorldStaging.TryWrite(
+                        directory: m_directory.RootPath,
+                        name: world.Name,
+                        path: out _,
+                        reason: out var reason,
+                        sourceDirectory: Path.GetDirectoryName(path: source)!,
+                        world: ((System.Text.Json.Nodes.JsonObject)world.Json.DeepClone())
+                    ),
+                    userMessage: reason
+                );
+            }
         }
 
-        return directory;
-    });
+        public string DirectoryPath => m_directory.RootPath;
 
-    private static WorldDefinition Hedges() {
-        var path = Path.Combine(path1: Staged.Value, path2: WorldDocumentName.DocumentFile(name: "hedges"));
+        public void Dispose() => m_directory.Dispose();
+    }
+
+    private WorldDefinition Hedges() {
+        var path = Path.Combine(path1: staged.DirectoryPath, path2: WorldDocumentName.DocumentFile(name: "hedges"));
 
         Assert.True(
             condition: WorldDefinitionLoader.TryLoadFile(
@@ -92,7 +85,7 @@ public sealed class RulePushTurnLawTests(ITestOutputHelper output) {
     }
     // A 16x16 level of 58 tokens stamped from the package's own level module; a test world, never shipped.
     private static WorldDefinition Sixteen() => AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Tests/Fixtures/rulepush-sixteen.puck");
-    private static WorldFixture Boot() => Boot(definition: Hedges());
+    private WorldFixture Boot() => Boot(definition: Hedges());
     private static WorldFixture Boot(WorldDefinition definition) {
         var fixture = Fixtures.FreshServer(definition: definition);
         var seat = Principal.Seat(slot: 0);

@@ -1,5 +1,6 @@
 using Puck.Cli.Bench;
 using Puck.State;
+using Puck.Testing;
 
 using Xunit;
 
@@ -60,26 +61,22 @@ public sealed class StateEvidenceCommandTests {
     }
     [Fact]
     public void InventoryKeepsMissingArtifactsAndCalibrationExplicit() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-state-evidence-");
+        using var directory = new TemporaryDirectory(prefix: "puck-state-evidence-");
 
-        try {
-            var inventory = StateEvidenceCommand.BuildInventory(repositoryRoot: directory.FullName);
+        var inventory = StateEvidenceCommand.BuildInventory(repositoryRoot: directory.RootPath);
 
-            Assert.Equal(ReferenceScheduleManifest.Digest, inventory.ManifestDigest);
-            Assert.All(inventory.Kernels.SelectMany(selector: static kernel => kernel.Sources), static source => {
-                Assert.Null(@object: source.ActualSha256);
-                Assert.False(condition: source.Matches);
-            });
-            Assert.Contains(collection: inventory.Kernels, filter: static kernel => (kernel.UnresolvedTargets.Count > 0));
-            Assert.All(inventory.MemoryGaps, static memoryClass => Assert.NotEmpty(collection: memoryClass.Value));
-            Assert.Equal(
-                ReferenceSchedule.Coverage.Select(selector: static entry => (entry.Vocabulary, entry.Registered, entry.Priced, entry.Unmodeled.Count)),
-                inventory.Coverage.Select(selector: static entry => (entry.Vocabulary, entry.Registered, entry.Priced, entry.Unmodeled.Count))
-            );
-            Assert.Contains(collection: inventory.Coverage, filter: static entry => (entry.Unmodeled.Count > 0));
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Equal(ReferenceScheduleManifest.Digest, inventory.ManifestDigest);
+        Assert.All(inventory.Kernels.SelectMany(selector: static kernel => kernel.Sources), static source => {
+            Assert.Null(@object: source.ActualSha256);
+            Assert.False(condition: source.Matches);
+        });
+        Assert.Contains(collection: inventory.Kernels, filter: static kernel => (kernel.UnresolvedTargets.Count > 0));
+        Assert.All(inventory.MemoryGaps, static memoryClass => Assert.NotEmpty(collection: memoryClass.Value));
+        Assert.Equal(
+            ReferenceSchedule.Coverage.Select(selector: static entry => (entry.Vocabulary, entry.Registered, entry.Priced, entry.Unmodeled.Count)),
+            inventory.Coverage.Select(selector: static entry => (entry.Vocabulary, entry.Registered, entry.Priced, entry.Unmodeled.Count))
+        );
+        Assert.Contains(collection: inventory.Coverage, filter: static entry => (entry.Unmodeled.Count > 0));
     }
     [Fact]
     public async Task CaptureRefusesAnAbsentPinnedCompilerByNameRatherThanSubstitutingOne() {
@@ -87,30 +84,25 @@ public sealed class StateEvidenceCommandTests {
 
         Assert.NotNull(@object: root);
 
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-state-capture-");
-        string text;
+        using var directory = new TemporaryDirectory(prefix: "puck-state-capture-");
 
-        try {
-            var (exitCode, _, refusal) = await ConsoleCapture.RunSplitAsync(run: () => ReferenceCapture.RunAsync(
-                cancellationToken: TestContext.Current.CancellationToken,
-                clock: TimeProvider.System,
-                directory: directory.FullName,
-                options: new(
-                    Ilc: Path.Combine(path1: directory.FullName, path2: "no-such-ilc.exe"),
-                    LlvmMca: null,
-                    LlvmObjdump: null,
-                    NuGetPackages: null,
-                    ReuseLowering: false
-                ),
-                repositoryRoot: root
-            ));
+        var (exitCode, _, refusal) = await ConsoleCapture.RunSplitAsync(run: () => ReferenceCapture.RunAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            clock: TimeProvider.System,
+            directory: directory.RootPath,
+            options: new(
+                Ilc: Path.Combine(path1: directory.RootPath, path2: "no-such-ilc.exe"),
+                LlvmMca: null,
+                LlvmObjdump: null,
+                NuGetPackages: null,
+                ReuseLowering: false
+            ),
+            repositoryRoot: root
+        ));
 
-            Assert.Equal(actual: exitCode, expected: 2);
-            Assert.Empty(collection: Directory.GetFiles(path: directory.FullName));
-            text = refusal;
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Equal(actual: exitCode, expected: 2);
+        Assert.Empty(collection: Directory.GetFiles(path: directory.RootPath));
+        var text = refusal;
 
         Assert.Contains(ReferenceScheduleManifest.Targets[0].Build.IlCompiler, text, StringComparison.Ordinal);
         Assert.Contains(actualString: text, comparisonType: StringComparison.Ordinal, expectedSubstring: "no-such-ilc.exe");

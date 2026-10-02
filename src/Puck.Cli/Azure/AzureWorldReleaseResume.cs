@@ -40,13 +40,15 @@ internal static partial class AzureCommand {
             ).ConfigureAwait(continueOnCapturedContext: false)
             : null
         );
-        var temporary = Directory.CreateTempSubdirectory(prefix: "puck-release-resume-");
-
-        try {
+        // Staging holds nothing a later look needs, so it is deleted however the step ends.
+        using (var temporary = RunDirectory.Create(
+            keepOnFailure: false,
+            prefix: "puck-release-resume-"
+        )) {
             var runtime = new AzureWorldReleaseRuntime(
                 context.ResourceGroup,
                 context.Group,
-                temporary.FullName,
+                temporary.Path,
                 Text(value: Value(
                     context.Outputs,
                     "worldSiloStorageEndpoint"
@@ -85,7 +87,7 @@ internal static partial class AzureCommand {
                 runtime,
                 token
             ).ConfigureAwait(continueOnCapturedContext: false);
-        } finally { temporary.Delete(recursive: true); }
+        }
     }
 
     internal static async Task InitializeWorldReleaseBootstrapAsync(WorldReleaseManifest manifest, WorldReleaseArchive archive,

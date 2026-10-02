@@ -3,6 +3,7 @@ using Puck.Abstractions.Counting;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
+using Puck.Testing;
 
 namespace Puck.World.Tests;
 
@@ -133,59 +134,52 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
     }
     [Fact]
     public void FreshBootBindingTheSameIdentityReloadsTheLane() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-identity-facts-").FullName;
+        using var directory = new TemporaryDirectory(prefix: "puck-identity-facts-");
 
-        try {
-            using (var first = Boot(
-                definition: Document(rules: [WriteRule()]),
-                directory: directory
-            )) {
-                Join(
-                    fixture: first,
-                    identity: IdentityName
-                );
-                first.Step();
-
-                Assert.Equal(
-                    expected: 1L,
-                    actual: Lane(
-                        body: 0,
-                        fact: Fact,
-                        fixture: first
-                    )
-                );
-            }
-
-            using var second = Boot(
-                definition: Document(rules: []),
-                directory: directory
-            );
-
-            second.Step();
-
-            Assert.Empty(collection: LaneCells(fixture: second));
-
+        using (var first = Boot(
+            definition: Document(rules: [WriteRule()]),
+            directory: directory.RootPath
+        )) {
             Join(
-                fixture: second,
+                fixture: first,
                 identity: IdentityName
             );
-            second.Step();
+            first.Step();
 
             Assert.Equal(
                 expected: 1L,
                 actual: Lane(
                     body: 0,
                     fact: Fact,
-                    fixture: second
+                    fixture: first
                 )
             );
-            Assert.Empty(collection: second.Server.RuleRuntimeDiagnostics());
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
         }
+
+        using var second = Boot(
+            definition: Document(rules: []),
+            directory: directory.RootPath
+        );
+
+        second.Step();
+
+        Assert.Empty(collection: LaneCells(fixture: second));
+
+        Join(
+            fixture: second,
+            identity: IdentityName
+        );
+        second.Step();
+
+        Assert.Equal(
+            expected: 1L,
+            actual: Lane(
+                body: 0,
+                fact: Fact,
+                fixture: second
+            )
+        );
+        Assert.Empty(collection: second.Server.RuleRuntimeDiagnostics());
     }
     [Fact]
     public void WorldDeclaringNoLaneRefusesTheEffectAndTheChannelByName() {
@@ -486,8 +480,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
 
         return new WorldFixture(
             machines: machines,
-            server: server,
-            stateDirectory: Directory.CreateTempSubdirectory(prefix: "puck-identity-facts-scratch-").FullName
+            server: server
         );
     }
     private static void Join(WorldFixture fixture, string? identity) {

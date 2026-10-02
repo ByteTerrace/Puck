@@ -95,9 +95,13 @@ internal static partial class AzureCommand {
                 "json"
             );
         }, clock: clock);
-        var temporary = Directory.CreateTempSubdirectory(prefix: "puck-silo-").FullName;
+        // The silo's scratch holds the signing key, so it is deleted however the step ends.
+        using (var scratch = RunDirectory.Create(
+            keepOnFailure: false,
+            prefix: "puck-silo-"
+        )) {
+            var temporary = scratch.Path;
 
-        try {
             var encodedKey = await LoadWorldSigningKeyAsync(
                 vault,
                 secret,
@@ -320,12 +324,6 @@ internal static partial class AzureCommand {
                 Convert.ToBase64String(inArray: key.ExportSubjectPublicKeyInfo()),
                 CliFiles.ReadJson(path: templatePath).AsObject()
             ) { ClosedGroupRewind = true };
-        } finally {
-            // This freshly generated path is never derived from arguments or deployment documents.
-            Directory.Delete(
-                path: temporary,
-                recursive: true
-            );
         }
     }
     /// <summary>Deploys the world compute template, first recreating the scale set when its priority differs from the declared <c>Regular</c> or <c>Spot</c>.</summary>

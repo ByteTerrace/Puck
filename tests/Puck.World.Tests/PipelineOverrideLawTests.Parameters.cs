@@ -80,7 +80,7 @@ public sealed partial class PipelineOverrideLawTests {
         File.WriteAllText(
             contents: BoardGraph,
             path: Path.Combine(
-                path1: m_directory,
+                path1: m_directory.RootPath,
                 path2: "board.graph.json"
             )
         );
@@ -185,7 +185,7 @@ public sealed partial class PipelineOverrideLawTests {
 
         using var fixture = Fixtures.FreshServer(definition: WithField(definition: Document()));
 
-        fixture.Server.PipelineSources = new WorldPipelineSources(documentDirectory: m_directory);
+        fixture.Server.PipelineSources = new WorldPipelineSources(documentDirectory: m_directory.RootPath);
         fixture.Server.EchoTap = m_echoes.Add;
 
         WorldDefinition Binding(string array) => WithField(definition: WithBoardParameter(

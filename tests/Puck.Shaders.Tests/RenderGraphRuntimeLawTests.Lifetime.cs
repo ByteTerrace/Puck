@@ -58,10 +58,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         return (runtime, frames, recorders);
     }
-    private static FrameCaptureRequest CaptureRequest() => new(path: Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: $"{Guid.NewGuid():N}.png"
-    ));
+    private FrameCaptureRequest CaptureRequest() => new(path: m_captures.PathOf(name: $"{Guid.NewGuid():N}.png"));
     // The outcome of a request some frame or refusal has already completed.
     private static FrameCaptureResult Outcome(FrameCaptureRequest request) {
         Assert.True(condition: request.Completion.IsCompleted);

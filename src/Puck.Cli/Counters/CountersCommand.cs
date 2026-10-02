@@ -191,9 +191,8 @@ internal static class CountersCommand {
         var compiler = new Puck.Shaders.ShaderToolchain().Identity;
         var suiteClock = Stopwatch.StartNew();
 
-        CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
-
-        var runDirectory = Directory.CreateTempSubdirectory(prefix: ScratchPrefix).FullName;
+        using var scratch = RunDirectory.Create(prefix: ScratchPrefix);
+        var runDirectory = scratch.Path;
 
         Console.Error.WriteLine(value: $"{Verb}: artifacts {CliPaths.ToDisplay(fullPath: runDirectory)}");
 
@@ -297,7 +296,12 @@ internal static class CountersCommand {
             Console.Out.WriteLine(value: $"{Verb}: ceilings {CliPaths.ToDisplay(fullPath: ceilingsFile)} {((verdict.Failures.Count == 0) ? "hold" : $"fail {verdict.Failures.Count}")}");
         }
 
-        return Report(differences: differences);
+        var exit = Report(differences: differences);
+
+        // With no --output the report is written into the run directory, which is then the run's product and kept.
+        scratch.Conclude(passed: ((exit == CliExit.Success) && (output is not null)));
+
+        return exit;
     }
 
     public static Command Create() {

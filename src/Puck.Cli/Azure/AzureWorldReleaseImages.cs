@@ -24,9 +24,11 @@ internal static partial class AzureCommand {
         ).ConfigureAwait(continueOnCapturedContext: false);
 
         if (inventory.Any(predicate: image => (image.Server != registryServer))) { throw new InvalidDataException(message: "release images must belong to the configured official registry"); }
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-release-registry-");
-
-        try {
+        // The registry configuration holds a login, so it is deleted however the step ends.
+        using (var directory = RunDirectory.Create(
+            keepOnFailure: false,
+            prefix: "puck-release-registry-"
+        )) {
             foreach (var registry in inventory.GroupBy(
                 image => image.Server,
                 StringComparer.Ordinal
@@ -93,17 +95,17 @@ internal static partial class AzureCommand {
                 CliGitHub.Mask(value: refresh);
                 await RunAsync(
                     "docker",
-                    ["--config", directory.FullName, "login", server, "--username", "00000000-0000-0000-0000-000000000000", "--password-stdin"],
+                    ["--config", directory.Path, "login", server, "--username", "00000000-0000-0000-0000-000000000000", "--password-stdin"],
                     input: (refresh + "\n")
                 ).ConfigureAwait(continueOnCapturedContext: false);
                 foreach (var image in registry) {
                     await RunAsync(
                         "docker",
-                        ["--config", directory.FullName, "pull", ((server + "/") + image.Reference)]
+                        ["--config", directory.Path, "pull", ((server + "/") + image.Reference)]
                     ).ConfigureAwait(continueOnCapturedContext: false);
                 }
             }
-        } finally { directory.Delete(recursive: true); }
+        }
     }
 
     internal static (string Server, string Reference, string Digest) ParseWorldReleaseImage(string image) {

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Assets.Tests;
@@ -40,20 +41,18 @@ public sealed class ContentPinLawTests {
             actual: ContentPin.FromDigest(digest: SHA256.HashData(source: bytes))
         );
 
-        var path = Path.GetTempFileName();
+        using var directory = new TemporaryDirectory(prefix: "puck-content-pin-");
 
-        try {
-            File.WriteAllBytes(
-                bytes: bytes,
-                path: path
-            );
-            Assert.Equal(
-                expected: expected,
-                actual: ContentPin.OfFile(path: path)
-            );
-        } finally {
-            File.Delete(path: path);
-        }
+        var path = directory.PathOf(name: "content.bin");
+
+        File.WriteAllBytes(
+            bytes: bytes,
+            path: path
+        );
+        Assert.Equal(
+            expected: expected,
+            actual: ContentPin.OfFile(path: path)
+        );
     }
     [Fact]
     public void CanonicalTextRoundTrips() {
@@ -160,66 +159,62 @@ public sealed class ContentPinLawTests {
     }
     [Fact]
     public void StoreAddressesObjectsAtTheOneLayout() {
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-content-pin-");
+        using var directory = new TemporaryDirectory(prefix: "puck-content-pin-");
 
-        try {
-            var store = new ContentAddressedStore(root: root.FullName);
-            var pin = store.Put(content: "stored"u8);
+        var store = new ContentAddressedStore(root: directory.RootPath);
+        var pin = store.Put(content: "stored"u8);
 
-            Assert.Equal(
-                expected: ContentPin.Compute(content: "stored"u8),
-                actual: pin
-            );
-            Assert.Equal(
-                expected: $"objects/sha256/{pin.Hex[..2]}/{pin.Hex}",
-                actual: ContentAddressedStore.ObjectRelativePath(pin: pin)
-            );
-            Assert.True(condition: File.Exists(path: ContentAddressedStore.ObjectPath(
-                pin: pin,
-                root: root.FullName
-            )));
-            Assert.True(condition: store.Contains(pin: pin));
-            Assert.True(condition: store.TryGet(
-                content: out var content,
-                pin: pin
-            ));
-            Assert.Equal(
-                expected: "stored"u8.ToArray(),
-                actual: content
-            );
-            store.SetRef(
-                category: "tests",
-                hash: pin,
-                name: "stored"
-            );
-            Assert.True(condition: store.TryResolveRef(
-                category: "tests",
-                hash: out var resolved,
-                name: "stored"
-            ));
-            Assert.Equal(
-                actual: resolved,
-                expected: pin
-            );
-            File.WriteAllText(
-                contents: pin.ToString().ToUpperInvariant().Replace(
-                    newValue: ContentPin.Prefix,
-                    oldValue: ContentPin.Prefix.ToUpperInvariant()
-                ),
-                path: Path.Combine(
-                    path1: root.FullName,
-                    path2: "refs",
-                    path3: "tests",
-                    path4: "upper"
-                )
-            );
-            Assert.False(condition: store.TryResolveRef(
-                category: "tests",
-                hash: out _,
-                name: "upper"
-            ));
-        } finally {
-            root.Delete(recursive: true);
-        }
+        Assert.Equal(
+            expected: ContentPin.Compute(content: "stored"u8),
+            actual: pin
+        );
+        Assert.Equal(
+            expected: $"objects/sha256/{pin.Hex[..2]}/{pin.Hex}",
+            actual: ContentAddressedStore.ObjectRelativePath(pin: pin)
+        );
+        Assert.True(condition: File.Exists(path: ContentAddressedStore.ObjectPath(
+            pin: pin,
+            root: directory.RootPath
+        )));
+        Assert.True(condition: store.Contains(pin: pin));
+        Assert.True(condition: store.TryGet(
+            content: out var content,
+            pin: pin
+        ));
+        Assert.Equal(
+            expected: "stored"u8.ToArray(),
+            actual: content
+        );
+        store.SetRef(
+            category: "tests",
+            hash: pin,
+            name: "stored"
+        );
+        Assert.True(condition: store.TryResolveRef(
+            category: "tests",
+            hash: out var resolved,
+            name: "stored"
+        ));
+        Assert.Equal(
+            actual: resolved,
+            expected: pin
+        );
+        File.WriteAllText(
+            contents: pin.ToString().ToUpperInvariant().Replace(
+                newValue: ContentPin.Prefix,
+                oldValue: ContentPin.Prefix.ToUpperInvariant()
+            ),
+            path: Path.Combine(
+                path1: directory.RootPath,
+                path2: "refs",
+                path3: "tests",
+                path4: "upper"
+            )
+        );
+        Assert.False(condition: store.TryResolveRef(
+            category: "tests",
+            hash: out _,
+            name: "upper"
+        ));
     }
 }

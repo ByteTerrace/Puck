@@ -40,6 +40,12 @@ build. Pruning keeps the most recently used builds and every leased one, and a
 killed run's leftover directories and lock files are removed only after six hours.
 `WorldArtifactClosureLawTests` evaluates the World's project graph with MSBuild
 and requires every input it names to lie under a keyed path.
+`RunDirectoryLawTests` holds the one run-directory policy: a passing run leaves
+no directory, a failing or unfinished run keeps its own and names its absolute
+path, a directory that holds no evidence is deleted whatever the verdict, and
+the age sweep removes only stale directories of its own prefix. It also checks
+that a recording keeps its inner canary transcript when that run fails, and that
+a law's `TemporaryDirectory` outlives its disposal until the law's verdict.
 `CanaryListenerLawTests` checks that the canary port probe hands out UDP ports.
 It also checks that a World refusing its listener is classified as an
 infrastructure failure rather than unsupported.

@@ -131,44 +131,40 @@ internal static class NuGetReleaseCommand {
     }
     private static async Task<int> PinAsync(string version) {
         var root = RepositoryPaths.RequireRoot();
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-official-install-").FullName;
+        // Install attempts retry while the publication propagates, so a failed one is not evidence worth keeping.
+        using var run = RunDirectory.Create(
+            keepOnFailure: false,
+            prefix: "puck-official-install-"
+        );
+        var directory = run.Path;
 
-        try {
-            // The published package is proven in an empty tool path before tracked configuration changes.
-            var executable = await InstallAsync(
-                configFile: Path.Combine(
-                    path1: root,
-                    path2: "nuget.config"
-                ),
-                directory: directory,
-                root: root,
-                version: NuGetCommand.ValidateVersion(version: version)
-            );
-
-            await CliProcess.RunCheckedAsync(
-                arguments: ["nuget", "--help"],
-                fileName: executable,
-                workingDirectory: root
-            );
-            var manifestPath = Path.Combine(
+        // The published package is proven in an empty tool path before tracked configuration changes.
+        var executable = await InstallAsync(
+            configFile: Path.Combine(
                 path1: root,
-                path2: ".config/dotnet-tools.json"
-            );
-            var manifest = CliFiles.ReadJson(path: manifestPath);
+                path2: "nuget.config"
+            ),
+            directory: directory,
+            root: root,
+            version: NuGetCommand.ValidateVersion(version: version)
+        );
 
-            manifest["tools"]![Package] = new JsonObject { ["version"] = version, ["commands"] = new JsonArray("puck"), ["rollForward"] = false };
-            CliFiles.WriteJson(
-                path: manifestPath,
-                value: manifest
-            );
-        } finally {
-            if (Directory.Exists(path: directory)) {
-                Directory.Delete(
-                    path: directory,
-                    recursive: true
-                );
-            }
-        }
+        await CliProcess.RunCheckedAsync(
+            arguments: ["nuget", "--help"],
+            fileName: executable,
+            workingDirectory: root
+        );
+        var manifestPath = Path.Combine(
+            path1: root,
+            path2: ".config/dotnet-tools.json"
+        );
+        var manifest = CliFiles.ReadJson(path: manifestPath);
+
+        manifest["tools"]![Package] = new JsonObject { ["version"] = version, ["commands"] = new JsonArray("puck"), ["rollForward"] = false };
+        CliFiles.WriteJson(
+            path: manifestPath,
+            value: manifest
+        );
         return 0;
     }
     private static async Task<int> PinPublishedAsync(string packages, string patch) {
@@ -250,108 +246,103 @@ internal static class NuGetReleaseCommand {
             searchPattern: "ByteTerrace.Puck.Cli.*.nupkg"
         ).Single();
         var version = Path.GetFileName(path: package)["ByteTerrace.Puck.Cli.".Length..^".nupkg".Length];
-        var directory = CliScratchDirectories.CreateProject(prefix: "puck-package-smoke-");
+        using var run = RunDirectory.Create(prefix: "puck-package-smoke-");
+        var directory = run.Path;
 
-        try {
-            var executable = await InstallAsync(
-                configFile: CandidateConfig(
-                    directory: directory,
-                    feed: packages
-                ),
+        CliScratchDirectories.PinSdk(directory: directory);
+
+        var executable = await InstallAsync(
+            configFile: CandidateConfig(
                 directory: directory,
-                root: root,
-                version: version
-            );
-            var project = Path.Combine(
-                path1: root,
-                path2: "src/Puck.Cli/Puck.Cli.csproj"
-            );
+                feed: packages
+            ),
+            directory: directory,
+            root: root,
+            version: version
+        );
+        var project = Path.Combine(
+            path1: root,
+            path2: "src/Puck.Cli/Puck.Cli.csproj"
+        );
 
-            await CliProcess.RunCheckedAsync(
-                arguments: ["nuget", "--help"],
-                fileName: executable,
-                workingDirectory: root
-            );
-            await CliProcess.RunCheckedAsync(
-                arguments: ["nuget", "version"],
-                fileName: executable,
-                workingDirectory: root
-            );
-            await CliProcess.RunCheckedAsync(
-                arguments: ["search", "PackAsTool", project, "-M", "0"],
-                fileName: executable,
-                workingDirectory: root
-            );
-            await CliProcess.RunCheckedAsync(
-                arguments: ["declarations", Path.Combine(
-                        path1: root,
-                        path2: "src/Puck.Cli/NuGet/NuGetCommand.cs"
-                    ), "--members"],
-                fileName: executable,
-                workingDirectory: root
-            );
-            // Workspace build-host packaging is exercised against a tiny standalone project.
-            var probe = Path.Combine(
-                path1: directory,
-                path2: "probe"
-            );
+        await CliProcess.RunCheckedAsync(
+            arguments: ["nuget", "--help"],
+            fileName: executable,
+            workingDirectory: root
+        );
+        await CliProcess.RunCheckedAsync(
+            arguments: ["nuget", "version"],
+            fileName: executable,
+            workingDirectory: root
+        );
+        await CliProcess.RunCheckedAsync(
+            arguments: ["search", "PackAsTool", project, "-M", "0"],
+            fileName: executable,
+            workingDirectory: root
+        );
+        await CliProcess.RunCheckedAsync(
+            arguments: ["declarations", Path.Combine(
+                    path1: root,
+                    path2: "src/Puck.Cli/NuGet/NuGetCommand.cs"
+                ), "--members"],
+            fileName: executable,
+            workingDirectory: root
+        );
+        // Workspace build-host packaging is exercised against a tiny standalone project.
+        var probe = Path.Combine(
+            path1: directory,
+            path2: "probe"
+        );
 
-            Directory.CreateDirectory(path: probe);
-            File.WriteAllText(
-                contents: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>",
-                path: Path.Combine(
+        Directory.CreateDirectory(path: probe);
+        File.WriteAllText(
+            contents: "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>",
+            path: Path.Combine(
+                path1: probe,
+                path2: "Probe.csproj"
+            )
+        );
+        File.WriteAllText(
+            contents: "public sealed class Probe { public int Value() => 1; public int Read() => Value(); }",
+            path: Path.Combine(
+                path1: probe,
+                path2: "Probe.cs"
+            )
+        );
+        await CliProcess.RunCheckedAsync(
+            arguments: ["restore", Path.Combine(
                     path1: probe,
                     path2: "Probe.csproj"
-                )
-            );
-            File.WriteAllText(
-                contents: "public sealed class Probe { public int Value() => 1; public int Read() => Value(); }",
-                path: Path.Combine(
+                ), "--disable-build-servers", "--configfile", Path.Combine(
+                    path1: root,
+                    path2: "nuget.config"
+                )],
+            fileName: "dotnet",
+            workingDirectory: root
+        );
+        await CliProcess.RunCheckedAsync(
+            arguments: ["build", Path.Combine(
                     path1: probe,
-                    path2: "Probe.cs"
-                )
-            );
-            await CliProcess.RunCheckedAsync(
-                arguments: ["restore", Path.Combine(
-                        path1: probe,
-                        path2: "Probe.csproj"
-                    ), "--disable-build-servers", "--configfile", Path.Combine(
-                        path1: root,
-                        path2: "nuget.config"
-                    )],
-                fileName: "dotnet",
-                workingDirectory: root
-            );
-            await CliProcess.RunCheckedAsync(
-                arguments: ["build", Path.Combine(
-                        path1: probe,
-                        path2: "Probe.csproj"
-                    ), "--disable-build-servers", "-c", "Release", "--no-restore"],
-                fileName: "dotnet",
-                workingDirectory: root
-            );
-            var references = await CliProcess.RunCheckedAsync(
-                arguments: ["references", "Value", "--project", Path.Combine(
-                        path1: probe,
-                        path2: "Probe.csproj"
-                    )],
-                capture: true,
-                fileName: executable,
-                workingDirectory: root
-            );
+                    path2: "Probe.csproj"
+                ), "--disable-build-servers", "-c", "Release", "--no-restore"],
+            fileName: "dotnet",
+            workingDirectory: root
+        );
+        var references = await CliProcess.RunCheckedAsync(
+            arguments: ["references", "Value", "--project", Path.Combine(
+                    path1: probe,
+                    path2: "Probe.csproj"
+                )],
+            capture: true,
+            fileName: executable,
+            workingDirectory: root
+        );
 
-            if (!references.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "Probe.cs"
-            )) { throw new InvalidDataException(message: "The packaged Roslyn workspace host did not resolve the probe."); }
-        } finally {
-            if (Directory.Exists(path: directory)) {
-                Directory.Delete(
-                    path: directory,
-                    recursive: true
-                );
-            }
-        }
+        if (!references.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: "Probe.cs"
+        )) { throw new InvalidDataException(message: "The packaged Roslyn workspace host did not resolve the probe."); }
+        run.Conclude(passed: true);
         return 0;
     }
     private static async Task<int> TagAsync() {

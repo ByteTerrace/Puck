@@ -247,7 +247,7 @@ internal static class WorldArtifactBuild {
                     clock: clock
                 )
             )) {
-                CliScratchDirectories.TryDelete(path: staging);
+                RunDirectory.TryDelete(path: staging);
 
                 return false;
             }
@@ -255,7 +255,7 @@ internal static class WorldArtifactBuild {
                 path1: staging,
                 path2: ArtifactName
             ))) {
-                CliScratchDirectories.TryDelete(path: staging);
+                RunDirectory.TryDelete(path: staging);
                 error = $"the Puck.World build exited 0 but did not produce {ArtifactName}.";
 
                 return false;
