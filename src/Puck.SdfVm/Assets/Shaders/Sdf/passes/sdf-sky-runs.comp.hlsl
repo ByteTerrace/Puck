@@ -30,9 +30,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
         sdfSkyCloudRun(direction, scale, offset);
         skyBaseRW[id.xy] = float4(sdfSkyGradient(direction), 1.0);
+        evaluations += 1u;
         skyScaleRW[id.xy] = float4(scale, 1.0);
         skyOffsetRW[id.xy] = float4(offset, 1.0);
-        evaluations = 1u;
     } else {
         skyBaseRW[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
     }

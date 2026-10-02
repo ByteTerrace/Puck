@@ -5825,8 +5825,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      reference for the run composition is `SdfSkyRuns`. `gpu.sky.evaluations` is a
      kernel-counted kind beside the march steps and texels written; the field
      runs' texels are the `sky` pass's row, and per-run and per-layer rows wait for
-     the detail labels P18-7 adds. Every hit reads zero sky evaluations
-     (`SdfSkyEvaluationDeviceLawTests`).
+     the detail labels P18-7 adds. A pixel covered with all its neighbours reads
+     zero field evaluations in the sky pass (`SdfSkyEvaluationDeviceLawTests`).
+     Composite counts each gradient evaluation for surface fog and each in-place
+     field fallback; both can occur at one pixel. Zero fog density evaluates no
+     fog gradient (`SdfSkySamplingLawTests`).
    - Delivers: `views` shading hits only into `lit`, premultiplied, with
      coverage in its alpha; `sky` evaluating the sky's field runs where
      coverage is below one, with a one-pixel dilation, into their scale and
@@ -5845,8 +5848,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `shade/sdf-sky.hlsli`, `SdfWorldPassRecorder`, `WorldRenderDefaults`,
      `tests/Puck.Parity`, `docs/rendering/sdf/handbook/frame-rendering.md`.
    - Done when: `SdfPassPlanLawTests` plans `sky` and `composite` after `views`;
-     a device law counts zero sky evaluations for a pixel that hits and one for
-     a pixel that misses (red leg: a hit pixel evaluated fails);
+     a device law counts zero field evaluations in the sky pass for a pixel
+     covered with all its neighbours and one for a pixel that misses;
+     a shader law requires the composite's fog and fallback evaluations to count;
      `SkyRunCompositionLawTests` hold the run composition to one ordered
      evaluation of the whole stack, on a CPU reference within a stated float
      tolerance, for stars beneath clouds and for a mixed stack (`over`, `add`,
@@ -5854,9 +5858,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      leg: composing the field runs before the point layers dims no star); a
      `sky-coverage` canary holds a silhouette edge's blend to the sky at its
      pixel; parity holds on both backends after its explained re-record.
-   - Counted-cost gate: `gpu.sky.evaluations` falls from (1 + L) × P to about
-     (1 − h) × P per view (see the expected wins), and every hit reads zero;
-     each field run's texels written are a row of their own under `sky`.
+   - Counted-cost gate: `gpu.sky.evaluations` includes about (1 − h) × P field
+     evaluations per view, the dilated edge, composite fallbacks and fog gradients
+     at output resolution. The committed ceilings require a recording that
+     includes the composite's fog work; each pass reports its own row.
 6. **P18-6, a cadence per pass.**
    - Landed foundation: the graph can retain private intermediate resources
      and leave a pass standing while its signature, extent, inputs and outputs
@@ -6088,11 +6093,11 @@ the rows P18-1 records. P is a view's render pixels (518,400 for a 1920 by 1080
 view at the floor tier's half scale), h the fraction of them that hit, and L the
 fraction in live tiles, at least h.
 
-- **Sky evaluations.** Before P18-5, (1 + L) × P per frame: every pixel in the
-  pre-pass and every live-tile pixel again in `views`, hits included. Since
-  P18-5, about (1 − h) × P plus the dilated edge. At h = 0.6 and L = 0.75, from 907,200 to
-  about 210,000, a fall of 77%. A hit reads zero sky evaluations instead of one
-  full sky and up to two gradients. A view that hits nothing is unchanged at P.
+- **Sky evaluations.** The sky pass evaluates about (1 − h) × P field runs plus
+  the dilated edge. Composite adds its in-place fallbacks and one gradient
+  evaluation per fogged output pixel. A covered pixel can therefore count a fog
+  gradient even when it needs no sky run. Cost comparisons include both passes;
+  a view that hits nothing and needs no fallback evaluates P field runs.
 - **Visual-only frames** (a drift, a twinkle, a camera-only keyed colour, an
   atmosphere edit, a moving volume). Today every pass the view runs: 7 SDF
   compute dispatches for a meshless view at the floor tier, 9 and the mesh draw

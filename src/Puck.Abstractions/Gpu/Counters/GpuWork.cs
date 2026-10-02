@@ -86,9 +86,10 @@ public static class GpuWork {
     /// visibility record. The kernels count it on the GPU, so it is per-backend-deterministic, as
     /// <see cref="MarchSteps"/> is.</summary>
     public static WorkKind TexelsWritten { get; } = new(name: "gpu.texels.written", unit: "count", workClass: WorkClass.PerBackendDeterministic);
-    /// <summary>Gets the kind counting the pixels a pass evaluates the sky's layer stack at: the sky pass counts each pixel it
-    /// evaluates the field runs for, where the pixel or a neighbour is not wholly covered. The kernels count it on the GPU, and
-    /// coverage comes from the march, so it is per-backend-deterministic, as <see cref="MarchSteps"/> is.</summary>
+    /// <summary>Gets the kind counting sky field evaluations: the sky pass's field runs, the composite's in-place field
+    /// runs when no tap is valid, and each gradient evaluation for surface fog. Fog and a field fallback at the same pixel
+    /// each count. The kernels count it on the GPU, and coverage comes from the march, so it is per-backend-deterministic,
+    /// as <see cref="MarchSteps"/> is.</summary>
     public static WorkKind SkyEvaluations { get; } = new(name: "gpu.sky.evaluations", unit: "count", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting compute and graphics pipelines created. A node's ledger counts the pipelines that
     /// node created; a backend's <see cref="GpuPipelineCacheWork"/> counts every pipeline its devices created.</summary>

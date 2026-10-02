@@ -68,6 +68,11 @@ bool sdfSkyPassRuns(uint2 pixel, out float3 base, out float3 scale, out float3 o
             int3 tap = int3(clamp((origin + corner), int2(0, 0), (grid - 1)), 0);
             float4 runBase = skyBase.Load(tap);
 
+            // Only the base is written for an invalid tap. Do not load its unwritten scale or offset: multiplying an
+            // undefined value by zero does not exclude it from the filter (zero times NaN is still NaN).
+            if (runBase.a <= 0.0) {
+                continue;
+            }
             weight *= runBase.a;
             base += (weight * runBase.rgb);
             scale += (weight * skyScale.Load(tap).rgb);

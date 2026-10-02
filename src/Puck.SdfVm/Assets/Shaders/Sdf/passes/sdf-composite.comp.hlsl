@@ -6,7 +6,7 @@
 //   disc and the stars) evaluated here at the pixel, then the cloud run's scale and offset, and the lit color over the
 //   result by its coverage. The field runs are read from the grid the sky evaluated them on, filtered over the texels it
 //   evaluated; where it evaluated none beside the pixel, the composite evaluates them here and counts the evaluation. A
-//   wholly covered pixel reads no run and evaluates no layer.
+//   wholly covered pixel reads no run; its fog gradient still evaluates and counts when the fog density is positive.
 // - The bounded volumes composite last, clipped to the span from the camera's near plane to the surface's ray distance,
 //   or to the far distance on a miss, so a medium never paints through solid geometry.
 // A debug view's lit image is its whole picture, so it passes through.
@@ -28,10 +28,11 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float3 direction = sdfSkyPassDirection(view, id.xy);
         float t = sdfSkyPassSurfaceDistance(id.xy);
 
-        if ((litColor.a > 0.0) && (t > 0.0)) {
+        if ((litColor.a > 0.0) && (t > 0.0) && (sdfSky[0].FogDensity > 0.0)) {
             float fog = (1.0 - exp(-sdfSky[0].FogDensity * t));
 
             color = lerp(color, (sdfSkyGradient(direction) * litColor.a), fog);
+            evaluations += 1u;
         }
         if (litColor.a < 1.0) {
             float3 sky;
@@ -40,8 +41,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
             if (!sdfSkyPassRuns(id.xy, sky, scale, offset)) {
                 sky = sdfSkyGradient(direction);
+                evaluations += 1u;
                 sdfSkyCloudRun(direction, scale, offset);
-                evaluations = 1u;
             }
             sky += sdfSkyPoints(direction);
             sky = ((scale * sky) + offset);
