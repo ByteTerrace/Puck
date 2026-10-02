@@ -16,6 +16,16 @@ public static class SdfWallpaperFold {
     /// the reciprocal, so it bounds that product: a point as far out as 3e20 still rounds to a finite cell index, far
     /// past where a float point resolves a cell, including under an outer scale that enlarges the point a millionfold.</summary>
     public const float MaximumInverseCell = 1.0e18f;
+    /// <summary>The farthest fold-plane coordinate a hex fold reads, per axis: a point beyond it folds as the point on
+    /// that bound. The reduction multiplies the point by the pitch's reciprocals, which <see cref="CellRefusal"/> holds
+    /// to at most <see cref="MaximumInverseCell"/> (1e18) each, so within this bound (1e19) the second axial
+    /// coordinate is at most 1e37, the first at most 8.7e36 + 0.5e37 = 1.4e37, and the third, -(a + b), the largest, at
+    /// most 2.4e37: under float's finite range of 3.4e38 with a fourteenfold margin, for every cell the fold admits.
+    /// Beyond it the sums overflow to infinity and the rounding then takes infinity from infinity. It is a clamp of the
+    /// point, which leaves no two points farther apart, so it keeps the fold continuous and distance-preserving. A float
+    /// point resolves a cell nowhere near this far out. The kernel's <c>SDF_WALLPAPER_HEX_COORDINATE_MAX</c> is this
+    /// value.</summary>
+    public const float MaximumHexCoordinate = 1.0e19f;
 
     private const float Sqrt3 = 1.7320508f;
 
@@ -44,6 +54,12 @@ public static class SdfWallpaperFold {
                 : (1f / cell.Y))
         );
     }
+    /// <summary>Whether <paramref name="limit"/> leaves the lattice without an edge: either axis at
+    /// <see cref="UnboundedLimit"/>. Such a fold has copies at every distance, so its influence has no bound, and every
+    /// reader of the limit takes this one answer for it rather than the sentinel as a number of cells.</summary>
+    /// <param name="limit">The cell-index limit per lattice axis.</param>
+    /// <returns><see langword="true"/> when the fold's influence is unbounded.</returns>
+    public static bool IsUnbounded(Vector2 limit) => ((limit.X >= UnboundedLimit) || (limit.Y >= UnboundedLimit));
     /// <summary>Returns why <paramref name="cell"/> cannot be a <paramref name="group"/> fold's cell, or
     /// <see langword="null"/> when it can: the extents the group reads (X for every group, and Y for a square group, since
     /// a hex lattice is set by its pitch alone) are positive and finite, and their reciprocals (<see cref="InverseCell"/>)
@@ -159,6 +175,7 @@ public static class SdfWallpaperFold {
     }
 
     private static Vector2 FoldHex(Vector2 q, SdfWallpaperGroup group, float pitch, Vector2 inversePitch, out Vector2 cellIndex) {
+        q = Vector2.Clamp(max: new Vector2(value: MaximumHexCoordinate), min: new Vector2(value: -MaximumHexCoordinate), value1: q);
         var axialB = (q.Y * inversePitch.Y);
         var axialA = ((q.X * inversePitch.X) - (0.5f * axialB));
         var axialC = -(axialA + axialB);

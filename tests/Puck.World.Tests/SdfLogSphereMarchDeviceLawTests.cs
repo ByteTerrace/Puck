@@ -72,6 +72,23 @@ public sealed class SdfLogSphereMarchDeviceLawTests {
                 yield return new MarchCase($"{group} folds {point} as the CPU fold does", MarchMode.Field, point, Vector3.UnitX, program, ((expected - 1.0e-4f), (expected + 1.0e-4f)));
             }
         }
+        // A hex fold far past its coordinate bound: world (-3, 0, 3) reaches the fold as (-3e20, 3e20), where the axial
+        // sums overflowed to infinity before the kernel clamped the point (SDF_WALLPAPER_HEX_COORDINATE_MAX). The five
+        // scales and the one after the fold cancel, so a finite fold leaves the unit sphere's field at -1 to float precision.
+        yield return new MarchCase("a hex fold far past its coordinate bound reads a finite field", MarchMode.Field, new Vector3(x: -3f, y: 0f, z: 3f), Vector3.UnitX, FarHexProgram(), (-1.001f, -0.999f));
+    }
+    private static SdfProgram FarHexProgram() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        for (var scale = 0; (scale < 5); scale++) {
+            _ = builder.Scale(scale: new Vector3(value: 1.0e-4f));
+        }
+        _ = builder.WallpaperFold(cell: new Vector2(value: 1.2e-18f), group: SdfWallpaperGroup.P6M, limit: new Vector2(value: SdfWallpaperFold.UnboundedLimit))
+            .Scale(scale: new Vector3(value: 1.0e20f))
+            .Sphere(material: material, radius: 1f);
+
+        return builder.Build();
     }
 
     [Fact]

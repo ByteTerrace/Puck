@@ -229,7 +229,10 @@ These are one-line cautions; the owning pages hold the derivations.
   places through one statement (`SdfWallpaperFold.LimitRefusal` and
   `CellRefusal`: the builder, `SdfProgram` admission, the creation
   canonicalizer): a square limit is whole, a hex group takes the unbounded
-  limit and no clamp, and `Data0.zw` is exactly `InverseCell`.
+  limit and no clamp, and `Data0.zw` is exactly `InverseCell`. A fold with an
+  unbounded limit (`SdfWallpaperFold.IsUnbounded`, one axis at the sentinel) has
+  no bound: `SdfProgram.HasUnmaskableInfluence` and `ShapeDomainOps.Reach` both
+  answer it, with `SdfProgram.UnmaskableBoundRadius`, never a number of cells.
 
 ## Prototype bakes
 

@@ -83,6 +83,7 @@ public sealed partial class SdfProgram {
     /// <summary>Each packed <see cref="SdfShapeType.Sweep"/> curve table entry's uvec4 stride: (A.xyz, radiusStart),
     /// (B.xyz, radiusEnd), (C.xyz, bulge).</summary>
     private const int SweepCurveVectorsPerEntry = 3;
+
     /// <summary>The UNMASKABLE-instance sentinel radius: an instance carrying an unbounded shape or compose
     /// (<see cref="HasUnmaskableInfluence"/>) packs this instead of a real bound, so the beam prepass's sphere-vs-cone
     /// test <c>axisDistance &lt;= (radius + chord*alongRay) * inverseAperture</c> passes for every tile and the instance
@@ -93,7 +94,8 @@ public sealed partial class SdfProgram {
     /// within 20 decades of it. Needs no shader change: the existing cull arithmetic already always admits it, and it is
     /// non-negative so neither the parked-slot skip in <c>collectInstanceMaskWord</c> nor the one in
     /// <c>sdfNextVisibleInstanceRange</c> misfires.</para></summary>
-    private const float UnmaskableBoundRadius = 1.0e30f;
+    public const float UnmaskableBoundRadius = 1.0e30f;
+
     private const int WordsPerVector = 4;
 
     private readonly bool m_buildInstanceGrid;
@@ -1010,6 +1012,15 @@ public sealed partial class SdfProgram {
             if (
                 (instruction.Op == SdfOp.ShapeBlend) &&
                 (((SdfShapeType)instruction.Shape) == SdfShapeType.Plane)
+            ) {
+                return true;
+            }
+
+            // A wallpaper fold with an unbounded limit repeats its prototype over a lattice with no edge, at any depth of
+            // scope: its copies stand at every distance, so no finite bound contains it (SdfWallpaperFold.IsUnbounded).
+            if (
+                (instruction.Op == SdfOp.WallpaperFold) &&
+                SdfWallpaperFold.IsUnbounded(limit: new Vector2(x: instruction.Data1.X, y: instruction.Data1.Y))
             ) {
                 return true;
             }

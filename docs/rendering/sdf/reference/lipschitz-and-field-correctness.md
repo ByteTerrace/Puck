@@ -137,7 +137,13 @@ unless it is positive and finite and its reciprocal is at most
 `SdfWallpaperFold.MaximumInverseCell`, which keeps the round finite at any point
 a float resolves a cell. The builder, `SdfProgram` admission and the creation
 canonicalizer state each rule once, through `LimitRefusal` and `CellRefusal`.
-`SdfWallpaperFoldLawTests` folds pairs across every cell wall of finite,
+A fold whose limit is unbounded (`SdfWallpaperFold.IsUnbounded`) has copies at every
+distance, so its influence has no bound: its instance packs the unmaskable
+sentinel and the stamper's reach for it is that sentinel, where a million cells of
+a small pitch would be a radius a camera can leave behind. The hex reduction
+clamps its fold-plane point to `MaximumHexCoordinate` before the multiply, which
+keeps every axial sum within float's finite range for any cell the rule admits and
+leaves the fold continuous. `SdfWallpaperFoldLawTests` folds pairs across every cell wall of finite,
 fractional and unbounded limits and of cells from ten micro-units to three
 thousand, and holds every configuration a builder accepts to the same stretch.
 

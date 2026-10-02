@@ -183,8 +183,9 @@ public static class ShapeDomainOps {
     /// repeat lattice reaches its per-axis limit times its spacing, unaffected by its own origin (a repeat's fold is
     /// a pure translation, so its physical copies sit at the same offsets from the shape's own position regardless
     /// of where cell selection centres — only a polar fold's rotation pivot moves the copies, by twice the pivot's
-    /// distance from the creation origin); a wallpaper lattice reaches its per-axis limit times its spacing (an
-    /// unbounded limit yields a bound far past any camera, disabling the cull rather than lying to it).</summary>
+    /// distance from the creation origin); a wallpaper lattice reaches its per-axis limit times its spacing, and one with
+    /// an unbounded limit (<see cref="SdfWallpaperFold.IsUnbounded"/>) has no bound at all: it answers
+    /// <see cref="SdfProgram.UnmaskableBoundRadius"/>, the program's own mark for an influence nothing contains.</summary>
     /// <param name="domain">The shape's domain ops, or null/empty for 0.</param>
     /// <returns>The displacement bound, creation units.</returns>
     public static float Reach(IReadOnlyList<ShapeDomainOp>? domain) {
@@ -212,6 +213,11 @@ public static class ShapeDomainOps {
         static float WallpaperReach(ShapeDomainOp.Wallpaper wallpaper) {
             var cell = wallpaper.Cell.Value;
             var limit = (wallpaper.Limit?.Value ?? new Vector2(value: SdfWallpaperFold.UnboundedLimit));
+
+            // A lattice with no edge has copies at every distance: no bound, the program's own sentinel for one.
+            if (SdfWallpaperFold.IsUnbounded(limit: limit)) {
+                return SdfProgram.UnmaskableBoundRadius;
+            }
 
             return ((wallpaper.Group >= SdfWallpaperGroup.P3)
                 ? ((cell.X * (limit.X + limit.Y)) * HexDiagonal)

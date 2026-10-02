@@ -164,6 +164,91 @@ public sealed class SdfWallpaperFoldLawTests {
         return new SdfProgram(program.Instructions.Select(selector: instruction => ((instruction.Op == SdfOp.WallpaperFold) ? tamper(instruction) : instruction)).ToArray(), [new SdfMaterial(Albedo: Vector3.One)]);
     }
 
+    // A unit sphere in a P6M lattice of 0.001 cells with no limit, inside an instance bounded at 23.51: the unbounded
+    // fold has copies at every distance, so the instance packs the program's unmaskable sentinel and is never culled
+    // by radius, where the authored radius would drop the surface at (30, 0, 0) from a camera at (30, 1, 0).
+    [Fact]
+    public void AnUnboundedFoldPacksTheUnmaskableBoundWhateverItsInstanceRadius() {
+        foreach (var (group, cell, limit) in new[] {
+            (SdfWallpaperGroup.P6M, new Vector2(value: 0.001f), new Vector2(value: SdfWallpaperFold.UnboundedLimit)),
+            (SdfWallpaperGroup.Pmm, new Vector2(x: 1f, y: 0.8f), new Vector2(x: SdfWallpaperFold.UnboundedLimit, y: 2f)),
+            (SdfWallpaperGroup.Pmm, new Vector2(x: 1f, y: 0.8f), new Vector2(x: 2f, y: SdfWallpaperFold.UnboundedLimit)),
+        }) {
+            var cost = Instance(cell: cell, group: group, limit: limit, radius: 23.51f);
+
+            Assert.True(condition: cost.Unmaskable, userMessage: $"{group} {limit}");
+            Assert.Equal(expected: SdfProgram.UnmaskableBoundRadius, actual: cost.BoundRadius);
+        }
+    }
+    [Fact]
+    public void AFiniteFoldKeepsItsInstanceBoundAndStaysCullable() {
+        var cost = Instance(group: SdfWallpaperGroup.P4M, cell: Vector2.One, limit: new Vector2(value: 2f), radius: 23.51f);
+
+        Assert.False(condition: cost.Unmaskable);
+        Assert.InRange(actual: cost.BoundRadius, low: 23.51f, high: 24f);
+    }
+    [Fact]
+    public void AnUnboundedLimitIsEitherAxisAtTheSentinel() {
+        Assert.True(condition: SdfWallpaperFold.IsUnbounded(limit: new Vector2(value: SdfWallpaperFold.UnboundedLimit)));
+        Assert.True(condition: SdfWallpaperFold.IsUnbounded(limit: new Vector2(x: SdfWallpaperFold.UnboundedLimit, y: 0f)));
+        Assert.True(condition: SdfWallpaperFold.IsUnbounded(limit: new Vector2(x: 0f, y: SdfWallpaperFold.UnboundedLimit)));
+        Assert.False(condition: SdfWallpaperFold.IsUnbounded(limit: new Vector2(value: (SdfWallpaperFold.UnboundedLimit - 1f))));
+    }
+    // P6M with pitch 1.2e-18 passes the cell rule, with reciprocals near (8.3e17, 9.6e17): at the fold-plane point
+    // (-3e20, 3e20) the first axial coordinate was -2.5e38 - 1.44e38, which overflowed float to -Infinity (reached through
+    // five Scale(1e-4), the fold, Scale(1e20) and a sphere). A point beyond MaximumHexCoordinate folds as the point on it.
+    [Fact]
+    public void AHexFoldFarPastTheCoordinateBoundFoldsAsThePointOnIt() {
+        var limit = new Vector2(value: SdfWallpaperFold.UnboundedLimit);
+
+        foreach (var (group, pitch) in new[] { (SdfWallpaperGroup.P6M, 1.2e-18f), (SdfWallpaperGroup.P3M1, 1.16e-18f), (SdfWallpaperGroup.P6M, 1f) }) {
+            var cell = new Vector2(value: pitch);
+
+            Assert.Null(@object: SdfWallpaperFold.CellRefusal(cell: cell, group: group));
+
+            foreach (var far in new[] { new Vector2(x: -3.0e20f, y: 3.0e20f), new Vector2(x: 3.0e20f, y: -3.0e20f), new Vector2(x: float.MaxValue, y: -float.MaxValue) }) {
+                var folded = SdfWallpaperFold.Fold(cell: cell, cellIndex: out var index, group: group, limit: limit, point: far);
+                var bound = SdfWallpaperFold.MaximumHexCoordinate;
+                var onBound = SdfWallpaperFold.Fold(cell: cell, cellIndex: out var boundIndex, group: group, limit: limit, point: new Vector2(x: (MathF.Sign(x: far.X) * bound), y: (MathF.Sign(x: far.Y) * bound)));
+
+                Assert.True(condition: (float.IsFinite(f: folded.X) && float.IsFinite(f: folded.Y) && float.IsFinite(f: index.X) && float.IsFinite(f: index.Y)), userMessage: $"{group} pitch {pitch} at {far}: {folded}, cell {index}");
+                Assert.Equal(actual: folded, expected: onBound);
+                Assert.Equal(actual: index, expected: boundIndex);
+            }
+        }
+    }
+    // The witness chain the device law reads on the GPU: five Scale(1e-4), P6M of pitch 1.2e-18, Scale(1e20) and a unit sphere.
+    // World (-3, 0, 3) reaches the fold as (-3e20, 3e20), and the sphere's field is its radius below zero wherever the
+    // fold is finite, since Scale(1e-4) five times and Scale(1e20) cancel.
+    [Fact]
+    public void TheFarHexWitnessProgramBuildsWithTheFoldPlanePointPastTheBound() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        for (var scale = 0; (scale < 5); scale++) {
+            _ = builder.Scale(scale: new Vector3(value: 1.0e-4f));
+        }
+        _ = builder.WallpaperFold(cell: new Vector2(value: 1.2e-18f), group: SdfWallpaperGroup.P6M, limit: new Vector2(value: SdfWallpaperFold.UnboundedLimit))
+            .Scale(scale: new Vector3(value: 1.0e20f))
+            .Sphere(material: material, radius: 1f);
+
+        var program = builder.Build();
+
+        Assert.True(condition: float.IsFinite(f: program.StepScale));
+        Assert.True(condition: ((3.0f / (MathF.Pow(x: 1.0e-4f, y: 5f))) > SdfWallpaperFold.MaximumHexCoordinate));
+    }
+
+    private static SdfInstanceCost Instance(SdfWallpaperGroup group, Vector2 cell, Vector2 limit, float radius) {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: radius);
+        _ = builder.WallpaperFold(cell: cell, group: group, limit: limit).Sphere(material: material, radius: 1f);
+        _ = builder.EndInstance();
+
+        return builder.Build().InspectInstance(index: 0);
+    }
+
     [Fact]
     public void AProgramRefusesTheOffCentreP2Lattice() {
         // Four-unit cells whose sphere sits at the cell's x = 1: from x = -1.75 the folded field reads cell 0's copy 2.5

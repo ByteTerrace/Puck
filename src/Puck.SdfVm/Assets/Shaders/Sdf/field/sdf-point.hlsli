@@ -101,7 +101,12 @@ float sdfFloorMod(float x, float y) {
 // with mirrors along the corner directions (P3m1), the edge directions (P31m), or both (P6m). All rotations/mirrors
 // are written as EXPLICIT component expressions (no float2x2) so no row/column convention can flip a fold.
 // inversePitch = (1/pitch, 2/(√3·pitch)), baked HOST-SIDE by SdfProgramBuilder.WallpaperFold (data0.zw).
+// SYNC with SdfWallpaperFold.MaximumHexCoordinate, which derives it: with a reciprocal of at most 1e18 the axial sums stay
+// under float's finite range for every point within it, so a point beyond it folds as the point on this bound, per axis.
+#define SDF_WALLPAPER_HEX_COORDINATE_MAX 1.0e19
+
 float2 sdfWallpaperFoldHexCell(float2 q, uint group, float pitch, float2 inversePitch, out float2 cellIndex) {
+    q = clamp(q, -SDF_WALLPAPER_HEX_COORDINATE_MAX, SDF_WALLPAPER_HEX_COORDINATE_MAX);
     float axialB = (q.y * inversePitch.y);
     float axialA = ((q.x * inversePitch.x) - (0.5 * axialB));
     float axialC = -(axialA + axialB);

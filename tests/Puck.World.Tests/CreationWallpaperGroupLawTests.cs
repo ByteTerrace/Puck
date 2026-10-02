@@ -54,6 +54,25 @@ public sealed class CreationWallpaperGroupLawTests {
             _ = CreationCanonicalizer.Canonicalize(document: Wallpaper(group: group, limit: limit));
         }
     }
+    // The stamper adds a domain's reach to a shape's render bound: a lattice with no edge has no reach to add, and
+    // answers the program's own sentinel for an influence nothing contains, where 1e6 cells of 0.001 is a radius a
+    // camera 30 units away can leave behind.
+    [Fact]
+    public void AnUnboundedWallpaperReachesAsFarAsNothingContains() {
+        ShapeDomainOp[] unbounded = [
+            new ShapeDomainOp.Wallpaper(Cell: new Vector2(value: 0.001f), Group: SdfWallpaperGroup.P6M),
+            new ShapeDomainOp.Wallpaper(Cell: new Vector2(value: 1f), Group: SdfWallpaperGroup.Pmm, Limit: new Vector2(x: SdfWallpaperFold.UnboundedLimit, y: 2f)),
+        ];
+
+        foreach (var op in unbounded) {
+            Assert.Equal(expected: SdfProgram.UnmaskableBoundRadius, actual: ShapeDomainOps.Reach(domain: [op]));
+        }
+        Assert.InRange(
+            actual: ShapeDomainOps.Reach(domain: [new ShapeDomainOp.Wallpaper(Cell: new Vector2(value: 1f), Group: SdfWallpaperGroup.P4M, Limit: new Vector2(value: 2f))]),
+            low: 1f,
+            high: 4f
+        );
+    }
     [Fact]
     public void ACellTooSmallToInvertIsRefusedAtTheCell() {
         var document = Wallpaper(group: SdfWallpaperGroup.Pmm, cell: new Vector2(value: 1.0e-19f));
