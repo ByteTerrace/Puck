@@ -61,8 +61,8 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
         FoldCompletions();
     }
 
-    // A successful install, reload or resize: submissions still in flight were completed by the install's drain, so
-    // nothing recorded under the old graph remains to publish, and the new passes count under a new revision.
+    // A successful install, reload or resize withdraws old counters without draining in-flight submissions. Their
+    // render completions remain pending independently, and the new passes count under a new revision.
     private void ConfigureWork() {
         m_work.Invalidate();
         m_revision++;

@@ -1321,6 +1321,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             slot.Fence?.Dispose();
             slot.Fence = null;
         }
+        Array.Clear(array: m_pendingRenders);
         m_passes = [];
         m_resources = [];
         m_resourceLookup = new Dictionary<string, RuntimeResource>(comparer: StringComparer.Ordinal);
@@ -1717,6 +1718,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             fence: slot.Fence!
         );
         NoteRenderGrid();
+        NoteRenderCompletion(fence: slot.Fence!, slot: slotIndex);
         CommitCadenceFrame();
         SubmitPackageReadbacks(fence: slot.Fence!, slot: slotIndex);
         SubmitTiming(fence: slot.Fence!, slot: slotIndex);

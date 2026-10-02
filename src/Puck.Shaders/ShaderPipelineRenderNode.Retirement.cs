@@ -330,6 +330,8 @@ public sealed partial class ShaderPipelineRenderNode {
     // Records that the node waited on, or found signaled, a slot's fence: when it is the first submission's, that
     // submission has completed.
     private void NoteWaited(IGpuSubmissionFence fence) {
+        CompleteRenderFence(fence: fence);
+
         if (ReferenceEquals(
             objA: fence,
             objB: m_firstSubmission

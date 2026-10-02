@@ -1950,7 +1950,9 @@ nothing and never decides freshness. Present association reads each node's
 `TakeCompletions`, the summary of every render completed since its last read,
 never the newest submission alone. The runtime polls a standing node's
 readbacks only while it `OwesReadbacks` (`RenderGraphRuntime.ReadbackPolls`
-counts the polls). Timing runs under `WorldGpuTiming.Require`
+counts the polls). Pending render completion fences survive an install's
+counter invalidation; device loss drops renders whose completion is unobserved.
+Timing runs under `WorldGpuTiming.Require`
 (the operator's `world.gpu-timing` demand and the controller's are one
 demand), and the step budget comes from the embedded `counters.ceilings.json`,
 so `puck counters --record` moves the budget. Run

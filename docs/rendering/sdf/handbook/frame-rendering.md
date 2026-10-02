@@ -237,7 +237,9 @@ and timestamps each frame, so its final submission becomes readable when its
 fence signals; a view that owes nothing is not polled at all. A present
 interval names no frame, so each view's node also keeps a summary of every
 render completed since it was last read, and an interval counts only when every
-view's summary names the current grid. When the budget lies between two
+view's summary names the current grid. Render completion fences survive an
+install's counter invalidation; device loss drops renders whose completion is
+unobserved. When the budget lies between two
 adjacent grids, the controller settles on the cheaper one rather than
 alternating: a sample over the budget marks its grid, and the grid rises onto
 the mark only once a sample, compared exactly against the budget, predicts it
