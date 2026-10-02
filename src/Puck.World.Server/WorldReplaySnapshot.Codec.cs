@@ -387,11 +387,7 @@ public sealed partial class WorldReplaySnapshot {
                 w.WriteInt32(value: seat.Slot);
                 w.WriteOptional(
                     value: seat.Profile,
-                    writeValue: static (pinWriter, pin) => {
-                        pinWriter.WriteString(value: pin.Name);
-                        pinWriter.WriteNullableFixed(value: pin.MoveSpeed);
-                        pinWriter.WriteNullableFixed(value: pin.TurnSpeed);
-                    }
+                    writeValue: WorldAuthorityCheckpointCodec.WriteIdentityProjection
                 );
             }
         );

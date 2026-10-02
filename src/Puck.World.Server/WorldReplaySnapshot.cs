@@ -8,25 +8,12 @@ using Puck.World.Server;
 
 namespace Puck.World;
 
-/// <summary>The profile a seat was seated on at record-start: its catalog name, plus the locomotion rates the recorded
-/// run actually integrated with. The rates are pinned because they are simulation input — <c>WorldBody.Advance</c> reads
-/// them off the seated handle every frame — and they are pinned as the simulation's own <see cref="FixedQ4816"/> values,
-/// so a re-drive consumes the recorded number rather than one re-derived from a float. Nothing about the profile that
-/// only presentation reads is here: not the color or portable seat-look preference, which the client applies before intent
-/// production, upstream of the link, so a recorded intent already carries it.</summary>
-/// <param name="Name">The profile the seat was seated on.</param>
-/// <param name="MoveSpeed">The pinned locomotion rate (<see cref="WorldIdentity.FixedMoveSpeed"/> as recorded —
-/// <see langword="null"/> pins an identity that claimed no rate, so the re-drive falls back to the kit's rate the
-/// same way the live run did).</param>
-/// <param name="TurnSpeed">The pinned angular rate (<see cref="WorldIdentity.FixedTurnSpeed"/> as recorded).</param>
-public readonly record struct WorldReplayProfilePin(string Name, FixedQ4816? MoveSpeed, FixedQ4816? TurnSpeed);
 /// <summary>One local seat active at record-start — the seat slice of the captured starting state, re-joined into the
 /// replay's fresh world so its body exists to receive the recorded intent stream.</summary>
 /// <param name="Slot">The 0-based seat slot.</param>
 /// <param name="Profile">The seat's pinned profile, or <see langword="null"/> for a profileless seat. One nullable
-/// carries both the name and the rates deliberately: they are present or absent together, so there is no shape where a
-/// seat has a name but no pinned rates for a reader to have to rule on.</param>
-public readonly record struct WorldReplaySeat(int Slot, WorldReplayProfilePin? Profile);
+/// carries the same identity projection the population checkpoint resumes, including its stable id and records.</param>
+public readonly record struct WorldReplaySeat(int Slot, WorldIdentityProjection? Profile);
 /// <summary>One captured authority input — the closed, discriminated set of synchronous writes that cross
 /// <see cref="IServerLink"/> inside a tick's command-apply window. One ordered stream rather than a list per kind,
 /// because the live order between a driving command and a grant change is stdin FIFO and position-within-tick is the
@@ -227,7 +214,7 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// the handle by <c>WorldBody.Advance</c> every frame, which makes them simulation input — and they reach the catalog
 /// through <c>SetPlayerSection</c>, which never crosses the <see cref="WorldCommand"/>/grant/revoke union the tick
 /// stream records, so an edit to them is structurally invisible to that stream. Each <see cref="WorldReplaySeat"/>
-/// therefore carries the rates its profile actually ran at (<see cref="WorldReplayProfilePin"/>, in raw fixed-point),
+/// therefore carries the projection its profile actually ran with (<see cref="WorldIdentityProjection"/>, with raw fixed-point rates),
 /// and <see cref="Drive"/> seats its bodies on those rather than on whatever the live catalog now holds. That makes a
 /// re-drive hermetic with respect to the catalog: an <c>identity.motion</c> between record and verify no longer moves the
 /// replayed trajectory. When the live values have moved, <see cref="Drive"/> says so on stderr — naming the profile,
@@ -277,7 +264,7 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// compatibility reader.</para>
 /// <para><b>Public, not <c>internal</c> behind an <c>InternalsVisibleTo</c> grant</b> (widen the member, not the
 /// assembly) — every instance member here was already <c>public</c>; only the class declaration
-/// (and <see cref="WorldReplaySeat"/>/<see cref="WorldReplayProfilePin"/>/<see cref="WorldReplayTickInput"/>/the
+/// (and <see cref="WorldReplaySeat"/>/<see cref="WorldIdentityProjection"/>/<see cref="WorldReplayTickInput"/>/the
 /// <see cref="WorldReplayEntry"/> base it composes with) had not caught up. Widened so
 /// <c>tests/Puck.World.Tests</c> — which reads this surface directly per its own documented no-IVT/no-reflection
 /// convention — can exercise <see cref="ResolveStepWidth"/> without a grant.</para>
@@ -285,10 +272,9 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
     // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
-    // Shape 5 carries the recorded authority and its document paths, the companion tapes of a set, departures by
-    // target authority, arrivals, and federated input. Refuse earlier tapes at intake instead of reporting their old
-    // shape as a simulation divergence.
-    private const uint ShapeToken = 5u;
+    // Shape 6 carries each starting seat's full identity projection alongside the authority, companion tapes,
+    // departures, arrivals and federated input. Refuse other shapes at intake.
+    private const uint ShapeToken = 6u;
 
     /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
     /// tapes pairs one authority's departure with another's arrival.</summary>
@@ -570,10 +556,8 @@ public sealed partial class WorldReplaySnapshot {
             );
             population.SetSeatProfile(
                 slot: seat.Slot,
-                profile: WorldIdentity.Pinned(
-                    name: pin.Name,
-                    moveSpeed: pin.MoveSpeed,
-                    turnSpeed: pin.TurnSpeed,
+                profile: WorldIdentity.FromProjection(
+                    projection: pin,
                     defaults: definition.PlayerDefaults
                 )
             );
@@ -943,17 +927,9 @@ public sealed partial class WorldReplaySnapshot {
 
         return (entries, grants);
     }
-    private static WorldReplayProfilePin? ReadProfilePin(ref WireReader reader) => reader.ReadOptional(readValue: static (ref WireReader r) => {
-        var name = r.ReadString(field: "seat profile name");
-        var moveSpeed = r.ReadNullableFixed();
-        var turnSpeed = r.ReadNullableFixed();
-
-        return new WorldReplayProfilePin(
-            MoveSpeed: moveSpeed,
-            Name: name,
-            TurnSpeed: turnSpeed
-        );
-    });
+    private static WorldIdentityProjection? ReadProfilePin(ref WireReader reader) => reader.ReadOptional(
+        readValue: static (ref WireReader r) => WorldAuthorityCheckpointCodec.ReadIdentityProjection(reader: ref r)
+    );
     private static WorldQuery ReadQueryLeaf(ref WireReader reader) => ReadLeaf<WorldQuery>(
         reader: ref reader,
         tryDecode: WorldSubmissionCodec.TryDecodeQuery,
@@ -1126,7 +1102,7 @@ public sealed partial class WorldReplaySnapshot {
     // Reports a live/pinned rate drift without refusing: a drifted profile is a perfectly replayable recording, so
     // nothing here throws. Without this, an operator who edited a profile between record and verify would see a
     // MATCH with no way to tell a profile edit from a genuine determinism regression.
-    private static void ReportProfileDrift(WorldOwnedWorlds profiles, WorldReplayProfilePin pin) {
+    private static void ReportProfileDrift(WorldOwnedWorlds profiles, WorldIdentityProjection pin) {
         if (profiles.Find(name: pin.Name) is not { } live) {
             // Drift all the way to absent. The re-drive is unaffected — the pinned handle needs no catalog entry — but
             // an operator reading a MATCH for a profile that no longer exists deserves to be told why it still ran.

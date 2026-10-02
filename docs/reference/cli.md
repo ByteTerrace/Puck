@@ -1702,7 +1702,8 @@ pose, arena, host-owned rows, declarations, topologies, latches, rule groups,
 decisions, board enforcement, body action state, body continuation, navigation,
 flocks and search), then the population pose hash, then the authoritative state
 hash the replay tape verifies. Body continuation is every active body's
-checkpoint entry in the checkpoint's own bytes, so two runs whose bodies share a
+simulation checkpoint fields in the checkpoint's own encoding, excluding rendered
+color and rig, so two runs whose bodies share a
 pose but differ in a velocity, a remainder or a timer diverge at that tick. The aggregates come last, so
 the first differing hash of a tick names the system that split.
 

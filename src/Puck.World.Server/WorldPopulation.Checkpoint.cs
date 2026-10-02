@@ -5,10 +5,10 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
-    /// <summary>Folds every active slot's checkpoint entry, in the checkpoint codec's own bytes, into a state hash: the
-    /// whole continuation a restore would resume, so state the pose hash does not read (a velocity, an integration
-    /// remainder, a channel timer) still separates two runs. Called where <see cref="Capture"/> may be, between a
-    /// completed step and the next. It writes the entries' checkpoint image, which allocates; the authoritative hash
+    /// <summary>Folds every active slot's simulation continuation through the checkpoint's field codecs, excluding
+    /// rendered color and rig, so state the pose hash does not read (a velocity, an integration remainder, a channel
+    /// timer) still separates two runs. Called where <see cref="Capture"/> may be, between a
+    /// completed step and the next. Encoding the simulation fields allocates; the authoritative hash
     /// that folds it is taken while a replay records or verifies and when a console or attestation asks, never by an
     /// ordinary tick.</summary>
     /// <param name="hash">The hash to fold into.</param>
@@ -60,6 +60,11 @@ public sealed partial class WorldPopulation {
             foreach (var key in entry.AdmissionRevokedKeys) {
                 revokedKeys.Add(item: (key.Capability, key.Subject));
             }
+            revokedKeys.Sort(comparison: static (left, right) => {
+                var capability = Comparer<WorldCapability>.Default.Compare(x: left.Item1, y: right.Item1);
+
+                return ((capability != 0) ? capability : WorldGrants.CompareSubjects(a: left.Item2, b: right.Item2));
+            });
 
             var residue = body.CaptureIntegrationResidue();
             var contactFieldObservationCurrent = (residue.LastContactFieldVersion == ContactFieldVersion);

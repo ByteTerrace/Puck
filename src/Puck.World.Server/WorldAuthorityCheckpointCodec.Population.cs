@@ -20,8 +20,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
 
-    /// <summary>Folds population checkpoint entries into a state hash in exactly the bytes a checkpoint writes them in,
-    /// so the hash covers what a restore resumes and moves only when the encoding does.</summary>
+    /// <summary>Folds population continuation through the checkpoint's field codecs, excluding rendered appearance.</summary>
     /// <param name="hash">The hash to fold into.</param>
     /// <param name="entries">The entries, in slot order.</param>
     internal static void AppendPopulationEntries(ref Fnv1aHash hash, IReadOnlyList<WorldPopulationEntryCheckpoint> entries) {
@@ -29,16 +28,20 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         writer.WriteArray(
             items: entries,
-            writeItem: WritePopulationEntry
+            writeItem: static (w, entry) => WritePopulationEntry(entry: entry, includeAppearance: false, writer: w)
         );
         hash.Add(values: writer.WrittenSpan);
     }
 
-    private static void WritePopulationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry) {
+    private static void WritePopulationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry) =>
+        WritePopulationEntry(entry: entry, includeAppearance: true, writer: writer);
+    private static void WritePopulationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry, bool includeAppearance) {
         writer.WriteInt32(value: entry.Index);
         writer.WriteByte(value: entry.KitIndex);
-        writer.WriteVector(value: entry.BodyColor);
-        writer.WriteByte(value: entry.CatalogRig);
+        if (includeAppearance) {
+            writer.WriteVector(value: entry.BodyColor);
+            writer.WriteByte(value: entry.CatalogRig);
+        }
         writer.WriteArray(
             items: entry.Designations,
             writeItem: WriteTargetDesignation
