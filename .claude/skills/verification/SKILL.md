@@ -1,6 +1,6 @@
 ---
 name: verification
-description: Routes the verification of a Puck change and defines what a finished lane proves. Covers the gate route (`puck gate` when the CLI lists it), running gates from a private copy of the head's own CLI, ledgers and generated files checked with `--check`, `puck affected` against the lane's merge base, never testing binaries a failed build left behind, red legs proved by withholding the fix (`puck laws prove` when listed), GPU legs one at a time per GPU under a grant, and flake versus failure. Use before calling any change verified, before handing back or merging a lane, when writing, mutating, restoring or proving a law or canary, when running parity, canaries, GPU tests, docs checks or a process check for the GPU, when a gate fails, when judging whether one branch contains or was cut from another, and when writing a test that builds a scratch repository. Subsystem commands belong to their owners: maths-laws for the Maths law suite, gaming-bricks for the emulator batteries, rendering for GPU, parity and capture specifics, puck-world for World runs and stdin scripts. review-passes owns briefing and verifying a cross-family review-and-fix pass.
+description: Routes the verification of a Puck change and defines what a finished lane proves. Covers the gate route (`puck gate`), running gates from a private copy of the head's own CLI, ledgers and generated files checked with `--check`, `puck affected` against the lane's merge base, never testing binaries a failed build left behind, red legs proved by withholding the fix (`puck laws prove`), GPU legs one at a time per GPU under a grant, and flake versus failure. Use before calling any change verified, before handing back or merging a lane, when writing, mutating, restoring or proving a law or canary, when running parity, canaries, GPU tests, docs checks or a process check for the GPU, when a gate fails, when judging whether one branch contains or was cut from another, and when writing a test that builds a scratch repository. Subsystem commands belong to their owners: maths-laws for the Maths law suite, gaming-bricks for the emulator batteries, rendering for GPU, parity and capture specifics, puck-world for World runs and stdin scripts. review-passes owns briefing and verifying a cross-family review-and-fix pass.
 ---
 
 # Verification
@@ -16,16 +16,19 @@ same change. The user's current instruction outranks it.
 
 ## The route
 
-Run `puck --help` from your CLI copy (below) and look for two verbs:
+`puck gate` and `puck laws prove` are the routes. Run both from your CLI copy
+(below).
 
-- **`puck gate`** is the route for verifying a lane. When it is listed, run it
-  on the lane's final head, report its verdict, and read its `--help` for what
-  it already covers; do not repeat by hand a step it ran.
-- **`puck laws prove`** is the route for proving red legs. When it is listed,
-  use it for every new or changed law instead of the manual withholding below.
-
-When a verb is not listed, run the manual steps in this skill. They are the
-same obligations either way.
+- **`puck gate --merge-base <integration branch>`** is the route for verifying a
+  lane. Run it on the lane's final head against the integration branch the brief
+  names, report its verdict, and read its `--help` for what it already covers;
+  do not repeat by hand a step it ran. Without `--gpu` it runs no canary or
+  parity, so with no grant run it without `--gpu` and list the plan's canary and
+  parity lines as GPU legs owed.
+- **`puck laws prove`** is the route for proving red legs. Use it for every new
+  or changed law instead of the manual withholding below: it works in a scratch
+  worktree, never in your tree, and refuses a proof when a build fails, a
+  selected test is skipped or the two legs ran different tests.
 
 ## Run gates from your own CLI copy
 
@@ -214,7 +217,7 @@ repositories share an object store, alternates or a common directory.
 ## What a finished lane proves
 
 A lane is finished when its final head, with the integration branch's current
-tip merged in, shows all of the following. `puck gate`, when listed, is the one
+tip merged in, shows all of the following. `puck gate` is the one
 command for the parts it covers.
 
 1. `dotnet build Puck.slnx -c Release` exits 0 with zero warnings.
