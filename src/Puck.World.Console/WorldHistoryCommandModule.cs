@@ -81,7 +81,7 @@ public sealed class WorldHistoryCommandModule(WorldHistory history, WorldInstanc
             : string.Empty);
 
         if (json) {
-            return new CommandResult(Output: Encoding.UTF8.GetString(bytes: diff!.ToCanonicalJson()).TrimEnd()) { IsError = (divergedAt is not null) };
+            return new CommandResult(Output: $"[world.history diff: {diff!.ToJson()}]") { IsError = (divergedAt is not null) };
         }
 
         var lines = diff!.DescribeLines(maxLines: MaxDiffLines);
@@ -149,7 +149,7 @@ public sealed class WorldHistoryCommandModule(WorldHistory history, WorldInstanc
         _ = output.Append(value: $"[world.history replay-edit: the edits at tick {report.EditTick} land at tick {report.LandedAt} — {edits}");
 
         if (report.ControlDivergedAt is { } control) {
-            _ = output.Append(value: $" | REFUSED TO TRUST: the unedited re-simulation itself left the recording at tick {control}]");
+            _ = output.Append(value: $" | untrusted: the unedited re-simulation itself left the recording at tick {control}]");
 
             return CommandResult.Error(output: output.ToString());
         }

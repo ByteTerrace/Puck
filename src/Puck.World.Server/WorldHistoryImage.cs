@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
-using Puck.Abstractions.Documents;
 using Puck.Maths;
 using Puck.World.Server;
 
@@ -344,10 +343,10 @@ public sealed record WorldHistoryDiff(ulong From, ulong To, IReadOnlyList<WorldS
 
         return lines;
     }
-    /// <summary>Returns the diff as canonical UTF-8 JSON with exact raw values (no BOM, LF newlines, two-space
-    /// indentation, one trailing newline) — the machine form for tools.</summary>
-    /// <returns>The canonical bytes.</returns>
-    public byte[] ToCanonicalJson() {
+    /// <summary>Returns the diff as one line of JSON with exact raw values, members in a fixed order — the machine form
+    /// for tools.</summary>
+    /// <returns>The JSON text.</returns>
+    public string ToJson() {
         static JsonNode? Vector(FixedVector3 value) => new JsonArray(value.X.Value, value.Y.Value, value.Z.Value);
         static JsonNode? Body(WorldHistoryBodyImage? image) => ((image is { } body)
             ? new JsonObject {
@@ -393,6 +392,6 @@ public sealed record WorldHistoryDiff(ulong From, ulong To, IReadOnlyList<WorldS
             })]),
         };
 
-        return CanonicalJsonDocument.Serialize(node: document);
+        return document.ToJsonString();
     }
 }

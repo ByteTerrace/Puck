@@ -1,5 +1,7 @@
+using Puck.World.Client;
 using Puck.Commands;
 using Puck.World.Protocol;
+using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -285,6 +287,15 @@ public sealed class InSessionHistoryLawTests {
         );
         Assert.Equal(expected: live.Components, actual: diff.Components);
         Assert.True(condition: WorldHistoryDiff.Between(from: after, to: after).Empty);
+
+        // The machine form carries the same changes with their exact raw values.
+        var json = System.Text.Json.Nodes.JsonNode.Parse(json: diff.ToJson())!;
+
+        Assert.Equal(expected: from, actual: json["from"]!.GetValue<ulong>());
+        Assert.Equal(
+            expected: [(ScoreRow, "p1", 0L, 5L), (ScoreRow, "p2", 4L, 7L)],
+            actual: json["cells"]!.AsArray().Select(selector: static cell => (cell!["row"]!.GetValue<string>(), cell["key"]!.GetValue<string>(), cell["from"]!["raw"]!.GetValue<long>(), cell["to"]!["raw"]!.GetValue<long>()))
+        );
     }
     [Fact]
     public void ADiffSeesOneChangedCellAndNothingElse() {
@@ -432,6 +443,48 @@ public sealed class InSessionHistoryLawTests {
         // The shared keyframes still restore exactly.
         _ = harness.SeekAndProve(target: harness.History.KeyframeTicks[2]);
     }
+    // The HUD's history tokens read the history itself: "off" before a window exists, the cursor and its place in the
+    // window once one does, and the window's ends with the bytes held against the budget.
+    [Fact]
+    public void TheHistoryHudTokensShowTheCursorInItsWindow() {
+        using var harness = new WorldHistoryHarness(
+            on: false,
+            seed: 29UL
+        );
+        var definition = harness.Fixture.Server.Definition;
+        var client = ClientFixtures.Client(definition: definition);
+        var resolver = new WorldHudBindingResolver(
+            client: client,
+            continuum: new WorldContinuum(
+                client,
+                new WorldSeatAuthorityRouter(),
+                new NoNeighbours()
+            ),
+            frameRate: new FrameRateMonitor(),
+            history: harness.History,
+            population: harness.Fixture.Server.Population,
+            seatBindings: new WorldSeatBindings(definition: definition)
+        );
+
+        (float Fraction, string Text) Read(string token) {
+            Assert.True(condition: resolver.TryResolve(binding: token, fraction: out var fraction, seat: -1, text: out var text));
+
+            return (fraction, text);
+        }
+
+        Assert.Equal(expected: (0f, "off"), actual: Read(token: "history.cursor"));
+        Assert.True(condition: harness.History.TryOn(budgetBytes: WorldHistory.DefaultBudgetBytes, refusal: out _));
+        harness.Steps(count: 41);
+
+        Assert.Equal(expected: (1f, "41"), actual: Read(token: "history.cursor"));
+        Assert.Equal(expected: "1..41", actual: Read(token: "history.window").Text);
+        _ = harness.SeekAndProve(target: 11UL);
+        Assert.Equal(expected: (0.25f, "11"), actual: Read(token: "history.cursor"));
+        Assert.Equal(
+            expected: (((float)harness.History.BytesHeld) / WorldHistory.DefaultBudgetBytes),
+            actual: Read(token: "history.window").Fraction
+        );
+    }
     [Fact]
     public void ASteadyRecordedTickAllocatesNothing() {
         using var harness = new WorldHistoryHarness(seed: 11UL);
@@ -468,6 +521,30 @@ public sealed class InSessionHistoryLawTests {
         Assert.True(condition: (measured > 60), userMessage: $"only {measured} steady ticks were measured");
         Assert.Equal(actual: allocated, expected: 0L);
     }
+    // One capture feeds both: a recording armed beside a history captures the same tape it would alone, and the tape
+    // verifies.
+    [Fact]
+    public void ARecordingBesideTheHistoryStillMatches() {
+        using var harness = new WorldHistoryHarness(seed: 31UL);
+
+        Assert.True(condition: harness.Tape.TryBeginRecording(name: $"beside-{Guid.NewGuid():N}", refusal: out var refusal), userMessage: refusal);
+        harness.Steps(count: 40);
+        harness.Submit(mutation: new WorldMutation.UpsertStateRow(
+            Principal: Principal.Console,
+            Row: new WorldStateRow(
+                Kind: CellKind.Int,
+                Name: CellName.Parse(candidate: "beside")
+            )
+        ));
+        harness.Steps(count: 40);
+
+        var result = harness.Tape.StopRecording();
+
+        Assert.Null(@object: result.VerifyFault);
+        Assert.True(condition: result.Verdict!.Passing, userMessage: result.Verdict.Describe());
+        Assert.Equal(expected: 80UL, actual: harness.History.HeadTick);
+        _ = harness.SeekAndProve(target: 20UL);
+    }
     [Fact]
     public void ASeekRefusesByNameWhileARecordingCapturesTheTimeline() {
         using var harness = new WorldHistoryHarness(seed: 2UL);
@@ -489,4 +566,21 @@ public sealed class InSessionHistoryLawTests {
     }
 
     private static Puck.Maths.FixedQ4816 FixedQ4816FromTick(int tick) => Puck.Maths.FixedQ4816.FromRawBits(value: ((((long)(tick % 5)) - 2L) * 16384L));
+
+    private sealed class NoNeighbours : IWorldAdjacencySource {
+        public void BeginTick(ulong tick) { }
+        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Solid;
+        public WorldEntityAddress LocalEntityAddress(int index) => default;
+        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
+            neighbour = null;
+
+            return false;
+        }
+        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [];
+        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
+            departedFrom = default;
+
+            return false;
+        }
+    }
 }

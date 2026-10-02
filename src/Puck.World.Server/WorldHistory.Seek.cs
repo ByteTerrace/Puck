@@ -39,6 +39,14 @@ public sealed partial class WorldHistory {
     public ulong? HeadTick => ((m_segments.Count > 0)
         ? Head
         : null);
+    /// <summary>Gets the oldest tick a seek can reach, or <see langword="null"/> while no window is held.</summary>
+    public ulong? OldestTick => ((m_segments.Count > 0)
+        ? Oldest
+        : null);
+    /// <summary>Gets every byte the history holds against its budget.</summary>
+    public long BytesHeld => HeldBytes;
+    /// <summary>Gets the memory budget, in bytes.</summary>
+    public long BudgetBytes => m_budgetBytes;
     /// <summary>Gets the tick the live world sits at in the history, or <see langword="null"/> while no window is
     /// held.</summary>
     public ulong? CursorTick => ((m_segments.Count > 0)
@@ -57,7 +65,7 @@ public sealed partial class WorldHistory {
 
         return null;
     }
-    // Every reason the LIVE timeline cannot be rewound from the cursor to `target` right now, by name.
+    // Every reason the live timeline cannot be rewound from the cursor to `target` right now, by name.
     private string? SeekRefusal(ulong target, ulong start) {
         if (m_tape.Mode == WorldReplayMode.Recording) {
             return $"replay.record '{m_tape.Name}' is capturing this timeline — replay.stop or replay.cancel first";

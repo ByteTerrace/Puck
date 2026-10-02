@@ -2249,7 +2249,7 @@ re-simulates there. A diff images both ticks (`WorldHistoryImage`: every
 authoritative component's digest folded alone, every active body's pose lanes,
 every stored cell's resolved value through `WorldStateExport.VisitResolvedCells`,
 and every field cell) and reports exactly what differs (`WorldHistoryDiff`, with
-a canonical JSON machine form). A replay-edit runs an unedited control shadow and
+a one-line JSON machine form). A replay-edit runs an unedited control shadow and
 an edited one in lockstep; the edits — the document changes submitted since the
 cursor's tick closed, or those recorded at the cursor's tick — land ahead of the
 first tick of the span, and the first tick whose authoritative hash leaves the

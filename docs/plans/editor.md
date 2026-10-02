@@ -54,7 +54,9 @@ window, backward or forward, each move proved against the hash recorded there;
 resumes from the past, discarding the future or keeping it as a named branch;
 diffs the state at two ticks; and replays an edit some ticks earlier to see
 where it would first have changed the world. Its verbs are console-only, unbindable
-and operator-only; no HUD shows the window.
+and operator-only. An authored HUD shows the cursor and window through the
+`history.cursor` and `history.window` bindings, as text or gauges; nothing draws
+the window as a scrubber a pointer can drag.
 
 Several pieces exist with nothing using them:
 
@@ -862,8 +864,8 @@ a world's boot image.
 
 1. **A scrubber row.** An editor HUD row draws the window as a bar — keyframes as
    ticks, the cursor, kept branches as forks — and a drag on it seeks. It reads
-   `world.history status` and submits `world.history seek`; it draws nothing a
-   verb cannot echo.
+   what the `history.cursor` and `history.window` bindings already read and
+   submits `world.history seek`; it draws nothing a verb cannot echo.
 2. **Bindable stepping.** `world.history step <±n>`, `resume` and `branch` become
    bindable in the build-mode binding group, checked at dispatch under the
    pressing seat's principal, with a grant that names them, so a seat can scrub

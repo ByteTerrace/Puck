@@ -92,6 +92,7 @@ public sealed class WorldHudRoutedSeatLawTests {
                 new NoNeighbours()
             ),
             frameRate: new FrameRateMonitor(),
+            history: null,
             population: new WorldPopulation(definition: home),
             seatBindings: seats
         );

@@ -500,7 +500,9 @@ depends on the timeline. A keyframe cannot be captured while an addon guest has
 run or a screen operation has applied. A live neighbour linked through an
 adjacency is re-read as it stands now, so seam contact with a neighbour that has
 moved since shows up as a reported divergence. The history covers the boot world
-only. The server guide's
+only. A world's HUD can show it: the `history.cursor` binding reads the cursor
+tick and gauges its place in the window, and `history.window` reads the
+window's ends and gauges the bytes held against the budget. The server guide's
 [in-session history](../../../src/Puck.World.Server/README.md#in-session-history-worldhistorycs-worldreplaytapecapturecs)
 section describes the mechanism.
 

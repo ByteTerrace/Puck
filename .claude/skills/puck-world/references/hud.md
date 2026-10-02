@@ -73,7 +73,10 @@ carrying an `Identity` section (an owned world's boot load, a sync pull, and
 `identity.hud`'s own candidate check below), never hand-rolled per door.
 
 **Bindings are a CLOSED vocabulary** (`HudBindingVocabulary`): `world.tick`,
-`world.fps`, `population.active`, `seat.<n>.position.{x,y,z}` with `<n>`
+`world.fps`, `population.active`, `history.cursor` (the in-session history's
+cursor tick, its gauge the cursor's place in the window), `history.window` (the
+window's ends, its gauge the bytes held against the budget; both read `off`
+with no window), `seat.<n>.position.{x,y,z}` with `<n>`
 1-based in 1..4, `state.<row>` (a `state`-section row's own SLOT cell), and
 `state.<row>.<key>` (one named cell in ANY row shape — see
 [documents.md](documents.md)'s `state` section). The split on the FIRST dot
