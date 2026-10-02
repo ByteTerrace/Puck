@@ -79,7 +79,7 @@
         "Kind": "InTreeIndependent",
         "Flavor": "None",
         "Subject": "a one-tick-per-step walk of the compiled pole-matched propagator (SecondOrderStep.Step) from rest toward a folded target, over f in (0,100] Hz and zeta in [0,16]",
-        "Against": "SecondOrderDynamics.Evaluate at the same elapsed duration — a genuinely separate code path: Compile derives the exact Q32 matrix once via BigInteger scaling-and-squaring/Taylor series (SecondOrderDynamics.Exact), while Evaluate is built at runtime from the public FixedQ4816.Exp2/SinCos kernels and never touches BigInteger",
+        "Against": "SecondOrderDynamics.Evaluate at the same elapsed duration — a genuinely separate code path: Compile derives the exact Q32 matrix once via BigInteger scaling-and-squaring/Taylor series (SecondOrderDynamics.Exact), while Evaluate is built at runtime from FixedQ4816's exponential (Exp2Q56, fed the exactly formed exponent rate·t·log₂e rounded once to Q56) and SinCos kernels and never touches BigInteger",
         "Shared": "",
         "Citation": "ENVELOPE: agreement is required within Aem·2^-15 plus float-kernel slack (widened for velocity by a factor of the natural frequency, since the velocity channel carries an extra omega-squared scale), per SecondOrderDynamics.Evaluate's own documented remarks — Evaluate is stated there to be an approximation of the exact propagator, not bit-identical to it. THIS law folds frequency to [0.5, 8] Hz rather than the full (0, 100] Hz authoring band (the upper bound avoids many-cycle phase-rounding divergence over one second at 240 one-tick steps; the lower bound avoids a near-zero decay rate where both sides' rounding noise dominates a genuinely tiny signal) and nudges the damping ratio off the near-critical band |zeta-1| < 1/6 (there the overdamped closed form divides two nearly-equal decay rates by a near-zero sigma, a genuinely different numerical regime this generic bound is not shaped to cover)",
         "Absolute": ""
@@ -91,6 +91,44 @@
         "Against": "",
         "Shared": "",
         "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dynamics.decay-factor-vs-series",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Evaluate" },
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "DecayRateRaw" },
+      { "Type": "Puck.Maths.SecondOrderSample", "Name": "Value" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SecondOrderDynamics.Evaluate's decay factor, read where nothing else rounds: critically damped over f in (0, 2] Hz, from zero offset with unit velocity, over a whole number n in [1, 4] of seconds, so the value is n·e with every product exact — reaching past the underflow floor, where the settled read answers exactly zero",
+        "Against": "Oracles.EncloseExpNegative — the Taylor series of e^x summed at 160 working bits from the exact dyadic ζω·n, floored and ceilinged chains closed by a geometric tail bound, then reciprocated outward; no base-2 reduction, no log2(e), no table and no polynomial of the subject's",
+        "Shared": "",
+        "Citation": "ENVELOPE: n times (half a ULP for Exp2Q56\u0027s closing narrowing plus 2^-17 ULP), derived rather than fitted: the exponent \u03B6\u03C9\u00B7t\u00B7log2(e) is formed exactly from a Q62 log2(e) and rounded once to Q56 (relative error at most ln2\u00B72^-57), and the mantissa adds under 2^-44 relative, on a factor at most one. RULED: rounding \u03B6\u03C9\u00B7t to Q16 and multiplying by a Q16 log2(e) (94548) before a Q16 Exp2 put the factor up to 1.29 ULP from the truth",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "dynamics.overdamped-wide-fast-pole",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.SecondOrderDynamics", "Name": "Evaluate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Evaluate at frequency raw 1, damping raws 2^59 and 2^60, zero target and velocity, initial offsets of both signs at one unit, after 1 and 2^32 seconds; the fast pole's Q32 sum crosses long.MaxValue, and its product with time crosses the Q16 carrier",
+        "Against": "the closed form at equal rounded Q32 decay and oscillation rates: p1 = 0, lambda1 = 1, lambda2 rounds to zero, p2 = 2 sigma, so the offset is retained and velocity is zero. Narrowing p2 to Q16 changes this unit offset by less than half a raw",
+        "Shared": "",
+        "Citation": "The rate equality is asserted before the check. A wide positive fast pole must remain positive, and its underflow must not erase the slow pole's response",
         "Absolute": ""
       }
     ]

@@ -289,12 +289,16 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float2 previousTransport;
 
         sdfHistoryAt(historyPosition, extent, previous, previousTransport);
-        historyWeight = (clamp(historyWeightGathered, 0.0, SdfHistoryWeightCap) * (1.0 - reactive));
-        history = float4(
-            sdfFromYCoCg(sdfClipToBox(sdfToYCoCg(max(previous.rgb, 0.0)), boxMin, boxMax)),
-            clamp(previous.a, coverageMin, coverageMax)
-        );
-        historyTransport = clamp(previousTransport, transportMin, transportMax);
+        // Clipping infinity can produce NaN, and even zero history weight cannot remove it (NaN * 0 is NaN).
+        accepted = (all(isfinite(previous)) && all(isfinite(previousTransport)));
+        if (accepted) {
+            historyWeight = (clamp(historyWeightGathered, 0.0, SdfHistoryWeightCap) * (1.0 - reactive));
+            history = float4(
+                sdfFromYCoCg(sdfClipToBox(sdfToYCoCg(max(previous.rgb, 0.0)), boxMin, boxMax)),
+                clamp(previous.a, coverageMin, coverageMax)
+            );
+            historyTransport = clamp(previousTransport, transportMin, transportMax);
+        }
     }
 
     float total = (historyWeight + weightSum);
@@ -307,10 +311,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     output[id.xy] = resolved;
     sdfWorkTexels = 1u;
+    // The working history is half-float. A non-finite current sample contributes no reusable history, and a finite
+    // reconstruction must remain representable when stored, so one bright transient cannot poison later frames.
+    bool reusable = (all(isfinite(accumulated)) && all(isfinite(accumulatedTransport)) && isfinite(total));
+
     transportRW[((id.y * extent.x) + id.x)] = sdfPackTransport(resolvedTransport);
-    historyColorRW[id.xy] = accumulated;
+    historyColorRW[id.xy] = (reusable ? clamp(accumulated, -65504.0, 65504.0) : float4(0.0, 0.0, 0.0, 0.0));
     historySurfaceRW[word] = hitIdentity;
-    historySurfaceRW[word + 1u] = (f32tof16(hit ? hitT : 0.0) | (f32tof16(min(total, SdfHistoryWeightCap)) << 16u));
-    historySurfaceRW[word + 2u] = sdfPackTransport(accumulatedTransport);
+    historySurfaceRW[word + 1u] = (f32tof16(hit ? hitT : 0.0) | (f32tof16(reusable ? min(total, SdfHistoryWeightCap) : 0.0) << 16u));
+    historySurfaceRW[word + 2u] = sdfPackTransport(reusable ? accumulatedTransport : float2(0.0, 0.0));
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

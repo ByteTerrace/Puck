@@ -26,13 +26,12 @@ namespace Puck.World.Client;
 /// <c>WorldSceneEmitter</c> calls for the boot world's own decoration placements — a <see cref="WorldStampPool"/>
 /// of its own, rooted on the destination through <see cref="WorldSessionStampSource"/> with its census kept by a
 /// <see cref="WorldBodyStampCensus"/>, and <see cref="WorldRigCatalog"/> directly for avatars, rather than a second
-/// implementation of any of them. No screens,
-/// no editor overlay: a session mirror does not process the destination's own <c>screens</c> section at all, which is
-/// what closes recursion structurally (a destination naming its own session screen has no path this type ever walks
-/// into) — <c>WorldScreenBinder</c> still narrates the depth-1 policy by name when it detects that shape, so
-/// the refusal is observable even though nothing here could recurse regardless. A body that renders its creation
-/// through the pool (an inhabitant, or a crowd body wearing a creation look) parks its catalog avatar, as the local
-/// scene's does.
+/// implementation of any of them. The destination's own screens are drawn too, its declared rows and its creations'
+/// derived faces, as <c>WorldSceneEmitter</c> draws the boot world's (<c>WorldStaticSceneEmit</c>): what each one
+/// shows is bound per view by whoever renders the frame (<c>WorldScreenBinder</c>'s nested screens), so a portal inside
+/// the destination shows its own destination to the presentation's nesting depth. No editor overlay. A body that
+/// renders its creation through the pool (an inhabitant, or a crowd body wearing a creation look) parks its catalog
+/// avatar, as the local scene's does.
 /// </para>
 /// <para>
 /// <b>The interpolation timebase.</b> A session's view calls <c>ISdfFrameSource.CaptureFrame</c> with its own
@@ -214,13 +213,26 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         return (Vector3.Zero, Quaternion.Identity);
     }
-    // Resolves this frame's camera: the bind-time-effective named camera if it still exists, else the destination's
-    // first declared camera, else a fixed overview derived from its spawn points.
-    // Re-resolved every frame from the LIVE mirrored definition (never cached past a name lookup) so a
-    // live pose/aim/lens edit on the destination's own camera row is visible without rebinding the session face.
-    private CameraSnapshot ResolveCamera(uint width, uint height) {
-        var definition = m_mirror.Definition;
-        var row = ResolveCameraRow(definition: definition);
+
+    /// <summary>Resolves the camera a session's ordinary projection renders a destination through this frame: the named
+    /// camera if the destination still declares it, else the destination's first declared camera, else a fixed overview
+    /// over its spawn points. It is resolved from the live mirrored definition every time, so a live edit of the
+    /// destination's camera row shows at once.</summary>
+    /// <param name="mirror">The destination's mirror.</param>
+    /// <param name="cameraName">The camera the session names, or <see langword="null"/> for the destination's
+    /// default projection.</param>
+    /// <param name="width">The view's width, in pixels.</param>
+    /// <param name="height">The view's height, in pixels.</param>
+    /// <returns>The camera, in the destination's space.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mirror"/> is <see langword="null"/>.</exception>
+    public static CameraSnapshot ResolveCamera(WorldSessionMirror mirror, string? cameraName, uint width, uint height) {
+        ArgumentNullException.ThrowIfNull(argument: mirror);
+
+        var definition = mirror.Definition;
+        var row = ResolveCameraRow(
+            definition: definition,
+            name: cameraName
+        );
 
         if (row is { } cameraRow) {
             var (position, orientation) = ResolveAnchorPose(
@@ -229,7 +241,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             );
             var rig = WorldCameraRigCompiler.Compile(
                 definition: definition,
-                mirror: m_mirror.FollowState(),
+                mirror: mirror.FollowState(),
                 program: cameraRow.Rig
             );
             var anchor = new SdfAnchor(
@@ -238,7 +250,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             );
             var clock = new SdfCameraClock(
                 PresentationSeconds: 0f,
-                AuthoritativeTick: m_mirror.Tick
+                AuthoritativeTick: mirror.Tick
             );
 
             var (eye, target, fieldOfView) = rig.Resolve(
@@ -267,8 +279,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             width: width
         );
     }
-    private WorldCamera? ResolveCameraRow(WorldDefinition definition) {
-        if (m_effectiveCameraName is { } name) {
+
+    private static WorldCamera? ResolveCameraRow(WorldDefinition definition, string? name) {
+        if (name is not null) {
             foreach (var camera in definition.Cameras) {
                 if (string.Equals(
                     a: camera.Name,
@@ -354,7 +367,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_pool.Tick(deltaSeconds: deltaSeconds);
 
         var camera = (m_windowFit?.Invoke() ?? ResolveCamera(
+            cameraName: m_effectiveCameraName,
             height: height,
+            mirror: m_mirror,
             width: width
         ));
 
@@ -443,6 +458,15 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 picks: m_picks
             );
             m_meshDraws.Static = meshDraws;
+
+            // The destination's screens: its rows, then the faces its creations seat at the reserved band, within what
+            // the probe reserves (WorldSessionRenderEnvelope). The band's unseated placeholders are left out, so a world
+            // with no screen keeps a program that may stand unchanged between frames.
+            WorldStaticSceneEmit.Emit(
+                builder: builder,
+                derivedFaces: WorldPrototypeFacets.Seated(definition: definition),
+                screens: definition.Screens
+            );
             m_pool.Emit(
                 builder: builder,
                 colors: colors,

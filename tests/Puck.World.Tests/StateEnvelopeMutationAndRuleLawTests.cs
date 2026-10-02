@@ -475,8 +475,8 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
 
         Assert.Null(@object: stop.VerifyFault);
         Assert.True(
-            condition: stop.Verdict!.Value.Match,
-            userMessage: stop.Verdict.Value.Describe()
+            condition: stop.Verdict!.Primary.Match,
+            userMessage: stop.Verdict.Primary.Describe()
         );
 
         // Decision 10: running the SAME recording's verify a second time is an additional determinism check, not
@@ -493,8 +493,8 @@ public sealed class StateEnvelopeMutationAndRuleLawTests {
             userMessage: second.Describe()
         );
         Assert.Equal(
-            expected: first.DivergedAt,
-            actual: second.DivergedAt
+            expected: first.Primary.DivergedAt,
+            actual: second.Primary.DivergedAt
         );
     }
 

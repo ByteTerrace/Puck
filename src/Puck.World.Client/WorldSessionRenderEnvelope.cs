@@ -50,7 +50,7 @@ internal static class WorldSessionRenderEnvelope {
     }
 
     /// <summary>Emits the construction/candidate probe into an existing composition builder.</summary>
-    public static void EmitProbe(SdfProgramBuilder builder, WorldDefinition candidate, Func<int, Vector3> bodyColor, WorldBakedColors colors, WorldStampPool pool, int slotBase, bool includeScreens = false) {
+    public static void EmitProbe(SdfProgramBuilder builder, WorldDefinition candidate, Func<int, Vector3> bodyColor, WorldBakedColors colors, WorldStampPool pool, int slotBase) {
         ArgumentNullException.ThrowIfNull(argument: builder);
         ArgumentNullException.ThrowIfNull(argument: candidate);
         ArgumentNullException.ThrowIfNull(argument: bodyColor);
@@ -76,12 +76,11 @@ internal static class WorldSessionRenderEnvelope {
             slotBase: (slotBase + WorldRigCatalog.DynamicTransformCapacity)
         );
 
-        if (includeScreens) {
-            EmitScreenReservation(
-                builder: builder,
-                candidate: candidate
-            );
-        }
+        // A presented world draws its own screens wherever it is shown, so every view of it reserves them.
+        EmitScreenReservation(
+            builder: builder,
+            candidate: candidate
+        );
 
         var bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
         var accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
@@ -108,7 +107,7 @@ internal static class WorldSessionRenderEnvelope {
     // session render cost.")
 
     /// <summary>Measures a candidate definition against the same program shape the offscreen renderer probed.</summary>
-    public static (int Words, int Instances) MeasureCandidate(WorldDefinition candidate, Func<int, Vector3> bodyColor, WorldBakedColors colors, WorldStampPool pool, bool includeScreens = false, bool includeAdjacencies = false) {
+    public static (int Words, int Instances) MeasureCandidate(WorldDefinition candidate, Func<int, Vector3> bodyColor, WorldBakedColors colors, WorldStampPool pool, bool includeAdjacencies = false) {
         ArgumentNullException.ThrowIfNull(argument: candidate);
         ArgumentNullException.ThrowIfNull(argument: bodyColor);
 
@@ -118,7 +117,6 @@ internal static class WorldSessionRenderEnvelope {
                 builder: builder,
                 candidate: candidate,
                 colors: colors,
-                includeScreens: includeScreens,
                 pool: pool,
                 slotBase: 0
             );

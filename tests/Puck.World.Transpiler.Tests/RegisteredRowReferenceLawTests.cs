@@ -16,7 +16,7 @@ public class RegisteredRowReferenceLawTests {
     // One document holding `name` at `path` and nothing else, plus the rows `declared` lists.
     private static JsonObject Probe(string path, string name, bool asList, params string[] declared) {
         var root = new JsonObject {
-            ["schema"] = WorldSemanticValidator.RootSchemaId,
+            ["schema"] = WorldDefinition.SchemaVersion,
         };
         var segments = path.Split(separator: '.');
         var holder = root;
@@ -154,7 +154,7 @@ public class RegisteredRowReferenceLawTests {
     [Fact]
     public void ARegionInteractionsRightSideIsResolvedAsAPlacementNotARow() {
         JsonObject Region(string placementId) => new() {
-            ["schema"] = WorldSemanticValidator.RootSchemaId,
+            ["schema"] = WorldDefinition.SchemaVersion,
             ["interactions"] = new JsonObject {
                 ["interactions"] = new JsonArray(new JsonObject {
                     ["coOccurrence"] = nameof(WorldInteractionCoOccurrence.Region),

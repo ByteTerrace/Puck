@@ -708,8 +708,35 @@ remote worlds do not share a presentation coordinate. It lights the destination 
 destination's own sky and lighting, its keys read on the destination's own clocks, and its sky clock
 (star twinkle, cloud drift) is the destination's delivered engine tick. Its view renders at a
 session screen's reduced quality (`WorldSessionSceneEmitter.ReducedQuality`: no soft shadows, no
-ambient occlusion, no far bound). A nested screen inside a projected destination binds dark: the
-explicit depth-one policy.
+ambient occlusion, no far bound).
+
+A projected destination draws its own screens wherever it is rendered, as the boot world does: a
+portal inside it shows its own destination, whose portals show theirs, recursively, to the
+presentation's nesting depth. The depth is the boot world's `views.nestingDepth`, 3 when the
+document authors none; a value below 0 or past 8 is refused by name. A screen of the boot world, or
+of a world a seat is presented in, is one level deep, and each screen seen through it one level
+more. Each level renders from its own eye: a window fits to the camera of the view that renders the
+world its glass stands in, which is the boot world's viewer, the first seat presented in a routed
+world, or the window one level up, mapped through its own door. So two portals facing each other
+end at the depth, each level looking through its own glass. A session screen at the depth shows its
+session's `fallback` colour, black when the session authors none, through the `color` producer. That
+is the one rule for every face past the depth: a flat colour the author chose costs nothing to show
+and reads as the end of the recursion. A world shown through a screen shows only what any viewer may
+be shown on its behalf: its sessions, and producers whose content is a pure function of their
+settings (a test pattern, a QR code, a colour). A machine, a probe, a camera view, text, and a
+producer of the local device's content (a camera, a desktop capture) show nothing there, so being
+shown through a portal never opens the local user's camera or desktop.
+
+The authority opens the sessions a world's screens show while that world is fewer screens deep than
+the nesting depth. The boot world and every world a human stands in are at depth zero, and a world a
+live session observes is one deeper than the shallowest screen showing it. An ended observation
+holds no descendant sessions open, and its retained document grants no live view of those descendants. What a world observes
+therefore follows the documents and the sessions already open, never what a frame draws. The
+presentation renders a level only while something sees it: each view that reads a session tests the
+glass it shows on against the camera it last rendered with (`WorldPortalVisibility`), and a glass
+behind that camera or outside its frustum schedules nothing beneath it. `world.nesting` echoes every
+level: its depth, its destination, the residency it renders through, and what each of its world's
+screens shows.
 
 A portal's face can show its destination as a window (`projection: window`): the face's portal facet
 maps a counterpart, and the destination renders each frame through an off-axis camera fitted, from
@@ -720,11 +747,13 @@ one per screen, since a screen shows one image: the first joined seat's view, ch
 person, which is the camera a click through that view is cast from, so the texel the glass shows at
 a point and a click at that point look along one line into the destination. With no seat resolving
 a view, the eye is the camera the frame's first view renders with: a fixed camera's, or the
-no-local-seats spectator's. A pick through the glass continues through
-the camera the window rendered into the destination and, since the destination's own screens bind
-dark, ends on its world: on the surface the pick's ray meets among the destination's static
-placements. That pick is presentation; the input a click carries reaches the destination's rules
-through the engaged body's own intent, as above.
+no-local-seats spectator's. When the counterpart seats a screen, a window's rays start past its glass,
+so a window never shows the destination's face it looks through, which shows a window of its own when the counterpart is
+a return portal. A pick through the glass continues through the camera the window rendered into the
+destination, through the destination's own screens to the nesting depth, each world tested against
+its own screens, and ends on the last world it enters: on the surface the pick's ray meets among that
+world's static placements. That pick is presentation; the input a click carries reaches the
+destination's rules through the engaged body's own intent, as above.
 
 A seat that crosses into a world the boot presentation cannot map it into (another document that no
 adjacency relates to the boot world) is presented in that world. Its view draws the destination's own
@@ -742,7 +771,12 @@ discloses everything joins its destination's scene this way (`WorldSessionWindow
 seat and every such window presenting one endpoint share exactly one residency, and its GPU node
 (`sdf:routed$<endpoint>`) reports that row: residencies made and released, and the bytes its
 tables hold by memory. Any other session screen renders a residency of its own from its own
-observation of the destination. Split seats in
+observation of the destination. The rule holds at every depth: a destination shown at two depths, or
+by a window and a seat, shares its endpoint's one residency while each session discloses everything.
+Each view of a shared residency binds the screens of the level it renders, so one world seen at two
+depths shows each level's own images. Every level is an instance of its own, with its own temporal
+history and its own resets, so no level's history carries another level's frames. A seat presented
+in a world sees that world's own screens, its return portal among them. Split seats in
 different worlds each show their own world. Named boot cameras and the spectator fallback keep
 showing the boot world. A local seat keeps its roster's color wherever it is presented. A seat's view
 follows the destination's residency in place when its tables are ready, its instance capacity matches
@@ -787,10 +821,82 @@ and enters its ordered domain; it never reads wall clock or compares raw tick or
 with different rates. Abort restores each body's original pose/state, not merely source spawn. The
 source releases authority only after destination acknowledgement.
 
+The handoff token is the source-scoped transfer key: the source's authority identity and the transfer
+id it minted. Three fences hold it. The traveler's ownership epoch admits one commit per epoch, so a
+reservation for an epoch the destination has already consumed is refused as stale. The
+destination's lease deadline refuses a commit after it expires. The destination's crossing log
+refuses an append from an activation its store has fenced off, so a superseded destination cannot
+commit. An exact replay of a committed token is answered as committed, including by a destination
+rebuilt from its checkpoint and log; the same token carrying a different commit is refused.
+
+Every crossing step a peer can see is written ahead to the authority's crossing log
+(`IWorldCrossingLog`) before the step happens:
+
+| Authority | Record | Written before |
+|---|---|---|
+| Source | departure: the complete in-doubt recovery record | the commit is sent |
+| Destination | arrival: the reservation, its body indices and the commit | the commit is answered |
+| Source | settlement: arrived, with its forwarding routes | the arrival is acknowledged |
+| Source | settlement: stayed | the cohort is restored home |
+
+The log answers each append as durable, refused, or uncertain (`WorldCrossingDurability`). Uncertain
+means the store's answer was lost, so the record may or may not have landed. After an uncertain
+record the authority records no further crossing step until it recovers, because the next record
+would take the same sequence.
+
+A source acts only on a durable record. If its departure is not durable, it aborts and keeps the
+cohort. If its settlement is not durable, the settlement stays pending until it lands. Recovery
+redoes whichever of these records did land.
+
+A destination that cannot make its arrival durable lands nothing. If the record was refused, it
+answers the commit as a refusal. If the record is uncertain, it cannot refuse, because the arrival
+may already be durable. It answers `Uncertain` (`WorldTransferStatus.Uncertain`) to the commit, to a
+retried commit and to the status query, and it refuses a reservation for any of the travelers.
+
+The source treats an uncertain answer like a lost one. It keeps the transfer in doubt and neither
+completes it nor restores the cohort. Only the destination's recovery decides. A recovered
+destination answers from its log: an arrival found there lands again and the transfer is committed;
+otherwise the transfer is missing and the source restores the cohort. A stopped row answers for no
+transfer. An in-doubt transfer addressed to it waits for the next row that claims the same authority.
+
+Each authority numbers its records in one dense sequence that every checkpoint captures. A restarted
+authority restores its latest checkpoint and redoes, in order, every record past it:
+
+- an arrival lands again through the escrow;
+- a departure detaches its cohort again and puts the transfer back in doubt;
+- a settlement publishes the forwarding routes or restores the cohort.
+
+The ordinary drain then reconciles the transfer with its peer. Recovery refuses an arrival it cannot
+land again and leaves its sequence unapplied. Whichever step a crash or a lost answer interrupts, the
+traveler ends on exactly one authority.
+
+A hosted silo row writes its records into its fenced authority journal beside its mutations, and
+recovers both kinds in publication order. An activation whose journal does not decode or redo is
+refused. A checkpoint pins its journal coverage at capture and queues its upload under the same
+authority gate, so arrivals after the capture remain in the journal suffix. Uploads run off the tick
+thread. `WorldSiloHost.WaitForCheckpointUploadsAsync` waits for each active row's latest queued upload,
+including cadence captures, without taking another snapshot; retirement uses this barrier before its
+final capture. A failed mutation journal append blocks the activation's later publications, so
+no crossing depends on a document edit its successor cannot recover. A root compare-and-swap the
+store cannot reconcile is uncertain, and it blocks the activation the same way. A blocked row cannot
+write the final checkpoint a deactivation needs. A new activation replaces it only after its silo
+restarts, and until then a source beside it keeps its doubt; routing that doubt through the
+authority directory instead is [open work](../plans/open-items.md#cross-plan-maintenance). A desktop process installs no log, so
+its crossings live only as long as the process.
+
 Resolution and transfer are ordered authority events, not untaped host side effects. Generation ids
 issue from a counter in the target resolver's ordered domain, recorded before they are exposed—a
 pure function of event order. Wall time, UUIDs and discovery order never decide identity. A
 remote-issued id enters the source as a verified foreign value at a named tape boundary.
+
+An arrival is taped by its destination. The destination's tape records the reservation, body indices
+and commit as one entry and lands it again through the shadow's own escrow at the tick it landed. It
+also records the federated device images that forwarded and federated travelers drive the authority
+with, because that input reaches the authority through no loopback. `replay.record` tapes every row
+of the process beside the boot row in one file. Verification replays the tape and every companion a
+crossing involves, and pairs every crossing's departure with its arrival by handoff token. A
+crossing whose other half is on a remote authority, or on a row nothing taped, is reported as not
+verified, and `replay.verify` fails.
 
 Each authority tape records the initial authored rate and every ordered rate write, pause and resume
 that changes which steps occur. Replay drives from the tape's recorded rate history and refuses a
@@ -821,10 +927,10 @@ and frame compatibility, and the crossing record—so a lying destination cannot
 the wrong size. It rides the trust tiers rather than adding a second trust list.
 
 **A vanished source needs no reaper at the destination.** The body is the source's until commit, so
-transfer durability is the source journal's durability, and a reservation held for a source that dies
-expires at its deadline with capacity released. What dies with a host is in-world body state only:
-identity and its attested facts—items, currency, achievements—live on the identity document, so a
-player loses position rather than possessions.
+transfer durability is the source's crossing log, and a reservation held for a source that dies
+before its departure is durable expires at its deadline with capacity released. What dies with a
+host is in-world body state only: identity and its attested facts—items, currency, achievements—live
+on the identity document, so a player loses position rather than possessions.
 
 For population-backed admission, the connection receives a body index, so its
 principal and body arrive together. During transfer, the source authority holds

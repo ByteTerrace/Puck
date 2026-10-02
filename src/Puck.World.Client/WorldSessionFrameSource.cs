@@ -8,7 +8,7 @@ namespace Puck.World.Client;
 /// composition the interval between its own frames rather than the host's frame delta, and no interpolation fraction.
 /// Wall-clock and presentation-only: the away-seat framing it paces is not reproducible run to run. Before each capture
 /// it has the world capture its own frame (the <c>captureHostFirst</c> action), so a window session fits against the
-/// seat camera of the frame it renders in (<see cref="WorldWindowFrustumFit.FitFrom"/>), whatever order the frame's
+/// seat camera of the frame it renders in (<see cref="WorldWindowFrustumFit.FitFrom(Func{System.Numerics.Vector3?}, Func{WorldDefinition?}, Func{WorldDefinition}, Func{WorldScreen?})"/>), whatever order the frame's
 /// residencies prepare in.
 /// </summary>
 /// <param name="inner">The session's composition, whose dresser is its <see cref="WorldSessionSceneEmitter"/>.</param>

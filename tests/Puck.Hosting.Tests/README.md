@@ -10,8 +10,9 @@ output streams runs to exit through `ChildProcess.RunAsync`, with both streams
 arriving whole. `RenderGraphSchedulerLawTests` holds the render-graph demand
 scheduler to its demand, extent, refresh, cycle and budget rules, and
 `RenderGraphHitWalkLawTests` follows a pick through a screen showing another
-instance to the nested world's surface, stopping at the depth limit, an unread
-image, or an instance with no camera.
+instance to the nested world's surface, two levels deep with each world tested
+against its own screens, stopping at the depth limit, an unread image, or an
+instance with no camera, and holds a set's declared nesting depth and its cap.
 
 ## Running
 

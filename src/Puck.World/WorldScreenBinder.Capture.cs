@@ -127,7 +127,8 @@ internal sealed partial class WorldScreenBinder {
     // disposed before the binder resolves a replacement target (a returning window with the same title, or a reconnected
     // monitor); reacquisition is World policy rather than a compatibility path in the platform feed. On the D3D12 GPU
     // transport the platform copies GPU-side into shared textures the screen samples directly — the CPU surface is never
-    // converted, only its divided-cadence readback frames feed the room glow.
+    // converted, only its divided-cadence readback frames feed the room glow. A capture of an HDR display hands over
+    // half-float scRGB, which only the CPU path converts, into working values at the host's paper white.
     private void CaptureWindow(CaptureFeed feed, in FrameContext context) {
         if (!feed.TryEnsureSource(adapterLuid: AdapterLuidForOpen())) {
             feed.Live = false;
@@ -139,7 +140,7 @@ internal sealed partial class WorldScreenBinder {
         }
 
         if (
-            feed.GpuRoute &&
+            feed.RidesGpu &&
             m_exportsSurfaces &&
             context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var deviceContext) &&
             OperatingSystem.IsWindowsVersionAtLeast(
@@ -172,15 +173,31 @@ internal sealed partial class WorldScreenBinder {
             return;
         }
 
+        // A source reacquired on a display that turned HDR no longer copies into the shared ring an SDR one used.
+        if (
+            !feed.RidesGpu &&
+            (feed.GpuTargets is not null)
+        ) {
+            feed.ReleaseGpuTargets();
+        }
+
         if (feed.Source!.TryCapture(surface: out var surface)) {
+            var output = feed.Source.Output;
+
             _ = TryConvert(
+                color: ImageColorEncoding.Of(colorSpace: output.ColorSpace),
                 context: in context,
                 pixels: feed.Pixels,
                 surface: in surface
             );
             feed.Live = true;
             feed.Fault = null;
-            feed.Light = WorldImageLight.Average(bgra: surface.Pixels.Span);
+            feed.Light = (output.IsHdr
+                ? WorldImageLight.AverageScRgb(
+                    paperWhiteNits: m_paperWhiteNits,
+                    rgba: surface.Pixels.Span
+                )
+                : WorldImageLight.Average(bgra: surface.Pixels.Span));
         } else if (!feed.Live) {
             feed.Fault = $"{feed.Label} awaiting a compositor frame";
         }
@@ -561,9 +578,13 @@ internal sealed partial class WorldScreenBinder {
         // The CPU route's pixels, converted into the image a frame samples.
         public ConvertedPixels Pixels { get; } = pixels;
         public string Title { get; } = title;
-        // Whether this feed rides the D3D12 GPU transport (the platform copies GPU-side into GpuTargets and a frame acquires
-        // their latest slot), rather than the converted CPU Pixels. Fixed at construction by the host backend.
+        // Whether this feed may ride the D3D12 GPU transport (the platform copies GPU-side into GpuTargets and a frame
+        // acquires their latest slot), rather than the converted CPU Pixels. Fixed at construction by the host backend.
         public bool GpuRoute { get; } = gpuRoute;
+
+        // Whether this feed rides the GPU transport now: on that host, for a source capturing an SDR display. A capture
+        // of an HDR display converts its half-float pixels through the CPU path.
+        public bool RidesGpu => (GpuRoute && !(Source?.Output.IsHdr ?? false));
 
         private PullCadence Cadence { get; } = new(rateHz: profile.RefreshRateHz);
 
@@ -575,7 +596,7 @@ internal sealed partial class WorldScreenBinder {
                 return 0;
             }
 
-            if (GpuRoute) {
+            if (RidesGpu) {
                 return (((GpuTargets is { } ring) && ring.TryAcquire(frame: out var frame))
                     ? frame
                     : 0);
@@ -590,7 +611,7 @@ internal sealed partial class WorldScreenBinder {
             Pixels.Retire();
         }
         public nint Handle() {
-            if (GpuRoute) {
+            if (RidesGpu) {
                 // The image view of the platform's latest completed GPU copy; 0 (unbound glass) until that first copy lands.
                 return ((Live && (GpuTargets is { } ring))
                     ? ring.LatestHandle()

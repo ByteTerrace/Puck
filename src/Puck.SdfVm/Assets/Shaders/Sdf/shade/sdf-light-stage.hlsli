@@ -1,18 +1,23 @@
 // The light stage: shades one pixel's hit from its surface sample (SdfSurfaceSample) into the view's lit color, and
 // nothing on a miss. It samples a bound screen, re-resolves the material, lights the surface through the one light
 // interface (sdf-light.hlsli), the key light under the soft shadow the shadow stage wrote, applies the editor grid, and
-// reports the pixel's coverage: one for a solid hit, less on a silhouette edge against the sky, zero on a miss. The sky,
-// the distance fog and the volumes are the composite's, after this stage; the debug views follow it.
+// reports the pixel's coverage: one for a solid hit, less on a silhouette edge against the sky, zero on a miss. It also
+// reports the pixel's reactivity for a temporal view's resolve: one for a screen, whose content changes on its own, and
+// for emission, which the material model cannot tell animated from steady, the share of the color the material and atlas
+// texel that actually shaded the pixel emit. The sky, the distance fog and the volumes are the composite's, after this
+// stage; the debug views follow it.
 #ifndef SHADE_SDF_LIGHT_STAGE_HLSLI
 #define SHADE_SDF_LIGHT_STAGE_HLSLI
 #include "sdf-light.hlsli"
 #include "sdf-grid.hlsli"
 #ifdef SDF_VIEWS_PASS
 
-float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage) {
+float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out float reactivity) {
     float3 color = float3(0.0, 0.0, 0.0);
+    float3 emission = float3(0.0, 0.0, 0.0);
 
     coverage = 0.0;
+    reactivity = 0.0;
     if (!s.hit) {
         return color;
     }
@@ -29,6 +34,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage) {
     bool curvatureShading = worldCurvatureShadingEnabled();
     bool useFinalShading = worldFinalShadingMode(p.viewMode);
     bool sampledScreen = false;
+    reactivity = ((material >= SDF_SCREEN_MATERIAL) ? 1.0 : 0.0);
 
     sdfEvalCount += s.surfaceQueries;
 
@@ -194,6 +200,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage) {
 
             float3 selfEmission = ((shadeMaterial.albedo * shadeMaterial.emissive) + meshEmission);
             color = selfEmission + (color - selfEmission) * attenuation;
+            // Use the material and atlas texel that actually shaded this pixel, after detail re-resolution and layers.
+            emission = selfEmission;
 
             // The stylized curvature terms (cavity darkening, ridge light, ink outline).
             if (curvatureShading) {
@@ -238,6 +246,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage) {
         }
     }
 
+    static const float3 Luma = float3(0.2126, 0.7152, 0.0722);
+    reactivity = max(reactivity, saturate(dot(emission, Luma) / max(dot(color, Luma), 1.0e-4)));
     return color;
 }
 

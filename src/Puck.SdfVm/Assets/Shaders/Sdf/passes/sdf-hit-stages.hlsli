@@ -16,29 +16,8 @@
 #include "../debug/sdf-debug-views.hlsli"
 
 #ifdef SDF_VIEWS_PASS
-// What motion cannot describe in a pixel the light stage shaded, for a temporal view's resolve: one for a screen, whose
-// content changes on its own, and for emission, which the material model cannot tell animated from steady, the share of
-// the pixel's color it emits.
-float sdfSurfaceReactivity(SdfSurfaceSample s, float3 color) {
-    if (!s.hit) {
-        return 0.0;
-    }
-    if (s.material >= SDF_SCREEN_MATERIAL) {
-        return 1.0;
-    }
-
-    SdfMaterialData material = sdfMaterialLoad(s.material);
-
-    if (material.emissive <= 0.0) {
-        return 0.0;
-    }
-
-    static const float3 Luma = float3(0.2126, 0.7152, 0.0722);
-
-    return saturate(dot((material.albedo * material.emissive), Luma) / max(dot(color, Luma), 1.0e-4));
-}
 // The views stage: the pixel's light stage over its surface sample and the debug view, with the pixel's coverage and
-// reactivity (sdfSurfaceReactivity). A hit's color leaves through the fog's transmittance over its own ray distance
+// reactivity (sdfLightStage). A hit's color leaves through the fog's transmittance over its own ray distance
 // (sdf-transport.hlsli), so the resolve filters it with the coverage as one premultiplied quantity; the fog's in-scatter,
 // the sky and the bounded volumes are the composite's, so a moving medium never enters a temporal view's history. A
 // debug view draws the whole pixel, so it covers it and is not fogged. A lane past the render extent returns black,
@@ -56,9 +35,7 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     // The query tally the evals heatmap reads, from the marches every stage before this one made.
     sdfEvalCount = s.queries;
 
-    float3 color = sdfLightStage(p, s, coverage);
-
-    reactivity = sdfSurfaceReactivity(s, color);
+    float3 color = sdfLightStage(p, s, coverage, reactivity);
 
     if (p.viewMode != 0) {
         coverage = 1.0;

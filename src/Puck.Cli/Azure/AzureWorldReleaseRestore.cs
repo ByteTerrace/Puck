@@ -88,7 +88,7 @@ internal static partial class AzureCommand {
                         }),
                         discardsProgress = true,
                     },
-                    new JsonSerializerOptions { WriteIndented = true }
+                    new JsonSerializerOptions { NewLine = "\n", WriteIndented = true }
                 ));
                 if (!discardProgress) {
                     return new(

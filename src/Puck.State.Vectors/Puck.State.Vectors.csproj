@@ -14,7 +14,7 @@
         <!-- Puck.State carries the arena, the catalog, the cell carrier, and the vector kernels the transforms
              reduce through; Puck.Maths carries the signed-byte dot, cosine, and normalization those kernels are
              written on. Nothing else, and nothing points back: this project is a leaf of the state graph. -->
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.State/Puck.State.csproj" />
     </ItemGroup>
 </Project>

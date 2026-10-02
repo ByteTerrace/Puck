@@ -11,6 +11,7 @@
     <ItemGroup>
         <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
         <Compile Include="../Shared/TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
+        <Compile Include="../Shared/TestLiveness.cs" Link="TestLiveness.cs" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="JsonSchema.Net" Version="[9.*, )" />
@@ -19,10 +20,10 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Schema/Puck.World.Schema.csproj" />
         <!-- The shipped worlds are read as the game resolves them: a document with a .puck source is that source,
              compiled and composed through the transpiler's document composer. -->
-        <ProjectReference Include="..\..\src\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Transpiler/Puck.World.Transpiler.csproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- The shipped world, read as-authored by BindingDocumentWireShapeTests: the binding sections it
@@ -30,8 +31,8 @@
              copied so the file has exactly one home. -->
         <Content
             CopyToOutputDirectory="PreserveNewest"
-            Include="..\..\src\Puck.World\Assets\worlds\puck.world.json"
-            Link="Assets\puck.world.json"
+            Include="../../src/Puck.World/Assets/worlds/puck.world.json"
+            Link="Assets/puck.world.json"
         />
     </ItemGroup>
     <ItemGroup>

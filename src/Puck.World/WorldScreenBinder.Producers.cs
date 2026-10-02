@@ -49,7 +49,7 @@ internal sealed partial class WorldScreenBinder {
 
         foreach (var slot in m_slots.Values) {
             if (
-                (ReadOf(screen: slot.Index) is { } instance) &&
+                (InstanceOf(screen: slot.Index) is { } instance) &&
                 (FeedOf(instance: instance) is { Descriptor.FillsCaptures: true } source)
             ) {
                 m_fills.Ensure(

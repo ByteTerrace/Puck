@@ -11,13 +11,13 @@
     </PropertyGroup>
     <ItemGroup>
         <InternalsVisibleTo Include="Puck.Text.Tests" />
-        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>
     <ItemGroup>
-        <Content Include="Assets\Fonts\**\*.json" CopyToOutputDirectory="PreserveNewest" Pack="false" />
-        <Content Include="Assets\Fonts\**\*.png" CopyToOutputDirectory="PreserveNewest" Pack="false" />
-        <Content Include="Assets\Fonts\source\**\*.ttf" Pack="false" />
-        <Content Include="Assets\Fonts\source\**\*.txt" Pack="false" />
+        <Content Include="Assets/Fonts/**/*.json" CopyToOutputDirectory="PreserveNewest" Pack="false" />
+        <Content Include="Assets/Fonts/**/*.png" CopyToOutputDirectory="PreserveNewest" Pack="false" />
+        <Content Include="Assets/Fonts/source/**/*.ttf" Pack="false" />
+        <Content Include="Assets/Fonts/source/**/*.txt" Pack="false" />
     </ItemGroup>
 </Project>

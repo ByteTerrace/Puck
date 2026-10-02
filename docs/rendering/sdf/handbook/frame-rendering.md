@@ -316,7 +316,8 @@ view.
 
 Each view's history is its own fragment's: two versions at the output extent,
 one allocation a frame slot each, that the next frame reads through
-`ResourceReference.PreviousFrame`.
+`ResourceReference.PreviousFrame`. A resize carries a history buffer only when
+its resolved byte capacity and element size still match.
 
 - The **history color** holds, per output pixel, the weighted mean of every sample
   the pixel has gathered: the lit color in its RGB and the coverage in its alpha,
@@ -327,13 +328,15 @@ one allocation a frame slot each, that the next frame reads through
   full-weight samples, as two half floats; and the weighted mean of the samples'
   surface transport.
 
-The views pass also writes a one-channel **reactivity** buffer at the render
-extent, which only the resolve reads, inside the dispatch box: one where a screen
-covers the pixel, and, since the material model cannot tell steady emission from
-animated, the share of the pixel's color its material emits. Coverage stays in
-the color's alpha. The sky, the fog's glow and the bounded media never enter the
-history: they composite after the resolve. The fog's transmittance does, inside
-the lit color and the transport, as a property of each sample's surface.
+The sky and views passes also write a one-channel **reactivity** buffer at the
+render extent, which only the resolve reads: one where a screen or a bounded
+volume covers the pixel, and, since the material model cannot tell steady
+emission from animated, the share of the pixel's color it emits after detail
+material selection, material layers and mesh-atlas sampling.
+Coverage stays in the color's alpha. The sky, the fog's glow and the bounded
+media never enter the history: they composite after the resolve. The fog's
+transmittance does, inside the lit color and the transport, as a property of each
+sample's surface.
 
 The temporal resolve takes, for each output pixel, the 3x3 render samples
 nearest its center, each weighted by a Gaussian of its distance in output
@@ -347,14 +350,25 @@ spatial path at this frame's sample grid and its history restarts. Surviving
 history is clipped to the 3x3's YCoCg box, weighted down by the reactivity, and
 joined by this frame's samples. The transport history is clamped to the 3x3's
 range, as coverage is, and joined with the same weights.
+Non-finite history colors are rejected before clipping. History writes stay
+within the half-float range; a non-finite accumulation stores zero weight, so a
+bright transient cannot contaminate later history after its source recovers.
 
 History epochs are free: a reset sets the instance's frame count to zero, and the
 resolve then reads no history, so the first frame after a cut, a follow or a
-portal crossing, a view or extent change, a debug view turned on or off, or
+portal crossing, a view or extent change, a parked view shown again, a debug view turned on or off, or
 reconstruction turned on is the spatial path's frame exactly, at the sequence's
 first sample, the pixel center. Under `world.cadence on`, a still temporal view
 renders one jitter period after its inputs last change and then stands, its
-output converged (`SdfTemporalHistory.Stands`).
+output converged (`SdfTemporalHistory.Stands`). A render-grid dip or recovery
+restarts this settling period, including a grid change that takes effect only
+when a replacement graph installs. A view the display stopped showing is parked:
+the render graph counts the frames its schedule leaves an instance unread and
+absent from displayed outputs, including held consumer outputs. Cadence gaps in
+a consumer do not park its nested views. Every recording carries the count
+(`RenderGraphPackageRecording.UnreadFrames`), and `IsUnchanged` receives it too.
+The count is part of the epoch, so a temporal view shown again starts
+a new epoch while a spatial view's still output stands without a render.
 
 A temporal view that follows a portal crossing into another world keeps
 reconstructing there. The other world's residency builds its resolve pipeline

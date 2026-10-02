@@ -13,42 +13,42 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.Commands\Puck.Commands.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Shaders\Puck.Shaders.csproj" />
+        <ProjectReference Include="../../src/Puck.Commands/Puck.Commands.csproj" />
+        <ProjectReference Include="../../src/Puck.Shaders/Puck.Shaders.csproj" />
         <!-- Generate the shipped SDF shader fixtures before copying them, and read the SDF engine's declared buffer uses
              in the pass-plan law. -->
-        <ProjectReference Include="..\..\src\Puck.SdfVm\Puck.SdfVm.csproj" />
+        <ProjectReference Include="../../src/Puck.SdfVm/Puck.SdfVm.csproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- The constant-packing fixture compiles through the shared shader recipe like any shipped shader, so the law
              reads the offsets DXC assigned out of real bytecode. -->
-        <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
-        <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
-        <ComputeShaderSource Include="Assets\Shaders\**\*.comp.hlsl" />
+        <ShaderBytecode Include="Assets/Shaders/**/*.spv" />
+        <ShaderBytecode Include="Assets/Shaders/**/*.dxil" />
+        <ComputeShaderSource Include="Assets/Shaders/**/*.comp.hlsl" />
     </ItemGroup>
     <ItemGroup>
         <!-- The two-group binding spike's pass variants: plain content, compiled at test time against the include each
              one's pass interface generates, so they never reach the shared shader recipe. -->
-        <Content Include="Assets\Interfaces\**\*.hlsl" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="Assets/Interfaces/**/*.hlsl" CopyToOutputDirectory="PreserveNewest" />
         <!-- The film-grain variant hashes with sdfPcg3d, so the hash include resolves from the linked SDF directory. -->
-        <Content Include="..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\field\sdf-hash.hlsli" Link="Assets\Shaders\Sdf\field\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-hash.hlsli" Link="Assets/Shaders/Sdf/field/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
         <!-- Package fixtures: graph documents, sources, includes, and malformed manifests the package laws copy into
              a scratch directory. Plain content, never fed to the shader recipe, because the laws compile them. -->
-        <Content Include="Assets\ShaderPackages\**" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="Assets/ShaderPackages/**" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
         <!-- The film grain package's deployed stages, where its declaration (RenderGraphPackageCatalog.SdfFilmGrain)
              says they ship. -->
-        <Content Include="..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\passes\sdf-film-grain.frag.spv;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\passes\sdf-film-grain.frag.dxil;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\passes\fullscreen.vert.spv;..\..\src\Puck.SdfVm\Assets\Shaders\Sdf\passes\fullscreen.vert.dxil" Link="Assets\Shaders\Sdf\passes\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-film-grain.frag.spv;../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-film-grain.frag.dxil;../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/fullscreen.vert.spv;../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/fullscreen.vert.dxil" Link="Assets/Shaders/Sdf/passes/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
         <!-- The neutral group layouts the backends' planners and the spike's interfaces are held to. -->
-        <Compile Include="..\Shared\GpuGroupLayoutTables.cs" Link="GpuGroupLayoutTables.cs" />
+        <Compile Include="../Shared/GpuGroupLayoutTables.cs" Link="GpuGroupLayoutTables.cs" />
         <!-- The package decorator the post and overlay laws observe a recording through. -->
-        <Compile Include="..\Shared\ObservedPackageFactory.cs" Link="ObservedPackageFactory.cs" />
-        <Compile Include="..\Shared\TestLiveness.cs" Link="TestLiveness.cs" />
+        <Compile Include="../Shared/ObservedPackageFactory.cs" Link="ObservedPackageFactory.cs" />
+        <Compile Include="../Shared/TestLiveness.cs" Link="TestLiveness.cs" />
         <!-- The memory model a staged source region's copy runs on, and the fake it wraps. -->
-        <Compile Include="..\Shared\FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
-        <Compile Include="..\Shared\UploadModelGpu.cs" Link="UploadModelGpu.cs" />
+        <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
+        <Compile Include="../Shared/UploadModelGpu.cs" Link="UploadModelGpu.cs" />
     </ItemGroup>
 </Project>

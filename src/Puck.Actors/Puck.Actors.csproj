@@ -13,9 +13,9 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Azure\Puck.Azure.csproj" />
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <ProjectReference Include="..\Puck.Storage\Puck.Storage.csproj" />
+        <ProjectReference Include="../Puck.Azure/Puck.Azure.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Storage/Puck.Storage.csproj" />
     </ItemGroup>
 
     <ItemGroup>

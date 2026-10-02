@@ -42,7 +42,7 @@ public sealed record SdfBake(SdfBakedMesh Mesh, IReadOnlyList<SdfBakedTexture> T
 public static class SdfBaker {
     /// <summary>The baker's version. It moves whenever a change to the baker changes the bytes a bake produces, and it is
     /// part of every bake's key and the version of the compiled-world chunk that names bakes.</summary>
-    public const uint Version = 7;
+    public const uint Version = 8;
 
     /// <summary>Bakes <paramref name="program"/> at <paramref name="tier"/>.</summary>
     /// <param name="program">The program.</param>
@@ -51,12 +51,14 @@ public static class SdfBaker {
     /// <param name="center">The center of a sphere holding every surface of the program, in world units.</param>
     /// <param name="reach">The sphere's radius, in world units.</param>
     /// <param name="tier">The resolution.</param>
+    /// <param name="cancellationToken">Cancels the bake at its next field evaluation.</param>
     /// <returns>The bake.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="materials"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The fixed-point interpreter refuses an instruction of the program, the
     /// program has no shape that reaches the field, or <paramref name="reach"/> is not a positive finite value.</exception>
-    public static SdfBake Bake(SdfProgram program, IReadOnlyList<SdfMaterial> materials, Vector3 center, float reach, SdfBakeTier tier) {
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public static SdfBake Bake(SdfProgram program, IReadOnlyList<SdfMaterial> materials, Vector3 center, float reach, SdfBakeTier tier, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: materials);
 
@@ -70,7 +72,7 @@ public static class SdfBaker {
             throw new ArgumentException(message: "The program has no shape that reaches the field, so it has no surface to bake.", paramName: nameof(program));
         }
 
-        var field = new SdfBakeField(evaluator: evaluator);
+        var field = new SdfBakeField(cancellationToken: cancellationToken, evaluator: evaluator);
         var grid = SdfBakeGrid.Create(
             cells: tier.Cells,
             center: SdfSurfaceTextures.Fixed(x: center.X, y: center.Y, z: center.Z),

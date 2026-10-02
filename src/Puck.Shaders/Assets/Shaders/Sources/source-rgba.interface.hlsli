@@ -1,4 +1,4 @@
-// Generated from shader interface 'source-rgba' (sha256/0e2b7f388303f8b0ec3cc3e9c7024d0f9ad67004fbb5853a84acaaad3f447fc2). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'source-rgba' (sha256/e29cbf47920c52708b789e790d217d9ca9b8340d7f2136608b116d79fc9d730b). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SOURCE_RGBA
 #define PUCK_SHADER_INTERFACE_SOURCE_RGBA
 
@@ -25,7 +25,8 @@ struct SourceRgbaFrame {
 // The Pass group: descriptor set 3, register space 3.
 struct SourceRgbaPass {
     [[vk::offset(0)]] uint2 extent;
-    [[vk::offset(8)]] uint workCounterRow;
+    [[vk::offset(8)]] float paperWhiteNits;
+    [[vk::offset(12)]] uint workCounterRow;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SourceRgbaPass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] ByteAddressBuffer region : register(t1, space3);

@@ -1,4 +1,4 @@
-// Generated from shader interface 'source-transfer' (sha256/107ef275143e81e76b3bb459962bb2de02705e0856206f01a9d5661b4248938d). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'source-transfer' (sha256/62b8f7b13c31d8ce3819293f29ff9478dda7b071d226a2e6240adac0f8215e24). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SOURCE_TRANSFER
 #define PUCK_SHADER_INTERFACE_SOURCE_TRANSFER
 
@@ -25,7 +25,8 @@ struct SourceTransferFrame {
 // The Pass group: descriptor set 3, register space 3.
 struct SourceTransferPass {
     [[vk::offset(0)]] uint2 extent;
-    [[vk::offset(8)]] uint workCounterRow;
+    [[vk::offset(8)]] float paperWhiteNits;
+    [[vk::offset(12)]] uint workCounterRow;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SourceTransferPass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] ByteAddressBuffer region : register(t1, space3);

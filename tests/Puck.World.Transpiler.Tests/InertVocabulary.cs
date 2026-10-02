@@ -24,7 +24,7 @@ internal sealed class InertVocabulary : IDocumentVocabulary {
         fallback: WorldDocumentVocabulary.Instance,
         vocabularies: new Dictionary<string, IDocumentVocabulary>(comparer: StringComparer.Ordinal) {
             [schema] = Instance,
-            [WorldDocumentVocabulary.Schema] = WorldDocumentVocabulary.Instance,
+            [WorldDefinition.SchemaVersion] = WorldDocumentVocabulary.Instance,
         }
     );
 }

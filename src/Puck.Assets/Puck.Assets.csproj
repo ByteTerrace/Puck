@@ -19,8 +19,8 @@
         <PackageReference Include="System.IO.Hashing" Version="[10.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
         <!-- Qr/QrReedSolomon builds its generator polynomials over Puck.Maths.ReedSolomon/BinaryField<T>. -->
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>
 </Project>

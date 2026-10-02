@@ -218,7 +218,7 @@ public sealed partial class PipelineOverrideLawTests {
         _ = tape.StopRecording();
 
         Assert.Equal(
-            actual: tape.Verify(name: name).DivergedAt,
+            actual: tape.Verify(name: name).Primary.DivergedAt,
             expected: -1
         );
 
@@ -234,7 +234,9 @@ public sealed partial class PipelineOverrideLawTests {
         );
 
         var unread = new WorldReplaySnapshot {
+            Authority = "boot",
             DefinitionJson = recording.DefinitionJson,
+            Instance = "boot",
             MountedAddons = recording.MountedAddons,
             PipelineSourceDirectory = null,
             RecordedAuthoritativeHashes = recording.RecordedAuthoritativeHashes,

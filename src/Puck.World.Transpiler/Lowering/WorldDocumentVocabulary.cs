@@ -13,8 +13,6 @@ namespace Puck.World.Transpiler.Lowering;
 /// <remarks>The description is a constructor argument rather than a static read so a law can hand one pass a
 /// description it invented and watch every reader of that pass follow it.</remarks>
 public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = null) : IDocumentVocabulary {
-    /// <summary>The canonical schema URI for world definitions.</summary>
-    public const string Schema = "puck.world.definition.v1";
     /// <summary>The annotation holding the directory the lowered document's relative file paths resolve against.</summary>
     public const string DocumentDirectoryAnnotation = "DocumentDirectory";
 

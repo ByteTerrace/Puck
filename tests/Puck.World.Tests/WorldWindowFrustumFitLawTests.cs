@@ -28,7 +28,7 @@ namespace Puck.World.Tests;
 /// its rays start on the aperture: the destination's occluder, standing between the mapped eye and the glass, is never
 /// met, and the marker beyond it is.
 /// </summary>
-public sealed class WorldWindowFrustumFitLawTests {
+public sealed partial class WorldWindowFrustumFitLawTests {
     internal const string Destination = "tests/Puck.World.Canaries/portal-window/beyond.world.json";
 
     private const string Local = "tests/Puck.World.Canaries/portal-window/fixture.world.json";
@@ -450,14 +450,13 @@ public sealed class WorldWindowFrustumFitLawTests {
     [Fact]
     public void TheCanarysSeatViewRidesItsBody_SoAStepReframesTheWindow() {
         using var state = new TemporaryDirectory(
-            bestEffortDelete: true,
             prefix: "puck-portal-window-eye-"
         );
-        using var host = WorldBootHarness.Compose(
+        var host = state.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,
             world: Local
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var client = host.Services.GetRequiredService<WorldClient>();
         var viewports = host.Services.GetRequiredService<WorldSeatViewports>();
@@ -524,14 +523,13 @@ public sealed class WorldWindowFrustumFitLawTests {
     [Fact]
     public void ANoSeatWorldsWindowFitsFromTheSpectator_AndMovingItReframesTheWindow() {
         using var state = new TemporaryDirectory(
-            bestEffortDelete: true,
             prefix: "puck-portal-window-spectator-"
         );
-        using var host = WorldBootHarness.Compose(
+        var host = state.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,
             world: Local
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var client = host.Services.GetRequiredService<WorldClient>();
         var viewports = host.Services.GetRequiredService<WorldSeatViewports>();
@@ -562,7 +560,14 @@ public sealed class WorldWindowFrustumFitLawTests {
             var window = fit();
 
             Assert.NotNull(@object: window);
-            Assert.Equal(expected: Fit(eye: spectator.Position), actual: window.Value);
+            Assert.True(condition: WorldWindowFrustumFit.TryFitFromEye(
+                camera: out var fromSpectator,
+                destination: AuthoredGameFixtures.Load(relativePath: Destination),
+                eye: spectator.Position,
+                local: AuthoredGameFixtures.Load(relativePath: Local),
+                screen: DoorRow()
+            ));
+            Assert.Equal(expected: fromSpectator, actual: window.Value);
 
             return (spectator, window.Value);
         }

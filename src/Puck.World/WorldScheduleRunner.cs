@@ -100,6 +100,7 @@ internal sealed class WorldScheduleRunner : ICommandObserver {
     // quotes, and escaping every one of them makes the manifest unreadable for its one human audience.
     private static readonly JsonSerializerOptions ManifestSerializerOptions = new() {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        NewLine = "\n",
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
     };

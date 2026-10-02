@@ -79,6 +79,7 @@ public sealed partial class WorldSiloHost {
                         throw new InvalidOperationException(message: "fixture export found an unavailable managed row");
                     }
                     if (!TryCaptureRow(
+                        capturedJournalSequence: out _,
                         encoded: out var bytes,
                         outcome: out var reason,
                         row: row,
@@ -103,14 +104,17 @@ public sealed partial class WorldSiloHost {
                     );
                     // Insert the root read behind this capture's preceding publications and ahead of all later
                     // mutations. Only the small root read holds the queue; its immutable graph is copied afterward.
-                    var selected = ReadFixtureRootAsync(
-                        bookkeeping: bookkeeping,
-                        identity: identity,
-                        previous: bookkeeping.JournalTail,
-                        token: cancellationToken
-                    );
+                    Task<WorldAuthorityRootSnapshot> selected;
 
-                    bookkeeping.JournalTail = ObserveFixtureReadAsync(selected: selected);
+                    lock (bookkeeping.TailGate) {
+                        selected = ReadFixtureRootAsync(
+                            bookkeeping: bookkeeping,
+                            identity: identity,
+                            previous: bookkeeping.JournalTail,
+                            token: cancellationToken
+                        );
+                        bookkeeping.JournalTail = ObserveFixtureReadAsync(selected: selected);
+                    }
                     rows.Add(
                         key: declared.World.Value,
                         value: new(

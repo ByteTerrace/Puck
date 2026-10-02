@@ -1,4 +1,4 @@
-// Generated from shader interface 'source-nv12' (sha256/c11c10783c4ee1bb7c331ad852424edd1bb9321248a83fcdd1cd311fdceb7c21). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'source-nv12' (sha256/218b8def0a175f9f885de22028907861e891ffedd79d13aff42d492425ce8c26). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SOURCE_NV12
 #define PUCK_SHADER_INTERFACE_SOURCE_NV12
 
@@ -25,7 +25,8 @@ struct SourceNv12Frame {
 // The Pass group: descriptor set 3, register space 3.
 struct SourceNv12Pass {
     [[vk::offset(0)]] uint2 extent;
-    [[vk::offset(8)]] uint workCounterRow;
+    [[vk::offset(8)]] float paperWhiteNits;
+    [[vk::offset(12)]] uint workCounterRow;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SourceNv12Pass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] ByteAddressBuffer region : register(t1, space3);

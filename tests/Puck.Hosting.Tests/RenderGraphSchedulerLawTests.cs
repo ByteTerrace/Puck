@@ -625,7 +625,6 @@ public sealed partial class RenderGraphSchedulerLawTests {
                 set: out var withRead
             ), userMessage: accepted?.Message);
             Assert.True(condition: withRead.Reads[1][0].PreviousFrame);
-            Assert.Equal(expected: 0, actual: withRead.NestingDepth);
         }
 
         Assert.False(condition: RenderGraphInstanceSet.TryCreate(
@@ -658,7 +657,6 @@ public sealed partial class RenderGraphSchedulerLawTests {
 
         // The one same-frame read orders the camera before the watcher; every previous-frame read orders nothing.
         Assert.Equal(expected: [1, 0, 2, 3], actual: set.Order);
-        Assert.Equal(expected: 1, actual: set.NestingDepth);
     }
     [Fact]
     public void AnExternalProducerIsScheduledAndPricedLikeAnyInstance() {

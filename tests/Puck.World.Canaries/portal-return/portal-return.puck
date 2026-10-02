@@ -1,0 +1,16 @@
+// Two rooms joined by windows both ways: the lobby, whose arch shows the garden, and the garden, whose arrival arch is
+// the lobby arch's counterpart and whose return arch, ahead of a traveller who arrives, shows the lobby. Each arch is a
+// rim around an open aperture whose glass shows a window session of the other room. A door maps a face's front onto
+// its counterpart's back, turned about, so a traveller walking into the lobby's arch arrives behind the garden's
+// arrival arch facing back through it, while the seat's camera, whose yaw is the world's, still looks on along the walk,
+// at the return arch beyond. A window shows its destination the same way: the return arch's glass looks out of the back
+// of the lobby's arch toward the lobby's spawn, where the lobby stands an orange wall; the garden stands a blue one
+// behind its return arch. So what each window shows names its room. Each room is the verdicts plot (a ground, a walking
+// kit, a chase rig and one seat) presented offscreen at the canary's capture size.
+
+schema: "puck.world.definition.v1"
+
+import "rooms.puck"
+
+entry world lobby = lobby(nesting: 3)
+world garden = garden(nesting: 3)

@@ -42,7 +42,12 @@ Prefer the cheapest correct tool:
 ## File paths
 
 Use `/` in authored paths, configuration, stored path identities, and path output,
-including on Windows. Prefer current `System.IO` APIs that accept these paths
+including on Windows. That includes every MSBuild project, props, and targets
+file: imports, item includes and excludes, links, package paths, and path
+properties all spell `/`. Puck's own MSBuild readers still read `\` as a
+separator the way MSBuild does, so the spelling is held by a `Puck.Cli.Tests`
+law that refuses a backslash anywhere in a tracked MSBuild file outside
+`experimental/`. Prefer current `System.IO` APIs that accept these paths
 directly; do not convert `/` to the platform separator before file access.
 Normalize platform-produced paths to `/` at Puck's output and storage boundaries
 with `Puck.Abstractions.PuckPaths.Normalize`, which resolves a path to its full
@@ -85,11 +90,17 @@ refresh are `puck` verbs, not scripts and not file apps.
 `src/Puck.Azure.Resources/bootstrap.cs` is the repository's one C# file app, an
 identity-team operation run outside CI. It uses the same `.editorconfig`,
 compiler warnings, and Puck formatting conventions as the project-based code;
-its file directives declare its dependencies, so keep package versions pinned.
-`Directory.Build.props` links `build/RepositoryPaths.cs` into it so it can locate
-checkout data at runtime without building Puck CLI. Invoke it from within the
-checkout. Compiler source paths can be remapped by CI and are not runtime file
-locations.
+its file directives declare its dependencies, so keep its SDK, package and
+project directives intact and its package versions pinned. The formatter's
+conventions apply as they do to project code: named arguments where compiler
+resolution and evaluation order permit, declaration spacing, explicit braces,
+PascalCase constants, and an `Async` suffix on task-returning helpers. It starts
+child processes through `ProcessStartInfo.ArgumentList` and checks each child's
+exit code. `Directory.Build.props` links `build/RepositoryPaths.cs` into it so it
+can locate checkout data at runtime without building Puck CLI; use that helper
+rather than a second repository walker. Invoke it from within the checkout.
+Compiler source paths can be remapped by CI and are not runtime file locations,
+so never derive a runtime path from one.
 
 Compile it without executing its operational code:
 
@@ -110,6 +121,33 @@ fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
 
 ## Verification
 
+### Verify a change
+
+`puck gate` is how a change is verified, by agents and people alike. Run it
+from a copy of the candidate's own CLI outside the checkout. It builds the
+solution and stops on a failed build; copies the CLI that build wrote into a
+directory of its own; runs the suites, test worlds and catalog check the change
+reaches, read against the merge base with the target branch so the target's
+newer commits are not counted; and runs `format`, `lengths`, `comment-smells`,
+`docs links`, `schema`, `architecture`, `registry`, `vocabulary`, `shaders generate`,
+`branding`, `formats` and `canary-ceilings` in their check forms only. `puck gate --gpu` adds the
+affected canaries and parity, one after the other, on a machine with no
+competing build or GPU work. The suites and canaries come from
+[`puck affected`](../reference/cli.md#puck-affectedthe-checks-a-change-needs),
+chosen from the project graph and recorded canary coverage, and nothing wider.
+The full sets run only when the owner asks for them. See
+[`puck gate`](../reference/cli.md#puck-gatethe-change-scoped-gate) for the
+steps and the log the run keeps.
+
+A new law proves its own fix: `puck laws prove <law> --fix <commit>`, or
+`--file-list` naming the files of an uncommitted fix, withholds the fix in a
+worktree of its own, requires the law to fail there and pass once the fix is
+restored, and prints the evidence block for the commit body. A law that passes
+with its fix withheld cannot fail and is reported so; a build that fails in
+either phase is refused rather than counted. Never prove a law by hand-reverting
+files in a shared tree. See
+[`puck laws prove`](../reference/cli.md#puck-laws-provea-law-against-its-fix).
+
 ### Engine changes and verification coverage
 
 `Puck.Post` remains quarantined under `experimental/Puck.Post` and outside the
@@ -127,10 +165,11 @@ additional checks with distinct scopes.
 
 `puck parity` boots the [authored parity world](../../tests/Puck.Parity/README.md)
 offscreen once on Vulkan and once on Direct3D 12. Tick-scheduled captures receive
-three verdicts: valid content, exact simulation-state hash agreement, and pixel
+four verdicts: valid content, exact simulation-state hash agreement, the tick
+each frame refreshed its bound regions at matching the capture's tick, and pixel
 agreement under per-tile thresholds. Missing content or a camera inside geometry
-fails before comparison; state and pixel checks are evaluated separately after
-the content check passes. A failure records frames, a delta heatmap, and verdicts.
+fails before comparison; the state, tick and pixel checks are evaluated
+separately after the content check passes. A failure records frames, a delta heatmap, and verdicts.
 
 This comparison uses the contract beside the parity world, not a stored image
 baseline. It requires both GPU backends but does not take over a display. Use it
@@ -138,18 +177,14 @@ for render-path, shader, presenter, or capture changes. Its authored stations
 exercise specific contracts; passing them does not establish correctness for
 every possible scene. See `puck parity --help` for the current command surface.
 
-`puck affected --run` is how a change is verified: it runs the suites, canaries
-and parity the change can reach, chosen from the project graph and recorded
-canary coverage (see [`puck affected`](../reference/cli.md#puck-affectedthe-checks-a-change-needs)),
-and nothing wider. The full sets run only when the owner asks for them.
-
 `puck canary --merge` runs the full canary set. It runs every
 [real-World canary](../reference/cli.md#puck-canaryreal-world-behavioral-proofs)
 a merge needs: the automatic set (headless, no environmental requirements) and
 every canary requiring `gpu`, which includes the offscreen proofs on both
 backends. A bare `puck canary` runs only the automatic set, so it never runs a
-GPU proof. Run the merge gate with no competing build or GPU work on the
-machine, from a copy of the candidate's own CLI. `puck canary --merge --plan`
+GPU proof. A GPU runs one canary or parity run at a time, since runs compete
+for the device and for ports, and heavy CPU work beside one can push a leg past
+its time bounds. Run the merge gate from a copy of the candidate's own CLI. `puck canary --merge --plan`
 prints what the gate would run without a GPU, and a gate that outgrows its
 declared ceiling is refused before it builds. For a per-change GPU check on one
 backend, `puck canary --capability gpu --backend vulkan` (or `directx`) runs
@@ -231,8 +266,9 @@ The Humble battery's reference corpora are declared in its `corpora.json`
 once and the stages resolve it without configuration. `--lane gate` measures
 every row recorded as passing and must stay green; `--lane frontier` measures
 the recorded fails and inconclusives; a plain run measures both. The recipe above
-matches CI's `artifacts/hgb-post` directory for `summary.json`, `results.junit.xml`,
-and the candidate ledger; `--accept` promotes the candidate under the refusal rules
+writes to CI's `artifacts/hgb-post` directory, where a run leaves its report table,
+its JSON summary and its JUnit results (all three written by `PostReport` in
+`src/Puck.Machines.Post`) and the candidate ledger; `--accept` promotes the candidate under the refusal rules
 in the project README. Iterate with `--filter`; never chain runs to record.
 The Advanced battery works the same way: its corpora are pinned in its own
 `corpora.json`, the BIOS and commercial cartridges are command-line flags, and
@@ -290,14 +326,15 @@ dotnet publish src/Puck.World.Browser -c Release
 `tests/Puck.World.Browser.Tests` links `Engine/*.cs` as source and runs under
 the ordinary net10.0 test host—no wasm runtime needed to exercise the pure
 core. The wasm-specific proof is the Node harness, which needs the AppBundle
-the `dotnet publish` line above produces and Node reached through fnm, since
-Node is not on `PATH` on the reference system
-(`FNM_DIR="$APPDATA/fnm" fnm exec --using=26.5.1 -- node ...`):
+the `dotnet publish` line above produces and the system Node on `PATH`. Its
+package declares no `engines` requirement, and CI runs it on Node 24.20.0
+(the `browser` job in `.github/workflows/verify.yml`). Use the system install,
+not a version manager:
 
 ```powershell
 dotnet publish src/Puck.World.Browser -c Release
 cd src/Puck.Dashboard/src/portal
-$env:FNM_DIR = "$env:APPDATA/fnm"; fnm exec --using=26.5.1 -- node --test tests/engine-wasm.test.cjs
+node --test tests/engine-wasm.test.cjs
 ```
 
 The `.puck` authoring surface (a mounted workspace, `CompileSource`,
@@ -332,8 +369,9 @@ dotnet test tests/Puck.Cli.Tests -c Release --filter "FullyQualifiedName~Officia
 ```
 
 CI's `artifacts` workflow always publishes the browser before any test project
-runs, so this is a local-run-only step; the fixture's own failure message
-names the command when the bundle is missing.
+runs, so this is a local-run-only step. Without the bundle the tree-building
+tests skip by name, and the skip reason names the publish command; they never
+fail for the missing prerequisite.
 
 ## Working with world documents
 
@@ -472,6 +510,14 @@ meant to establish.
 - Read the refusal or failure reason. A control must fail at the intended check,
   with the intended message and error signal, rather than merely returning a
   failure.
+- Prove a new law or canary by withholding the fix it pins: with the fix
+  reverted and the law kept, the law must fail at its intended assertion, and
+  with the fix restored it must pass. A law that passes with the fix withheld
+  pins nothing.
+- Re-run a failure seen under load once, alone, before believing it. A timeout
+  or a wait for a port, listener or readiness that passes alone is a flake to
+  report with its message; a wrong pixel, hash, count, refusal or asserted value
+  is a failure whatever the load.
 - When converting a prose rule into an automated check, ensure the derived rule
   rejects every prohibited case. Prefer a strict, observable check when the
   intended scope is uncertain; an overly broad check can pass without testing
@@ -497,6 +543,25 @@ meant to establish.
   with blocking collections (`ConcurrentGarbageCollection` in
   `Directory.Build.targets`). Setting `DOTNET_gcConcurrent=1` brings the false
   failures back, so don't set it when you run these suites.
+- A host, service or object that runs background workers returns from its
+  disposal only after every worker has joined: it exposes `DisposeAsync`, or a
+  `Completion` task that completes after the last worker returns and that
+  `DisposeAsync` awaits, and a law holds a worker inside its owner and fails if
+  disposal or `Completion` returns first. A host awaits its services'
+  `DisposeAsync`, so a service that stops without waiting hides from every
+  teardown above it. `LocalControlServer.Dispose` only begins the stop, because
+  its caller may be the pump its sessions wait for; `Completion` and
+  `DisposeAsync` are the wait.
+- A law that gives a host a state directory hands both to the shared
+  `TemporaryDirectory` (`tests/Shared`): `Own(host)` registers the owner, and
+  disposing the directory disposes its owners last registered first, awaiting
+  `DisposeAsync` when there is one, then deletes, retrying while a handle closes.
+  One bound (`teardownBound`, `TestLiveness.Bound` by default) covers owners and
+  delete, and an owner that does not return fails the law by its type name with
+  nothing deleted. The files' sizes and last write times are compared between
+  delete tries as a secondary net; it sees only a write that lands before the
+  delete succeeds, so shutdown is established by the owner's contract and never
+  by watching the directory.
 - XML documentation is a compile-time dependency. With warnings treated as
   errors, an unresolved member reference produces CS1574; verify documentation
   changes with the compiler when they affect member references.
@@ -535,6 +600,22 @@ meant to establish.
   (SMELL002/SMELL003). Rewrite or delete the comment, then
   `puck comment-smells`. Both ledgers are
   [ratchet ledgers](../reference/cli.md#puck-lengths-and-puck-comment-smellsratchet-ledgers).
+- A strictly versioned format token (a wire key, checkpoint or journal
+  version, replay shape token, baker version, magic, or `puck.<name>.vN`
+  schema) is recorded in `FormatVersions.json`. Bump the constant, then run
+  `puck formats`; formatting preserves the canonical digest.
+  `puck formats --check` fails on any disagreement. A codec
+  edited without a bump moves the recorded digest and fails the check, so the
+  author decides whether the token should move, and two lanes that bump one
+  format conflict in the ledger instead of colliding at run time.
+  [`puck formats`](../reference/cli.md#puck-formatsstrict-format-tokens).
+- The cost of the canary gate selections is recorded in `CanaryCeilings.json`,
+  never declared by hand. A change that adds or removes canary cost runs
+  `puck canary-ceilings` and states the new `puck canary --merge --plan`
+  counts in its commit; `puck canary-ceilings --check` requires each recorded
+  count to equal its plan. When a merge conflicts in the file, rerun the verb
+  rather than recomputing counts.
+  [`puck canary-ceilings`](../reference/cli.md#puck-canary-ceilingsrecorded-gate-costs).
 - A call through an unmanaged function pointer (`delegate* unmanaged`, any
   calling convention) may not use a signature that mentions a type parameter
   except behind a pointer: `Puck.Analyzers` fails the build with INTEROP001,
@@ -574,3 +655,9 @@ superseded plans. When moving or retiring a document, move every live contract,
 limitation, and procedure to its canonical home before removing the old copy.
 The root [README](../../README.md) routes to the document set; update its
 routing whenever the set changes.
+
+The rules for coding agents live in one file, the root
+[`AGENTS.md`](../../AGENTS.md). Codex reads it, and so does Claude Code 2.1.277
+or newer, which reads `AGENTS.md` natively only when no Claude Code memory
+file (a CLAUDE.md, a CLAUDE.local.md, or one under `.claude/`) exists in the
+directory or above it. The repository therefore commits none, at any level.

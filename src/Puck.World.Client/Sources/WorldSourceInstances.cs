@@ -128,6 +128,51 @@ public sealed class WorldSourceInstances {
             instances: instances
         );
     }
+    /// <summary>Returns these source instances followed by every one of <paramref name="others"/> they lack by name, each
+    /// screen reading what it read here.</summary>
+    /// <param name="others">Source instances other screens read, such as those of a world a seat is presented in.</param>
+    /// <returns>The combined instances, or this set itself when it already holds every one.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="others"/> is <see langword="null"/>.</exception>
+    public WorldSourceInstances Including(IReadOnlyList<RenderGraphInstance> others) {
+        ArgumentNullException.ThrowIfNull(argument: others);
+
+        List<RenderGraphInstance>? combined = null;
+
+        foreach (var other in others) {
+            if (!Holds(
+                instances: (combined ?? Instances),
+                name: other.Name
+            )) {
+                (combined ??= [.. Instances]).Add(item: other);
+            }
+        }
+
+        return ((combined is null)
+            ? this
+            : new WorldSourceInstances(
+                byScreen: m_byScreen,
+                instances: combined
+            ));
+    }
+    /// <summary>Returns whether an instance list holds an instance of a name.</summary>
+    /// <param name="instances">The instances.</param>
+    /// <param name="name">The name.</param>
+    /// <returns><see langword="true"/> when an instance has the name.</returns>
+    public static bool Holds(IReadOnlyList<RenderGraphInstance> instances, string name) {
+        ArgumentNullException.ThrowIfNull(argument: instances);
+
+        for (var index = 0; (index < instances.Count); index++) {
+            if (string.Equals(
+                a: instances[index].Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>Returns the screen source a source instance reads, rebuilt from its package and settings: the
     /// <see cref="WorldScreenSource.Producer"/>, <see cref="WorldScreenSource.Machine"/> or
     /// <see cref="WorldScreenSource.Probe"/> source it was derived from.</summary>

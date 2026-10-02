@@ -15,7 +15,7 @@
              LatticeTopology/TopologyCompilation stay there; docs/plans/state-rebuild.md, "What the landing settled",
              says why); Puck.Maths carries the fixed-point and bitset kernels the board and pattern reads fold through.
              Nothing else, and nothing points back. -->
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.State/Puck.State.csproj" />
     </ItemGroup>
 </Project>

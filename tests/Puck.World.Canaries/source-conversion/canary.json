@@ -1,7 +1,7 @@
 {
   "id": "source-conversion",
-  "title": "The shipped palette, NV12, four-byte and transfer conversion passes turn uploaded source regions into the pixels the CPU reference computes",
-  "binding": "The positive leg boots an offscreen world whose one pipeline seeds four 32x32 regions in the uploaded-source layout, a palette-indexed one, an NV12 one, a BGRA8 one and an sRGB-encoded RGBA8 one, runs the shipped source-palette, source-nv12, source-rgba and source-transfer kernels from src/Puck.Shaders over them, and captures each converted image paused. Each quadrant of the palette image is the palette entry (i, 255 - i, 3i mod 256) its index selects, each quadrant of the NV12 image is the BT.709 limited-range conversion of its Y, Cb, Cr sample, clamped, each quadrant of the four-byte image is its BGRA pixel with red and blue swapped, and each quadrant of the transfer image is its sRGB code decoded to linear light, read through the display encode; every expectation is the CPU reference ImageSourceConversion applied to the same regions, which SourceConversionCanaryFixtureTests recomputes. The discriminating leg names BT.601 in the NV12 header, raises every palette index by one, names R8G8B8A8 over the four-byte region's bytes and the linear transfer function in the transfer region's header: the neutral white quadrants hold, and every other quadrant turns to the value the changed header or index predicts.",
+  "title": "The shipped palette, NV12, four-byte and transfer conversion passes turn uploaded source regions, an HDR one among them, into the pixels the CPU reference computes",
+  "binding": "The positive leg boots an offscreen world whose one pipeline seeds five 32x32 regions in the uploaded-source layout, a palette-indexed one, an NV12 one, a BGRA8 one, an sRGB-encoded RGBA8 one and a half-float scRGB one standing in for a capture of an HDR display, runs the shipped source-palette, source-nv12, source-rgba and source-transfer kernels from src/Puck.Shaders over them, the last twice, and captures each converted image paused. Each quadrant of the palette image is the palette entry (i, 255 - i, 3i mod 256) its index selects, each quadrant of the NV12 image is the BT.709 limited-range conversion of its Y, Cb, Cr sample, clamped, each quadrant of the four-byte image is its BGRA pixel with red and blue swapped, each quadrant of the transfer image keeps its sRGB code as a working value, and each quadrant of the HDR image, 1000 cd/m² white, SDR white, 200 cd/m² and 400 cd/m² red with a negative green, is its luminance over a 1000 cd/m² paper white on the extended sRGB curve, all read through the display encode; every expectation is the CPU reference ImageSourceConversion applied to the same regions, which SourceConversionCanaryFixtureTests recomputes. The discriminating leg names BT.601 in the NV12 header, raises every palette index by one, names R8G8B8A8 over the four-byte region's bytes and the linear transfer function in the transfer region's header, and converts the HDR region at the SDR paper white: the neutral white quadrants hold, and every other quadrant turns to the value the changed header, index or paper white predicts.",
   "bootShape": "offscreen",
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
@@ -89,6 +89,21 @@
       {
         "verb": "pipeline.wait",
         "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.output",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 8,
         "outcome": "accepted"
       }
     ],
@@ -248,7 +263,7 @@
       },
       {
         "type": "imageRegion",
-        "name": "transfer-top-left-is-its-srgb-decoded-value",
+        "name": "transfer-top-left-keeps-its-srgb-code",
         "capture": "transfer.png",
         "extent": [32, 32],
         "region": [0.03125, 0.03125, 0.46875, 0.46875],
@@ -260,37 +275,85 @@
       },
       {
         "type": "imageRegion",
-        "name": "transfer-top-right-is-its-srgb-decoded-value",
+        "name": "transfer-top-right-keeps-its-srgb-code",
         "capture": "transfer.png",
         "extent": [32, 32],
         "region": [0.53125, 0.03125, 0.96875, 0.46875],
         "reduce": "every",
-        "minimum": [0.215686275, 0.050980392, 0.0, 1],
-        "maximum": [0.215686275, 0.050980392, 0.0, 1],
+        "minimum": [0.501960784, 0.250980392, 0.0, 1],
+        "maximum": [0.501960784, 0.250980392, 0.0, 1],
         "toleranceCodes": 1,
         "holds": true
       },
       {
         "type": "imageRegion",
-        "name": "transfer-bottom-left-is-its-srgb-decoded-value",
+        "name": "transfer-bottom-left-keeps-its-srgb-code",
         "capture": "transfer.png",
         "extent": [32, 32],
         "region": [0.03125, 0.53125, 0.46875, 0.96875],
         "reduce": "every",
-        "minimum": [0.576470588, 0.015686275, 0.352941176, 1],
-        "maximum": [0.576470588, 0.015686275, 0.352941176, 1],
+        "minimum": [0.784313725, 0.125490196, 0.62745098, 1],
+        "maximum": [0.784313725, 0.125490196, 0.62745098, 1],
         "toleranceCodes": 1,
         "holds": true
       },
       {
         "type": "imageRegion",
-        "name": "transfer-bottom-right-is-its-srgb-decoded-value",
+        "name": "transfer-bottom-right-keeps-its-srgb-code",
         "capture": "transfer.png",
         "extent": [32, 32],
         "region": [0.53125, 0.53125, 0.96875, 0.96875],
         "reduce": "every",
-        "minimum": [0.003921569, 0.870588235, 0.117647059, 1],
-        "maximum": [0.003921569, 0.870588235, 0.117647059, 1],
+        "minimum": [0.062745098, 0.941176471, 0.376470588, 1],
+        "maximum": [0.062745098, 0.941176471, 0.376470588, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "hdr-top-left-is-its-luminance-over-a-1000-nit-paper-white",
+        "capture": "hdr.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.03125, 0.46875, 0.46875],
+        "reduce": "every",
+        "minimum": [1.0, 1.0, 1.0, 1],
+        "maximum": [1.0, 1.0, 1.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "hdr-top-right-is-its-luminance-over-a-1000-nit-paper-white",
+        "capture": "hdr.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.31372549, 0.219607843, 0.152941176, 1],
+        "maximum": [0.31372549, 0.219607843, 0.152941176, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "hdr-bottom-left-is-its-luminance-over-a-1000-nit-paper-white",
+        "capture": "hdr.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.48627451, 0.349019608, 0.0, 1],
+        "maximum": [0.48627451, 0.349019608, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "hdr-bottom-right-is-its-luminance-over-a-1000-nit-paper-white",
+        "capture": "hdr.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.666666667, 0.0, 0.062745098, 1],
+        "maximum": [0.666666667, 0.0, 0.062745098, 1],
         "toleranceCodes": 1,
         "holds": true
       }
@@ -378,6 +441,21 @@
       {
         "verb": "pipeline.wait",
         "occurrence": 7,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.output",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.capture",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 8,
         "outcome": "accepted"
       }
     ],
@@ -673,43 +751,7 @@
       },
       {
         "type": "imageRegion",
-        "name": "transfer-top-right-is-not-the-srgb-decoded-value",
-        "capture": "transfer.png",
-        "extent": [32, 32],
-        "region": [0.53125, 0.03125, 0.96875, 0.46875],
-        "reduce": "every",
-        "minimum": [0.215686275, 0.050980392, 0.0, 1],
-        "maximum": [0.215686275, 0.050980392, 0.0, 1],
-        "toleranceCodes": 1,
-        "holds": false
-      },
-      {
-        "type": "imageRegion",
-        "name": "transfer-bottom-left-is-not-the-srgb-decoded-value",
-        "capture": "transfer.png",
-        "extent": [32, 32],
-        "region": [0.03125, 0.53125, 0.46875, 0.96875],
-        "reduce": "every",
-        "minimum": [0.576470588, 0.015686275, 0.352941176, 1],
-        "maximum": [0.576470588, 0.015686275, 0.352941176, 1],
-        "toleranceCodes": 1,
-        "holds": false
-      },
-      {
-        "type": "imageRegion",
-        "name": "transfer-bottom-right-is-not-the-srgb-decoded-value",
-        "capture": "transfer.png",
-        "extent": [32, 32],
-        "region": [0.53125, 0.53125, 0.96875, 0.96875],
-        "reduce": "every",
-        "minimum": [0.003921569, 0.870588235, 0.117647059, 1],
-        "maximum": [0.003921569, 0.870588235, 0.117647059, 1],
-        "toleranceCodes": 1,
-        "holds": false
-      },
-      {
-        "type": "imageRegion",
-        "name": "transfer-top-right-is-the-linear-value",
+        "name": "transfer-top-right-is-not-its-srgb-code",
         "capture": "transfer.png",
         "extent": [32, 32],
         "region": [0.53125, 0.03125, 0.96875, 0.46875],
@@ -717,11 +759,11 @@
         "minimum": [0.501960784, 0.250980392, 0.0, 1],
         "maximum": [0.501960784, 0.250980392, 0.0, 1],
         "toleranceCodes": 1,
-        "holds": true
+        "holds": false
       },
       {
         "type": "imageRegion",
-        "name": "transfer-bottom-left-is-the-linear-value",
+        "name": "transfer-bottom-left-is-not-its-srgb-code",
         "capture": "transfer.png",
         "extent": [32, 32],
         "region": [0.03125, 0.53125, 0.46875, 0.96875],
@@ -729,17 +771,137 @@
         "minimum": [0.784313725, 0.125490196, 0.62745098, 1],
         "maximum": [0.784313725, 0.125490196, 0.62745098, 1],
         "toleranceCodes": 1,
-        "holds": true
+        "holds": false
       },
       {
         "type": "imageRegion",
-        "name": "transfer-bottom-right-is-the-linear-value",
+        "name": "transfer-bottom-right-is-not-its-srgb-code",
         "capture": "transfer.png",
         "extent": [32, 32],
         "region": [0.53125, 0.53125, 0.96875, 0.96875],
         "reduce": "every",
         "minimum": [0.062745098, 0.941176471, 0.376470588, 1],
         "maximum": [0.062745098, 0.941176471, 0.376470588, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "transfer-top-right-is-its-linear-value-encoded",
+        "capture": "transfer.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.737254902, 0.537254902, 0.0, 1],
+        "maximum": [0.737254902, 0.537254902, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "transfer-bottom-left-is-its-linear-value-encoded",
+        "capture": "transfer.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.898039216, 0.388235294, 0.815686275, 1],
+        "maximum": [0.898039216, 0.388235294, 0.815686275, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "transfer-bottom-right-is-its-linear-value-encoded",
+        "capture": "transfer.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.278431373, 0.97254902, 0.647058824, 1],
+        "maximum": [0.278431373, 0.97254902, 0.647058824, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "hdr-top-left-stays-white-above-either-paper-white",
+        "capture": "hdr.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.03125, 0.46875, 0.46875],
+        "reduce": "every",
+        "minimum": [1.0, 1.0, 1.0, 1],
+        "maximum": [1.0, 1.0, 1.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "hdr-top-right-is-not-its-value-at-a-1000-nit-paper-white",
+        "capture": "hdr.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [0.31372549, 0.219607843, 0.152941176, 1],
+        "maximum": [0.31372549, 0.219607843, 0.152941176, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "hdr-bottom-left-is-not-its-value-at-a-1000-nit-paper-white",
+        "capture": "hdr.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.48627451, 0.349019608, 0.0, 1],
+        "maximum": [0.48627451, 0.349019608, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "hdr-bottom-right-is-not-its-value-at-a-1000-nit-paper-white",
+        "capture": "hdr.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [0.666666667, 0.0, 0.062745098, 1],
+        "maximum": [0.666666667, 0.0, 0.062745098, 1],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "hdr-top-right-is-its-luminance-over-the-sdr-paper-white",
+        "capture": "hdr.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.03125, 0.96875, 0.46875],
+        "reduce": "every",
+        "minimum": [1.0, 0.737254902, 0.537254902, 1],
+        "maximum": [1.0, 0.737254902, 0.537254902, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "hdr-bottom-left-is-its-luminance-over-the-sdr-paper-white",
+        "capture": "hdr.png",
+        "extent": [32, 32],
+        "region": [0.03125, 0.53125, 0.46875, 0.96875],
+        "reduce": "every",
+        "minimum": [1.0, 1.0, 0.0, 1],
+        "maximum": [1.0, 1.0, 0.0, 1],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "hdr-bottom-right-is-its-luminance-over-the-sdr-paper-white",
+        "capture": "hdr.png",
+        "extent": [32, 32],
+        "region": [0.53125, 0.53125, 0.96875, 0.96875],
+        "reduce": "every",
+        "minimum": [1.0, 0.0, 0.278431373, 1],
+        "maximum": [1.0, 0.0, 0.278431373, 1],
         "toleranceCodes": 1,
         "holds": true
       }

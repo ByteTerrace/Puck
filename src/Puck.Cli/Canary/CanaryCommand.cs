@@ -55,7 +55,7 @@ internal static partial class CanaryCommand {
 
             The five selection forms are mutually exclusive. Every execution refuses an empty selection,
             and a gate selection (the automatic set or --merge) whose planned World boots or summed leg
-            budget exceed its ceiling in CanaryCeilings.cs. It builds Puck.World once (or takes
+            budget exceed the cost recorded in CanaryCeilings.json (`puck canary-ceilings`). It builds Puck.World once (or takes
             --world-artifact as given), then runs every positive and discriminating leg from fresh state,
             up to --jobs World processes at once; a windowed, offscreen, or requirement-declaring leg runs
             alone. A leg ends when its script does: the runner closes each script with wire.errors and
@@ -267,8 +267,25 @@ internal static partial class CanaryCommand {
             manifests: selected,
             namedWorldArtifact: (worldArtifact is not null)
         );
-        var ceiling = CeilingOf(selection: selection);
         var ceilingName = CeilingName(selection: selection);
+        CanaryCeiling? ceiling = null;
+
+        if (ceilingName is not null) {
+            if (!CanaryCeilingsLedger.TryRead(
+                error: out var ledgerError,
+                ledger: out var ledger,
+                repositoryRoot: repositoryRoot,
+                text: out _
+            )) {
+                Console.Error.WriteLine(value: $"ERROR: {CanaryCeilingsLedger.FileName}: {ledgerError}");
+
+                return CliExit.Refused;
+            }
+
+            ceiling = ((ceilingName == "merge")
+                ? ledger!.Merge
+                : ledger!.Automatic);
+        }
 
         if (plan) {
             PrintPlan(
@@ -283,7 +300,7 @@ internal static partial class CanaryCommand {
             (ceiling is not null) &&
             (CeilingRefusal(
                 ceiling: ceiling,
-                name: ceilingName,
+                name: ceilingName!,
                 plan: costs
             ) is { } overCeiling)
         ) {
@@ -1050,7 +1067,8 @@ internal static partial class CanaryCommand {
         var exitCode = process.ExitCode;
         var timedOut = process.TimedOut;
 
-        // The relaunch boots only after a first boot that ran its script to the end, on the document that boot wrote.
+        // The relaunch boots only after a first boot that ran its script to the end, on the document that boot wrote or on
+        // the leg's own world.
         if (
             (leg.Relaunch is { } relaunch) &&
             (unsupported is null) &&
@@ -1064,10 +1082,12 @@ internal static partial class CanaryCommand {
                 );
             }
 
-            var relaunchWorld = Path.Combine(
-                path1: runDirectory,
-                path2: relaunch.WorldFileName
-            );
+            var relaunchWorld = ((relaunch.WorldFileName is { } relaunchFile)
+                ? Path.Combine(
+                    path1: runDirectory,
+                    path2: relaunchFile
+                )
+                : executionWorld);
             var relaunchInput = File.ReadAllText(path: relaunch.ScriptPath)
                 .Replace(
                 oldValue: "{fixtures}",

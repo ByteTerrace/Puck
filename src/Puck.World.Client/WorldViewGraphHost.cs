@@ -142,8 +142,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         /// <summary>The root source being watched, or null when watching is disabled.</summary>
         public string? WatchPath { get; private set; }
 
-        internal void CancelPending() =>
-            Compilation.Cancel();
         internal bool PollWatch(long debounceTicks, long pollTicks) => m_watch.Poll(now: Stopwatch.GetTimestamp(), debounceTicks: debounceTicks, pollTicks: pollTicks);
         internal void RefreshDependencies() {
             if (WatchPath is not { } root) { return; }
@@ -253,6 +251,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     public const int WatchPollMilliseconds = 50;
 
     private readonly Dictionary<string, Entry> m_entries = new(comparer: StringComparer.Ordinal);
+    private readonly List<CanceledBuild<CompileOutcome>> m_canceledCompilations = [];
     private readonly List<RenderGraphFootprint> m_footprints = [];
     private readonly Dictionary<string, RenderGraphPlacement> m_placements = new(comparer: StringComparer.Ordinal);
 
@@ -271,6 +270,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
     private readonly List<RenderGraphRoot> m_roots = [];
     private List<RenderGraphFootprint> m_screenFootprints = [];
+    // The session views of the running set, whose footprints follow what their consumers see (ResetFootprints).
+    private readonly HashSet<string> m_portals = new(comparer: StringComparer.Ordinal);
 
     private WorldViewDefaults? m_lastViews;
     // The render.tonemap the running set was composed with, and whether a temporally resolved view sharpened then.
@@ -379,6 +380,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         if (!RenderGraphInstanceSet.TryCreate(
             instances: instances,
+            nestingDepth: views.NestingDepth,
             refusal: out var refusal,
             set: out var composedSet
         )) {
@@ -435,23 +437,19 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             Reads = [
                 .. instance.Reads,
                 .. sources.Select(selector: static source => new RenderGraphRead(Producer: source.Name)),
-                .. rendered.Views.Where(predicate: static view => view.Demand.HasFlag(flag: WorldViewDemand.Screen)).Select(selector: static view => new RenderGraphRead(Producer: view.Name)),
+                .. rendered.Views.Where(predicate: static view => WorldViewInstances.IsShownDirectly(view: in view)).Select(selector: static view => new RenderGraphRead(Producer: view.Name)),
             ],
         }));
-    // The footprints a screen-rendering instance shows its reads through: a source renders at its producer's negotiated
-    // extent, so any fraction demands it without sizing it, and a view a screen shows at the fraction of the display its
-    // declared extent covers.
+    // The footprints a screen-rendering instance, or a view whose screens show something, shows its reads through: a
+    // source renders at its producer's negotiated extent, so any fraction demands it without sizing it, and a view a
+    // screen shows at the fraction of the display its declared extent covers.
     private static List<RenderGraphFootprint> ScreenFootprints(RenderGraphInstanceSet set, WorldViewInstances rendered) {
         var footprints = new List<RenderGraphFootprint>();
 
         foreach (var instance in set.Instances) {
             if (
                 !RendersScreens(instance: instance, rendered: rendered) &&
-                !rendered.Views.Any(predicate: view => (view.FilmsWorld && string.Equals(
-                    a: view.Name,
-                    b: instance.Name,
-                    comparisonType: StringComparison.Ordinal
-                )))
+                !rendered.Contains(name: instance.Name)
             ) {
                 continue;
             }
@@ -806,17 +804,46 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         ArgumentException.ThrowIfNullOrWhiteSpace(documentDirectory);
         DocumentDirectory = Path.GetFullPath(path: documentDirectory);
     }
-    /// <summary>Cancels pending compilations; the runtime retains ownership of the GPU instances.</summary>
+    /// <summary>Cancels compilations and waits for them and earlier superseded compilations to stop, so nothing this
+    /// host started writes under the compiler's cache after disposal. The runtime owns the GPU instances.</summary>
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
         foreach (var entry in m_entries.Values) {
-            entry.CancelPending();
+            CancelPending(entry: entry);
+        }
+        foreach (var compilation in m_canceledCompilations) {
+            compilation.Wait();
+        }
+        m_canceledCompilations.Clear();
+    }
+
+    // Supersession and row removal never wait on the frame thread. Keep their canceled builds until they finish, or
+    // join them at disposal before the owner releases the compiler's directory.
+    private void CancelPending(Entry entry) {
+        CollectCanceledCompilations();
+        var compilation = entry.Compilation.Detach();
+
+        if (compilation.IsCompleted) {
+            compilation.Wait();
+        } else {
+            m_canceledCompilations.Add(item: compilation);
         }
     }
+    private void CollectCanceledCompilations() {
+        for (var index = (m_canceledCompilations.Count - 1); (index >= 0); index--) {
+            var compilation = m_canceledCompilations[index];
+
+            if (!compilation.IsCompleted) { continue; }
+            compilation.Wait();
+            m_canceledCompilations.RemoveAt(index: index);
+        }
+    }
+
     /// <summary>Installs complete candidates and polls dependency watches before this host frame renders.</summary>
     public void PumpWatches() {
         if (m_disposed) { return; }
+        CollectCanceledCompilations();
         var debounce = ((Stopwatch.Frequency * WatchDebounceMilliseconds) / 1000);
         var poll = ((Stopwatch.Frequency * WatchPollMilliseconds) / 1000);
 
@@ -923,7 +950,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         var entry = m_entries[name];
         var superseded = entry.IsCompiling;
 
-        entry.CancelPending();
+        CancelPending(entry: entry);
         if (superseded) {
             Report?.Invoke(
                 name,
@@ -1214,6 +1241,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             set: set
         );
         m_screenFootprints.AddRange(collection: DisplayFootprints(scene: scene));
+        m_portals.Clear();
+
+        foreach (var view in rendered.Views) {
+            if (!view.FilmsWorld) {
+                _ = m_portals.Add(item: view.Name);
+            }
+        }
         m_roots.Clear();
 
         foreach (var view in rendered.Views) {
@@ -1262,7 +1296,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     objB: node
                 )
             ) {
-                entry?.CancelPending();
+                if (entry is not null) { CancelPending(entry: entry); }
                 entry = new Entry { Name = row.Name, Node = node, Owner = this };
                 m_entries[row.Name] = entry;
             }
@@ -1286,7 +1320,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         foreach (var name in m_entries.Keys.ToArray()) {
             if (desiredNames.Contains(item: name)) { continue; }
-            m_entries[name].CancelPending();
+            CancelPending(entry: m_entries[name]);
             m_entries.Remove(key: name);
         }
     }
@@ -1391,6 +1425,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         return footprints;
     }
+    // The frame's footprints: the synthesized root's, then every screen's, a session's only while its consumer sees the
+    // glass it shows on (ShowsPortal), so a portal face out of view schedules no level beneath it.
     private void ResetFootprints() {
         m_footprints.Clear();
 
@@ -1398,6 +1434,45 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             m_footprints.AddRange(collection: synthesized.Footprints);
         }
 
-        m_footprints.AddRange(collection: m_screenFootprints);
+        foreach (var footprint in m_screenFootprints) {
+            if (
+                !m_portals.Contains(item: footprint.Producer) ||
+                ShowsPortal(
+                    consumer: footprint.Consumer,
+                    producer: footprint.Producer
+                )
+            ) {
+                m_footprints.Add(item: footprint);
+            }
+        }
+    }
+    // Whether a consumer sees the glass a session it reads shows on, from the camera it last rendered with: a consumer in
+    // another world than the glass's sees none of it, and one whose camera or glass is not known yet sees it.
+    private bool ShowsPortal(string consumer, string producer) {
+        if (ViewScenes is not { } scenes) {
+            return true;
+        }
+
+        return scenes.PortalGlass(
+            consumer: consumer,
+            glass: out var glass,
+            producer: producer
+        ) switch {
+            WorldPortalGlass.Elsewhere => false,
+            WorldPortalGlass.Found => (
+                !(m_cameras.TryGetValue(
+                    key: consumer,
+                    value: out var camera
+                ) || scenes.TryCamera(
+                    camera: out camera,
+                    view: consumer
+                )) ||
+                WorldPortalVisibility.Sees(
+                    camera: in camera,
+                    glass: glass!
+                )
+            ),
+            _ => true,
+        };
     }
 }

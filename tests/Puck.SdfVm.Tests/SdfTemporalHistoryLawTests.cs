@@ -65,6 +65,21 @@ public sealed class SdfTemporalHistoryLawTests {
         Assert.False(condition: history.Stands(epoch: (epoch with { Cut = 9 }), previousPoses: 0));
     }
     [Fact]
+    public void AChangedRecordedGridNeedsAPeriodEvenWhenTheRequestedScaleAlreadySettled() {
+        var epoch = (Epoch with { Temporal = true });
+        var history = new SdfTemporalHistory();
+
+        foreach (var width in new[] { 160u, 320u }) {
+            for (var sample = 0U; (sample < SdfTemporalHistory.Period); sample++) {
+                history.Prepare(camera: default, currentPoses: 0, epoch: epoch, previousPoses: 0,
+                    renderWidth: width, renderHeight: 180);
+                history.Rendered();
+                Assert.Equal(expected: (sample == (SdfTemporalHistory.Period - 1)),
+                    actual: history.Stands(epoch: epoch, previousPoses: 0));
+            }
+        }
+    }
+    [Fact]
     public void EightSamplesBeginAtTheCenterAndRepeat() {
         Vector2[] expected = [
             Vector2.Zero, new(x: 0f, y: (-1f / 6f)), new(x: -0.25f, y: (1f / 6f)), new(x: 0.25f, y: (-7f / 18f)),

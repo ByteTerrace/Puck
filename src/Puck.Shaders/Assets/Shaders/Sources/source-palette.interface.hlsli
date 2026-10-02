@@ -1,4 +1,4 @@
-// Generated from shader interface 'source-palette' (sha256/76137870fb99229a34b1586139e5b12ae65477db7cbdbc7d07345c2d44bb063e). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'source-palette' (sha256/8438098e267a98a22925df63d2aa0037e786c2c955be78862580348b824d3744). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SOURCE_PALETTE
 #define PUCK_SHADER_INTERFACE_SOURCE_PALETTE
 
@@ -25,7 +25,8 @@ struct SourcePaletteFrame {
 // The Pass group: descriptor set 3, register space 3.
 struct SourcePalettePass {
     [[vk::offset(0)]] uint2 extent;
-    [[vk::offset(8)]] uint workCounterRow;
+    [[vk::offset(8)]] float paperWhiteNits;
+    [[vk::offset(12)]] uint workCounterRow;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SourcePalettePass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] ByteAddressBuffer region : register(t1, space3);

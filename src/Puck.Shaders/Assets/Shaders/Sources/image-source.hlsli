@@ -15,6 +15,7 @@
 #define IMAGE_FORMAT_INDEXED8 3u
 #define IMAGE_FORMAT_NV12 4u
 #define IMAGE_FORMAT_R10G10B10A2 5u
+#define IMAGE_FORMAT_R16G16B16A16F 6u
 
 // ImageYuvMatrix, ImageYuvRange and ImageTransferFunction codes.
 #define IMAGE_MATRIX_BT601 0u
@@ -26,8 +27,12 @@
 #define IMAGE_TRANSFER_LINEAR 1u
 #define IMAGE_TRANSFER_PQ 2u
 
-// ImageSourceConversion.ReferenceWhiteNits: the luminance the transfer pass maps to 1.
-#define IMAGE_REFERENCE_WHITE_NITS 203.0
+// ImageColorPrimaries codes.
+#define IMAGE_PRIMARIES_BT709 0u
+#define IMAGE_PRIMARIES_BT2020 1u
+
+// DisplayOutput.SdrWhiteNits: the luminance of an scRGB (linear) value of one.
+#define IMAGE_SDR_WHITE_NITS 80.0
 
 struct ImageSourceHeader {
     uint width;
@@ -119,16 +124,51 @@ float imageSourceSrgbToLinear(float value) {
     return ((clamped <= 0.04045) ? (clamped / 12.92) : pow(((clamped + 0.055) / 1.055), 2.4));
 }
 
-float imageSourceDecode(uint transfer, float value) {
+// One stored value to linear light relative to the paper-white level; ImageSourceConversion.ToLinear. An sRGB value is
+// relative to SDR white already, a linear value is scRGB (one at 80 cd/m²) and is not clamped, and a perceptual-quantizer
+// value is its luminance over the paper white.
+float imageSourceToLinear(uint transfer, float value, float paperWhiteNits) {
     if (transfer == IMAGE_TRANSFER_PQ) {
-        return (imageSourcePqToNits(value) / IMAGE_REFERENCE_WHITE_NITS);
+        return (imageSourcePqToNits(value) / paperWhiteNits);
     }
 
     if (transfer == IMAGE_TRANSFER_LINEAR) {
-        return value;
+        return ((value * IMAGE_SDR_WHITE_NITS) / paperWhiteNits);
     }
 
     return imageSourceSrgbToLinear(value);
+}
+
+// Linear light to a working value: the sRGB curve extended past one and mirrored below zero, the curve the display encode
+// decodes; ImageSourceConversion.LinearToWorking.
+float imageSourceLinearToWorking(float value) {
+    float magnitude = abs(value);
+    float encoded = ((magnitude <= 0.0031308) ? (magnitude * 12.92) : ((1.055 * pow(magnitude, (1.0 / 2.4))) - 0.055));
+
+    return ((value < 0.0) ? -encoded : encoded);
+}
+
+// One sample's stored channels to working values: decoded to linear light relative to the paper white, BT.2020 primaries
+// moved to BT.709 (ITU-R BT.2407), then encoded; ImageSourceConversion.ToWorking.
+float3 imageSourceToWorking(uint color, float3 stored, float paperWhiteNits) {
+    uint transfer = ((color >> 16) & 0xFFu);
+    float3 linearLight = float3(
+        imageSourceToLinear(transfer, stored.r, paperWhiteNits),
+        imageSourceToLinear(transfer, stored.g, paperWhiteNits),
+        imageSourceToLinear(transfer, stored.b, paperWhiteNits)
+    );
+
+    if ((color >> 24) == IMAGE_PRIMARIES_BT2020) {
+        const float3x3 bt2020ToBt709 = {
+            1.6604910, -0.5876411, -0.0728499,
+            -0.1245505, 1.1328999, -0.0083494,
+            -0.0181508, -0.1005789, 1.1187297,
+        };
+
+        linearLight = mul(bt2020ToBt709, linearLight);
+    }
+
+    return float3(imageSourceLinearToWorking(linearLight.r), imageSourceLinearToWorking(linearLight.g), imageSourceLinearToWorking(linearLight.b));
 }
 
 #endif

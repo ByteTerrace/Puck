@@ -11,7 +11,7 @@
         <InvariantGlobalization>true</InvariantGlobalization>
         <!-- Nothing packs unless it opts in. A "blessed" project sets <IsPackable>true</IsPackable>
              in its own csproj, which turns on the shared version and NuGet metadata in
-             build\Packaging.targets; every other project stays out of `dotnet pack` entirely. The
+             build/Packaging.targets; every other project stays out of `dotnet pack` entirely. The
              '' guard leaves an explicit per-project choice (e.g. Puck.Analyzers) untouched. -->
         <IsPackable Condition="'$(IsPackable)' == ''">false</IsPackable>
         <Nullable>enable</Nullable>
@@ -67,7 +67,7 @@
 
     <!-- File apps share the runtime repository lookup by source, so a bootstrap program needs no CLI build. -->
     <ItemGroup Condition="'$(IsFileBasedProgram)' == 'true'">
-        <Compile Include="$(MSBuildThisFileDirectory)build\RepositoryPaths.cs" Link="RepositoryPaths.cs" />
+        <Compile Include="$(MSBuildThisFileDirectory)build/RepositoryPaths.cs" Link="RepositoryPaths.cs" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(IsFileBasedProgram)' != 'true' AND ('@(Compile)' == '' OR !$([System.String]::Copy('@(Compile)').Contains('VerifiedCodeAttribute.cs')))">
@@ -77,7 +77,7 @@
              once for the same project — without it, a second pass would add the same Compile item twice, which
              MSBuild reports as an error under the repo-wide TreatWarningsAsErrors/CodeAnalysisTreatWarningsAsErrors
              gate. -->
-        <Compile Include="$(MSBuildThisFileDirectory)build\VerifiedCodeAttribute.cs" Link="Properties\VerifiedCodeAttribute.cs" />
+        <Compile Include="$(MSBuildThisFileDirectory)build/VerifiedCodeAttribute.cs" Link="Properties/VerifiedCodeAttribute.cs" />
         <!-- The brand ledger Puck.Analyzers reads at RegisterCompilationStartAction time; see VerifiedCode.json
              itself for the schema and the analyzer's VerifiedCodeManifest.cs for the reader. -->
         <AdditionalFiles Include="$(MSBuildThisFileDirectory)VerifiedCode.json" />
@@ -94,7 +94,7 @@
          becomes a compile-time dependency nor ships in any output. -->
     <ItemGroup Condition="('$(MSBuildProjectName)' != 'Puck.Analyzers') AND ('$(IsFileBasedProgram)' != 'true') AND ('@(ProjectReference)' == '' OR !$([System.String]::Copy('@(ProjectReference)').Contains('Puck.Analyzers.csproj')))">
         <ProjectReference
-            Include="$(MSBuildThisFileDirectory)src\Puck.Analyzers\Puck.Analyzers.csproj"
+            Include="$(MSBuildThisFileDirectory)src/Puck.Analyzers/Puck.Analyzers.csproj"
             OutputItemType="Analyzer"
             ReferenceOutputAssembly="false"
         />
@@ -106,21 +106,21 @@
              already rides the Mono runtime pack itself) and otherwise copied into every RID's output regardless of
              which native host will ever load them. -->
         <None
-            Condition="Exists('$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc.dll') AND ('$(RuntimeIdentifier)' != 'browser-wasm')"
+            Condition="Exists('$(MSBuildThisFileDirectory)lib/win-x64/mimalloc-3.3/bin/mimalloc.dll') AND ('$(RuntimeIdentifier)' != 'browser-wasm')"
             CopyToOutputDirectory="PreserveNewest"
-            Include="$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc.dll"
+            Include="$(MSBuildThisFileDirectory)lib/win-x64/mimalloc-3.3/bin/mimalloc.dll"
             Link="mimalloc.dll"
         />
         <None
-            Condition="Exists('$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc-redirect.dll') AND ('$(RuntimeIdentifier)' != 'browser-wasm')"
+            Condition="Exists('$(MSBuildThisFileDirectory)lib/win-x64/mimalloc-3.3/bin/mimalloc-redirect.dll') AND ('$(RuntimeIdentifier)' != 'browser-wasm')"
             CopyToOutputDirectory="PreserveNewest"
-            Include="$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc-redirect.dll"
+            Include="$(MSBuildThisFileDirectory)lib/win-x64/mimalloc-3.3/bin/mimalloc-redirect.dll"
             Link="mimalloc-redirect.dll"
         />
         <None
-            Condition="Exists('$(MSBuildThisFileDirectory)lib\linux-x64\mimalloc-3.3\lib\libmimalloc.so.3.3') AND ('$(RuntimeIdentifier)' != 'browser-wasm')"
+            Condition="Exists('$(MSBuildThisFileDirectory)lib/linux-x64/mimalloc-3.3/lib/libmimalloc.so.3.3') AND ('$(RuntimeIdentifier)' != 'browser-wasm')"
             CopyToOutputDirectory="PreserveNewest"
-            Include="$(MSBuildThisFileDirectory)lib\linux-x64\mimalloc-3.3\lib\libmimalloc.so.3.3"
+            Include="$(MSBuildThisFileDirectory)lib/linux-x64/mimalloc-3.3/lib/libmimalloc.so.3.3"
             Link="libmimalloc.so"
         />
     </ItemGroup>

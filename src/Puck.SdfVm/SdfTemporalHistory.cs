@@ -13,7 +13,9 @@ namespace Puck.SdfVm;
 /// <param name="Debug">The debug view mode.</param>
 /// <param name="Temporal">Whether the view resolves temporally (<c>SdfWorldPackage.TemporalFragment</c>), whose
 /// output converges over one period and then stands.</param>
-public readonly record struct SdfTemporalEpoch(long Binding, long Cut, uint Width, uint Height, float Ceiling, bool Enabled, int Debug, bool Temporal = false);
+/// <param name="Unread">The frames the instance's render graph has left it unread and absent from displayed outputs,
+/// including held consumer outputs: a view shown again after it was parked renders in a new epoch.</param>
+public readonly record struct SdfTemporalEpoch(long Binding, long Cut, uint Width, uint Height, float Ceiling, bool Enabled, int Debug, bool Temporal = false, long Unread = 0);
 /// <summary>A rendered camera and its sample grid, retained for motion reconstruction.</summary>
 /// <param name="Camera">The camera whose basis and off-axis lens projected the sample.</param>
 /// <param name="Jitter">The ray offset in render pixels.</param>
@@ -72,7 +74,8 @@ public sealed class SdfTemporalHistory {
     /// <returns><see langword="true"/> when the previous view and poses feed the pass's pixels.</returns>
     public static bool ReadsMotion(SdfTemporalEpoch epoch) => (epoch.Debug == DebugViewModes.Motion);
     /// <summary>Prepares a render, resetting when its epoch changes or the residency's previous transform tables do not
-    /// hold the poses of this instance's preceding render.</summary>
+    /// hold the poses of this instance's preceding render. A sample grid other than the preceding render's restarts the
+    /// settling period (<see cref="Changed"/>), whether a dip, a recovery or a replacement graph moved it.</summary>
     /// <param name="epoch">The current reset inputs.</param>
     /// <param name="camera">The camera being rendered.</param>
     /// <param name="previousPoses">The pose revision the residency's previous transform tables hold for this render
@@ -84,6 +87,12 @@ public sealed class SdfTemporalHistory {
     /// which then drive the index from the epoch's first render, or <see langword="null"/> when each completed render
     /// advances it.</param>
     public void Prepare(SdfTemporalEpoch epoch, CameraSnapshot camera, long previousPoses, long currentPoses, uint renderWidth = 0, uint renderHeight = 0, int? counted = null) {
+        var width = ((renderWidth == 0) ? epoch.Width : renderWidth);
+        var height = ((renderHeight == 0) ? epoch.Height : renderHeight);
+
+        if ((m_currentView.Width != width) || (m_currentView.Height != height)) {
+            Changed();
+        }
         if (!Continues(epoch: epoch, previousPoses: previousPoses)) {
             Reset();
         }
@@ -99,7 +108,7 @@ public sealed class SdfTemporalHistory {
             }
             Frames = (Sampling(epoch: epoch) ? ((uint)(samples - m_countBase)) : 0U);
         }
-        m_currentView = new SdfReprojectionView(Camera: camera, Jitter: Jitter, Width: ((renderWidth == 0) ? epoch.Width : renderWidth), Height: ((renderHeight == 0) ? epoch.Height : renderHeight));
+        m_currentView = new SdfReprojectionView(Camera: camera, Jitter: Jitter, Width: width, Height: height);
     }
     /// <summary>Discards history while retaining its storage: the next render starts the epoch at the pixel center with
     /// no previous view.</summary>

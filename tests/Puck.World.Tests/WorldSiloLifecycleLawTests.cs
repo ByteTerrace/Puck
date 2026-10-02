@@ -72,8 +72,16 @@ public sealed class WorldSiloLifecycleLawTests {
             if (!host.IsDraining) { host.Instances.StepInstances(masterDeltaTicks: Fixtures.StepTicks); host.NoteMasterStep(stepTicks: Fixtures.StepTicks); }
             await Task.Yield();
         }
-        await operation;
-        host.DrainActivationMailbox();
+        try {
+            await operation;
+        } finally {
+            await WorldSiloHost.PumpActivationMailboxesAsync(
+                cancellationToken: TestContext.Current.CancellationToken,
+                hosts: [host],
+                operation: host.WaitForCheckpointUploadsAsync(ct: TestContext.Current.CancellationToken)
+            );
+            host.DrainActivationMailbox();
+        }
     }
 
     // Law: a row whose published listen endpoint another socket already holds fails its activation with the endpoint
@@ -535,8 +543,7 @@ public sealed class WorldSiloLifecycleLawTests {
 
         await PumpAsync(
             host: host,
-            operation: again,
-            step: true
+            operation: again
         );
         Assert.Equal(
             hash,

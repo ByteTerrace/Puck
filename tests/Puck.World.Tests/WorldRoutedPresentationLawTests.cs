@@ -139,7 +139,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
     [Fact]
     public void MixedLayoutsLatchViewIndicesAndRetireScenesWhenSeatsReturnHome() {
         using var state = new TemporaryDirectory(prefix: "puck-routed-layout-");
-        using var host = WorldBootHarness.Compose(
+        var host = state.Own(owner: WorldBootHarness.Compose(
             edit: definition => (definition with {
                 ViewsRaw = (definition.Views with {
                     Graphs = [new WorldViewGraph(Name: "pane", Package: "sdf.world")],
@@ -155,7 +155,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,
             world: "tests/Puck.Counters/counters.world.json"
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var client = host.Services.GetRequiredService<WorldClient>();
         var routes = host.Services.GetRequiredService<WorldSeatAuthorityRouter>();
@@ -292,7 +292,8 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
     [Fact]
     public void AnInstanceCannotStandOnAViewRenderedByAnotherInstance() {
-        using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
+        // A world with no screen, since a program declaring one renders every frame and never stands.
+        using var north = Endpoint(definition: (AwayDocument() with { PlacementRowsRaw = [], ScreensRaw = [] }), identity: Away, position: AwayPose);
         var scene = new WorldRoutedScene(bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
         var frame = (Capture(source: scene.FrameSource) with { EnableCadenceGate = true });
         var gpu = new FakeGpuDevice();
@@ -321,7 +322,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         Assert.True(condition: residency.IsUnchanged(context: in context, view: 0));
         var passes = new SdfWorldPasses(resolve: _ => new SdfWorldView(Residency: residency, View: 0));
 
-        Assert.False(condition: passes.IsUnchanged(context: in context, instance: "world"));
+        Assert.False(condition: passes.IsUnchanged(context: in context, instance: "world", unreadFrames: 0));
     }
 
     private sealed class SilentAudio : IWorldAudioCueSink {

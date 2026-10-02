@@ -8,8 +8,8 @@
         <PuckLayer>Backends</PuckLayer>
     </PropertyGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.Shaders/Puck.Shaders.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.Abstractions.Gpu" />

@@ -177,7 +177,7 @@ internal static partial class CanaryCommand {
 
         if (changed) {
             File.WriteAllText(
-                contents: world.ToJsonString(options: new System.Text.Json.JsonSerializerOptions { WriteIndented = true }),
+                contents: world.ToJsonString(options: new System.Text.Json.JsonSerializerOptions { NewLine = "\n", WriteIndented = true }),
                 encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
                 path: staged
             );
@@ -337,7 +337,7 @@ internal static partial class CanaryCommand {
         root["admission"] = composedAdmission;
         File.WriteAllText(
             path: authorityTarget,
-            contents: root.ToJsonString(options: new System.Text.Json.JsonSerializerOptions { WriteIndented = true }),
+            contents: root.ToJsonString(options: new System.Text.Json.JsonSerializerOptions { NewLine = "\n", WriteIndented = true }),
             encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
         );
 
@@ -772,7 +772,7 @@ internal static partial class CanaryCommand {
         root["admission"] = composedAdmission;
         File.WriteAllText(
             path: targetPath,
-            contents: root.ToJsonString(options: new System.Text.Json.JsonSerializerOptions { WriteIndented = true }),
+            contents: root.ToJsonString(options: new System.Text.Json.JsonSerializerOptions { NewLine = "\n", WriteIndented = true }),
             encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
         );
     }

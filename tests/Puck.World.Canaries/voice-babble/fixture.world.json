@@ -181,7 +181,7 @@
     {
       "name": "stinger",
       "source": "../../../src/Puck.World/Assets/worlds/patches/stinger.synth.json",
-      "hash": "5126a83fc5816863b6ecf981ef238ef346653c028a589520d766ec4ab82260ca"
+      "hash": "5d8f53b2714ddc863bf96e4817055838e3b72d705cba99bb050ccd6a00c472b0"
     }
   ],
   "audio": {

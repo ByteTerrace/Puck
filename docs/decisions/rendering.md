@@ -548,10 +548,17 @@ surfaces, nested sources, or screens showing live content, which all need their
 own motion and reactive masks. The package produces the inputs vendor upscalers
 expect, so one could still be added later as an alternative pass.
 
-**HDR output starts as a minimal forcing function.** One display-transform
-node, one HDR swapchain path on Windows, paper white for UI, and one HDR source
-are enough to force a scene-linear working space and color-space declarations
-on every source. Calibration and Linux HDR wait until something needs them.
+**HDR output starts as a minimal forcing function.** One display transform, one
+HDR swapchain path on Windows, paper white for UI, and one HDR source are enough
+to force a working space and color-space declarations on every source. The
+working space is display-referred, not scene-linear: float values on the sRGB
+curve, one at SDR white, with headroom above it. The stylized shading already
+produces display-referred values, so a display-referred space keeps SDR output
+exact and lets the HUD and the letterbox compose at SDR white untonemapped. The
+display encode alone maps the space to an output, showing one at the
+paper-white level, and every source converts into it relative to that level,
+so an HDR source shows at its own luminance. Calibration and Linux HDR wait
+until something needs them.
 
 **Assets derived from SDFs come from one baker whose cache is filled in two
 ways.** Shipping bakes only inside compiled worlds would leave live authoring
