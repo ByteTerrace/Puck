@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Numerics;
 using Puck.Abstractions.Capture;
 using Puck.Abstractions.Gpu;
@@ -31,7 +32,7 @@ public sealed class WorldCaptureFillLawTests {
     /// converts it, and a frame no conversion reads refuses even with an older image still shown.</summary>
     [Fact]
     public void ACapturedFrameAnswersFromItsConversionNeverFromItsPixels() {
-        using var scene = new Scene(shown: Pattern());
+        using var scene = new Scene(shown: Pattern(), trackObjects: true);
         using var capture = new WorldCapturePixels(name: "capture:law");
         using var camera = new WorldCameraSourceFeed(cameras: new CapturedSeatCameras(pixels: capture), profile: null, seat: 2, sensor: WorldCameraSensor.Infrared);
         var source = new CpuFrameSource();
@@ -85,15 +86,19 @@ public sealed class WorldCaptureFillLawTests {
         Assert.Contains(expectedSubstring: "no conversion reads", actualString: capture.Answer().Reason);
 
         var held = capture.Acquire();
+        var released = scene.ImagesReleased;
 
         capture.Forget();
+        Assert.Equal(expected: released, actual: scene.ImagesReleased);
         Assert.Equal(expected: ((nint)0), actual: capture.Handle);
         Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: capture.Answer().Completion);
         source.Shared = false;
         Assert.True(condition: capture.Pull(context: default, runtime: null, source: source));
         Assert.Equal(expected: ((nint)0), actual: capture.Handle);
         Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: camera.Publish(context: default).Completion);
+        Assert.Equal(expected: released, actual: scene.ImagesReleased);
         held.Retire();
+        Assert.True(condition: (scene.ImagesReleased > released), userMessage: "the forgotten source's converter outlived its last lease");
     }
     [InlineData(false)]
     [InlineData(true)]
@@ -101,7 +106,7 @@ public sealed class WorldCaptureFillLawTests {
     public void ACapturedFrameSettlesItsConversionWhenNoNewerFrameArrives(bool refused) {
         using var scene = new Scene(shown: Pattern());
         using var capture = new WorldCapturePixels(name: "capture:quiet-law");
-        var source = new CpuFrameSource();
+        var source = new CpuFrameSource { ReusesBuffer = true };
 
         if (refused) {
             scene.Faults.Arm(kind: GpuCreationKind.Pipeline, nth: 1);
@@ -161,6 +166,12 @@ public sealed class WorldCaptureFillLawTests {
         Assert.Equal(expected: FrameCompletion.Refused, actual: Answer(ended: true, gpuHandle: 0x5A, gpuRoute: false).Completion);
         capture.Forget();
         Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: Answer(gpuRoute: false, gpuHandle: 0x5A).Completion);
+
+        // An ended source refuses even when its CPU frame is waiting on a conversion that would not refuse.
+        source.Shared = false;
+        Assert.True(condition: capture.Pull(context: default, runtime: null, source: source));
+        Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: Answer(gpuRoute: false, gpuHandle: 0).Completion);
+        Assert.Equal(expected: FrameCompletion.Refused, actual: Answer(ended: true, gpuHandle: 0, gpuRoute: false).Completion);
     }
     [Fact]
     public void AnUnopenedImportedSourceRefusesWithoutAScheduledExtent() {
@@ -440,13 +451,15 @@ public sealed class WorldCaptureFillLawTests {
     // through the capture gate and the fills, and each frame converts the fills it needs before its source resolves, on a
     // device of its own whose every pipeline creation can be held.
     private sealed class Scene : IDisposable {
-        private readonly FakeGpuDevice m_gpu = new();
+        private readonly FakeGpuDevice m_gpu;
+
         private readonly ManualResetEventSlim m_held = new(initialState: true);
 
         private int m_pipelinesEntered;
         private long m_frame;
 
-        public Scene(WorldScreenSource shown, bool alwaysFills = false, uint feedExtent = 1U, string? openingFault = null) {
+        public Scene(WorldScreenSource shown, bool alwaysFills = false, uint feedExtent = 1U, string? openingFault = null, bool trackObjects = false) {
+            m_gpu = new FakeGpuDevice(trackObjects: trackObjects);
             ConsumesExternal = WorldCaptureFills.IsExternal(source: shown);
             Gate = new WorldCaptureGate(
                 alwaysFills: alwaysFills,
@@ -503,6 +516,8 @@ public sealed class WorldCaptureFillLawTests {
 
         public GpuCreationFaults Faults { get; } = new();
 
+        // The images the fake device created and released, when the scene tracks objects.
+        public int ImagesReleased => m_gpu.Created.Where(predicate: static item => item.Kind.Contains(value: "image")).Sum(selector: static item => item.DisposeCount);
         // Whether a consumer shows external content: at first, whether the scene's screen does.
         public bool ConsumesExternal { get; set; }
         public WorldCaptureFills Fills { get; }
@@ -565,14 +580,28 @@ public sealed class WorldCaptureFillLawTests {
     private sealed class CpuFrameSource : IFrameCaptureSource {
         private readonly byte[] m_pixels = new byte[16];
 
+        private PoisonedPixels? m_handed;
+
         public bool Available { get; set; } = true;
+        // Whether a frame's pixels are valid only until the next capture attempt, as a platform's reused buffer is.
+        public bool ReusesBuffer { get; set; }
         public bool Shared { get; set; }
 
         public bool TryCapture(out Surface surface) {
+            m_handed?.Poison();
+            m_handed = null;
+
             if (!Available) {
                 surface = default;
 
                 return false;
+            }
+
+            if (ReusesBuffer && !Shared) {
+                m_handed = new PoisonedPixels(pixels: m_pixels);
+                surface = Surface.CpuPixels(format: GpuPixelFormat.B8G8R8A8Unorm, height: 2U, pixels: m_handed.Memory, width: 2U);
+
+                return true;
             }
 
             surface = (Shared
@@ -581,6 +610,19 @@ public sealed class WorldCaptureFillLawTests {
 
             return true;
         }
+    }
+    // One handed-over frame's pixels, which throw when read after the source took them back.
+    private sealed class PoisonedPixels(byte[] pixels) : MemoryManager<byte> {
+        private bool m_poisoned;
+
+        public void Poison() => m_poisoned = true;
+        public override Span<byte> GetSpan() => (m_poisoned
+            ? throw new InvalidOperationException(message: "the capture source already reused this frame's pixels")
+            : pixels);
+        public override MemoryHandle Pin(int elementIndex = 0) => throw new NotSupportedException();
+        public override void Unpin() { }
+
+        protected override void Dispose(bool disposing) { }
     }
     // A seat whose CPU sensor answers its real conversion. Handle deliberately remains the previously converted
     // image, even when a later conversion refuses, so Publish cannot infer availability from the handle.
