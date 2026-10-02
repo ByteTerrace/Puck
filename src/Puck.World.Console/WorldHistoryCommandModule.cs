@@ -237,6 +237,9 @@ public sealed class WorldHistoryCommandModule(WorldHistory history, WorldInstanc
         var meanKeyframe = ((counters.KeyframesCaptured > 0L)
             ? (counters.KeyframeBytesCaptured / counters.KeyframesCaptured)
             : 0L);
+        var meanStored = ((counters.KeyframesCaptured > 0L)
+            ? (counters.KeyframeBytesStored / counters.KeyframesCaptured)
+            : 0L);
         var ticksHeld = (((status.Oldest is { } first) && (status.Head is { } last))
             ? ((long)(last - first))
             : 0L);
@@ -250,7 +253,7 @@ public sealed class WorldHistoryCommandModule(WorldHistory history, WorldInstanc
                 values: status.Branches.Select(selector: static branch => $"'{branch.Name}' {(branch.ForkTick + 1UL)}..{branch.HeadTick}")
             ));
 
-        return new CommandResult(Output: $"[world.history: on | {window} | held {Bytes(bytes: status.BytesHeld)} of {Bytes(bytes: status.BudgetBytes)} (keyframes {Bytes(bytes: status.KeyframeBytes)}, input {Bytes(bytes: status.InputBytes)} = {Bytes(bytes: perTick)}/tick, branches {Bytes(bytes: status.BranchBytes)}) | recorded {counters.TicksRecorded} tick(s), {counters.HashFolds} hash fold(s), {counters.KeyframesCaptured} keyframe(s) captured ({Bytes(bytes: meanKeyframe)} mean), {counters.KeyframesDeferred} deferred, {counters.SegmentsEvicted} evicted | {counters.Seeks} seek(s), {counters.TicksResimulated} tick(s) re-simulated, {counters.InPlaceRestores} in-place and {counters.RebuildRestores} rebuilt restore(s) | {counters.BranchesKept} kept and {counters.FuturesDiscarded} discarded future(s) | branches: {branches}]");
+        return new CommandResult(Output: $"[world.history: on | {window} | held {Bytes(bytes: status.BytesHeld)} of {Bytes(bytes: status.BudgetBytes)} (keyframes {Bytes(bytes: status.KeyframeBytes)} shared from {Bytes(bytes: status.KeyframeEncodedBytes)} encoded, input {Bytes(bytes: status.InputBytes)} = {Bytes(bytes: perTick)}/tick, branches {Bytes(bytes: status.BranchBytes)}) | recorded {counters.TicksRecorded} tick(s), {counters.HashFolds} hash fold(s), {counters.KeyframesCaptured} keyframe(s) captured ({Bytes(bytes: meanKeyframe)} mean encoded, {Bytes(bytes: meanStored)} mean added), {counters.KeyframesDeferred} deferred, {counters.SegmentsEvicted} evicted | {counters.Seeks} seek(s), {counters.TicksResimulated} tick(s) re-simulated, {counters.InPlaceRestores} in-place and {counters.RebuildRestores} rebuilt restore(s) | {counters.BranchesKept} kept and {counters.FuturesDiscarded} discarded future(s) | branches: {branches}]");
     }
     private CommandResult Step(WireArgs args) {
         if (

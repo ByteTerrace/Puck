@@ -54,7 +54,7 @@ public sealed partial class WorldHistory {
     private static bool IsEdit(WorldReplayEntry entry) => (entry is WorldReplayEntry.Mutation or WorldReplayEntry.Undo or WorldReplayEntry.Composition or WorldReplayEntry.Rebuild);
     private WorldHistoryShadow OpenShadow(Segment segment, string? documentPath) {
         if (!WorldAuthorityCheckpointCodec.TryDecode(
-            bytes: segment.Keyframe,
+            bytes: KeyframeBytes(segment: segment),
             checkpoint: out var checkpoint,
             reason: out var reason
         )) {

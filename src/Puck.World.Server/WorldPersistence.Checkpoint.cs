@@ -4,6 +4,38 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldPersistence {
+    // The base document's canonical bytes, kept while the same base object stands. A base moves only on a rebuild, a
+    // compaction, an undo, or a journal horizon fold, so a checkpoint cadence serializes it once rather than at
+    // every capture.
+    private (WorldDefinition Base, byte[] Json)? m_baseJson;
+
+    private byte[] BaseJson(byte[] definitionJson) {
+        var baseDefinition = Host.Document.Base;
+
+        if (ReferenceEquals(
+            objA: baseDefinition,
+            objB: Host.Document.Definition
+        )) {
+            return definitionJson;
+        }
+
+        if (
+            (m_baseJson is { } cached) &&
+            ReferenceEquals(
+                objA: cached.Base,
+                objB: baseDefinition
+            )
+        ) {
+            return cached.Json;
+        }
+
+        var json = WorldDefinitionSerialization.Serialize(definition: baseDefinition);
+
+        m_baseJson = (baseDefinition, json);
+
+        return json;
+    }
+
     // Undo the last `count` applied mutations (default clamps to 1): restore the base and deterministically replay the
     // journal minus its tail through the SAME per-entry gates a live mutation passes — compose, whole-document
     // validate, render-envelope capacity, and solid-field buildability — everything but the authority check (the
@@ -584,14 +616,15 @@ public sealed partial class WorldPersistence {
                 );
             }
 
+            var definitionJson = WorldDefinitionSerialization.Serialize(definition: Host.Document.Definition);
             var server = new WorldServerCheckpoint(
                 Undo: (Host.RuleHost.Groups.Any(predicate: group => (group.Undo is not null)) ? Host.Arena.ExportUndoSnapshot() : null),
                 ArenaKeys: [.. Host.Arena.Keys.Names.OrderBy(
                     keySelector: static name => name.Value,
                     comparer: StringComparer.Ordinal
                 )],
-                DefinitionJson: WorldDefinitionSerialization.Serialize(definition: Host.Document.Definition),
-                BaseDefinitionJson: WorldDefinitionSerialization.Serialize(definition: Host.Document.Base),
+                DefinitionJson: definitionJson,
+                BaseDefinitionJson: BaseJson(definitionJson: definitionJson),
                 BaseOrigin: Host.Document.BaseOrigin,
                 Journal: journal,
                 LastCompletedTick: Host.Tick.CompletedTick,

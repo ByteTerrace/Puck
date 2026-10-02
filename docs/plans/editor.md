@@ -874,19 +874,15 @@ a world's boot image.
    `ForkedFrom` naming its fork. Both need a tape that starts from a
    checkpoint instead of a boot image, which also lets a mid-session
    `replay.record` match from its first tick.
-4. **Cheaper keyframes.** A keyframe whose base document equals its live one
-   stores one copy, and consecutive keyframes share unchanged content, so the
-   same budget holds a longer window or a denser keyframe spacing.
 
 **Touches:** `Puck.World.Server` (`WorldHistory`, `WorldReplaySnapshot`,
-`WorldAuthorityCheckpointCodec`), the history command module, the editor HUD.
+`WorldReplayTape`), the history command module, the editor HUD.
 
 **Check:** a scrubber law drives the row by a seat's pointer and reads the seek
 back (red leg: a seat without the grant is refused by name); a switch law
 proves the re-entered branch reproduces its recorded hashes; a saved branch
 passes `replay.verify` (red leg: a tape whose checkpoint was taken at the wrong
-tick reports MISMATCH at its first tick); a keyframe-size law pins that a span
-of unchanged ticks adds no document bytes.
+tick reports MISMATCH at its first tick).
 
 **Depends on:** E2 for the HUD row's picking.
 

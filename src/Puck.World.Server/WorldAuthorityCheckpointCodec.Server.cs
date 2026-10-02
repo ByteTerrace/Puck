@@ -363,7 +363,16 @@ public static partial class WorldAuthorityCheckpointCodec {
         var writer = new WireWriter();
 
         writer.WriteBlock(value: section.DefinitionJson);
-        writer.WriteBlock(value: section.BaseDefinitionJson);
+
+        // A base byte-identical to the live document — every activation with no journaled edit — is written once.
+        var baseIsDefinition = section.BaseDefinitionJson.AsSpan().SequenceEqual(other: section.DefinitionJson);
+
+        writer.WriteBoolean(value: baseIsDefinition);
+
+        if (!baseIsDefinition) {
+            writer.WriteBlock(value: section.BaseDefinitionJson);
+        }
+
         writer.WriteString(value: section.BaseOrigin);
         writer.WriteArray(
             items: section.ArenaKeys,
@@ -473,10 +482,12 @@ public static partial class WorldAuthorityCheckpointCodec {
             );
         }
 
-        var baseDefinitionJson = reader.ReadBlock(
-            field: "server base definition",
-            maxBytes: MaxSectionBytes
-        );
+        var baseDefinitionJson = (reader.ReadBoolean()
+            ? definitionJson
+            : reader.ReadBlock(
+                field: "server base definition",
+                maxBytes: MaxSectionBytes
+            ));
         var baseOrigin = reader.ReadString(
             field: "server base origin",
             maxBytes: MaxStringBytes

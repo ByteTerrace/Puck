@@ -485,9 +485,10 @@ The history records a full checkpoint (a keyframe) every few seconds of
 simulation at most, and each tick's input and authoritative hash in between. A
 seek restores the nearest keyframe at or before its target and re-simulates the
 recorded input, so every tick it reaches is checked against the hash the live
-run recorded; a disagreement is reported by tick and the verb fails. The
-keyframe spacing balances keyframe bytes against input bytes, and the oldest
-keyframe span is dropped when the budget fills. A tick that captures no keyframe
+run recorded; a disagreement is reported by tick and the verb fails.
+Consecutive keyframes share every region that did not change, so a keyframe
+costs what changed since the last one; the spacing balances that cost against
+input bytes, and the oldest keyframe span is dropped when the budget fills. A tick that captures no keyframe
 allocates nothing; `world.history status` echoes what the keyframes and the
 input cost in the running world.
 

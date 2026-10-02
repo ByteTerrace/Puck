@@ -385,6 +385,53 @@ public sealed class InSessionHistoryLawTests {
         );
         _ = harness.SeekAndProve(target: status.Oldest!.Value);
     }
+    // Consecutive keyframes of one world differ in a few regions — here a large authored row stands still while the
+    // bodies move — so each keyframe after the first adds a small fraction of its encoded size; a store that shared
+    // nothing would add all of it.
+    [Fact]
+    public void ALaterKeyframeAddsOnlyWhatChanged() {
+        var rows = new WorldStateRow[16];
+
+        for (var row = 0; (row < rows.Length); row++) {
+            var cells = new StateCell[120];
+
+            for (var index = 0; (index < cells.Length); index++) {
+                cells[index] = new StateCell(CellName.Parse(candidate: $"cell{index}"), CellValue.Int(value: ((row * 1000L) + index)));
+            }
+
+            rows[row] = new WorldStateRow(
+                CellName.Parse(candidate: $"ledger{row}"),
+                CellKind.Int,
+                Cells: cells
+            );
+        }
+
+        using var harness = new WorldHistoryHarness(
+            definition: (Fixtures.BuildDocument() with { StateRaw = new(World: rows) }),
+            seed: 23UL
+        );
+
+        while (harness.History.Status().Counters.KeyframesCaptured < 2L) {
+            harness.Step();
+        }
+
+        var first = harness.History.Status().Counters;
+
+        while (harness.History.Status().Counters.KeyframesCaptured < 6L) {
+            harness.Step();
+        }
+
+        var later = harness.History.Status().Counters;
+        var encoded = (later.KeyframeBytesCaptured - first.KeyframeBytesCaptured);
+        var added = (later.KeyframeBytesStored - first.KeyframeBytesStored);
+
+        Assert.True(
+            condition: ((added * 4L) < encoded),
+            userMessage: $"four keyframes encoded {encoded} bytes and added {added}"
+        );
+        // The shared keyframes still restore exactly.
+        _ = harness.SeekAndProve(target: harness.History.KeyframeTicks[2]);
+    }
     [Fact]
     public void ASteadyRecordedTickAllocatesNothing() {
         using var harness = new WorldHistoryHarness(seed: 11UL);

@@ -2204,11 +2204,18 @@ reuses the capture's lists; a recording keeps them.
 The history is a ring of keyframe spans. Each span starts at an authority
 checkpoint (`TryCaptureCheckpoint`, encoded by `WorldAuthorityCheckpointCodec`)
 and holds each following tick's authority entries, intents, step width, and the
-authoritative hash the tick reached. The keyframe spacing is the last keyframe's
-encoded size over the mean recorded input per tick, clamped between an eighth of
-a second and four seconds of simulation; the oldest span is evicted whenever the
-bytes held exceed the budget (64 MiB unless `world.history on <MiB>` names
-another). A span's per-tick arrays are sized for its interval on the keyframe
+authoritative hash the tick reached. Keyframes live in a
+`WorldHistoryChunkStore`: each encoded keyframe is cut into content-defined
+chunks (a gear rolling hash picks the boundaries, so an edit moves only the
+chunks around it) and each distinct chunk is held once, reference-counted, so a
+keyframe costs the regions that changed since the ones already held. The
+keyframe spacing is the bytes the last keyframe added over the mean recorded
+input per tick, never closer than one keyframe per `KeyframeWorkBytesPerTick`
+(64 KiB) of encoded checkpoint, and clamped between an eighth of a second and
+four seconds of simulation; the oldest span is evicted whenever the bytes held
+exceed the budget (64 MiB unless `world.history on <MiB>` names another). The
+checkpoint capture serializes the journal base only when the base object moved,
+and the codec writes a base byte-identical to the live document once. A span's per-tick arrays are sized for its interval on the keyframe
 tick, so a tick that captures no keyframe allocates nothing. A keyframe the
 boundary refuses (a buffered edit, an open arena scope, an engagement) is
 counted as deferred and retried at the next tick.
@@ -2267,8 +2274,8 @@ run reached, across seeds on the fixture, `snake`, and the shipped island; a
 keyframe from the wrong span and input fed in the wrong order each fail the
 proof; a branch resumed behind the head is the run that took that path; a diff
 reports exactly the changed cells; a replay-edit names its landing tick and a
-no-op edit names none; the budget holds and counts its evictions; and a steady
-recorded tick allocates nothing.
+no-op edit names none; the budget holds and counts its evictions; a later
+keyframe adds only what changed; and a steady recorded tick allocates nothing.
 
 ## Verifying a change here
 

@@ -13,6 +13,8 @@ namespace Puck.World;
 /// re-simulated tick.</param>
 /// <param name="KeyframesCaptured">The checkpoint keyframes captured.</param>
 /// <param name="KeyframeBytesCaptured">The encoded bytes of every captured keyframe, summed.</param>
+/// <param name="KeyframeBytesStored">The bytes the captured keyframes added to the chunk store: their changed
+/// regions, past the chunks an earlier keyframe already held.</param>
 /// <param name="KeyframesDeferred">The keyframe captures a boundary refused, each retried at the next tick.</param>
 /// <param name="SegmentsEvicted">The keyframe spans dropped from the oldest end to stay within the budget.</param>
 /// <param name="Seeks">The seeks that moved the live world.</param>
@@ -27,6 +29,7 @@ public readonly record struct WorldHistoryCounters(
     long HashFolds,
     long KeyframesCaptured,
     long KeyframeBytesCaptured,
+    long KeyframeBytesStored,
     long KeyframesDeferred,
     long SegmentsEvicted,
     long Seeks,
@@ -57,7 +60,10 @@ public sealed record WorldHistoryBranch(string Name, ulong ForkTick, IReadOnlyLi
 /// <param name="Keyframes">The keyframes held.</param>
 /// <param name="Interval">The current keyframe spacing, in ticks.</param>
 /// <param name="BudgetBytes">The memory budget, in bytes.</param>
-/// <param name="KeyframeBytes">The encoded keyframe bytes held.</param>
+/// <param name="KeyframeBytes">The keyframe bytes held: every distinct chunk's payload once, plus each keyframe's
+/// chunk references.</param>
+/// <param name="KeyframeEncodedBytes">The encoded size of the keyframes held, before chunks are shared — the ratio to
+/// <paramref name="KeyframeBytes"/> is what sharing saves.</param>
 /// <param name="InputBytes">The input and per-tick bookkeeping bytes held, including reserved array capacity.</param>
 /// <param name="BranchBytes">The bytes held by kept branches.</param>
 /// <param name="Waiting">Why the history holds no window yet, or <see langword="null"/> once it does.</param>
@@ -72,6 +78,7 @@ public readonly record struct WorldHistoryStatus(
     int Interval,
     long BudgetBytes,
     long KeyframeBytes,
+    long KeyframeEncodedBytes,
     long InputBytes,
     long BranchBytes,
     string? Waiting,
@@ -90,11 +97,13 @@ public readonly record struct WorldHistoryStatus(
 /// doors, proving every re-simulated tick against the recorded hash.
 /// </summary>
 /// <remarks>
-/// <para>The keyframe spacing balances keyframe bytes against input bytes: the interval is the last keyframe's
-/// encoded size over the mean recorded input per tick, clamped between an eighth of a second and four seconds of
-/// simulation, so a small world keyframes often and a large one keeps its seek cost bounded. The oldest span is
-/// evicted whenever the held bytes exceed the budget; kept branches whose fork the window no longer reaches go
-/// with it.</para>
+/// <para>Keyframes are held in a <see cref="WorldHistoryChunkStore"/>, so a keyframe costs the regions that changed
+/// since the ones already held. The keyframe spacing balances that cost against input bytes — the bytes the last
+/// keyframe added over the mean recorded input per tick — and never captures more than
+/// <see cref="KeyframeWorkBytesPerTick"/> of encoded checkpoint per tick on average, clamped between an eighth of a
+/// second and four seconds of simulation; a small world keyframes often and a large one keeps its seek and capture
+/// costs bounded. The oldest span is evicted whenever the held bytes exceed the budget; kept branches whose fork the
+/// window no longer reaches go with it.</para>
 /// <para>Steady state is allocation-free on a tick that captures no keyframe: the capture's accumulators are reused
 /// and the span's per-tick arrays grow only until they fit the interval. A keyframe tick pays the checkpoint capture
 /// and its encoding.</para>
@@ -104,8 +113,11 @@ public readonly record struct WorldHistoryStatus(
 public sealed partial class WorldHistory {
     /// <summary>The default memory budget, in bytes.</summary>
     public const long DefaultBudgetBytes = ((64L * 1024L) * 1024L);
+    /// <summary>The most encoded checkpoint bytes a keyframe costs per recorded tick, averaged over its interval: the
+    /// floor the spacing keeps so capturing and encoding keyframes stays a bounded share of each tick.</summary>
+    public const long KeyframeWorkBytesPerTick = (64L * 1024L);
 
-    // The smallest budget a history accepts: one shipped-world keyframe span with room to spare.
+    // The smallest budget a history accepts.
     private const long MinimumBudgetBytes = (1024L * 1024L);
     // The per-tick bookkeeping a span reserves beside each tick's intents: the hash, the step width, and the
     // intent-end offset.
@@ -117,6 +129,7 @@ public sealed partial class WorldHistory {
     private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     private readonly WorldStateRoot m_stateRoot;
 
+    private readonly WorldHistoryChunkStore m_chunks = new();
     private readonly List<Segment> m_segments = [];
     private readonly Stack<Segment> m_recycled = new();
     private readonly List<WorldHistoryBranch> m_branches = [];
@@ -166,9 +179,10 @@ public sealed partial class WorldHistory {
         public ulong[] Hashes { get; set; } = new ulong[16];
         public int[] IntentEnds { get; set; } = new int[16];
         public IntentSubmission[] Intents { get; set; } = new IntentSubmission[16];
-        public byte[] Keyframe { get; set; } = [];
+        public WorldHistoryChunkStore.Chunk[] Keyframe { get; set; } = [];
 
         public ulong KeyframeHash { get; set; }
+        public int KeyframeLength { get; set; }
         public ulong KeyframeTick { get; set; }
 
         public ulong[] StepTicks { get; set; } = new ulong[16];
@@ -185,6 +199,7 @@ public sealed partial class WorldHistory {
             AuthorityBytes = 0L;
             Count = 0;
             Keyframe = [];
+            KeyframeLength = 0;
             KeyframeHash = 0UL;
             KeyframeTick = 0UL;
             Fingerprint = default;
@@ -231,15 +246,22 @@ public sealed partial class WorldHistory {
     private ulong Head => m_segments[^1].HeadTick;
     private long HeldBytes {
         get {
-            var total = BranchBytes;
+            var total = (BranchBytes + m_chunks.PayloadBytes);
 
             foreach (var segment in m_segments) {
-                total += (segment.Keyframe.Length + segment.InputBytes);
+                total += (WorldHistoryChunkStore.ReferenceCost(chunks: segment.Keyframe) + segment.InputBytes);
             }
 
             return total;
         }
     }
+
+    // A held keyframe's encoded bytes, rebuilt from its chunks.
+    private static byte[] KeyframeBytes(Segment segment) => WorldHistoryChunkStore.Load(
+        chunks: segment.Keyframe,
+        length: segment.KeyframeLength
+    );
+
     private ulong Oldest => m_segments[0].KeyframeTick;
 
     // Appends one tick to the newest span, copying its input out of the capture's reused accumulators.
@@ -392,8 +414,9 @@ public sealed partial class WorldHistory {
 
         return grown;
     }
-    // The keyframe spacing that balances keyframe bytes against input bytes, clamped to the rate-derived bounds.
-    private int IntervalFor(long keyframeBytes) {
+    // The keyframe spacing that balances the bytes a keyframe added against input bytes, kept wide enough that its
+    // encoding averages at most KeyframeWorkBytesPerTick, and clamped to the rate-derived bounds.
+    private int IntervalFor(long addedBytes, long encodedBytes) {
         var rate = Math.Max(
             val1: 1,
             val2: m_server.Definition.SimulationRateHz
@@ -421,10 +444,16 @@ public sealed partial class WorldHistory {
                 : TickBookkeepingBytes)
         );
 
+        var balanced = ((addedBytes + (perTick - 1L)) / perTick);
+        var work = ((encodedBytes + (KeyframeWorkBytesPerTick - 1L)) / KeyframeWorkBytesPerTick);
+
         return ((int)Math.Clamp(
             max: maximum,
             min: minimum,
-            value: ((keyframeBytes + (perTick - 1L)) / perTick)
+            value: Math.Max(
+                val1: balanced,
+                val2: work
+            )
         ));
     }
     private static ArraySegment<IntentSubmission> IntentRange(Segment segment, int offset) {
@@ -523,6 +552,7 @@ public sealed partial class WorldHistory {
         ? m_recycled.Pop()
         : new Segment());
     private void Recycle(Segment segment) {
+        m_chunks.Release(chunks: segment.Keyframe);
         segment.Reset();
         m_recycled.Push(item: segment);
     }
@@ -561,7 +591,11 @@ public sealed partial class WorldHistory {
             : null);
         var segment = Rent();
 
-        segment.Keyframe = bytes;
+        segment.Keyframe = m_chunks.Store(
+            addedBytes: out var addedBytes,
+            blob: bytes
+        );
+        segment.KeyframeLength = bytes.Length;
         segment.KeyframeHash = authoritativeHash;
         segment.KeyframeTick = tick;
         segment.Fingerprint = WorldHistoryFingerprint.Of(server: m_server);
@@ -569,8 +603,12 @@ public sealed partial class WorldHistory {
         m_counters = (m_counters with {
             KeyframesCaptured = (m_counters.KeyframesCaptured + 1L),
             KeyframeBytesCaptured = (m_counters.KeyframeBytesCaptured + bytes.LongLength),
+            KeyframeBytesStored = (m_counters.KeyframeBytesStored + addedBytes),
         });
-        m_interval = IntervalFor(keyframeBytes: bytes.LongLength);
+        m_interval = IntervalFor(
+            addedBytes: addedBytes,
+            encodedBytes: bytes.LongLength
+        );
         Reserve(
             intentsPerTick: (((previous is { Count: > 0 } last)
                 ? ((last.IntentCount + (last.Count - 1)) / last.Count)
@@ -687,11 +725,13 @@ public sealed partial class WorldHistory {
     /// <summary>Returns the history's read-back.</summary>
     /// <returns>The status.</returns>
     public WorldHistoryStatus Status() {
-        var keyframeBytes = 0L;
+        var keyframeBytes = m_chunks.PayloadBytes;
+        var encodedBytes = 0L;
         var inputBytes = 0L;
 
         foreach (var segment in m_segments) {
-            keyframeBytes += segment.Keyframe.Length;
+            keyframeBytes += WorldHistoryChunkStore.ReferenceCost(chunks: segment.Keyframe);
+            encodedBytes += segment.KeyframeLength;
             inputBytes += segment.InputBytes;
         }
 
@@ -707,6 +747,7 @@ public sealed partial class WorldHistory {
             InputBytes: inputBytes,
             Interval: m_interval,
             KeyframeBytes: keyframeBytes,
+            KeyframeEncodedBytes: encodedBytes,
             Keyframes: m_segments.Count,
             Oldest: (windowed ? Oldest : null),
             On: m_on,

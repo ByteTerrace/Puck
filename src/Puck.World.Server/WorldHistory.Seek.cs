@@ -105,7 +105,7 @@ public sealed partial class WorldHistory {
     // the load door first, so solids, machines, and the rule compilation match the keyframe's document.
     private string? RestoreLive(Segment segment, string? documentPath, out bool rebuilt) {
         if (!WorldAuthorityCheckpointCodec.TryDecode(
-            bytes: segment.Keyframe,
+            bytes: KeyframeBytes(segment: segment),
             checkpoint: out var checkpoint,
             reason: out var decodeReason
         )) {
