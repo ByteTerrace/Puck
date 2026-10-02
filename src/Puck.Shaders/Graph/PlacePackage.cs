@@ -11,12 +11,15 @@ namespace Puck.Shaders;
 /// <param name="Top">The rect's top edge, as a fraction of the output's height.</param>
 /// <param name="Width">The rect's width, as a fraction of the output's width.</param>
 /// <param name="Height">The rect's height, as a fraction of the output's height.</param>
-/// <param name="Sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom).</param>
+/// <param name="Sharpness">The reconstruction's sharpness, from 0 (bilinear) to 1 (clamped Catmull-Rom), and the
+/// strength of the sharpen <paramref name="Sharpen"/> asks for.</param>
 /// <param name="Uncovered">Whether some of the output lies outside every rect the host shows this frame, so those
 /// pixels owe the letterbox. A pass whose config sets <see cref="RenderGraphPackageCatalog.PlaceLetterbox"/> and whose
 /// source is not shown then writes the letterbox color everywhere, so pixels no later pass covers show it rather than
 /// the base; over a covered output it stands for its base as any unshown pass does.</param>
-public readonly record struct RenderGraphPlacement(bool Shown, float Left, float Top, float Width, float Height, float Sharpness, bool Uncovered = false);
+/// <param name="Sharpen">Whether a source at the rect's own extent is sharpened by <paramref name="Sharpness"/> rather
+/// than copied exactly (<see cref="RenderGraphPackageCatalog.PlaceSharpen"/>): a temporally resolved view's is.</param>
+public readonly record struct RenderGraphPlacement(bool Shown, float Left, float Top, float Width, float Height, float Sharpness, bool Uncovered = false, bool Sharpen = false);
 /// <summary>Answers where a host shows each <c>place</c> pass's source this frame. The recorder asks once per recorded
 /// frame, on the frame thread.</summary>
 public interface IRenderGraphPlacements {
@@ -33,10 +36,10 @@ public interface IRenderGraphPlacements {
 /// letterbox color when the config's <see cref="RenderGraphPackageCatalog.PlaceLetterbox"/> is set, and the source
 /// reconstructed inside it.
 /// <para>
-/// The kernel reads the frame group and a pass group holding the extent, the config (the letterbox switch, the rect and
-/// the sharpness) and the images the catalog declares (<see cref="RenderGraphPackageCatalog.PlaceMembers"/>). A host
-/// that places the source per frame (<see cref="IRenderGraphPlacements"/>) overrides the rect and sharpness in the pass
-/// block without rebinding anything, and one that shows the source nowhere this frame has the pass draw nothing, so the
+/// The kernel reads the frame group and a pass group holding the extent, the config (the letterbox switch, the rect, the
+/// sharpness and the sharpen switch) and the images the catalog declares (<see cref="RenderGraphPackageCatalog.PlaceMembers"/>). A host
+/// that places the source per frame (<see cref="IRenderGraphPlacements"/>) overrides the rect, the sharpness and the
+/// sharpen switch in the pass block without rebinding anything, and one that shows the source nowhere this frame has the pass draw nothing, so the
 /// output stands for the base; when the pass may not stand in, it copies the base everywhere. A letterboxing pass whose
 /// source is not shown writes the letterbox color everywhere instead when the host says part of the output is
 /// uncovered (<see cref="RenderGraphPlacement.Uncovered"/>). Its build leases the compute pipeline, one for every place
@@ -162,6 +165,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
         private readonly GpuDeviceServices m_services;
         private readonly RenderGraphPackageSets m_sets = null!;
         private readonly int m_sharpnessOffset;
+        private readonly int m_sharpenOffset;
         private readonly uint m_source;
         private readonly RenderGraphPackageWorkCounters m_workCounters = null!;
 
@@ -181,6 +185,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 m_letterboxOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceLetterbox));
                 m_rectOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceRect));
                 m_sharpnessOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceSharpness));
+                m_sharpenOffset = ((int)parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceSharpen));
                 m_sets = new RenderGraphPackageSets(
                     context: context,
                     groupLayoutHandles: built.Pipeline.GroupLayoutHandles,
@@ -260,6 +265,10 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 BinaryPrimitives.WriteSingleLittleEndian(
                     destination: recording.PassBlock[m_sharpnessOffset..],
                     value: placement.Sharpness
+                );
+                BinaryPrimitives.WriteUInt32LittleEndian(
+                    destination: recording.PassBlock[m_sharpenOffset..],
+                    value: (placement.Sharpen ? 1u : 0u)
                 );
 
                 // A source shown nowhere that must still draw writes the letterbox everywhere when it owes it, its empty

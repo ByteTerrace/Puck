@@ -52,6 +52,9 @@ public static partial class SdfWorldPackage {
     public const string Jitter = "jitter";
     /// <summary>The number of preceding rendered samples in the current history epoch (<c>uint</c>).</summary>
     public const string HistoryFrames = "historyFrames";
+    /// <summary>The pass-group value set to one when the view runs <see cref="TemporalFragment"/>: the sky and views
+    /// passes then write the reactivity buffer and the resolve reconstructs over time (<c>uint</c>).</summary>
+    public const string Temporal = "temporal";
     /// <summary>The pass-group value holding the forward distance of the view camera's own near plane, in world units,
     /// zero for a camera whose image begins at its eye (<c>float</c>).</summary>
     public const string NearDistance = "nearDistance";
@@ -285,6 +288,7 @@ public static partial class SdfWorldPackage {
         Value(name: FrustumOffset, type: ShaderValueType.Float2),
         Value(name: Jitter, type: ShaderValueType.Float2),
         Value(name: HistoryFrames, type: ShaderValueType.Uint),
+        Value(name: Temporal, type: ShaderValueType.Uint),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: 6, name: PreviousView, type: ShaderValueType.Float4),
         Value(name: NearDistance, type: ShaderValueType.Float),
         Value(name: FarDistance, type: ShaderValueType.Float),
@@ -371,6 +375,7 @@ public static partial class SdfWorldPackage {
         Written(element: ShaderValueType.Uint, name: ViewsArgsWritten),
         Read(element: ShaderValueType.Uint, name: VisibilityRecords),
         Written(element: ShaderValueType.Uint, name: VisibilityRecordsWritten),
+        Written(element: ShaderValueType.Float, name: ReactivityWritten),
         ShaderInterfaceMember.StorageImage(
             format: RenderGraphPackageCatalog.WorkingFormat,
             group: ShaderInterfaceGroup.Pass,
@@ -581,5 +586,14 @@ public static partial class SdfWorldPackage {
         public const string AmbientVisibility = "ambientVisibility";
         /// <summary>Shadow's visibility records, forwarding ambient's.</summary>
         public const string ShadowVisibility = "shadowVisibility";
+        /// <summary>The sky's version of the reactivity buffer: a temporal view's render-extent reactivity, which the sky
+        /// starts and views overwrites where it shades.</summary>
+        public const string SkyReactivity = "skyReactivity";
+        /// <summary>The reactivity buffer views writes and the resolve consumes, forwarding the sky's.</summary>
+        public const string Reactivity = "reactivity";
+        /// <summary>The history color: the resolved color, one image a frame slot, read by the next frame.</summary>
+        public const string HistoryColor = "historyColor";
+        /// <summary>The history surface: each output pixel's ray distance and identity, read by the next frame.</summary>
+        public const string HistorySurface = "historySurface";
     }
 }

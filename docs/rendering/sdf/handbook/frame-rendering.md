@@ -34,7 +34,9 @@ rendering passes do; [the engine README](../../../../src/Puck.SdfVm/README.md)
 describes the visibility records the four per-pixel passes share: one per pixel
 of each view's render grid, 64 bytes. A view whose render-scale ceiling is below
 native appends the full-output `resolve` pass described under
-[render scale](#render-scale-tiers-trade-resolution-for-frame-time).
+[render scale](#render-scale-tiers-trade-resolution-for-frame-time), and a view
+that reconstructs over time appends it at any scale
+([temporal reconstruction](#temporal-reconstruction)).
 
 **mask** (`sdf-instance-cull.comp.hlsl`) computes, for every 16×16 screen tile, the
 set of instances that could possibly matter to that tile—a bitmask, one bit per
@@ -169,8 +171,9 @@ move every frame. A layout transition's dip moves only this grid. The shaded
 color at the render grid is one transient allocation that every frame slot
 shares. The final `resolve` pass writes full-output color with the same
 bilinear and clamped Catmull-Rom filter as `place`; coverage remains the
-color's alpha. Nothing is written beside the color: a per-pixel surface (ray
-distance and identity) at the output extent waits for its first reader.
+color's alpha. A spatial resolve writes nothing beside the color; the temporal
+resolve keeps a per-pixel surface (ray distance and identity) at the output
+extent as its history.
 
 The view's output has the extent the render graph schedules for it, which is its
 rect's native extent quantized to the scheduler's steps. `place` copies that
@@ -202,6 +205,81 @@ Render scale is *presentation only*: it never touches simulation state, and whic
 tier a view uses is a host decision, not baked into the content. In `Puck.World`,
 `world.render-scale` sets it for every player view and `world.upscale-sharpness`
 sets the reconstruction blend.
+
+## Temporal reconstruction
+
+A view whose quality asks for it (`SdfViewQuality.Temporal`) reconstructs over
+time: it renders a jittered sample each frame and resolves the samples it has
+gathered into its output. It runs `SdfWorldPackage.TemporalFragment`, the
+reduced fragment's passes at its render ceiling, native or reduced, so a native
+view gains a `resolve` pass too. In `Puck.World`, `world.temporal` turns it on
+for the world's own views; the quality presets carry it, off at `low` and on at
+`medium` and `high`. A camera view never reconstructs (its quality restriction,
+`WorldScreenBinder.CameraViewQuality`, does not ask), and neither does a session
+view.
+
+Each view's history is its own fragment's: two versions at the output extent,
+one allocation a frame slot each, that the next frame reads through
+`ResourceReference.PreviousFrame`. A resize carries a history buffer only when
+its resolved byte capacity and element size still match.
+
+- The **history color** holds, per output pixel, the weighted mean of every sample
+  the pixel has gathered in its RGB and their summed weight in its alpha, capped
+  at one jitter period of full-weight samples.
+- The **history surface** holds two words per output pixel: the ray distance and
+  the visibility identity of the nearest of the render samples the resolve read.
+
+The sky and views passes also write a one-channel **reactivity** buffer at the
+render extent, which only the resolve reads: one where a screen or a bounded
+volume covers the pixel, and, since the material model cannot tell steady
+emission from animated, the share of the pixel's color it emits after detail
+material selection, material layers and mesh-atlas sampling.
+Coverage stays in the color's alpha.
+
+The temporal resolve takes, for each output pixel, the 3x3 render samples
+nearest its center, each weighted by a Gaussian of its distance in output
+pixels. It reprojects the pixel through the nearest-depth sample's motion
+(`frame/sdf-reprojection.hlsli`, the one reprojection implementation, through its
+shape's or triangle's previous pose and the instance's previous view), or, where
+the 3x3 saw no surface, through the camera's rotation alone. History at the moved
+position is rejected when the history surface there names another identity or a
+ray distance more than 5% from the reprojected one; the pixel then shows the
+spatial path at this frame's sample grid and its history restarts. Surviving
+history is clipped to the 3x3's YCoCg box, weighted down by the reactivity, and
+joined by this frame's samples.
+Non-finite history colors are rejected before clipping. History writes stay
+within the half-float range; a non-finite accumulation stores zero weight, so a
+bright transient cannot contaminate later history after its source recovers.
+
+History epochs are free: a reset sets the instance's frame count to zero, and the
+resolve then reads no history, so the first frame after a cut, a follow or a
+portal crossing, a view or extent change, a parked view shown again, a debug view turned on or off, or
+reconstruction turned on is the spatial path's frame exactly, at the sequence's
+first sample, the pixel center. Under `world.cadence on`, a still temporal view
+renders one jitter period after its inputs last change and then stands, its
+output converged (`SdfTemporalHistory.Stands`). A render-grid dip or recovery
+restarts this settling period, including a grid change that takes effect only
+when a replacement graph installs. A view the display stopped showing is parked:
+the render graph counts the frames its schedule leaves an instance unread and
+absent from displayed outputs, including held consumer outputs. Cadence gaps in
+a consumer do not park its nested views. Every recording carries the count
+(`RenderGraphPackageRecording.UnreadFrames`), and `IsUnchanged` receives it too.
+The count is part of the epoch, so a temporal view shown again starts
+a new epoch while a spatial view's still output stands without a render.
+
+A temporal view that follows a portal crossing into another world keeps
+reconstructing there. The other world's residency builds its resolve pipeline
+only on request, so when a followed view changes residency `SdfWorldPasses`
+requests that residency's resolve pipeline from the build source the departed
+one used; until it is ready the view holds the departed world's image, as any
+follow it cannot yet make does.
+
+`place` sharpens what a temporal view resolves: where its source has its rect's
+own extent, it applies a contrast-adaptive sharpen of `world.upscale-sharpness`'s
+strength instead of its exact copy (`RenderGraphPlacement.Sharpen`), adding no
+pass and no texel written; at sharpness 0 the copy stays exact. A lone
+whole-display view that sharpens is placed by the root for that pass, as a
+tonemapped one is.
 
 ## Frames in flight
 

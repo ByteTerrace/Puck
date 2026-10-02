@@ -70,9 +70,12 @@ public sealed class ShippedWorldQualityLawTests(ShippedWorldQualityLawTests.Stag
             expected: new WorldQualityPreset(
                 AmbientOcclusion: false,
                 RenderScale: WorldRenderScaleTier.Half,
-                Shadows: ShadowTier.Off
+                Shadows: ShadowTier.Off,
+                Temporal: false
             )
         );
+        Assert.True(condition: (table.Preset(tier: QualityTier.Medium)?.Temporal ?? false));
+        Assert.True(condition: (table.Preset(tier: QualityTier.High)?.Temporal ?? false));
         Assert.Equal(
             actual: (table with { LowRaw = null, MediumRaw = null, HighRaw = null }),
             expected: WorldRenderDefaults.Absent

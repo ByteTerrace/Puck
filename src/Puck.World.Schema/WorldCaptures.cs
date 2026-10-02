@@ -28,7 +28,9 @@ public sealed record WorldCapturePaletteEntry(int Material, string Color);
 /// indices.</param>
 /// <param name="Instance">The render-graph instance whose output the station captures, or <see langword="null"/> (the
 /// default) for the root, the frame the display shows. <see cref="WorldViewGraphs.WorldInstance"/> captures the SDF
-/// world before any <c>views.post</c> pass or the overlay is drawn over it.</param>
+/// world before any <c>views.post</c> pass or the overlay is drawn over it, and a world camera's name (one not
+/// relative to a seat) captures that camera's view, which renders while a screen, a HUD frame or a probe export shows
+/// it.</param>
 /// <param name="Screen">The index of the screen whose source the station captures, before any screen shows it: the
 /// source instance the screen reads, which a machine output, a producer or a probe source is. Mutually exclusive with
 /// <paramref name="Instance"/>; <see langword="null"/> (the default) captures by instance.</param>

@@ -8,7 +8,7 @@
   "timeoutSeconds": 60,
   "positive": {
     "world": "tests/Puck.World.Canaries/portal-walk/portal-walk.puck",
-    "script": "../portal-walk/cross.script.txt",
+    "script": "cross.script.txt",
     "authorityWorld": "tests/Puck.World.Canaries/portal-walk/portal-walk.puck",
     "connect": true,
     "commands": [

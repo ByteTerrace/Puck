@@ -410,11 +410,12 @@ passes shade a card pixel from the same views: albedo, normal and emission blend
 view weight and texel coverage (`frame/sdf-mesh-impostor-surface.hlsli`), each
 sampled at the level the pixel's footprint wants, bilinear inside the view's tile,
 with each texel's own material: the impostor stores a material plane (R8, the
-program material id, never blended), and the card takes the nearest texel at level
-zero from the view with the greatest filtered coverage weight, added to the draw's
-material as a mesh's texel entry is. Filtered coverage can select an uncovered
-level-zero material texel at a silhouette; material coverage remains a merge blocker.
-Primary stores that
+program material id, never blended), and the card takes the nearest texel, at the
+pixel's level, of the highest-weighted view whose nearest depth texel is covered, added to
+the draw's material as a mesh's texel entry is. That is the rule the trace discards a pixel
+by too, so coverage and material have one provenance and filtered alpha decides neither.
+The level depends on the draw and the camera alone, the pixel's size at the sphere's
+center. Primary stores that
 material in the visibility record, shared by picking and lighting. `SdfImpostorOracle` states the trace in doubles over the decoded depth,
 and `SdfImpostorLawTests` hold it to the field's sphere and box.
 

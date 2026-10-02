@@ -51,7 +51,7 @@ public sealed partial class SdfWorldTables {
         );
     // Writes a buffer at a resource of the world interface in a set of its group.
     internal void WriteWorldBuffer(nint set, string member, IGpuBuffer buffer) =>
-        WriteBuffer(
+        WriteInterfaceBuffer(
             buffer: buffer,
             layout: SdfWorldInterfaces.WorldLayout,
             member: member,
@@ -119,7 +119,7 @@ public sealed partial class SdfWorldTables {
 
     // Writes a ring slot's mesh region into a mesh pass set of the mesh interface.
     internal void WriteMeshTables(nint set, int slot) =>
-        WriteBuffer(buffer: m_meshRegion.Buffer(slot: slot), layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldPackage.MeshRegion, set: set);
+        WriteInterfaceBuffer(buffer: m_meshRegion.Buffer(slot: slot), layout: SdfWorldInterfaces.MeshLayout, member: SdfWorldPackage.MeshRegion, set: set);
     // Writes the impostor depth atlas a mesh pass's card fragments search into a mesh pass set, with the sampled filler
     // while the frame draws no impostor.
     internal void WriteMeshImpostorDepth(nint set) {
@@ -136,5 +136,5 @@ public sealed partial class SdfWorldTables {
     }
     // Writes the work counters a mesh pass's fragments count into, at the mesh interface's binding.
     internal void WriteMeshWorkCounters(nint set, IGpuBuffer counters) =>
-        WriteBuffer(buffer: counters, layout: SdfWorldInterfaces.MeshLayout, member: ShaderWorkCounters.Buffer, set: set);
+        WriteInterfaceBuffer(buffer: counters, layout: SdfWorldInterfaces.MeshLayout, member: ShaderWorkCounters.Buffer, set: set);
 }

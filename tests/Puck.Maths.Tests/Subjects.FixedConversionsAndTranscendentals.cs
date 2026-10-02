@@ -903,7 +903,7 @@ internal static partial class Subjects {
     private static long Exp2ExponentRaw(long raw) =>
         (((long)(unchecked((ulong)raw) % (67UL << FixedQ4816.FractionBitCount))) - (20L << FixedQ4816.FractionBitCount));
     // Exp2's envelope, DERIVED from the kernel's own two error terms rather than declared as a step: half a raw ULP for
-    // the closing round-half-UP narrowing, plus the mantissa's own relative error carried up to the result's scale.
+    // the closing ties-to-even narrowing, plus the mantissa's own relative error carried up to the result's scale.
     // That relative error is dominated by the quartic's truncation of the exponential series — the omitted tail
     // Σ_{n≥5} (ln2·r)ⁿ/n! is at most 3.85·10⁻¹⁴ at the largest residual r = 511/2¹⁶ < 2⁻⁷ — with the six Q62
     // truncations and the table's own rounding together under 10⁻¹⁸, so 2⁻⁴⁴ ≈ 5.68·10⁻¹⁴ covers the whole of it.
@@ -1021,7 +1021,7 @@ internal static partial class Subjects {
     }
     /// <summary>Proves the exponential lies inside the square-root-ladder enclosure widened by the committed two-regime
     /// envelope, that it is EXACT at every whole exponent, and that both documented gates fire exactly where the code
-    /// puts them — the underflow one at −17, not at the −17.5 the doc names.</summary>
+    /// puts them — the underflow one at −17, where the half-ULP tie goes to the even Zero.</summary>
     /// <param name="left">The first sampled operand lane.</param>
     /// <param name="right">The second sampled operand lane.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
@@ -1052,11 +1052,15 @@ internal static partial class Subjects {
         if (FixedQ4816.Exp2(value: FixedQ4816.MaxValue) != FixedQ4816.MaxValue) { return "the exponential does not saturate at MaxValue"; }
         if (FixedQ4816.Exp2(value: Raw(value: ((47L << FixedQ4816.FractionBitCount) - 1L))) == FixedQ4816.MaxValue) { return "the exponential saturates one epsilon below forty-seven"; }
 
-        // The underflow gate, which is at −17 and not the documented −17.5: the true 2⁻¹⁷ is exactly half a ULP and
-        // this kernel rounds half UP, so the threshold lands on Epsilon rather than on Zero.
-        if (FixedQ4816.Exp2(value: Raw(value: (-17L << FixedQ4816.FractionBitCount))) != FixedQ4816.Epsilon) { return "the exponential at minus seventeen is not epsilon"; }
+        // The underflow gate: the true 2⁻¹⁷ is exactly half a ULP and the narrowing ties to even, so −17 answers Zero
+        // — the same answer the whole-exponent power gives for 2^−17 — while one raw above it is past the tie.
+        if (FixedQ4816.Exp2(value: Raw(value: ((-17L << FixedQ4816.FractionBitCount) + 1L))) != FixedQ4816.Epsilon) { return "the exponential one raw above minus seventeen is not epsilon"; }
+        if (FixedQ4816.Pow(
+            x: Raw(value: (2L << FixedQ4816.FractionBitCount)),
+            y: Raw(value: (-17L << FixedQ4816.FractionBitCount))
+        ) != FixedQ4816.Exp2(value: Raw(value: (-17L << FixedQ4816.FractionBitCount)))) { return "the exponential and the power disagree on two to the minus seventeen"; }
 
-        foreach (var underflow in ((ReadOnlySpan<long>)[((-17L << FixedQ4816.FractionBitCount) - 1L), (-18L << FixedQ4816.FractionBitCount), (-19L << FixedQ4816.FractionBitCount), (-1L << 31), long.MinValue])) {
+        foreach (var underflow in ((ReadOnlySpan<long>)[(-17L << FixedQ4816.FractionBitCount), ((-17L << FixedQ4816.FractionBitCount) - 1L), (-18L << FixedQ4816.FractionBitCount), (-19L << FixedQ4816.FractionBitCount), (-1L << 31), long.MinValue])) {
             if (FixedQ4816.Exp2(value: Raw(value: underflow)) != FixedQ4816.Zero) { return $"the exponential at the raw {underflow} is not zero"; }
         }
 
@@ -1219,9 +1223,8 @@ internal static partial class Subjects {
         return null;
     }
     /// <summary>Proves the power on the two families where its answer is EXACT rather than approximate — the
-    /// power-of-two lattice, where every intermediate of the squaring schedule is exactly representable, and the small
-    /// whole-exponent ladder, where a plain sequential fold in arbitrary width reaches the same value by a different
-    /// schedule — and pins the four documented edge policies and the two saturation gates.</summary>
+    /// power-of-two lattice and the small whole-exponent powers — and pins the documented edge policies, exact-half
+    /// rounding, full-width raw extremes and the neighbors of both saturation and underflow thresholds.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? FixedPowExactLattice() {
         for (var scale = -16; (scale <= 46); ++scale) {
@@ -1338,7 +1341,7 @@ internal static partial class Subjects {
             if (actual != expected) { return $"the near-top square of raw {squareRaw} is {actual}, expected {expected}"; }
         }
 
-        return null;
+        return FixedPowWholeBoundaries();
     }
 
     // The interface route: IPowerFunctions<T>.Pow reached through a constrained generic, so the law states the .NET
@@ -1382,58 +1385,144 @@ internal static partial class Subjects {
         ("MinValue^−1", long.MinValue, -65536L, 0L),
     ];
 
-    /// <summary>Proves the power's FRACTIONAL path — the exponential of the once-rounded Q32 product of the exponent and
-    /// the subject's own Q46 logarithm — lies inside the enclosure of the true value widened by the DERIVED envelope: the
-    /// exponent carries at most (8·|yRaw| + 2¹⁸)/2⁵¹ of error from the Q46 logarithm and the single Q32 rounding, which
-    /// scales the result by at most that factor, and the exponential contributes its own documented envelope.</summary>
+    /// <summary>Proves the power's WHOLE-exponent path is the single correct rounding of the true power at every
+    /// exponent 2 ≤ |n| ≤ 32, both base signs, and both saturation and underflow verdicts — each base sampled over
+    /// the full raw carrier, folded so the true magnitude lands between 2⁻²⁰ and 2⁵⁰, straddling both ends of the
+    /// carrier, and again at a base within 32 raws of the exponent's own saturation threshold, where the result sits
+    /// within a few raws of 2⁶³.</summary>
+    /// <param name="left">Its lane supplies the full-width base, then a folded base: the target magnitude from the top
+    /// byte, the sign from the bit below it, the mantissa from the rest; its low bits pick the threshold base's
+    /// offset and sign.</param>
+    /// <param name="right">Its lane folds onto the exponent.</param>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? FixedPowWholeCorrectlyRounded(long[] left, long[] right) {
+        var exponentIndex = ((int)(unchecked((ulong)right[0]) % 62UL));
+        var exponent = ((exponentIndex < 31)
+            ? -(exponentIndex + 2)
+            : (exponentIndex - 29));
+
+        if (FixedPowWholeMatchesOracle(baseRaw: left[0], exponent: exponent) is { } fullWidthFailure) {
+            return fullWidthFailure;
+        }
+
+        var baseBits = unchecked((ulong)left[0]);
+        var targetLog2 = (((int)((baseBits >> 56) % 71UL)) - 20);
+        var bitIndex = Math.Clamp(
+            max: 62,
+            min: 0,
+            value: (16 + (targetLog2 / exponent))
+        );
+        var baseRaw = ((long)((1UL << bitIndex) | (baseBits & ((1UL << bitIndex) - 1UL))));
+
+        if (0UL != ((baseBits >> 55) & 1UL)) {
+            baseRaw = -baseRaw;
+        }
+
+        if (FixedPowWholeMatchesOracle(baseRaw: baseRaw, exponent: exponent) is { } foldedFailure) {
+            return foldedFailure;
+        }
+
+        // The saturation threshold, where the quotient of a negative power and the shift of a positive one sit
+        // within a few raws of 2⁶³ — the band random draws almost never reach, and the only one where the quotient
+        // estimate can overshoot. The base is the integer n-th root of that threshold, offset either side.
+        var power = Math.Abs(value: exponent);
+        var threshold = ((exponent > 0)
+            ? (BigInteger.One << (63 + (16 * (power - 1))))
+            : (BigInteger.One << ((16 * (power + 1)) - 63)));
+        var offset = (((long)((baseBits >> 8) % 65UL)) - 32L);
+        var thresholdBase = Math.Max(
+            val1: 1L,
+            val2: (FixedPowBoundaryRoot(degree: power, radicand: threshold) + offset)
+        );
+
+        return FixedPowWholeMatchesOracle(
+            baseRaw: (((baseBits & 1UL) != 0UL)
+                ? -thresholdBase
+                : thresholdBase),
+            exponent: exponent
+        );
+    }
+    /// <summary>Proves the power's EXPONENTIAL path — fractional exponents and whole ones beyond ±32 — lies inside the
+    /// enclosure of the true value widened by the DERIVED envelope: the logarithm's error is below 2⁻⁵²·|log₂ x| + 2⁻⁶⁰
+    /// (relative, so a large exponent does not magnify it), the fraction's cut to 63 bits and the floor to the Q56
+    /// exponent add 2⁻⁶³ of it and 2⁻⁵⁶, and the exponential contributes its own documented envelope.</summary>
     /// <param name="left">The first sampled operand lane.</param>
     /// <param name="right">The second sampled operand lane.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? FixedPowWithinEnvelope(long[] left, long[] right) {
+        // The logarithm at 2⁻⁵⁶ and the exponential at a 48-bit exponent, so the enclosure is far narrower than the
+        // old Q46/Q32 kernel's error at every exponent the band admits.
+        const int LogarithmGuardBitCount = 40;
+        const int ExponentBitCount = 48;
+
         var baseRaw = PositiveRaw(raw: left[0]);
         var logarithm = Oracles.EncloseLog2(
-            guardBitCount: Oracles.GuardBitCount,
+            guardBitCount: LogarithmGuardBitCount,
             raw: baseRaw
         );
-        var magnitude = (BigInteger.Max(
+        var logarithmScaled = BigInteger.Max(
             left: BigInteger.Abs(value: logarithm.Low),
             right: BigInteger.Abs(value: logarithm.High)
-        ) >> (FixedQ4816.FractionBitCount + Oracles.GuardBitCount));
-        var limit = ((15L << FixedQ4816.FractionBitCount) / (((long)magnitude) + 1L));
-        var exponentRaw = (((long)(unchecked((ulong)right[0]) % ((ulong)(2L * limit)))) - limit);
+        );
+        // |y| bounded so |y·log₂ x| stays under forty — below the saturation gate at 47 — so the band reaches both the
+        // large exponents a base near one admits and results up to 2⁴⁰, where an exponent error shows as many ULP.
+        var limit = ((long)BigInteger.Min(
+            left: (BigInteger.One << 47),
+            right: ((new BigInteger(value: 40L) << ((FixedQ4816.FractionBitCount + FixedQ4816.FractionBitCount) + LogarithmGuardBitCount)) / BigInteger.Max(
+                left: logarithmScaled,
+                right: BigInteger.One
+            ))
+        ));
+        var selector = unchecked((ulong)right[0]);
+        long exponentRaw;
 
-        // The band keeps |y·log₂ x| under sixteen, so neither saturation gate fires and the derived error factor stays
-        // far below the half at which the bound 2^ε − 1 ≤ ε would stop holding. The fraction bits are forced non-zero
-        // so the subject takes the exponential path rather than the whole-exponent squaring one, which
-        // scalar.pow-exact-lattice owns.
-        if (0L == (exponentRaw & 0xFFFFL)) { exponentRaw += 1L; }
+        if (
+            (0UL != ((selector >> 62) & 1UL)) &&
+            ((limit >> FixedQ4816.FractionBitCount) > 33L)
+        ) {
+            // A whole exponent beyond the ±32 band scalar.pow-whole-correctly-rounded owns, which takes this path too.
+            var whole = (33L + ((long)((selector >> 8) % ((ulong)((limit >> FixedQ4816.FractionBitCount) - 33L)))));
+
+            exponentRaw = ((0UL != ((selector >> 61) & 1UL))
+                ? -(whole << FixedQ4816.FractionBitCount)
+                : (whole << FixedQ4816.FractionBitCount));
+        } else {
+            exponentRaw = (((long)(selector % ((ulong)(2L * limit)))) - limit);
+
+            // The fraction bits are forced non-zero so a small exponent takes this path rather than the whole one.
+            if (0L == (exponentRaw & 0xFFFFL)) { exponentRaw += 1L; }
+        }
 
         var actual = FixedQ4816.Pow(
             x: Raw(value: baseRaw),
             y: Raw(value: exponentRaw)
         ).Value;
+        // The logarithm enclosure is at 2^(16 + 40) and the exponent raw at 2^16: their product is the exponent at
+        // 2^72, floored and ceilinged to the 2^48 the exponential enclosure takes.
         var first = (logarithm.Low * exponentRaw);
         var second = (logarithm.High * exponentRaw);
+        var dropped = (((FixedQ4816.FractionBitCount + FixedQ4816.FractionBitCount) + LogarithmGuardBitCount) - ExponentBitCount);
         var low = Oracles.EncloseExp2(
             scaledExponent: (BigInteger.Min(
                 left: first,
                 right: second
-            ) >> 32),
-            exponentBitCount: 32,
+            ) >> dropped),
+            exponentBitCount: ExponentBitCount,
             guardBitCount: Oracles.GuardBitCount
         ).Low;
         var high = Oracles.EncloseExp2(
             scaledExponent: (-((-BigInteger.Max(
                 left: first,
                 right: second
-            )) >> 32)),
-            exponentBitCount: 32,
+            )) >> dropped)),
+            exponentBitCount: ExponentBitCount,
             guardBitCount: Oracles.GuardBitCount
         ).High;
-        // The logarithm reaches the product at Q46 and the product is rounded once to Q32, so the exponent error is
-        // below |yRaw|·2⁻⁴⁸ (the Q46 logarithm's error, far under one Q46 unit per unit of y, stated at 2⁻³² for slack)
-        // plus 2⁻³³: in units of 2⁻⁵¹, 8·|yRaw| + 2¹⁸.
-        var quantization = ((high * ((8 * BigInteger.Abs(value: new BigInteger(value: exponentRaw))) + (BigInteger.One << 18))) >> 51);
+        // The exponent error is below |y|·(2⁻⁵²·|L| + 2⁻⁶⁰) + |y·L|·2⁻⁶³ + 2⁻⁵⁶, stated with slack as
+        // |y|·(⌈|L|⌉ + 1)·2⁻⁵¹ + 2⁻⁵⁵ — in raw units of y, |yRaw|·(⌈|L|⌉ + 1)·2⁻⁶⁷ — and scales the result by at most
+        // that factor (2^ε − 1 ≤ ε for ε far below one).
+        var logarithmCeiling = ((logarithmScaled >> (FixedQ4816.FractionBitCount + LogarithmGuardBitCount)) + BigInteger.One);
+        var quantization = (((high * (BigInteger.Abs(value: new BigInteger(value: exponentRaw)) * (logarithmCeiling + BigInteger.One))) >> 67) + (high >> 55));
 
         return Oracles.WithinEnvelope(
             name: $"Pow({baseRaw}, {exponentRaw})",
