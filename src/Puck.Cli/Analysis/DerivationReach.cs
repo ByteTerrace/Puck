@@ -122,7 +122,7 @@ public static class DerivationReach {
             Add(symbol: type);
             // A new T() in the generic body has no concrete constructor symbol in its operation tree.
             if ((type is INamedTypeSymbol named) && sources.ContainsKey(key: named.ContainingAssembly.Name)) {
-                foreach (var constructor in named.InstanceConstructors) { Add(symbol: constructor); }
+                foreach (var constructor in named.InstanceConstructors.Where(predicate: constructor => ((constructor.DeclaredAccessibility == Accessibility.Public) && (constructor.Parameters.Length == 0)))) { Add(symbol: constructor); }
             }
         }
         private void Visit(ISymbol symbol) {

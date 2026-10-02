@@ -191,6 +191,59 @@ public sealed class DerivationLawTests {
         Assert.Contains(collection: original.Symbols, filter: static symbol => (symbol.Id == "M:Fixture.Sample.#ctor"));
     }
     [Fact]
+    public void GenericConstructionDoesNotReachParameterizedConstructors() {
+        const string Source = """
+            namespace Fixture;
+            public sealed class Sample {
+                public Sample() { Value = 7; }
+                public Sample(int value) { Value = value + 13; }
+                public int Value { get; }
+            }
+            public static class Producer {
+                private static T Create<T>() where T : new() => new T();
+                [Puck.Derivation("bake")]
+                public static int Bake() => Create<Sample>().Value;
+            }
+            """;
+        var original = SingleSource(source: Source);
+        var edited = SingleSource(source: Source.Replace(comparisonType: StringComparison.Ordinal, newValue: "value + 14", oldValue: "value + 13"));
+
+        Assert.Equal(actual: edited.Fingerprint, expected: original.Fingerprint);
+        Assert.Contains(collection: original.Symbols, filter: static symbol => (symbol.Id == "M:Fixture.Sample.#ctor"));
+        Assert.DoesNotContain(collection: original.Symbols, filter: static symbol => (symbol.Id == "M:Fixture.Sample.#ctor(System.Int32)"));
+    }
+    [InlineData("new()", "public sealed class Sample { public Sample() : this(3) { } public Sample(int value) { Producer.Value = value + 7; } }", "value + 7", "value + 8")]
+    [InlineData("new()", "public sealed class Sample { private readonly int m_seed = Producer.Seed(); public Sample() { } }", "Seed() => 7", "Seed() => 8")]
+    [InlineData("new()", "public sealed class Sample { public int Seed { get; } = Producer.Seed(); }", "Seed() => 7", "Seed() => 8")]
+    [InlineData("new()", "public sealed class Sample { public event System.Action Changed = Producer.Hook; }", "Value = 7", "Value = 8")]
+    [InlineData("new()", "public sealed class Sample { private static readonly int s_seed = Producer.Seed(); }", "Seed() => 7", "Seed() => 8")]
+    [InlineData("new()", "public sealed partial class Sample { public Sample() { } } public sealed partial class Sample { private readonly int m_seed = Producer.Seed(); }", "Seed() => 7", "Seed() => 8")]
+    [InlineData("new()", "public class Root { public Root() { Producer.Value = 7; } } public sealed class Sample : Root { }", "Value = 7", "Value = 8")]
+    [InlineData("new()", "public class Root { public Root(int value) { Producer.Value = value + 7; } } public sealed class Sample : Root { public Sample() : base(2) { } }", "value + 7", "value + 8")]
+    [InlineData("new()", "public class Root { private readonly int m_seed = Producer.Seed(); } public sealed class Sample : Root { }", "Seed() => 7", "Seed() => 8")]
+    [InlineData("new()", "public sealed class Sample(int value) { private readonly int m_seed = value + Producer.Seed(); public Sample() : this(1) { } }", "Seed() => 7", "Seed() => 8")]
+    [InlineData("new()", "public struct Sample { public Sample() { Producer.Value = 7; } }", "Value = 7", "Value = 8")]
+    [InlineData("struct", "public struct Sample { public Sample() { Producer.Value = 7; } }", "Value = 7", "Value = 8")]
+    [Theory]
+    public void GenericConstructionReachesEverythingTheParameterlessConstructorRuns(string constraint, string declaration, string original, string edited) {
+        var source = $$"""
+            namespace Fixture;
+            {{declaration}}
+            public static class Producer {
+                public static int Value;
+                public static int Seed() => 7;
+                public static void Hook() { Value = 7; }
+                private static int Create<T>() where T : {{constraint}} { _ = new T(); return Value; }
+                [Puck.Derivation("bake")]
+                public static int Bake() => Create<Sample>();
+            }
+            """;
+        var before = SingleSource(source: source);
+        var after = SingleSource(source: source.Replace(comparisonType: StringComparison.Ordinal, newValue: edited, oldValue: original));
+
+        Assert.NotEqual(expected: before.Fingerprint, actual: after.Fingerprint);
+    }
+    [Fact]
     public void GenericLocalConstructionReachesConcreteConstructors() {
         const string Source = """
             namespace Fixture;

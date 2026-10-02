@@ -587,8 +587,8 @@ type declarations retain their compilation order. Constructors,
 initializers, implicit conversions and virtual/interface implementations in the
 producer's dependency graph are included. Reached types also contribute their
 interface implementations and virtual members, including callbacks invoked inside
-external code. Concrete generic arguments contribute their constructors because
-the operation for `new T()` does not name the concrete constructor. Base constructors and compiler pattern
+external code. Concrete generic arguments contribute their public parameterless
+constructors because the operation for `new T()` does not name the concrete constructor. Base constructors and compiler pattern
 members for disposal, iteration, awaiting and deconstruction are included
 conservatively because the public operation tree does not expose every lowered
 call. External identities participate in the hash without external bodies.
