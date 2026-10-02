@@ -19,7 +19,9 @@ using Puck.Cli.Firmware;
 using Puck.Cli.FontAtlas;
 using Puck.Cli.Format;
 using Puck.Cli.Formats;
+using Puck.Cli.Gate;
 using Puck.Cli.Landing;
+using Puck.Cli.Laws;
 using Puck.Cli.Mcp;
 using Puck.Cli.NuGet;
 using Puck.Cli.Official;
@@ -133,7 +135,9 @@ internal static class PuckRootCommand {
             FontAtlasCommand.Create(),
             FormatCommand.Create(),
             FormatsCommand.Create(),
+            GateCommand.Create(),
             LandingCommand.Create(),
+            LawsCommand.Create(),
             RatchetCommand.CreateLengths(),
             LintCommand.Create(),
             LspCommand.Create(),

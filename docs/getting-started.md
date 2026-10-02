@@ -9,7 +9,7 @@ and find a small content-editing workflow.
 Install the .NET SDK version selected by [global.json](../global.json). The
 repository disables automatic SDK roll-forward, so having a different .NET 10
 SDK installed is not sufficient. Package restore requires access to the feeds
-listed in [NuGet.Config](../NuGet.Config).
+listed in [nuget.config](../nuget.config).
 
 The desktop render path needs a compatible Direct3D 12 or Vulkan GPU and the
 DirectX Shader Compiler (`dxc`) on the process search path. Check the

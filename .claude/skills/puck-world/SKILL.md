@@ -454,8 +454,12 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
 - **A verification that cannot fail is a lie.** Pair every denial case with
   a control (actor holds the grant → succeeds), keep actor ≠ target (every
   seat is seeded wide, so self-targeting discriminates nothing), and prove
-  a new assertion once by breaking it. This repo's recorded dominant
-  failure mode is verification scripts that lie silently.
+  a new assertion once by breaking it. A law with a fix is proven by
+  `puck laws prove <law> --fix <commit>` (or `--file-list` for an
+  uncommitted fix), which withholds the fix in a worktree of its own and
+  requires the law to fail there and pass with it; never hand-revert files
+  in a shared tree. This repo's recorded dominant failure mode is
+  verification scripts that lie silently.
 - `replay.verify` MATCH proves the explicitly hashed authoritative state-system
   trajectory, not the whole document, grant table, or HUD
   ([references/replay.md](references/replay.md)). A recording tapes every row
