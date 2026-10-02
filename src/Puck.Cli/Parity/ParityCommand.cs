@@ -37,12 +37,13 @@ internal static class ParityCommand {
 
         return run.Conclude(exitCode: Run(
             bakes: bakes,
+            debugLayers: debugLayers,
             repositoryRoot: repositoryRoot,
             runDirectory: run.Path
         ));
     }
     // One parity run inside its run directory, which the caller concludes with the exit code this returns.
-    private static int Run(bool bakes, string repositoryRoot, string runDirectory) {
+    private static int Run(bool bakes, bool debugLayers, string repositoryRoot, string runDirectory) {
         var suiteClock = Stopwatch.StartNew();
 
         if (!WorldOffscreenLeg.TryResolveWorld(
