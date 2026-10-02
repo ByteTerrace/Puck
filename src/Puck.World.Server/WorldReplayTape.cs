@@ -171,8 +171,8 @@ public sealed partial class WorldReplayTape {
     /// <summary>Gets the ticks captured so far in the active recording.</summary>
     public int TickCount => (m_ticks?.Count ?? 0);
 
-    // Snapshot the seats active at record-start: their slot and their seated profile — its name AND the locomotion
-    // rates it carried right now, which is the whole reason this reads the live handle rather than only its name. Those
+    // Snapshot the seats active at record-start: their slot and their seated identity projection, including the id,
+    // records and locomotion rates it carried right now, rather than only its name. Those
     // rates are simulation INPUT (WorldBody.Advance reads them every frame), so pinning them here is what stops a later
     // identity.motion from re-driving a different world under this recording's stream. Only the four local seats can be
     // active; a peer/inhabitant is boot-derived from the definition.
@@ -183,7 +183,7 @@ public sealed partial class WorldReplayTape {
             if (m_liveServer.Population.IsActive(index: slot)) {
                 seats.Add(item: new WorldReplaySeat(
                     Slot: slot,
-                    Profile: PinProfile(profile: m_liveServer.Body(index: slot)?.Profile)
+                    Profile: m_liveServer.Body(index: slot)?.Profile?.Project()
                 ));
             }
         }
@@ -232,19 +232,6 @@ public sealed partial class WorldReplayTape {
         m_liveServer.ServerEventTap = null;
         m_liveServer.ArrivalTap = null;
         m_liveServer.FederatedIntentTap = null;
-    }
-    // Read straight off the live handle in the simulation's own fixed-point currency — never through the float
-    // accessors, which would quantize a rate that is already exact.
-    private static WorldReplayProfilePin? PinProfile(WorldIdentity? profile) {
-        if (profile is null) {
-            return null;
-        }
-
-        return new WorldReplayProfilePin(
-            Name: profile.Name,
-            MoveSpeed: profile.FixedMoveSpeed,
-            TurnSpeed: profile.FixedTurnSpeed
-        );
     }
     // Shared by StopRecording (every exit path, via try/finally) and CancelRecording: a recording's whole mutable
     // state, back to Idle. m_mode always ends at Idle here — leaving it at Recording with no live recording behind

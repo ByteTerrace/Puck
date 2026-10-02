@@ -94,6 +94,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck creation`](#puck-creationcode-authored-sculpts) | the offline twin of `creation.sculpt(s)`: list registered sculpts, apply one to a world file, or report a creation's shape budget/feature usage. |
 | [`puck declarations`](#puck-declarationsdeclaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
 | [`puck decompile`](#the-puck-dsl-verbs) | renders a world JSON document back as `.puck` source—a one-time import, not a synced mirror; optionally resolves companion vector locks with `--embeddings`. |
+| [`puck determinism`](#puck-determinismcross-host-determinism-attestation) | boots the scenarios of a determinism manifest headless in-process and records per-tick, per-system state hashes and document-level hashes into a strict stream; `determinism compare` names the first tick and system, or document hash, where two hosts' streams differ. |
 | [`puck docs`](#puck-docsthe-documentation-family) | the documentation family: `build` stages the website reference, `links` checks relative links and cited repository paths, and `citations` checks the console-verb tokens skills and XML docs cite, including a live `Puck.World` console boot. |
 | [`puck embed`](#the-puck-dsl-verbs) | resolves authored `embed(...)` text into committed `.embeddings.json` lock files, or probes cosine similarity rankings. |
 | [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
@@ -1691,6 +1692,92 @@ device or shader tool, or a ceilings file that is missing or not a ceilings
 document. `counters compare`
 exits 0 when every comparable count agrees, 1 on a difference, and 2 for a usage
 error or a file that is not a readable report.
+
+---
+
+## `puck determinism`—cross-host determinism attestation
+
+```text
+puck determinism record <manifest> --output <stream>   record what each scenario hashes to on this host
+puck determinism compare <left> <right>                 name the first divergence of each scenario
+```
+
+The simulation contract says the same document and the same input give
+bit-identical state on every machine. `determinism record` measures that for
+one host. It boots each scenario of a `puck.determinism.manifest.v1` manifest in
+this process the way the game boots it, headless and with no presentation. It
+joins the scenario's seats, then steps the world for its ticks, writing the
+scenario's state cells and submitting its held intents before the ticks they
+name. The shipped manifest is
+[tests/Puck.Determinism/determinism.json](../../tests/Puck.Determinism/determinism.json).
+It covers body dynamics and action state, flocks, rule latches and state
+writes, flow conservation, a kart lap, a billiards host, navigation, the chess
+AI's search, rule groups, decisions, board enforcement and interactions. Two
+small worlds beside it, `decisions.puck` and `board-enforcement.puck`, exist
+for the scenarios no shipped world reaches.
+
+A manifest holds `schema` and `scenarios`. Each scenario holds `name` (ASCII
+letters, digits and `-`, unique), `world` (a document or `.puck` source,
+forward-slashed and relative to the manifest), `ticks` (1 to 100000), `seats`
+(0-based seat slots joined before the first tick), `intents`, `cells` and
+`exercises`. An intent holds `body`, `from`, `through` (ticks counted from one)
+and `channels`, which maps a declared channel name to a decimal string parsed
+exactly as `FixedQ4816`. A cell holds `tick`, `row`, `key` and `value`, applied through the
+mutation `world.state.cell.set` submits; a write the authority refuses, or does
+not answer by the end of its tick, fails the scenario with its tick and cell
+rather than recording a run the script did not describe. `exercises` names the per-tick
+components the scenario exists to move, by their names on the stream's
+`components` line, aggregates excluded. `record` refuses a scenario whose run
+leaves any of them unchanged, so a scenario cannot go vacuous unnoticed. Any
+other member, a repeated member or another schema is refused by name.
+
+The stream (`puck.determinism.stream.v1`) is text with LF line breaks and
+nothing that depends on the host:
+
+```text
+puck.determinism.stream.v1
+manifest <the manifest's content pin>
+components <one name per per-tick hash>
+scenario <name> <ticks>
+document <name> <hash>             one per document-level hash
+tick <n> <16 hex digits> ...       one per tick, in components order
+end
+```
+
+A scenario's document hashes are the world's fingerprint, the compiled world's
+definition hash and catalog fingerprint, in that order and always present, then
+each asset row's canonical hash (`patch:`, `tune:`, `music:`, `table:`) and each
+creation's canonical hash and bake key (`creation:`, `bake:`). A stream missing
+one of the first three, or naming a document of another family, is refused. A
+tick's vector holds each authoritative state component on its own (population
+pose, arena, host-owned rows, declarations, topologies, latches, rule groups,
+decisions, board enforcement, body action state, body continuation, navigation,
+flocks and search), then the population pose hash, then the authoritative state
+hash the replay tape verifies. Body continuation is every active body's
+simulation checkpoint fields in the checkpoint's own encoding, excluding rendered
+color and rig, so two runs whose bodies share a
+pose but differ in a velocity, a remainder or a timer diverge at that tick. The aggregates come last, so
+the first differing hash of a tick names the system that split.
+
+`determinism compare` compares two streams of one manifest. For each scenario it
+compares the document hashes first, then the ticks in order until the first
+divergence. It reports that divergence with the tick (or the document hash), the
+component and both values; whatever follows it is a consequence and is not
+reported. It prints the scenarios, ticks and hashes it compared and the
+divergences it found. It refuses rather than compares two streams of different
+versions, manifests (by pin), scenario lists or tick counts.
+
+Exit codes: `record` exits 0 when it has written the stream and 2 when the
+manifest or a scenario cannot be read or run, or a scenario moves a component it
+exercises nowhere. `compare` exits 0 with no
+divergence, 1 on a divergence and 2 on a refusal. The shipped manifest records
+13 scenarios, 1,480 ticks and about 24,000 hashes in under ten seconds. Every
+per-tick component but the topologies is exercised by some scenario. The
+topologies are declaration that nothing at run time changes, so no scenario can
+move them; a law holds instead that a world declaring one folds it and that the
+fold holds still. CI records it
+on Windows and on Linux and compares the two streams
+([CI](../development/ci.md)).
 
 ---
 

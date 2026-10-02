@@ -1,3 +1,4 @@
+using Puck.Maths;
 using Puck.Networking;
 using Puck.Physics.Navigation;
 using Puck.World.Protocol;
@@ -18,11 +19,29 @@ public static partial class WorldAuthorityCheckpointCodec {
             Point: point
         );
     }
-    private static void WritePopulationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry) {
+
+    /// <summary>Folds population continuation through the checkpoint's field codecs, excluding rendered appearance.</summary>
+    /// <param name="hash">The hash to fold into.</param>
+    /// <param name="entries">The entries, in slot order.</param>
+    internal static void AppendPopulationEntries(ref Fnv1aHash hash, IReadOnlyList<WorldPopulationEntryCheckpoint> entries) {
+        var writer = new WireWriter();
+
+        writer.WriteArray(
+            items: entries,
+            writeItem: static (w, entry) => WritePopulationEntry(entry: entry, includeAppearance: false, writer: w)
+        );
+        hash.Add(values: writer.WrittenSpan);
+    }
+
+    private static void WritePopulationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry) =>
+        WritePopulationEntry(entry: entry, includeAppearance: true, writer: writer);
+    private static void WritePopulationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry, bool includeAppearance) {
         writer.WriteInt32(value: entry.Index);
         writer.WriteByte(value: entry.KitIndex);
-        writer.WriteVector(value: entry.BodyColor);
-        writer.WriteByte(value: entry.CatalogRig);
+        if (includeAppearance) {
+            writer.WriteVector(value: entry.BodyColor);
+            writer.WriteByte(value: entry.CatalogRig);
+        }
         writer.WriteArray(
             items: entry.Designations,
             writeItem: WriteTargetDesignation

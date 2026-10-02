@@ -239,6 +239,27 @@ data can still load: old data must never load under a new interpretation, so
 a renamed or reshaped field makes the strict parser refuse the old form
 rather than silently reinterpreting it.
 
+Cross-host determinism has its own check.
+[`puck determinism record`](../reference/cli.md#puck-determinismcross-host-determinism-attestation)
+boots each scenario of
+[the determinism manifest](../../tests/Puck.Determinism/determinism.json)
+headless in-process and records every tick's per-system state hashes and the
+world's document-level hashes. `puck determinism compare` names the first tick
+and system, or document hash, where two recordings differ. CI records the
+manifest on Windows and on Linux and fails on any divergence. Locally, record it
+twice, or before and after a change, and compare the two streams. A deliberate
+correction to simulation math or logic moves the hashes on both hosts alike, so
+the cross-host compare still agrees and needs no re-recording. A host-dependent
+difference, such as a writer whose line breaks follow the operating system, is
+caught at the tick and system or the document hash it moves. When a change adds
+a system or a document hash the manifest's worlds do not reach, add a scenario:
+a small world, a few hundred ticks, and seats, intents or cell writes that make
+the system run within them. Name the components it moves in its `exercises`;
+`record` refuses a scenario that leaves one unchanged, and a law fails when a
+per-tick component other than the declared topologies is exercised by no
+scenario. The manifest covers no portal transfer, since that needs more than one
+world instance.
+
 For changes under `src/Puck.Maths`, also run the maths law suite. A plain
 `dotnet test` runs the default tier (Smoke and Default), the everyday gate;
 `smoke`, `deep` and `exhaustive` are selected by their committed run settings:

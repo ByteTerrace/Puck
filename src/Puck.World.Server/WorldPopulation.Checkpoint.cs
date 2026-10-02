@@ -5,11 +5,35 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
+    /// <summary>Folds every active slot's simulation continuation through the checkpoint's field codecs, excluding
+    /// rendered color and rig, so state the pose hash does not read (a velocity, an integration remainder, a channel
+    /// timer) still separates two runs. Called where <see cref="Capture"/> may be, between a
+    /// completed step and the next. Encoding the simulation fields allocates; the authoritative hash
+    /// that folds it is taken while a replay records or verifies and when a console or attestation asks, never by an
+    /// ordinary tick.</summary>
+    /// <param name="hash">The hash to fold into.</param>
+    internal void AppendContinuationHash(ref Fnv1aHash hash) =>
+        WorldAuthorityCheckpointCodec.AppendPopulationEntries(
+            entries: CaptureEntries(),
+            hash: ref hash
+        );
+
     /// <summary>Captures every active slot's simulation state. Asserts the per-tick pending-output lists are empty —
     /// guaranteed by <see cref="WorldServer.TryCaptureCheckpoint"/>'s capture point sitting between a completed
     /// <c>Step</c> and the next, never inside one.</summary>
     /// <exception cref="InvalidOperationException">A pending-output list is non-empty.</exception>
-    public WorldPopulationCheckpoint Capture() {
+    public WorldPopulationCheckpoint Capture() =>
+        new(
+            Entries: CaptureEntries(),
+            Generations: m_entries.Select(selector: entry => entry.Generation).ToArray(),
+            SharedNavigation: m_navigation.CaptureShared(),
+            Revision: m_revision,
+            SeatKit: m_seatKit,
+            SimulatedCount: m_simulatedCount
+        );
+
+    // Every active slot's checkpoint entry, in slot order: the part of a population checkpoint a body owns.
+    private List<WorldPopulationEntryCheckpoint> CaptureEntries() {
         if (
             (m_effectOutputs.Count != 0) ||
             (m_designationOutputs.Count != 0) ||
@@ -36,6 +60,11 @@ public sealed partial class WorldPopulation {
             foreach (var key in entry.AdmissionRevokedKeys) {
                 revokedKeys.Add(item: (key.Capability, key.Subject));
             }
+            revokedKeys.Sort(comparison: static (left, right) => {
+                var capability = Comparer<WorldCapability>.Default.Compare(x: left.Item1, y: right.Item1);
+
+                return ((capability != 0) ? capability : WorldGrants.CompareSubjects(a: left.Item2, b: right.Item2));
+            });
 
             var residue = body.CaptureIntegrationResidue();
             var contactFieldObservationCurrent = (residue.LastContactFieldVersion == ContactFieldVersion);
@@ -115,15 +144,9 @@ public sealed partial class WorldPopulation {
             ));
         }
 
-        return new WorldPopulationCheckpoint(
-            Entries: entries,
-            Generations: m_entries.Select(selector: entry => entry.Generation).ToArray(),
-            SharedNavigation: m_navigation.CaptureShared(),
-            Revision: m_revision,
-            SeatKit: m_seatKit,
-            SimulatedCount: m_simulatedCount
-        );
+        return entries;
     }
+
     /// <summary>Restores every entity-table slot from a previously captured checkpoint. Every slot is cleared first —
     /// this replaces the live table wholesale rather than merging onto it. A captured entry that is
     /// <see cref="Entry.IsRemoteHuman"/> and not already <see cref="Entry.Parked"/> is parked as of

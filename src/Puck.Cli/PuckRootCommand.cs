@@ -14,6 +14,7 @@ using Puck.Cli.Canary;
 using Puck.Cli.CartridgeCost;
 using Puck.Cli.Counters;
 using Puck.Cli.Creation;
+using Puck.Cli.Determinism;
 using Puck.Cli.Docs;
 using Puck.Cli.Firmware;
 using Puck.Cli.FontAtlas;
@@ -129,6 +130,7 @@ internal static class PuckRootCommand {
             CreationCommand.Create(),
             DecompileCommand.Create(),
             DeclarationsCommand.Create(),
+            DeterminismCommand.Create(),
             DocsCommand.Create(),
             EmbedCommand.Create(),
             FirmwareCommand.Create(),

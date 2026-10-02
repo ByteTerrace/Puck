@@ -115,14 +115,13 @@ Record-start state: the live `WorldDefinition` as canonical JSON
 (`WorldReplaySnapshot.DefinitionJson`), the mounted-addon receipts (name,
 module content hash, fuel/tick — copied from the instances that MOUNTED,
 never the document rows), and the active local seats with a pinned profile
-(`WorldReplayProfilePin(Name, MoveSpeed, TurnSpeed)`, raw fixed-point, never
-float accessors). There is no captured identity/profile catalog on the tape —
+(`WorldIdentityProjection`, including id, name, authored color, records and raw
+fixed-point movement rates). There is no captured identity/profile catalog on the tape —
 owned identities are ordinary `puck.world.definition.v1` documents on disk, outside
-the tape's scope. `Drive(profiles, engines, addonHostFactory)` re-resolves each seat by pinned
-`Name` against the LIVE `WorldOwnedWorlds` catalog handed to it at replay
-time; the pin's own rates are what make that safe even when the live
-identity's rates have since moved (`ReportProfileDrift` reports, never
-silently substitutes, a drifted rate). The re-drive mounts its own guest set
+the tape's scope. `Drive(profiles, engines, addonHostFactory)` reconstructs each
+seat from its recorded projection. The live `WorldOwnedWorlds` catalog supplies
+only the rate-drift report (`ReportProfileDrift` reports, never substitutes,
+a drifted rate). The re-drive mounts its own guest set
 through the injected `addonHostFactory` rather than reusing the live
 session's.
 
@@ -297,7 +296,11 @@ diagnostic; the replay verdict instead compares
 named components (`WorldStateHashComposition.Authoritative`): poses, everything
 the state arena stores, the host-owned field cells, the state section's own
 declaration, the declared topologies, rule/interaction latches, rule-group
-progress, decision runtime, board enforcement, body action state, cached
+progress, decision runtime, board enforcement, body action state, every body's
+simulation continuation (the checkpoint's field codecs, excluding rendered
+color and rig, which allocates, so
+the scope is taken while a replay records or verifies and on request, never by
+an ordinary tick), cached
 navigation and shared destination-tree/scheduler/pending-request state,
 flock perception/cadence/sample state (including the cached result of state
 affinity expressions), slot generations, and previous positions. Affinity programs

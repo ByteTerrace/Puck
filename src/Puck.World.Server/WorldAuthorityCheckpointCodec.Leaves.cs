@@ -89,7 +89,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             throw new InvalidOperationException(message: $"{nameof(GrantSubject)} {subject.Kind}:{subject.Value} has no wire value");
         }
     }
-    private static void WriteIdentityProjection(WireWriter writer, WorldIdentityProjection projection) {
+
+    internal static void WriteIdentityProjection(WireWriter writer, WorldIdentityProjection projection) {
         writer.WriteString(value: projection.Id);
         writer.WriteString(value: projection.Name);
         writer.WriteString(value: projection.ColorHex);
@@ -97,7 +98,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteNullableFixed(value: projection.TurnSpeed);
         WorldIdentityRecordWire.Write(writer: writer, records: projection.Records);
     }
-    private static WorldIdentityProjection ReadIdentityProjection(ref WireReader reader) => new(
+    internal static WorldIdentityProjection ReadIdentityProjection(ref WireReader reader) => new(
         Id: reader.ReadString(
             field: "identity id",
             maxBytes: MaxStringBytes
@@ -114,6 +115,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         TurnSpeed: reader.ReadNullableFixed(),
         Records: WorldIdentityRecordWire.Read(reader: ref reader)
     );
+
     // A traveler/committed-member identity is carried across a checkpoint restore through the identical reduction a
     // federated crossing already applies (WorldIdentity.Project()/FromProjection) — a body's own simulation never
     // reads a Document/Bindings/Hud/SeatLook off an in-flight traveler's identity, only its projection (Name/Color/

@@ -249,27 +249,6 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // whose vocabulary is Set/Add rather than mutation kinds.
     private static bool CarriesWriteMask(WorldCapability capability, GrantSubject subject) =>
         ((capability == WorldCapability.Mutate) && (subject.Kind == GrantSubjectKind.State));
-    // The total order ProjectSubjects sorts by — kind first (GrantSubjectKind's own declaration order), then value,
-    // then id (the string-keyed kinds' only — State and Region — ordinal). Two subjects the table already treats as
-    // equal (record-struct equality) sort equal here too; the order exists to be REPRODUCIBLE across a rebuild, not
-    // to express any ranking of kinds.
-    private static int CompareSubjects(GrantSubject a, GrantSubject b) {
-        var kind = ((byte)a.Kind).CompareTo(value: ((byte)b.Kind));
-
-        if (kind != 0) {
-            return kind;
-        }
-
-        var value = a.Value.CompareTo(value: b.Value);
-
-        return ((value != 0)
-            ? value
-            : string.CompareOrdinal(
-                strA: a.Id,
-                strB: b.Id
-            )
-        );
-    }
     // Whether an incoming grant conflicts with an existing hold under the exclusivity rule. Grant/revoke is a
     // human-cadence op (never the tick path), so the two scans are affordable; both are skipped entirely for the common
     // idempotent re-grant (a matching holder is the incoming principal itself).

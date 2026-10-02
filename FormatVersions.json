@@ -91,6 +91,16 @@
             "source": "src/Puck.World.Schema/CompiledWorldChunks.cs",
             "token": "2"
         },
+        "DeterminismManifest.Schema": {
+            "shape": "883eb57c589c2438",
+            "source": "src/Puck.Cli/Determinism/DeterminismManifest.cs",
+            "token": "puck.determinism.manifest.v1"
+        },
+        "DeterminismStream.Version": {
+            "shape": "543ba98e4323b922",
+            "source": "src/Puck.Cli/Determinism/DeterminismStream.cs",
+            "token": "puck.determinism.stream.v1"
+        },
         "EmbeddingLock.SupportedFormat": {
             "shape": "cc2aef0045cc79c1",
             "source": "src/Puck.World.Transpiler/Embeddings/EmbeddingLock.cs",
@@ -252,12 +262,12 @@
             "token": "puck.world-artifact-key.v2"
         },
         "WorldAuthorityCheckpointCodec.Magic": {
-            "shape": "f7b2e59252a0b102",
+            "shape": "d2c916aabbcf5327",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
             "token": "PCKP"
         },
         "WorldAuthorityCheckpointCodec.SupportedVersion": {
-            "shape": "f7b2e59252a0b102",
+            "shape": "d2c916aabbcf5327",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
             "token": "16"
         },
@@ -297,7 +307,7 @@
             "token": "puck.camera.program.v1"
         },
         "WorldCaptureManifest.SchemaId": {
-            "shape": "0c538ee15b04fc28",
+            "shape": "cdf34ad23aee39aa",
             "source": "src/Puck.World.Console/WorldCaptureScheduler.cs",
             "token": "puck.parity.manifest.v1"
         },
@@ -332,7 +342,7 @@
             "token": "puck.world.extensions.v1"
         },
         "WorldFederationCodec.WireKey": {
-            "shape": "1bb19aec6e430214",
+            "shape": "260cb21a83d2ab23",
             "source": "src/Puck.World.Server/WorldFederationCodec.cs",
             "token": "PUCKFED6"
         },
@@ -387,14 +397,14 @@
             "token": "puck.world.rewind.closed-group.v1"
         },
         "WorldReplaySnapshot.Magic": {
-            "shape": "e54f8d47c8c67bbf",
+            "shape": "975be6a5c40cfd7f",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "WLRP"
         },
         "WorldReplaySnapshot.ShapeToken": {
-            "shape": "e54f8d47c8c67bbf",
+            "shape": "975be6a5c40cfd7f",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
-            "token": "5"
+            "token": "6"
         },
         "WorldScheduleSection.ManifestSchemaId": {
             "shape": "a63d4c4af217e350",
