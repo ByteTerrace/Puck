@@ -1145,24 +1145,22 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     m_capture.Forward(target: producer);
                 }
 
-                var produced = (
-                    (row.Width > 0) &&
-                    (row.Height > 0) &&
-                    producer.Produce(
+                var produced = (((row.Width > 0) && (row.Height > 0))
+                    ? producer.Produce(
                         context: in context,
                         height: ((uint)row.Height),
                         reads: reads,
                         width: ((uint)row.Width)
                     )
-                );
+                    : FrameRender.Waiting(reason: "the schedule gave it no extent"));
 
                 reads?.RetireUntaken();
 
-                if (!produced) {
+                if (!produced.IsRendered) {
                     m_unproduced++;
-                    MarkStale(
+                    MarkProduction(
                         index: index,
-                        reason: $"the instance '{m_set.Instances[index].Name}' produced no output this frame{((producer.NotReadyReason is { } notReady) ? $": {notReady}" : string.Empty)}"
+                        production: produced
                     );
                     schedule.Next.Withdraw(
                         index: index,
@@ -1182,17 +1180,26 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             // as an external producer's render is, so its cadence counts from its last converted frame.
             if (
                 (source is not null) &&
-                !source.TryWrite(
+                (source.Write(
                     node: node,
                     tick: frame.Tick
-                )
+                ) is { IsRendered: false } written)
             ) {
                 m_unproduced++;
-                MarkUnproduced(
-                    index: index,
-                    node: node,
-                    waiting: $"the source '{m_set.Instances[index].Name}' wrote no image for tick {frame.Tick}"
-                );
+
+                if (written.Completion == FrameCompletion.Refused) {
+                    MarkProduction(
+                        index: index,
+                        production: written
+                    );
+                } else {
+                    MarkUnproduced(
+                        index: index,
+                        node: node,
+                        waiting: written.Reason
+                    );
+                }
+
                 schedule.Next.Withdraw(
                     index: index,
                     previous: prior

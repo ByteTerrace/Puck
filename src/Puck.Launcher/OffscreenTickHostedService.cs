@@ -12,7 +12,7 @@ namespace Puck.Launcher;
 /// window and NO swapchain. Its frames are its only output, so its time is its tick count, never the wall clock: an
 /// iteration runs at most one step of the SAME <see cref="FixedStepPump"/> the other hosts drive
 /// (<see cref="FixedStepPump.TryStep"/>) and composes the frame that step owes (<see cref="ComposesFrame"/>), and it
-/// steps the next tick only once the root reports that frame rendered (<see cref="RootFrame.Completion"/>). Until then
+/// steps the next tick only once the root reports that frame rendered (<see cref="RootFrame.Render"/>). Until then
 /// (a pipeline still building, a graph rebuilding, an input with no output for the frame, a device rebuilt after a
 /// loss) it holds the tick (<see cref="HoldsTick"/>), composing the same tick again and stepping none, so every tick has
 /// exactly one rendered frame, whatever a frame cost, and no frame shows an older image for a newer tick. A refused
@@ -270,7 +270,6 @@ public sealed class OffscreenTickHostedService : BackgroundService {
                         ? stepTicks
                         : 0UL);
 
-                    composedTick = true;
                     // Read once, so a resize between frames reaches the whole frame and never half of it.
                     var (targetWidth, targetHeight) = m_renderOptions.Extent;
                     var frameContext = new FrameContext(
@@ -294,15 +293,19 @@ public sealed class OffscreenTickHostedService : BackgroundService {
 
                     try {
                         m_faults?.ThrowIfLossDue();
+                        // The tick counts as composed once the root has been handed its context, the step it advanced
+                        // included, so a loss raised before the hand-off leaves the retry carrying the step and one the
+                        // root raises after it leaves the retry advancing nothing.
+                        composedTick = true;
 
                         var produced = m_root.ProduceFrame(context: in frameContext);
 
                         deviceLoss.NoteFrameProduced();
                         holding = HoldsTick(
-                            completion: produced.Completion,
+                            completion: produced.Render.Completion,
                             hasSimulation: (pump is not null)
                         );
-                        reason = produced.Reason;
+                        reason = produced.Render.Reason;
                     } catch (DeviceLostException deviceLost) {
                         if (!deviceLoss.TryRecover(
                             deviceLost: deviceLost,

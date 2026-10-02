@@ -112,10 +112,10 @@ public sealed class ImageProducerLawTests {
             slotCount: 1
         );
 
-        Assert.True(condition: Assert.IsAssignableFrom<IWorldUploadFeed>(@object: opened).TryWrite(
+        Assert.True(condition: Assert.IsAssignableFrom<IWorldUploadFeed>(@object: opened).Write(
             region: region,
             tick: 640L
-        ));
+        ).IsRendered);
         Assert.True(condition: reference.TryWriteReference(rgba: rgba, stamp: out var stamp));
         Assert.Equal(expected: new ImageSourceStamp(Sequence: 1UL, Tick: 640UL), actual: stamp);
 
@@ -618,6 +618,106 @@ public sealed class ImageProducerLawTests {
             return Extent;
         }
     }
+    // An imported feed that answers its publish as the law says, with an image only when it answers rendered.
+    private sealed class AnsweringFeed : IWorldImportFeed {
+        public FrameRender Answer { get; set; } = FrameRender.Rendered;
+        public ImageSourceDescriptor Descriptor { get; } = new(
+            Cadence: ImageSourceCadence.Rate(rateHz: 30U),
+            Color: ImageColorEncoding.Srgb,
+            Content: ImageContentClass.External,
+            Format: ImagePixelFormat.B8G8R8A8Unorm,
+            Height: 8U,
+            Producer: WorldImageProducerSettings.CaptureId,
+            Transport: ImageSourceTransport.Imported,
+            Width: 8U
+        );
+
+        public string? Fault => Answer.Reason;
+        public Vector3 Light => Vector3.Zero;
+
+        public GpuImageLease AcquireFrame() => (Answer.IsRendered ? FakeFeed.DesktopHandle : 0);
+        public void Dispose() { }
+        public nint Handle() => (Answer.IsRendered ? FakeFeed.DesktopHandle : 0);
+        public void NotifyDeviceLost() { }
+        public FrameRender Publish(in FrameContext context) => Answer;
+    }
+
+    /// <summary>An imported source answers its frame three ways. Outside a fill it answers as its feed does: an image is
+    /// rendered, a feed still making its first frame waits, and a feed that ended (its window gone) refuses by its own
+    /// reason, so an offscreen host steps on rather than holding the tick for an image that cannot come. While the gate
+    /// fills, the source shows its capture fill whatever the feed answers, so an ended feed renders once the fill has
+    /// converted and waits only for the conversion. A source that opened no feed refuses. The red leg is the ended feed
+    /// outside a fill, which a bool answer could only call a wait.</summary>
+    [Fact]
+    public void AnImportedSourceAnswersAsItsFeedOrItsFill() {
+        var feed = new AnsweringFeed();
+        var filling = false;
+        var fillHandle = ((nint)0);
+        var context = new RenderGraphExternalProducerContext(
+            Device: null!,
+            HostsOnDirectX: false,
+            Instance: "source$capture$0",
+            Package: RenderGraphInstance.SourcePackage(producer: WorldImageProducerSettings.CaptureId)
+        );
+
+        using var source = new WorldImageFeedProducer(
+            fill: _ => fillHandle,
+            gate: new WorldCaptureGate(
+                alwaysFills: false,
+                captureArmed: () => filling
+            ),
+            opening: new WorldImageSourceOpening(
+                Context: context,
+                Fault: null,
+                Feed: feed
+            )
+        );
+
+        FrameRender Produce() => source.Produce(
+            context: default,
+            height: 8U,
+            width: 8U
+        );
+
+        Assert.Equal(actual: Produce(), expected: FrameRender.Rendered);
+
+        feed.Answer = FrameRender.Waiting(reason: "window 'law' awaiting a compositor frame");
+        Assert.Equal(actual: Produce(), expected: feed.Answer);
+
+        feed.Answer = FrameRender.Refused(reason: "window 'law' is unavailable");
+        Assert.Equal(actual: Produce(), expected: FrameRender.Refused(reason: "window 'law' is unavailable"));
+
+        filling = true;
+        Assert.Equal(
+            actual: Produce(),
+            expected: FrameRender.Waiting(reason: "source 'source$capture$0' shows its capture fill, which is still converting")
+        );
+        fillHandle = 0xF111;
+        Assert.Equal(actual: Produce(), expected: FrameRender.Rendered);
+
+        using var unopened = new WorldImageFeedProducer(
+            fill: static _ => default,
+            gate: new WorldCaptureGate(
+                alwaysFills: true,
+                captureArmed: static () => false
+            ),
+            opening: new WorldImageSourceOpening(
+                Context: context,
+                Fault: "image producer 'capture' could not open window 'law'",
+                Feed: null
+            )
+        );
+
+        Assert.Equal(
+            actual: unopened.Produce(
+                context: default,
+                height: 8U,
+                width: 8U
+            ),
+            expected: FrameRender.Refused(reason: "image producer 'capture' could not open window 'law'")
+        );
+    }
+
     private sealed class FakeFeed(ImageSourceDescriptor descriptor) : IWorldImportFeed {
         public static readonly nint DesktopHandle = 0xDE5C;
 
@@ -635,7 +735,7 @@ public sealed class ImageProducerLawTests {
         public void Dispose() => Disposed = true;
         public nint Handle() => DesktopHandle;
         public void NotifyDeviceLost() { }
-        public void Publish(in FrameContext context) { }
+        public FrameRender Publish(in FrameContext context) => FrameRender.Rendered;
     }
     // The third producer's runtime: an uploaded producer whose feed writes a one-pixel region, recording the level each
     // opening read from its source's settings.
@@ -668,7 +768,7 @@ public sealed class ImageProducerLawTests {
         public Vector3 Light => Vector3.Zero;
 
         public void Dispose() { }
-        public bool TryWrite(long tick, GpuRegion region) => false;
+        public FrameRender Write(long tick, GpuRegion region) => FrameRender.Waiting(reason: "the fake has no image");
     }
     // The third producer's shape reads its settings without the world serializer's shipped shapes: it names the one
     // member it declares and refuses any other by name.

@@ -72,8 +72,9 @@ using Puck.Hosting;
 sealed class StatusPixelRoot : IRenderRoot {
     private readonly byte[] pixels = [0x20, 0x80, 0xE0, 0xFF];
 
-    public RootFrame ProduceFrame(in FrameContext context) => RootFrame.Rendered(
-        surface: Surface.CpuPixels(
+    public RootFrame ProduceFrame(in FrameContext context) => new(
+        Render: FrameRender.Rendered,
+        Surface: Surface.CpuPixels(
             pixels: pixels,
             width: 1,
             height: 1,
@@ -211,7 +212,20 @@ nothing the host does can render it; the root names the refusal. A refusal is
 something only a change to what a build was made from retries: a node's
 refused graph, or a package's refusal of its instance, such as an SDF
 residency whose tables' build was refused. Each is reported as `Refused`, never
-as a wait the host would hold forever. An instance with no installed graph,
+as a wait the host would hold forever.
+
+Producers answer the same three ways (`FrameRender`): an external producer's
+`Produce`, an uploaded source's `Write` and a World feed's `Publish` or `Write`
+each return rendered, waiting with a reason, or refused with one. The rule is
+that **a source waits only for what waiting can deliver**: it answers waiting
+only while composing the same tick again can bring its image (a conversion
+still building, a compositor's or a probe's first frame arriving on another
+thread, a seat that may take a camera). A feed that ended or could not open (a
+window or monitor that is gone, a probe whose ring cannot be provisioned)
+refuses, and so does a source whose image is a function of the simulation with
+none for this tick (a machine that is not running or has completed no frame),
+since only a later tick can change it. Offscreen, external content renders its
+capture fill, so an external source waits only for its fill to convert. An instance with no installed graph,
 or an uploaded source whose opening or descriptor has no conversion graph,
 also refuses the frame until its inputs change. Completion follows the
 scheduled same-frame reads, including buffers, external producers and package

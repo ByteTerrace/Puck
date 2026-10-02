@@ -134,6 +134,9 @@ public sealed class WorldCameraSourceFeed : IWorldImportFeed {
     /// <remarks>The seat's cameras recover their own device objects.</remarks>
     public void NotifyDeviceLost() { }
     /// <inheritdoc/>
-    /// <remarks>The seat's cameras publish every sensor once per frame, whatever reads it.</remarks>
-    public void Publish(in FrameContext context) { }
+    /// <remarks>The seat's cameras publish every sensor once per frame, whatever reads it. A seat may take a camera with
+    /// the sensor at any time, so a sensor that shows nothing waits and never refuses.</remarks>
+    public FrameRender Publish(in FrameContext context) => ((Handle() != 0)
+        ? FrameRender.Rendered
+        : FrameRender.Waiting(reason: (Fault ?? $"seat {Seat}'s {Sensor} sensor shows nothing yet")));
 }

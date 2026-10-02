@@ -47,17 +47,17 @@ public sealed partial class RenderGraphRuntimeLawTests {
             // The consumer still submits an image, but a same-frame read shows the held source's older state.
             Assert.False(condition: frames.Next().IsEmpty);
             Assert.Equal(expected: produced, actual: source.Produced);
-            Assert.Equal(expected: expected, actual: runtime.Completion);
+            Assert.Equal(expected: expected, actual: runtime.Render.Completion);
         }
 
         source.Holding = false;
         _ = frames.Next();
-        Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Completion);
+        Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Render.Completion);
     }
-
     [Fact]
     public void AnUnshownInputDoesNotKeepTheRootWaiting() {
         var gpu = new FakePipelineGpu();
+
         var (runtime, _, producers) = WorldScene(gpu: gpu);
 
         using (runtime) {
@@ -73,16 +73,15 @@ public sealed partial class RenderGraphRuntimeLawTests {
             frames.Settle();
             producers.Only.Holding = true;
             _ = frames.Next();
-            Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: runtime.Completion);
+            Assert.Equal(expected: FrameCompletion.NotYetRenderable, actual: runtime.Render.Completion);
 
             footprints.Clear();
             frames.Next(count: 3);
             Assert.Equal(expected: RenderGraphInstanceStatus.Unread, actual: runtime.Latest!.Instances[0].Status);
-            Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Completion);
-            Assert.Null(@object: runtime.CompletionReason);
+            Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Render.Completion);
+            Assert.Null(@object: runtime.Render.Reason);
         }
     }
-
     [Fact]
     public void ARefusedBufferProducerRefusesItsBlockedConsumerEvenWhileAnotherInputBuilds() {
         var gpu = new FakePipelineGpu();
@@ -114,11 +113,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
 
             frames.Next(count: 3);
-            Assert.Equal(expected: FrameCompletion.Refused, actual: runtime.Completion);
-            Assert.Contains(expectedSubstring: package.Refusal!, actualString: runtime.CompletionReason);
+            Assert.Equal(expected: FrameCompletion.Refused, actual: runtime.Render.Completion);
+            Assert.Contains(expectedSubstring: package.Refusal!, actualString: runtime.Render.Reason);
         }
     }
-
     [Fact]
     public void AMissingGraphRefusesTheFrameUntilAGraphIsInstalled() {
         var gpu = new FakePipelineGpu();
@@ -132,13 +130,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         frames.Next(count: 3);
         Assert.False(condition: runtime.Node(instance: 0).IsBuildingCandidate);
-        Assert.Equal(expected: FrameCompletion.Refused, actual: runtime.Completion);
-        Assert.Contains(expectedSubstring: "no graph is installed", actualString: runtime.CompletionReason);
+        Assert.Equal(expected: FrameCompletion.Refused, actual: runtime.Render.Completion);
+        Assert.Contains(expectedSubstring: "no graph is installed", actualString: runtime.Render.Reason);
         Assert.True(condition: runtime.TryInstall(instance: "main", graph: Graph(pipeline: CameraGraph()), refusal: out var refusal), userMessage: refusal?.Message);
         frames.Settle();
-        Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Completion);
+        Assert.Equal(expected: FrameCompletion.Rendered, actual: runtime.Render.Completion);
     }
-
     [Fact]
     public void ARefusedSourceConversionIsNotAWaitForPixels() {
         var gpu = new FakePipelineGpu { FailAtCreation = 1 };
@@ -160,7 +157,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             return (runtime.Node(instance: 0).LastSwapError is not null);
         });
         frames.Next(count: 3);
-        Assert.Equal(expected: FrameCompletion.Refused, actual: runtime.Completion);
-        Assert.Contains(expectedSubstring: runtime.Node(instance: 0).LastSwapError!.Message, actualString: runtime.CompletionReason);
+        Assert.Equal(expected: FrameCompletion.Refused, actual: runtime.Render.Completion);
+        Assert.Contains(expectedSubstring: runtime.Node(instance: 0).LastSwapError!.Message, actualString: runtime.Render.Reason);
     }
 }

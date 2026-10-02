@@ -34,9 +34,14 @@ public interface IWorldImportFeed : IWorldImageFeed {
     nint Handle();
     /// <summary>Drops every device-owned resource after a device loss; the next <see cref="Publish"/> recreates them.</summary>
     void NotifyDeviceLost();
-    /// <summary>Publishes the feed's current image for this produced frame, converting only what its cadence owes.</summary>
+    /// <summary>Publishes the feed's current image for this produced frame, converting only what its cadence owes, and
+    /// answers whether it has one.</summary>
     /// <param name="context">The host's frame context, whose host resolves the live GPU device.</param>
-    void Publish(in FrameContext context);
+    /// <returns><see cref="FrameRender.Rendered"/> while the feed has an image; waiting while its producer is still
+    /// making the first one (a compositor's or a probe's first frame, a seat that may take a camera); refused once it
+    /// ended or cannot open (a window or monitor that is gone, a device that cannot share its images), which only a
+    /// change to what it opens retries.</returns>
+    FrameRender Publish(in FrameContext context);
 }
 /// <summary>An uploaded feed: one whose producer writes CPU pixels, which a source instance's graph reads as a region
 /// (<see cref="IRenderGraphSourceUpload"/>) and converts through the pass its descriptor names.</summary>
@@ -46,9 +51,9 @@ public interface IWorldUploadFeed : IWorldImageFeed {
     /// already holds.</summary>
     /// <param name="tick">The completed simulation tick the frame presents.</param>
     /// <param name="region">The region.</param>
-    /// <returns><see langword="true"/> when the region holds an image; <see langword="false"/> while the feed has
-    /// none.</returns>
-    bool TryWrite(long tick, GpuRegion region);
+    /// <returns>Whether the region holds the tick's image, as <see cref="IRenderGraphSourceUpload.Write"/>
+    /// answers.</returns>
+    FrameRender Write(long tick, GpuRegion region);
 }
 /// <summary>An uploaded source instance's upload over the feed its producer opened: the render-graph runtime converts the
 /// region the feed writes. It owns the feed.</summary>
@@ -69,13 +74,13 @@ public sealed class WorldImageSourceUpload(WorldImageSourceOpening opening) : IR
     /// <inheritdoc/>
     public void Dispose() => Opening.Feed?.Dispose();
     /// <inheritdoc/>
-    public bool TryWrite(long tick, GpuRegion region) => (
-        (Fault is null) &&
-        ((IWorldUploadFeed)Opening.Feed!).TryWrite(
+    /// <remarks>A source whose feed did not open, or opened one that writes no region, refuses.</remarks>
+    public FrameRender Write(long tick, GpuRegion region) => ((Fault is { } fault)
+        ? FrameRender.Refused(reason: fault)
+        : ((IWorldUploadFeed)Opening.Feed!).Write(
             region: region,
             tick: tick
-        )
-    );
+        ));
 }
 /// <summary>
 /// A producer registered with the World host under an id: it opens a feed for every screen source naming it. Its id,

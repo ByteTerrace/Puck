@@ -191,7 +191,7 @@ public sealed class WorldCaptureFillLawTests {
         public void Dispose() { }
         public nint Handle() => DesktopHandle;
         public void NotifyDeviceLost() { }
-        public void Publish(in FrameContext context) { }
+        public FrameRender Publish(in FrameContext context) => FrameRender.Rendered;
     }
     // One screen showing a source, run as the binder runs it: the source is a render-graph instance whose producer reads
     // through the capture gate and the fills, and each frame converts the fills it needs before its source resolves, on a

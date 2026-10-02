@@ -181,13 +181,19 @@ internal sealed partial class WorldScreenBinder {
         public void Dispose() => Feed.Dispose();
         public nint Handle() => Feed.Handle();
         public void NotifyDeviceLost() => Feed.NotifyDeviceLost();
-        public void Publish(in FrameContext context) {
+        public FrameRender Publish(in FrameContext context) {
             if (Feed.ShouldPull()) {
                 m_binder.CaptureWindow(
                     context: in context,
                     feed: Feed
                 );
             }
+
+            return (Feed.Live
+                ? FrameRender.Rendered
+                : (Feed.Ended
+                    ? FrameRender.Refused(reason: (Feed.Fault ?? $"{Feed.Label} is unavailable"))
+                    : FrameRender.Waiting(reason: (Feed.Fault ?? $"{Feed.Label} awaiting a compositor frame"))));
         }
     }
 }

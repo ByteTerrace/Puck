@@ -209,7 +209,7 @@ public interface IRenderGraphPackageFactory {
     /// <summary>Returns why the package cannot build or record an instance's passes until something they are built from
     /// changes, naming the refusal, or <see langword="null"/> while it can or is still building. A refusal is permanent
     /// until its inputs move, so the runtime reports a frame such an instance cannot render as
-    /// <see cref="Puck.Hosting.FrameCompletion.Refused"/> (<see cref="RenderGraphRuntime.Completion"/>), and an offscreen
+    /// <see cref="Puck.Hosting.FrameCompletion.Refused"/> (<see cref="RenderGraphRuntime.Render"/>), and an offscreen
     /// host steps on rather than waiting for it; a wait reports <see langword="null"/>.</summary>
     /// <param name="instance">The instance's name.</param>
     /// <returns>The refusal, or <see langword="null"/>.</returns>

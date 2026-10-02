@@ -16,11 +16,8 @@ public sealed partial class RenderGraphRuntime {
     /// <see cref="FrameCompletion.Rendered"/> when the root rendered it over inputs current for it (or stands unchanged),
     /// <see cref="FrameCompletion.NotYetRenderable"/> while an instance it reads within the frame, or the root itself, has
     /// not rendered it yet, and <see cref="FrameCompletion.Refused"/> when one cannot until something it was built from
-    /// changes.</summary>
-    public FrameCompletion Completion { get; private set; } = FrameCompletion.NotYetRenderable;
-    /// <summary>Gets why the latest produced frame is not <see cref="FrameCompletion.Rendered"/>, naming the instance
-    /// and its state, or <see langword="null"/> when it is.</summary>
-    public string? CompletionReason { get; private set; } = "the runtime has produced no frame";
+    /// changes; with the reason, naming the instance and its state, when it is not rendered.</summary>
+    public FrameRender Render { get; private set; } = FrameRender.Waiting(reason: "the runtime has produced no frame");
 
     // Sizes the per-instance standing to a set of instances, every one current until it renders.
     private void ResetStale(int count) {
@@ -36,9 +33,10 @@ public sealed partial class RenderGraphRuntime {
         m_staleRefused[index] = refused;
     }
     // A scheduled graph instance whose node produced nothing this frame. A paused node presents its last image on purpose.
-    // This is the one place a refusal becomes Refused: a package's refusal of the instance (IRenderGraphPackageFactory.
-    // RefusalOf, such as an SDF residency's refused tables), the node's refused build or a missing graph; otherwise
-    // the instance is waiting. Source writes also pass through here, since binding their region advances the build.
+    // This is the one place a graph instance's refusal becomes Refused: a package's refusal of the instance
+    // (IRenderGraphPackageFactory.RefusalOf, such as an SDF residency's refused tables), the node's refused build or a
+    // missing graph; otherwise the instance is waiting. A source write that waits also passes through here, since binding
+    // its region advances the build. A producer's or an upload's own three-way answer is taken as it is (MarkProduction).
     private void MarkUnproduced(int index, ShaderPipelineRenderNode node, string? waiting = null) {
         var name = m_set.Instances[index].Name;
 
@@ -102,6 +100,13 @@ public sealed partial class RenderGraphRuntime {
 
         return null;
     }
+    // A producer's or an upload's own answer that it produced nothing: refused or waiting, as it says, naming the
+    // instance and its reason.
+    private void MarkProduction(int index, FrameRender production) => MarkStale(
+        index: index,
+        reason: $"the instance '{m_set.Instances[index].Name}' produced no output: {production.Reason}",
+        refused: (production.Completion == FrameCompletion.Refused)
+    );
     // A graph instance that rendered: stale when an input it reads within the frame is, when it bound a stand-in, or when
     // the output it bound is older than the frame the schedule has it read.
     private void MarkRendered(int index, RenderGraphSchedule schedule) {
@@ -115,7 +120,12 @@ public sealed partial class RenderGraphRuntime {
         var name = m_set.Instances[index].Name;
         string? waiting = null;
 
-        foreach (var read in schedule.Reads) {
+        // An indexed loop: an interface enumerator would allocate on every frame.
+        var reads = schedule.Reads;
+
+        for (var position = 0; (position < reads.Count); position++) {
+            var read = reads[position];
+
             if ((read.Consumer != name) || read.PreviousFrame) {
                 continue;
             }
@@ -164,19 +174,16 @@ public sealed partial class RenderGraphRuntime {
     // Decides the frame's completion from the root's standing.
     private void Complete() {
         if (m_stale[m_root] is { } reason) {
-            Completion = (m_staleRefused[m_root]
-                ? FrameCompletion.Refused
-                : FrameCompletion.NotYetRenderable);
-            CompletionReason = reason;
+            Render = (m_staleRefused[m_root]
+                ? FrameRender.Refused(reason: reason)
+                : FrameRender.Waiting(reason: reason));
         } else if (
             (m_producers[m_root] is null) &&
             (m_current[m_root].Frame < 0)
         ) {
-            Completion = FrameCompletion.NotYetRenderable;
-            CompletionReason = $"the root '{m_set.Instances[m_root].Name}' has produced no output";
+            Render = FrameRender.Waiting(reason: $"the root '{m_set.Instances[m_root].Name}' has produced no output");
         } else {
-            Completion = FrameCompletion.Rendered;
-            CompletionReason = null;
+            Render = FrameRender.Rendered;
         }
     }
 }

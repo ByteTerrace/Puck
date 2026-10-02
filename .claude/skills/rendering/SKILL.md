@@ -416,7 +416,7 @@ These are one-line cautions; the owning pages hold the derivations.
   conversion a catalog package per shipped kernel (`SourceConversionPackage`,
   its interface generated beside the kernel). The runtime declares the
   upload's cadence and extent to the scheduler itself. A new uploaded producer
-  writes its planes in `IWorldUploadFeed.TryWrite`, which a screen showing the
+  writes its planes in `IWorldUploadFeed.Write`, which a screen showing the
   source samples as the instance's converted output. CPU pixels a producer
   holds outside the set (a camera's or a capture's CPU tier, a capture fill)
   convert through the same one-pass graph on a converter of their own
@@ -489,7 +489,12 @@ These are one-line cautions; the owning pages hold the derivations.
   purpose), `Refused` when a node's refused build or a package's refusal of the
   instance (`IRenderGraphPackageFactory.RefusalOf`; `SdfWorldPasses` reports its
   residency's refused tables, `SdfWorldResidency.Refusal`) stops it. A refusal
-  is never a wait: an offscreen host would hold its tick forever. A new kind of
+  is never a wait: an offscreen host would hold its tick forever. Producers
+  answer the same three ways (`FrameRender`, from `IRenderGraphExternalProducer.Produce`,
+  `IRenderGraphSourceUpload.Write` and a World feed's `Publish` or `Write`): a
+  source waits only for what waiting can deliver (a build, a first frame on
+  another thread), and refuses when it ended, failed to open, or has no image
+  for a tick its image is a function of (`MarkProduction`). A new kind of
   refusal states itself through `RefusalOf`, and `MarkUnproduced` in
   `RenderGraphRuntime.Completion.cs` is the one place it becomes `Refused`
   (`RenderGraphRuntimeLawTests.Completion`,

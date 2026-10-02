@@ -293,13 +293,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         public void Dispose() { }
         public void OnDeviceLost() { }
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+        public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             var self = reads![reads.IndexOf(producer: "mirror")];
 
             Seen.Add(item: ((int)self.Lease.ImageViewHandle));
             m_completed++;
 
-            return true;
+            return FrameRender.Rendered;
         }
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new NotSupportedException());
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
@@ -367,7 +367,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         public void Dispose() => m_image?.Dispose();
         public void OnDeviceLost() { }
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+        public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             m_image ??= gpu.Create(
                 format: GpuPixelFormat.R8G8B8A8Unorm,
                 height: height,
@@ -378,7 +378,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Extent = (width, height);
             Produced++;
 
-            return true;
+            return FrameRender.Rendered;
         }
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new NotSupportedException());
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
@@ -429,7 +429,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         public void Dispose() { }
         public void OnDeviceLost() { }
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+        public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             Seen.Clear();
 
             for (var index = 0; (index < (reads?.Count ?? 0)); index++) {
@@ -440,7 +440,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 }
             }
 
-            return true;
+            return FrameRender.Rendered;
         }
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new NotSupportedException());
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {

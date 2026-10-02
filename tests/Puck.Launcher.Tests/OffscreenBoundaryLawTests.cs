@@ -131,6 +131,75 @@ public sealed class OffscreenBoundaryLawTests {
         Assert.Equal(expected: ((lossTick * StepTicks), StepTicks), actual: (root.Failed!.Value.ElapsedTicks, root.Failed.Value.DeltaTicks));
         Assert.Equal(expected: root.Failed.Value with { DeltaTicks = 0UL, FrameDeltaTicks = 0UL }, actual: root.Frames[(((int)lossTick) - 1)]);
     }
+
+    // Records every frame the root is handed, ending the run after four.
+    private sealed class RecordingRoot : IRenderRoot {
+        public List<FrameContext> Frames { get; } = [];
+        public int Losses { get; private set; }
+        public TerminalControl? Terminal { get; set; }
+
+        public void Dispose() { }
+        public void OnDeviceLost() => Losses++;
+        public RootFrame ProduceFrame(in FrameContext context) {
+            Frames.Add(item: context);
+
+            if (Frames.Count == 4) {
+                Terminal!.RequestExit();
+            }
+
+            return default;
+        }
+    }
+
+    /// <summary>The operator's <c>gpu.faults lose</c> loses the device on its armed frame before the root is handed the
+    /// frame's context, so the root never saw the tick's step: the retry carries it, and every frame the root is handed
+    /// spans exactly one step, presentation moving once a tick. The red leg is the tick marked composed before the hand-off,
+    /// whose retry advances nothing and drops the step.</summary>
+    [Fact]
+    public async Task AnInjectedLossBeforeTheHandOffKeepsTheTicksStep() {
+        var clock = new ManualClock { AdvancesOnRead = true };
+        var simulation = new Simulation();
+        var root = new RecordingRoot();
+        var rebuild = new ClockedRebuild(clock: clock);
+        var faults = new GpuCreationFaults();
+        var builder = Host.CreateApplicationBuilder(settings: new HostApplicationBuilderSettings { DisableDefaults = true });
+
+        faults.ArmLoss(nth: 2);
+        builder.Logging.ClearProviders();
+        builder.Services.AddSingleton<TimeProvider>(implementationInstance: clock);
+        builder.Services.AddSingleton<IPrecisionWaiter>(implementationInstance: new ManualWaiter(clock: clock));
+        builder.Services.AddSingleton(implementationInstance: new LauncherOptions { ExitAfter = TimeSpan.FromMinutes(value: 1) });
+        builder.Services.AddSingleton(implementationInstance: new OffscreenRenderOptions(height: 32U, width: 32U));
+        builder.Services.AddSingleton<IRenderRoot>(implementationInstance: root);
+        builder.Services.AddSingleton<IDeviceRebuild>(implementationInstance: rebuild);
+        builder.Services.AddSingleton(implementationInstance: faults);
+        builder.Services.AddSingleton<IPrincipalResolver, ConsolePrincipal>();
+        builder.Services.AddSingleton(implementationInstance: simulation);
+        builder.Services.AddFixedStepSimulation<Simulation>(bindings: new NoBindings());
+        builder.Services.AddLauncherOffscreenTerminal();
+        // This law has no stdin script; keep the test process's stdin out of the first-step gate.
+        for (var index = (builder.Services.Count - 1); (index >= 0); index--) {
+            if ((builder.Services[index].ServiceType == typeof(IHostedService)) &&
+                (builder.Services[index].ImplementationFactory is not null)) {
+                builder.Services.RemoveAt(index: index);
+            }
+        }
+
+        using var host = builder.Build();
+
+        root.Terminal = host.Services.GetRequiredService<TerminalControl>();
+        await WindowedHostFixture.RunAsync(host: host);
+
+        Assert.Equal(expected: (1, 1), actual: (rebuild.Calls, root.Losses));
+        Assert.Equal(expected: 4UL, actual: simulation.Steps);
+        Assert.Equal(expected: 4, actual: root.Frames.Count);
+        for (var index = 0; (index < root.Frames.Count); index++) {
+            var frame = root.Frames[index];
+
+            Assert.Equal(expected: ((((ulong)index) + 1UL) * StepTicks), actual: frame.ElapsedTicks);
+            Assert.Equal(expected: (StepTicks, StepTicks), actual: (frame.DeltaTicks, frame.FrameDeltaTicks));
+        }
+    }
     [InlineData("offscreen")]
     [InlineData("headless")]
     [InlineData("windowed")]

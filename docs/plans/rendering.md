@@ -3426,7 +3426,7 @@ Each commit is marked with what it waits on.
    installed in the live set, the instance's latest completed image handed to
    `SdfEngineNode` with the screen's other reads) and then deleted the feed's
    `CpuSurfaceSource` upload and `IWorldImageFeed.Publish`/`AcquireFrame` for
-   uploaded feeds, leaving `IWorldUploadFeed.TryWrite` their one image path.
+   uploaded feeds, leaving `IWorldUploadFeed.Write` their one image path.
    Laws on the fake GPU: a screen's lease
    retires after the sampling slot's fence; a slot the capture producer is
    lapping is never handed out while leased; a filled external source binds

@@ -538,7 +538,7 @@ public sealed class WorldCaptureSchedulerLawTests : IDisposable {
             // machine is replaced by one of another extent, the old source reads the new output's shape, and a rebuilt
             // source runs in its place, before the scheduler judges the capture.
             run.WorldTarget.Writer = path => {
-                Assert.True(condition: served.TryWrite(region: region, tick: ((long)SecondTick)));
+                Assert.True(condition: served.Write(region: region, tick: ((long)SecondTick)).IsRendered);
 
                 var rgba = new byte[((8 * 2) * 4)];
 

@@ -538,12 +538,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
             expected: "the instance 'pattern' has produced no output: the test producer refused its settings"
         );
         TestLiveness.Until(step: () => {
-            Produce(index: runtime.Latest!.Frame + 1, runtime: runtime, tick: 1);
+            Produce(index: (runtime.Latest!.Frame + 1), runtime: runtime, tick: 1);
 
             return (runtime.Node(instance: 1).FrameCounter > 0UL);
         });
-        Assert.Equal(expected: FrameCompletion.Refused, actual: runtime.Completion);
-        Assert.Contains(expectedSubstring: upload.Refusal!, actualString: runtime.CompletionReason);
+        Assert.Equal(expected: FrameCompletion.Refused, actual: runtime.Render.Completion);
+        Assert.Contains(expectedSubstring: upload.Refusal!, actualString: runtime.Render.Reason);
     }
 
     // An upload of a SourceExtent-square image that counts what it writes.
@@ -565,7 +565,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public long Writes { get; private set; }
 
         public void Dispose() { }
-        public bool TryWrite(long tick, GpuRegion region) {
+        public FrameRender Write(long tick, GpuRegion region) {
             Writes++;
 
             Span<byte> word = stackalloc byte[4];
@@ -577,7 +577,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 offset: ImageSourceUploadLayout.HeaderBytes
             );
 
-            return true;
+            return FrameRender.Rendered;
         }
     }
 }

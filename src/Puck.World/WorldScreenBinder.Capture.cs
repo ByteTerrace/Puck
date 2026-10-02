@@ -129,9 +129,12 @@ internal sealed partial class WorldScreenBinder {
     // transport the platform copies GPU-side into shared textures the screen samples directly — the CPU surface is never
     // converted, only its divided-cadence readback frames feed the room glow.
     private void CaptureWindow(CaptureFeed feed, in FrameContext context) {
+        feed.Ended = false;
+
         if (!feed.TryEnsureSource(adapterLuid: AdapterLuidForOpen())) {
             feed.Live = false;
             feed.Fault = $"{feed.Label} is unavailable";
+            feed.Ended = true;
             // No source to sample: drop the shared images so the next open reallocates and re-attaches from scratch.
             feed.ReleaseGpuTargets();
 
@@ -541,6 +544,9 @@ internal sealed partial class WorldScreenBinder {
         bool gpuRoute = false,
         int? monitorIndex = null
     ) : IDisposable {
+        // Whether the latest pull found no source to capture (a window or monitor that is gone): the feed refuses until a
+        // later pull reacquires one.
+        public bool Ended { get; set; }
         public string? Fault { get; set; }
         public INativeImageCaptureFeed? GpuAttachedSource { get; set; }
         // The ring of simultaneous-access shared textures, with its shared fence and slot publication, the platform copies

@@ -124,10 +124,12 @@ public sealed class OffscreenTickPacingLawTests {
             }
 
             return new RootFrame(
-                Completion: completed,
-                Reason: ((completed == FrameCompletion.Rendered)
-                    ? null
-                    : "the law's root has not rendered this tick"),
+                Render: new FrameRender(
+                    Completion: completed,
+                    Reason: ((completed == FrameCompletion.Rendered)
+                        ? null
+                        : "the law's root has not rendered this tick")
+                ),
                 Surface: default
             );
         }

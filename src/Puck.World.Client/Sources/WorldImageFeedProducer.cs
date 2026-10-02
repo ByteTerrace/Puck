@@ -19,6 +19,8 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
     private readonly WorldCaptureGate m_gate;
     // Why the opened feed hands out no image, when it is no import feed.
     private readonly string? m_notImported;
+    // What a filled source waits for until its fill has converted, built once.
+    private readonly string m_fillConverting;
 
     /// <summary>Initializes a new instance of the <see cref="WorldImageFeedProducer"/> class, which owns the opened
     /// feed.</summary>
@@ -38,6 +40,7 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
             ? $"image producer '{opening.Feed.Descriptor.Producer}' opened a feed that hands out no image"
             : null);
         Opening = opening;
+        m_fillConverting = $"source '{opening.Context.Instance}' shows its capture fill, which is still converting";
     }
 
     /// <inheritdoc/>
@@ -69,16 +72,30 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
     /// <inheritdoc/>
     public void OnDeviceLost() => Feed?.NotifyDeviceLost();
     /// <inheritdoc/>
-    /// <remarks>Publishes the feed for the frame and reports whether it has an image. The extent is the one the feed
-    /// declared, so the arguments are not read.</remarks>
-    public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+    /// <remarks>Publishes the feed for the frame and answers as the image it hands out stands. A source that opened no
+    /// feed refuses. While the gate fills the feed's content class the source hands out its capture fill, never the
+    /// feed's image, so it is rendered once the fill has converted, whatever the feed answers; otherwise it answers as
+    /// its feed does (<see cref="IWorldImportFeed.Publish"/>). The extent is the one the feed declared, so the arguments
+    /// are not read.</remarks>
+    public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
         if (Feed is not { } feed) {
-            return false;
+            return FrameRender.Refused(reason: (Fault ?? $"source '{Opening.Context.Instance}' opened no feed"));
         }
 
-        feed.Publish(context: in context);
+        var published = feed.Publish(context: in context);
 
-        return (feed.Handle() != 0);
+        if (!m_gate.Fills(content: feed.Descriptor.Content)) {
+            return published;
+        }
+
+        var fill = m_fill(arg: feed.Descriptor.CaptureFill);
+        var converted = (fill.ImageViewHandle != 0);
+
+        fill.Retire();
+
+        return (converted
+            ? FrameRender.Rendered
+            : FrameRender.Waiting(reason: m_fillConverting));
     }
     /// <inheritdoc/>
     /// <remarks>A source is captured through the instance that shows it, so a capture armed on the source itself is

@@ -6,7 +6,7 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// The runtime reports whether the root's image shows the frame it was asked to compose
-/// (<see cref="RenderGraphRuntime.Completion"/>), which the offscreen host steps on. A cold build is not yet renderable
+/// (<see cref="RenderGraphRuntime.Render"/>), which the offscreen host steps on. A cold build is not yet renderable
 /// until the root renders, and a producer that keeps its older output while it rebuilds leaves the root not yet renderable
 /// though the root renders over that output: a host that took the surface alone would show an older frame's image for a
 /// newer one.
@@ -54,12 +54,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
                 Assert.True(condition: surface.IsEmpty);
                 Assert.Equal(
-                    actual: runtime.Completion,
+                    actual: runtime.Render.Completion,
                     expected: FrameCompletion.NotYetRenderable
                 );
                 Assert.Contains(
                     expectedSubstring: "has no installed graph yet: its pipelines are building",
-                    actualString: runtime.CompletionReason
+                    actualString: runtime.Render.Reason
                 );
             }
 
@@ -69,15 +69,15 @@ public sealed partial class RenderGraphRuntimeLawTests {
             var rendered = default(Surface);
 
             TestLiveness.Until(
-                reason: () => (runtime.CompletionReason ?? "rendered"),
+                reason: () => (runtime.Render.Reason ?? "rendered"),
                 step: () => {
                     rendered = frames.Next();
 
-                    return (runtime.Completion == FrameCompletion.Rendered);
+                    return (runtime.Render.Completion == FrameCompletion.Rendered);
                 }
             );
             Assert.False(condition: rendered.IsEmpty);
-            Assert.Null(@object: runtime.CompletionReason);
+            Assert.Null(@object: runtime.Render.Reason);
         }
     }
     [Fact]
@@ -92,7 +92,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             frames.Settle();
             _ = frames.Next();
             Assert.Equal(
-                actual: runtime.Completion,
+                actual: runtime.Render.Completion,
                 expected: FrameCompletion.Rendered
             );
 
@@ -111,19 +111,19 @@ public sealed partial class RenderGraphRuntimeLawTests {
                     expected: produced
                 );
                 Assert.Equal(
-                    actual: runtime.Completion,
+                    actual: runtime.Render.Completion,
                     expected: FrameCompletion.NotYetRenderable
                 );
                 Assert.Equal(
-                    actual: runtime.CompletionReason,
-                    expected: "the instance 'world' produced no output this frame"
+                    actual: runtime.Render.Reason,
+                    expected: "the instance 'world' produced no output: the fake world is holding"
                 );
             }
 
             world.Holding = false;
             _ = frames.Next();
             Assert.Equal(
-                actual: (runtime.Completion, world.Produced),
+                actual: (runtime.Render.Completion, world.Produced),
                 expected: (FrameCompletion.Rendered, (produced + 1))
             );
         }
@@ -191,25 +191,63 @@ public sealed partial class RenderGraphRuntimeLawTests {
             const string Waiting = "the instance 'camera' has no installed graph yet: its pipelines are building";
 
             TestLiveness.Until(
-                reason: () => (refusing.CompletionReason ?? "rendered"),
+                reason: () => (refusing.Render.Reason ?? "rendered"),
                 step: () => {
                     _ = frames.Next();
 
-                    return (refusing.CompletionReason == Waiting);
+                    return (refusing.Render.Reason == Waiting);
                 }
             );
             frames.Next(count: 3);
             Assert.Equal(
-                actual: (refusing.Completion, refusing.CompletionReason),
+                actual: (refusing.Render.Completion, refusing.Render.Reason),
                 expected: (FrameCompletion.NotYetRenderable, Waiting)
             );
 
             package.Refusal = "the engine's build was refused and is retried when its inputs change: [GPU_CREATION_FAULT] the law refused it";
             _ = frames.Next();
             Assert.Equal(
-                actual: (refusing.Completion, refusing.CompletionReason),
+                actual: (refusing.Render.Completion, refusing.Render.Reason),
                 expected: (FrameCompletion.Refused, $"the instance 'camera' cannot render: {package.Refusal}")
             );
         }
     }
+    /// <summary>A producer answers three ways, and the frame follows it: one still making its image (holding) leaves the
+    /// frame not yet renderable, which an offscreen host waits out, and one that ended (an imported feed whose window is
+    /// gone) refuses it by its own reason, so the host steps on. The red leg: the same ended producer read as a wait
+    /// would hold the tick forever, as a bool answer had to.</summary>
+    [Fact]
+    public void AnEndedProducerRefusesTheFrameAndAWaitingOneHoldsIt() {
+        var gpu = new FakePipelineGpu();
+
+        var (runtime, frames, producers) = WorldScene(gpu: gpu);
+
+        using (runtime) {
+            var world = producers.Only;
+
+            frames.Settle();
+            world.Holding = true;
+            _ = frames.Next();
+            Assert.Equal(
+                actual: runtime.Render,
+                expected: FrameRender.Waiting(reason: "the instance 'world' produced no output: the fake world is holding")
+            );
+
+            world.Ended = "the fake world's feed ended";
+            frames.Next(count: 2);
+            Assert.Equal(
+                actual: runtime.Render,
+                expected: FrameRender.Refused(reason: "the instance 'world' produced no output: the fake world's feed ended")
+            );
+
+            world.Ended = null;
+            world.Holding = false;
+            _ = frames.Next();
+            Assert.Equal(
+                actual: runtime.Render,
+                expected: FrameRender.Rendered
+            );
+        }
+    }
 }
+

@@ -75,7 +75,7 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     /// <inheritdoc/>
     public void OnDeviceLost() => Runtime.OnDeviceLost();
     /// <inheritdoc/>
-    /// <remarks>The frame's completion is the runtime's (<see cref="RenderGraphRuntime.Completion"/>): rendered only when
+    /// <remarks>The frame's completion is the runtime's (<see cref="RenderGraphRuntime.Render"/>): rendered only when
     /// the root's image shows this frame.</remarks>
     public RootFrame ProduceFrame(in FrameContext context) {
         Prepare?.Invoke(context: in context);
@@ -114,8 +114,7 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
         );
 
         return new RootFrame(
-            Completion: Runtime.Completion,
-            Reason: Runtime.CompletionReason,
+            Render: Runtime.Render,
             Surface: surface
         );
     }
