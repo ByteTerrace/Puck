@@ -160,7 +160,6 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.True(condition: rig.Stood(), userMessage: $"frame {frame} after the period");
         }
     }
-
     [Fact]
     public void AGridMoveSettlesForOnePeriodWithoutDiscardingHistoryOrRebuilding() {
         using var rig = new TemporalRig(views: 1, cadence: true, temporal: true, renderScale: 0.75f);
@@ -178,10 +177,17 @@ public sealed partial class SdfWorldPassesLawTests {
             for (var sample = 0U; (sample < SdfTemporalHistory.Period); sample++) {
                 rig.Produce();
                 Assert.False(condition: rig.Stood(), userMessage: $"grid {grid}, sample {sample}");
-                Assert.Equal(expected: (preceding + sample + 1u), actual: rig.HistoryFrames());
+                Assert.Equal(expected: ((preceding + sample) + 1u), actual: rig.HistoryFrames());
                 Assert.True(condition: rig.PreviousValid());
                 Assert.Equal(expected: revision, actual: rig.World.WorkRevision);
             }
+            // The node records the quantized grid with each submission it renders, as its completed work names them.
+            var completed = new GpuWorkSample();
+            var node = rig.Runtime.Node(instance: 0);
+
+            Assert.True(condition: node.TryReadCompleted(sample: completed));
+            Assert.True(condition: node.TryGetRenderGrid(grid: out var recorded, submission: completed.Submission));
+            Assert.Equal(expected: RenderGraphExtent.Quantize(fraction: grid), actual: recorded);
             rig.Produce();
             Assert.True(condition: rig.Stood());
             // A different requested fraction in the same quantized grid needs no new samples.
@@ -250,10 +256,10 @@ public sealed partial class SdfWorldPassesLawTests {
         public bool Filling {
             set => m_feed!.Filling = value;
         }
+        public SdfWorldPasses Passes { get; }
         public float RenderGrid {
             set => m_sourceFrame = m_sourceFrame with { Views = [m_sourceFrame.Views[0] with { ResolvedRenderScale = value }] };
         }
-        public SdfWorldPasses Passes { get; }
         public RenderGraphRuntime Runtime { get; }
         public SdfWorldResidency? Second { get; }
         public SdfWorldResidency Selected { get; set; }

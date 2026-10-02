@@ -14,13 +14,16 @@ namespace Puck.World.Tests;
 /// <see cref="WorldDynamicResolution.Deadband"/> of its budget leaves the grid; outside it the grid moves toward the scale
 /// whose area meets the budget by at most <see cref="WorldDynamicResolution.MaximumFall"/> of itself down or
 /// <see cref="WorldDynamicResolution.MaximumRise"/> up, clamped to the floor and the ceiling; a frame with no fresh sample
-/// moves nothing. Against a known display rate the sample is the GPU's frame time for a newly timed frame against the
-/// display period, so under a present-paced display, where every kept present reads exactly its period, the grid rises
-/// again when the GPU's time drops; where the device times nothing it is a new present's interval against the period;
-/// where neither is available, a completed frame's counted march steps against the budget the committed counters
-/// ceilings give per output pixel, and no budget holds the ceiling. Every signal answers the same trace of load against
-/// budget with the same grids. A forced grid overrides them all, bounded by the ceiling. The grids it chooses are extents
-/// the render graph quantizes, so the views' extents follow them.
+/// moves nothing. A sample is taken only at the grid the views render now: a reading of renders at another grid moves
+/// nothing, and a present interval is a sample only while the views' completed renders were at the current grid
+/// throughout it. When the budget falls between two adjacent grids the controller settles on the cheaper one, until a
+/// sample predicts the dearer one within the budget. Against a known display rate the sample is the GPU's frame time for
+/// newly timed renders against the display period, so under a present-paced display, where every kept present reads
+/// exactly its period, the grid rises again when the GPU's time drops; where the device times nothing it is a new
+/// present's interval against the period; where neither is available, newly completed renders' counted march steps
+/// against the budget the committed counters ceilings give per output pixel, and no budget holds the ceiling. Every
+/// signal answers the same trace of load against budget with the same grids. A forced grid overrides them all, bounded
+/// by the ceiling. The grids it chooses are extents the render graph quantizes, so the views' extents follow them.
 /// </summary>
 public sealed class WorldDynamicResolutionLawTests {
     private const float Ceiling = 0.875f;
@@ -30,10 +33,10 @@ public sealed class WorldDynamicResolutionLawTests {
     private const long OutputPixels = (256L * 144L);
     private const float Rise = ((float)(1d + WorldDynamicResolution.MaximumRise));
 
-    [Theory]
     [InlineData(1f)]
     [InlineData(0.99f)]
     [InlineData(0.9376f)]
+    [Theory]
     public void EveryCeilingThatQuantizesToNativeReconstructsWhileDynamicResolutionIsOn(float scale) {
         var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults()) { RenderScale = scale };
 
@@ -46,17 +49,12 @@ public sealed class WorldDynamicResolutionLawTests {
         settings.DynamicResolution = false;
         Assert.Equal(expected: scale, actual: settings.RenderCeiling);
     }
-
     [Fact]
     public void PresentTimingHoldsKeptPeriodsAndStepsTheGridByBoundedShares() {
-        var load = new ScriptedLoad();
         var controller = new WorldDynamicResolution();
+        var load = new ScriptedLoad(controller: controller);
 
-        float Present(double periods) {
-            load.Present(periods: periods);
-
-            return Advance(controller: controller, load: load);
-        }
+        float Present(double periods) => PresentSample(controller: controller, load: load, periods: periods);
 
         // Kept periods, and any within the deadband, hold the ceiling; the first present only starts the clock.
         Assert.Equal(expected: Ceiling, actual: Present(periods: 3.0));
@@ -92,28 +90,57 @@ public sealed class WorldDynamicResolutionLawTests {
         Assert.True(condition: (RenderGraphExtent.Quantize(fraction: controller.Scale) > RenderGraphExtent.Quantize(fraction: Floor)));
     }
     [Fact]
+    public void APresentIsASampleOnlyWhileTheViewsCompletedAtTheCurrentGrid() {
+        var controller = new WorldDynamicResolution();
+        var load = new ScriptedLoad(controller: controller);
+        var elsewhere = 0.5d;
+
+        // Renders completing at another grid than the views render now void every interval they fall in.
+        load.CompletionGrid = () => elsewhere;
+
+        for (var miss = 0; (miss < 8); miss++) {
+            load.Present(periods: 3.0);
+            Assert.Equal(expected: Ceiling, actual: Advance(controller: controller, load: load));
+        }
+
+        // Once they complete at the current grid, the next present starts the clock and the one after is a sample.
+        load.CompletionGrid = null;
+        load.Present(periods: 3.0);
+        Assert.Equal(expected: Ceiling, actual: Advance(controller: controller, load: load));
+        load.Present(periods: 3.0);
+        Assert.Equal(expected: (Ceiling * Fall), actual: Advance(controller: controller, load: load), tolerance: 1e-6f);
+
+        // A render at another grid completing inside an interval voids it, though the present ending it follows a render
+        // at the current grid.
+        load.CompletionGrid = () => elsewhere;
+        load.CompleteFrame();
+        Assert.Equal(expected: (Ceiling * Fall), actual: Advance(controller: controller, load: load), tolerance: 1e-6f);
+        load.CompletionGrid = null;
+        load.Present(periods: 3.0);
+        Assert.Equal(expected: (Ceiling * Fall), actual: Advance(controller: controller, load: load), tolerance: 1e-6f);
+        load.Present(periods: 3.0);
+        Assert.Equal(expected: ((Ceiling * Fall) * Fall), actual: Advance(controller: controller, load: load), tolerance: 1e-6f);
+    }
+    [Fact]
     public void UnderAPresentPacedDisplayTheGpuTimeRaisesTheGridAgain() {
         // Every kept present reads exactly the display period, as a present-paced (FIFO) swapchain reports them, so the
         // present timing alone lowers the grid on a miss and never raises it again.
-        var paced = new ScriptedLoad();
         var presentOnly = new WorldDynamicResolution();
+        var paced = new ScriptedLoad(controller: presentOnly);
 
-        paced.Present(periods: 1.0);
-        Advance(controller: presentOnly, load: paced);
-        paced.Present(periods: 2.0);
-        Advance(controller: presentOnly, load: paced);
+        PresentSample(controller: presentOnly, load: paced, periods: 1.0);
+        PresentSample(controller: presentOnly, load: paced, periods: 2.0);
 
         for (var frame = 0; (frame < 120); frame++) {
-            paced.Present(periods: 1.0);
-            Advance(controller: presentOnly, load: paced);
+            PresentSample(controller: presentOnly, load: paced, periods: 1.0);
         }
 
         Assert.Equal(expected: (Ceiling * Fall), actual: presentOnly.Scale, tolerance: 1e-6f);
 
         // The GPU's own time shows the headroom: two periods of GPU work lower the grid, half a period raises it back to
         // the ceiling while the presents still read exactly their period.
-        var timed = new ScriptedLoad { Timed = true };
         var controller = new WorldDynamicResolution();
+        var timed = new ScriptedLoad(controller: controller) { Timed = true };
 
         for (var frame = 0; (frame < 8); frame++) {
             timed.Present(periods: 1.0);
@@ -133,14 +160,14 @@ public sealed class WorldDynamicResolutionLawTests {
         }
 
         Assert.Equal(expected: Ceiling, actual: controller.Scale);
-        // A frame with no newly timed frame moves nothing.
+        // A frame with no newly timed render moves nothing.
         timed.TimeFrame(fresh: false, periods: 2.0);
         Assert.Equal(expected: Ceiling, actual: Advance(controller: controller, load: timed));
     }
     [Fact]
     public void TheGpuTimeLeadsThePresentTimingWhichLeadsTheSteps() {
         var controller = new WorldDynamicResolution();
-        var load = new ScriptedLoad { BudgetPerPixel = 20d, StepsPerPixelAtFull = 60d, Timed = true };
+        var load = new ScriptedLoad(controller: controller) { BudgetPerPixel = 20d, StepsPerPixelAtFull = 60d, Timed = true };
 
         load.Present(periods: 1.0);
         load.TimeFrame(periods: 1.0);
@@ -178,20 +205,102 @@ public sealed class WorldDynamicResolutionLawTests {
         Assert.Equal(expected: 0.81f, actual: WorldDynamicResolution.Respond(budget: 100d, ceiling: 0.81f, floor: 0.25f, load: 1d, scale: 0.8f));
         Assert.Equal(expected: (0.8f * Fall), actual: WorldDynamicResolution.Respond(budget: 100d, ceiling: 1f, floor: 0.25f, load: 400d, scale: 0.8f), tolerance: 1e-6f);
     }
-    [Theory]
     [InlineData(90d)]
     [InlineData(100d)]
     [InlineData(110d)]
+    [Theory]
     public void TheDeadbandIncludesBothBoundaries(double load) =>
         Assert.Equal(expected: 0.8f, actual: WorldDynamicResolution.Respond(budget: 100d, ceiling: 1f, floor: 0.25f, load: load, scale: 0.8f));
+    [Fact]
+    public void AReadingOfRendersAtAnotherGridMovesNothing() {
+        var controller = new WorldDynamicResolution();
+        var load = new ScriptedLoad(controller: controller) { BudgetPerPixel = 20d, StepsPerPixelAtFull = 60d, Timed = true };
+        var current = WorldDynamicResolution.GridOf(ceiling: Ceiling, scale: Ceiling);
+
+        // Four periods of GPU time read back from renders at another grid, then from renders whose grids differ.
+        load.TimeFrame(grid: 0.5d, periods: 4.0);
+        Assert.Equal(expected: Ceiling, actual: Advance(controller: controller, load: load));
+        load.TimeFrame(grid: 0d, periods: 4.0);
+        Assert.Equal(expected: Ceiling, actual: Advance(controller: controller, load: load));
+        // The same time at the grid the views render now is a sample.
+        load.TimeFrame(grid: current, periods: 4.0);
+        Assert.Equal(expected: (Ceiling * Fall), actual: Advance(controller: controller, load: load), tolerance: 1e-6f);
+
+        // The steps answer alike.
+        var steps = new WorldDynamicResolution();
+        var counted = new ScriptedLoad(controller: steps) { BudgetPerPixel = 20d };
+
+        counted.CompleteFrame(grid: 0.5d, steps: ((long)(80d * OutputPixels)));
+        Assert.Equal(expected: Ceiling, actual: Advance(controller: steps, load: counted));
+        counted.CompleteFrame(grid: current, steps: ((long)(80d * OutputPixels)));
+        Assert.Equal(expected: (Ceiling * Fall), actual: Advance(controller: steps, load: counted), tolerance: 1e-6f);
+    }
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [Theory]
+    public void ABudgetBetweenTwoGridsSettlesOnTheCheaperOneAndStaysPut(int latency) {
+        // The GPU's time scales with the grid's area and meets the display period at a scale of 0.594, between the grids
+        // 0.5625 and 0.625, where it reads 14.946 and 18.452 milliseconds: under and over the deadband. Each render is
+        // read back `latency` frames after it was rendered, at the grid it rendered.
+        var meets = 0.594d;
+        var controller = new WorldDynamicResolution();
+        var load = new ScriptedLoad(controller: controller) { Timed = true };
+        var rendered = new Queue<double>();
+        var grids = new List<double>();
+
+        double Periods(double grid) => ((grid / meets) * (grid / meets));
+        void Run(int frames) {
+            for (var frame = 0; (frame < frames); frame++) {
+                rendered.Enqueue(item: load.RenderGrid());
+
+                if (rendered.Count > latency) {
+                    var grid = rendered.Dequeue();
+
+                    load.TimeFrame(grid: grid, periods: Periods(grid: grid));
+                }
+
+                Advance(controller: controller, load: load);
+                grids.Add(item: controller.Grid);
+            }
+        }
+        int SettledAt() {
+            var last = (grids.Count - 1);
+
+            while ((last > 0) && (grids[(last - 1)] == grids[last])) {
+                last--;
+            }
+
+            return last;
+        }
+
+        Assert.Equal(expected: 14.946d, actual: ((Periods(grid: 0.5625d) * 1000d) / Hertz), precision: 3);
+        Assert.Equal(expected: 18.452d, actual: ((Periods(grid: 0.625d) * 1000d) / Hertz), precision: 3);
+        Run(frames: 600);
+
+        // Settled on the cheaper grid within a bounded run, measured over budget on the dearer one, and held there.
+        var settled = SettledAt();
+
+        Assert.Equal(expected: 0.5625d, actual: grids[^1]);
+        Assert.Equal(expected: 0.625d, actual: controller.OverGrid);
+        Assert.True(condition: (settled < (16 * (latency + 1))), userMessage: $"settled at frame {settled}");
+
+        // A load that falls until the dearer grid is predicted within the budget clears the mark and rises onto it.
+        meets = 0.66d;
+        grids.Clear();
+        Run(frames: 600);
+        settled = SettledAt();
+        Assert.Equal(expected: 0.6875d, actual: grids[^1]);
+        Assert.Equal(expected: 0d, actual: controller.OverGrid);
+        Assert.True(condition: (settled < (16 * (latency + 1))), userMessage: $"settled at frame {settled}");
+    }
     [Fact]
     public void WithoutPresentTimingTheStepBudgetHoldsTheFrameAndNoBudgetHoldsTheCeiling() {
         var controller = new WorldDynamicResolution();
         // The views march 60 steps a pixel at the full output, a quarter of that at half its extent on each axis; the
         // budget is 20 a pixel, so the grid that meets it is the full output over the square root of three.
-        var load = new ScriptedLoad { BudgetPerPixel = 20d, StepsPerPixelAtFull = 60d };
-
-        load.Grid = () => controller.Scale;
+        var load = new ScriptedLoad(controller: controller) { BudgetPerPixel = 20d, StepsPerPixelAtFull = 60d };
 
         for (var frame = 0; (frame < 48); frame++) {
             load.CompleteFrame();
@@ -204,7 +313,7 @@ public sealed class WorldDynamicResolutionLawTests {
 
         Assert.Equal(expected: budget, actual: controller.StepBudget);
         Assert.InRange(actual: controller.Scale, low: Floor, high: Ceiling);
-        Assert.InRange(actual: ((double)load.StepsAt(grid: controller.Scale)), low: (budget * (1d - WorldDynamicResolution.Deadband)), high: (budget * (1d + WorldDynamicResolution.Deadband)));
+        Assert.InRange(actual: ((double)load.StepsAt(grid: controller.Grid)), low: (budget * (1d - WorldDynamicResolution.Deadband)), high: (budget * (1d + WorldDynamicResolution.Deadband)));
 
         // A frame no new completion follows moves nothing.
         var held = controller.Scale;
@@ -233,23 +342,23 @@ public sealed class WorldDynamicResolutionLawTests {
         var timed = new WorldDynamicResolution();
         var counted = new WorldDynamicResolution();
         var gpu = new WorldDynamicResolution();
-        var presents = new ScriptedLoad();
-        var steps = new ScriptedLoad { BudgetPerPixel = 10d };
-        var frames = new ScriptedLoad { Timed = true };
+        var presents = new ScriptedLoad(controller: timed);
+        var steps = new ScriptedLoad(controller: counted) { BudgetPerPixel = 10d };
+        var frames = new ScriptedLoad(controller: gpu) { Timed = true };
 
-        // The first present only starts the clock, so the timed controller takes one present ahead of the trace. A present's
-        // interval is whole clock ticks, so its share of the period agrees with the steps' to within a tick.
+        // The first present only starts the clock, as the first after each grid move does, so the timed controller takes
+        // those presents beside the trace. A present's interval is whole clock ticks, so its share of the period agrees
+        // with the steps' to within a tick.
         presents.Present(periods: 1.0);
         Advance(controller: timed, load: presents);
 
         foreach (var ratio in trace) {
-            presents.Present(periods: ratio);
             steps.CompleteFrame(steps: ((long)Math.Round(a: ((ratio * steps.BudgetPerPixel) * OutputPixels))));
             frames.TimeFrame(periods: ratio);
 
             var grid = Advance(controller: counted, load: steps);
 
-            Assert.Equal(expected: grid, actual: Advance(controller: timed, load: presents), tolerance: 1e-6f);
+            Assert.Equal(expected: grid, actual: PresentSample(controller: timed, load: presents, periods: ratio), tolerance: 1e-6f);
             Assert.Equal(expected: grid, actual: Advance(controller: gpu, load: frames), tolerance: 1e-6f);
         }
 
@@ -278,18 +387,34 @@ public sealed class WorldDynamicResolutionLawTests {
     [Fact]
     public void AForcedGridOverridesTheLoadAndTheCeilingBoundsIt() {
         var controller = new WorldDynamicResolution();
-        var load = new ScriptedLoad();
+        var load = new ScriptedLoad(controller: controller);
 
         load.Present(periods: 3.0);
         Assert.Equal(expected: 0.6f, actual: controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, forced: 0.6f, load: load, outputPixels: OutputPixels));
         Assert.Equal(expected: WorldDynamicResolutionSignal.Forced, actual: controller.Signal);
+        Assert.Equal(expected: 0.625d, actual: controller.Grid);
         Assert.Equal(expected: Ceiling, actual: controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, forced: 1f, load: load, outputPixels: OutputPixels));
         // Below the floor too: a sweep forces any extent the ceiling allows.
         Assert.Equal(expected: 0.25f, actual: controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, forced: 0.25f, load: load, outputPixels: OutputPixels));
     }
 
-    private static float Advance(WorldDynamicResolution controller, ScriptedLoad load) =>
+    private static float Advance(WorldDynamicResolution controller, IWorldFrameLoadSource load) =>
         controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, forced: 0f, load: load, outputPixels: OutputPixels);
+    // One present sample: a present after a grid move only restarts the clock, so a move is followed by that present,
+    // which moves nothing.
+    private static float PresentSample(WorldDynamicResolution controller, ScriptedLoad load, double periods) {
+        var grid = controller.Grid;
+
+        load.Present(periods: periods);
+        var scale = Advance(controller: controller, load: load);
+
+        if (controller.Grid != grid) {
+            load.Present(periods: 1.0);
+            Assert.Equal(expected: scale, actual: Advance(controller: controller, load: load));
+        }
+
+        return scale;
+    }
     private static string RepositoryRoot() {
         for (var directory = new DirectoryInfo(path: AppContext.BaseDirectory); (directory is not null); directory = directory.Parent) {
             if (File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx"))) {
@@ -300,61 +425,63 @@ public sealed class WorldDynamicResolutionLawTests {
         throw new InvalidOperationException(message: "No checkout holds the test assembly.");
     }
 
-    // A load whose timed frames, presents and march steps the law scripts: each timed frame takes the given number of
-    // display periods of GPU time, each Present advances the present count by one at the given number of display periods
-    // after the last, and each completed frame counts either the given steps or those the views would at the grid the
-    // controller last chose, proportional to the grid's area. An untimed load reads no GPU time.
-    private sealed class ScriptedLoad : IWorldFrameLoadSource {
-        private long m_frame;
-        private long m_gpuFrame;
-        private double m_gpuSeconds;
+    // A load whose timed renders, presents and completed renders the law scripts, each read once: a timed render takes
+    // the given number of display periods of GPU time, each Present advances the present count by one at the given
+    // number of display periods after the last and follows a completed render, and each completed render counts either
+    // the given steps or those the views march at its grid, proportional to the grid's area. A render is at the grid
+    // the controller last chose unless the law names another. An untimed load reads no GPU time.
+    private sealed class ScriptedLoad(WorldDynamicResolution controller) : IWorldFrameLoadSource {
+        private WorldFrameLoadReading m_completed;
+        private bool m_counts;
+        private WorldFrameLoadReading m_timed;
+        private bool m_times;
         private uint m_presents;
-        private long? m_steps;
         private long m_ticks;
 
         public double BudgetPerPixel { get; set; }
-        public Func<float> Grid { get; set; } = static () => Ceiling;
+        public Func<double>? CompletionGrid { get; set; }
         public PresentTimingSample LastPresentTiming { get; private set; }
         public double MarchStepBudgetPerPixel => BudgetPerPixel;
         public double StepsPerPixelAtFull { get; init; }
         public bool Timed { get; set; }
 
+        public double RenderGrid() => ((controller.Grid > 0d)
+            ? controller.Grid
+            : WorldDynamicResolution.GridOf(ceiling: Ceiling, scale: Ceiling));
         public void RequireGpuTiming(bool required) { }
-        public bool TryReadGpuFrame(out long frame, out double seconds) {
-            frame = m_gpuFrame;
-            seconds = m_gpuSeconds;
+        public bool TryReadGpuFrame(out WorldFrameLoadReading reading) {
+            reading = m_timed;
+            m_timed = (m_timed with { Renders = 0 });
 
-            return (Timed && (m_gpuFrame != 0L));
+            return (Timed && m_times);
         }
-        public void TimeFrame(double periods, bool fresh = true) {
+        public void TimeFrame(double periods, bool fresh = true, double? grid = null) {
             if (fresh) {
-                m_gpuFrame++;
+                m_times = true;
+                m_timed = new WorldFrameLoadReading(Grid: (grid ?? RenderGrid()), Load: (periods / Hertz), Renders: 1);
             }
-
-            m_gpuSeconds = (periods / Hertz);
         }
         public void Unpresent() => LastPresentTiming = PresentTimingSample.Unavailable;
-        public void CompleteFrame(long? steps = null) {
-            m_frame++;
-            m_steps = steps;
+        public void CompleteFrame(long? steps = null, double? grid = null) {
+            var at = (grid ?? (CompletionGrid?.Invoke() ?? RenderGrid()));
+
+            m_counts = true;
+            m_completed = new WorldFrameLoadReading(Grid: at, Load: (steps ?? StepsAt(grid: at)), Renders: 1);
         }
         public void Present(double periods) {
+            CompleteFrame();
             m_ticks += ((m_ticks == 0L)
                 ? Stopwatch.Frequency
                 : ((long)Math.Round(a: ((periods * Stopwatch.Frequency) / Hertz))));
             m_presents++;
             LastPresentTiming = new PresentTimingSample(PresentCount: m_presents, PresentTimestampTicks: m_ticks);
         }
-        public long StepsAt(float grid) {
-            var scale = ((grid > 0f) ? grid : Ceiling);
+        public long StepsAt(double grid) => ((long)((StepsPerPixelAtFull * OutputPixels) * (grid * grid)));
+        public bool TryReadMarchSteps(out WorldFrameLoadReading reading) {
+            reading = m_completed;
+            m_completed = (m_completed with { Renders = 0 });
 
-            return ((long)((StepsPerPixelAtFull * OutputPixels) * (((double)scale) * scale)));
-        }
-        public bool TryReadMarchSteps(out long frame, out long steps) {
-            frame = m_frame;
-            steps = (m_steps ?? StepsAt(grid: Grid()));
-
-            return (m_frame != 0L);
+            return m_counts;
         }
     }
 }

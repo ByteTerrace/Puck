@@ -9,13 +9,14 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <summary>The load the dynamic-resolution controller reads in a presentation with a render graph: the world's own views'
-/// (<c>world</c>, <c>world$2</c> on) GPU frame time, the latest timed frame's summed pass time from the pass timestamps
-/// <see cref="WorldGpuTiming"/> records while the controller asks; the presenter's present timing, when the host's
-/// presenter reports it (a windowed World's swapchain; an offscreen World presents nothing, so it reports none); the
-/// counted march steps the views recorded in their latest completed submissions; and their budget per output pixel from
-/// the counters ceilings the floor tier committed (<c>tests/Puck.Counters/counters.ceilings.json</c>, compiled in as
-/// <see cref="CeilingsResource"/>) for the device's backend. A reading's frame is the first view's. Reading allocates
-/// nothing.</summary>
+/// (<c>world</c>, <c>world$2</c> on) GPU frame time, from the pass timestamps <see cref="WorldGpuTiming"/> records while
+/// the controller asks; the presenter's present timing, when the host's presenter reports it (a windowed World's
+/// swapchain; an offscreen World presents nothing, so it reports none); the counted march steps of the views' completed
+/// submissions; and their budget per output pixel from the counters ceilings the floor tier committed
+/// (<c>tests/Puck.Counters/counters.ceilings.json</c>, compiled in as <see cref="CeilingsResource"/>) for the device's
+/// backend. A timed or counted reading sums each view's newest submission not read before, through a
+/// <see cref="WorldFrameLoadAggregate"/> per signal, and names the grid each submission's node recorded it at
+/// (<see cref="ShaderPipelineRenderNode.TryGetRenderGrid"/>). Reading allocates nothing.</summary>
 /// <param name="presentTiming">Resolves the presenter's present timing, on the first read, or <see langword="null"/> for a
 /// host whose presenter reports none.</param>
 /// <param name="backend">Resolves the backend the device runs, on the first budget read, or <see langword="null"/> before
@@ -28,17 +29,19 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
 
     private static readonly int MarchStepsColumn = ColumnOf(kind: GpuWork.MarchSteps);
     private static readonly Lazy<WorldCountersCeilings?> Ceilings = new(valueFactory: ReadCeilings);
+    private readonly WorldFrameLoadAggregate m_gpu = new();
     private readonly GpuWorkSample m_sample = new();
+    private readonly WorldFrameLoadAggregate m_steps = new();
 
     private double m_budget;
     private bool m_budgeted;
     private IPresentTimingFeedback? m_presentTiming;
     private bool m_resolved;
-    // The instance set the view indices were found in, and each instance's 0-based view, or -1 for any other instance:
-    // found again only when the runtime runs another set.
+    // The instance set the views were found in, and each instance's node when it is one of the world's own views, or
+    // null for any other instance.
     private RenderGraphInstanceSet? m_set;
 
-    private int[] m_views = [];
+    private ShaderPipelineRenderNode?[] m_nodes = [];
 
     /// <inheritdoc/>
     public PresentTimingSample LastPresentTiming {
@@ -68,88 +71,117 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
     /// <inheritdoc/>
     public void RequireGpuTiming(bool required) => timing.Require(required: required);
     /// <inheritdoc/>
-    public bool TryReadGpuFrame(out long frame, out double seconds) {
-        frame = 0L;
-        seconds = 0d;
+    /// <remarks>A view whose node has no timed submission yet adds nothing; the views are timed while any one is. A
+    /// submission whose grid its node no longer records adds nothing either.</remarks>
+    public bool TryReadGpuFrame(out WorldFrameLoadReading reading) {
+        reading = default;
 
         if (probe.Root?.Runtime is not { } runtime) {
             return false;
         }
 
         FindViews(runtime: runtime);
+        m_gpu.Begin();
+        var timed = false;
 
-        for (var index = 0; (index < m_views.Length); index++) {
-            var view = m_views[index];
-
-            if ((view < 0) || (runtime.Producer(instance: index) is not null)) {
+        for (var view = 0; (view < m_nodes.Length); view++) {
+            if (m_nodes[view] is not { } node) {
                 continue;
             }
 
-            var node = runtime.Node(instance: index);
+            var submission = node.LatestTimingSubmission;
 
-            // The first view's timed frames are the reading's identity: while it is untimed, nothing is.
-            if (node.Timings.IsEmpty) {
-                if (view == 0) {
-                    return false;
-                }
-
+            if (submission == 0L) {
                 continue;
             }
-            if (view == 0) {
-                frame = node.TimingFrames;
-            }
 
-            seconds += (node.LatestTimingMilliseconds / 1000d);
+            timed = true;
+
+            if (node.TryGetRenderGrid(grid: out var grid, submission: submission)) {
+                m_gpu.Add(grid: grid, load: (node.LatestTimingMilliseconds / 1000d), render: submission, view: view);
+            }
         }
 
-        return (frame != 0L);
+        reading = m_gpu.End();
+
+        return timed;
     }
     /// <inheritdoc/>
-    public bool TryReadMarchSteps(out long frame, out long steps) {
-        frame = 0L;
-        steps = 0L;
+    /// <remarks>A completed submission whose grid its node does not record, one that rendered no passes or is no longer
+    /// recorded, adds nothing.</remarks>
+    public bool TryReadMarchSteps(out WorldFrameLoadReading reading) {
+        reading = default;
 
         if (probe.Root?.Runtime is not { } runtime) {
             return false;
         }
 
         FindViews(runtime: runtime);
+        m_steps.Begin();
+        var counted = false;
 
-        for (var index = 0; (index < m_views.Length); index++) {
-            var view = m_views[index];
-
-            if (
-                (view < 0) ||
-                (runtime.Producer(instance: index) is not null) ||
-                !runtime.Work(instance: index).TryReadCompleted(sample: m_sample)
-            ) {
+        for (var view = 0; (view < m_nodes.Length); view++) {
+            if ((m_nodes[view] is not { } node) || !node.TryReadCompleted(sample: m_sample)) {
                 continue;
             }
 
-            if (view == 0) {
-                frame = m_sample.Submission;
+            counted = true;
+
+            if (!node.TryGetRenderGrid(grid: out var grid, submission: m_sample.Submission)) {
+                continue;
             }
+
+            var steps = 0L;
 
             for (var pass = 0; (pass < m_sample.PassCount); pass++) {
                 if (m_sample.TryGetPassCount(column: MarchStepsColumn, pass: pass, value: out var count)) {
                     steps += count;
                 }
             }
+
+            m_steps.Add(grid: grid, load: steps, render: m_sample.Submission, view: view);
         }
 
-        return (frame != 0L);
+        reading = m_steps.End();
+
+        return counted;
     }
 
-    // Finds each instance's view again only when the runtime runs another instance set.
+    // Finds each instance's view again only when the runtime runs another instance set or another node for a view. A
+    // view whose node survives keeps the submissions it counted, since a node numbers its submissions on; any other view
+    // counts afresh.
     private void FindViews(RenderGraphRuntime runtime) {
         var set = runtime.Instances;
 
-        if (!ReferenceEquals(objA: set, objB: m_set)) {
-            m_set = set;
-            m_views = [.. set.Instances.Select(selector: static instance => (string.Equals(a: instance.Name, b: WorldViewGraphs.WorldInstance, comparisonType: StringComparison.Ordinal)
-                ? 0
-                : (WorldViewNames.ViewOf(instance: instance.Name) ?? -1)))];
+        if (ReferenceEquals(objA: set, objB: m_set) && NodesHold(runtime: runtime)) {
+            return;
         }
+
+        var instances = set.Instances;
+        var nodes = new ShaderPipelineRenderNode?[instances.Count];
+        var survivors = new int[instances.Count];
+
+        for (var index = 0; (index < instances.Count); index++) {
+            var name = instances[index].Name;
+            var view = (string.Equals(a: name, b: WorldViewGraphs.WorldInstance, comparisonType: StringComparison.Ordinal) || (WorldViewNames.ViewOf(instance: name) is not null));
+
+            nodes[index] = ((view && (runtime.Producer(instance: index) is null)) ? runtime.Node(instance: index) : null);
+            survivors[index] = ((nodes[index] is { } node) ? Array.FindIndex(array: m_nodes, match: previous => ReferenceEquals(objA: previous, objB: node)) : -1);
+        }
+
+        m_set = set;
+        m_nodes = nodes;
+        m_gpu.Reset(survivors: survivors);
+        m_steps.Reset(survivors: survivors);
+    }
+    private bool NodesHold(RenderGraphRuntime runtime) {
+        for (var index = 0; (index < m_nodes.Length); index++) {
+            if ((m_nodes[index] is { } node) && !ReferenceEquals(objA: node, objB: runtime.Node(instance: index))) {
+                return false;
+            }
+        }
+
+        return true;
     }
     private static WorldCountersCeilings? ReadCeilings() {
         using var stream = typeof(WorldFrameLoadSource).Assembly.GetManifestResourceStream(name: CeilingsResource);

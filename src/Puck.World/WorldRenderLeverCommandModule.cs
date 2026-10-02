@@ -65,15 +65,20 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
             ? "on"
             : "off")}]";
     }
-    // The world.dynamic-resolution echo: the lever, the ceiling it bounds, the grid the latest frame chose (the ceiling
-    // before the first), the floor, the march-step budget the latest frame was held to (zero where present timing moved
-    // it) and the signal that moved the grid.
+    // The world.dynamic-resolution echo: the lever, the ceiling it bounds, the grid the views render the latest frame's
+    // choice at (the ceiling's before the first), the lowest grid measured over the budget that no rise reaches, the
+    // floor, the march-step budget the latest frame was held to (zero where timing moved it) and the signal that moved
+    // the grid.
     private string DynamicResolutionEcho() {
         var controller = renderProbe.DynamicResolution;
         var ceiling = settings.RenderCeiling;
-        var grid = ((((controller?.Scale ?? 0f) > 0f) && settings.DynamicResolution)
-            ? Math.Min(val1: controller!.Scale, val2: ceiling)
-            : ceiling);
+        var on = (settings.DynamicResolution && ((controller?.Scale ?? 0f) > 0f));
+        var grid = (on
+            ? controller!.Grid
+            : Client.WorldDynamicResolution.GridOf(ceiling: ceiling, scale: ceiling));
+        var over = ((on && (controller!.OverGrid > 0d))
+            ? RenderScaleName(scale: ((float)controller.OverGrid))
+            : "none");
         var state = (!settings.DynamicResolution
             ? "off"
             : ((settings.DynamicResolutionForced > 0f)
@@ -85,7 +90,7 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[world.dynamic-resolution: {state} ceiling={RenderScaleName(scale: ceiling)} grid={RenderScaleName(scale: grid)} floor={RenderScaleName(scale: settings.DynamicResolutionFloor)} budget={Math.Round(a: (controller?.StepBudget ?? 0d))} signal={signal.ToString().ToLowerInvariant()}]"
+            handler: $"[world.dynamic-resolution: {state} ceiling={RenderScaleName(scale: ceiling)} grid={RenderScaleName(scale: ((float)grid))} over={over} floor={RenderScaleName(scale: settings.DynamicResolutionFloor)} budget={Math.Round(a: (controller?.StepBudget ?? 0d))} signal={signal.ToString().ToLowerInvariant()}]"
         );
     }
     // The world.temporal echo.

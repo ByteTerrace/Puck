@@ -227,6 +227,15 @@ counted march steps against the floor tier's committed ceilings per output
 pixel. Counted work per frame then scales with the grid, which
 `world.counters gpu` shows as the sky pass's texels written.
 
+A sample counts only at the grid the views render now. Each view's node
+records the quantized grid of every submission it renders, and a reading,
+summed over each view's renders not read before, names their common grid; a
+reading from another grid, such as one read back after the grid moved, is not
+a sample, and a view standing on a render already read adds nothing. When the
+budget lies between two adjacent grids, the controller settles on the cheaper
+one rather than alternating: a sample over the budget marks its grid, and the
+grid rises onto the mark only once a sample predicts it within the budget.
+
 ## Temporal reconstruction
 
 A view whose quality asks for it (`SdfViewQuality.Temporal`) reconstructs over

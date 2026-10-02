@@ -1935,14 +1935,21 @@ presenter (`WorldFramePresenter.DynamicResolution.cs`) advances it once a
 frame and writes its grid as `ResolvedRenderScale`, times the transition dip,
 with `RenderScale = WorldRenderSettings.RenderCeiling`. Off, every view's
 values are exactly what they were without it. Never add a second grid or
-quantizer: the grid reaches `RenderGraphExtent.Quantize`. All three signals go
-through `WorldDynamicResolution.Respond`, so a policy change is one edit there.
-The load reaches it only through `IWorldFrameLoadSource`; the World's
-`WorldFrameLoadSource` reads the GPU frame time from
-`ShaderPipelineRenderNode.LatestTimingMilliseconds` and `TimingFrames` under
-`WorldGpuTiming.Require` (the operator's `world.gpu-timing` demand and the
-controller's are one demand), and the step budget from the embedded
-`counters.ceilings.json`, so `puck counters --record` moves the budget. Run
+quantizer: the grid reaches `RenderGraphExtent.Quantize`, and the controller
+compares grids through `WorldDynamicResolution.GridOf`, the same quantization.
+All three signals go through `WorldDynamicResolution.Take` and `Respond`, so a
+policy change is one edit there. A sample counts only at the grid the views
+render now: a node records the grid each rendered submission ran at
+(`IShaderPipelineRenderExtent.Grid`, `ShaderPipelineRenderNode.TryGetRenderGrid`),
+and a reading names its renders' common grid. The load reaches the controller
+only through `IWorldFrameLoadSource`; the World's `WorldFrameLoadSource` sums
+each view's newest timed (`LatestTimingSubmission`,
+`LatestTimingMilliseconds`) or completed (`TryReadCompleted`) submission not
+read before through a `WorldFrameLoadAggregate`, so a standing view adds
+nothing and never decides freshness. Timing runs under `WorldGpuTiming.Require`
+(the operator's `world.gpu-timing` demand and the controller's are one
+demand), and the step budget comes from the embedded `counters.ceilings.json`,
+so `puck counters --record` moves the budget. Run
 `WorldDynamicResolutionLawTests` and the `dynamic-resolution` canary on both
 backends with `--debug-layers` after changing it.
 

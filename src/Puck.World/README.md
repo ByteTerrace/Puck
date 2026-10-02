@@ -1909,8 +1909,11 @@ times nothing, and, offscreen, the views' counted march steps against the
 budget the committed floor ceilings give per output pixel. A sample within 10%
 of its budget leaves the grid; outside it the grid moves by at most 1/16 of
 itself down or 1/32 up. `world.dynamic-resolution <tier|fraction>` forces a
-grid for sweeps, and the no-argument echo names the ceiling, the grid, the
-floor, the budget and the signal. `render.dynamicResolution` sets it at boot,
+grid for sweeps, and the no-argument echo names the ceiling, the grid the
+views render, the lowest grid measured over the budget that it will not rise
+onto (`over=`), the floor, the budget and the signal. A sample counts only at
+the grid the views render now, and between two grids that bracket the budget
+the grid settles on the cheaper one. `render.dynamicResolution` sets it at boot,
 `world.save` folds it back, and every shipped preset leaves it off.
 Named tiers are
 facades over continuous values. Do not assume a lower render scale is

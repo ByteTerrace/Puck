@@ -4639,7 +4639,17 @@ resolution, and stay there.
   and scale by output pixel area, so recording new floor evidence also updates
   the controller's budgets. No copied numeric budget constants are maintained.
   The GPU time, the present timing and the counted fallback hold the same exact response,
-  including both step bounds and floor/ceiling clamps. Extent changes allocate
+  including both step bounds and floor/ceiling clamps. A sample is taken only
+  at the quantized grid the views render now: each node records the grid of
+  every submission it renders, a reading names its renders' common grid, and a
+  reading from another grid, as one delayed past a grid move is, moves
+  nothing. A present names no frame, so a present interval is a sample only
+  while every view render completed from its start to its end was at the
+  current grid. When the budget falls between two adjacent grids the
+  controller settles on the cheaper one: an over-budget sample marks its grid,
+  and a rise stops below the mark until a sample, scaled by the two grids'
+  area ratio, predicts the marked grid within the budget itself, which clears
+  the mark. Extent changes allocate
   nothing inside the ceiling. Ordinary canaries and parity pin the lever off;
   P15-8 decides default enablement from its counted comparison.
 - **The counters are always on.** A pass counts its march steps and texels into
@@ -4888,7 +4898,15 @@ counted rows recorded in the same change.
    ceilings over its output pixels, read from the committed ceilings file,
    which the World compiles in; it is one budget for every tier, scaled by the
    output's pixels. A native tier's ceiling while the lever is on is
-   three-quarter (`WorldRenderSettings.RenderCeiling`).
+   three-quarter (`WorldRenderSettings.RenderCeiling`). A reading is the
+   frame's cost across views: the sum over each view's newest timed or
+   completed render not read before. A standing view's latest reading is
+   stale, a render an earlier reading already counted, so it adds no load, does
+   not make the reading fresh and does not name its grid; a reading is fresh
+   whenever any view rendered anew. The controller settles on the cheaper of
+   two adjacent quantized grids that bracket the budget instead of
+   oscillating between them, and `world.dynamic-resolution` echoes the grid
+   it holds above as `over=`.
    - Delivers: one controller that sets each view's per-frame render extent
      between a floor and the tier's ceiling, never reallocating, and resets no
      history (the resolve reads the extent each frame). It writes
@@ -4911,7 +4929,8 @@ counted rows recorded in the same change.
      one holds the fallback order; a `dynamic-resolution` canary forces a sweep of extents through the
      lever and reads no `gpu.created.*` rise and no rebuild across it, each
      forced extent's capture within tolerance of its reference. Held by
-     `WorldDynamicResolutionLawTests` and the `dynamic-resolution` canary, whose
+     `WorldDynamicResolutionLawTests`, `WorldFrameLoadAggregateLawTests` and the
+     `dynamic-resolution` canary, whose
      grid captures equal their tiers' captures exactly on both backends.
    - Counted-cost gate: zero created objects across the sweep; per-frame counts
      scale with the render extent the frame chose.

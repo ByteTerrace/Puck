@@ -56,10 +56,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         Assert.Equal(expected: 0UL, actual: node.TimingCpuBytes);
         node.TimingEnabled = false;
     }
-    [Theory]
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
+    [Theory]
     public void LatestGpuTimeBelongsToTheNewestSubmissionAcrossSlotWrap(int firstSlot) {
         var gpu = new FakeGpuDevice(holdFences: true);
         using var node = new ShaderPipelineRenderNode(name: "timing", deviceContext: gpu, pipelines: new GpuPassPipelineCache(),
@@ -83,7 +83,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         };
         node.TimingEnabled = true;
         for (var frame = 0U; (frame < InFlight); frame++) {
-            durations[node.FrameCounter % InFlight] = ((frame + 1UL) * 1_000_000UL);
+            durations[(node.FrameCounter % InFlight)] = ((frame + 1UL) * 1_000_000UL);
             _ = Produce(node: node);
             fences.Add(item: Assert.IsType<FakeGpuDevice.Fence>(@object: gpu.LastSubmittedFence));
         }
@@ -96,6 +96,14 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         Assert.Equal(expected: 18d, actual: node.LatestTimingMilliseconds);
         Assert.Equal(expected: 3L, actual: node.TimingFrames);
         Assert.All(collection: node.Timings.ToArray(), action: timing => Assert.Equal(expected: 4d, actual: timing.Milliseconds));
+        // The latest time names the newest completed submission, and the grid the node rendered it at: the output's own,
+        // since no package of the graph sets another.
+        var completed = new GpuWorkSample();
+
+        Assert.True(condition: node.TryReadCompleted(sample: completed));
+        Assert.Equal(expected: completed.Submission, actual: node.LatestTimingSubmission);
+        Assert.True(condition: node.TryGetRenderGrid(grid: out var grid, submission: node.LatestTimingSubmission));
+        Assert.Equal(actual: grid, expected: 1d);
         _ = Produce(node: node);
         Assert.Equal(expected: 3L, actual: node.TimingFrames);
     }
