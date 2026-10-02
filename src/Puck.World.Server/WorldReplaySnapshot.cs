@@ -1170,26 +1170,26 @@ public sealed partial class WorldReplaySnapshot {
         );
     }
 
-    /// <summary>Reports, as a pinned seat's drift is reported, where the identity a re-driven home arrival bound differs
-    /// from the projection its tape carried: the name, either rate, and every fact whose presence or value differs,
-    /// in ordinal key order. The bound identity is the owner's identity as it stands now with the carried facts and
-    /// records adopted, so an edit made to it after the recording reaches the re-drive, and this names it rather than
-    /// letting it surface as an unexplained divergence. Nothing here refuses.</summary>
+    /// <summary>Reports, as a pinned seat's drift is reported, where the owned identity as it stands now differs from the
+    /// projection a re-driven home arrival's tape carried: the name, either rate, and every fact whose presence or value
+    /// differs, in ordinal key order. The re-drive binds the taped projection, so an edit made to the owned identity
+    /// after the recording does not reach it; this names the edit rather than letting it pass unseen. It reads the owned
+    /// identity and refuses nothing.</summary>
     /// <param name="narrationHub">The hub the report is narrated through, or <see langword="null"/> for none.</param>
     /// <param name="taped">The identity rebuilt from the taped projection.</param>
-    /// <param name="bound">The identity the re-driven seat bound.</param>
-    internal static void ReportAdoptionDrift(WorldOutputHub? narrationHub, WorldIdentity taped, WorldIdentity bound) {
+    /// <param name="current">The owned identity as it stands now.</param>
+    internal static void ReportAdoptionDrift(WorldOutputHub? narrationHub, WorldIdentity taped, WorldIdentity current) {
         if (narrationHub is not { HasNarrationSink: true }) {
             return;
         }
         if (!string.Equals(
             a: taped.Name,
-            b: bound.Name,
+            b: current.Name,
             comparisonType: StringComparison.Ordinal
         )) {
             narrationHub.Narrate(
                 channel: "replay.profile",
-                text: $"[replay.profile: '{taped.Name}' name drifted since record-start — taped '{taped.Name}', live '{bound.Name}'; {LiveUsed}]"
+                text: $"[replay.profile: '{taped.Name}' name drifted since record-start — taped '{taped.Name}', live '{current.Name}'; {TapedUsed}]"
             );
         }
         ReportRateDrift(
@@ -1197,24 +1197,24 @@ public sealed partial class WorldReplaySnapshot {
             name: taped.Name,
             field: "move-speed",
             pinned: taped.FixedMoveSpeed,
-            live: bound.FixedMoveSpeed,
-            used: LiveUsed
+            live: current.FixedMoveSpeed,
+            used: TapedUsed
         );
         ReportRateDrift(
             narrationHub: narrationHub,
             name: taped.Name,
             field: "turn-speed",
             pinned: taped.FixedTurnSpeed,
-            live: bound.FixedTurnSpeed,
-            used: LiveUsed
+            live: current.FixedTurnSpeed,
+            used: TapedUsed
         );
 
         var carried = (taped.Facts?.Cells ?? []).ToDictionary(keySelector: static cell => cell.Key, elementSelector: static cell => cell.Value.AsInt);
-        var adopted = (bound.Facts?.Cells ?? []).ToDictionary(keySelector: static cell => cell.Key, elementSelector: static cell => cell.Value.AsInt);
+        var live = (current.Facts?.Cells ?? []).ToDictionary(keySelector: static cell => cell.Key, elementSelector: static cell => cell.Value.AsInt);
 
-        foreach (var key in carried.Keys.Concat(second: adopted.Keys).Distinct().OrderBy(keySelector: static key => key.Value, comparer: StringComparer.Ordinal)) {
+        foreach (var key in carried.Keys.Concat(second: live.Keys).Distinct().OrderBy(keySelector: static key => key.Value, comparer: StringComparer.Ordinal)) {
             var had = carried.TryGetValue(key: key, value: out var before);
-            var has = adopted.TryGetValue(key: key, value: out var after);
+            var has = live.TryGetValue(key: key, value: out var after);
 
             if ((had == has) && (before == after)) {
                 continue;
@@ -1224,12 +1224,12 @@ public sealed partial class WorldReplaySnapshot {
 
             narrationHub.Narrate(
                 channel: "replay.profile",
-                text: $"[replay.profile: '{taped.Name}' fact '{key}' drifted since record-start — taped {tapedValue}, live {boundValue}; {LiveUsed}]"
+                text: $"[replay.profile: '{taped.Name}' fact '{key}' drifted since record-start — taped {tapedValue}, live {boundValue}; {TapedUsed}]"
             );
         }
     }
 
-    private const string LiveUsed = "the home arrival used a detached copy of the current owned identity, so this verdict reflects the difference";
+    private const string TapedUsed = "the home arrival used the TAPED projection, so this verdict reports the recording, not the edit";
     private const string PinnedUsed = "the replay used the PINNED value, so this verdict reports the recording, not the edit";
 
     // Compared on the RAW fixed lane, never on the rendered decimal: a drift too small to show in four places is still

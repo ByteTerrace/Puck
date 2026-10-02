@@ -993,22 +993,22 @@ public sealed partial class WorldTransferEscrow {
                 (HomeIdentity(arrival: arrival, index: index, id: carried.Id) is not { } owned)) {
                 continue;
             }
-            // A re-drive of a recorded outcome saves nothing: it binds a detached copy of the owned identity, as a
-            // replay's pinned seats are detached, and reports where that copy differs from the taped projection.
+            // A re-drive of a recorded outcome is a function of its tape: the seat binds the taped projection
+            // exactly, facts and records included, in a detached identity that saves nothing, and nothing of the live
+            // catalog enters it. Where the owned identity has moved since the recording is reported, read-only.
             var bound = owned;
-            bool adopted;
-            string reason;
+            var adopted = true;
+            var reason = string.Empty;
 
             if (m_relandOutcome is null) {
                 adopted = m_server.Profiles.TryAdopt(carried: carried, owned: owned, reason: out reason);
             } else {
                 bound = WorldIdentity.FromProjection(
                     defaults: m_server.Definition.PlayerDefaults,
-                    projection: owned.Project()
+                    projection: carried.Project()
                 );
-                adopted = bound.TryAdopt(carried: carried, reason: out reason);
                 WorldReplaySnapshot.ReportAdoptionDrift(
-                    bound: bound,
+                    current: owned,
                     narrationHub: m_server.Profiles.NarrationHub,
                     taped: carried
                 );

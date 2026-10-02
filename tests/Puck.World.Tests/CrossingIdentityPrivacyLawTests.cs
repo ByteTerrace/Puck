@@ -572,7 +572,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
     }
     // THE LAW: a re-drive of a recorded home arrival saves nothing, whichever catalog it runs against. A fresh server
     // whose catalog owns the same identity re-lands a taped arrival through the door every re-drive takes: the seat
-    // binds a detached copy of the owned identity with the carried fact adopted, and the catalog's identity, document,
+    // binds the taped projection, carried fact included, in a detached identity, and the catalog's identity, document,
     // revision and files are untouched. The red leg adopts into the catalog's identity and saves it.
     [Fact]
     public void ARelandedHomeArrivalAdoptsIntoADetachedCopyAndSavesNothing() {
@@ -608,10 +608,10 @@ public sealed class CrossingIdentityPrivacyLawTests {
         Assert.Equal(expected: owned.Name, actual: seated.Name);
         Assert.Equal(5L, Fact(identity: seated, key: "replayFact"));
     }
-    // THE LAW: a re-driven home arrival reports where the identity it bound differs from the taped projection, as a
+    // THE LAW: a re-driven home arrival reports where the owned identity has moved from the taped projection, as a
     // pinned seat's drift is reported. After the recording the owner writes a fact the tape never carried; verifying the
     // tape still matches and narrates that fact on the catalog's hub, while the fact the tape carried is not drift. The
-    // red leg binds the copy silently.
+    // red leg reports nothing.
     [Fact]
     public void VerifyingAHomeArrivalReportsAFactWrittenSinceTheRecording() {
         using var directory = new TemporaryDirectory(prefix: "puck-privacy-drift-");

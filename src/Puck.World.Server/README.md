@@ -1628,9 +1628,10 @@ Remote round trips do not adopt: the federation reservation leaf has no
 admission field, so a decoded reservation is always a peer admission, since a
 remote incarnation claim is unauthenticated. Offline replay uses a detached
 catalog (`WorldOwnedWorlds.CreateReplayCopy`), and a re-driven home arrival
-adopts into a detached copy of the owned identity and reports its drift from the
-taped projection (`WorldReplaySnapshot.ReportAdoptionDrift`), so replay changes
-no live identity or saved document. Checkpoint restore and source rollback
+binds the taped projection in a detached identity and reports where the owned
+identity has drifted from it since the recording
+(`WorldReplaySnapshot.ReportAdoptionDrift`), so replay changes no live identity
+or saved document and takes nothing from the live catalog. Checkpoint restore and source rollback
 recovery rebind a home seat to its own restored catalog. Recovery applies a
 departure newer than the checkpoint before live writes resume; an abort saves
 the current identity, preserving writes made while its outcome was in doubt.

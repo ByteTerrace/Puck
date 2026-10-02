@@ -132,12 +132,13 @@ rate). The shadow server holds a detached
 `WorldOwnedWorlds.CreateReplayCopy` of that catalog: session changes, facts and
 records change only the replay's identities, their saves perform no file I/O,
 and the copy narrates through the live catalog's hub. A re-driven home arrival
-(any `TryReland` with a recorded outcome) adopts into a detached copy of the
-owned identity, never the catalog's, and
-`WorldReplaySnapshot.ReportAdoptionDrift` reports on `replay.profile`, as
-`ReportProfileDrift` does for a pin, where that copy differs from the taped
-projection: the name, either rate, and every differing fact in ordinal key
-order, including a taped fact the current identity's capacity refuses. The
+(any `TryReland` with a recorded outcome) binds the taped projection exactly,
+facts and records included, in a detached identity that takes nothing from the
+live catalog, and `WorldReplaySnapshot.ReportAdoptionDrift` reports on
+`replay.profile`, as `ReportProfileDrift` does for a pin, where the owned
+identity as it stands now (read-only) differs from the taped projection: the
+name, either rate, and every differing fact in ordinal key order, including a
+taped fact the current identity's capacity refuses. The
 live drive refuses a tape that lands travelers. The re-drive mounts its own guest set
 through the injected `addonHostFactory` rather than reusing the live
 session's.

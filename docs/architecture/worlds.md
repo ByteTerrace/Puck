@@ -670,10 +670,12 @@ authority's own state newer than its checkpoint. An in-doubt transfer already ca
 checkpoint uses that checkpoint's catalog. An eventual abort reseats and saves the current owned
 identity, so neither the departure's facts nor owner writes made while recovery waits are lost.
 
-Replay verification saves no identity. A re-driven home arrival binds a detached copy of the
-owned identity as it stands now, with the carried facts and records adopted, and reports on
-`replay.profile` where that copy differs from the taped projection, as a pinned seat's drifted rate
-is reported. A live `replay.drive` refuses a tape that lands travelers.
+Replay verification saves no identity. A replay is a function of its tape: a re-driven home arrival
+binds the taped projection exactly, its facts and records included, in a detached identity, and
+takes nothing from the live catalog. It reports on `replay.profile` where the owned identity as it
+stands now differs from the taped projection, as a pinned seat's drifted rate is reported, so an
+owner's edit since the recording is named without making the replay diverge. A live
+`replay.drive` refuses a tape that lands travelers.
 
 A world names a cross-owner neighbour without reaching its storage directly — worlds are users, so one
 owner's storage container is never reachable from another's. A cross-owner reference resolves through
