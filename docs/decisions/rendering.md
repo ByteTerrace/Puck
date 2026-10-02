@@ -576,73 +576,104 @@ These decisions shape [P6-GI](../plans/rendering.md#p6-gi-global-illumination-fr
 the global illumination slices of P6.
 
 **Indirect light is a world-space cache traced through the field, and every
-view of a world reads it.** The constraint that decides the technique is where
-the cost lands. A secondary ray in the SDF engine evaluates the whole
-interpreter per sample under a mask far looser than the primary march's, so a
-technique that marches per pixel spends the frame's most expensive work again,
-and a technique that runs per view multiplies it by the seats, camera views,
-mirrors and portal windows of a world. A lattice of probes in world space, placed
-where the field says surfaces are and traced through the field, puts the cost
-on the world and on its changes: a still world converges and stands, a panning
-camera pays only for the bricks it newly demands, and four seats pay one trace.
-It also makes indirect light a property of the world rather than of a view, so a
-mirror and the main view agree.
+view of a world with the same lighting inputs reads it.** The constraint that
+decides the technique is where the cost lands. A secondary ray in the SDF
+engine evaluates the whole interpreter per sample under a mask far looser than
+the primary march's, so a technique that marches per pixel spends the frame's
+most expensive work again, and a technique that runs per view multiplies it by
+the seats, camera views, mirrors and portal windows of a world. A lattice of
+probes in world space, placed where the field says surfaces are and traced
+through the field, puts the cost on the world and on its changes: a still world
+finishes its solve and stands, a panning camera pays only for the bricks it
+newly demands, and four seats pay one trace. It also makes indirect light a
+property of the world rather than of a view, so a mirror and the main view
+agree.
 
-**A probe stores the hits of its rays, not a blend of what they saw.** Classic
-irradiance probes blend each update's radiance into the last with a hysteresis,
-so a lighting change re-marches every probe and converges over many frames, a
-moving light trails, and a converged cache is never quite still. Storing each
-ray's hit (distance, normal, material) makes the cache relightable: a light's
-colour, a sky change, an emission or a screen's image re-shades the stored hits
-and marches nothing, which is exactly P18-6's lighting-visible class, and only
-geometry re-traces. With no hysteresis there is nothing to ghost, and a
-converged cache is a function of the world and its lights, so a capture of it is
-reproducible from a cold start. The price is the hits' memory, about a kilobyte
-a probe at `medium`.
+**A probe stores the hits of its rays, and lighting is a finite solve.**
+Classic irradiance probes blend each update into the last with a hysteresis,
+so a lighting change re-marches every probe, a moving light trails and a cache
+is never quite still. Storing each ray's hit (a distance, a normal, a material)
+makes the cache relightable: a light's colour, a sky change, an emission or a
+screen's image re-shades the stored hits and marches nothing, which is P18-6's
+lighting-visible class, and only geometry re-traces. Lighting is one direct
+sweep and a fixed count of feedback sweeps over two generations, so a capture
+runs a fixed solve from a cold start and is reproducible, where a stopping test
+on display codes would be neither bounded nor the same on both backends.
 
-**Shadowed lights at a hit read the probes' visibility below `high`.** Marching
-a shadow ray from every stored hit for every shadowed light costs about a hundred
-times the probes' count of marches, which a turning sun would pay continuously.
-Marching from each probe instead, and interpolating to the hits, blurs a bounce
-source's shadow edge by the spacing, which indirect light tolerates because it
-is low-frequency; `high` marches the hits themselves. A light-space visibility
-map rendered from the field is the follow-up if the counted rows show the probe
-visibility dominating a moving-sun workload, since it would also serve the
-atmosphere's light shafts.
+**The field partitions every cell, so a surface never reads a probe a wall
+separates it from.** Irradiance fields weight probes by the moments of their
+rays' distances, which is an estimate: a texel mixing a near and a far hit has a
+mean that gives a surface behind the near wall full weight, and renormalizing
+the survivors makes it worse. Puck can do better because the field answers a
+segment query exactly. Each cell's eight corner probes are connected only by
+segments an exact field trace reaches end to end, and a surface reads only the
+corners of its own component, choosing it by a separating plane fitted inside
+the cutting surface or, in the rare complex cell, by its own exact traces. A
+sealed wall of any thickness that crosses a cell cuts every segment across it,
+so a sealed room takes no light through its walls, and the only bound left is a
+plane-fit tolerance beside curved surfaces. The cache keeps no moments.
 
-**Considered and set aside.**
+**Continuation seeks support instead of guessing.** Finer levels trace short
+rays and continue into coarser levels, the interval-merging idea of radiance
+cascades. A ray that reaches its reach keeps marching through empty space,
+which is cheap where the clearance is large, until it stands in a coarser cell
+component with traced probes, so nothing has to be allocated in empty space and
+a sealed hall reads its own wall, never the sky. Sky is read only at the far
+distance the camera treats as sky, and a coarser probe's ray is read only where
+its hit lies beyond the fine ray's end, so no interval counts twice.
 
-- **Screen-space indirect light with a field fallback.** It is per view and
-  view-dependent: a mirror, a portal window and the main view would light the
-  same wall differently, it is recomputed whenever the camera moves, so a
-  converged view never stands, and its fallback marches the field per pixel,
-  which is the cost the cache exists to avoid. The near field at `high` keeps
-  its one good idea, shading a short field ray's hit from the view's resolved
-  history when the hit is on screen.
+**Each bounce source sees a light through a light view.** A probe and the
+surfaces its rays hit do not share a view of the sun, so a probe's visibility
+cannot stand for a hit's. Marching from every stored hit is exact and is the
+reference, but it costs about a million marches at `medium` each time a sun
+turns. A depth-only camera view of the residency placed far along the light,
+far enough that its rays diverge by less than half the light's penumbra, gives
+every hit its own visibility for one render of a quarter of a million rays,
+through the engine's own march and beam. Its error is its texel size and its
+divergence, both reported and held to the per-hit reference by law.
+
+**Portals read their destination one frame late.** A cache reads a portal's
+emission from the destination view's preceding completed output, through the
+graph's previous-frame edge, so mutual portals form no same-frame cycle. The
+loop between two facing portals advances one step a frame, its gain is below
+one because every artistic gain on the path is bounded at one and diffuse
+albedo is below one, so it converges; a capture runs a fixed count of those
+steps from a cold start.
+
+**Considered, and kept as comparisons.** The floor device's counted rows decide
+whether the cache stays the default; G10 runs the comparison on the same
+fixtures and records the bound that decides each one.
+
+- **Screen-space indirect light over a probe fallback.** It is per view and
+  view-dependent, so split screen, mirrors and portal windows multiply it and
+  disagree, and its fallback still needs a cache. It cannot see what is behind
+  a wall from the camera, so it offers no sealed-room guarantee. Its one
+  strength, reusing what a view already shaded, informs the near field, which
+  shades its own hits rather than reusing colour history that holds specular
+  and fog.
 - **Radiance cascades.** In screen space they are per view and per frame, with
-  every interval a field march, so nested views and split screen multiply them.
-  In world space, a dense volume of short-interval probes costs memory and
-  updates in proportion to volume rather than surface area, and re-traces every
-  frame. The cache keeps their interval-merging idea between its levels: a fine
-  level's ray that reaches its reach continues as the coarser level's radiance.
-- **Cone tracing over a prefiltered volume.** The field gives a cone's occlusion
-  for free but holds no radiance, so cone tracing needs the scene voxelized
-  into a radiance volume on every change: a second, discretized representation,
-  which [the global voxel representation's rejection](../rendering/sdf/reference/negative-results-and-rejections.md#global-voxel-representation)
-  already rules out as a core representation.
-- **Per-pixel path tracing with reservoir reuse.** Several field-marched rays a
-  pixel a frame, per view, is beyond the floor device and stands nothing still.
+  every interval a field march. In world space a dense volume of short
+  intervals costs memory and updates in proportion to volume rather than
+  surface area. The cache keeps their interval merging between its levels.
+- **Cone occlusion extended to one diffuse bounce.** The field gives a cone's
+  occlusion cheaply but holds no radiance, so a bounce needs a radiance source:
+  a cache, or a voxelized radiance volume, which
+  [the global voxel representation's rejection](../rendering/sdf/reference/negative-results-and-rejections.md#global-voxel-representation)
+  rules out as a core representation. Per pixel it is per view. It stays a
+  comparison at equal error.
+- **Per-pixel path tracing with reservoir reuse.** Several field marches a
+  pixel a frame, per view, is beyond the floor device's counted budget.
 - **Indirect light baked into prototype bakes or lightmaps.** A bake is per
   prototype and static, while lights key on clocks, worlds are edited live and a
-  bounce depends on the neighbours a placement has, not on the prototype.
+  bounce depends on a placement's neighbours, not its prototype.
 
-**Off is the image without it.** Every rendering layer carries an off-switch
-that leaves a capture as it was, so the views pass takes today's code unchanged
-when indirect light is off, the cache's instance does not exist when no view
-reads it, and the parity world pins it off. Global illumination enters
-`puck parity` through capture rows that turn it on for one capture, cold, and
-compare the state hash with the same tick's capture without it, which shows the
-cache never reaches simulation state.
+**Off is the image without it.** With indirect light off a view takes the
+direct path unchanged, the cache and the light views do not exist, and the
+parity world pins it off. Global illumination enters `puck parity` through
+capture rows that run it cold with a fixed solve for one capture, compared
+under a tile tolerance, with a simulation hash equal to the indirect-off
+control's at that tick and after, which shows the cache never reaches
+simulation state.
 
 ---
 
