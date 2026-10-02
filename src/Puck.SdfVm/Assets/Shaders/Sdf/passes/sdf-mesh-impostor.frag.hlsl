@@ -33,7 +33,7 @@ CardFragment PSMain(CardInput input) {
 
     if (
         !sdfMeshIsImpostor(draw) ||
-        !sdfImpostorTrace(draw, view.position.xyz, direction, (length(offset) * (2.0 * view.right.w / view.extent.y)), t)
+        !sdfImpostorTrace(draw, view.position.xyz, direction, (2.0 * view.right.w / view.extent.y), t)
     ) {
         discard;
     }

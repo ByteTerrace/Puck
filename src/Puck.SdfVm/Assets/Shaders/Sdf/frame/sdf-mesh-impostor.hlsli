@@ -123,9 +123,11 @@ SdfImpostorViews sdfImpostorViewsAt(SdfImpostor impostor, float3 toward) {
     return chosen;
 }
 
-// The level of the impostor atlases a pixel reads: the one whose texels are nearest the pixel's size, from the pixel's
-// footprint in world units at the surface, clamped to the chain.
-uint sdfImpostorLevel(SdfImpostor impostor, uint record, float footprint, uint levels) {
+// The level of the impostor atlases a pixel reads: the one whose texels are nearest the pixel's size at the sphere's
+// center, clamped to the chain. `pixelAngle` is a pixel's world size per unit of distance. The level depends on the draw and
+// the camera alone, so the mesh pass's trace and every hit pass read the same level of the same pixel.
+uint sdfImpostorLevel(SdfImpostor impostor, uint record, float3 origin, float pixelAngle, uint levels) {
+    float footprint = (length((sdfImpostorWorldCenter(record, impostor) - origin)) * pixelAngle);
     float texelsAcross = ((float)impostor.viewTexels / max((2.0 * impostor.radius * sdfImpostorScale(record)), 1.0e-6));
     float level = round(log2(max((footprint * texelsAcross), 1.0)));
 
@@ -195,9 +197,21 @@ bool sdfImpostorViewHit(SdfImpostor impostor, uint2 cell, float3 start, float3 t
 
     return false;
 }
+// Whether one view's nearest texel, at the level the trace hit, is covered at a point of the ray: its depth shows a surface.
+// Coverage has this one provenance, the depth atlas, in the trace that decides whether a pixel is a card's and in the
+// surface that names the pixel's material, so the two can never disagree.
+bool sdfImpostorCovered(SdfImpostor impostor, uint2 cell, float3 spot, uint level) {
+    float3 toward = sdfImpostorViewDirection(cell.x, cell.y, impostor.views);
+    float3 right;
+    float3 up;
+
+    sdfImpostorViewBasis(toward, right, up);
+
+    return (sdfImpostorDepthAt(impostor, cell, float2(dot(spot, right), dot(spot, up)), level) < SdfImpostorMissDepth);
+}
 // The ray's hit with a draw's impostor: the parameter along the unit `direction` from `origin`, in world units, at which
-// the surface the views show meets it. `footprint` is the world size of a pixel at the surface, which picks the level.
-bool sdfImpostorTrace(uint draw, float3 origin, float3 direction, float footprint, out float t) {
+// the surface the views show meets it. `pixelAngle` is a pixel's world size per unit of distance, which picks the level.
+bool sdfImpostorTrace(uint draw, float3 origin, float3 direction, float pixelAngle, out float t) {
     uint record = sdfMeshRecord(draw);
     SdfImpostor impostor = sdfImpostorOf(record);
     float radius = impostor.radius;
@@ -228,7 +242,7 @@ bool sdfImpostorTrace(uint draw, float3 origin, float3 direction, float footprin
 
     sdfImpostorDepth.GetDimensions(0u, width, height, levels);
 
-    uint level = sdfImpostorLevel(impostor, record, footprint, max(levels, 1u));
+    uint level = sdfImpostorLevel(impostor, record, origin, pixelAngle, max(levels, 1u));
     SdfImpostorViews views = sdfImpostorViewsAt(impostor, normalize(-travel));
     float covered = 0.0;
     float sum = 0.0;
@@ -243,6 +257,19 @@ bool sdfImpostorTrace(uint draw, float3 origin, float3 direction, float footprin
     }
 
     if (covered < 0.5) {
+        return false;
+    }
+
+    float3 spot = (start + (travel * (sum / covered)));
+
+    // A pixel is a card's only if some view's nearest texel at the hit is covered, whatever the views' hits averaged to.
+    bool any = false;
+
+    [unroll] for (uint check = 0u; check < 3u; check++) {
+        any = (any || sdfImpostorCovered(impostor, views.cell[check], spot, level));
+    }
+
+    if (!any) {
         return false;
     }
 

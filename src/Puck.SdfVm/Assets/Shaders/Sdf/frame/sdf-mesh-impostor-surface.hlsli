@@ -5,7 +5,7 @@
 // (sdfImpostorAlbedo, sdfImpostorNormals, sdfImpostorMaterials, sdfImpostorEmission) beside the depth atlas the trace reads; the mesh pass's does
 // not, so its stages never include this module. Each atlas is read at the level the pixel's footprint wants, bilinear inside
 // the view's tile at that level, as frame/sdf-mesh-textures.hlsli reads a mesh's. The material is an identity, never
-// filtered: the texel the most-weighted covering view holds at level zero, whose entry the includer adds to the draw's
+// filtered: the texel the highest-weighted view with a covered nearest texel holds at the pixel's level, whose entry the includer adds to the draw's
 // material as a mesh's texel entry is. KEEP IN SYNC with SdfBakedImpostor and
 // SdfMeshImpostor (the albedo is sRGB-encoded with coverage in alpha, the normal an octahedral pair in the prototype's
 // frame, the emission linear).
@@ -57,22 +57,22 @@ float3 sdfImpostorNormalFiltered(SdfImpostor impostor, uint2 cell, float2 ab, ui
 
     return lerp(lerp(d00, d10, weight.x), lerp(d01, d11, weight.x), weight.y);
 }
-// The material entry of one view's texel at a point of its plane, at level zero: the nearest texel, unfiltered.
-int sdfImpostorMaterialAt(SdfImpostor impostor, uint2 cell, float2 ab) {
+// The material entry of one view's texel at a point of its plane and a level: the nearest texel, unfiltered.
+int sdfImpostorMaterialAt(SdfImpostor impostor, uint2 cell, float2 ab, uint level) {
     uint width;
     uint height;
     uint levels;
 
-    sdfImpostorMaterials.GetDimensions(0u, width, height, levels);
+    sdfImpostorMaterials.GetDimensions(level, width, height, levels);
 
-    SdfImpostorTile tile = sdfImpostorTileOf(impostor, cell, 0u, float2((float)width, (float)height));
+    SdfImpostorTile tile = sdfImpostorTileOf(impostor, cell, level, float2((float)width, (float)height));
     float2 local = clamp(floor((sdfImpostorTileFraction(ab) * tile.edge)), 0.0, (tile.edge - 1.0));
 
-    return (int)round((sdfImpostorMaterials.Load(int3(int2((tile.origin + local)), 0)).r * 255.0));
+    return (int)round((sdfImpostorMaterials.Load(int3(int2((tile.origin + local)), (int)level)).r * 255.0));
 }
-// The surface of a card's pixel at ray parameter `t` along the unit `direction` from `origin`. `footprint` is the world
-// size of a pixel at the surface.
-SdfImpostorSurface sdfImpostorSurfaceAt(uint draw, float3 origin, float3 direction, float t, float footprint) {
+// The surface of a card's pixel at ray parameter `t` along the unit `direction` from `origin`. `pixelAngle` is a pixel's
+// world size per unit of distance.
+SdfImpostorSurface sdfImpostorSurfaceAt(uint draw, float3 origin, float3 direction, float t, float pixelAngle) {
     uint record = sdfMeshRecord(draw);
     SdfImpostor impostor = sdfImpostorOf(record);
     float3 start = ((sdfMeshObjectFromWorld(record, (origin - sdfMeshRow(record, 3u))) - impostor.center) / impostor.radius);
@@ -84,7 +84,7 @@ SdfImpostorSurface sdfImpostorSurfaceAt(uint draw, float3 origin, float3 directi
 
     sdfImpostorDepth.GetDimensions(0u, width, height, levels);
 
-    uint level = sdfImpostorLevel(impostor, record, footprint, max(levels, 1u));
+    uint level = sdfImpostorLevel(impostor, record, origin, pixelAngle, max(levels, 1u));
     SdfImpostorViews views = sdfImpostorViewsAt(impostor, normalize(-travel));
     float3 albedo = float3(0.0, 0.0, 0.0);
     float3 normal = float3(0.0, 0.0, 0.0);
@@ -112,9 +112,11 @@ SdfImpostorSurface sdfImpostorSurfaceAt(uint draw, float3 origin, float3 directi
         emission += (weight * light);
         total += weight;
 
-        if (weight > heaviest) {
-            heaviest = weight;
-            material = sdfImpostorMaterialAt(impostor, views.cell[view], ab);
+        // The material is the highest-weighted view's whose nearest texel at this level is covered (the trace's own
+        // rule), never the filtered alpha's, which a neighbouring covered texel can lift over an uncovered one.
+        if (sdfImpostorCovered(impostor, views.cell[view], spot, level) && (views.weight[view] > heaviest)) {
+            heaviest = views.weight[view];
+            material = sdfImpostorMaterialAt(impostor, views.cell[view], ab, level);
         }
         plain += (views.weight[view] * direction3);
     }

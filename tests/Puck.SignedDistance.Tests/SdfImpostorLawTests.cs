@@ -194,12 +194,13 @@ public sealed class SdfImpostorLawTests(ITestOutputHelper output) {
             reach: 0.8f,
             tier: SdfBakeTier.For(quality: SdfBakeQuality.Standard)
         ).Impostor;
-        var oracle = new SdfImpostorOracle(impostor: impostor);
+        // Level zero, and level one, whose nearest texel is a coarser tile's: a coarse hit reads that level's own texel.
+        SdfImpostorOracle[] oracles = [new(impostor: impostor), new(impostor: impostor, level: 1)];
         Vector3[] directions = [-Vector3.UnitZ, Vector3.UnitZ, -Vector3.UnitY, Vector3.UnitY, Vector3.Normalize(value: new Vector3(x: 0f, y: -0.5f, z: -1f)), Vector3.Normalize(value: new Vector3(x: 0f, y: 0.5f, z: 1f))];
 
         var (checkedRays, mutantWrong) = (0, 0);
 
-        foreach (var direction in directions) {
+        foreach (var (oracle, direction) in oracles.SelectMany(selector: oracle => directions.Select(selector: direction => (oracle, direction)))) {
             foreach (var (x, expected) in new[] { (-0.4f, 0), (0.4f, 1) }) {
                 var center = new Vector3(x: x, y: 0f, z: 0f);
                 var start = ((center - (direction * (3f * impostor.Radius))) / impostor.Radius);
@@ -226,9 +227,24 @@ public sealed class SdfImpostorLawTests(ITestOutputHelper output) {
             }
         }
 
-        Assert.Equal(actual: checkedRays, expected: 12);
+        Assert.Equal(actual: checkedRays, expected: 24);
         // Half the rays are the second material's, and the mutant names every one of them wrong.
-        Assert.Equal(actual: mutantWrong, expected: 6);
+        Assert.Equal(actual: mutantWrong, expected: 12);
+    }
+    [Fact]
+    public void AnUncoveredViewNeverNamesThePixelsMaterialEvenWhenItsFilteredAlphaWins() {
+        // Weights .45/.30/.25 with filtered alphas .70/1/1: weight times filtered alpha puts the first view ahead
+        // (.315 against .30 and .25), but its nearest texel is uncovered, so the highest-weighted covered view, the
+        // second, names the material. The rule it replaced names the first view's.
+        double[] weights = [0.45, 0.30, 0.25];
+        bool[] covered = [false, true, true];
+        double[] alpha = [0.70, 1.0, 1.0];
+        int[] materials = [0, 1, 2];
+
+        Assert.Equal(actual: SdfImpostorOracle.PickMaterial(covered: covered, filteredAlpha: alpha, filteredAlphaRule: false, materials: materials, weights: weights), expected: 1);
+        Assert.Equal(actual: SdfImpostorOracle.PickMaterial(covered: covered, filteredAlpha: alpha, filteredAlphaRule: true, materials: materials, weights: weights), expected: 0);
+        // When every view's texel is covered the highest weight wins, as it does under either rule.
+        Assert.Equal(actual: SdfImpostorOracle.PickMaterial(covered: [true, true, true], filteredAlpha: [1.0, 1.0, 1.0], filteredAlphaRule: false, materials: materials, weights: weights), expected: 0);
     }
     [Fact]
     public void ExchangingTheViewBasisBreaksTheBoundsSoTheyDiscriminate() {

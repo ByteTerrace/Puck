@@ -78,7 +78,7 @@ void sdfSurfaceStage(SdfPixel p) {
         float3 meshNormal;
 
         if (sdfMeshIsImpostor(draw)) {
-            meshNormal = sdfImpostorSurfaceAt(draw, p.rayOrigin, p.rayDirection, visibility.t, (p.pixelFootprint * visibility.t)).normal;
+            meshNormal = sdfImpostorSurfaceAt(draw, p.rayOrigin, p.rayDirection, visibility.t, p.pixelFootprint).normal;
         } else {
             meshNormal = sdfMeshSurfaceNormal(draw, triangleIndex, meshPoint, p.rayDirection);
         }

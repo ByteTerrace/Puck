@@ -4,20 +4,43 @@ namespace Puck.SignedDistance.Tests;
 
 /// <summary>
 /// The CPU oracle of the impostor card's ray trace (<c>frame/sdf-mesh-impostor.hlsli</c>, <c>sdfImpostorTrace</c>), written
-/// in doubles over the decoded depth atlas at level zero: the three views nearest the direction toward the camera, each
+/// in doubles over the decoded depth atlas at one level (zero unless a law reads a coarser one): the three views nearest the direction toward the camera, each
 /// marched through the sphere against its depth, and the weighted mean of the hits the views agree on. KEEP IN SYNC with
 /// that function: the same octahedral encode and triangle of views, the same view basis, the same texel layout, the same
 /// eight steps with a linear refinement, the same miss depth and the same majority rule.
 /// </summary>
-internal sealed class SdfImpostorOracle(SdfBakedImpostor impostor) {
+internal sealed class SdfImpostorOracle(SdfBakedImpostor impostor, int level = 0) {
     internal const double MissDepth = 0.98;
     internal const double MissGap = 16.0;
     internal const int Steps = 8;
 
-    private readonly byte[] m_albedo = impostor.Albedo.Decode(level: 0);
-    private readonly byte[] m_depth = impostor.Depth.Decode(level: 0);
-    private readonly byte[] m_material = impostor.Material.Levels[0];
+    private readonly byte[] m_depth = impostor.Depth.Decode(level: level);
+    private readonly byte[] m_material = impostor.Material.Levels[level];
+    private readonly int m_tile = Math.Max(val1: (impostor.ViewTexels >> level), val2: 1);
 
+    /// <summary>The rule that names a card pixel's material, mirrored by <c>sdfImpostorSurfaceAt</c>: the highest-weighted
+    /// view whose nearest texel is covered. Coverage and material have one provenance, the nearest texel, so a filtered
+    /// alpha that a neighbouring covered texel lifted cannot pick an uncovered view's material.</summary>
+    /// <param name="weights">The three views' weights.</param>
+    /// <param name="covered">Whether each view's nearest texel is covered.</param>
+    /// <param name="filteredAlpha">Each view's bilinear alpha.</param>
+    /// <param name="materials">Each view's nearest texel's material entry.</param>
+    /// <param name="filteredAlphaRule">Mutates the rule to the one it replaced, the highest weight times the filtered alpha
+    /// whatever the nearest texel holds.</param>
+    /// <returns>The material entry.</returns>
+    internal static int PickMaterial(double[] weights, bool[] covered, double[] filteredAlpha, int[] materials, bool filteredAlphaRule) {
+        var (best, material) = (-1.0, 0);
+
+        for (var view = 0; (view < 3); view++) {
+            var score = (filteredAlphaRule ? (weights[view] * filteredAlpha[view]) : (covered[view] ? weights[view] : -1.0));
+
+            if (score > best) {
+                (best, material) = (score, materials[view]);
+            }
+        }
+
+        return material;
+    }
     // The octahedral map of a direction onto [-1, 1]^2, +Y the pole.
     internal static (double X, double Z) Encode((double X, double Y, double Z) v) {
         var norm = ((Math.Abs(value: v.X) + Math.Abs(value: v.Y)) + Math.Abs(value: v.Z));
@@ -97,7 +120,15 @@ internal sealed class SdfImpostorOracle(SdfBakedImpostor impostor) {
             return false;
         }
 
-        t = (sum / covered);
+        // A pixel is a card's only if some view's nearest texel at the hit is covered.
+        var at = (sum / covered);
+        var spot = ((start.X + (travel.X * at)), (start.Y + (travel.Y * at)), (start.Z + (travel.Z * at)));
+
+        if (!new[] { chosen.A, chosen.B, chosen.C }.Any(predicate: cell => Covered(cell: cell, spot: spot))) {
+            return false;
+        }
+
+        t = at;
 
         return true;
     }
@@ -124,29 +155,34 @@ internal sealed class SdfImpostorOracle(SdfBakedImpostor impostor) {
         var length = Math.Sqrt(d: Dot(a: travel, b: travel));
         var chosen = Views(toward: ((-travel.X / length), (-travel.Y / length), (-travel.Z / length)), views: impostor.Views);
         var spot = ((start.X + (travel.X * t)), (start.Y + (travel.Y * t)), (start.Z + (travel.Z * t)));
-        var heaviest = -1.0;
+        (int I, int J)[] cells = [chosen.A, chosen.B, chosen.C];
 
-        foreach (var (cell, weight) in new[] { (chosen.A, chosen.Wa), (chosen.B, chosen.Wb), (chosen.C, chosen.Wc) }) {
-            var toward = SdfBakedImpostor.ViewDirection(i: cell.I, j: cell.J, views: impostor.Views);
-            var v = (((double)toward.X), ((double)toward.Y), ((double)toward.Z));
-            var reference = ((Math.Abs(value: v.Item2) > 0.999) ? (0.0, 0.0, 1.0) : (0.0, 1.0, 0.0));
-            var right = Normalize(v: Cross(a: reference, b: v));
-            var up = Cross(a: v, b: right);
-            var tile = impostor.ViewTexels;
-            var ix = Math.Clamp(value: ((int)Math.Floor(d: (((Dot(a: spot, b: right) * 0.5) + 0.5) * tile))), min: 0, max: (tile - 1));
-            var iy = Math.Clamp(value: ((int)Math.Floor(d: ((0.5 - (Dot(a: spot, b: up) * 0.5)) * tile))), min: 0, max: (tile - 1));
-            var at = ((((cell.J * tile) + iy) * (impostor.Views * tile)) + ((cell.I * tile) + ix));
-            var covered = (weight * (m_albedo[((at * 4) + 3)] / 255.0));
-
-            if (covered > heaviest) {
-                heaviest = covered;
-                material = m_material[at];
-            }
-        }
+        material = PickMaterial(
+            covered: [.. cells.Select(selector: cell => Covered(cell: cell, spot: spot))],
+            filteredAlpha: [1.0, 1.0, 1.0],
+            filteredAlphaRule: false,
+            materials: [.. cells.Select(selector: cell => ((int)m_material[TexelOf(cell: cell, spot: spot)]))],
+            weights: [chosen.Wa, chosen.Wb, chosen.Wc]
+        );
 
         return true;
     }
 
+    // The texel of a view's tile at a point of the ray, at the oracle's level.
+    private int TexelOf((int I, int J) cell, (double X, double Y, double Z) spot) {
+        var toward = SdfBakedImpostor.ViewDirection(i: cell.I, j: cell.J, views: impostor.Views);
+        var v = (((double)toward.X), ((double)toward.Y), ((double)toward.Z));
+        var reference = ((Math.Abs(value: v.Item2) > 0.999) ? (0.0, 0.0, 1.0) : (0.0, 1.0, 0.0));
+        var right = Normalize(v: Cross(a: reference, b: v));
+        var up = Cross(a: v, b: right);
+        var ix = Math.Clamp(value: ((int)Math.Floor(d: (((Dot(a: spot, b: right) * 0.5) + 0.5) * m_tile))), min: 0, max: (m_tile - 1));
+        var iy = Math.Clamp(value: ((int)Math.Floor(d: ((0.5 - (Dot(a: spot, b: up) * 0.5)) * m_tile))), min: 0, max: (m_tile - 1));
+
+        return ((((cell.J * m_tile) + iy) * (impostor.Views * m_tile)) + ((cell.I * m_tile) + ix));
+    }
+    // Whether a view's nearest texel at a point of the ray shows a surface: the one coverage rule of the trace and the material.
+    private bool Covered((int I, int J) cell, (double X, double Y, double Z) spot) =>
+        ((m_depth[TexelOf(cell: cell, spot: spot)] / 255.0) < MissDepth);
     private bool ViewHit((int I, int J) cell, double entry, double leave, (double X, double Y, double Z) start, (double X, double Y, double Z) travel, bool swapBasis, out double hit) {
         var toward = SdfBakedImpostor.ViewDirection(i: cell.I, j: cell.J, views: impostor.Views);
         var v = (((double)toward.X), ((double)toward.Y), ((double)toward.Z));
@@ -182,7 +218,7 @@ internal sealed class SdfImpostorOracle(SdfBakedImpostor impostor) {
         return false;
     }
     private double DepthAt(double a, double b, (int I, int J) cell) {
-        var tile = impostor.ViewTexels;
+        var tile = m_tile;
         var ix = Math.Clamp(value: ((int)Math.Floor(d: (((a * 0.5) + 0.5) * tile))), min: 0, max: (tile - 1));
         var iy = Math.Clamp(value: ((int)Math.Floor(d: ((0.5 - (b * 0.5)) * tile))), min: 0, max: (tile - 1));
         var side = (impostor.Views * tile);

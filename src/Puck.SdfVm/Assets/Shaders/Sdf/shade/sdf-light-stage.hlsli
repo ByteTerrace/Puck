@@ -74,7 +74,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
             if (s.mesh) {
                 if (sdfMeshIsImpostor(s.meshDraw)) {
                     meshImpostor = true;
-                    impostorSurface = sdfImpostorSurfaceAt(s.meshDraw, p.rayOrigin, p.rayDirection, s.t, (p.pixelFootprint * s.t));
+                    impostorSurface = sdfImpostorSurfaceAt(s.meshDraw, p.rayOrigin, p.rayDirection, s.t, p.pixelFootprint);
                 } else if (sdfMeshTextured(s.meshDraw)) {
                     meshTextured = true;
                     meshTexel = sdfMeshTexelAt(s.meshDraw, s.meshTriangle, surfacePoint, (p.pixelFootprint * s.t));
