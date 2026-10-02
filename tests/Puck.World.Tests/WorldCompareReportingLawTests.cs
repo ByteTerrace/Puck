@@ -22,7 +22,7 @@ public sealed class WorldCompareReportingLawTests {
             "tests/Puck.World.Canaries/editor-grid/fixture.world.json");
 
         builder.Services.AddSingleton(implementationInstance: output);
-        using var host = builder.Build();
+        var host = files.Own(owner: builder.Build());
 
         Assert.True(condition: WorldPostBuildWiring.Install(services: host.Services));
         var registry = host.Services.GetRequiredService<CommandRegistry>();

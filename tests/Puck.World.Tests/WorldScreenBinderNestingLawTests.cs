@@ -29,7 +29,7 @@ public sealed class WorldScreenBinderNestingLawTests {
 
         builder.Services.AddSingleton<ICameraCaptureService, NullCameraCaptureService>();
 
-        return builder.Build();
+        return state.Own(owner: builder.Build());
     }
     private static IWorldScreenPresenter BindScreens(IHost host) {
         var binder = host.Services.GetRequiredService<IWorldScreenPresenter>();
