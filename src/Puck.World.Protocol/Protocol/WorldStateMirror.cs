@@ -1,7 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Counting;
 using Puck.Hosting;
-using Puck.Maths;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
 
@@ -1143,7 +1142,7 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
 
         m_reads.Increment();
         entry.Sample = sample;
-        entry.HasNumber = TryConvertNumber(
+        entry.HasNumber = WorldStateReader.TryNumber(
             number: out var number,
             value: sample.Value
         );
@@ -1218,36 +1217,6 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
         ) {
             m_revision++;
             entry.Changed = m_revision;
-        }
-    }
-
-    internal static bool TryConvertNumber(CellValue value, out double number) {
-        if (!value.HasValue) {
-            number = 0d;
-
-            return false;
-        }
-
-        switch (value.Kind) {
-            case CellKind.Int:
-                number = value.AsInt;
-
-                return true;
-            case CellKind.Fixed:
-                number = ((double)FixedQ4816.FromRawBits(value: value.AsFixed));
-
-                return true;
-            case CellKind.Bool:
-                number = (value.AsBool
-                    ? 1d
-                    : 0d
-                );
-
-                return true;
-            default:
-                number = 0d;
-
-                return false;
         }
     }
 

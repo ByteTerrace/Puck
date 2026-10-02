@@ -667,65 +667,6 @@ public static partial class WorldDefinitionValidator {
                 : $"{subject} names no {rowNoun}; the world declares none."));
         }
     }
-    private static void RequireFinite(float value, string name, List<string> errors) {
-        if (!float.IsFinite(f: value)) {
-            errors.Add(item: $"{name} must be finite.");
-        }
-    }
-    private static void RequireIntRange(int value, int min, int max, string name, List<string> errors) {
-        if (
-            (value < min) ||
-            (value > max)
-        ) {
-            errors.Add(item: $"{name} {value} is outside {min}..{max}.");
-        }
-    }
-    private static void RequireNonNegative(float value, string name, List<string> errors) {
-        if (
-            !float.IsFinite(f: value) ||
-            (value < 0f)
-        ) {
-            errors.Add(item: $"{name} must be finite and non-negative.");
-        }
-    }
-    private static void RequireNonNegativeEpoch(long value, string name, List<string> errors) {
-        if (value < 0) {
-            errors.Add(item: $"{name} {value} must be non-negative.");
-        }
-    }
-    private static void RequirePositive(float value, string name, List<string> errors) {
-        if (
-            !float.IsFinite(f: value) ||
-            (value <= 0f)
-        ) {
-            errors.Add(item: $"{name} must be finite and positive.");
-        }
-    }
-    // The general bounded-float door every closed-interval check (unit alphas, gain ceilings, half-angle cones, …)
-    // folds onto: finite, and within [min, max] with either edge switchable to an open bound (e.g. a half-angle's
-    // 0 is excluded — a zero-width cone senses nothing — while its 180 ceiling is admitted).
-    private static void RequireRange(float value, float min, float max, string name, List<string> errors, bool minExclusive = false, bool maxExclusive = false) {
-        if (
-            !float.IsFinite(f: value) ||
-            (minExclusive
-            ? (value <= min)
-            : (value < min)) ||
-            (maxExclusive
-            ? (value >= max)
-            : (value > max))
-        ) {
-            var openBracket = (minExclusive
-                ? "("
-                : "["
-            );
-            var closeBracket = (maxExclusive
-                ? ")"
-                : "]"
-            );
-
-            errors.Add(item: $"{name} {value} must be finite and within {openBracket}{min}, {max}{closeBracket}.");
-        }
-    }
     // The required-then-unique name door every row loop needing an ordinal identity opens: absent/blank is
     // "{path}[.field] is required.", a repeat against the caller's own seen-set is "…is duplicated.". field may be
     // empty when path already names the leaf (e.g. a tags[] entry) — no trailing dot is emitted in that case.
@@ -750,15 +691,6 @@ public static partial class WorldDefinitionValidator {
         }
 
         return true;
-    }
-    private static void RequireUnitInterval(float value, string name, List<string> errors) {
-        if (
-            !float.IsFinite(f: value) ||
-            (value < 0f) ||
-            (value > 1f)
-        ) {
-            errors.Add(item: $"{name} {value} must be within 0..1.");
-        }
     }
     // The null-tolerant twin of ValidateAssets, for an OPTIONAL asset section (null = none authored) rather than a
     // required one (Tunes/Patches) — a document declaring no music is not missing anything.
@@ -1498,6 +1430,14 @@ public static partial class WorldDefinitionValidator {
             : null),
             proveNeighbours: validateAdjacencyClaims
         );
+
+        // A load is the one boundary that judges a bound presentation value's starting value (ValidateBoundStarts).
+        if (validateAdjacencyClaims) {
+            ValidateBoundStarts(
+                definition: definition,
+                errors: errors
+            );
+        }
 
         var authoring = definition.Authoring;
 

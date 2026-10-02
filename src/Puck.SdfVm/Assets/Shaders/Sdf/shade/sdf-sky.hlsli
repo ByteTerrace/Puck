@@ -122,7 +122,9 @@ float sdfCloudThickness(float2 p, float2 shearOffset, uint seed, float threshold
     float warp = sdfCloudFbm((p + shearOffset), (seed ^ 0x9E3779B9u));
     float density = sdfCloudFbm((p + (CloudWarp * (warp - 0.5))), seed);
 
-    return smoothstep(threshold, (threshold + softness), density);
+    // The host admits any softness in (0, 1], down to a float too small to move a threshold near one or one the GPU
+    // flushes to zero; the floor keeps the band's edges apart, where smoothstep is defined.
+    return smoothstep(threshold, (threshold + max(softness, 1e-6)), density);
 }
 float4 sdfCloudLayer(float3 direction, float3 color, float coverage, float softness, float scale, uint seed, float2 offset, float2 shearOffset, float spinAngle, float curl, float3 sun, float3 sunColor) {
     if ((coverage <= 0.0) || (direction.y <= 0.0)) {

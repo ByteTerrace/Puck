@@ -1223,8 +1223,13 @@ block carries offsets and a phase, never a rate),
 definition every frame, so a `world.row.set render …` lands on the next frame
 without a program rebuild; `render.tonemap` reaches the root graph
 (`WorldViewGraphHost.BeginFrame`), which it recomposes, never an SDF kernel. Creation volumes become `SdfFrame.Volumes`, not
-instructions. Validation ranges live in `WorldDefinitionValidator`; a new render
-field needs its validator bound, its field on the record that carries it (a
+instructions. A bindable scalar's domain is its row in `WorldValueFields`, which
+the validator judges and the resolve clamps every resolved value into
+(`WorldValueDomainReports.Clamp`), so no value a bound row strays to reaches a
+record; a kernel still guards a division or a `smoothstep` width against a
+domain's smallest float, which the GPU may flush to zero. Plain-float ranges live
+in `WorldDefinitionValidator`. A new render field needs its domain or validator
+bound, its field on the record that carries it (a
 light's on `SdfLight`, the sky's on `SdfSkyBlock`, `SdfSkyStop` or `SdfSoftbox`,
 whose declarations `puck shaders generate` writes into `sdf-world.interface.hlsli`
 from the C# type) or else its pass-block value (`SdfWorldPackage.Values`, written

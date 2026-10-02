@@ -2072,6 +2072,23 @@ start in engine ticks, its phase and reading at the authority's tick, and how
 many keyed values the presentation has resolved, which rises only while a
 clock a key reads moves.
 
+Every scalar or angle a presentation section authors declares one domain
+(`WorldValueFields`): a light's weight, radius, power and angular radius, the
+curvature gains and ink band, a stop's elevation, the fog's density, the sun
+disc's radius and intensity, the stars' brightness and twinkle, the clouds'
+coverage, softness and scale, the theme's bloom and scrim alphas, and a
+marker's chip and ring alphas. The validator refuses a literal or a key outside
+its field's domain by name, and a load refuses a field bound to a state row
+whose starting value lies outside it. A row a rule or a console write later
+moves outside the domain refuses nothing: the presentation maps the value it
+reads into the domain, a closed end to itself and an open end to the nearest
+float inside it, so a cloud softness written to 0 presents the smallest
+positive float. The mapping is a function of the current value alone, so a
+seek, a replay or a capture presents what the state says. The first stray value
+of each field and row is reported once, on stderr, the console and a toast, as
+`[world.value: render.sky.layers[3].softness reads 0 from state.cloudSoft,
+outside (0, 1]; presenting 1E-45]`.
+
 ## Engine boundaries worth knowing
 
 - `SdfProgramBuilder.MaxInstances = 65536`: per-tile mask width scales with

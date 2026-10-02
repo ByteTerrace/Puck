@@ -30,9 +30,9 @@ public sealed record WorldThemeBloomHue(BindableColor Ring, BindableColor Halo) 
     );
 }
 /// <summary>One scrim's fill color plus its own alpha, split apart so a world can retheme opacity independent of
-/// hue — the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. <see cref="Alpha"/> is
-/// clamped to <see cref="WorldThemeCapacity.ScrimMinAlpha"/> at resolve time when it is a state binding (see
-/// <see cref="WorldDefinitionValidator"/>'s theme validation for the literal-authoring floor).</summary>
+/// hue — the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. <see cref="Alpha"/> lies
+/// between <see cref="WorldThemeCapacity.ScrimMinAlpha"/> and one; a bound alpha a live write moves below the floor
+/// presents at it.</summary>
 /// <param name="Color">The scrim's opaque fill color.</param>
 /// <param name="Alpha">The scrim's opacity, in <c>[0, 1]</c>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -481,9 +481,8 @@ public sealed record WorldThemeSection(
         Type: WorldThemeType.Absent
     );
 }
-/// <summary>The theme's two engine-side perceptual floors — never authored, always enforced. A literal value below
-/// either refuses at boot; a state-bound value clamps to it at resolve time instead (a live cell write cannot be
-/// refused, so the floor still holds by construction).</summary>
+/// <summary>The theme's two engine-side perceptual floors — never authored, always enforced. A value below either
+/// refuses at boot; a bound scrim alpha a live write moves below its floor clamps to it as the theme resolves.</summary>
 public static class WorldThemeCapacity {
     /// <summary>The scrim opacity floor — the guaranteed-AA contrast contract under a scrim, over both a dark corner
     /// and a lit CRT.</summary>

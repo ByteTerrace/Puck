@@ -28,6 +28,9 @@ public sealed class WorldEnvironmentResolve {
     private static readonly SdfLights Empty = new();
     private static readonly SdfSky Unauthored = new();
     private readonly List<(int Slot, double Value)> m_bound = [];
+
+    private readonly WorldValueDomainReports? m_domains;
+
     private readonly SdfLights[] m_outputLights = [new SdfLights(), new SdfLights()];
     private readonly SdfSky[] m_outputSky = [new SdfSky(), new SdfSky()];
     private readonly SdfLights m_resolvedLights = new();
@@ -46,6 +49,11 @@ public sealed class WorldEnvironmentResolve {
 
     private WorldRenderSky? m_sky;
     private PresentedTick m_tick;
+
+    /// <summary>Initializes a new instance of the <see cref="WorldEnvironmentResolve"/> class.</summary>
+    /// <param name="domains">The reports a bound value presented outside its field's domain goes to, or
+    /// <see langword="null"/> to clamp it without reporting.</param>
+    public WorldEnvironmentResolve(WorldValueDomainReports? domains = null) => m_domains = domains;
 
     /// <summary>Gets how many times this resolver has resolved the environment rather than copying its last
     /// resolution.</summary>
@@ -248,7 +256,9 @@ public sealed class WorldEnvironmentResolve {
         _ = mirror.TryValue(slot: slot, value: out var value);
         m_bound.Add(item: (slot, value));
     }
-    private float Scalar(WorldStateMirror mirror, BindableScalar? scalar, float fallback) {
+    // Every resolved scalar is mapped into its field's declared domain, so no value a bound row strays to reaches the
+    // GPU record; an absent field keeps its fallback, the engine default.
+    private float Scalar(WorldStateMirror mirror, BindableScalar? scalar, float fallback, WorldValueField field, in WorldValueSite site) {
         if (scalar is not { } value) {
             return fallback;
         }
@@ -263,12 +273,18 @@ public sealed class WorldEnvironmentResolve {
             mirror: mirror
         );
 
-        return mirror.Scalar(
-            fallback: fallback,
-            scalar: in value
+        return WorldValueDomainReports.Clamp(
+            domains: m_domains,
+            field: field,
+            scalar: in value,
+            site: in site,
+            value: mirror.Scalar(
+                fallback: fallback,
+                scalar: in value
+            )
         );
     }
-    private float Angle(WorldStateMirror mirror, BindableAngle? angle, float fallback) {
+    private float Angle(WorldStateMirror mirror, BindableAngle? angle, float fallback, WorldValueField field, in WorldValueSite site) {
         if (angle is not { } value) {
             return fallback;
         }
@@ -283,9 +299,15 @@ public sealed class WorldEnvironmentResolve {
             mirror: mirror
         );
 
-        return mirror.Angle(
-            angle: in value,
-            fallback: fallback
+        return WorldValueDomainReports.Clamp(
+            domains: m_domains,
+            field: field,
+            scalar: value.Value,
+            site: in site,
+            value: mirror.Angle(
+                angle: in value,
+                fallback: fallback
+            )
         );
     }
     private Vector3 Direction(WorldStateMirror mirror, BindableDirection? direction, Vector3 fallback) {
@@ -401,6 +423,10 @@ public sealed class WorldEnvironmentResolve {
             for (var index = 0; (index < count); index++) {
                 var authored = lights[index];
                 var pinned = PinnedLight(light: authored);
+                var lightSite = new WorldValueSite(
+                    Index: index,
+                    Section: "render.lighting.lights"
+                );
 
                 into.Set(
                     index: index,
@@ -420,14 +446,18 @@ public sealed class WorldEnvironmentResolve {
                                 ? MathF.Tan(x: Angle(
                                     angle: angularRadius,
                                     fallback: MathF.Atan(x: pinned.Param),
-                                    mirror: mirror
+                                    mirror: mirror,
+                                    field: WorldValueFields.DirectionalAngularRadius,
+                                    site: lightSite
                                 ))
                                 : pinned.Param),
                             Shadows = ((directional.Shadows ?? (pinned.Shadows != 0u)) ? 1u : 0u),
                             Weight = Scalar(
                                 fallback: pinned.Weight,
                                 mirror: mirror,
-                                scalar: directional.Weight
+                                scalar: directional.Weight,
+                                field: WorldValueFields.DirectionalWeight,
+                                site: lightSite
                             ),
                         },
                         WorldRenderLight.Hemisphere hemisphere => pinned with {
@@ -439,12 +469,16 @@ public sealed class WorldEnvironmentResolve {
                             Param = Scalar(
                                 fallback: pinned.Param,
                                 mirror: mirror,
-                                scalar: hemisphere.Gradient
+                                scalar: hemisphere.Gradient,
+                                field: WorldValueFields.HemisphereGradient,
+                                site: lightSite
                             ),
                             Weight = Scalar(
                                 fallback: pinned.Weight,
                                 mirror: mirror,
-                                scalar: hemisphere.Base
+                                scalar: hemisphere.Base,
+                                field: WorldValueFields.HemisphereBase,
+                                site: lightSite
                             ),
                         },
                         WorldRenderLight.Rim rim => pinned with {
@@ -456,12 +490,16 @@ public sealed class WorldEnvironmentResolve {
                             Param = Scalar(
                                 fallback: pinned.Param,
                                 mirror: mirror,
-                                scalar: rim.Power
+                                scalar: rim.Power,
+                                field: WorldValueFields.RimPower,
+                                site: lightSite
                             ),
                             Weight = Scalar(
                                 fallback: pinned.Weight,
                                 mirror: mirror,
-                                scalar: rim.Weight
+                                scalar: rim.Weight,
+                                field: WorldValueFields.RimWeight,
+                                site: lightSite
                             ),
                         },
                         WorldRenderLight.Occluder occluder => pinned with {
@@ -473,12 +511,16 @@ public sealed class WorldEnvironmentResolve {
                             Param = Scalar(
                                 fallback: pinned.Param,
                                 mirror: mirror,
-                                scalar: occluder.Radius
+                                scalar: occluder.Radius,
+                                field: WorldValueFields.OccluderRadius,
+                                site: lightSite
                             ),
                             Weight = Scalar(
                                 fallback: pinned.Weight,
                                 mirror: mirror,
-                                scalar: occluder.Weight
+                                scalar: occluder.Weight,
+                                field: WorldValueFields.OccluderWeight,
+                                site: lightSite
                             ),
                         },
                         WorldRenderLight.Point point => pinned with {
@@ -495,12 +537,16 @@ public sealed class WorldEnvironmentResolve {
                             Param = Scalar(
                                 fallback: pinned.Param,
                                 mirror: mirror,
-                                scalar: point.Radius
+                                scalar: point.Radius,
+                                field: WorldValueFields.PointRadius,
+                                site: lightSite
                             ),
                             Weight = Scalar(
                                 fallback: pinned.Weight,
                                 mirror: mirror,
-                                scalar: point.Weight
+                                scalar: point.Weight,
+                                field: WorldValueFields.PointWeight,
+                                site: lightSite
                             ),
                         },
                         _ => pinned,
@@ -513,32 +559,43 @@ public sealed class WorldEnvironmentResolve {
 
         if (lighting?.Curvature is { } curvature) {
             var seed = into.Curvature;
+            var curvatureSite = new WorldValueSite(Section: "render.lighting.curvature");
 
             into.Curvature = new SdfCurvature(
                 Cavity: Scalar(
                     fallback: seed.Cavity,
                     mirror: mirror,
-                    scalar: curvature.Cavity
+                    scalar: curvature.Cavity,
+                    field: WorldValueFields.CurvatureCavity,
+                    site: curvatureSite
                 ),
                 Rim: Scalar(
                     fallback: seed.Rim,
                     mirror: mirror,
-                    scalar: curvature.Rim
+                    scalar: curvature.Rim,
+                    field: WorldValueFields.CurvatureRim,
+                    site: curvatureSite
                 ),
                 Ink: Scalar(
                     fallback: seed.Ink,
                     mirror: mirror,
-                    scalar: curvature.Ink
+                    scalar: curvature.Ink,
+                    field: WorldValueFields.CurvatureInk,
+                    site: curvatureSite
                 ),
                 InkLow: Scalar(
                     fallback: seed.InkLow,
                     mirror: mirror,
-                    scalar: curvature.InkLow
+                    scalar: curvature.InkLow,
+                    field: WorldValueFields.CurvatureInkLow,
+                    site: curvatureSite
                 ),
                 InkHigh: Scalar(
                     fallback: seed.InkHigh,
                     mirror: mirror,
-                    scalar: curvature.InkHigh
+                    scalar: curvature.InkHigh,
+                    field: WorldValueFields.CurvatureInkHigh,
+                    site: curvatureSite
                 ),
                 InkColor: Rgb(
                     color: curvature.InkColor,
@@ -548,12 +605,18 @@ public sealed class WorldEnvironmentResolve {
             );
         }
 
-        foreach (var layer in (sky?.Layers ?? [])) {
+        var layers = (sky?.Layers ?? []);
+
+        for (var index = 0; (index < layers.Count); index++) {
             WriteLayer(
                 into: m_resolvedSky,
-                layer: layer,
+                layer: layers[index],
                 lights: into,
-                mirror: mirror
+                mirror: mirror,
+                site: new WorldValueSite(
+                    Index: index,
+                    Section: "render.sky.layers"
+                )
             );
         }
 
@@ -563,7 +626,7 @@ public sealed class WorldEnvironmentResolve {
             mirror: mirror
         );
     }
-    private void WriteLayer(WorldStateMirror mirror, WorldRenderSkyLayer layer, SdfLights lights, SdfSky into) {
+    private void WriteLayer(WorldStateMirror mirror, WorldRenderSkyLayer layer, SdfLights lights, SdfSky into, WorldValueSite site) {
         ref var block = ref into.Block;
 
         switch (layer) {
@@ -576,6 +639,8 @@ public sealed class WorldEnvironmentResolve {
                         val1: stops.Count,
                         val2: SdfSky.MaxStops
                     );
+
+                    var stopSite = site with { Inner = "stops" };
 
                     for (var index = 0; (index < count); index++) {
                         var stop = stops[index];
@@ -591,7 +656,9 @@ public sealed class WorldEnvironmentResolve {
                                 Elevation: Scalar(
                                     fallback: 0f,
                                     mirror: mirror,
-                                    scalar: stop?.Elevation
+                                    scalar: stop?.Elevation,
+                                    field: WorldValueFields.StopElevation,
+                                    site: stopSite
                                 )
                             )
                         );
@@ -605,7 +672,9 @@ public sealed class WorldEnvironmentResolve {
                     block.FogDensity = Scalar(
                         fallback: block.FogDensity,
                         mirror: mirror,
-                        scalar: fog.Density
+                        scalar: fog.Density,
+                        field: WorldValueFields.FogDensity,
+                        site: site
                     );
 
                     break;
@@ -617,12 +686,16 @@ public sealed class WorldEnvironmentResolve {
                     into.SunDiscRadians = Angle(
                         angle: disc.Radius,
                         fallback: into.SunDiscRadians,
-                        mirror: mirror
+                        mirror: mirror,
+                        field: WorldValueFields.SunDiscRadius,
+                        site: site
                     );
                     block.DiscIntensity = Scalar(
                         fallback: block.DiscIntensity,
                         mirror: mirror,
-                        scalar: disc.Intensity
+                        scalar: disc.Intensity,
+                        field: WorldValueFields.SunDiscIntensity,
+                        site: site
                     );
 
                     break;
@@ -632,7 +705,9 @@ public sealed class WorldEnvironmentResolve {
                     block.StarBrightness = Scalar(
                         fallback: block.StarBrightness,
                         mirror: mirror,
-                        scalar: stars.Brightness
+                        scalar: stars.Brightness,
+                        field: WorldValueFields.StarBrightness,
+                        site: site
                     );
                     block.StarSeed = (stars.Seed ?? block.StarSeed);
 
@@ -640,15 +715,21 @@ public sealed class WorldEnvironmentResolve {
                         break;
                     }
 
+                    var twinkleSite = site with { Inner = "twinkle" };
+
                     block.TwinkleShare = Scalar(
                         fallback: block.TwinkleShare,
                         mirror: mirror,
-                        scalar: twinkle.Share
+                        scalar: twinkle.Share,
+                        field: WorldValueFields.TwinkleShare,
+                        site: twinkleSite
                     );
                     block.TwinkleDepth = Scalar(
                         fallback: block.TwinkleDepth,
                         mirror: mirror,
-                        scalar: twinkle.Depth
+                        scalar: twinkle.Depth,
+                        field: WorldValueFields.TwinkleDepth,
+                        site: twinkleSite
                     );
 
                     var rate = (twinkle.Rate ?? new BindableScalar(literal: SdfSky.DefaultTwinkleRate));
@@ -682,17 +763,23 @@ public sealed class WorldEnvironmentResolve {
                     block.CloudCoverage = Scalar(
                         fallback: block.CloudCoverage,
                         mirror: mirror,
-                        scalar: clouds.Coverage
+                        scalar: clouds.Coverage,
+                        field: WorldValueFields.CloudCoverage,
+                        site: site
                     );
                     block.CloudSoftness = Scalar(
                         fallback: block.CloudSoftness,
                         mirror: mirror,
-                        scalar: clouds.Softness
+                        scalar: clouds.Softness,
+                        field: WorldValueFields.CloudSoftness,
+                        site: site
                     );
                     block.CloudScale = Scalar(
                         fallback: block.CloudScale,
                         mirror: mirror,
-                        scalar: clouds.Scale
+                        scalar: clouds.Scale,
+                        field: WorldValueFields.CloudScale,
+                        site: site
                     );
                     block.CloudSeed = (clouds.Seed ?? block.CloudSeed);
                     block.CloudColor = Rgb(
@@ -703,7 +790,9 @@ public sealed class WorldEnvironmentResolve {
                     block.CloudCurl = Angle(
                         angle: clouds.Curl,
                         fallback: block.CloudCurl,
-                        mirror: mirror
+                        mirror: mirror,
+                        field: WorldValueFields.CloudCurl,
+                        site: site
                     );
                     block.CloudDriftOffset = Integrate(
                         mirror: mirror,

@@ -232,11 +232,20 @@ public static class WorldPostBuildWiring {
 
         var consoleSessions = services.GetRequiredService<TerminalConsoleSessions>();
 
-        services.GetRequiredService<WorldSourceWatch>().Report = (message, refused) => {
+        Action<string, bool> report = (message, refused) => {
             toasts?.Publish(isError: refused, message: message);
             consoleSessions.RecordAdministrativeEcho(message: message, refused: refused);
         };
+
+        services.GetRequiredService<WorldSourceWatch>().Report = report;
         var consoleOutput = services.GetRequiredService<BufferedConsoleOutput>();
+
+        // A bound value a presentation clamps into its field's domain reaches the same fan-out as a document reload's
+        // diagnostic, and stderr, where a piped script reads it.
+        services.GetRequiredService<WorldValueDomainReports>().Report = message => {
+            report(arg1: message, arg2: true);
+            consoleOutput.WriteErrorLine(value: message);
+        };
 
         services.GetRequiredService<WorldCompareCapture>().Report = result => {
             // Only late settlements reach this callback; synchronous refusals are counted by Submit itself.

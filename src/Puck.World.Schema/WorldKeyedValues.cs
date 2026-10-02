@@ -26,6 +26,12 @@ public interface IWorldKeyTrack {
 /// <see cref="BindableVector3"/>.</param>
 /// <param name="Track">The value's keys.</param>
 public readonly record struct WorldKeyedValue(string Path, object Value, IWorldKeyTrack Track);
+/// <summary>One presentation scalar a document binds to a state row: where it sits, its scalar form, and the field it
+/// fills (<see cref="WorldValueFields"/>).</summary>
+/// <param name="Path">The value's document path, in JSON member names (<c>render.sky.layers[3].softness</c>).</param>
+/// <param name="Value">The bound scalar; a <see cref="BindableAngle"/> appears as its scalar form.</param>
+/// <param name="Field">The field the value fills.</param>
+public readonly record struct WorldBoundValue(string Path, BindableScalar Value, WorldValueField Field);
 /// <summary>
 /// Finds every keyed value a document authors, wherever the document places a bindable that can carry keys
 /// (<see cref="BindableColor"/>, <see cref="BindableScalar"/>, <see cref="BindableAngle"/>,
@@ -61,6 +67,24 @@ public static class WorldKeyedValues {
         );
 
         return walk.Found;
+    }
+    /// <summary>Returns every presentation scalar a document binds to a state row in a field the document model
+    /// declares (<see cref="WorldValueFields"/>), in document order.</summary>
+    /// <param name="definition">The document.</param>
+    /// <returns>The bound values.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<WorldBoundValue> BoundOf(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var walk = new Walk();
+
+        walk.Visit(
+            declared: null,
+            path: string.Empty,
+            value: definition
+        );
+
+        return walk.Bound;
     }
     /// <summary>Returns whether a model type is a bindable that can carry keys on a clock.</summary>
     /// <param name="type">The type; a nullable value type answers for its underlying type.</param>
@@ -154,9 +178,12 @@ public static class WorldKeyedValues {
     private sealed class Walk {
         private readonly HashSet<object> m_visited = new(comparer: ReferenceEqualityComparer.Instance);
 
+        public List<WorldBoundValue> Bound { get; } = [];
         public List<WorldKeyedValue> Found { get; } = [];
 
-        public void Visit(object? value, string path, WorldModelType? declared) {
+        // The field is the one the member holding the value declares, or null for a value no member declares (a
+        // dictionary's or a list's element).
+        public void Visit(object? value, string path, WorldModelType? declared, WorldValueField? field = null) {
             if ((value is null) || (value is string)) {
                 return;
             }
@@ -167,6 +194,20 @@ public static class WorldKeyedValues {
                         Path: path,
                         Track: track,
                         Value: value
+                    ));
+                }
+
+                var scalar = (value switch {
+                    BindableScalar bindable => bindable,
+                    BindableAngle angle => angle.Value,
+                    _ => ((BindableScalar?)null),
+                });
+
+                if ((field is not null) && (scalar is { State: not null } bound)) {
+                    Bound.Add(item: new WorldBoundValue(
+                        Field: field,
+                        Path: path,
+                        Value: bound
                     ));
                 }
 
@@ -226,6 +267,10 @@ public static class WorldKeyedValues {
                     foreach (var (property, name) in MembersOf(shape: shape)) {
                         Visit(
                             declared: WorldModelShape.Of(type: property.PropertyType),
+                            field: WorldValueFields.Of(
+                                member: property.Name,
+                                owner: property.DeclaringType!
+                            ),
                             path: ((path.Length == 0)
                                 ? name
                                 : $"{path}.{name}"),

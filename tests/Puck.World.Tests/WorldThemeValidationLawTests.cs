@@ -6,16 +6,17 @@ namespace Puck.World.Tests;
 
 /// <summary>Pins the <c>theme</c> section's validation: a minimal, fully-authored theme parses and validates; the
 /// two engine-side perceptual floors (type size, scrim alpha) refuse a literal violation by name; a state-bound
-/// scrim alpha cannot be refused at boot (the document has no way to know its live value) but clamps to the floor
-/// at resolve time instead; and absence resolves to the zeroed <see cref="WorldThemeSection.Absent"/> block.</summary>
+/// scrim alpha starting below its floor is refused at load, and one a live write moves below it clamps to the floor
+/// at resolve time; and absence resolves to the zeroed <see cref="WorldThemeSection.Absent"/> block.</summary>
 public sealed class WorldThemeValidationLawTests {
     private static readonly BindableColor OpaqueGray = new(Raw: "#808080");
     private static readonly BindableColor BakedAlphaWhite = new(Raw: "#FFFFFF80");
 
-    private static WorldThemeScrim BoundScrim(string binding) => new(
+    internal static WorldThemeScrim BoundScrim(string binding) => new(
         Alpha: new BindableScalar(binding: binding),
         Color: new BindableColor(Raw: "#101010")
     );
+
     private static WorldThemeBloomHue Hue() => new(
         Halo: BakedAlphaWhite,
         Ring: BakedAlphaWhite
@@ -37,7 +38,8 @@ public sealed class WorldThemeValidationLawTests {
         WheelMarkerHalf: 3.5f,
         WheelRingAlpha: 0.55f
     );
-    private static WorldThemeColor MinimalColor(float scrimAlpha = 0.9f) => new(
+
+    internal static WorldThemeColor MinimalColor(float scrimAlpha = 0.9f) => new(
         Accent: OpaqueGray,
         AccentInk: OpaqueGray,
         AccentLine: BakedAlphaWhite,
@@ -65,6 +67,7 @@ public sealed class WorldThemeValidationLawTests {
         TextPrimary: OpaqueGray,
         Warning: OpaqueGray
     );
+
     private static WorldThemeDiegetic MinimalDiegetic() => new(
         BezelEdge: OpaqueGray,
         BezelInner: OpaqueGray,
@@ -89,7 +92,8 @@ public sealed class WorldThemeValidationLawTests {
         ScreenWellInner: OpaqueGray,
         ScreenWellOuter: OpaqueGray
     );
-    private static WorldThemeElevation MinimalElevation() => new(
+
+    internal static WorldThemeElevation MinimalElevation() => new(
         BloomHaloBlur: 10f,
         BloomHaloSpread: -2f,
         BloomHaloAlpha: new BindableScalar(literal: 0.4f),
@@ -125,6 +129,7 @@ public sealed class WorldThemeValidationLawTests {
         RingStatusWidth: 2f,
         RingStatusAlpha: 0.5f
     );
+
     private static WorldThemeIcon MinimalIcon() => new(StrokeHalfWidth: 0.08f);
     private static WorldThemeMotion MinimalMotion() => new(
         CaretBlink: 1000f,
@@ -167,7 +172,8 @@ public sealed class WorldThemeValidationLawTests {
         Space6: 24f,
         Space8: 32f
     );
-    private static WorldThemeSection MinimalTheme(float bodySize = 12f, float scrimAlpha = 0.9f) => new(
+
+    internal static WorldThemeSection MinimalTheme(float bodySize = 12f, float scrimAlpha = 0.9f) => new(
         Chrome: MinimalChrome(),
         Color: MinimalColor(scrimAlpha: scrimAlpha),
         Space: MinimalSpace(),
@@ -178,6 +184,7 @@ public sealed class WorldThemeValidationLawTests {
         Motion: MinimalMotion(),
         Icon: MinimalIcon()
     );
+
     private static WorldThemeType MinimalType(float bodySize = 12f) => new(
         BodyLine: 16f,
         BodySize: bodySize,
@@ -421,12 +428,11 @@ public sealed class WorldThemeValidationLawTests {
         );
     }
     [Fact]
-    public void BoundScrimAlphaBelowFloorPassesValidationButClampsAtResolve() {
-        var theme = MinimalTheme() with {
-            Color = MinimalColor() with { ScrimPanel = BoundScrim(binding: "state.lowAlpha") },
-        };
-        var definition = Fixtures.BuildDocument() with {
-            ThemeRaw = theme,
+    public void BoundScrimAlphaStartingBelowItsFloorIsRefusedAndOneWrittenBelowItClampsAtResolve() {
+        static WorldDefinition Bound(double alpha) => Fixtures.BuildDocument() with {
+            ThemeRaw = MinimalTheme() with {
+                Color = MinimalColor() with { ScrimPanel = BoundScrim(binding: "state.lowAlpha") },
+            },
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(
                 Name: CellName.Parse(candidate: "lowAlpha"),
@@ -434,33 +440,40 @@ public sealed class WorldThemeValidationLawTests {
                 Cells: [
                     new StateCell(
                         Key: WorldStateRow.SlotKey,
-                        Value: CellValue.Fixed(rawBits: Puck.Maths.FixedQ4816.FromDouble(value: 0.2).Value)
+                        Value: CellValue.Fixed(rawBits: Puck.Maths.FixedQ4816.FromDouble(value: alpha).Value)
                     ),
                 ]
             ),
             ]),
         };
 
-        // A state binding cannot be refused at boot — the document has no way to know the cell's live value.
-        var admitted = WorldDefinitionValidator.TryValidate(
-            definition: definition,
-            neighbours: null,
-            reason: out var reason
+        // A load refuses a binding whose row starts below the floor, naming the field; one starting above it is
+        // admitted.
+        Laws.Refuses(
+            definition: Bound(alpha: 0.2d),
+            needle: "theme.color.scrimPanel.alpha binds state.lowAlpha whose starting value"
         );
-
         Assert.True(
-            condition: admitted,
+            condition: WorldDefinitionValidator.TryValidate(
+                definition: Bound(alpha: 0.9d),
+                neighbours: null,
+                reason: out var reason
+            ),
             userMessage: reason
         );
 
-        // At resolve time, the clamp is what actually enforces the floor.
+        // A live write below the floor clamps to it as the theme resolves.
+        var written = Bound(alpha: 0.2d);
         var resolved = new WorldThemeResolve().Resolve(
-            definition: definition,
+            definition: written,
             revision: 1,
-            mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition))
+            mirror: ClientFixtures.StateMirror(definition: written)
         );
 
-        Assert.True(condition: (resolved.Color.ScrimPanel.Alpha >= WorldThemeCapacity.ScrimMinAlpha));
+        Assert.Equal(
+            expected: WorldThemeCapacity.ScrimMinAlpha,
+            actual: resolved.Color.ScrimPanel.Alpha
+        );
     }
     /// <summary>The chrome block's ranges are enforced by name, beside a passing control — an opacity outside [0, 1]
     /// and a negative extent are both authoring errors a boot must refuse rather than draw.</summary>

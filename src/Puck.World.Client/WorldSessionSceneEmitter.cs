@@ -119,7 +119,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     // The mirrored world's environment, resolved each dressed frame. The track double-buffers its output, so the frame
     // the residency holds keeps its environment through the next dress, as the boot presentation's does.
-    private readonly WorldEnvironmentResolve m_environment = new();
+    private readonly WorldEnvironmentResolve m_environment;
+
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
     // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
     // interpolated (not host-supplied) positions.
@@ -141,8 +142,12 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <param name="bodyColor">The color each avatar is painted with by body index, or <see langword="null"/> for the
     /// mirror's own (<see cref="WorldSessionMirror.BodyColor"/>).</param>
     /// <param name="castsAvatarShadows">Whether avatar transforms participate in soft shadows when the host enables them.</param>
-    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false) {
+    /// <param name="domains">The reports a bound value presented outside its field's domain goes to, or
+    /// <see langword="null"/> to clamp it without reporting.</param>
+    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false, WorldValueDomainReports? domains = null) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
+
+        m_environment = new WorldEnvironmentResolve(domains: domains);
 
         m_mirror = mirror;
         m_bodyColor = (bodyColor ?? mirror.BodyColor);

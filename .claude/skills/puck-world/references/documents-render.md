@@ -62,6 +62,16 @@ for the client through its state mirror. Ordered values (gradient stop
 elevations, the ink band) are judged by `JudgeAscending` over every phase of
 their one clock, between keys as well as at them. A projection carries only the
 tick clocks; one whose values key on a state clock refuses to hydrate.
+Every bindable presentation scalar's domain is one row of `WorldValueFields`
+(`WorldValueDomain.cs`), keyed by its model member: `JudgeScalar` judges a
+literal and each key against it, `ValidateBoundStarts` judges a bound row's
+starting value at a load only (`TryValidate`; `TryValidateLocally` never reads
+rows, so a stray live value never refuses a mutation, a replay or a snapshot),
+and the presentation (`WorldEnvironmentResolve`, `WorldThemeResolve`,
+`WorldMarkerAlphas`) maps each resolved value through
+`WorldValueDomainReports.Clamp`, which reports the first stray value per field
+site and row once (`[world.value: …]`, wired in `WorldPostBuildWiring`). A new
+bindable scalar member needs its row, or `WorldValueDomainLawTests` fails.
 Each light's `$type` union:
 
 | `$type` | Carries |

@@ -10954,7 +10954,7 @@ export type WorldThemeRadius = {
 };
 
 /**
- * One scrim's fill color plus its own alpha, split apart so a world can retheme opacity independent of hue — the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. Alpha is clamped to ScrimMinAlpha at resolve time when it is a state binding (see WorldDefinitionValidator's theme validation for the literal-authoring floor).
+ * One scrim's fill color plus its own alpha, split apart so a world can retheme opacity independent of hue — the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. Alpha lies between ScrimMinAlpha and one; a bound alpha a live write moves below the floor presents at it.
  */
 export type WorldThemeScrim = {
   /**
