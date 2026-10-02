@@ -33,7 +33,8 @@ public sealed partial class FederationTransferLawTests {
     // traveler, at the same mobility epoch, reserves and commits again.
     [Fact]
     public void ARolledBackPeerLeavesItsDestinationAndCanArriveAgain() {
-        using var fixture = Fixtures.FreshServer(definition: Fixtures.PeerPopulationDocument(networkPlayers: 2));
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.PeerPopulationDocument(networkPlayers: 2),
+            landingRefusal: static ordinal => ((ordinal == 1) ? "forced landing refusal at member 1" : null));
         var admitted = new List<WorldPeerEventEntry>();
 
         fixture.Server.ServerEventTap = serverEvent => {
@@ -51,7 +52,6 @@ public sealed partial class FederationTransferLawTests {
             userMessage: reservation.Reason
         );
 
-        fixture.Server.TransferEscrow.TestRefuseLandingOrdinal = 1;
         Assert.False(condition: fixture.Server.CommitTransfer(
             members: [Turned(travelTurn: FixedQ4816.One), Turned(travelTurn: FixedQ4816.One)],
             reason: out var reason,
@@ -61,12 +61,11 @@ public sealed partial class FederationTransferLawTests {
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "TEST-ONLY forced landing refusal at member 1"
+            expectedSubstring: "forced landing refusal at member 1"
         );
 
         var first = Assert.Single(collection: admitted);
 
-        fixture.Server.TransferEscrow.TestRefuseLandingOrdinal = null;
         fixture.Step();
         fixture.Step();
 
@@ -111,7 +110,8 @@ public sealed partial class FederationTransferLawTests {
     public void ARolledBackCommitReplaysAsItRan(bool peer, bool taped) {
         using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-rollback-");
         using var fixture = (peer
-            ? Fixtures.FreshServer(definition: Fixtures.PeerPopulationDocument(networkPlayers: 2))
+            ? Fixtures.FreshServer(definition: Fixtures.PeerPopulationDocument(networkPlayers: 2),
+                landingRefusal: static ordinal => ((ordinal == 1) ? "forced landing refusal at member 1" : null))
             : Fixtures.FreshServer());
         var request = (peer
             ? PeerCohort(91, 4, 5)
@@ -164,9 +164,7 @@ public sealed partial class FederationTransferLawTests {
 
         var commitTick = 0;
 
-        if (peer) {
-            fixture.Server.TransferEscrow.TestRefuseLandingOrdinal = 1;
-        } else {
+        if (!peer) {
             // Seat 1's principal loses its grants on the tape after the reservation, so its join is refused inside the
             // commit.
             foreach (var grant in fixture.Server.GrantRows(principal: Principal.Seat(slot: 1))) {
@@ -193,7 +191,6 @@ public sealed partial class FederationTransferLawTests {
             expectedSubstring: "refused reserved commit"
         );
 
-        fixture.Server.TransferEscrow.TestRefuseLandingOrdinal = null;
 
         for (var tick = 0; (tick < 4); tick++) {
             fixture.Step();
@@ -396,6 +393,7 @@ public sealed partial class FederationTransferLawTests {
         }
 
         Assert.True(condition: isolated.Server.Population.IsActive(index: slot));
+        Assert.Equal(expected: fixture.Server.Population.SimulatedCount, actual: isolated.Server.Population.SimulatedCount);
         Assert.Equal(
             actual: (
                 Position: isolated.Server.Population.EntryBody(index: slot)!.FixedPosition,

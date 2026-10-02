@@ -11,6 +11,7 @@ namespace Puck.World.Server;
 /// the rollback a live commit and a replay's re-drive both apply, and <see cref="WorldServer.ArrivalTap"/> reports each
 /// landing once the commit decides.</summary>
 /// <param name="Slot">The reserved index.</param>
+/// <param name="Generation">The destination occupant generation minted by this admission.</param>
 /// <param name="Principal">The principal a local seat joins under.</param>
 /// <param name="Peer">Whether a transferred peer or entity arrives, admitted by its event, rather than a local
 /// seat.</param>
@@ -21,4 +22,4 @@ namespace Puck.World.Server;
 /// <param name="Border">The border the occupant was admitted across.</param>
 /// <param name="Member">The commit member: the arrival's motion and accumulated arrival turn. Its own profile is not
 /// read; <paramref name="Profile"/> is the one the occupant is seated on.</param>
-public sealed record WorldArrival(int Slot, Principal Principal, bool Peer, WorldIdentity? Profile, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity Mobility, string Border, WorldTransferCommitMember Member);
+public sealed record WorldArrival(int Slot, int Generation, Principal Principal, bool Peer, WorldIdentity? Profile, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity Mobility, string Border, WorldTransferCommitMember Member);

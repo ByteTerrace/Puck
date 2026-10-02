@@ -778,7 +778,8 @@ internal static class Fixtures {
     /// <see langword="null"/> for none when no <paramref name="machineCatalog"/> is supplied.</param>
     /// <param name="machineCatalog">An explicit catalog including content providers, instead of engine-only registration.</param>
     /// <param name="documentPath">The source document path for resolving relative machine content, or null for the host default.</param>
-    public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IMachineEngine>? engines = null, WorldMachineCatalog? machineCatalog = null, string? documentPath = null) {
+    /// <param name="landingRefusal">Optional transfer admission policy supplied by the law.</param>
+    public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IMachineEngine>? engines = null, WorldMachineCatalog? machineCatalog = null, string? documentPath = null, Func<int, string?>? landingRefusal = null) {
         // The default document's BYTES are serialized once for the whole run. Each fixture still deserializes its
         // own graph — that is what keeps one test's mutation off the next test's document — but the serialize half
         // of the round trip is the same work every time and is not worth repeating seven hundred times.
@@ -815,7 +816,8 @@ internal static class Fixtures {
             profiles: profiles,
             envelope: new WorldRenderEnvelope(),
             machines: machines,
-            narrationSink: new WorldConsoleNarrationSink()
+            narrationSink: new WorldConsoleNarrationSink(),
+            landingRefusal: landingRefusal
         );
 
         return new WorldFixture(

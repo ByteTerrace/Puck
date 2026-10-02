@@ -171,16 +171,19 @@ public abstract record WorldReplayEntry {
     /// what a MATCH proves.</para></summary>
     /// <param name="Adjacency">The authored <c>adjacencies</c> row name that refreshed.</param>
     internal sealed record LinkDelivery(string Adjacency) : WorldReplayEntry;
+
     /// <summary>A traveler a transfer commit landed in the recorded world (<see cref="WorldServer.ArrivalTap"/>), local
     /// seat or transferred peer, with whether the commit rolled it back. A peer's admission is its own recorded
     /// <c>PeerAdmitted</c> entry, which the commit taped ahead of this one. Re-drive lands it through
     /// <see cref="WorldTransferEscrow.LandArrival"/> at the same pre-step position and, for a rolled-back one, rolls it back
     /// through <see cref="WorldTransferEscrow.RollBackArrival"/>, so the generation a landing advanced advances again.
-    /// Its profile is re-seated on the pinned rates (<paramref name="Profile"/>) as a recorded seat's is.</summary>
+    /// Its profile projection pins the identity, rates, appearance and owned records; a backing document preserves
+    /// identity facts when the arriving profile carries them.</summary>
     /// <param name="Value">The arrival, with no profile of its own.</param>
-    /// <param name="Profile">The occupant's pinned profile, or <see langword="null"/>.</param>
+    /// <param name="Profile">The occupant's profile projection, or <see langword="null"/>.</param>
+    /// <param name="ProfileDocument">The profile's backing document at landing, or an empty block.</param>
     /// <param name="RolledBack">Whether the commit that landed it rolled back.</param>
-    internal sealed record Arrival(WorldArrival Value, WorldReplayProfilePin? Profile, bool RolledBack) : WorldReplayEntry;
+    public sealed record Arrival(WorldArrival Value, WorldIdentityProjection? Profile, byte[] ProfileDocument, bool RolledBack) : WorldReplayEntry;
 }
 /// <summary>One recorded tick's server-facing input — the exact <see cref="IServerLink"/> traffic the live session
 /// applied that tick, captured at the loopback: the synchronous <see cref="Authority"/> stream (commands, grants, and
@@ -283,9 +286,8 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
     // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
-    // Shape 6 carries each local seat a committed transfer lands in the recorded world. Refuse earlier tapes at intake
-    // instead of reporting their old shape as a simulation divergence.
-    private const uint ShapeToken = 6u;
+    // The arrival contract includes peer admissions and rollback outcomes. Earlier arrival layouts are refused.
+    private const uint ShapeToken = 7u;
 
     /// <summary>Gets the record-start world definition as its canonical UTF-8 JSON — the rehydrated starting state.</summary>
     public required byte[] DefinitionJson { get; init; }
@@ -365,6 +367,7 @@ public sealed partial class WorldReplaySnapshot {
     /// step and narrates the disagreement itself instead.</param>
     /// <exception cref="WorldReplayCodecException">An authority-entry kind this apply does not handle.</exception>
     internal static void ApplyRecordedTick(WorldServer server, WorldPopulation population, WorldReplayTickInput input, List<bool> expectedMutationOutcomes, Queue<bool> replayedMutationOutcomes, Func<WorldReplayEntry.Rebuild, string?> rebuildContentPin) {
+        ValidateArrivalOrder(entries: input.Authority);
         foreach (var entry in input.Authority) {
             switch (entry) {
                 case WorldReplayEntry.Command command:
@@ -488,10 +491,11 @@ public sealed partial class WorldReplaySnapshot {
                         defaults: server.Definition.PlayerDefaults
                     );
 
-                    if (
-                        server.TransferEscrow.LandArrival(arrival: landed).Accepted &&
-                        arrival.RolledBack
-                    ) {
+                    var landing = server.TransferEscrow.LandArrival(arrival: landed);
+                    if (!landing.Accepted) {
+                        throw new InvalidDataException(message: $"arrival at body:{landed.Slot} refused: {landing.Reason}");
+                    }
+                    if (arrival.RolledBack) {
                         server.TransferEscrow.RollBackArrival(arrival: landed);
                     }
 
@@ -1698,6 +1702,10 @@ public sealed partial class WorldReplaySnapshot {
                     reader: ref r,
                     what: "authority entry"
                 );
+
+                if (!r.Failed) {
+                    ValidateArrivalOrder(entries: authority);
+                }
                 var intents = ReadTapeArray(
                     minimumBytesEach: 60,
                     readItem: static (ref WireReader intent) => WorldWireCodec.ReadIntentSubmission(reader: ref intent),

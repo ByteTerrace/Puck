@@ -339,7 +339,10 @@ says nothing about it:
   `WorldTransferEscrow` made, with whether its commit rolled back, and the
   re-drive applies `WorldTransferEscrow.LandArrival` and `RollBackArrival`, the
   escrow's own landing and rollback. A peer's admission is its taped
-  `PeerAdmitted` entry. The source authority's simulation is never replayed.
+  `PeerAdmitted` entry, which the arrival must follow; each entry pins its
+  destination slot's generation, and the tape refuses an arrival out of that
+  order, against another generation, or whose landing the escrow refuses, rather
+  than skipping it. The source authority's simulation is never replayed.
 - Transfer reserve/commit/abort/acknowledge traffic is not taped as protocol —
   `Transfer` records the decided outcome as narration, not a re-executed
   handshake.

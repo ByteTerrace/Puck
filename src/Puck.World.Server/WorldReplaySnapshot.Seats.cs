@@ -55,18 +55,22 @@ public sealed partial class WorldReplaySnapshot {
             TurnSpeed: turnSpeed
         );
     });
-    // The arrival a re-drive lands: the recorded one, its profile re-seated on the pinned rates against the embedded
-    // definition's player defaults, exactly as SeatRecordedSeats re-seats a recorded seat.
-    private static WorldArrival Landed(WorldReplayEntry.Arrival arrival, WorldPlayerDefaults defaults) => (arrival.Value with {
-        Profile = ((arrival.Profile is { } pin)
-        ? WorldIdentity.Pinned(
-            defaults: defaults,
-            moveSpeed: pin.MoveSpeed,
-            name: pin.Name,
-            turnSpeed: pin.TurnSpeed
-        )
-        : null),
-    });
+    // Arrival identity is the same projection a federation crossing or checkpoint preserves, including owned records.
+    private static WorldArrival Landed(WorldReplayEntry.Arrival arrival, WorldPlayerDefaults defaults) {
+        var profile = ((arrival.Profile is { } pin) ? WorldIdentity.FromProjection(defaults: defaults, projection: pin) : null);
+
+        if (arrival.ProfileDocument.Length > 0) {
+            profile!.ReplaceDocument(document: ReadArrivalProfileDocument(bytes: arrival.ProfileDocument));
+        }
+        return arrival.Value with { Profile = profile };
+    }
+    private static WorldDefinition ReadArrivalProfileDocument(byte[] bytes) {
+        try {
+            return WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
+        } catch (Exception exception) when ((exception is System.Text.Json.JsonException or InvalidOperationException or ArgumentException)) {
+            throw new InvalidDataException(innerException: exception, message: "arrival profile document is malformed");
+        }
+    }
     private static void WriteProfilePin(WireWriter writer, WorldReplayProfilePin? pin) => writer.WriteOptional(
         value: pin,
         writeValue: static (pinWriter, value) => {
@@ -80,6 +84,7 @@ public sealed partial class WorldReplaySnapshot {
 
         writer.WriteByte(value: 19);
         writer.WriteInt32(value: value.Slot);
+        writer.WriteInt32(value: value.Generation);
 
         if (!WorldWireCodec.TryWritePrincipal(
             principal: value.Principal,
@@ -90,10 +95,11 @@ public sealed partial class WorldReplaySnapshot {
 
         writer.WriteBoolean(value: value.Peer);
         writer.WriteBoolean(value: arrival.RolledBack);
-        WriteProfilePin(
-            pin: arrival.Profile,
-            writer: writer
+        writer.WriteOptional(
+            value: arrival.Profile,
+            writeValue: WorldAuthorityCheckpointCodec.WriteIdentityProjection
         );
+        writer.WriteBlock(value: arrival.ProfileDocument);
         writer.WriteVector(value: value.BodyColor);
         writer.WriteByte(value: value.CatalogRig);
         WorldWireLeaves.WriteMobility(
@@ -108,15 +114,36 @@ public sealed partial class WorldReplaySnapshot {
     }
     private static WorldReplayEntry.Arrival ReadArrivalEntry(ref WireReader reader) {
         var slot = reader.ReadInt32();
+        var generation = reader.ReadInt32();
         var principal = WorldWireCodec.ReadPrincipal(reader: ref reader);
         var peer = reader.ReadBoolean();
         var rolledBack = reader.ReadBoolean();
-        var profile = ReadProfilePin(reader: ref reader);
+        var profile = reader.ReadOptional(readValue: static (ref WireReader r) => WorldAuthorityCheckpointCodec.ReadIdentityProjection(reader: ref r));
+        var profileDocument = reader.ReadBlock(field: "arrival profile document", maxBytes: WireLimits.MaxDocumentBytes);
+
+        if (!reader.Failed && (profileDocument.Length > 0)) {
+            var definition = ReadArrivalProfileDocument(bytes: profileDocument);
+
+            if ((profile is not { } projected) || (definition.Identity is not { } identity) || (identity.Id.ToString() != projected.Id)) {
+                reader.Fail(detail: "arrival profile document has no matching identity", refusal: WireRefusal.PayloadMalformed);
+            }
+        }
         var bodyColor = reader.ReadFiniteVector(field: "arrival body color");
         var catalogRig = reader.ReadByte();
         var mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
         var border = reader.ReadString(field: "arrival border");
         var member = WorldWireLeaves.ReadCommitMemberMotion(reader: ref reader);
+
+        if (!reader.Failed && ((((uint)slot) >= WorldBodiesLimits.CapacityCeiling) || (generation <= 0) ||
+            (mobility.Epoch == 0) || (mobility.Incarnation.Index < 0) || (mobility.Incarnation.Generation < 0) ||
+            (mobility.DepartedFrom.Index < 0) || (mobility.DepartedFrom.Generation < 0) ||
+            (member.HasMappedArrival && string.IsNullOrWhiteSpace(value: member.BodyMotionProgramName)) ||
+            ((member.Continuum is { } continuum) && (!member.HasMappedArrival ||
+                (continuum.ContinuumEndEngineTick <= continuum.ContinuumStartEngineTick) ||
+                (continuum.ConsumedThroughEngineTick < continuum.ContinuumEndEngineTick) ||
+                (continuum.BoundaryEvents == 0) || (continuum.BoundaryEvents > WorldContinuumTrajectory.MaxBoundaryEvents))))) {
+            reader.Fail(detail: "arrival carries an invalid slot, mobility or motion", refusal: WireRefusal.PayloadMalformed);
+        }
 
         if (
             !reader.Failed &&
@@ -130,11 +157,13 @@ public sealed partial class WorldReplaySnapshot {
 
         return new WorldReplayEntry.Arrival(
             Profile: profile,
+            ProfileDocument: profileDocument,
             RolledBack: rolledBack,
             Value: new WorldArrival(
                 BodyColor: bodyColor,
                 Border: border,
                 CatalogRig: catalogRig,
+                Generation: generation,
                 Member: member,
                 Mobility: mobility,
                 Peer: peer,
@@ -143,5 +172,37 @@ public sealed partial class WorldReplaySnapshot {
                 Slot: slot
             )
         );
+    }
+    private static void ValidateArrivalOrder(IReadOnlyList<WorldReplayEntry> entries) {
+        var admitted = new Dictionary<int, WorldPeerEventEntry>();
+
+        foreach (var entry in entries) {
+            switch (entry) {
+                case WorldReplayEntry.PeerAdmitted peers:
+                    foreach (var peer in peers.Value.Entries) {
+                        if (peer.AuthorityTransferred) {
+                            admitted[peer.BodyIndex] = peer;
+                        }
+                    }
+                    break;
+                case WorldReplayEntry.PeerDisconnected peers:
+                    foreach (var peer in peers.Value.Entries) {
+                        admitted.Remove(key: peer.BodyIndex);
+                    }
+                    break;
+                case WorldReplayEntry.Transfer transfer:
+                    foreach (var slot in transfer.DepartedBootSlots) {
+                        admitted.Remove(key: slot);
+                    }
+                    break;
+                case WorldReplayEntry.Arrival { Value.Peer: true } arrival:
+                    if (!admitted.Remove(key: arrival.Value.Slot, value: out var admission) ||
+                        (admission.Generation != arrival.Value.Generation) ||
+                        (admission.CatalogRig != arrival.Value.CatalogRig) || (admission.TravelTurn != arrival.Value.Member.TravelTurn)) {
+                        throw new InvalidDataException(message: $"arrival at body:{arrival.Value.Slot} has no preceding matching PeerAdmitted entry");
+                    }
+                    break;
+            }
+        }
     }
 }

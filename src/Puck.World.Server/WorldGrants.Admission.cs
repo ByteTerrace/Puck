@@ -35,7 +35,7 @@ public sealed partial class WorldGrants {
         ApplyLifecycleEvents(
             admitted: [admitted],
             disconnected: [],
-            ordered: true
+            ordered: false
         );
         if (identity is not null) {
             Host.Population.SetSeatProfile(
@@ -239,7 +239,7 @@ public sealed partial class WorldGrants {
         ApplyLifecycleEvents(
             admitted: [admitted],
             disconnected: [],
-            ordered: true,
+            ordered: !authorityTransferred,
             mintedGrants: BuildAdmissionGrants(
                 principal: admitted.Identity,
                 bodyIndex: admitted.BodyIndex,

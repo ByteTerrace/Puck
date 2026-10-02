@@ -141,6 +141,7 @@ public sealed partial class WorldTransferEscrow {
     private readonly record struct MobilityLease(WorldTransferKey Transfer, ulong ExpectedEpoch);
 
     private readonly WorldServer m_server;
+    private readonly Func<int, string?>? m_landingRefusal;
 
     // Sorted by DeadlineTick so ReclaimExpired sweeps only what has actually arrived; every m_leases entry has
     // exactly one live row here, added alongside the lease and removed by ReleaseLease, whether that release is
@@ -161,12 +162,12 @@ public sealed partial class WorldTransferEscrow {
     // The population remains the source of truth: stale rows are pruned before every capacity decision.
     private readonly Dictionary<int, string> m_borderAdmissions = new();
 
-    public WorldTransferEscrow(WorldServer server) => m_server = server;
-
-    /// <summary>Gets or sets a commit member ordinal whose admission every commit refuses inside the landing loop, after
-    /// the members ahead of it have landed, so a law can roll a landed cohort back. Verification only: a world never
-    /// sets it, and <see langword="null"/> refuses nothing.</summary>
-    public int? TestRefuseLandingOrdinal { get; set; }
+    /// <summary>Creates an escrow with an optional admission policy evaluated at each commit member's ordinal.
+    /// A policy returns a refusal reason or null to admit. The policy is fixed at composition.</summary>
+    public WorldTransferEscrow(WorldServer server, Func<int, string?>? landingRefusal = null) {
+        m_server = server;
+        m_landingRefusal = landingRefusal;
+    }
 
     /// <summary>Captures every table this escrow owns.</summary>
     public WorldTransferEscrowCheckpoint Capture() {
@@ -742,11 +743,11 @@ public sealed partial class WorldTransferEscrow {
             var mobility = reservationMember.Mobility!.Value.Advance();
             SessionReply reply;
 
-            if (TestRefuseLandingOrdinal == index) {
+            if (m_landingRefusal?.Invoke(index) is { } landingRefusal) {
                 reply = new SessionReply(
                     Accepted: false,
                     AssignedIndex: -1,
-                    Reason: $"TEST-ONLY forced landing refusal at member {index}",
+                    Reason: landingRefusal,
                     RosterEcho: string.Empty
                 );
             } else if (lease.Request.PeerAdmission) {
@@ -780,6 +781,7 @@ public sealed partial class WorldTransferEscrow {
                         slot: slot
                     );
                     arrivals.Add(item: new WorldArrival(
+                        Generation: m_server.Population.Generation(index: slot),
                         BodyColor: reservationMember.BodyColor,
                         Border: lease.Request.Border,
                         CatalogRig: reservationMember.CatalogRig,
@@ -793,6 +795,7 @@ public sealed partial class WorldTransferEscrow {
                 }
             } else {
                 var arrival = new WorldArrival(
+                    Generation: checked((m_server.Population.Generation(index: slot) + 1)),
                     BodyColor: reservationMember.BodyColor,
                     Border: lease.Request.Border,
                     CatalogRig: reservationMember.CatalogRig,
@@ -893,6 +896,18 @@ public sealed partial class WorldTransferEscrow {
     /// <returns>The admission's verdict; nothing is written onto a refused or unadmitted index.</returns>
     public SessionReply LandArrival(WorldArrival arrival) {
         ArgumentNullException.ThrowIfNull(argument: arrival);
+
+        if ((((uint)arrival.Slot) >= ((uint)m_server.Population.Capacity)) ||
+            (arrival.Peer != (arrival.Slot >= m_server.Population.LocalSeatCount)) ||
+            (arrival.Generation <= 0) ||
+            (((long)arrival.Generation) != (((long)m_server.Population.Generation(index: arrival.Slot)) + (arrival.Peer ? 0 : 1))) ||
+            (!arrival.Peer && m_server.Population.IsActive(index: arrival.Slot)) ||
+            (arrival.Peer && !m_server.Population.PeerAuthorityTransferred(bodyIndex: arrival.Slot)) ||
+            (arrival.Member.HasMappedArrival && !m_server.Definition.BodyMotionPrograms.Any(predicate: program =>
+                ((program.Kind == BodyProgramKind.Motion) && (program.Name == arrival.Member.BodyMotionProgramName))))) {
+            return new SessionReply(Accepted: false, AssignedIndex: -1,
+                Reason: $"arrival at body:{arrival.Slot} has no matching admission or motion program", RosterEcho: string.Empty);
+        }
 
         var reply = (arrival.Peer
             ? (m_server.Population.IsActive(index: arrival.Slot)

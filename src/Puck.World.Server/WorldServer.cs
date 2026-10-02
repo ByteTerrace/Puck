@@ -479,8 +479,9 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="instanceIdentity"/> is empty, admission or machine
     /// preparation refuses, or the supplied admission names a different definition or machine catalog.</exception>
+    /// <param name="landingRefusal">Optional transfer admission policy fixed at composition; null admits each reserved member.</param>
     public WorldServer(WorldDefinition definition, WorldPopulation population, WorldOwnedWorlds profiles, WorldRenderEnvelope envelope, IWorldMachineHost machines, string instanceIdentity = "boot", IWorldNarrationSink? narrationSink = null,
-        WorldDefinitionAdmission? admission = null) {
+        WorldDefinitionAdmission? admission = null, Func<int, string?>? landingRefusal = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: profiles);
@@ -596,7 +597,7 @@ public sealed partial class WorldServer : IWorldServerHost {
             capacity: population.Capacity
         );
         m_profiles = profiles;
-        m_transferEscrow = new WorldTransferEscrow(server: this);
+        m_transferEscrow = new WorldTransferEscrow(landingRefusal: landingRefusal, server: this);
         m_envelope = envelope;
         // Adopt the population's boot-built field (the field provider compiled it once for the bodies it minted at
         // construction) — the server owns it from here without a second build.

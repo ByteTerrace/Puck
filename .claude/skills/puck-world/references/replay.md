@@ -111,7 +111,9 @@ never the document rows), and the active local seats with a pinned profile
 (`WorldReplayProfilePin(Name, MoveSpeed, TurnSpeed)`, raw fixed-point, never
 float accessors). There is no captured identity/profile catalog on the tape —
 owned identities are ordinary `puck.world.definition.v1` documents on disk, outside
-the tape's scope. `Drive(profiles, engines, addonHostFactory)` re-resolves each seat by pinned
+the tape's scope. An arrival entry is the exception for the traveller it lands: it
+carries the arriving profile's identity projection and its backing document, so a
+re-driven landing holds the same identity, owned records and facts the live one did. `Drive(profiles, engines, addonHostFactory)` re-resolves each seat by pinned
 `Name` against the LIVE `WorldOwnedWorlds` catalog handed to it at replay
 time; the pin's own rates are what make that safe even when the live
 identity's rates have since moved (`ReportProfileDrift` reports, never

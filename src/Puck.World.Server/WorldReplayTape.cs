@@ -717,7 +717,8 @@ public sealed partial class WorldReplayTape {
         };
         m_liveServer.LinkDeliveryTap = adjacency => m_currentAuthority.Add(item: new WorldReplayEntry.LinkDelivery(Adjacency: adjacency));
         m_liveServer.ArrivalTap = (arrival, rolledBack) => m_currentAuthority.Add(item: new WorldReplayEntry.Arrival(
-            Profile: PinProfile(profile: arrival.Profile),
+            Profile: arrival.Profile?.Project(),
+            ProfileDocument: ((arrival.Profile?.Document is { } document) ? WorldDefinitionSerialization.Serialize(definition: document) : []),
             RolledBack: rolledBack,
             Value: (arrival with { Profile = null })
         ));

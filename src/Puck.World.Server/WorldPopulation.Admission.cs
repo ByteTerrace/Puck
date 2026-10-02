@@ -297,7 +297,6 @@ public sealed partial class WorldPopulation {
             );
             entry.Active = true;
             entry.IsRemoteHuman = (peer.Source == IntentSource.Live);
-            m_simulatedCount = CountActiveCensus();
             m_revision++;
         }
         // A resumed connection rides the same PeerAdmitted event as a fresh one, and a replay reaches it against an
@@ -326,6 +325,7 @@ public sealed partial class WorldPopulation {
         entry.AdmissionRevokedKeys.Clear();
         entry.IdentityDomain = peer.IdentityDomain;
         entry.IdentitySubject = peer.IdentitySubject;
+        m_simulatedCount = CountActiveCensus();
     }
     /// <summary>Re-applies one recorded disconnect through the population door. Park-with-grace: on the same terms as
     /// <see cref="DeactivateSeat"/>, this defers the body/occupancy half of the teardown (<see cref="Entry.Body"/>,
