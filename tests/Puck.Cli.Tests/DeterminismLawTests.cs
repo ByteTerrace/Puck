@@ -3,6 +3,7 @@ using Puck.Assets;
 using Puck.Cli.Determinism;
 using Puck.Testing;
 using Puck.World;
+using Puck.World.Server;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -11,7 +12,10 @@ namespace Puck.Cli.Tests;
 /// A stream round-trips its one spelling; the same scenario recorded twice diverges nowhere; a divergence planted at a
 /// tick is reported at exactly that tick and the system it split; a CRLF canonical writer on one host is reported at
 /// the document hash it moves; and streams of another version, manifest or scenario list are refused by name rather
-/// than compared. The scenario is the records-pools canary's world, whose pool rule a state write starts.</summary>
+/// than compared. The scenario is the records-pools canary's world, whose pool rule a state write starts. Every shipped
+/// scenario moves each component it names as exercised, every per-tick component but the declared topologies is
+/// exercised by some scenario, and the topologies, which nothing at run time redeclares, are folded and hold
+/// still.</summary>
 public sealed class DeterminismLawTests {
     private const string Pin = "sha256-64/0123456789abcdef";
     private const int Ticks = 20;
@@ -24,6 +28,27 @@ public sealed class DeterminismLawTests {
             path2: "tests/Puck.World.Canaries/records-pools/fixture.world.json"
         );
     }
+    private static DeterminismManifest ShippedManifest() {
+        Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root));
+        Assert.True(condition: DeterminismManifest.TryLoad(error: out var error, manifest: out var manifest, path: Path.Combine(path1: root, path2: "tests/Puck.Determinism/determinism.json")), userMessage: error);
+
+        return manifest!;
+    }
+    private static DeterminismScenarioRecord RecordShipped(string name) {
+        var scenario = ShippedManifest().Scenarios.Single(predicate: scenario => (scenario.Name == name));
+
+        Assert.True(condition: DeterminismRecorder.TryRecord(error: out var error, record: out var record, scenario: scenario), userMessage: error);
+
+        return record!;
+    }
+    // A component's hash on every tick, read off the vector by its position in the stream's components line.
+    private static ulong[] Column(DeterminismScenarioRecord record, string component) {
+        var column = DeterminismStream.Components.ToList().IndexOf(item: component);
+
+        Assert.True(condition: (column >= 0), userMessage: component);
+
+        return [.. record.Ticks.Select(selector: vector => vector[column])];
+    }
     // The records-pools world for Ticks ticks, its pool request written before the given tick.
     private static DeterminismScenarioRecord Record(int requestTick) {
         Assert.True(
@@ -32,6 +57,7 @@ public sealed class DeterminismLawTests {
                 record: out var record,
                 scenario: new DeterminismScenario(
                     Cells: [new DeterminismCellWrite(Key: "$value", Row: "request", Tick: requestTick, Value: "1")],
+                    Exercises: ["Arena"],
                     Intents: [],
                     Name: "records-pools",
                     Seats: [],
@@ -149,11 +175,66 @@ public sealed class DeterminismLawTests {
         using var directory = new TemporaryDirectory(prefix: "puck-determinism-law-");
 
         directory.WriteText(name: "extra.json", text: """{ "schema": "puck.determinism.manifest.v1", "scenarios": [], "extra": 1 }""");
+        directory.WriteText(name: "exercises.json", text: """{ "schema": "puck.determinism.manifest.v1", "scenarios": [{ "name": "a", "world": "a.world.json", "ticks": 1, "seats": [], "intents": [], "cells": [], "exercises": ["authoritative"] }] }""");
         directory.WriteText(name: "version.json", text: """{ "schema": "puck.determinism.manifest.v2", "scenarios": [] }""");
 
         Assert.False(condition: DeterminismManifest.TryLoad(error: out error, manifest: out _, path: directory.PathOf(name: "extra.json")));
         Assert.Contains(actualString: error, expectedSubstring: "extra");
         Assert.False(condition: DeterminismManifest.TryLoad(error: out error, manifest: out _, path: directory.PathOf(name: "version.json")));
         Assert.Contains(actualString: error, expectedSubstring: "puck.determinism.manifest.v2");
+        // An aggregate moves on every tick whatever the systems do, so it is no component a scenario can exercise.
+        Assert.False(condition: DeterminismManifest.TryLoad(error: out error, manifest: out _, path: directory.PathOf(name: "exercises.json")));
+        Assert.Contains(actualString: error, expectedSubstring: "names 'authoritative', not a per-tick component");
     }
+    [MemberData(memberName: nameof(ShippedScenarios))]
+    [Theory]
+    public void EachShippedScenarioMovesEveryComponentItExercises(string name) {
+        var scenario = ShippedManifest().Scenarios.Single(predicate: scenario => (scenario.Name == name));
+        var record = RecordShipped(name: name);
+
+        Assert.Equal(expected: scenario.Ticks, actual: record.Ticks.Count);
+
+        foreach (var component in scenario.Exercises) {
+            Assert.True(condition: (Column(component: component, record: record).Distinct().Count() > 1), userMessage: $"{name} never moves {component}");
+        }
+    }
+    [Fact]
+    public void EveryPerTickComponentButTheDeclaredTopologiesIsExercisedBySomeShippedScenario() {
+        var exercised = ShippedManifest().Scenarios.SelectMany(selector: static scenario => scenario.Exercises).ToHashSet(comparer: StringComparer.Ordinal);
+        var expected = DeterminismStream.TickComponents.Where(predicate: static component => (component != WorldStateHashComponent.Topologies)).Select(selector: static component => component.ToString());
+
+        Assert.Equal(expected: expected.Order(), actual: exercised.Order());
+    }
+    [Fact]
+    public void AScenarioThatNeverMovesAComponentItExercisesIsRefusedByName() {
+        Assert.False(condition: DeterminismRecorder.TryRecord(
+            error: out var error,
+            record: out var record,
+            scenario: new DeterminismScenario(
+                Cells: [new DeterminismCellWrite(Key: "$value", Row: "request", Tick: 10, Value: "1")],
+                Exercises: ["Arena", "Search"],
+                Intents: [],
+                Name: "records-pools",
+                Seats: [],
+                Ticks: Ticks,
+                World: World()
+            )
+        ));
+        Assert.Null(@object: record);
+        Assert.Contains(actualString: error, expectedSubstring: "exercises Search, but its Search hash never changed in 20 ticks");
+    }
+    // Nothing at run time redeclares a lattice, so no scenario can move the topologies: what holds instead is that a
+    // world declaring one folds it (its hash is not a no-lattice world's) and that the fold holds still across a run.
+    [Fact]
+    public void TheDeclaredTopologiesAreFoldedAndHoldStillAcrossARun() {
+        var declared = Column(component: nameof(WorldStateHashComponent.Topologies), record: RecordShipped(name: "board-enforcement"));
+        var undeclared = Column(component: nameof(WorldStateHashComponent.Topologies), record: RecordShipped(name: "decisions"));
+
+        Assert.Single(collection: declared.Distinct());
+        Assert.Single(collection: undeclared.Distinct());
+        Assert.NotEqual(expected: undeclared[0], actual: declared[0]);
+    }
+    /// <summary>Gets the shipped manifest's scenario names.</summary>
+    /// <returns>One row per scenario.</returns>
+    public static TheoryData<string> ShippedScenarios() => [.. ShippedManifest().Scenarios.Select(selector: static scenario => scenario.Name)];
 }

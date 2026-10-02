@@ -10,7 +10,8 @@
                 {"body": 0, "from": 1, "through": 120, "channels": {"forward": "1"}},
                 {"body": 0, "from": 60, "through": 90, "channels": {"forward": "1", "turn": "0.5"}}
             ],
-            "cells": []
+            "cells": [],
+            "exercises": ["PopulationPose", "Flock"]
         },
         {
             "name": "traveller-kit",
@@ -22,7 +23,8 @@
                 {"body": 0, "from": 20, "through": 24, "channels": {"forward": "1", "jump": "1"}},
                 {"body": 0, "from": 40, "through": 41, "channels": {"forward": "1", "dash": "1"}}
             ],
-            "cells": []
+            "cells": [],
+            "exercises": ["BodyActionState"]
         },
         {
             "name": "records-pools",
@@ -32,7 +34,8 @@
             "intents": [],
             "cells": [
                 {"tick": 10, "row": "request", "key": "$value", "value": "1"}
-            ]
+            ],
+            "exercises": ["Arena", "RuleLatch"]
         },
         {
             "name": "tabletop-state",
@@ -42,7 +45,8 @@
             "intents": [],
             "cells": [
                 {"tick": 10, "row": "destination", "key": "scout", "value": "2"}
-            ]
+            ],
+            "exercises": ["Arena", "Declaration"]
         },
         {
             "name": "flow-conservation",
@@ -50,7 +54,8 @@
             "ticks": 240,
             "seats": [],
             "intents": [],
-            "cells": []
+            "cells": [],
+            "exercises": ["HostOwnedRows"]
         },
         {
             "name": "kart-lap",
@@ -60,7 +65,8 @@
             "intents": [
                 {"body": 0, "from": 1, "through": 90, "channels": {"forward": "1"}}
             ],
-            "cells": []
+            "cells": [],
+            "exercises": ["PopulationPose"]
         },
         {
             "name": "billiards",
@@ -68,7 +74,77 @@
             "ticks": 120,
             "seats": [0],
             "intents": [],
-            "cells": []
+            "cells": [],
+            "exercises": ["PopulationPose"]
+        },
+        {
+            "name": "navigation",
+            "world": "../Puck.World.Canaries/dive-medium/fixture.world.json",
+            "ticks": 40,
+            "seats": [0],
+            "intents": [],
+            "cells": [],
+            "exercises": ["Navigation"]
+        },
+        {
+            "name": "chess-search",
+            "world": "../../worlds/parlor/chess.puck",
+            "ticks": 200,
+            "seats": [0],
+            "intents": [],
+            "cells": [
+                {"tick": 1, "row": "aiSide", "key": "$value", "value": "0"}
+            ],
+            "exercises": ["Search"]
+        },
+        {
+            "name": "rule-groups",
+            "world": "../Puck.World.Canaries/rulepush-board/fixture.puck",
+            "ticks": 80,
+            "seats": [0],
+            "intents": [
+                {"body": 0, "from": 10, "through": 12, "channels": {"east": "1"}},
+                {"body": 0, "from": 30, "through": 32, "channels": {"south": "1"}},
+                {"body": 0, "from": 50, "through": 52, "channels": {"east": "1"}},
+                {"body": 0, "from": 70, "through": 72, "channels": {"north": "1"}}
+            ],
+            "cells": [],
+            "exercises": ["RuleGroups"]
+        },
+        {
+            "name": "decisions",
+            "world": "decisions.puck",
+            "ticks": 80,
+            "seats": [],
+            "intents": [],
+            "cells": [
+                {"tick": 40, "row": "level", "key": "$value", "value": "4"}
+            ],
+            "exercises": ["Decisions"]
+        },
+        {
+            "name": "board-enforcement",
+            "world": "board-enforcement.puck",
+            "ticks": 30,
+            "seats": [],
+            "intents": [],
+            "cells": [
+                {"tick": 10, "row": "move", "key": "from", "value": "1"},
+                {"tick": 10, "row": "move", "key": "to", "value": "3"},
+                {"tick": 20, "row": "move", "key": "to", "value": "2"}
+            ],
+            "exercises": ["BoardEnforcement"]
+        },
+        {
+            "name": "interactions",
+            "world": "../Puck.World.Tests/Fixtures/minimal-paddleball-host.world.json",
+            "ticks": 120,
+            "seats": [0],
+            "intents": [],
+            "cells": [
+                {"tick": 10, "row": "paddleballServeSerial", "key": "$value", "value": "1"}
+            ],
+            "exercises": ["InteractionLatch"]
         }
     ]
 }

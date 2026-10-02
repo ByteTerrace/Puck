@@ -21,15 +21,17 @@ internal sealed record DeterminismIntent(int Body, int From, int Through, IReadO
 /// <c>true</c> or <c>false</c> for a <c>Bool</c> one.</param>
 internal sealed record DeterminismCellWrite(int Tick, string Row, string Key, string Value);
 /// <summary>One scenario of a determinism manifest: a world booted in-process, the seats joined before the first tick,
-/// the intents held over tick ranges, the state cells written before given ticks, and the number of ticks
-/// recorded.</summary>
+/// the intents held over tick ranges, the state cells written before given ticks, the number of ticks recorded, and
+/// the per-tick components the scenario exists to move.</summary>
 /// <param name="Name">The scenario's name, unique in its manifest.</param>
 /// <param name="World">The full path of the world document or <c>.puck</c> source.</param>
 /// <param name="Ticks">The number of simulation ticks recorded.</param>
 /// <param name="Seats">The 0-based seat slots joined before the first tick, in order.</param>
 /// <param name="Intents">The held intents, in authored order.</param>
 /// <param name="Cells">The state cell writes, in authored order.</param>
-internal sealed record DeterminismScenario(string Name, string World, int Ticks, IReadOnlyList<int> Seats, IReadOnlyList<DeterminismIntent> Intents, IReadOnlyList<DeterminismCellWrite> Cells);
+/// <param name="Exercises">The per-tick components whose hash the scenario must change at least once, by their
+/// <see cref="DeterminismStream.TickComponents"/> names, in authored order.</param>
+internal sealed record DeterminismScenario(string Name, string World, int Ticks, IReadOnlyList<int> Seats, IReadOnlyList<DeterminismIntent> Intents, IReadOnlyList<DeterminismCellWrite> Cells, IReadOnlyList<string> Exercises);
 /// <summary>
 /// A determinism manifest (<c>puck.determinism.manifest.v1</c>): the scenarios <c>puck determinism record</c> boots and
 /// records. Paths resolve against the manifest's own directory. The manifest's pin, a hash of its bytes, is written into
@@ -110,7 +112,7 @@ internal sealed record DeterminismManifest(AssetContentHash Pin, IReadOnlyList<D
     }
     private static DeterminismScenario ReadScenario(JsonElement element, string context, string directory) {
         CliStrictJson.RequireObject(context: context, element: element, refusal: Refuse);
-        CliStrictJson.RequireOnlyMembers(allowed: ["cells", "intents", "name", "seats", "ticks", "world"], context: context, element: element, refusal: Refuse, unknownMemberDetail: "a scenario holds name, world, ticks, seats, intents and cells");
+        CliStrictJson.RequireOnlyMembers(allowed: ["cells", "exercises", "intents", "name", "seats", "ticks", "world"], context: context, element: element, refusal: Refuse, unknownMemberDetail: "a scenario holds name, world, ticks, seats, intents, cells and exercises");
 
         var name = CliStrictJson.ReadRequiredString(context: context, element: element, member: "name", refusal: Refuse);
         var world = CliStrictJson.ReadRequiredString(context: context, element: element, member: "world", refusal: Refuse);
@@ -168,8 +170,30 @@ internal sealed record DeterminismManifest(AssetContentHash Pin, IReadOnlyList<D
             cells.Add(item: ReadCell(context: $"{context}.cells[{index++}]", element: cell, ticks: ticks));
         }
 
+        var exercises = new List<string>();
+
+        foreach (var exercised in CliStrictJson.ReadRequiredArray(context: context, element: element, member: "exercises", refusal: Refuse).EnumerateArray()) {
+            var component = ((exercised.ValueKind == JsonValueKind.String)
+                ? exercised.GetString()!
+                : string.Empty);
+
+            if (!DeterminismStream.TickComponents.Any(predicate: tickComponent => (tickComponent.ToString() == component))) {
+                throw Refuse(message: $"{context}.exercises names '{component}', not a per-tick component ({string.Join(separator: ", ", values: DeterminismStream.TickComponents)})");
+            }
+            if (exercises.Contains(item: component)) {
+                throw Refuse(message: $"{context}.exercises names '{component}' twice");
+            }
+
+            exercises.Add(item: component);
+        }
+
+        if (exercises.Count == 0) {
+            throw Refuse(message: $"{context}.exercises names no component; a scenario exists to move at least one");
+        }
+
         return new DeterminismScenario(
             Cells: cells,
+            Exercises: exercises,
             Intents: intents,
             Name: name,
             Seats: seats,

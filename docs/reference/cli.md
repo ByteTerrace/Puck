@@ -1535,17 +1535,23 @@ scenario's state cells and submitting its held intents before the ticks they
 name. The shipped manifest is
 [tests/Puck.Determinism/determinism.json](../../tests/Puck.Determinism/determinism.json).
 It covers body dynamics and action state, flocks, rule latches and state
-writes, flow conservation, a kart lap and a billiards host.
+writes, flow conservation, a kart lap, a billiards host, navigation, the chess
+AI's search, rule groups, decisions, board enforcement and interactions. Two
+small worlds beside it, `decisions.puck` and `board-enforcement.puck`, exist
+for the scenarios no shipped world reaches.
 
 A manifest holds `schema` and `scenarios`. Each scenario holds `name` (ASCII
 letters, digits and `-`, unique), `world` (a document or `.puck` source,
 forward-slashed and relative to the manifest), `ticks` (1 to 100000), `seats`
-(0-based seat slots joined before the first tick), `intents` and `cells`. An
-intent holds `body`, `from`, `through` (ticks counted from one) and `channels`,
-which maps a declared channel name to a decimal string parsed exactly as
-`FixedQ4816`. A cell holds `tick`, `row`, `key` and `value`, applied through the
-mutation `world.state.cell.set` submits. Any other member, a repeated member or
-another schema is refused by name.
+(0-based seat slots joined before the first tick), `intents`, `cells` and
+`exercises`. An intent holds `body`, `from`, `through` (ticks counted from one)
+and `channels`, which maps a declared channel name to a decimal string parsed
+exactly as `FixedQ4816`. A cell holds `tick`, `row`, `key` and `value`, applied through the
+mutation `world.state.cell.set` submits. `exercises` names the per-tick
+components the scenario exists to move, by their names on the stream's
+`components` line, aggregates excluded. `record` refuses a scenario whose run
+leaves any of them unchanged, so a scenario cannot go vacuous unnoticed. Any
+other member, a repeated member or another schema is refused by name.
 
 The stream (`puck.determinism.stream.v1`) is text with LF line breaks and
 nothing that depends on the host:
@@ -1579,9 +1585,14 @@ divergences it found. It refuses rather than compares two streams of different
 versions, manifests (by pin), scenario lists or tick counts.
 
 Exit codes: `record` exits 0 when it has written the stream and 2 when the
-manifest or a scenario cannot be read or run. `compare` exits 0 with no
+manifest or a scenario cannot be read or run, or a scenario moves a component it
+exercises nowhere. `compare` exits 0 with no
 divergence, 1 on a divergence and 2 on a refusal. The shipped manifest records
-7 scenarios, 930 ticks and about 15,000 hashes in a few seconds. CI records it
+13 scenarios, 1,480 ticks and about 24,000 hashes in under ten seconds. Every
+per-tick component but the topologies is exercised by some scenario. The
+topologies are declaration that nothing at run time changes, so no scenario can
+move them; a law holds instead that a world declaring one folds it and that the
+fold holds still. CI records it
 on Windows and on Linux and compares the two streams
 ([CI](../development/ci.md)).
 

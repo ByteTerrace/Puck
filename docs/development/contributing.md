@@ -208,8 +208,11 @@ difference, such as a writer whose line breaks follow the operating system, is
 caught at the tick and system or the document hash it moves. When a change adds
 a system or a document hash the manifest's worlds do not reach, add a scenario:
 a small world, a few hundred ticks, and seats, intents or cell writes that make
-the system run within them. The manifest covers no portal transfer, since that
-needs more than one world instance.
+the system run within them. Name the components it moves in its `exercises`;
+`record` refuses a scenario that leaves one unchanged, and a law fails when a
+per-tick component other than the declared topologies is exercised by no
+scenario. The manifest covers no portal transfer, since that needs more than one
+world instance.
 
 For changes under `src/Puck.Maths`, also run the maths law suite. A plain
 `dotnet test` runs the default tier (Smoke and Default), the everyday gate;

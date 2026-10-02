@@ -216,8 +216,8 @@ internal static class DeterminismRecorder {
     /// <summary>Records one scenario.</summary>
     /// <param name="scenario">The scenario.</param>
     /// <param name="record">The record, or <see langword="null"/> when the scenario could not run.</param>
-    /// <param name="error">Why the scenario could not run, or empty.</param>
-    /// <returns><see langword="true"/> when every tick was recorded.</returns>
+    /// <param name="error">Why the scenario could not run or moved a component it exercises nowhere, or empty.</param>
+    /// <returns><see langword="true"/> when every tick was recorded and every exercised component changed.</returns>
     public static bool TryRecord(DeterminismScenario scenario, out DeterminismScenarioRecord? record, out string error) {
         record = null;
 
@@ -325,11 +325,21 @@ internal static class DeterminismRecorder {
             ticks.Add(item: Vector(server: server));
         }
 
-        record = new DeterminismScenarioRecord(
+        var recorded = new DeterminismScenarioRecord(
             Documents: documents,
             Name: scenario.Name,
             Ticks: ticks
         );
+
+        // A scenario that never moves what it exists to move compares equal on every host whatever that system does,
+        // so it is refused here rather than counted as coverage.
+        if (scenario.Exercises.FirstOrDefault(predicate: component => (recorded.Changes(component: component) == 0)) is { } still) {
+            error = $"{scenario.Name} exercises {still}, but its {still} hash never changed in {scenario.Ticks} ticks; drive the scenario so the system runs, or stop naming it";
+
+            return false;
+        }
+
+        record = recorded;
 
         return true;
     }

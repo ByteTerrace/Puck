@@ -15,7 +15,33 @@ internal sealed record DeterminismDocumentHash(string Name, string Value);
 /// <param name="Name">The scenario's name.</param>
 /// <param name="Documents">The document-level hashes, in recorded order.</param>
 /// <param name="Ticks">The per-tick hash vectors, the first for tick 1.</param>
-internal sealed record DeterminismScenarioRecord(string Name, IReadOnlyList<DeterminismDocumentHash> Documents, IReadOnlyList<ulong[]> Ticks);
+internal sealed record DeterminismScenarioRecord(string Name, IReadOnlyList<DeterminismDocumentHash> Documents, IReadOnlyList<ulong[]> Ticks) {
+    /// <summary>Returns how many ticks changed a component's hash from the tick before.</summary>
+    /// <param name="component">The component's name, one of <see cref="DeterminismStream.Components"/>.</param>
+    /// <returns>The number of changes, zero for a component the run never moved.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="component"/> names no component.</exception>
+    public int Changes(string component) {
+        var column = -1;
+
+        for (var index = 0; (index < DeterminismStream.Components.Count); index++) {
+            if (DeterminismStream.Components[index] == component) {
+                column = index;
+            }
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(value: column, paramName: nameof(component));
+
+        var changes = 0;
+
+        for (var tick = 1; (tick < Ticks.Count); tick++) {
+            if (Ticks[tick][column] != Ticks[(tick - 1)][column]) {
+                changes++;
+            }
+        }
+
+        return changes;
+    }
+}
 /// <summary>
 /// A determinism stream (<c>puck.determinism.stream.v1</c>): what <c>puck determinism record</c> measured for every
 /// scenario of one manifest, in the one text spelling this type renders and parses. A line is one fact. The header
