@@ -97,7 +97,7 @@ public sealed class CrossingHandoffTokenLawTests {
         );
         _ = world.Cross();
 
-        var arrival = Assert.IsType<WorldCrossingRecord.Arrival>(@object: Assert.Single(collection: world.DestinationLog.Read(defaults: world.Destination.Server.Definition.PlayerDefaults)).Record).Value;
+        var arrival = Assert.IsType<WorldCrossingRecord.Arrival>(@object: Assert.Single(collection: world.DestinationLog.Read()).Record).Value;
 
         using var restarted = world.Restart(
             destinationDied: true,
@@ -150,7 +150,7 @@ public sealed class CrossingHandoffTokenLawTests {
 
         _ = world.Cross();
 
-        var arrival = Assert.IsType<WorldCrossingRecord.Arrival>(@object: Assert.Single(collection: world.DestinationLog.Read(defaults: world.Destination.Server.Definition.PlayerDefaults)).Record).Value;
+        var arrival = Assert.IsType<WorldCrossingRecord.Arrival>(@object: Assert.Single(collection: world.DestinationLog.Read()).Record).Value;
         var departedEpoch = arrival.Request.Members[0].Mobility!.Value;
 
         using var restarted = world.Restart(

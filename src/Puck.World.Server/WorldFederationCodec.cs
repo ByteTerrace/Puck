@@ -143,44 +143,14 @@ public static partial class WorldFederationCodec {
     /// both dialects off the first eight bytes. A dialer opens every federation connection by writing it through
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames.</summary>
-    public const ulong WireKey = 0x364445464B435550UL; // "PUCKFED6", commits and routes carry the traveler's arrival turn.
+    public const ulong WireKey = 0x364445464B435550UL; // "PUCKFED6", commits and routes carry the traveler's arrival turn, and every traveler identity crosses as its projection alone.
     /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
     /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
     public const int DocumentHeaderBytes = 25;
 
     private static bool Finish(ref WireReader reader, out WireFailure failure) => reader.TryFinish(failure: out failure);
-    private static WorldTransferCommitMember ReadCommitMember(ref WireReader reader, WorldPlayerDefaults defaults, int ordinal) {
-        var profileBytes = reader.ReadBlock(
-            field: $"commit traveler {(ordinal + 1)} identity document",
-            maxBytes: WireLimits.MaxDocumentBytes
-        );
-        WorldIdentity? profile = null;
-
-        if (
-            !reader.Failed &&
-            (profileBytes.Length > 0)
-        ) {
-            if (
-                TryDeserializeDefinition(
-                bytes: profileBytes,
-                definition: out var profileDocument,
-                failure: out _,
-                field: $"commit traveler {(ordinal + 1)} identity document"
-            ) &&
-                (profileDocument is not null)
-            ) {
-                profile = new WorldIdentity(
-                    defaults: defaults,
-                    document: profileDocument
-                );
-            } else {
-                reader.Fail(
-                    detail: $"commit traveler {(ordinal + 1)} identity document did not parse",
-                    refusal: WireRefusal.PayloadMalformed
-                );
-            }
-        }
-
+    private static WorldTransferCommitMember ReadCommitMember(ref WireReader reader, int ordinal) {
+        var profile = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
         var mapped = reader.ReadBoolean();
         var program = reader.ReadString(field: "commit body motion program");
         var position = reader.ReadFixedVector();
@@ -367,7 +337,7 @@ public static partial class WorldFederationCodec {
             return false;
         }
     }
-    private static bool TryReadReservationMember(ref WireReader reader, int ordinal, WorldPlayerDefaults defaults, out WorldTransferReservationMember member, out WireFailure failure) {
+    private static bool TryReadReservationMember(ref WireReader reader, int ordinal, out WorldTransferReservationMember member, out WireFailure failure) {
         member = default;
 
         var preferred = reader.ReadInt32();
@@ -395,25 +365,7 @@ public static partial class WorldFederationCodec {
         var source = WorldWireCodec.ReadIntentSource(reader: ref reader);
         var bodyColor = reader.ReadFiniteVector(field: $"traveler {(ordinal + 1)} body color");
         var catalogRig = reader.ReadByte();
-        WorldIdentity? identity = null;
-
-        if (reader.ReadBoolean()) {
-            var projection = new WorldIdentityProjection(
-                Id: reader.ReadRequiredString(field: $"traveler {(ordinal + 1)} identity id"),
-                Name: reader.ReadString(field: $"traveler {(ordinal + 1)} identity name"),
-                ColorHex: reader.ReadString(field: $"traveler {(ordinal + 1)} identity color"),
-                MoveSpeed: reader.ReadNullableFixed(),
-                TurnSpeed: reader.ReadNullableFixed(),
-                Records: WorldIdentityRecordWire.Read(reader: ref reader)
-            );
-
-            if (!reader.Failed) {
-                identity = WorldIdentity.FromProjection(
-                    defaults: defaults,
-                    projection: in projection
-                );
-            }
-        }
+        var identity = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
 
         if (reader.Failed) {
             failure = reader.Failure;
@@ -435,9 +387,10 @@ public static partial class WorldFederationCodec {
         return true;
     }
     private static void WriteCommitMember(WireWriter writer, WorldTransferCommitMember member) {
-        writer.WriteBlock(value: ((member.Profile?.Document is { } profileDocument)
-            ? WorldDefinitionSerialization.Serialize(definition: profileDocument)
-            : []));
+        WorldIdentityProjectionWire.WriteOptional(
+            projection: member.Profile,
+            writer: writer
+        );
         writer.WriteBoolean(value: member.HasMappedArrival);
         writer.WriteString(value: member.BodyMotionProgramName);
         writer.WriteFixedVector(value: member.Position);
@@ -653,8 +606,8 @@ public static partial class WorldFederationCodec {
 
         return writer.ToArray();
     }
-    /// <summary>Encodes a reservation including each traveler's identity projection — appearance and motion-envelope
-    /// claims alone, never the owned-world document behind them (see <see cref="WorldIdentityProjection"/>).</summary>
+    /// <summary>Encodes a reservation including each traveler's identity projection
+    /// (<see cref="WorldIdentityProjectionWire"/>), never the owned-world document behind it.</summary>
     /// <param name="request">The reservation request.</param>
     /// <returns>The encoded leaf.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
@@ -698,18 +651,10 @@ public static partial class WorldFederationCodec {
             );
             writer.WriteVector(value: member.BodyColor);
             writer.WriteByte(value: member.CatalogRig);
-            writer.WriteBoolean(value: (member.Identity is not null));
-
-            if (member.Identity is { } identity) {
-                var projected = identity.Project();
-
-                writer.WriteString(value: projected.Id);
-                writer.WriteString(value: projected.Name);
-                writer.WriteString(value: projected.ColorHex);
-                writer.WriteNullableFixed(value: projected.MoveSpeed);
-                writer.WriteNullableFixed(value: projected.TurnSpeed);
-                WorldIdentityRecordWire.Write(writer: writer, records: projected.Records);
-            }
+            WorldIdentityProjectionWire.WriteOptional(
+                projection: member.Identity,
+                writer: writer
+            );
         }
 
         return writer.ToArray();
@@ -992,11 +937,10 @@ public static partial class WorldFederationCodec {
     /// <param name="body">The leaf bytes.</param>
     /// <param name="sourceAuthority">The claimed source namespace.</param>
     /// <param name="transferId">The transfer id.</param>
-    /// <param name="defaults">The destination's own player defaults, applied to each carried identity document.</param>
     /// <param name="members">The landing cohort.</param>
     /// <param name="failure">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
-    public static bool TryDecodeCommit(ReadOnlySpan<byte> body, WorldPlayerDefaults defaults, out string sourceAuthority, out ulong transferId, out WorldTransferCommitMember[] members, out WireFailure failure) {
+    public static bool TryDecodeCommit(ReadOnlySpan<byte> body, out string sourceAuthority, out ulong transferId, out WorldTransferCommitMember[] members, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
         sourceAuthority = reader.ReadRequiredString(field: "commit source authority");
@@ -1020,7 +964,6 @@ public static partial class WorldFederationCodec {
 
         for (var index = 0; (index < count); index++) {
             members[index] = ReadCommitMember(
-                defaults: defaults,
                 ordinal: index,
                 reader: ref reader
             );
@@ -1211,11 +1154,10 @@ public static partial class WorldFederationCodec {
     }
     /// <summary>Decodes an untrusted reservation, rebuilding identities through the canonical document codec.</summary>
     /// <param name="body">The leaf bytes.</param>
-    /// <param name="defaults">The destination's player defaults, applied to each rebuilt identity.</param>
     /// <param name="request">The reservation on success.</param>
     /// <param name="failure">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
-    public static bool TryDecodeReservation(ReadOnlySpan<byte> body, WorldPlayerDefaults defaults, out WorldTransferReservationRequest? request, out WireFailure failure) {
+    public static bool TryDecodeReservation(ReadOnlySpan<byte> body, out WorldTransferReservationRequest? request, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
         request = null;
@@ -1251,7 +1193,6 @@ public static partial class WorldFederationCodec {
             if (!TryReadReservationMember(
                 reader: ref reader,
                 ordinal: index,
-                defaults: defaults,
                 member: out members[index],
                 failure: out failure
             )) {

@@ -16,20 +16,17 @@ public static partial class WorldAuthorityCheckpointCodec {
         TransferId: reader.ReadUInt64()
     );
     private static void WriteCommitMember(WireWriter writer, WorldTransferCommitMember member) {
-        WriteIdentityOptional(
-            writer: writer,
-            identity: member.Profile
+        WorldIdentityProjectionWire.WriteOptional(
+            projection: member.Profile,
+            writer: writer
         );
         WorldWireLeaves.WriteCommitMemberMotion(
             member: member,
             writer: writer
         );
     }
-    private static WorldTransferCommitMember ReadCommitMember(ref WireReader reader, WorldPlayerDefaults defaults) {
-        var profile = ReadIdentityOptional(
-            defaults: defaults,
-            reader: ref reader
-        );
+    private static WorldTransferCommitMember ReadCommitMember(ref WireReader reader) {
+        var profile = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
 
         return (WorldWireLeaves.ReadCommitMemberMotion(reader: ref reader) with { Profile = profile });
     }
@@ -39,9 +36,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             principal: member.Principal
         );
         writer.WriteInt32(value: member.PreferredSlot);
-        WriteIdentityOptional(
-            writer: writer,
-            identity: member.Identity
+        WorldIdentityProjectionWire.WriteOptional(
+            projection: member.Identity,
+            writer: writer
         );
         WriteIntentSource(
             writer: writer,
@@ -54,13 +51,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeValue: WorldWireLeaves.WriteMobility
         );
     }
-    private static WorldTransferReservationMember ReadReservationMember(ref WireReader reader, WorldPlayerDefaults defaults) {
+    private static WorldTransferReservationMember ReadReservationMember(ref WireReader reader) {
         var principal = WorldWireCodec.ReadPrincipal(reader: ref reader);
         var preferredSlot = reader.ReadInt32();
-        var identity = ReadIdentityOptional(
-            defaults: defaults,
-            reader: ref reader
-        );
+        var identity = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
         var source = WorldWireCodec.ReadIntentSource(reader: ref reader);
         var bodyColor = reader.ReadFiniteVector(field: "reservation member body color");
         var catalogRig = reader.ReadByte();
@@ -96,7 +90,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeItem: WriteReservationMember
         );
     }
-    private static WorldTransferReservationRequest ReadReservationRequest(ref WireReader reader, WorldPlayerDefaults defaults) {
+    private static WorldTransferReservationRequest ReadReservationRequest(ref WireReader reader) {
         var transferId = reader.ReadUInt64();
         var sourceAuthority = reader.ReadString(
             field: "reservation source authority",
@@ -117,7 +111,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         var members = reader.ReadArray(
             field: "reservation members",
             readItem: (ref WireReader r) => ReadReservationMember(
-                defaults: defaults,
                 reader: ref r
             ),
             maximum: MaxCollectionCount
@@ -156,10 +149,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeValue: WriteAdmissionVerdict
         );
     }
-    private static WorldTransferLeaseCheckpoint ReadLease(ref WireReader reader, WorldPlayerDefaults defaults) {
+    private static WorldTransferLeaseCheckpoint ReadLease(ref WireReader reader) {
         var key = ReadTransferKey(reader: ref reader);
         var request = ReadReservationRequest(
-            defaults: defaults,
             reader: ref reader
         );
         var deadlineTick = reader.ReadUInt64();
@@ -203,12 +195,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeItem: WorldWireLeaves.WriteEntityAddress
         );
     }
-    private static WorldTransferCommittedCheckpoint ReadCommitted(ref WireReader reader, WorldPlayerDefaults defaults) {
+    private static WorldTransferCommittedCheckpoint ReadCommitted(ref WireReader reader) {
         var key = ReadTransferKey(reader: ref reader);
         var members = reader.ReadArray(
             field: "committed members",
             readItem: (ref WireReader r) => ReadCommitMember(
-                defaults: defaults,
                 reader: ref r
             ),
             maximum: MaxCollectionCount
@@ -295,12 +286,11 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodeEscrow(byte[] bytes, WorldPlayerDefaults defaults, out string reason, out WorldTransferEscrowCheckpoint section) {
+    private static bool TryDecodeEscrow(byte[] bytes, out string reason, out WorldTransferEscrowCheckpoint section) {
         var reader = new WireReader(bytes: bytes);
         var leases = reader.ReadArray(
             field: "escrow leases",
             readItem: (ref WireReader r) => ReadLease(
-                defaults: defaults,
                 reader: ref r
             ),
             maximum: MaxCollectionCount
@@ -308,7 +298,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         var committed = reader.ReadArray(
             field: "escrow committed",
             readItem: (ref WireReader r) => ReadCommitted(
-                defaults: defaults,
                 reader: ref r
             ),
             maximum: MaxCollectionCount

@@ -1608,8 +1608,15 @@ existing shapes. Both arms hand back a document whose `state.<row>[.<key>]`
 values are resolved, so a delivered definition is indistinguishable from a
 file-loaded one and an arriving seat's binding recompose cannot fault on an
 unresolved identifier; a projection leaf that still names a state cell is
-refused as `PayloadMalformed`. The reservation leaf carries a
-`WorldIdentityProjection` instead of the traveler's owned document.
+refused as `PayloadMalformed`. A traveler's identity crosses as its
+`WorldIdentityProjection` alone (id, name, color, rates, selected records,
+facts), never its owned document: `WorldIdentityProjectionWire` is the one wire
+form the reservation and commit leaves, the crossing log, the arrival tape and
+the checkpoint all write, and a colocated crossing carries the same projection.
+The destination lands `WorldIdentity.FromProjection`; a local seat coming home
+rebinds to its owned identity, which adopts the carried facts and records
+(`WorldOwnedWorlds.TryAdopt`), and `WorldOwnedWorlds.TrySave` refuses by name
+an identity its catalog does not own.
 
 An ordinary `Observe` stream attaches with the world's authored
 `bodies.disclosure` and no observer body index. A narrowed policy
@@ -1964,21 +1971,22 @@ key enumeration, and unchanged-value checks use its document-lane ordinal;
 installing another catalog refreshes the handle before the lane is read again.
 
 `setIdentityFact` (`WorldIdentityFactEffect`) resolves its body like `pose` does,
-refuses by name a body driving under no owned identity (`IdentityUnbound`—
+refuses by name a body driving under no identity (`IdentityUnbound`—
 an anonymous seat's fact is refused, never minted), a document declaring no
 lane, a faulted expression, or a lane write the row refuses
 (`IdentityFactUnwritable`, carrying the write's own reason; the lane cell is
 minted only when the lane holds none under the key), writes the lane cell
 when the value differs (`Applied`; an unchanged value is `Skipped` and costs a
-quiet tick what an unchanged ordinary write costs), and persists the fact on
-the identity's own row through `WorldOwnedWorlds.TrySetFact`—the one door
-the console's `identity.fact.set` shares—which saves the identity only when
-its row changed. Inside a transaction the persist waits on the commit: a
+quiet tick what an unchanged ordinary write costs), and writes the fact on
+the identity's row through `WorldOwnedWorlds.TrySetFact`—the one door
+the console's `identity.fact.set` shares—which saves an identity this catalog
+owns only when its row changed, and keeps a visitor's fact on the travelling
+row of the projection it arrived as, never saving the visitor here. Inside a transaction the persist waits on the commit: a
 preflight scope stacks its pending facts beside the frame's own journal marks
 and a discarded scope drops them. The identity's `FactsRevision` moves on
 every row change, so a console write reaches the lane on the next tick without
-a second mirror path; the replay tape pins an identity's projection and not its
-facts, so a re-drive of a tape recorded with a non-empty lane diverges at the
+a second mirror path; the replay tape pins a seat identity's name and rates and
+not its facts, so a re-drive of a tape recorded with a non-empty lane diverges at the
 lane the way it does at a durable identity slot.
 
 ## Owned worlds and storage

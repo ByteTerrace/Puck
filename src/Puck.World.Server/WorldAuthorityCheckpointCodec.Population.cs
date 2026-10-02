@@ -104,9 +104,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             residue: entry.Residue
         );
-        writer.WriteOptional(
-            value: entry.Profile,
-            writeValue: WriteIdentityProjection
+        WorldIdentityProjectionWire.WriteOptional(
+            projection: entry.Profile,
+            writer: writer
         );
         writer.WriteOptional(
             value: entry.Navigation,
@@ -221,9 +221,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var yaw = reader.ReadFixed();
         var dynamicState = ReadTransferState(reader: ref reader);
         var residue = ReadResidue(reader: ref reader);
-        var profile = reader.ReadOptional(
-            readValue: static (ref WireReader r) => ReadIdentityProjection(reader: ref r)
-        );
+        var profile = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
         var navigation = reader.ReadOptional(
             readValue: static (ref WireReader r) => new WorldPopulationNavigationCheckpoint(
                 ActiveProducerDomainIndex: r.ReadInt32(),

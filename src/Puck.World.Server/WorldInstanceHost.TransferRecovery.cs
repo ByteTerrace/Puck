@@ -152,7 +152,12 @@ public sealed partial class WorldInstanceHost {
                     Mobility: member.Mobility,
                     Peer: member.Peer,
                     Position: member.Position,
-                    Profile: pending.CommitMembers[ordinal].Profile,
+                    Profile: ((pending.CommitMembers[ordinal].Profile is { } projection)
+                        ? WorldIdentity.FromProjection(
+                            defaults: row.Server.Definition.PlayerDefaults,
+                            projection: in projection
+                        )
+                        : null),
                     FollowedSeatMask: member.FollowedSeatMask,
                     SourceGrants: [.. member.SourceGrants],
                     SourcePrincipal: Principal.Console,

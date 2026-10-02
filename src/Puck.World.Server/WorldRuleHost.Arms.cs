@@ -560,10 +560,12 @@ public sealed partial class WorldRuleHost {
                 refusal: out refusal
             );
         }
-        if (body.Profile is not { Document: not null } identity) {
+        // An owned identity persists the fact through its catalog; a visitor keeps it on the travelling row its next
+        // crossing carries on.
+        if (body.Profile is not { } identity) {
             return Refuse(
                 code: WorldRuleEffectRefusal.IdentityUnbound,
-                reason: $"body:{bodyIndex} drives under no owned identity — a fact is refused, never minted for an anonymous seat",
+                reason: $"body:{bodyIndex} drives under no identity — a fact is refused, never minted for an anonymous seat",
                 refusal: out refusal
             );
         }

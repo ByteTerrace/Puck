@@ -334,6 +334,56 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
             action: identity => Assert.Null(@object: identity.Facts)
         );
     }
+    // THE LAW: a visitor's fact lands on its travelling row. A seat driving under an identity that arrived as a
+    // projection has no owned document here, yet it is no anonymous seat: the effect writes the lane and the visitor's
+    // travelling row, which its next crossing carries on, and nothing reaches this world's catalog. The red leg refuses
+    // the visitor as unbound, so a level could never award the visitor a fact.
+    [Fact]
+    public void AVisitorsFactLandsOnItsTravellingRowAndNeverOnThisCatalog() {
+        using var fixture = Fixtures.FreshServer(definition: Document(rules: [WriteRule()]));
+        var visitor = WorldIdentity.FromProjection(
+            defaults: fixture.Server.Definition.PlayerDefaults,
+            projection: new WorldIdentityProjection(
+                Id: "privacy-visitor",
+                Name: "Visitor",
+                ColorHex: "#123456",
+                MoveSpeed: null,
+                TurnSpeed: null
+            )
+        );
+
+        Join(
+            fixture: fixture,
+            identity: null
+        );
+        fixture.Server.Population.SetSeatProfile(
+            profile: visitor,
+            slot: 0
+        );
+        fixture.Step();
+        fixture.Step();
+
+        Assert.Empty(collection: fixture.Server.RuleRuntimeDiagnostics());
+        Assert.Equal(
+            expected: 1L,
+            actual: Lane(
+                body: 0,
+                fact: Fact,
+                fixture: fixture
+            )
+        );
+        Assert.Equal(
+            expected: 1L,
+            actual: Assert.Single(collection: Assert.IsType<WorldStateRow>(@object: visitor.Facts).Cells!).Value.AsInt
+        );
+        Assert.DoesNotContain(
+            collection: Directory.GetFiles(path: fixture.Server.Profiles.FilePath),
+            filter: static path => File.ReadAllText(path: path).Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "privacy-visitor"
+            )
+        );
+    }
     [Fact]
     public void UnchangedWriteCostsAnOrdinaryWrite_ChangedWriteIsBoundedByThePersistedDocument() {
         using var steady = Fixtures.FreshServer(definition: Document(rules: [WriteRule()]));

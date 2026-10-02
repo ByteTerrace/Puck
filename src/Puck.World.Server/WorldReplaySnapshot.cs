@@ -302,7 +302,7 @@ public sealed partial class WorldReplaySnapshot {
     // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
     // Shape 9 carries the recorded authority and its document paths, the companion tapes of a set, each departure and
     // its rollback where the authority decided it, settlements by target authority, every arrival a commit decided
-    // with its outcome, and federated input. Refuse earlier tapes at intake instead of reporting their old shape as a
+    // with its outcome and each traveler as its identity projection alone, and federated input. Refuse earlier tapes at intake instead of reporting their old shape as a
     // simulation divergence.
     private const uint ShapeToken = 9u;
 
@@ -1020,7 +1020,6 @@ public sealed partial class WorldReplaySnapshot {
         if (!WorldAuthorityCheckpointCodec.TryDecodeCrossingArrival(
             arrival: out var arrival,
             bytes: encoded,
-            defaults: WorldPlayerDefaults.Default,
             reason: out var reason
         )) {
             reader.Fail(
@@ -1077,7 +1076,6 @@ public sealed partial class WorldReplaySnapshot {
         if (!WorldAuthorityCheckpointCodec.TryDecodeCrossingArrival(
             arrival: out var decoded,
             bytes: arrival.Encoded,
-            defaults: server.Definition.PlayerDefaults,
             reason: out var decodeReason
         )) {
             throw ReplayRefusal.ArrivalRefused.Raise(message: $"transfer {arrival.TransferId} from '{arrival.SourceAuthority}' does not decode against the recorded world — {decodeReason}");

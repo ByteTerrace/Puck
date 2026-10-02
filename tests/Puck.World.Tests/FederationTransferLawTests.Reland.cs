@@ -54,7 +54,7 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.True(condition: recovery.Server.ApplySession(request: join).Accepted);
         Assert.False(condition: recovery.Server.ExecuteAuthorityOperation(operation: () => recovery.Server.TransferEscrow.TryReland(
-            arrival: DecodeArrival(arrival: arrival, defaults: recovery.Server.Definition.PlayerDefaults),
+            arrival: DecodeArrival(arrival: arrival),
             recorded: null, reason: out reason)));
         Assert.Contains(actualString: reason, expectedSubstring: "occupied");
         Assert.Equal(0, recovery.Server.Population.Generation(index: 0));

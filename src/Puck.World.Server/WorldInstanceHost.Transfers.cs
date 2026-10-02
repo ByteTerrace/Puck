@@ -295,7 +295,7 @@ public sealed partial class WorldInstanceHost {
                     authority: source.Server.AuthorityIdentity
                 );
 
-                return (Identity: body?.Profile, Source: (body?.Source ?? IntentSource.Idle), BodyColor: source.Server.Population.BodyColor(index: sourceSlot), CatalogRig: source.Server.Population.CatalogRig(index: sourceSlot), Mobility: mobility);
+                return (Identity: body?.Profile?.Project(), Source: (body?.Source ?? IntentSource.Idle), BodyColor: source.Server.Population.BodyColor(index: sourceSlot), CatalogRig: source.Server.Population.CatalogRig(index: sourceSlot), Mobility: mobility);
             });
 
             reservationMembers[reservationIndex] = new WorldTransferReservationMember(
@@ -646,7 +646,7 @@ public sealed partial class WorldInstanceHost {
             }
 
             commitMembers.Add(item: new WorldTransferCommitMember(
-                Profile: profile,
+                Profile: profile?.Project(),
                 HasMappedArrival: (transfer.Arrival == WorldPortalArrival.Mapped),
                 BodyMotionProgramName: dynamicState.BodyMotionProgramName,
                 Position: arrivalPosition,

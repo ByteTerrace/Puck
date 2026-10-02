@@ -328,11 +328,11 @@ public sealed partial class FederationTransferLawTests {
     [Fact]
     public void CommitWire_PreservesTheSelectedMotionProgramAndTheCommitTimeProfile() {
         using var fixture = Fixtures.FreshServer();
-        // The commit-time profile is the discriminating field: a colocated crossing hands this object straight to the
-        // destination, so a codec that drops it gives federated and colocated crossings different semantics.
+        // The commit-time projection is the discriminating field: a colocated crossing lands the same projection, so a
+        // codec that drops or alters it gives federated and colocated crossings different semantics.
         var profile = fixture.Server.Profiles.BootProfile;
         var expected = new WorldTransferCommitMember(
-            Profile: profile,
+            Profile: profile.Project(),
             HasMappedArrival: true,
             BodyMotionProgramName: "free",
             Position: new FixedVector3(
@@ -383,11 +383,10 @@ public sealed partial class FederationTransferLawTests {
         Assert.True(
             condition: WorldFederationCodec.TryDecodeCommit(
                 body: encoded,
-                defaults: fixture.Server.Definition.PlayerDefaults,
-                sourceAuthority: out var sourceAuthority,
-                transferId: out var transferId,
+                failure: out var failure,
                 members: out var members,
-                failure: out var failure
+                sourceAuthority: out var sourceAuthority,
+                transferId: out var transferId
             ),
             userMessage: failure.ToString()
         );
@@ -413,6 +412,10 @@ public sealed partial class FederationTransferLawTests {
             expected: profile.Name,
             actual: member.Profile?.Name
         );
+        Assert.True(condition: WorldIdentityProjectionWire.Matches(
+            left: expected.Profile,
+            right: member.Profile
+        ));
         Assert.True(condition: Assert.Single(collection: member.ActionContinuity!.Channels).PreviousBit);
         Assert.Equal(
             expected: FixedQ4816.One,
@@ -449,7 +452,6 @@ public sealed partial class FederationTransferLawTests {
         Assert.True(
             condition: WorldFederationCodec.TryDecodeCommit(
                 body: encoded,
-                defaults: defaults,
                 failure: out var control,
                 members: out _,
                 sourceAuthority: out _,
@@ -460,7 +462,6 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.False(condition: WorldFederationCodec.TryDecodeCommit(
             body: [.. encoded, 0],
-            defaults: defaults,
             failure: out var trailing,
             members: out _,
             sourceAuthority: out _,
@@ -479,7 +480,6 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.False(condition: WorldFederationCodec.TryDecodeCommit(
             body: writer.ToArray(),
-            defaults: defaults,
             sourceAuthority: out _,
             transferId: out _,
             members: out _,
@@ -2044,9 +2044,8 @@ public sealed partial class FederationTransferLawTests {
         Assert.True(
             condition: WorldFederationCodec.TryDecodeReservation(
                 body: bytes,
-                defaults: fixture.Server.Definition.PlayerDefaults,
-                request: out var decoded,
-                failure: out var failure
+                failure: out var failure,
+                request: out var decoded
             ),
             userMessage: failure.ToString()
         );
@@ -2100,7 +2099,6 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.False(condition: WorldFederationCodec.TryDecodeReservation(
             body: writer.ToArray(),
-            defaults: fixture.Server.Definition.PlayerDefaults,
             request: out var request,
             failure: out var failure
         ));

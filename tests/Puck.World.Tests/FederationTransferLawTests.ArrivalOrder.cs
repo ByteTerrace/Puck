@@ -18,12 +18,11 @@ public sealed partial class FederationTransferLawTests {
 
         return WorldReplaySnapshot.Read(stream: stream);
     }
-    private static WorldCrossingArrival DecodeArrival(WorldReplayEntry.Arrival arrival, WorldPlayerDefaults defaults) {
+    private static WorldCrossingArrival DecodeArrival(WorldReplayEntry.Arrival arrival) {
         Assert.True(
             condition: WorldAuthorityCheckpointCodec.TryDecodeCrossingArrival(
                 arrival: out var decoded,
                 bytes: arrival.Encoded,
-                defaults: defaults,
                 reason: out var reason
             ),
             userMessage: reason
@@ -37,8 +36,7 @@ public sealed partial class FederationTransferLawTests {
         foreach (var tick in recorded.Ticks) {
             foreach (var arrival in tick.Authority.OfType<WorldReplayEntry.Arrival>()) {
                 var decoded = DecodeArrival(
-                    arrival: arrival,
-                    defaults: fixture.Server.Definition.PlayerDefaults
+                    arrival: arrival
                 );
                 var reason = string.Empty;
 
@@ -209,7 +207,7 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.True(condition: reserved.Accepted, userMessage: reserved.Reason);
         Assert.True(condition: (fixture.Server.CommitTransfer(request.SourceAuthority, request.TransferId,
-            [Turned(travelTurn: FixedQ4816.One) with { Profile = profile }], out var reason) == WorldTransferStatus.Committed), userMessage: reason);
+            [Turned(travelTurn: FixedQ4816.One) with { Profile = profile.Project() }], out var reason) == WorldTransferStatus.Committed), userMessage: reason);
         var slot = Assert.Single(collection: reserved.BodyIndices);
 
         Assert.Equal("traveler-id", fixture.Server.Population.EntryBody(index: slot)!.Profile!.Id);
@@ -356,7 +354,7 @@ public sealed partial class FederationTransferLawTests {
             return;
         }
         var index = entries.IndexOf(item: arrival);
-        var decoded = DecodeArrival(arrival: arrival, defaults: WorldPlayerDefaults.Default);
+        var decoded = DecodeArrival(arrival: arrival);
 
         WorldReplayEntry.Arrival Reencoded(WorldCrossingArrival changed) => arrival with { Encoded = WorldAuthorityCheckpointCodec.EncodeCrossingArrival(arrival: changed) };
         WorldCrossingArrival WithFirstMember(WorldTransferCommitMember member) => decoded with { Members = [member, decoded.Members[1]] };

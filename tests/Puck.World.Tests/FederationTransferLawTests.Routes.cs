@@ -108,7 +108,6 @@ public sealed partial class FederationTransferLawTests {
         Assert.True(
             condition: WorldFederationCodec.TryDecodeCommit(
                 body: encodedCommit,
-                defaults: fixture.Server.Definition.PlayerDefaults,
                 failure: out var commitFailure,
                 members: out var members,
                 sourceAuthority: out _,
@@ -231,7 +230,6 @@ public sealed partial class FederationTransferLawTests {
                     sourceAuthority: "machine-b/boot",
                     transferId: 51
                 ),
-                defaults: fixture.Server.Definition.PlayerDefaults,
                 failure: out var commitFailure,
                 members: out _,
                 sourceAuthority: out _,

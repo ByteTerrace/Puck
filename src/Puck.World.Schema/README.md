@@ -3087,9 +3087,13 @@ corner (`WorldDefinitionValidator.ValidateDerivedAdjacencyCorners`) names a
 third authority, so it accepts only `Resolved` or `VerifiedAttested`—never a
 plain `Attested` outcome, which proves an ordinary two-document adjacency only.
 
-`WorldIdentityProjection` (`WorldIdentity.cs`) is what an identity discloses
-when it walks into another authority: id, name, colour, and the two motion
-rates. `WorldObserverDisclosure` (`bodies.disclosure`) is the per-observer
+`WorldIdentityProjection` (`WorldIdentity.cs`) is everything an identity
+discloses when it walks into another authority: id, name, colour, the two
+motion rates, the records `identity.records` selects, and the facts row
+(`WorldIdentityFacts.Validate` admits a carried one). An identity rebuilt from
+it (`WorldIdentity.FromProjection`) has no document; its records and facts are
+its travelling state, and `WorldIdentity.TryAdopt` folds them back into the
+owned identity when the traveler comes home. `WorldObserverDisclosure` (`bodies.disclosure`) is the per-observer
 snapshot policy—the record lives here (document data); the evaluation over a
 live `EntitySnapshot` (`WorldObserverDisclosureEvaluation.Discloses`) lives in
 `Puck.World.Protocol`, since it operates on the wire snapshot shape. Its

@@ -7,11 +7,6 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const byte CrossingDepartureTag = 1;
     private const byte CrossingSettlementTag = 2;
 
-    // Each traveler lands on its commit member's profile, or its reservation member's identity when the commit carries
-    // none. A projection carries the identity, rates, appearance and owned records; the backing document beside it
-    // carries the identity's facts, so a re-landed traveler keeps them.
-    private static WorldIdentity? LandedProfile(WorldCrossingArrival arrival, int index) =>
-        (arrival.Members[index].Profile ?? arrival.Request.Members[index].Identity);
     private static void WriteCrossingArrival(WireWriter writer, WorldCrossingArrival arrival) {
         WriteReservationRequest(
             request: arrival.Request,
@@ -25,24 +20,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: arrival.Members,
             writeItem: WriteCommitMember
         );
-        writer.WriteArray(
-            items: [.. Enumerable.Range(
-                count: arrival.Members.Count,
-                start: 0
-            ).Select(selector: index => ((LandedProfile(
-                arrival: arrival,
-                index: index
-            )?.Document is { } document)
-                ? WorldDefinitionSerialization.Serialize(definition: document)
-                : []))],
-            writeItem: static (w, document) => w.WriteBlock(value: document)
-        );
     }
-    private static WorldCrossingArrival ReadCrossingArrival(ref WireReader reader, WorldPlayerDefaults defaults) {
-        var request = ReadReservationRequest(
-            defaults: defaults,
-            reader: ref reader
-        );
+    private static WorldCrossingArrival ReadCrossingArrival(ref WireReader reader) {
+        var request = ReadReservationRequest(reader: ref reader);
         var slots = reader.ReadArray(
             field: "arrival slots",
             readItem: static (ref WireReader r) => r.ReadInt32(),
@@ -50,18 +30,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var members = reader.ReadArray(
             field: "arrival members",
-            readItem: (ref WireReader r) => ReadCommitMember(
-                defaults: defaults,
-                reader: ref r
-            ),
-            maximum: WorldBodiesLimits.CapacityCeiling
-        );
-        var documents = reader.ReadArray(
-            field: "arrival profile documents",
-            readItem: static (ref WireReader r) => r.ReadBlock(
-                field: "arrival profile document",
-                maxBytes: WireLimits.MaxDocumentBytes
-            ),
+            readItem: static (ref WireReader r) => ReadCommitMember(reader: ref r),
             maximum: WorldBodiesLimits.CapacityCeiling
         );
         var arrival = new WorldCrossingArrival(
@@ -70,10 +39,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             Slots: slots
         );
 
-        if (!reader.Failed && (ArrivalFault(
-            arrival: arrival,
-            documents: documents
-        ) is { } fault)) {
+        if (!reader.Failed && (ArrivalFault(arrival: arrival) is { } fault)) {
             reader.Fail(
                 detail: fault,
                 refusal: WireRefusal.PayloadMalformed
@@ -82,11 +48,10 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return arrival;
     }
-    // Refuses an arrival no commit could have landed: a cohort whose body indices, members and documents do not pair
-    // with its travelers, an index outside every world's capacity or named twice, a traveler with no mobility
-    // identity, a member whose carried motion has no sound shape, or a backing document that does not name the
-    // identity it backs. Attaches each sound document to the profile it backs.
-    private static string? ArrivalFault(WorldCrossingArrival arrival, byte[][] documents) {
+    // Refuses an arrival no commit could have landed: a cohort whose body indices and members do not pair with its
+    // travelers, an index outside every world's capacity or named twice, a traveler with no mobility identity, or a
+    // member whose carried motion has no sound shape.
+    private static string? ArrivalFault(WorldCrossingArrival arrival) {
         var count = arrival.Request.Members.Count;
 
         if (count == 0) {
@@ -94,10 +59,9 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
         if (
             (arrival.Slots.Count != count) ||
-            (arrival.Members.Count != count) ||
-            (documents.Length != count)
+            (arrival.Members.Count != count)
         ) {
-            return $"arrival binds {count} traveler(s) but carries {arrival.Slots.Count} slot(s), {arrival.Members.Count} member(s) and {documents.Length} profile document(s)";
+            return $"arrival binds {count} traveler(s) but carries {arrival.Slots.Count} slot(s) and {arrival.Members.Count} member(s)";
         }
         for (var index = 0; (index < count); index++) {
             var slot = arrival.Slots[index];
@@ -116,32 +80,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             if (WorldTransferEscrow.CommitMemberFault(member: arrival.Members[index]) is { } fault) {
                 return $"arrival traveler {(index + 1)} {fault}";
             }
-            if (documents[index].Length == 0) {
-                continue;
-            }
-
-            WorldDefinition document;
-
-            try {
-                document = WorldDefinitionSerialization.Deserialize(utf8Json: documents[index]);
-            } catch (Exception exception) when ((exception is System.Text.Json.JsonException or InvalidOperationException or ArgumentException)) {
-                return $"arrival traveler {(index + 1)} profile document is malformed — {exception.Message}";
-            }
-            if (
-                (LandedProfile(
-                    arrival: arrival,
-                    index: index
-                ) is not { } profile) ||
-                (document.Identity is not { } identity) ||
-                !string.Equals(
-                    a: identity.Id.ToString(),
-                    b: profile.Id,
-                    comparisonType: StringComparison.Ordinal
-                )
-            ) {
-                return $"arrival traveler {(index + 1)} profile document names no matching identity";
-            }
-            profile.ReplaceDocument(document: document);
         }
         return null;
     }
@@ -165,19 +103,12 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
     /// <summary>Decodes one destination arrival encoded by <see cref="EncodeCrossingArrival"/>.</summary>
     /// <param name="bytes">The encoded arrival.</param>
-    /// <param name="defaults">The destination's player defaults, which a carried identity projection hydrates
-    /// against.</param>
     /// <param name="arrival">The decoded arrival on success.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
     /// <returns><see langword="true"/> when the bytes decoded exactly.</returns>
-    public static bool TryDecodeCrossingArrival(ReadOnlySpan<byte> bytes, WorldPlayerDefaults defaults, out WorldCrossingArrival? arrival, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: defaults);
-
+    public static bool TryDecodeCrossingArrival(ReadOnlySpan<byte> bytes, out WorldCrossingArrival? arrival, out string reason) {
         var reader = new WireReader(bytes: bytes);
-        var decoded = ReadCrossingArrival(
-            defaults: defaults,
-            reader: ref reader
-        );
+        var decoded = ReadCrossingArrival(reader: ref reader);
 
         if (!reader.TryFinish(failure: out var failure)) {
             arrival = null;
@@ -234,13 +165,10 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
     /// <summary>Decodes one crossing-log entry encoded by <see cref="EncodeCrossingEntry"/>.</summary>
     /// <param name="bytes">The encoded entry.</param>
-    /// <param name="defaults">The authority's player defaults, which a carried identity projection hydrates
-    /// against.</param>
     /// <param name="entry">The decoded entry on success.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
     /// <returns><see langword="true"/> when the bytes decoded exactly.</returns>
-    public static bool TryDecodeCrossingEntry(ReadOnlySpan<byte> bytes, WorldPlayerDefaults defaults, out WorldCrossingEntry entry, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: defaults);
+    public static bool TryDecodeCrossingEntry(ReadOnlySpan<byte> bytes, out WorldCrossingEntry entry, out string reason) {
 
         var reader = new WireReader(bytes: bytes);
         var sequence = reader.ReadUInt64();
@@ -251,14 +179,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         if (!reader.Failed) {
             switch (tag) {
                 case CrossingArrivalTag:
-                    record = new WorldCrossingRecord.Arrival(Value: ReadCrossingArrival(
-                        defaults: defaults,
-                        reader: ref reader
-                    ));
+                    record = new WorldCrossingRecord.Arrival(Value: ReadCrossingArrival(reader: ref reader));
                     break;
                 case CrossingDepartureTag:
                     record = new WorldCrossingRecord.Departure(Transfer: ReadInDoubtTransfer(
-                        defaults: defaults,
                         reader: ref reader
                     ));
                     break;

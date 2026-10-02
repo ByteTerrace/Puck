@@ -97,7 +97,6 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
         Assert.Equal(expected: WorldAuthorityJournalEntryKind.Crossing, actual: entry.Kind);
         Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecodeCrossingEntry(
             bytes: entry.Encoded.Span,
-            defaults: rowA.Server.Definition.PlayerDefaults,
             entry: out var arrival,
             reason: out reason
         ), userMessage: reason);

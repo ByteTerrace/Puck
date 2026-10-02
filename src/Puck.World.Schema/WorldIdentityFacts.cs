@@ -16,6 +16,49 @@ public sealed record WorldIdentityFacts(CellName State, int Capacity) {
         State: CellName.Parse(candidate: "identity-facts"),
         Capacity: 64
     );
+
+    /// <summary>Refuses a facts row other than the one shape an identity carries: a trait-free keyed
+    /// <see cref="CellKind.Int"/> row declaring a capacity of 1 to <see cref="StateCapacity.MaxCellsPerRow"/>, holding at
+    /// most that many integer cells under distinct keys. A traveler's facts arrive from another authority, so every
+    /// reader of a projection admits them through this one check.</summary>
+    /// <param name="row">The facts row, or <see langword="null"/> for an identity carrying no fact.</param>
+    /// <exception cref="InvalidOperationException"><paramref name="row"/> is not that shape.</exception>
+    public static void Validate(WorldStateRow? row) {
+        if (row is null) {
+            return;
+        }
+        if (
+            (row is not { Kind: CellKind.Int, IsKeyed: true, Capacity: { } capacity }) ||
+            (capacity < 1) ||
+            (capacity > StateCapacity.MaxCellsPerRow)
+        ) {
+            throw new InvalidOperationException(message: $"identity facts row '{row.Name}' must be a keyed int row declaring a capacity of 1..{StateCapacity.MaxCellsPerRow}");
+        }
+        if (!WorldIdentityFactLane.TryAdmitTraits(
+            reason: out _,
+            row: row
+        )) {
+            throw new InvalidOperationException(message: $"identity facts row '{row.Name}' declares a value-over-time trait");
+        }
+
+        var cells = (row.Cells ?? []);
+
+        if (cells.Count > capacity) {
+            throw new InvalidOperationException(message: $"identity facts row '{row.Name}' holds {cells.Count} facts past its capacity {capacity}");
+        }
+
+        var keys = new HashSet<CellName>();
+
+        foreach (var cell in cells) {
+            if (
+                (cell is null) ||
+                (cell.Value.Kind != CellKind.Int) ||
+                !keys.Add(item: cell.Key)
+            ) {
+                throw new InvalidOperationException(message: $"identity facts row '{row.Name}' holds a fact that is not an integer under a distinct key");
+            }
+        }
+    }
 }
 /// <summary>The reserved body-scope lane a world declares when it reads facts: a keyed <see cref="CellKind.Int"/>
 /// row named <see cref="RowName"/> in <c>state.world</c>, one cell per (body, fact) keyed

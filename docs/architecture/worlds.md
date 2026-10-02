@@ -629,14 +629,31 @@ admission and read by every remote egress: `frames` (pixels only, no document), 
 (`puck.world.projection.v1` — the visitor's rendered and embodied-from state, with no member to
 carry the logic or authority sections), or `replica` (the whole world document, the sanctioned
 download). An absent tier resolves to `presentation`, so a world authored before the field existed
-hands out no replica. A traveler crossing a seam discloses an identity projection: appearance,
-the two motion rates, and the capacity-one record pools explicitly selected by `identity.records`.
-The rest of its owned document remains private. A counterpart proves a border with a signed
+hands out no replica. A counterpart proves a border with a signed
 attestation over the crossing rather than by handing over its world; assembling a derived corner from
 several such proofs ranks a resolved document over a verified attestation over a plain one,
 first-of-kind winning, so only the first two ever complete a corner. Snapshot delivery separately
 carries a per-observer disclosure policy applied at the output hub's sink boundary, defaulting to
 disclose-all.
+
+A traveler crossing a seam discloses its identity projection and nothing else: its id, name and
+color, the two motion rates, the capacity-one record pools explicitly selected by
+`identity.records`, and its facts row. The rest of its owned document never travels: state rows
+outside the selected records, binding layers, the private HUD panel, the seat look, grants and
+controller history. The rule holds on every path a crossing takes: a reservation, a commit, a
+commit retried after its source restarts, and a colocated crossing, which is the same interface
+short-circuited. Every durable leaf a crossing writes records the projection alone: a crossing-log
+record, a taped arrival, and a checkpoint's escrow, in-doubt and body rows. A destination that needs
+another identity field discloses it by adding that field to the projection.
+
+A visitor's facts and records live on its travelling projection. A destination's `setIdentityFact`
+or record write changes that copy, and the next crossing carries it on; a destination never saves
+a visitor into its own owned-world catalog. A local seat coming home rebinds to the identity it left
+with: the arrival lands at the seat whose incarnation this authority minted, carrying the id of an
+identity this authority's catalog owns. That identity adopts the carried facts and records, and
+only those, and is saved. An id match alone is not enough, since every catalog seeds identities
+from its template. Facts another world wrote are unsigned: provenance attestation for carried state
+does not exist yet, so an owner adopts whatever a visited world wrote onto its traveler.
 
 A world names a cross-owner neighbour without reaching its storage directly — worlds are users, so one
 owner's storage container is never reachable from another's. A cross-owner reference resolves through
@@ -932,9 +949,9 @@ traveler. The entry carries the reservation, the body indices and the commit, en
 leaf the destination's crossing log writes, and the commit's outcome: the generation each traveler
 landed at, and whether the commit rolled its landings back. A commit rolls back when a member is
 refused, or when its arrival record cannot be made durable; the rollback is taped because a landing
-advances its index's generation even when it is undone. Each traveler's profile travels with its
-stable identity id, rates, appearance, owned records and any backing document carrying identity
-facts. A traveler's admission is part of its landing: a local seat joins its session, and a
+advances its index's generation even when it is undone. Each traveler lands with the identity
+projection its commit carried, which holds its facts and records, and nothing of its owned
+document. A traveler's admission is part of its landing: a local seat joins its session, and a
 transferred peer or entity is admitted inline, even inside an ordered submission's completion, so
 no queued admission outlives a rollback; neither is taped beside the arrival.
 
@@ -986,8 +1003,9 @@ the wrong size. It rides the trust tiers rather than adding a second trust list.
 **A vanished source needs no reaper at the destination.** The body is the source's until commit, so
 transfer durability is the source's crossing log, and a reservation held for a source that dies
 before its departure is durable expires at its deadline with capacity released. What dies with a
-host is in-world body state only: identity and its attested facts—items, currency, achievements—live
-on the identity document, so a player loses position rather than possessions.
+host is in-world body state only: identity and its facts—items, currency, achievements—live on the
+owned identity document, which adopts a traveler's carried facts when its seat comes home, so a player
+loses position rather than possessions.
 
 For population-backed admission, the connection receives a body index, so its
 principal and body arrive together. During transfer, the source authority holds

@@ -7062,7 +7062,7 @@
       "title": "WorldEffectPose"
     },
     "WorldEffectSetIdentityFact": {
-      "description": "Writes one fact on the identity a world-addressed body drives under: the body\u0027s cell in the world\u0027s reserved WorldIdentityFactLane row and the identity\u0027s own persisted facts row, together. Exactly one of Value and Expression is authored; a body driving under no owned identity refuses the write rather than minting one.",
+      "description": "Writes one fact on the identity a world-addressed body drives under: the body\u0027s cell in the world\u0027s reserved WorldIdentityFactLane row and the identity\u0027s facts row, together. An owned identity\u0027s row is persisted; a visitor\u0027s is its travelling row, which its own authority adopts when it comes home. Exactly one of Value and Expression is authored; a body driving under no identity refuses the write rather than minting one.",
       "properties": {
         "$type": {
           "const": "setIdentityFact"

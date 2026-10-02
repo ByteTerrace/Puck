@@ -179,7 +179,6 @@ public static class WorldReplayEntryDescriber {
         (Server.WorldAuthorityCheckpointCodec.TryDecodeCrossingArrival(
             arrival: out var decoded,
             bytes: arrival.Encoded,
-            defaults: WorldPlayerDefaults.Default,
             reason: out _
         )
             ? $"arrival #{arrival.TransferId} from '{arrival.SourceAuthority}' body:[{string.Join(

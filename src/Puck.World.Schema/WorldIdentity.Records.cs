@@ -107,4 +107,49 @@ public sealed partial class WorldIdentity {
         reason = string.Empty;
         return true;
     }
+    /// <summary>Adopts what this identity's own traveler carried home: every fact on the traveler's travelling row and
+    /// every field of the record pools this identity owns. Nothing else of <paramref name="carried"/> is read, so this
+    /// identity keeps its own name, color, rates, panel, bindings and seat look. Each value passes the write door a
+    /// local write passes, so a value this identity's own declarations refuse is skipped and named.</summary>
+    /// <param name="carried">The identity the traveler arrived as, rebuilt from its projection.</param>
+    /// <param name="reason">The first value refused, or empty when every value was adopted.</param>
+    /// <returns><see langword="true"/> when every carried value was adopted.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="carried"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">This identity has no owned document, or <paramref name="carried"/>
+    /// names another identity.</exception>
+    public bool TryAdopt(WorldIdentity carried, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: carried);
+        if (Document is null) {
+            throw new InvalidOperationException(message: $"identity '{Id}' has no owned document to adopt into");
+        }
+        if (!string.Equals(a: carried.Id, b: Id, comparisonType: StringComparison.Ordinal)) {
+            throw new InvalidOperationException(message: $"identity '{Id}' cannot adopt what '{carried.Id}' carried");
+        }
+
+        var refused = string.Empty;
+
+        foreach (var cell in (carried.Facts?.Cells ?? [])) {
+            if (!TrySetFact(key: cell.Key, value: cell.Value.AsInt, changed: out _, reason: out var factReason) && (refused.Length == 0)) {
+                refused = $"fact '{cell.Key}': {factReason}";
+            }
+        }
+        if (RecordState is { } owned) {
+            foreach (var pool in (owned.Pools ?? [])) {
+                var record = (owned.Records ?? []).FirstOrDefault(predicate: candidate => (candidate.Name == pool.Record));
+
+                foreach (var field in (record?.Fields ?? [])) {
+                    if (
+                        carried.TryReadRecord(record: pool.Name, field: field.Name, value: out var value) &&
+                        !TryWriteRecord(record: pool.Name, field: field.Name, value: value, reason: out var recordReason) &&
+                        (refused.Length == 0)
+                    ) {
+                        refused = $"record '{pool.Name}.{field.Name}': {recordReason}";
+                    }
+                }
+            }
+        }
+
+        reason = refused;
+        return (refused.Length == 0);
+    }
 }

@@ -9,13 +9,14 @@ namespace Puck.World.Server;
 /// <summary>One prospective traveler in a destination reservation.</summary>
 /// <param name="Principal">The source-stamped acting principal for a colocated transfer.</param>
 /// <param name="PreferredSlot">The body index the traveler prefers to retain.</param>
-/// <param name="Identity">The attested owned-world identity carried by a federated traveler.</param>
+/// <param name="Identity">The traveler's identity projection at reservation: everything of its identity a crossing
+/// discloses, and nothing of the owned document behind it.</param>
 /// <param name="Source">The traveler's authored intent source, preserved across the authority boundary.</param>
 /// <param name="BodyColor">The source body's exact rendered material color, preserved across ownership.</param>
 /// <param name="CatalogRig">The source body's entity-owned procedural rig, preserved across ownership. Destination
 /// look authoring may deliberately override it; ordinary admission may not.</param>
 /// <param name="Mobility">The traveler's immutable incarnation and current committed ownership epoch.</param>
-public readonly record struct WorldTransferReservationMember(Principal Principal, int PreferredSlot, WorldIdentity? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null);
+public readonly record struct WorldTransferReservationMember(Principal Principal, int PreferredSlot, WorldIdentityProjection? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null);
 /// <summary>The destination's binding reservation request. The deadline is stated in the source authority's own
 /// simulation ticks; the destination converts the remaining interval through the exact 50400 engine-tick bridge.</summary>
 public sealed record WorldTransferReservationRequest(
@@ -115,9 +116,10 @@ public sealed record WorldTransferReservationReply(bool Accepted, string Reason,
 }
 /// <summary>One detached source body carried into a previously reserved destination index. <c>TravelTurn</c> is the
 /// traveler's accumulated arrival turn once it lands (<see cref="WorldFrameIsometry.AccumulateTurn"/>), which the
-/// destination keeps on the occupant for the routes it describes.</summary>
+/// destination keeps on the occupant for the routes it describes. <c>Profile</c> is the traveler's identity projection
+/// at commit, which the destination lands in place of the reservation's.</summary>
 public sealed record WorldTransferCommitMember(
-    WorldIdentity? Profile,
+    WorldIdentityProjection? Profile,
     bool HasMappedArrival,
     string BodyMotionProgramName,
     FixedVector3 Position,
@@ -378,7 +380,7 @@ public sealed partial class WorldTransferEscrow {
             var b = right[index];
 
             if (
-                !IdentityMatches(
+                !WorldIdentityProjectionWire.Matches(
                 left: a.Profile,
                 right: b.Profile
             ) ||
@@ -422,36 +424,6 @@ public sealed partial class WorldTransferEscrow {
         )
         : null),
     };
-    private static bool IdentityMatches(WorldIdentity? left, WorldIdentity? right) {
-        if (ReferenceEquals(
-            objA: left,
-            objB: right
-        )) {
-            return true;
-        }
-
-        if (
-            (left is null) ||
-            (right is null)
-        ) {
-            return false;
-        }
-
-        if (
-            (left.Document is not { } leftDocument) ||
-            (right.Document is not { } rightDocument)
-        ) {
-            return (
-                (left.Document is null) &&
-                (right.Document is null)
-            );
-        }
-
-        var leftBytes = WorldDefinitionSerialization.Serialize(definition: leftDocument);
-        var rightBytes = WorldDefinitionSerialization.Serialize(definition: rightDocument);
-
-        return leftBytes.AsSpan().SequenceEqual(other: rightBytes);
-    }
     private static int PreferredOrLowestFree(bool[] consumed, int preferred, int first) {
         if (
             (preferred >= first) &&
@@ -539,7 +511,7 @@ public sealed partial class WorldTransferEscrow {
                 (a.BodyColor != b.BodyColor) ||
                 (a.CatalogRig != b.CatalogRig) ||
                 (a.Mobility != b.Mobility) ||
-                !IdentityMatches(
+                !WorldIdentityProjectionWire.Matches(
                 left: a.Identity,
                 right: b.Identity
             )
@@ -952,6 +924,10 @@ public sealed partial class WorldTransferEscrow {
         }
 
         SessionReply reply;
+        var profile = ArrivingProfile(
+            arrival: arrival,
+            index: index
+        );
 
         if (arrival.Request.PeerAdmission) {
             var occupant = new WorldTransferredOccupant(
@@ -966,7 +942,7 @@ public sealed partial class WorldTransferEscrow {
                     verdict: verdict
                 )
                 : m_server.GrantTable.AdmitTransferredEntity(
-                    identity: reservationMember.Identity,
+                    identity: profile,
                     occupant: occupant,
                     slot: slot,
                     source: reservationMember.Source
@@ -986,12 +962,72 @@ public sealed partial class WorldTransferEscrow {
                 catalogRig: reservationMember.CatalogRig,
                 member: member,
                 mobility: reservationMember.Mobility!.Value.Advance(),
-                profile: (member.Profile ?? reservationMember.Identity),
+                profile: profile,
                 slot: slot
             );
         }
 
         return reply;
+    }
+    // The identity traveler `index` lands as: the projection its commit carried, or its reservation's when the commit
+    // carries none, rebuilt against this world's player defaults. Nothing of the owned document behind it ever arrives.
+    // A local seat coming home lands on the identity it left with instead, which adopts the facts and records it
+    // carried and nothing else.
+    private WorldIdentity? ArrivingProfile(WorldCrossingArrival arrival, int index) {
+        if ((arrival.Members[index].Profile ?? arrival.Request.Members[index].Identity) is not { } projection) {
+            return null;
+        }
+
+        var carried = WorldIdentity.FromProjection(
+            defaults: m_server.Definition.PlayerDefaults,
+            projection: in projection
+        );
+
+        if (HomeIdentity(
+            arrival: arrival,
+            id: projection.Id,
+            index: index
+        ) is not { } owned) {
+            return carried;
+        }
+        if (
+            !m_server.Profiles.TryAdopt(
+            carried: carried,
+            owned: owned,
+            reason: out var reason
+        ) &&
+            m_server.Output.HasNarrationSink
+        ) {
+            m_server.Output.Narrate(
+                channel: "world.identity",
+                text: $"[world.identity: world:{owned.Id} came home and did not adopt everything it carried — {reason}]"
+            );
+        }
+
+        return owned;
+    }
+    // The owned identity a local seat of this authority left with, when traveler `index` is that seat coming home: a
+    // colocated arrival of this process's own local seats (a remote one admits peers), whose incarnation this authority
+    // minted at the very seat it lands on, carrying the id of an identity this authority's catalog owns. An id alone
+    // proves nothing, since every catalog seeds its own identities from its template.
+    private WorldIdentity? HomeIdentity(WorldCrossingArrival arrival, int index, string id) {
+        if (
+            arrival.Request.PeerAdmission ||
+            (arrival.Request.Members[index].Mobility is not { } mobility) ||
+            !string.Equals(
+                a: mobility.Incarnation.Authority,
+                b: m_server.AuthorityIdentity,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+            (mobility.Incarnation.Index != arrival.Slots[index]) ||
+            (mobility.Incarnation.Index >= m_server.Population.LocalSeatCount)
+        ) {
+            return null;
+        }
+
+        return ((m_server.Profiles.FindById(id: id) is { Document: not null } owned)
+            ? owned
+            : null);
     }
     // The one undo of a landing: the first `landed` travelers of a commit that rolled back leave their indices, a
     // transferred peer or entity with the grants its admission minted, a local seat by leaving its seat. A refused

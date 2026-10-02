@@ -37,11 +37,34 @@ topology.
 
 Past the seam, a body that crossed is the destination's seat. The destination's
 rules read its input with `channel(1, name)` exactly as they read a seat that
-booted there, and its owned identity, facts included, arrives with it. The
-[rulepush package](../../../../worlds/rulepush/README.md) relies on both: a level hears
-the visitor's presses, a win writes an identity fact, and the overworld opens a
-gate from the fact the visitor carries back. Its `rulepush-overworld` canary is the
-end-to-end check.
+booted there.
+
+**What crosses is the identity projection and nothing else.** A traveler's
+`WorldIdentityProjection` (id, name, color, the two rates, the records
+`identity.records` selects, and the facts row) is the only identity a crossing
+carries, on every path: reservation and commit (`WorldTransferReservationMember.Identity`
+and `WorldTransferCommitMember.Profile` are projections), a commit retried after a
+source restart, and a colocated crossing. `WorldIdentityProjectionWire` is its one
+wire form, shared by the federation codec, the crossing log, the arrival tape and
+the checkpoint's escrow, in-doubt and body rows. Bindings, the HUD panel, the
+seat look and every other owned row never leave home. The destination lands
+`WorldIdentity.FromProjection` (`WorldTransferEscrow.ArrivingProfile`); a field a
+destination needs is added to the projection, never read off a document.
+
+A destination writes a visitor's facts and records on that travelling copy:
+`WorldOwnedWorlds.TrySetFact` keeps a visitor's fact on its travelling row, and
+`TrySave` refuses by name an identity the catalog does not own, so no destination
+writes a visitor to disk. A local seat coming home (a colocated arrival at the
+seat whose `Mobility.Incarnation` this authority minted, carrying an id its
+catalog owns; an id alone is not enough, since catalogs seed identities from
+their templates) rebinds to its owned identity, which adopts the carried facts
+and records and nothing else (`WorldOwnedWorlds.TryAdopt`). Foreign-written
+facts are unsigned until provenance attestation for carried state exists. The
+[rulepush package](../../../../worlds/rulepush/README.md) relies on this: a level
+hears the visitor's presses, a win writes an identity fact onto the travelling
+record, and the overworld adopts it when the visitor walks home and opens a gate
+from it. Its `rulepush-overworld` canary is the end-to-end check, and
+`CrossingIdentityPrivacyLawTests` pins every path.
 
 A shard names one document several times over — its own `basis`, each adjacency
 neighbour, each derived corner destination — and a composed document is reused
