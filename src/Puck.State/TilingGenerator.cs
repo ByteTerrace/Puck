@@ -30,14 +30,35 @@ public enum TilingFamily : byte {
 }
 /// <summary>Materializes a <see cref="LatticeTopology.Tiling"/> as the <see cref="LatticeTopology.Graph"/> it is:
 /// tiles within the radius, their centres, and one direction slot per outward edge normal, so the tiling compiles
-/// through the graph path and answers every board query on the same terms. Boot-time geometry in doubles — the
-/// coordinates are closed-form and the vertex merge quantizes to a fine grid, so the graph is the same on every
-/// machine.</summary>
+/// through the graph path and answers every board query on the same terms. Boot-time geometry in doubles, computed
+/// only with addition, subtraction, multiplication, division, square root, and comparison — operations IEEE 754
+/// rounds identically everywhere — so the graph is the same bits on every machine and runtime: every angle a family
+/// uses is a multiple of 7.5° or 18°, whose cosine and sine are closed-form square-root expressions, and no libm
+/// transcendental is ever called.</summary>
 public static class TilingGenerator {
     private const double Phi = 1.618033988749895;
     private const double Quantum = 1e-6;
     private const double Sqrt2 = 1.4142135623730951;
     private const double Sqrt3 = 1.7320508075688772;
+
+    // The cosine and sine of the angles in [0°, 45°] the families reach, each one fixed expression of square roots
+    // and the four operations, initialized in declaration order: 15° from √6 and √2, 7.5° by halving 15°, 18° and 36°
+    // from √5, 22.5° from √2, and 37.5° as 45° less 7.5°.
+    private static readonly double Sqrt5 = Math.Sqrt(d: 5.0);
+    private static readonly double Cos15 = ((Math.Sqrt(d: 6.0) + Sqrt2) / 4.0);
+    private static readonly double Sin15 = ((Math.Sqrt(d: 6.0) - Sqrt2) / 4.0);
+    private static readonly double Cos7Half = Math.Sqrt(d: ((1.0 + Cos15) / 2.0));
+    private static readonly double Sin7Half = (Sin15 / (2.0 * Cos7Half));
+    private static readonly double Cos18 = (Math.Sqrt(d: (10.0 + (2.0 * Sqrt5))) / 4.0);
+    private static readonly double Sin18 = ((Sqrt5 - 1.0) / 4.0);
+    private static readonly double Cos22Half = (Math.Sqrt(d: (2.0 + Sqrt2)) / 2.0);
+    private static readonly double Sin22Half = (Math.Sqrt(d: (2.0 - Sqrt2)) / 2.0);
+    private static readonly double Cos36 = ((1.0 + Sqrt5) / 4.0);
+    private static readonly double Sin36 = (Math.Sqrt(d: (10.0 - (2.0 * Sqrt5))) / 4.0);
+    private static readonly double Cos37Half = ((Sqrt2 / 2.0) * (Cos7Half + Sin7Half));
+    private static readonly double Sin37Half = ((Sqrt2 / 2.0) * (Cos7Half - Sin7Half));
+    // Every heading an edge normal can take, in half-degrees: the multiples of 7.5° and of 18°, at least 1.5° apart.
+    private static readonly (int HalfDegrees, Point Unit)[] Headings = EveryHeading();
 
     /// <summary>The most inflation steps a Penrose patch takes: φ⁹ ≈ 76 edge lengths of radius.</summary>
     public const int MaxPenroseInflations = 9;
@@ -52,7 +73,7 @@ public static class TilingGenerator {
             tiles: tiles
         );
 
-        // Every edge's outward normal angle, quantized to the family's own angle set, names the direction slot.
+        // Every edge's outward normal, snapped to the nearest heading a family lays down, names the direction slot.
         var directionDegrees = new SortedSet<int>();
         var normals = new int[tiles.Count][];
 
@@ -76,10 +97,10 @@ public static class TilingGenerator {
                     ? normal
                     : (normal * -1.0)
                 );
-                var degrees = ((((int)Math.Round(a: ((Math.Atan2(
-                    outward.Y,
-                    outward.X
-                ) * 180.0) / Math.PI))) + 360) % 360);
+                var degrees = Degrees(
+                    direction: outward,
+                    family: tiling.Family
+                );
 
                 normals[index][v] = degrees;
                 _ = directionDegrees.Add(item: degrees);
@@ -150,12 +171,88 @@ public static class TilingGenerator {
         }
         return vertices;
     }
+    // Orders two quantized directions by angle in [0, 2π), counterclockwise from +X: the half of the turn first, so a
+    // direction on −X is exactly π, then the sign of the cross product, which within one half is the angle order.
+    private static int CompareAngle(long ax, long ay, long bx, long by) {
+        var aHalf = HalfTurn(
+            x: ax,
+            y: ay
+        );
+        var bHalf = HalfTurn(
+            x: bx,
+            y: by
+        );
+
+        return ((aHalf != bHalf)
+            ? aHalf.CompareTo(value: bHalf)
+            : (((Int128)ay) * bx).CompareTo(value: (((Int128)ax) * by))
+        );
+    }
+    // The whole degrees of the heading nearest a direction: the greatest dot product over every heading a family can
+    // lay down, which stand at least 1.5° apart, so rounding many orders finer than that cannot change the winner.
+    private static int Degrees(Point direction, TilingFamily family) {
+        var nearest = Headings[0];
+        var best = double.NegativeInfinity;
+
+        foreach (var heading in Headings) {
+            var dot = ((heading.Unit.X * direction.X) + (heading.Unit.Y * direction.Y));
+
+            if (dot > best) {
+                best = dot;
+                nearest = heading;
+            }
+        }
+        if ((nearest.HalfDegrees % 2) != 0) {
+            throw new InvalidOperationException(message: $"tiling {family}: an edge normal at {(nearest.HalfDegrees / 2)}.5° has no whole-degree slot name");
+        }
+        return (nearest.HalfDegrees / 2);
+    }
     private static string DirectionName(int degrees) => string.Create(
         provider: CultureInfo.InvariantCulture,
         handler: $"a{degrees}"
     );
-    // The tiles a family lays down, in the order the cell ordinals read them: rings outward from the origin, then by
-    // angle, so consecutive ordinals cluster and the order is a function of the geometry alone.
+    private static (int HalfDegrees, Point Unit)[] EveryHeading() {
+        var headings = new List<(int HalfDegrees, Point Unit)>();
+
+        for (var half = 0; (half < 720); half += 3) {
+            if (((half % 15) == 0) || ((half % 36) == 0)) {
+                headings.Add(item: (half, Unit(halfDegrees: half)));
+            }
+        }
+        return [.. headings];
+    }
+    // 0 for a direction whose angle lies in [0, π), 1 for [π, 2π); the origin counts as angle 0.
+    private static int HalfTurn(long x, long y) => (((y > 0) || ((y == 0) && (x >= 0)))
+        ? 0
+        : 1
+    );
+    // An angle in degrees as whole half-degrees in [0, 720): every angle a family names is a multiple of 7.5° or 18°,
+    // exact in a double, so doubling it is exact too.
+    private static int HalfDegrees(double degrees) {
+        var half = (degrees * 2.0);
+
+        if (half != Math.Floor(d: half)) {
+            throw new InvalidOperationException(message: $"{degrees}° is not a whole number of half-degrees");
+        }
+        return (((((int)half) % 720) + 720) % 720);
+    }
+    // The cosine and sine of an angle in [0°, 45°] a family reaches, by its half-degrees.
+    private static (double Cos, double Sin) Octant(int halfDegrees) => halfDegrees switch {
+        0 => (1.0, 0.0),
+        15 => (Cos7Half, Sin7Half),
+        30 => (Cos15, Sin15),
+        36 => (Cos18, Sin18),
+        45 => (Cos22Half, Sin22Half),
+        60 => ((Sqrt3 / 2.0), 0.5),
+        72 => (Cos36, Sin36),
+        75 => (Cos37Half, Sin37Half),
+        90 => ((Sqrt2 / 2.0), (Sqrt2 / 2.0)),
+        _ => throw new InvalidOperationException(message: $"{(halfDegrees / 2.0)}° is not an angle a tiling family uses"),
+    };
+    // The tiles a family lays down, in the order the cell ordinals read them: rings outward from the origin, then
+    // counterclockwise from +X, so consecutive ordinals cluster and the order is a function of the geometry alone. A
+    // ring is a run of centres whose distances step by no more than the quantum, so a ring is never split by where a
+    // rounding boundary falls; the angle compares exactly on the quantized centre.
     private static List<Tile> Sorted(LatticeTopology.Tiling tiling) {
         var radius = Math.Max(
             val1: 1,
@@ -168,23 +265,37 @@ public static class TilingGenerator {
                 radius: radius
             )
         );
+        var keyed = new (double Distance, int Ring, long X, long Y, Tile Tile)[tiles.Count];
 
-        tiles.Sort(comparison: static (a, b) => {
-            var byDistance = Quantize(value: a.Centre.Length).CompareTo(value: Quantize(value: b.Centre.Length));
+        for (var index = 0; (index < tiles.Count); index++) {
+            var centre = tiles[index].Centre;
 
-            return ((byDistance != 0)
-                ? byDistance
-                : Quantize(value: Math.Atan2(
-                    a.Centre.Y,
-                    a.Centre.X
-                )).CompareTo(value: Quantize(value: Math.Atan2(
-                    b.Centre.Y,
-                    b.Centre.X
-                )))
+            keyed[index] = (centre.Length, 0, Quantize(value: centre.X), Quantize(value: centre.Y), tiles[index]);
+        }
+        Array.Sort(
+            array: keyed,
+            comparison: static (a, b) => a.Distance.CompareTo(value: b.Distance)
+        );
+        for (var index = 1; (index < keyed.Length); index++) {
+            keyed[index].Ring = (((keyed[index].Distance - keyed[(index - 1)].Distance) > Quantum)
+                ? (keyed[(index - 1)].Ring + 1)
+                : keyed[(index - 1)].Ring
             );
-        });
+        }
+        Array.Sort(
+            array: keyed,
+            comparison: static (a, b) => ((a.Ring != b.Ring)
+                ? a.Ring.CompareTo(value: b.Ring)
+                : CompareAngle(
+                    ax: a.X,
+                    ay: a.Y,
+                    bx: b.X,
+                    by: b.Y
+                )
+            )
+        );
 
-        return tiles;
+        return [.. keyed.Select(selector: static key => key.Tile)];
     }
     // Vertices merge by quantized position; an edge is a vertex pair; two tiles sharing an edge are neighbours.
     private static Dictionary<(int, int), List<(int Tile, int Edge)>> ShareEdges(List<Tile> tiles, out int[][] tileVertexIds) {
@@ -235,16 +346,14 @@ public static class TilingGenerator {
         return edgeOwners;
     }
     private static List<Tile> Penrose(int radius) {
+        // Each inflation splits every triangle into ones 1/φ the size; scale, φ^inflations kept as a running product,
+        // grows them back to edge 1 and so sets how far the patch reaches.
         var inflations = 0;
+        var scale = 1.0;
 
-        while (
-            (inflations < MaxPenroseInflations) &&
-            (Math.Pow(
-            x: Phi,
-            y: inflations
-        ) < (radius + 2))
-        ) {
+        while ((inflations < MaxPenroseInflations) && (scale < (radius + 2))) {
             inflations++;
+            scale *= Phi;
         }
         var halves = new List<Half>(capacity: 10);
 
@@ -324,10 +433,6 @@ public static class TilingGenerator {
             }
             halves = next;
         }
-        var scale = Math.Pow(
-            x: Phi,
-            y: inflations
-        );
         var byBase = new Dictionary<((long, long), (long, long), bool), List<Half>>();
 
         foreach (var half in halves) {
@@ -403,7 +508,7 @@ public static class TilingGenerator {
     }
     private static long Quantize(double value) => ((long)Math.Round(a: (value / Quantum)));
     private static Tile Regular(int sides, Point centre, double firstVertexDegrees) {
-        var circumradius = (1.0 / (2.0 * Math.Sin(a: (Math.PI / sides))));
+        var circumradius = (1.0 / (2.0 * Unit(halfDegrees: HalfDegrees(degrees: (180.0 / sides))).Y));
         var vertices = new Point[sides];
 
         for (var index = 0; (index < sides); index++) {
@@ -416,6 +521,40 @@ public static class TilingGenerator {
             Centre: centre,
             Vertices: vertices
         );
+    }
+    // The unit vector at an angle in half-degrees, counterclockwise from +X: the first-octant value, its swap past 45°,
+    // then a quarter-turn rotation by negation and swap, so symmetric angles get bitwise-symmetric vectors.
+    private static Point Unit(int halfDegrees) {
+        var quadrant = (halfDegrees / 180);
+        var within = (halfDegrees % 180);
+        var mirrored = Octant(halfDegrees: ((within <= 90)
+            ? within
+            : (180 - within)
+        ));
+
+        var (cos, sin) = ((within <= 90)
+            ? mirrored
+            : (mirrored.Sin, mirrored.Cos)
+        );
+
+        return quadrant switch {
+            0 => new Point(
+                X: cos,
+                Y: sin
+            ),
+            1 => new Point(
+                X: -sin,
+                Y: cos
+            ),
+            2 => new Point(
+                X: -cos,
+                Y: -sin
+            ),
+            _ => new Point(
+                X: sin,
+                Y: -cos
+            ),
+        };
     }
     // Each periodic family is a lattice (two translation vectors) and the prototiles of one cell: a regular polygon's
     // side count, centre, and the angle of its first vertex, all in edge-length units with the polygons edge to edge.
@@ -767,10 +906,7 @@ public static class TilingGenerator {
 
         public double Length => Math.Sqrt(d: ((X * X) + (Y * Y)));
 
-        public static Point Polar(double radius, double degrees) => new(
-            X: (radius * Math.Cos(d: ((degrees * Math.PI) / 180.0))),
-            Y: (radius * Math.Sin(a: ((degrees * Math.PI) / 180.0)))
-        );
+        public static Point Polar(double radius, double degrees) => (Unit(halfDegrees: HalfDegrees(degrees: degrees)) * radius);
     }
     private readonly record struct Prototile(int Sides, Point Centre, double FirstVertexDegrees);
     // Robinson-triangle inflation from a sun of ten acute halves; twins sharing a base merge into a rhomb whose edges
