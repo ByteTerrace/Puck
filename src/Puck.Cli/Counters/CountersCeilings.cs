@@ -250,11 +250,19 @@ internal static class CountersCeilings {
         }
 
         foreach (var run in ceilings.Runs) {
-            foreach (var ceiling in run.Ceilings.Where(predicate: static ceiling => (ceiling.RequiredZero && ((ceiling.Ceiling != 0L) || (ceiling.Class != WorkClass.PerBackendDeterministic))))) {
-                reason = $"a malformed ceiling: {run.Backend} kind={ceiling.Kind} pass={(ceiling.Pass ?? Outside)} node={ceiling.Node} is a required zero but is not a zero of a per-backend-deterministic class";
-                ceilings = null;
+            foreach (var ceiling in run.Ceilings) {
+                if (!SubmissionKindsByName.TryGetValue(key: ceiling.Kind, value: out var kind)) {
+                    reason = $"a malformed ceiling: {run.Backend} kind={ceiling.Kind} is not a GPU submission kind";
+                    ceilings = null;
 
-                return false;
+                    return false;
+                }
+                if (ceiling.RequiredZero != IsRequiredZero(ceiling: ceiling.Ceiling, kind: kind, recorded: ceiling.Class)) {
+                    reason = $"a malformed ceiling: {run.Backend} kind={ceiling.Kind} pass={(ceiling.Pass ?? Outside)} node={ceiling.Node} requiredZero does not match its kind, class and ceiling";
+                    ceilings = null;
+
+                    return false;
+                }
             }
         }
 

@@ -394,6 +394,50 @@ public sealed class CountersCeilingsLawTests {
         );
     }
     [Fact]
+    public void ADeviceFollowingKindsZeroCannotBeReadAsARequiredZero() {
+        var recorded = CountersCeilings.Record(report: Report(vulkan: WithUpload(dispatches: 0L, run: Run(backend: "vulkan"))));
+        var run = recorded.Runs[0];
+        var upload = Assert.Single(collection: run.Ceilings, predicate: static ceiling => (ceiling.Pass == "upload"));
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-ceilings-law-");
+
+        try {
+            var path = Path.Combine(path1: directory.FullName, path2: "counters.ceilings.json");
+
+            CountersCeilings.Write(ceilings: recorded with { Runs = [run with { Ceilings = [upload with { RequiredZero = true }] }] }, path: path);
+
+            Assert.False(condition: CountersCeilings.TryRead(ceilings: out _, path: path, reason: out var reason));
+            Assert.Contains(actualString: reason, expectedSubstring: "kind=gpu.dispatches pass=upload node=world requiredZero does not match its kind, class and ceiling");
+        } finally {
+            directory.Delete(recursive: true);
+        }
+    }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AKernelZeroCannotBeReadWithoutItsRequiredZeroMark(bool explicitFalse) {
+        var run = Recorded.Runs[0];
+        var zero = run.Ceilings.First(predicate: static ceiling => ceiling.RequiredZero);
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-ceilings-law-");
+
+        try {
+            var path = Path.Combine(path1: directory.FullName, path2: "counters.ceilings.json");
+
+            CountersCeilings.Write(ceilings: Recorded with { Runs = [run with { Ceilings = [zero with { RequiredZero = false }] }] }, path: path);
+
+            if (explicitFalse) {
+                File.WriteAllText(
+                    contents: File.ReadAllText(path: path).Replace(comparisonType: StringComparison.Ordinal, newValue: "\"ceiling\": 0, \"requiredZero\": false", oldValue: "\"ceiling\": 0"),
+                    path: path
+                );
+            }
+
+            Assert.False(condition: CountersCeilings.TryRead(ceilings: out _, path: path, reason: out var reason));
+            Assert.Contains(actualString: reason, expectedSubstring: "kind=gpu.march.steps pass=sdf.world$cull-args node=world requiredZero does not match its kind, class and ceiling");
+        } finally {
+            directory.Delete(recursive: true);
+        }
+    }
+    [Fact]
     public void WrittenCeilingsReadBackAsWrittenAndAForeignFileIsRefused() {
         var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-ceilings-law-");
 
@@ -419,7 +463,7 @@ public sealed class CountersCeilingsLawTests {
 
             CountersCeilings.Write(ceilings: raised, path: path);
             Assert.False(condition: CountersCeilings.TryRead(ceilings: out _, path: path, reason: out var malformed));
-            Assert.Contains(actualString: malformed, expectedSubstring: "is a required zero but is not a zero of a per-backend-deterministic class");
+            Assert.Contains(actualString: malformed, expectedSubstring: "requiredZero does not match its kind, class and ceiling");
 
             File.WriteAllText(contents: "{\"schema\":\"puck.counters.report.v1\",\"workload\":\"w\",\"script\":\"s\",\"runs\":[]}", path: path);
             Assert.False(condition: CountersCeilings.TryRead(ceilings: out _, path: path, reason: out var foreign));
