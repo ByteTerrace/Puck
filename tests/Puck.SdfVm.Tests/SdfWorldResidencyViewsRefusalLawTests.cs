@@ -175,77 +175,71 @@ public sealed class SdfWorldResidencyViewsRefusalLawTests {
     [InlineData(true)]
     [Theory]
     public void AReloadOrADeviceLossBuildsARefusedViewsKernelAgainAndTheResidencyIsReadyOnItsProgram(bool deviceLoss) {
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-test-").FullName;
+        using var scratch = new TemporaryDirectory(prefix: "puck-test-");
+        var root = scratch.RootPath;
 
-        try {
-            using var rig = new Rig();
-            var trapezoid = Rig.Frame(program: Trapezoid(), cameraZ: -8f);
+        using var rig = new Rig();
+        var trapezoid = Rig.Frame(program: Trapezoid(), cameraZ: -8f);
 
-            rig.ProduceUntilReady();
-            rig.Source.Frame = trapezoid with { ProgramChanged = true };
+        rig.ProduceUntilReady();
+        rig.Source.Frame = trapezoid with { ProgramChanged = true };
 
-            for (var frame = 0; (frame < Frames); frame++) {
-                _ = rig.Residency.Produce(context: in rig.Context);
-                _ = rig.Residency.WaitPipelineBuilds(cancellationToken: CancellationToken.None);
-            }
+        for (var frame = 0; (frame < Frames); frame++) {
+            _ = rig.Residency.Produce(context: in rig.Context);
+            _ = rig.Residency.WaitPipelineBuilds(cancellationToken: CancellationToken.None);
+        }
 
-            Assert.False(condition: rig.Residency.IsReady);
+        Assert.False(condition: rig.Residency.IsReady);
 
-            // The driver now builds every kernel, which no frame retries.
-            rig.Fails = false;
-            rig.Source.Frame = trapezoid;
+        // The driver now builds every kernel, which no frame retries.
+        rig.Fails = false;
+        rig.Source.Frame = trapezoid;
 
-            for (var frame = 0; (frame < Frames); frame++) {
-                _ = rig.Residency.Produce(context: in rig.Context);
-                _ = rig.Residency.WaitPipelineBuilds(cancellationToken: CancellationToken.None);
-            }
+        for (var frame = 0; (frame < Frames); frame++) {
+            _ = rig.Residency.Produce(context: in rig.Context);
+            _ = rig.Residency.WaitPipelineBuilds(cancellationToken: CancellationToken.None);
+        }
 
-            Assert.False(condition: rig.Residency.IsReady);
+        Assert.False(condition: rig.Residency.IsReady);
 
-            if (deviceLoss) {
-                rig.Residency.OnDeviceLost();
-            } else {
-                // A tree that carries the refused kernel unchanged: the reload builds it again from the same bytecode.
-                var passes = Directory.CreateDirectory(path: SdfKernelSet.PassesDirectory(tree: root)).FullName;
+        if (deviceLoss) {
+            rig.Residency.OnDeviceLost();
+        } else {
+            // A tree that carries the refused kernel unchanged: the reload builds it again from the same bytecode.
+            var passes = Directory.CreateDirectory(path: SdfKernelSet.PassesDirectory(tree: root)).FullName;
 
-                File.WriteAllBytes(
-                    bytes: SdfTestPipelines.Kernels()[SdfKernel.Views].ToArray(),
-                    path: Path.Combine(
-                        path1: passes,
-                        path2: $"{SdfKernelSet.StemOf(kernel: SdfKernel.Views)}.comp.spv"
-                    )
-                );
-                Assert.True(condition: rig.Residency.RequestShaderReload(
-                    compiler: new ShaderCompiler(cacheDirectory: Path.Combine(path1: Path.GetTempPath(), path2: "puck-test-shader-cache")),
-                    tree: root
-                ));
-            }
-
-            rig.ProduceUntilReady();
-            Assert.Null(@object: rig.Residency.Refusal);
-            Assert.Same(
-                actual: rig.Residency.Frame!.Program,
-                expected: trapezoid.Program
+            File.WriteAllBytes(
+                bytes: SdfTestPipelines.Kernels()[SdfKernel.Views].ToArray(),
+                path: Path.Combine(
+                    path1: passes,
+                    path2: $"{SdfKernelSet.StemOf(kernel: SdfKernel.Views)}.comp.spv"
+                )
             );
+            Assert.True(condition: rig.Residency.RequestShaderReload(
+                compiler: new ShaderCompiler(cacheDirectory: Path.Combine(path1: Path.GetTempPath(), path2: "puck-test-shader-cache")),
+                tree: root
+            ));
+        }
+
+        rig.ProduceUntilReady();
+        Assert.Null(@object: rig.Residency.Refusal);
+        Assert.Same(
+            actual: rig.Residency.Frame!.Program,
+            expected: trapezoid.Program
+        );
+        Assert.Equal(
+            actual: rig.Residency.CopyLiveProgramWords(),
+            expected: trapezoid.Program.Words.ToArray()
+        );
+        Assert.Equal(
+            actual: rig.Attempts(name: "sdf-world-views"),
+            expected: 2
+        );
+
+        if (!deviceLoss) {
             Assert.Equal(
-                actual: rig.Residency.CopyLiveProgramWords(),
-                expected: trapezoid.Program.Words.ToArray()
-            );
-            Assert.Equal(
-                actual: rig.Attempts(name: "sdf-world-views"),
-                expected: 2
-            );
-
-            if (!deviceLoss) {
-                Assert.Equal(
-                    actual: (rig.Residency.ShaderReloadStatus.State, rig.Residency.ShaderReloadStatus.ChangedPipelines),
-                    expected: ("applied", 2)
-                );
-            }
-        } finally {
-            Directory.Delete(
-                path: root,
-                recursive: true
+                actual: (rig.Residency.ShaderReloadStatus.State, rig.Residency.ShaderReloadStatus.ChangedPipelines),
+                expected: ("applied", 2)
             );
         }
     }

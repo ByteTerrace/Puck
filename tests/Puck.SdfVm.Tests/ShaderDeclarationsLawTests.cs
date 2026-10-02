@@ -1,4 +1,5 @@
 using Puck.Shaders;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -34,39 +35,36 @@ public sealed class ShaderDeclarationsLawTests {
     public void AReconcileNamesOnlyTheDriftedDeclarationAndWritesItOnlyWhenAsked(bool write) {
         var source = RepositoryPaths.RequireRoot();
         var declarations = ShaderDeclarations.Of(files: ShaderDeclarations.InterfaceFiles(repositoryRoot: source), packages: RenderGraphPackageCatalog.Engine, problems: []);
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-shader-declarations-");
+        using var scratch = new TemporaryDirectory(prefix: "puck-shader-declarations-");
+        var root = scratch.RootPath;
 
-        try {
-            var settled = new DateTime(day: 1, hour: 0, kind: DateTimeKind.Utc, minute: 0, month: 1, second: 0, year: 2000);
+        var settled = new DateTime(day: 1, hour: 0, kind: DateTimeKind.Utc, minute: 0, month: 1, second: 0, year: 2000);
 
-            foreach (var declaration in declarations) {
-                var path = Path.Combine(path1: root.FullName, path2: declaration.Path);
+        foreach (var declaration in declarations) {
+            var path = Path.Combine(path1: root, path2: declaration.Path);
 
-                _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
-                File.WriteAllText(contents: declaration.Generate().ReplaceLineEndings(replacementText: "\r\n"), path: path);
-                File.SetLastWriteTimeUtc(lastWriteTimeUtc: settled, path: path);
-            }
+            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
+            File.WriteAllText(contents: declaration.Generate().ReplaceLineEndings(replacementText: "\r\n"), path: path);
+            File.SetLastWriteTimeUtc(lastWriteTimeUtc: settled, path: path);
+        }
 
-            var drifted = declarations.Single(predicate: static declaration => declaration.Path.EndsWith(comparisonType: StringComparison.Ordinal, value: SdfIsaHlsl.FileName));
-            var driftedPath = Path.Combine(path1: root.FullName, path2: drifted.Path);
-            var driftedText = (drifted.Generate() + "// drift\n");
+        var drifted = declarations.Single(predicate: static declaration => declaration.Path.EndsWith(comparisonType: StringComparison.Ordinal, value: SdfIsaHlsl.FileName));
+        var driftedPath = Path.Combine(path1: root, path2: drifted.Path);
+        var driftedText = (drifted.Generate() + "// drift\n");
 
-            File.WriteAllText(contents: driftedText, path: driftedPath);
+        File.WriteAllText(contents: driftedText, path: driftedPath);
 
-            var differing = new List<string>();
-            var problems = new List<string>();
+        var differing = new List<string>();
+        var problems = new List<string>();
 
-            ShaderDeclarations.Reconcile(differing: differing, problems: problems, repositoryRoot: root.FullName, write: write);
+        ShaderDeclarations.Reconcile(differing: differing, problems: problems, repositoryRoot: root, write: write);
 
-            Assert.Empty(collection: problems);
-            Assert.Equal(actual: differing, expected: [drifted.Path]);
-            Assert.Equal(actual: File.ReadAllText(path: driftedPath), expected: (write ? drifted.Generate() : driftedText));
+        Assert.Empty(collection: problems);
+        Assert.Equal(actual: differing, expected: [drifted.Path]);
+        Assert.Equal(actual: File.ReadAllText(path: driftedPath), expected: (write ? drifted.Generate() : driftedText));
 
-            foreach (var declaration in declarations.Where(predicate: declaration => !ReferenceEquals(objA: declaration, objB: drifted))) {
-                Assert.Equal(actual: File.GetLastWriteTimeUtc(path: Path.Combine(path1: root.FullName, path2: declaration.Path)), expected: settled);
-            }
-        } finally {
-            root.Delete(recursive: true);
+        foreach (var declaration in declarations.Where(predicate: declaration => !ReferenceEquals(objA: declaration, objB: drifted))) {
+            Assert.Equal(actual: File.GetLastWriteTimeUtc(path: Path.Combine(path1: root, path2: declaration.Path)), expected: settled);
         }
     }
 }
