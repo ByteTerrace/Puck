@@ -30,6 +30,34 @@ public sealed partial class WorldServer {
     /// captures and recovery redoes from.</summary>
     public ulong CrossingSequence => ExecuteAuthorityOperation(operation: () => m_transferEscrow.CrossingSequence);
 
+    /// <summary>Returns the identity this authority's catalog owns for a seat that is its own: a local seat whose
+    /// incarnation, when it has crossed, this authority minted at that very seat, carrying the id of an identity the
+    /// catalog owns. An id alone proves nothing, since every catalog seeds its identities from its template. A seat
+    /// coming home, a restored checkpoint and a source rollback after a restart rebind such a seat to the identity this
+    /// returns; every other seat keeps the projection it carries.</summary>
+    /// <param name="slot">The seat's body index.</param>
+    /// <param name="mobility">The seat's mobility identity, or <see langword="null"/> for a seat that never crossed.</param>
+    /// <param name="id">The id of the identity the seat carries.</param>
+    /// <returns>The owned identity, or <see langword="null"/> when the seat is not this authority's own.</returns>
+    public WorldIdentity? HomeSeatIdentity(int slot, WorldMobilityIdentity? mobility, string id) {
+        if (
+            (((uint)slot) >= ((uint)Population.LocalSeatCount)) ||
+            ((mobility is { } crossed) && (
+                (crossed.Incarnation.Index != slot) ||
+                !string.Equals(
+                    a: crossed.Incarnation.Authority,
+                    b: AuthorityIdentity,
+                    comparisonType: StringComparison.Ordinal
+                )
+            ))
+        ) {
+            return null;
+        }
+
+        return ((Profiles.FindById(id: id) is { Document: not null } owned)
+            ? owned
+            : null);
+    }
     /// <summary>Replaces every held federated device image with a recorded set — the replay's door for the images a
     /// recorded step held.</summary>
     /// <param name="held">The images, each with the body index it drives.</param>

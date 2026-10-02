@@ -646,14 +646,23 @@ short-circuited. Every durable leaf a crossing writes records the projection alo
 record, a taped arrival, and a checkpoint's escrow, in-doubt and body rows. A destination that needs
 another identity field discloses it by adding that field to the projection.
 
+An identity with no written fact carries an empty facts row with its authored name and capacity,
+so its first write abroad observes the same bound as a write at home.
+
 A visitor's facts and records live on its travelling projection. A destination's `setIdentityFact`
 or record write changes that copy, and the next crossing carries it on; a destination never saves
 a visitor into its own owned-world catalog. A local seat coming home rebinds to the identity it left
 with: the arrival lands at the seat whose incarnation this authority minted, carrying the id of an
 identity this authority's catalog owns. That identity adopts the carried facts and records, and
-only those, and is saved. An id match alone is not enough, since every catalog seeds identities
+only those, and is saved after every landing succeeds and the arrival record is durable. A rollback
+leaves the owned identity and its saved document unchanged. An id match alone is not enough, since every catalog seeds identities
 from its template. Facts another world wrote are unsigned: provenance attestation for carried state
 does not exist yet, so an owner adopts whatever a visited world wrote onto its traveler.
+Remote round trips do not adopt: a remote incarnation claim is unauthenticated, and a federation
+reservation requesting local-seat admission is refused. Remote home adoption remains deferred.
+Checkpoint restore rebinds a local home seat to its restored owned identity; a visitor with a
+colliding id keeps its travelling projection. A source restart also retains that owned binding
+when an in-doubt crossing aborts and restores the source seat.
 
 A world names a cross-owner neighbour without reaching its storage directly — worlds are users, so one
 owner's storage container is never reachable from another's. A cross-owner reference resolves through

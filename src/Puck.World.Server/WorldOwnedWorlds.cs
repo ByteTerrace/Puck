@@ -34,12 +34,31 @@ public sealed class WorldOwnedWorlds {
     private readonly WorldOutputHub? m_narrationHub;
     private readonly List<WorldOwnedWorldRefusal> m_refused = [];
     private readonly WorldDefinition m_template;
+    private readonly bool m_persist = true;
 
     private WorldDocumentSubmissionReceipt? m_lastReceipt;
     private long m_revision = 1;
 
     private static readonly CellName MoveSpeedState = WorldIdentityRows.MoveSpeed;
     private static readonly CellName TurnSpeedState = WorldIdentityRows.TurnSpeed;
+
+    private WorldOwnedWorlds(WorldOwnedWorlds source) {
+        m_catalogFingerprint = source.m_catalogFingerprint;
+        m_directory = source.m_directory;
+        m_machineCatalog = source.m_machineCatalog;
+        m_template = source.m_template;
+        m_identities = [];
+        m_persist = false;
+        MachineId = source.MachineId;
+        Defaults = source.Defaults;
+        Restore(checkpoint: source.Capture());
+    }
+
+    /// <summary>Creates a detached catalog for offline replay. Identities are rebuilt through the checkpoint
+    /// leaves, so replay writes cannot mutate the live objects, and saving an owned replay identity performs no
+    /// file I/O.</summary>
+    /// <returns>The replay's own catalog.</returns>
+    public WorldOwnedWorlds CreateReplayCopy() => new(source: this);
 
     /// <summary>Loads owned worlds from a directory, seeding authored identities when it is empty.</summary>
     /// <param name="template">The document every seeded identity derives from.</param>
@@ -988,6 +1007,10 @@ public sealed class WorldOwnedWorlds {
         ) {
             reason = NotOwned(identity: identity);
             return false;
+        }
+        if (!m_persist) {
+            reason = string.Empty;
+            return true;
         }
         var path = Path.Combine(
             path1: m_directory,

@@ -126,7 +126,10 @@ re-driven landing holds the same identity, owned records and facts the live one 
 `Name` against the LIVE `WorldOwnedWorlds` catalog handed to it at replay
 time; the pin's own rates are what make that safe even when the live
 identity's rates have since moved (`ReportProfileDrift` reports, never
-silently substitutes, a drifted rate). The re-drive mounts its own guest set
+silently substitutes, a drifted rate). The shadow server holds a detached
+`WorldOwnedWorlds.CreateReplayCopy` of that catalog: session changes, facts,
+records and home adoption change only the replay's identities, and their saves
+perform no file I/O. The re-drive mounts its own guest set
 through the injected `addonHostFactory` rather than reusing the live
 session's.
 

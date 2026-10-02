@@ -1596,10 +1596,11 @@ public sealed partial class WorldReplaySnapshot {
         );
         // A fresh, unconfigured render envelope reads as "fits" — the replay applies no render-growing edits, and the
         // authoritative simulation never consults GPU capacity, so no probe is needed offline.
+        var replayProfiles = profiles.CreateReplayCopy();
         var server = new WorldServer(
             definition: definition,
             population: population,
-            profiles: profiles,
+            profiles: replayProfiles,
             envelope: new WorldRenderEnvelope(),
             machines: machines,
             instanceIdentity: Instance

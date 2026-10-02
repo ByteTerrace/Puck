@@ -393,4 +393,251 @@ public sealed class CrossingIdentityPrivacyLawTests {
             filter: static path => File.ReadAllText(path: path).Contains(comparisonType: StringComparison.Ordinal, value: OwnerId)
         );
     }
+    // THE LAW: a home arrival adopts nothing until it stands. The traveler comes home carrying a fact and a record value
+    // its visitor identity gained abroad, and the arrival record is refused or uncertain: the owned identity, its
+    // document, the catalog's revision and every catalog file are as they were. The red leg adopts and saves while the
+    // traveler lands, ahead of the record, so the rollback leaves the carried values in the owned identity and on disk.
+    [InlineData(WorldCrossingDurability.Refused)]
+    [InlineData(WorldCrossingDurability.Uncertain)]
+    [Theory]
+    public void AHomeArrivalThatIsNotDurableDoesNotAdoptOrSave(WorldCrossingDurability durability) {
+        using var world = CrossingWorld.Build();
+        var catalog = world.Source.Server.Profiles;
+
+        Assert.True(condition: catalog.ReplaceFromSync(document: OwnedDocument(), reason: out var reason), userMessage: reason);
+        var owned = Owned(identity: catalog.FindById(id: OwnerId));
+
+        Assert.True(condition: catalog.TrySave(identity: owned, reason: out reason), userMessage: reason);
+        world.Source.Server.Population.SetSeatProfile(profile: owned, slot: 0);
+        _ = world.Cross();
+        var visitor = ArrivedAt(id: OwnerId, server: world.Destination.Server);
+
+        Assert.True(condition: visitor.TrySetFact(key: Name(value: "awayFact"), value: 5, changed: out _, reason: out reason), userMessage: reason);
+        Assert.True(condition: visitor.TryWriteRecord(record: Name(value: "stats"), field: Name(value: "score"), value: CellValue.Int(value: 77), reason: out reason), userMessage: reason);
+        var before = WorldDefinitionSerialization.Serialize(definition: owned.Document!);
+        var files = Directory.GetFiles(path: catalog.FilePath).ToDictionary(keySelector: static path => path, elementSelector: static path => File.ReadAllBytes(path: path));
+        var revision = catalog.Revision;
+
+        world.SourceLog.LoseAnswerOn = typeof(WorldCrossingRecord.Arrival);
+        world.SourceLog.LostAnswerLands = false;
+        world.SourceLog.LostAnswer = durability;
+
+        _ = world.Host.EnqueueTransfer(
+            actingPrincipal: Principal.Console,
+            destination: WorldInstanceHost.TransferDestination.Existing(name: "row-a"),
+            scope: WorldInstanceHost.TransferScope.Body,
+            sourceInstance: "row-b",
+            sourceSlot: SlotOf(id: OwnerId, server: world.Destination.Server)
+        );
+        world.Host.DrainPendingTransfers();
+
+        Assert.Null(value: Fact(identity: owned, key: "awayFact"));
+        Assert.Equal("0", Record(field: "score", identity: owned));
+        Assert.Equal(before, WorldDefinitionSerialization.Serialize(definition: owned.Document!));
+        Assert.Equal(revision, catalog.Revision);
+        foreach (var (path, bytes) in files) {
+            Assert.Equal(bytes, File.ReadAllBytes(path: path));
+        }
+    }
+    // THE LAW: an identity that has written no fact still carries its authored facts row name and capacity, so its
+    // first fact abroad meets the bound it meets at home. The red leg projects no row, and the visitor writes under the
+    // default name and capacity, admitting a second fact its owner refuses.
+    [Fact]
+    public void AFirstFactAbroadUsesTheOwnersAuthoredNameAndCapacity() {
+        var defaults = Fixtures.BuildDocument().PlayerDefaults;
+        var document = OwnedDocument();
+        var owned = new WorldIdentity(defaults: defaults, document: document with {
+            Identity = document.Identity! with { Facts = new WorldIdentityFacts(State: Name(value: "small-facts"), Capacity: 1) },
+        });
+
+        Assert.Null(@object: owned.Facts);
+        var writer = new Puck.Networking.WireWriter();
+
+        WorldIdentityProjectionWire.Write(writer: writer, projection: owned.Project());
+        var reader = new Puck.Networking.WireReader(bytes: writer.WrittenSpan);
+        var projection = WorldIdentityProjectionWire.Read(reader: ref reader);
+
+        Assert.True(condition: reader.TryFinish(failure: out var failure), userMessage: failure.ToString());
+        var visitor = WorldIdentity.FromProjection(defaults: defaults, projection: projection);
+
+        Assert.Equal(owned.FactsDefinition, visitor.FactsDefinition);
+        Assert.True(condition: visitor.TrySetFact(key: Name(value: "first"), value: 1, changed: out _, reason: out var reason), userMessage: reason);
+        Assert.Equal(Name(value: "small-facts"), visitor.Facts!.Name);
+        Assert.False(condition: visitor.TrySetFact(key: Name(value: "second"), value: 2, changed: out var changed, reason: out reason));
+        Assert.False(condition: changed);
+        Assert.Contains(actualString: reason, expectedSubstring: "1 of 1");
+        Assert.Single(collection: visitor.Facts.Cells!);
+    }
+    // THE LAW: a federated reservation always asks for peer admission. The encoded control decodes; the same bytes with
+    // the admission flag cleared are refused by name, so a remote peer cannot take a local seat or the home adoption
+    // that comes with one. The red leg decodes the cleared flag into a local-seat reservation.
+    [Fact]
+    public void ARemoteReservationCannotClaimColocatedAdmission() {
+        var address = new WorldEntityAddress(Authority: "origin", Generation: 1, Index: 0);
+        var request = new WorldTransferReservationRequest(
+            TransferId: 1, SourceAuthority: "origin", SourceRateHz: 240, SourceTick: 0,
+            DeadlineSourceTick: 60, Border: "", BorderCapacity: null, PartyAllOrNothing: true,
+            PeerAdmission: true, Members: [new WorldTransferReservationMember(
+                Principal: Principal.Console, PreferredSlot: 0, Identity: Owned().Project(),
+                Source: IntentSource.Live, BodyColor: default, CatalogRig: 0,
+                Mobility: new WorldMobilityIdentity(DepartedFrom: address, Epoch: 0, Incarnation: address)
+            )]
+        );
+        var encoded = WorldFederationCodec.EncodeReservation(request: request);
+
+        Assert.True(condition: WorldFederationCodec.TryDecodeReservation(body: encoded, failure: out var failure, request: out var decoded), userMessage: failure.ToString());
+        Assert.True(condition: decoded!.PeerAdmission);
+        // Locate the flag from the complete header, independent of string-length encodings.
+        var prefix = new Puck.Networking.WireWriter();
+
+        prefix.WriteUInt64(value: request.TransferId);
+        prefix.WriteString(value: request.SourceAuthority);
+        prefix.WriteInt32(value: request.SourceRateHz);
+        prefix.WriteUInt64(value: request.SourceTick);
+        prefix.WriteUInt64(value: request.DeadlineSourceTick);
+        prefix.WriteString(value: request.Border);
+        prefix.WriteBoolean(value: false);
+        prefix.WriteBoolean(value: request.PartyAllOrNothing);
+        encoded[prefix.WrittenSpan.Length] = 0;
+
+        Assert.False(condition: WorldFederationCodec.TryDecodeReservation(body: encoded, failure: out failure, request: out decoded));
+        Assert.Null(@object: decoded);
+        Assert.Contains("peer admission", failure.Detail);
+    }
+    // THE LAW: verifying a tape changes nothing the live session owns. A tape records a home arrival carrying a fact at
+    // 1; the owner then writes it to 2; verifying the tape matches, and the live identity, its document, the catalog's
+    // revision and its files still hold 2. The red leg re-drives against the live catalog, adopting 1 and saving it.
+    [Fact]
+    public void VerifyingAHomeArrivalDoesNotRewindTheLiveCatalog() {
+        using var directory = new TemporaryDirectory(prefix: "puck-privacy-replay-");
+        using var fixture = Fixtures.FreshServer();
+        var server = fixture.Server;
+        var catalog = server.Profiles;
+        var owned = catalog.BootProfile;
+        var fact = Name(value: "replayFact");
+
+        Assert.True(condition: catalog.TrySetFact(changed: out _, identity: owned, key: fact, reason: out var reason, value: 1), userMessage: reason);
+        var tape = Tape(server: server, directory: directory.RootPath);
+
+        Assert.True(condition: tape.TryBeginRecording(name: "arrivals", refusal: out var refusal), userMessage: refusal);
+        var address = new WorldEntityAddress(Authority: server.AuthorityIdentity, Index: 0, Generation: 1);
+        var request = new WorldTransferReservationRequest(
+            TransferId: 1, SourceAuthority: "away", SourceRateHz: 240, SourceTick: 0,
+            DeadlineSourceTick: 60, Border: "", BorderCapacity: null, PartyAllOrNothing: true,
+            PeerAdmission: false, Members: [new WorldTransferReservationMember(
+                Principal: Principal.Console, PreferredSlot: 0, Identity: owned.Project(),
+                Source: IntentSource.Live, BodyColor: owned.Color, CatalogRig: 0,
+                Mobility: new WorldMobilityIdentity(DepartedFrom: address, Epoch: 1, Incarnation: address)
+            )]
+        );
+
+        Assert.True(condition: server.ReserveTransfer(request: request).Accepted);
+        var member = new WorldTransferCommitMember(Profile: owned.Project(), HasMappedArrival: false,
+            BodyMotionProgramName: "", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
+
+        Assert.Equal(WorldTransferStatus.Committed, server.CommitTransfer(sourceAuthority: request.SourceAuthority,
+            transferId: request.TransferId, members: [member], reason: out reason));
+        fixture.Step();
+        tape.NoteTick();
+        _ = tape.StopRecording();
+        Assert.True(condition: catalog.TrySetFact(changed: out _, identity: owned, key: fact, reason: out reason, value: 2), userMessage: reason);
+        var before = WorldDefinitionSerialization.Serialize(definition: owned.Document!);
+        var files = Directory.GetFiles(path: catalog.FilePath).ToDictionary(keySelector: static path => path, elementSelector: static path => File.ReadAllBytes(path: path));
+        var revision = catalog.Revision;
+
+        var verdict = tape.Verify(name: "arrivals");
+
+        Assert.Equal(-1, verdict.Primary.DivergedAt);
+        Assert.Equal(2L, Fact(identity: owned, key: "replayFact"));
+        Assert.Equal(before, WorldDefinitionSerialization.Serialize(definition: owned.Document!));
+        Assert.Equal(revision, catalog.Revision);
+        foreach (var (path, bytes) in files) {
+            Assert.Equal(bytes, File.ReadAllBytes(path: path));
+        }
+    }
+    // THE LAW: a restored checkpoint rebinds a seat this authority owns to its restored catalog identity, and only that
+    // seat. A fresh local seat and a seat that came home bind the catalog's identity, so a fact written after the
+    // restore reaches the catalog and its saved document; a visitor carrying the owner's id keeps its travelling row.
+    // The red leg leaves every seat on its projection, so the fact lands on a detached copy and the catalog never sees it.
+    [InlineData("local")]
+    [InlineData("home")]
+    [InlineData("visitor")]
+    [Theory]
+    public void ACheckpointRebindsOnlyAHomeSeatsOwnedIdentity(string origin) {
+        using var fixture = Fixtures.FreshServer();
+        var server = fixture.Server;
+        var catalog = server.Profiles;
+        var owned = catalog.BootProfile;
+
+        Assert.True(condition: catalog.TrySetFact(identity: owned, key: Name(value: "restoreFact"), value: 1, changed: out _, reason: out var reason), userMessage: reason);
+        Assert.True(condition: server.ApplySession(request: new SessionRequest.Join(Principal: Principal.Seat(slot: 0), Slot: 0,
+            IdentityName: owned.Name, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        if (origin != "local") {
+            var address = new WorldEntityAddress(Authority: ((origin == "home") ? server.AuthorityIdentity : "away"), Index: 0, Generation: 1);
+
+            server.Population.SetMobility(index: 0, mobility: new WorldMobilityIdentity(DepartedFrom: address, Epoch: 2, Incarnation: address));
+        }
+        if (origin == "visitor") {
+            var visitor = WorldIdentity.FromProjection(defaults: server.Definition.PlayerDefaults, projection: owned.Project());
+
+            Assert.True(condition: visitor.TrySetFact(key: Name(value: "restoreFact"), value: 2, changed: out _, reason: out reason), userMessage: reason);
+            server.Population.SetSeatProfile(profile: visitor, slot: 0);
+        }
+        Assert.True(condition: server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty, checkpoint: out var captured, reason: out reason), userMessage: reason);
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: WorldAuthorityCheckpointCodec.Encode(checkpoint: captured!), checkpoint: out var decoded, reason: out reason), userMessage: reason);
+
+        server.RestoreCheckpoint(checkpoint: decoded!);
+
+        var profile = server.Population.EntryBody(index: 0)!.Profile!;
+        var restoredOwner = catalog.FindById(id: owned.Id)!;
+
+        if (origin == "visitor") {
+            Assert.NotSame(actual: profile, expected: restoredOwner);
+            Assert.Null(@object: profile.Document);
+            Assert.Equal(2L, Fact(identity: profile, key: "restoreFact"));
+        } else {
+            Assert.Same(actual: profile, expected: restoredOwner);
+        }
+        Assert.True(condition: catalog.TrySetFact(identity: profile, key: Name(value: "restoreFact"), value: 3, changed: out _, reason: out reason), userMessage: reason);
+        Assert.Equal(((origin == "visitor") ? 1L : 3L), Fact(identity: restoredOwner, key: "restoreFact"));
+        var saved = Directory.GetFiles(path: catalog.FilePath).Select(selector: static path => WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: path)))
+            .Single(predicate: document => (document.Identity?.Id.ToString() == owned.Id));
+
+        Assert.Equal(((origin == "visitor") ? 1L : 3L), Fact(identity: new WorldIdentity(document: saved, defaults: server.Definition.PlayerDefaults), key: "restoreFact"));
+    }
+    // THE LAW: a crossing whose source restarts after its durable departure and whose destination then aborts restores
+    // the seat to the identity it left with, from the restored catalog. A fact written after the rollback reaches that
+    // identity. The red leg restores the projection the commit carried, a detached copy the catalog never sees.
+    [Fact]
+    public void AnAbortedCrossingAfterASourceRestartRestoresItsOwnedIdentity() {
+        using var world = CrossingWorld.Build();
+        var catalog = world.Source.Server.Profiles;
+
+        Assert.True(condition: catalog.ReplaceFromSync(document: OwnedDocument(), reason: out var reason), userMessage: reason);
+        var owned = Owned(identity: catalog.FindById(id: OwnerId));
+
+        Assert.True(condition: catalog.TrySave(identity: owned, reason: out reason), userMessage: reason);
+        world.Source.Server.Population.SetSeatProfile(profile: owned, slot: 0);
+        world.CheckpointSource();
+        world.SourceLog.CrashAfter = typeof(WorldCrossingRecord.Departure);
+        Assert.Throws<AuthorityCrashedException>(testCode: () => world.Cross());
+        // The destination has reserved but has never seen a commit. Its explicit abort is an authoritative Missing.
+        var departure = Assert.IsType<WorldCrossingRecord.Departure>(@object: Assert.Single(collection: world.SourceLog.Read()).Record);
+
+        world.Destination.Server.AbortTransfer(sourceAuthority: world.Source.Server.AuthorityIdentity,
+            transferId: departure.Transfer.TransferId);
+
+        using var restarted = world.Restart(sourceDied: true, destinationDied: false);
+
+        restarted.Step(ticks: PastEveryLease);
+
+        var restoredCatalog = restarted.Source.Server.Profiles;
+        var restoredOwner = restoredCatalog.FindById(id: OwnerId)!;
+        var profile = ArrivedAt(id: OwnerId, server: restarted.Source.Server);
+
+        Assert.Same(actual: profile, expected: restoredOwner);
+        Assert.True(condition: restoredCatalog.TrySetFact(identity: profile, key: Name(value: "afterAbort"), value: 9, changed: out _, reason: out reason), userMessage: reason);
+        Assert.Equal(9L, Fact(identity: restoredOwner, key: "afterAbort"));
+        Assert.Equal("champion", Record(field: "badge", identity: restoredOwner));
+    }
 }

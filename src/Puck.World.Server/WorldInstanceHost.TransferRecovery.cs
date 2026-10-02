@@ -144,6 +144,20 @@ public sealed partial class WorldInstanceHost {
                 ) {
                     Refuse(reason: "member slots or mobility identities are invalid or duplicated");
                 }
+                // This handle is retained only for the source's own use: a rollback reseats it and a publication mirrors
+                // it. The commit still carries the projection; a seat of this authority's own rebinds to its restored
+                // catalog's identity, as it was before the restart.
+                var profile = ((pending.CommitMembers[ordinal].Profile is { } projection)
+                    ? (row.Server.HomeSeatIdentity(
+                        id: projection.Id,
+                        mobility: member.Mobility,
+                        slot: member.SourceSlot
+                    ) ?? WorldIdentity.FromProjection(
+                        defaults: row.Server.Definition.PlayerDefaults,
+                        projection: in projection
+                    ))
+                    : null);
+
                 landed.Add(item: new(
                     AdmissionGrants: [.. member.AdmissionGrants],
                     BodyColor: member.BodyColor,
@@ -152,12 +166,7 @@ public sealed partial class WorldInstanceHost {
                     Mobility: member.Mobility,
                     Peer: member.Peer,
                     Position: member.Position,
-                    Profile: ((pending.CommitMembers[ordinal].Profile is { } projection)
-                        ? WorldIdentity.FromProjection(
-                            defaults: row.Server.Definition.PlayerDefaults,
-                            projection: in projection
-                        )
-                        : null),
+                    Profile: profile,
                     FollowedSeatMask: member.FollowedSeatMask,
                     SourceGrants: [.. member.SourceGrants],
                     SourcePrincipal: Principal.Console,

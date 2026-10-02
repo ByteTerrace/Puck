@@ -799,6 +799,29 @@ public sealed partial class WorldPersistence {
         Host.InputHold.Restore(checkpoint: checkpoint.InputHold);
         Host.Events.Restore(checkpoint: checkpoint.EventFeed);
         Host.Profiles.Restore(checkpoint: checkpoint.OwnedWorlds);
+        // Projection leaves never carry owned documents. Reconnect a local home seat to this restored catalog;
+        // a visitor with a colliding id keeps its projection, including on a silo move or a history restore.
+        foreach (var entry in checkpoint.Population.Entries) {
+            if (
+                entry.IsRemoteHuman ||
+                (entry.Profile is not { } projection) ||
+                (Host.HomeSeatIdentity(
+                    id: projection.Id,
+                    mobility: entry.Mobility,
+                    slot: entry.Index
+                ) is not { } owned)
+            ) {
+                continue;
+            }
+            Host.Population.SetSeatProfile(
+                profile: owned,
+                slot: entry.Index
+            );
+            Host.Population.SetBodyColor(
+                color: entry.BodyColor,
+                slot: entry.Index
+            );
+        }
         Host.RecompileRules(definition: restoredDefinition, compilation: admission.Compilation);
         // RecompileRules may relayout onto the installed definition's catalog. Relayout and prepared replacement
         // preserve the ledger; the idempotent restore checks that every committed name survives installation.

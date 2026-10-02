@@ -161,6 +161,7 @@ internal sealed class CrossingWorld : IDisposable {
     public IWorldCrossingLog SourceWriter { get; }
 
     public void CheckpointDestination() => DestinationImage = Image(host: Host, row: Destination);
+    public void CheckpointSource() => SourceImage = Image(host: Host, row: Source);
 
     /// <summary>The traveler's stable identity: seat 0 of the source as it was first minted.</summary>
     public WorldEntityAddress Traveler { get; private set; }

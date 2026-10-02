@@ -883,6 +883,7 @@ public sealed partial class WorldTransferEscrow {
             );
         }
         m_committedIncarnations[key] = committedIncarnations;
+        AdoptHomeProfiles(arrival: arrival);
         // Reported once the commit stands, with the generation each traveler landed at.
         m_server.ArrivalTap?.Invoke(
             arg1: arrival,
@@ -971,64 +972,53 @@ public sealed partial class WorldTransferEscrow {
     }
     // The identity traveler `index` lands as: the projection its commit carried, or its reservation's when the commit
     // carries none, rebuilt against this world's player defaults. Nothing of the owned document behind it ever arrives.
-    // A local seat coming home lands on the identity it left with instead, which adopts the facts and records it
-    // carried and nothing else.
+    // Home adoption waits until every landing succeeds and the arrival is durable.
     private WorldIdentity? ArrivingProfile(WorldCrossingArrival arrival, int index) {
         if ((arrival.Members[index].Profile ?? arrival.Request.Members[index].Identity) is not { } projection) {
             return null;
         }
 
-        var carried = WorldIdentity.FromProjection(
+        return WorldIdentity.FromProjection(
             defaults: m_server.Definition.PlayerDefaults,
             projection: in projection
         );
+    }
+    // Catalog writes cannot be undone by detaching a seat. Adopt only after the arrival stands, on recovery too;
+    // a taped rollback never reaches this point. Keep the material color the ordinary landing already installed.
+    private void AdoptHomeProfiles(WorldCrossingArrival arrival) {
+        for (var index = 0; (index < arrival.Slots.Count); index++) {
+            var slot = arrival.Slots[index];
 
-        if (HomeIdentity(
-            arrival: arrival,
-            id: projection.Id,
-            index: index
-        ) is not { } owned) {
-            return carried;
-        }
-        if (
-            !m_server.Profiles.TryAdopt(
-            carried: carried,
-            owned: owned,
-            reason: out var reason
-        ) &&
-            m_server.Output.HasNarrationSink
-        ) {
-            m_server.Output.Narrate(
-                channel: "world.identity",
-                text: $"[world.identity: world:{owned.Id} came home and did not adopt everything it carried — {reason}]"
-            );
-        }
+            if ((m_server.Population.EntryBody(index: slot)?.Profile is not { } carried) ||
+                (HomeIdentity(arrival: arrival, index: index, id: carried.Id) is not { } owned)) {
+                continue;
+            }
+            if (!m_server.Profiles.TryAdopt(carried: carried, owned: owned, reason: out var reason) &&
+                m_server.Output.HasNarrationSink) {
+                m_server.Output.Narrate(
+                    channel: "world.identity",
+                    text: $"[world.identity: world:{owned.Id} came home and did not adopt everything it carried — {reason}]"
+                );
+            }
+            var color = m_server.Population.BodyColor(index: slot);
 
-        return owned;
+            m_server.Population.SetSeatProfile(profile: owned, slot: slot);
+            m_server.Population.SetBodyColor(color: color, slot: slot);
+        }
     }
     // The owned identity a local seat of this authority left with, when traveler `index` is that seat coming home: a
-    // colocated arrival of this process's own local seats (a remote one admits peers), whose incarnation this authority
-    // minted at the very seat it lands on, carrying the id of an identity this authority's catalog owns. An id alone
-    // proves nothing, since every catalog seeds its own identities from its template.
-    private WorldIdentity? HomeIdentity(WorldCrossingArrival arrival, int index, string id) {
-        if (
-            arrival.Request.PeerAdmission ||
-            (arrival.Request.Members[index].Mobility is not { } mobility) ||
-            !string.Equals(
-                a: mobility.Incarnation.Authority,
-                b: m_server.AuthorityIdentity,
-                comparisonType: StringComparison.Ordinal
-            ) ||
-            (mobility.Incarnation.Index != arrival.Slots[index]) ||
-            (mobility.Incarnation.Index >= m_server.Population.LocalSeatCount)
-        ) {
-            return null;
-        }
-
-        return ((m_server.Profiles.FindById(id: id) is { Document: not null } owned)
-            ? owned
-            : null);
-    }
+    // colocated arrival of this process's own local seats (a remote one admits peers, and a remote incarnation claim is
+    // unauthenticated) at the seat this authority minted it at (WorldServer.HomeSeatIdentity).
+    private WorldIdentity? HomeIdentity(WorldCrossingArrival arrival, int index, string id) => ((
+        !arrival.Request.PeerAdmission &&
+        (arrival.Request.Members[index].Mobility is { } mobility)
+    )
+        ? m_server.HomeSeatIdentity(
+            id: id,
+            mobility: mobility,
+            slot: arrival.Slots[index]
+        )
+        : null);
     // The one undo of a landing: the first `landed` travelers of a commit that rolled back leave their indices, a
     // transferred peer or entity with the grants its admission minted, a local seat by leaving its seat. A refused
     // member, an arrival record that could not be made durable and a re-drive reproducing a recorded rollback all

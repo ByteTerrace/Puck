@@ -3090,10 +3090,13 @@ plain `Attested` outcome, which proves an ordinary two-document adjacency only.
 `WorldIdentityProjection` (`WorldIdentity.cs`) is everything an identity
 discloses when it walks into another authority: id, name, colour, the two
 motion rates, the records `identity.records` selects, and the facts row
-(`WorldIdentityFacts.Validate` admits a carried one). An identity rebuilt from
+(`WorldIdentityFacts.Validate` admits a carried one). An empty row preserves
+the owner's authored row name and capacity before its first fact. An identity rebuilt from
 it (`WorldIdentity.FromProjection`) has no document; its records and facts are
 its travelling state, and `WorldIdentity.TryAdopt` folds them back into the
-owned identity when the traveler comes home. `WorldObserverDisclosure` (`bodies.disclosure`) is the per-observer
+owned identity on a durable colocated home arrival. Remote home adoption is
+deferred because a remote incarnation claim is unauthenticated.
+`WorldObserverDisclosure` (`bodies.disclosure`) is the per-observer
 snapshot policy—the record lives here (document data); the evaluation over a
 live `EntitySnapshot` (`WorldObserverDisclosureEvaluation.Discloses`) lives in
 `Puck.World.Protocol`, since it operates on the wire snapshot shape. Its

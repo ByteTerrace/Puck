@@ -283,7 +283,12 @@ public sealed partial class WorldIdentity {
             MoveSpeed: m_moveSpeed,
             TurnSpeed: m_turnSpeed,
             Records: RecordState,
-            Facts: Facts
+            Facts: (Facts ?? new WorldStateRow(
+                Name: FactsDefinition.State,
+                Kind: CellKind.Int,
+                Capacity: FactsDefinition.Capacity,
+                Cells: []
+            ))
         );
     /// <summary>Replaces the backing owned world after a composed edit.</summary>
     /// <param name="document">The replacement owned world.</param>

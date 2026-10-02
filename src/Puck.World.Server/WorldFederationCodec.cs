@@ -1174,6 +1174,13 @@ public static partial class WorldFederationCodec {
         );
         var party = reader.ReadBoolean();
         var remote = reader.ReadBoolean();
+
+        if (!reader.Failed && !remote) {
+            reader.Fail(
+                detail: "a federated reservation must request peer admission; a remote incarnation cannot claim a local seat",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
         var count = reader.ReadCount(
             field: "reservation traveler count",
             maximum: WorldBodiesLimits.CapacityCeiling,
