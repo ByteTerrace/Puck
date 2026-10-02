@@ -25,7 +25,9 @@ holds a shell script only to glue a container or a step summary.
 workload, and a versioned, checksum-checked DXC archive on Windows. The SDK goes into a directory of its
 own: installing `wasm-tools` moves the workload set, and in the image's shared SDK directory that would
 also reinstall every workload the image ships. It restores
-the solution in locked mode and compiles Release with warnings as errors. It
+the solution in locked mode and compiles Release with warnings as errors. The
+built candidate CLI runs `puck derivations --check` against the restored producer
+graph, so a stale bake fingerprint stops artifact production before packaging. It
 packages those assemblies with `puck nuget pack --no-build`, publishes the
 Functions and WebAssembly payloads without rebuilding managed assemblies, and
 publishes `Puck.World` as a framework-dependent ReadyToRun artifact. World's

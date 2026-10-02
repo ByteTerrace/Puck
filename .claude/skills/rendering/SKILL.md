@@ -229,12 +229,17 @@ These are one-line cautions; the owning pages hold the derivations.
   (`SdfBakeField` counts each evaluation); never add a second interpreter or
   march for baking. A program the evaluator refuses has no bake, and a creation
   bakes only its contact emission (`CreationStampEmitter.EmitFixed`).
-- **The version moves with the bytes.** `SdfBaker.Version` keys every bake and is
-  the `BAKE` chunk's version; any change to what the baker, `CreationBaker` or
-  `CreationBakeCodec` produces bumps it and re-records the product pin in
-  `CreationBakeLawTests`. A held bake is keyed by the version, never by the code that wrote it, so
-  two lanes that change the bytes must not share a number; a held bake this baker cannot
-  decode draws the field, counted and named (`sdf.bakes.undecodable`).
+- **The fingerprint follows the code.** `[Derivation(name: "bake")]` marks
+  `CreationBaker.TryBake`, `CreationBakeCodec.Encode` and `EncodeRefusal`.
+  `puck derivations` follows their transitive source dependencies across
+  assemblies and regenerates `DerivationFingerprint.Bake`; every bake key
+  carries that full fingerprint. The `BAKE` chunk and bake-pack entries use
+  its first eight hexadecimal digits as an unsigned integer. Regenerate after
+  changing any reached declaration, re-record the product pin in
+  `CreationBakeLawTests`, and verify with `puck derivations --check`. A held
+  bake is keyed by the code that wrote it, so two lanes that change the bytes
+  never share a key; a held bake this baker cannot decode draws the field,
+  counted and named (`sdf.bakes.undecodable`).
 - **Portable bytes.** A bake is content-addressed and one build's pack stands in
   for any device's bake, so its bytes must not depend on the machine: scalar
   IEEE arithmetic in a written order, no transcendental function, no `Vector3`
@@ -252,8 +257,8 @@ These are one-line cautions; the owning pages hold the derivations.
   each usage's source format, stored format, color space and mip filter; the
   codecs, mip filters and octahedral normal pair live in `Puck.Assets.Textures`,
   where a GPU upload also reaches them. An encoder's bytes are pinned by
-  `TextureCodecLawTests`, so an encoder change re-records those pins, moves
-  `SdfBaker.Version` and regenerates `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json`
+  `TextureCodecLawTests`, so an encoder change re-records those pins, regenerates
+  `DerivationFingerprint.Bake` and `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json`
   (`BakeSamplingFixtureLawTests` writes the fresh one into its law directory, which a failing
   law keeps and names).
   Material identity is never blended or compressed.

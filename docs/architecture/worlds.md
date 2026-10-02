@@ -159,7 +159,7 @@ still open, and the chunks that follow, are in
 A creation bake is a prototype's presentation assets: an indexed mesh, its
 surface textures, and an octahedral impostor
 ([prototype bakes](../rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)). It is
-keyed by the creation's pin (the prototype row's hash), the baker's version, and
+keyed by the creation's pin (the prototype row's hash), the bake code fingerprint, and
 the quality tier, and one key is one set of bytes. Bakes are presentation only:
 contact, queries and simulation keep reading the field. A presentation draws
 its bakes by default when the loaded world's `BAKE` chunk supplies every bake

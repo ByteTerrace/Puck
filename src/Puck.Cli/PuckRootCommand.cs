@@ -130,6 +130,7 @@ internal static class PuckRootCommand {
             CreationCommand.Create(),
             DecompileCommand.Create(),
             DeclarationsCommand.Create(),
+            DerivationsCommand.Create(),
             DeterminismCommand.Create(),
             DocsCommand.Create(),
             EmbedCommand.Create(),

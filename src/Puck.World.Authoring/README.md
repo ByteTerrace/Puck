@@ -128,7 +128,7 @@ band is what makes the form a fixed point. `CreationCanonicalFormLawTests`
 holds every prototype a shipped world boots to both laws.
 
 The pin also keys a creation's bakes: `CreationBakeKey` pairs it with the
-baker's version and a quality tier, `CreationBaker` bakes the creation through
+bake code fingerprint and a quality tier, `CreationBaker` bakes the creation through
 the contact emission (`CreationStampEmitter.EmitFixed`), and `CreationBakeCodec`
 encodes the outcome, a bake or the creation's refusal
 ([prototype bakes](../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes)).

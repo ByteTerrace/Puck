@@ -93,6 +93,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck counters`](#puck-counterswork-counter-collector) | the work-counter collector: boots the authored counters workload offscreen once per backend, writes a `puck.counters.report.v1` report with every count tagged by class, and checks the deterministic counts agree across backends; `counters compare` holds two reports to each other. |
 | [`puck creation`](#puck-creationcode-authored-sculpts) | the offline twin of `creation.sculpt(s)`: list registered sculpts, apply one to a world file, or report a creation's shape budget/feature usage. |
 | [`puck declarations`](#puck-declarationsdeclaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
+| [`puck derivations`](#puck-derivationscode-provenance-keys) | generate or check bake fingerprints from their transitive source dependencies, and list the reach by assembly. |
 | [`puck decompile`](#the-puck-dsl-verbs) | renders a world JSON document back as `.puck` source—a one-time import, not a synced mirror; optionally resolves companion vector locks with `--embeddings`. |
 | [`puck determinism`](#puck-determinismcross-host-determinism-attestation) | boots the scenarios of a determinism manifest headless in-process and records per-tick, per-system state hashes and document-level hashes into a strict stream; `determinism compare` names the first tick and system, or document hash, where two hosts' streams differ. |
 | [`puck docs`](#puck-docsthe-documentation-family) | the documentation family: `build` stages the website reference, `links` checks relative links and cited repository paths, and `citations` checks the console-verb tokens skills and XML docs cite, including a live `Puck.World` console boot. |
@@ -575,6 +576,60 @@ default design coordinates. Complex-script shaping remains a separate layer;
 generated atlases preserve source glyph IDs for it.
 
 ---
+
+## `puck derivations`—code provenance keys
+
+```text
+puck derivations [--check]
+```
+
+A bake's cache key contains the SHA-256 fingerprint of the code that produces
+it. The `[Derivation(name: "bake")]` entry points include creation baking and
+outcome encoding. The command reads the solution manifest and loads
+`Puck.World.Authoring` and its complete Release project reference graph through
+the same MSBuild workspace as `references`, follows calls and reads transitively,
+and resolves referenced repository assemblies back to their source. A
+per-project analyzer sees metadata across that boundary and cannot compute this
+reach on its own. The producer project is the bake slice's registered root;
+unrelated executables and their platform workloads are outside this load.
+
+The command writes
+`src/Puck.SignedDistance/Baking/DerivationFingerprint.cs` and lists one reached
+symbol per line, grouped by assembly. It reuses `TokenFingerprint`'s
+`csharp-tokens-v1` framing, ordering assembly-qualified declaration ids and
+partial declaration fragments canonically. Each fragment includes its ordered
+symbol and type bindings, so rebinding aliases changes the hash even when the
+set of reached declarations stays the same. Type headers and member bodies are
+separate: an uncalled sibling method does not move the key. Enum members and
+executable field/property initializers retain their source order because it
+determines implicit values and initialization effects. Initializers across partial
+type declarations retain their compilation order. Constructors,
+initializers, implicit conversions and virtual/interface implementations in the
+producer's dependency graph are included. Reached types also contribute their
+interface implementations and virtual members, including callbacks invoked inside
+external code. Concrete generic arguments contribute their public parameterless
+constructors because the operation for `new T()` does not name the concrete constructor. Base constructors and compiler pattern
+members for disposal, iteration, awaiting and deconstruction are included
+conservatively because the public operation tree does not expose every lowered
+call. External identities participate in the hash without external bodies.
+The generated fingerprint declaration is excluded
+from its own reach. External symbols stop the walk and are listed with their
+assembly identity; their implementation is outside the source hash. Reflection,
+dynamic dispatch and configurations other than Release remain outside this
+slice.
+
+`--check` writes no generated file and exits 1 naming a stale derivation. As with
+`references`, workspace loading can write design-time build intermediates under
+`obj/`. Regenerate after changing reached code, then rebuild consumers. Bake
+keys use the complete fingerprint. The `BAKE` chunk and pack entry version fields
+use its first four bytes as an unsigned big-endian integer; their content keys
+retain all 256 bits.
+
+The artifact producer runs this check after its Release build, before packaging,
+using the built candidate CLI and the restored source graph.
+
+The next slices cover other compiled-world chunk versions, shader packages,
+`GpuPipelineCacheStore` content keys and kernel sets.
 
 ## `puck shaders`—shader compilation
 

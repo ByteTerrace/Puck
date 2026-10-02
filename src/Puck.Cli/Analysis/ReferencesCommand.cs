@@ -4,7 +4,6 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.FindSymbols;
-using Microsoft.CodeAnalysis.MSBuild;
 
 namespace Puck.Cli.Analysis;
 
@@ -540,19 +539,11 @@ internal static class ReferencesCommand {
             return 2;
         }
 
-        var failures = new WorkspaceFailureSink();
-
-        using var workspace = MSBuildWorkspace.Create(properties: new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
-            ["Configuration"] = options.Configuration,
-        });
-        using var registration = workspace.RegisterWorkspaceFailedHandler(handler: failures.Report);
+        using var workspace = new AnalysisWorkspace(configuration: options.Configuration, verb: "references");
         Solution solution;
 
         try {
-            solution = ((options.ProjectPath is null)
-                ? await workspace.OpenSolutionAsync(solutionFilePath: target)
-                : (await workspace.OpenProjectAsync(projectFilePath: target)).Solution
-            );
+            solution = await workspace.OpenAsync(target: target, project: (options.ProjectPath is not null));
         } catch (Exception ex) {
             // Everything the load can throw is a bad input as far as the caller is concerned — a malformed
             // solution surfaces as an XmlException, a bad project as one of several loader types — so the
@@ -565,7 +556,7 @@ internal static class ReferencesCommand {
         // A partly loaded solution answers "no references" exactly the way a genuinely unreferenced
         // symbol does, so a load failure is fatal unless the caller says otherwise.
         if (
-            failures.Failed &&
+            workspace.Failed &&
             !options.AllowPartial
         ) {
             // The commonest cause is an unrestored tree (a fresh worktree): the design-time build then
@@ -720,22 +711,4 @@ internal static class ReferencesCommand {
         return command;
     }
 
-    // Load diagnostics arrive on the workspace's own threads; the failure flag is read once the load has
-    // completed.
-    private sealed class WorkspaceFailureSink {
-        private int m_failures;
-
-        public bool Failed => (Volatile.Read(location: ref m_failures) != 0);
-
-        public void Report(WorkspaceDiagnosticEventArgs args) {
-            Console.Error.WriteLine(value: $"references: workspace: {args.Diagnostic.Message}");
-
-            if (args.Diagnostic.Kind == WorkspaceDiagnosticKind.Failure) {
-                _ = Interlocked.Exchange(
-                    location1: ref m_failures,
-                    value: 1
-                );
-            }
-        }
-    }
 }

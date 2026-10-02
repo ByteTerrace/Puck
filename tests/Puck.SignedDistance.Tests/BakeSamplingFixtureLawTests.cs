@@ -109,7 +109,6 @@ public sealed class BakeSamplingFixtureLawTests {
         }
 
         return new JsonObject {
-            ["bakerVersion"] = SdfBaker.Version,
             ["textures"] = textures,
         };
     }
@@ -124,7 +123,7 @@ public sealed class BakeSamplingFixtureLawTests {
             var regenerated = directory.PathOf(name: "bake-sampling.json");
 
             File.WriteAllText(contents: (fresh + "\n"), path: regenerated);
-            Assert.Fail(message: $"tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json is not a fresh bake at baker version {SdfBaker.Version}; the regenerated fixture is at {regenerated}.");
+            Assert.Fail(message: $"tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json is not a fresh bake; the regenerated fixture is at {regenerated}.");
         }
     }
     [Fact]

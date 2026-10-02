@@ -206,11 +206,6 @@
             "source": "src/Puck.Shaders/Graph/RenderGraphModel.cs",
             "token": "puck.render.graph.v1"
         },
-        "SdfBaker.Version": {
-            "shape": "4436e12ea2703e2a",
-            "source": "src/Puck.SignedDistance/Baking/SdfBaker.cs",
-            "token": "9"
-        },
         "SdfDocumentDecoder.Schema": {
             "shape": "762fae7b2ea0564b",
             "source": "src/Puck.World.Client/Sdf/SdfDocumentDecoder.cs",
@@ -292,12 +287,12 @@
             "token": "3"
         },
         "WorldBakePack.FormatVersion": {
-            "shape": "5f66d837fc05da21",
+            "shape": "175dad1e9037524d",
             "source": "src/Puck.World.Schema/WorldBakePack.cs",
             "token": "1"
         },
         "WorldBakePack.Magic": {
-            "shape": "5f66d837fc05da21",
+            "shape": "175dad1e9037524d",
             "source": "src/Puck.World.Schema/WorldBakePack.cs",
             "token": "PWBK"
         },

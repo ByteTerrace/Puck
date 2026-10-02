@@ -79,6 +79,7 @@
              MSBuild reports as an error under the repo-wide TreatWarningsAsErrors/CodeAnalysisTreatWarningsAsErrors
              gate. -->
         <Compile Include="$(MSBuildThisFileDirectory)build/VerifiedCodeAttribute.cs" Link="Properties/VerifiedCodeAttribute.cs" />
+        <Compile Include="$(MSBuildThisFileDirectory)build/DerivationAttribute.cs" Link="Properties/DerivationAttribute.cs" />
         <!-- The brand ledger Puck.Analyzers reads at RegisterCompilationStartAction time; see VerifiedCode.json
              itself for the schema and the analyzer's VerifiedCodeManifest.cs for the reader. -->
         <AdditionalFiles Include="$(MSBuildThisFileDirectory)VerifiedCode.json" />
