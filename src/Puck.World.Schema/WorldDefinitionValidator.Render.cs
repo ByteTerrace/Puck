@@ -235,18 +235,16 @@ public static partial class WorldDefinitionValidator {
                 );
             }
 
-            // The outline is a smoothstep across the band, which needs a positive width to have any inside. Judged
-            // where the band resolves: an absent end takes the engine default, and a keyed end at each key of either.
-            JudgeAtEveryKey(
+            // The outline is a smoothstep across the band, which needs a positive width to have any inside wherever the
+            // band resolves; an absent end takes the engine default.
+            JudgeAscending(
                 definition: definition,
                 errors: errors,
-                judge: values => ((values[0] < values[1])
-                    ? null
-                    : $"{path}.curvature.inkLow ({values[0]}) must be below {path}.curvature.inkHigh ({values[1]}){{0}}; an absent end is the engine default."),
+                note: "; an absent end is the engine default",
                 path: $"{path}.curvature",
-                scalars: [
-                    (curvature.InkLow ?? new BindableScalar(literal: SdfCurvature.DefaultInkLow)),
-                    (curvature.InkHigh ?? new BindableScalar(literal: SdfCurvature.DefaultInkHigh)),
+                values: [
+                    ((curvature.InkLow ?? new BindableScalar(literal: SdfCurvature.DefaultInkLow)), $"{path}.curvature.inkLow"),
+                    ((curvature.InkHigh ?? new BindableScalar(literal: SdfCurvature.DefaultInkHigh)), $"{path}.curvature.inkHigh"),
                 ]
             );
 
@@ -545,7 +543,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.stops carries {stops.Count} stops; a gradient carries two to {SdfSky.MaxStops}.");
         }
 
-        var elevations = new List<BindableScalar>(capacity: stops.Count);
+        var elevations = new List<(BindableScalar Value, string Path)>(capacity: stops.Count);
 
         for (var stopIndex = 0; (stopIndex < stops.Count); stopIndex++) {
             var stop = stops[stopIndex];
@@ -558,10 +556,6 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (stop.Elevation is { } elevation) {
-                if (elevation.State is not null) {
-                    errors.Add(item: $"{stopPath}.elevation may not bind a state row: the stops must stay ascending, which a row's value cannot promise.");
-                }
-
                 JudgeScalar(
                     definition: definition,
                     errors: errors,
@@ -575,7 +569,7 @@ public static partial class WorldDefinitionValidator {
                     path: $"{stopPath}.elevation",
                     scalar: elevation
                 );
-                elevations.Add(item: elevation);
+                elevations.Add(item: (elevation, $"{stopPath}.elevation"));
             } else {
                 errors.Add(item: $"{stopPath}.elevation is required.");
             }
@@ -589,25 +583,12 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        // The stops must stay strictly ascending wherever they resolve: as authored, and at every key of every keyed
-        // elevation.
-        JudgeAtEveryKey(
+        // The stops must stay strictly ascending wherever they resolve.
+        JudgeAscending(
             definition: definition,
             errors: errors,
-            judge: values => {
-                for (var index = 1; (index < values.Length); index++) {
-                    if (values[index] <= values[(index - 1)]) {
-                        return $"{path}.stops[{index}].elevation must exceed the previous stop's, and resolves [{string.Join(
-                            separator: ", ",
-                            values: values
-                        )}]{{0}}.";
-                    }
-                }
-
-                return null;
-            },
-            path: path,
-            scalars: [.. elevations]
+            path: $"{path}.stops",
+            values: elevations
         );
     }
     // A bindable scalar's admissibility and every value it authors: a literal judged at its own path, each key's value
@@ -693,95 +674,6 @@ public static partial class WorldDefinitionValidator {
             clock.IsStateClock
         ) {
             errors.Add(item: $"{path} is a rate the tick integrates and may key only on a tick clock; clock '{clock.Name}' reads state row '{clock.State}', whose history the integral would depend on.");
-        }
-    }
-    // Resolves several scalars together wherever any of them is keyed (WorldKeyResolver, with no live source: a key's
-    // own time is its phase) and judges each resolution; a scalar that is a literal or a binding holds its literal (a
-    // binding is judged by its own field). Keyed scalars judged together must read one clock, since two clocks' keys
-    // meet at times no document states. The judge returns the refusal, with {0} standing for where it resolves.
-    private static void JudgeAtEveryKey(WorldDefinition definition, BindableScalar[] scalars, string path, List<string> errors, Func<float[], string?> judge) {
-        string? clockName = null;
-
-        foreach (var scalar in scalars) {
-            if (scalar.Keys is not { } keys) {
-                continue;
-            }
-
-            if ((clockName is not null) && !string.Equals(
-                a: clockName,
-                b: keys.Clock,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                errors.Add(item: $"{path} keys values that must hold an order on clocks '{clockName}' and '{keys.Clock}'; key them on one clock.");
-
-                return;
-            }
-
-            clockName = keys.Clock;
-        }
-
-        var values = new float[scalars.Length];
-
-        if (clockName is null) {
-            for (var index = 0; (index < scalars.Length); index++) {
-                if (scalars[index].Literal is not { } literal) {
-                    return;
-                }
-
-                values[index] = literal;
-            }
-
-            if (judge(arg: values) is { } refusal) {
-                errors.Add(item: string.Format(
-                    format: refusal,
-                    arg0: string.Empty,
-                    provider: System.Globalization.CultureInfo.InvariantCulture
-                ));
-            }
-
-            return;
-        }
-
-        if (!WorldKeyResolver.TryClock(
-            clock: out var clock,
-            name: clockName,
-            timeline: definition.Timeline
-        ) || !double.IsFinite(d: clock.Span) || (clock.Span <= 0d)) {
-            return;
-        }
-
-        var times = scalars
-            .Where(predicate: static scalar => (scalar.Keys is not null))
-            .SelectMany(selector: static scalar => scalar.Keys!.Keys.Select(selector: static key => key.At))
-            .Where(predicate: at => ((at >= 0d) && (at < clock.Span)))
-            .Distinct()
-            .Order()
-            .ToArray();
-
-        foreach (var at in times) {
-            for (var index = 0; (index < scalars.Length); index++) {
-                if (scalars[index].Keys is { Count: > 0 } keys) {
-                    values[index] = WorldKeyResolver.Scalar(
-                        phase: (at / clock.Span),
-                        span: clock.Span,
-                        track: keys
-                    );
-                } else if (scalars[index].Literal is { } literal) {
-                    values[index] = literal;
-                } else {
-                    return;
-                }
-            }
-
-            if (judge(arg: values) is { } refusal) {
-                errors.Add(item: string.Format(
-                    format: refusal,
-                    arg0: $" at {at} on clock '{clock.Name}'",
-                    provider: System.Globalization.CultureInfo.InvariantCulture
-                ));
-
-                return;
-            }
         }
     }
     private static void ValidateRenderEnvironment(WorldDefinition definition, WorldRenderEnvironment? environment, List<string> errors, string path = "render.environment") {

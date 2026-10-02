@@ -648,6 +648,22 @@ public static class WorldModuleNamespace {
             return;
         }
 
+        // Converter-backed bindables have no serializer members. Their keyed arm still names a clock, and
+        // that reference must follow the module's declaration just as a keyed section's clock does.
+        if (WorldKeyedValues.IsKeyable(type: type)) {
+            if ((node is JsonObject keyed) && (keyed["clock"] is { } clock)) {
+                visitor(
+                    keyed,
+                    "clock",
+                    clock,
+                    new WorldNameField(Owner: type, Member: nameof(IWorldKeyTrack.Clock), Kind: WorldNameKind.Clock, Role: WorldNameRole.Names),
+                    typeof(string)
+                );
+            }
+
+            return;
+        }
+
         if (type == typeof(ExpressionProgram)) {
             if (node is JsonObject) {
                 VisitExpressionProgram(

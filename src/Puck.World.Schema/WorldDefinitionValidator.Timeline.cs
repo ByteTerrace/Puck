@@ -128,6 +128,16 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
+    // Expand only admitted section keys. In particular, a null key is a diagnostic, never a dereference in Expand.
+    private static (WorldRenderLighting? Lighting, WorldRenderSky? Sky) ValidateAndExpandRenderKeys(WorldDefinition definition, List<string> errors) {
+        var before = errors.Count;
+
+        ValidateRenderSectionKeys(definition: definition, errors: errors);
+
+        return ((errors.Count == before)
+            ? (WorldRenderKeys.Expand(lighting: definition.Render.Lighting), WorldRenderKeys.Expand(sky: definition.Render.Sky))
+            : (definition.Render.Lighting, definition.Render.Sky));
+    }
     // A keyed section: its clock and keys together, every key's time as a value's, each key addressing a light or a
     // layer the section names, of the same kind, stating only values a key may move, each a literal, and no field keyed
     // both on its own and by the section.

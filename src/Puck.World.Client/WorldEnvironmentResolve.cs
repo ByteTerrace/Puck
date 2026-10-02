@@ -27,7 +27,7 @@ public sealed class WorldEnvironmentResolve {
     private static readonly SdfLights Pinned = SdfLights.Default();
     private static readonly SdfLights Empty = new();
     private static readonly SdfSky Unauthored = new();
-    private readonly List<int> m_bound = [];
+    private readonly List<(int Slot, double Value)> m_bound = [];
     private readonly SdfLights[] m_outputLights = [new SdfLights(), new SdfLights()];
     private readonly SdfSky[] m_outputSky = [new SdfSky(), new SdfSky()];
     private readonly SdfLights m_resolvedLights = new();
@@ -210,8 +210,10 @@ public sealed class WorldEnvironmentResolve {
         ),
     });
     private bool BoundSlotMoved(WorldStateMirror mirror) {
-        foreach (var slot in m_bound) {
-            if (mirror.Changed(slot: slot) > m_resolvedAt) {
+        foreach (var (slot, value) in m_bound) {
+            _ = mirror.TryValue(slot: slot, value: out var presented);
+
+            if ((mirror.Changed(slot: slot) > m_resolvedAt) || (presented != value)) {
                 return true;
             }
         }
@@ -228,18 +230,23 @@ public sealed class WorldEnvironmentResolve {
         var slot = mirror.ClockSlotOf(name: keys.Clock);
 
         if (slot >= 0) {
-            m_bound.Add(item: slot);
+            NoteSlot(mirror: mirror, slot: slot);
         } else {
             m_readsTick = true;
         }
     }
     private void NoteBinding(WorldStateMirror mirror, StateBinding? binding, WorldStateConversion conversion) {
         if (binding is { } bound) {
-            m_bound.Add(item: mirror.SlotOf(
+            NoteSlot(mirror: mirror, slot: mirror.SlotOf(
                 binding: in bound,
                 conversion: conversion
             ));
         }
+    }
+    // Apply can move a presented number between deliveries without changing the slot's sample revision.
+    private void NoteSlot(WorldStateMirror mirror, int slot) {
+        _ = mirror.TryValue(slot: slot, value: out var value);
+        m_bound.Add(item: (slot, value));
     }
     private float Scalar(WorldStateMirror mirror, BindableScalar? scalar, float fallback) {
         if (scalar is not { } value) {

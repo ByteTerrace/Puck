@@ -58,7 +58,10 @@ by its `name`, of its own kind, stating values only (a light's `name` and
 `shadows` are structure and refused). The sky keys the same way, addressing a
 layer by `name`. `WorldRenderKeys.Expand` turns section keys into value keys
 and `WorldKeyResolver` resolves them, for the validator with no live source and
-for the client through its state mirror.
+for the client through its state mirror. Ordered values (gradient stop
+elevations, the ink band) are judged by `JudgeAscending` over every phase of
+their one clock, between keys as well as at them. A projection carries only the
+tick clocks; one whose values key on a state clock refuses to hydrate.
 Each light's `$type` union:
 
 | `$type` | Carries |

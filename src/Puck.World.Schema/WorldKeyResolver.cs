@@ -17,6 +17,16 @@ public interface IWorldClockSource {
     /// <returns><see langword="true"/> when the row reads a number.</returns>
     bool TryClockValue(WorldClock clock, out double value);
 }
+/// <summary>The segment of a keyed value a phase falls in: the key it leaves, the key it reaches, and how far along
+/// it the phase stands. Every length is in phase, a share of the clock's span.</summary>
+/// <param name="From">The earlier key's index.</param>
+/// <param name="To">The later key's index; the first key for the segment that wraps from the last.</param>
+/// <param name="Length">The segment's length in phase, through the wrap for the last segment; zero for a track of one
+/// key.</param>
+/// <param name="Offset">How far past the earlier key the phase stands, in phase.</param>
+/// <param name="Fraction">The even fraction of the way along, <c>Offset / Length</c> clamped to <c>[0, 1]</c>, before
+/// the earlier key's ease shapes it.</param>
+public readonly record struct WorldKeySegment(int From, int To, double Length, double Offset, double Fraction);
 /// <summary>
 /// The one resolver of keyed values. It computes a clock's phase from a presented tick or a state row, selects the
 /// two keys around a phase, eases the fraction between them by the earlier key's <see cref="WorldEase"/>, and blends
@@ -101,6 +111,31 @@ public static class WorldKeyResolver {
     /// <returns>The earlier key's index, the later key's index, and the eased fraction in <c>[0, 1]</c>.</returns>
     /// <exception cref="ArgumentException"><paramref name="track"/> carries no keys.</exception>
     public static (int From, int To, double T) Locate<T>(WorldKeyTrack<T> track, double span, double phase) {
+        var segment = Segment(
+            phase: phase,
+            span: span,
+            track: track
+        );
+
+        var ease = track.Keys[segment.From].Ease;
+
+        // Segment selects the key already reached. A Step holds that key even when a fraction just before the next
+        // key rounds to one (especially through the wrap); only selecting the next segment changes its value.
+        return (segment.From, segment.To, ((ease == WorldEase.Step)
+            ? 0d
+            : Ease(ease: ease, t: segment.Fraction)));
+    }
+    /// <summary>Returns the segment a phase falls in, as <see cref="Locate{T}(WorldKeyTrack{T}, double, double)"/>
+    /// selects it, with its even fraction before the earlier key's ease shapes it. Every comparison stays in phase
+    /// space: a key's time is divided by the span, never a phase multiplied back into time, so an exact key tick
+    /// selects its key.</summary>
+    /// <typeparam name="T">The value's type.</typeparam>
+    /// <param name="track">The track; at least one key, ascending.</param>
+    /// <param name="span">The clock's span, in the units the keys' times are authored in.</param>
+    /// <param name="phase">The clock's phase, in <c>[0, 1)</c>.</param>
+    /// <returns>The segment; a track of one key is the segment from that key to itself, of no length.</returns>
+    /// <exception cref="ArgumentException"><paramref name="track"/> carries no keys.</exception>
+    public static WorldKeySegment Segment<T>(WorldKeyTrack<T> track, double span, double phase) {
         ArgumentNullException.ThrowIfNull(argument: track);
 
         var keys = track.Keys;
@@ -114,14 +149,19 @@ public static class WorldKeyResolver {
         }
 
         if (count == 1) {
-            return (0, 0, 0d);
+            return new WorldKeySegment(
+                Fraction: 0d,
+                From: 0,
+                Length: 0d,
+                Offset: 0d,
+                To: 0
+            );
         }
 
-        var position = (phase * span);
         var from = (count - 1);
 
         for (var index = 0; (index < count); index++) {
-            if (keys[index].At <= position) {
+            if ((keys[index].At / span) <= phase) {
                 from = index;
             } else {
                 break;
@@ -129,28 +169,29 @@ public static class WorldKeyResolver {
         }
 
         var to = ((from + 1) % count);
-        var fromAt = keys[from].At;
+        var fromAt = (keys[from].At / span);
         var length = ((to == 0)
-            ? ((span - fromAt) + keys[0].At)
-            : (keys[to].At - fromAt)
+            ? ((1d - fromAt) + (keys[0].At / span))
+            : ((keys[to].At / span) - fromAt)
         );
-        var offset = ((position >= fromAt)
-            ? (position - fromAt)
-            : ((span - fromAt) + position)
-        );
-        var t = ((length > 0d)
-            ? Math.Clamp(
-                max: 1d,
-                min: 0d,
-                value: (offset / length)
-            )
-            : 0d
+        var offset = ((phase >= fromAt)
+            ? (phase - fromAt)
+            : ((1d - fromAt) + phase)
         );
 
-        return (from, to, Ease(
-            ease: keys[from].Ease,
-            t: t
-        ));
+        return new WorldKeySegment(
+            Fraction: ((length > 0d)
+                ? Math.Clamp(
+                    max: 1d,
+                    min: 0d,
+                    value: (offset / length)
+                )
+                : 0d),
+            From: from,
+            Length: length,
+            Offset: offset,
+            To: to
+        );
     }
     /// <summary>Returns an ease's shaping of an even fraction.</summary>
     /// <param name="ease">The ease.</param>

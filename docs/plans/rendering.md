@@ -5697,7 +5697,14 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      resolutions. The courtyard, the parity world, the sky-cycle canary and
      the counted sky-cycle workload key on a `skyMode` state clock. The
      softboxes' own numbers stay literal, since P18-9 deletes them, and a
-     clock keyed on another clock is not built.
+     clock keyed on another clock is not built. Values that must hold an order
+     (a gradient's stop elevations, an ink band's ends) are judged over every
+     phase of their one clock: the union of their key times partitions it,
+     every ease moves a value monotonically between two key times, and a pair
+     is refused (`JudgeAscending`) where its values may meet between keys as
+     well as at them; an ordered value binds no state row. A presentation-tier
+     projection carries the timeline's tick clocks, which a recipient
+     evaluates at the tick it presents.
    - Delivers: the keyed form of every bindable value (`keys(clock: …)`), the
      angle and direction bindables, section keys whose values are partial
      records addressed by name, blends by field type with per-key ease, the
@@ -5735,7 +5742,12 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      load-validated authored initial value (or clamps a closed range), so
      early and late views may hold different values while invalid.
    - Projection proof is a separate unimplemented slice after the keys
-     substrate. Authority and recipient must call the same prediction function
+     substrate. Until it lands, a projection carries no state clock, and a
+     projection whose values key on one (the courtyard's and the parity
+     world's `skyMode`) refuses to hydrate by name
+     (`WorldProjection.TryToDefinition`), so a presentation-tier recipient of
+     such a world receives a refusal rather than every keyed value at its
+     fallback. The slice replaces that refusal with the anchors below. Authority and recipient must call the same prediction function
      from a shared package, bit-exact on the u64 phase. A mixed affine,
      staircase, quantized, nonlinear and seek trace must match the host phase
      at every tick and produce zero spurious anchors. A steady state sends

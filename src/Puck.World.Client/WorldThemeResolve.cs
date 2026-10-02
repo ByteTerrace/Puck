@@ -27,7 +27,7 @@ public sealed class WorldThemeResolve {
     // The mirror reads one resolve makes, noting every slot a bound token reads so the next frame can ask whether any
     // of them moved.
     private sealed class ThemeReads(WorldStateMirror mirror) {
-        public List<int> Bound { get; } = [];
+        public List<(int Slot, double Value)> Bound { get; } = [];
         public WorldStateMirror Mirror { get; } = mirror;
 
         // Whether a keyed token reads a tick clock, whose phase moves with the presented tick.
@@ -67,18 +67,22 @@ public sealed class WorldThemeResolve {
             var slot = Mirror.ClockSlotOf(name: keys.Clock);
 
             if (slot >= 0) {
-                Bound.Add(item: slot);
+                NoteSlot(slot: slot);
             } else {
                 ReadsTick = true;
             }
         }
         private void Note(StateBinding? binding, WorldStateConversion conversion) {
             if (binding is { } bound) {
-                Bound.Add(item: Mirror.SlotOf(
+                NoteSlot(slot: Mirror.SlotOf(
                     binding: in bound,
                     conversion: conversion
                 ));
             }
+        }
+        private void NoteSlot(int slot) {
+            _ = Mirror.TryValue(slot: slot, value: out var value);
+            Bound.Add(item: (slot, value));
         }
     }
 
@@ -520,8 +524,10 @@ public sealed class WorldThemeResolve {
     }
 
     private bool BoundSlotMoved() {
-        foreach (var slot in m_reads!.Bound) {
-            if (m_reads.Mirror.Changed(slot: slot) > m_resolvedAt) {
+        foreach (var (slot, value) in m_reads!.Bound) {
+            _ = m_reads.Mirror.TryValue(slot: slot, value: out var presented);
+
+            if ((m_reads.Mirror.Changed(slot: slot) > m_resolvedAt) || (presented != value)) {
                 return true;
             }
         }
