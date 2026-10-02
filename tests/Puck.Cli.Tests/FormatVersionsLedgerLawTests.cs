@@ -85,7 +85,7 @@ public sealed class FormatVersionsLedgerLawTests {
                 id: "DemoCodec.SchemaVersion"
             ).Token
         );
-        Assert.Null(@object: Entry(
+        Assert.NotNull(@object: Entry(
             entries: entries,
             id: "DemoCodec.SchemaVersion"
         ).Shape);
@@ -162,7 +162,7 @@ public sealed class FormatVersionsLedgerLawTests {
         );
 
         Assert.Equal(
-            expected: ["reshaped: the source of 'DemoCodec.Magic'", "reshaped: the source of 'DemoCodec.WireKey'"],
+            expected: ["reshaped: the source of 'DemoCodec.Magic'", "reshaped: the source of 'DemoCodec.SchemaVersion'", "reshaped: the source of 'DemoCodec.WireKey'"],
             actual: problems.Select(selector: static problem => problem[..problem.IndexOf(
                 comparisonType: StringComparison.Ordinal,
                 value: " (src")]).Order(comparer: StringComparer.Ordinal)
@@ -275,6 +275,110 @@ public sealed class FormatVersionsLedgerLawTests {
                 filter: entry => (entry.Id == id)
             );
         }
+    }
+    [InlineData("Document.cs", "int Value", "long Value")]
+    [InlineData("Model.cs", "int Value", "long Value")]
+    [InlineData("Model.cs", "int Value", "int Renamed")]
+    [Theory]
+    public void ADocumentFieldChangeWithoutATokenBumpIsDrift(string file, string before, string after) {
+        var sources = new Dictionary<string, string>(StringComparer.Ordinal) {
+            ["src/Puck.Demo/Document.cs"] = "public sealed class Document { public const string Schema = \"puck.demo.v1\"; public int Value { get; init; } public Model Child { get; init; } }",
+            ["src/Puck.Demo/Model.cs"] = "public sealed record Model(int Value);",
+        };
+        var changed = new Dictionary<string, string>(sources, StringComparer.Ordinal);
+
+        changed[$"src/Puck.Demo/{file}"] = changed[$"src/Puck.Demo/{file}"].Replace(before, after);
+        Assert.Contains(collection: Check(recordedFrom: sources, current: changed), filter: problem => problem.StartsWith("reshaped:", StringComparison.Ordinal));
+    }
+    [Fact]
+    public void ConcurrentDocumentSchemaBumpsWithDifferentFieldsConflict() {
+        var sources = new Dictionary<string, string>(StringComparer.Ordinal) {
+            ["src/Puck.Demo/Document.cs"] = "public sealed record Document(int Value) { public const string Schema = \"puck.demo.v1\"; }",
+        };
+        var ours = new Dictionary<string, string>(sources, StringComparer.Ordinal);
+        var theirs = new Dictionary<string, string>(sources, StringComparer.Ordinal);
+
+        ours["src/Puck.Demo/Document.cs"] = sources["src/Puck.Demo/Document.cs"].Replace(".v1", ".v2").Replace("int Value", "long Value");
+        theirs["src/Puck.Demo/Document.cs"] = sources["src/Puck.Demo/Document.cs"].Replace(".v1", ".v2").Replace("int Value", "string Value");
+        var (conflicts, _) = LedgerMergeProbe.Merge(Records(sources), Records(ours), Records(theirs));
+        Assert.True(condition: (conflicts > 0));
+    }
+    [Fact]
+    public void AVersionShapedObjectIdentityIsNotAFormatToken() {
+        var sources = Sources();
+
+        sources["src/Puck.Demo/Profile.cs"] = "public static class Profile { public static object Default { get; } = new Model(\"puck.cost.portable-model.v1\"); }";
+        sources["src/Puck.Demo/Document.cs"] = "public static class Document { public const string CurrentSchema = (\"puck.demo.v1\"); }";
+        Assert.DoesNotContain(collection: FormatVersionsLedger.Discover(sources), filter: entry => (entry.Id == "Profile.Default"));
+        Assert.Contains(collection: FormatVersionsLedger.Discover(sources), filter: entry => (entry.Id == "Document.CurrentSchema"));
+    }
+    [InlineData("Puck.HumbleGamingBrick", "MachineSnapshot", "MachineIdentity")]
+    [InlineData("Puck.AdvancedGamingBrick", "AgbMachineSnapshot", "AgbMachineIdentity")]
+    [InlineData("Puck.HumbleGamingDeck", "HgdMachineSnapshot", "HgdMachineIdentity")]
+    [Theory]
+    public void ASnapshotLayoutChangeMovesItsIdentityDigest(string project, string file, string identity) {
+        var sources = new Dictionary<string, string>(StringComparer.Ordinal) {
+            [$"src/{project}/{file}.cs"] = $"public static class {identity} {{ public const int CurrentVersion = 1; }}",
+            [$"src/{project}/Device.cs"] = "public static class Device { public static int SaveState() => 1; }",
+        };
+        var changed = new Dictionary<string, string>(sources, StringComparer.Ordinal);
+
+        changed[$"src/{project}/Device.cs"] = "public static class Device { public static int SaveState() => 2; }";
+        Assert.Contains(collection: Check(recordedFrom: sources, current: changed), filter: problem => problem.StartsWith($"reshaped: the source of '{identity}.CurrentVersion'", StringComparison.Ordinal));
+    }
+    [Fact]
+    public void FormattingAndLocalRenamesPreserveTheShape() {
+        var original = Sources(body: "int value = 1; return Combine(value, 2 + 3);");
+
+        original[PartialPath] += "\npublic static partial class DemoCodec { private static int Combine(int z, int a) => z + a; private static int Next() => 1; }";
+        var formatted = new Dictionary<string, string>(original, StringComparer.Ordinal);
+
+        formatted[PartialPath] = formatted[PartialPath].Replace("Combine(value, 2 + 3)", "Combine(a: (2 + 3), z: value)");
+        Assert.Equal(expected: Records(original), actual: Records(formatted));
+        var nullEquality = Sources(body: "string value = null; return value == null ? 1 : 2;");
+        var nullPattern = Sources(body: "string value = null; return value is null ? 1 : 2;");
+
+        Assert.Equal(expected: Records(nullEquality), actual: Records(nullPattern));
+        formatted[PartialPath] = formatted[PartialPath].Replace("value", "renamed");
+        Assert.Equal(expected: Records(original), actual: Records(formatted));
+    }
+    [Fact]
+    public void GroupingArgumentBindingAndEvaluationOrderRemainPartOfTheShape() {
+        Assert.NotEqual(expected: Records(Sources(body: "return '\\uD800';")), actual: Records(Sources(body: "return '\\uD801';")));
+        Assert.NotEqual(expected: Records(Sources(body: "var value = 1; return nameof(value).Length;")),
+            actual: Records(Sources(body: "var renamed = 1; return nameof(renamed).Length;")));
+        Assert.NotEqual(expected: Records(Sources(body: "return (1 + 2) * 3;")), actual: Records(Sources(body: "return 1 + (2 * 3);")));
+        var original = Sources(body: "return Combine(z: 1, a: 2);");
+
+        original[PartialPath] += "\npublic static partial class DemoCodec { private static int Combine(int z, int a) => z + a; private static int Next() => 1; }";
+        var changed = new Dictionary<string, string>(original, StringComparer.Ordinal);
+
+        changed[PartialPath] = changed[PartialPath].Replace("z: 1, a: 2", "a: 1, z: 2");
+        Assert.NotEqual(expected: Records(original), actual: Records(changed));
+        original[PartialPath] = original[PartialPath].Replace("z: 1, a: 2", "z: Next(), a: Next()");
+        changed[PartialPath] = original[PartialPath].Replace("z: Next(), a: Next()", "a: Next(), z: Next()");
+        Assert.NotEqual(expected: Records(original), actual: Records(changed));
+    }
+    [Fact]
+    public void AWorldPayloadChangeMovesTheWireContractAndReplayDigests() {
+        var sources = new Dictionary<string, string>(StringComparer.Ordinal) {
+            ["src/Puck.World.Protocol/Protocol/WorldProtocol.cs"] = "public static class WorldProtocol { public const ulong WireProtocolKey = 1234; }",
+            ["src/Puck.World.Protocol/Protocol/WorldWireCodec.cs"] = "public static class WorldWireCodec { public static int Encode() => 1; }",
+            ["src/Puck.World.Server/WorldReplaySnapshot.cs"] = "public static class WorldReplaySnapshot { public const uint ShapeToken = 4; }",
+        };
+        var changed = new Dictionary<string, string>(sources, StringComparer.Ordinal);
+
+        changed["src/Puck.World.Protocol/Protocol/WorldWireCodec.cs"] = changed["src/Puck.World.Protocol/Protocol/WorldWireCodec.cs"].Replace("=> 1", "=> 2");
+        var problems = Check(recordedFrom: sources, current: changed);
+
+        Assert.Contains(collection: problems, filter: problem => problem.StartsWith("reshaped: the source of 'WorldProtocol.WireProtocolKey'", StringComparison.Ordinal));
+        Assert.Contains(collection: problems, filter: problem => problem.StartsWith("reshaped: the source of 'WorldReplaySnapshot.ShapeToken'", StringComparison.Ordinal));
+    }
+    [Fact]
+    public void TheStrictExtensionConfigurationTokenIsDiscovered() {
+        Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
+        Assert.Contains(collection: FormatVersionsLedger.Discover(files: FormatsCommand.ReadSources(repositoryRoot)),
+            filter: entry => ((entry.Id == "WorldExtensionConfiguration.CurrentSchema") && (entry.Token == "puck.world.extensions.v1")));
     }
     [Fact]
     public void TwoBranchesThatBumpOneFormatToTheSameTokenWithDifferentCodecsCollideInTheLedger() {

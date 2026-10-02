@@ -6,16 +6,17 @@ using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Puck.Cli.Format;
+using Puck.Cli.Format.Rewriters;
 
 namespace Puck.Cli.Formats;
 
 /// <summary>One strictly versioned format in <c>FormatVersions.json</c>.</summary>
 /// <param name="Id">The format's name: its declaring type and member, such as <c>WorldFederationCodec.WireKey</c>.</param>
 /// <param name="Source">The repository-relative path of the file that declares the token.</param>
-/// <param name="Shape">A digest of the format's source (<see cref="FormatVersionsLedger.ShapeOf"/>), or
-/// <see langword="null"/> for a named document schema, whose declaring file changes with every field it gains.</param>
+/// <param name="Shape">A digest of the format's canonical source (<see cref="FormatVersionsLedger.ShapeOf"/>).</param>
 /// <param name="Token">The format's current token.</param>
-internal sealed record FormatEntry(string Id, string Source, string? Shape, string Token);
+internal sealed record FormatEntry(string Id, string Source, string Shape, string Token);
 /// <summary>
 /// <c>FormatVersions.json</c>: every strictly versioned wire, persisted, or cache format the source declares, its current
 /// token, and the file that declares it. The ledger is generated from the source: <see cref="Discover"/> reads every
@@ -23,7 +24,7 @@ internal sealed record FormatEntry(string Id, string Source, string? Shape, stri
 /// of truth and the ledger is their checked-in mirror.
 /// <para>
 /// A format bumped on two branches collides in the ledger's lines, not in the code: each entry spells its token on
-/// its own line, and a binary format carries a digest of its declaring type's source on a line of its own. Two
+/// its own line, and every format carries a digest of its canonical source on a line of its own. Two
 /// branches that bump to the same new token merge their token lines cleanly, but they changed the codec differently,
 /// so their digest lines differ and conflict. A branch that changes the codec without a bump moves the digest and
 /// fails <c>puck formats --check</c> until the author re-records it, which is the moment to ask whether the encoding
@@ -34,7 +35,7 @@ internal static partial class FormatVersionsLedger {
     /// <summary>The ledger's file name at the repository root.</summary>
     public const string FileName = "FormatVersions.json";
     /// <summary>The ledger's own shape version.</summary>
-    public const int Format = 1;
+    public const int Format = 2;
 
     // Members that carry a binary format's token when their initializer holds exactly one literal. A document
     // schema is recognised by its value instead (SchemaToken), whatever the member is called.
@@ -110,19 +111,19 @@ internal static partial class FormatVersionsLedger {
             ? Encoding.ASCII.GetString(bytes: [.. bytes])
             : number.ToString(provider: CultureInfo.InvariantCulture));
     }
-    private static bool TryTokenOf(string memberName, ExpressionSyntax value, out string token, out bool schema) {
+    private static bool TryTokenOf(string memberName, ExpressionSyntax value, out string token) {
+        while (value is ParenthesizedExpressionSyntax parentheses) { value = parentheses.Expression; }
         var tokens = value.DescendantTokens().ToArray();
         var strings = tokens.Where(predicate: static item => item.IsKind(kind: SyntaxKind.StringLiteralToken)).ToArray();
 
         token = string.Empty;
-        schema = false;
 
         if (
+            (value is LiteralExpressionSyntax) &&
             (strings.Length == 1) &&
             SchemaToken().IsMatch(input: strings[0].ValueText)
         ) {
             token = strings[0].ValueText;
-            schema = true;
 
             return true;
         }
@@ -160,18 +161,188 @@ internal static partial class FormatVersionsLedger {
     }
     private static string DirectoryOf(string path) => path[..(path.LastIndexOf(value: '/') + 1)];
 
-    /// <summary>Digests the source that defines a binary format: every non-trivia token of the declaring file and of
-    /// its partial siblings, <c>Stem.cs</c> and <c>Stem.*.cs</c> in the same directory, so a comment, a blank line, or
-    /// a rename of nothing never moves it.</summary>
+    /// <summary>Digests canonical syntax of the declaring file, partial siblings, data types and shared codec
+    /// dependencies. Formatting, trivia and local renames do not move it; operator grouping, argument binding,
+    /// evaluation order and serialized member names remain significant.</summary>
     /// <param name="files">Every source file's text, by repository-relative path.</param>
     /// <param name="source">The declaring file.</param>
     /// <returns>Sixteen lowercase hexadecimal digits of a SHA-256.</returns>
-    public static string ShapeOf(IReadOnlyDictionary<string, string> files, string source) {
+    public static string ShapeOf(IReadOnlyDictionary<string, string> files, string source) => new Shapes(files: files).Of(source: source);
+
+    private sealed class Shapes {
+        private readonly IReadOnlyDictionary<string, string> m_files;
+        private readonly Dictionary<string, SyntaxTree> m_trees;
+
+        private readonly Dictionary<string, string> m_hashes = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> m_fragments = new(StringComparer.Ordinal);
+
+        private CSharpCompilation? m_compilation;
+
+        public Shapes(IReadOnlyDictionary<string, string> files) {
+            m_files = files;
+            m_trees = files.ToDictionary(pair => pair.Key, pair => ((SyntaxTree)CSharpSyntaxTree.ParseText(
+                text: pair.Value, path: pair.Key, options: CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview))), StringComparer.Ordinal);
+        }
+
+        private SemanticModel Model(SyntaxTree tree) {
+            m_compilation ??= CSharpCompilation.Create(
+                assemblyName: "FormatShapes",
+                syntaxTrees: m_trees.Values.Append(CSharpSyntaxTree.ParseText("global using System; global using System.Collections.Generic; global using System.IO; global using System.Linq; global using System.Threading; global using System.Threading.Tasks;", CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview))),
+                references: ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
+                    .Select(path => MetadataReference.CreateFromFile(path)),
+                options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));
+            return m_compilation.GetSemanticModel(tree);
+        }
+
+        public string Of(string source) {
+            if (m_hashes.TryGetValue(source, out var hash)) { return hash; }
+            var builder = new StringBuilder();
+
+            foreach (var path in Sources(source)) {
+                builder.Append(Fragment(path)).Append('\u0001');
+            }
+            hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())))[..16].ToLowerInvariant();
+            m_hashes[source] = hash;
+            return hash;
+        }
+
+        private IEnumerable<string> Sources(string source) {
+            var sources = ShapeSources(m_files, source).ToHashSet(StringComparer.Ordinal);
+            var pending = new Queue<string>(sources);
+
+            while (pending.TryDequeue(out var path)) {
+                var tree = m_trees[path];
+                var model = Model(tree);
+
+                foreach (var node in tree.GetRoot().DescendantNodes()) {
+                    var type = node switch {
+                        PropertyDeclarationSyntax property => property.Type,
+                        FieldDeclarationSyntax field => field.Declaration.Type,
+                        ParameterSyntax parameter when (parameter.Parent?.Parent is TypeDeclarationSyntax) => parameter.Type,
+                        BaseTypeSyntax basis => basis.Type,
+                        _ => null,
+                    };
+
+                    if (type is not null) { AddType(model.GetTypeInfo(type).Type); }
+                }
+            }
+            return sources.Order(StringComparer.Ordinal);
+
+            void AddType(ITypeSymbol? type) {
+                if (type is IArrayTypeSymbol array) { AddType(array.ElementType); }
+                if (type is not INamedTypeSymbol named) { return; }
+                foreach (var argument in named.TypeArguments) { AddType(argument); }
+                foreach (var declaration in named.OriginalDefinition.DeclaringSyntaxReferences) {
+                    var path = declaration.SyntaxTree.FilePath;
+
+                    if (m_trees.ContainsKey(path) && sources.Add(path)) { pending.Enqueue(path); }
+                }
+            }
+        }
+        private string Fragment(string path) {
+            if (m_fragments.TryGetValue(path, out var fragment)) { return fragment; }
+            var builder = new StringBuilder();
+            var tree = m_trees[path];
+            var root = new NullPatternRewriter(Model(tree)).Visit(tree.GetRoot())!;
+            // Run the existing syntactic normalizers on a trivia-free copy. A comment cannot decide whether a
+            // declaration or initializer is sorted in the fingerprint.
+            root = root.ReplaceTokens(root.DescendantTokens(), static (token, _) => token.WithoutTrivia()).NormalizeWhitespace();
+            foreach (var pass in FormatPasses.All.Where(pass => (pass.Default && pass.Syntactic))) {
+                root = pass.Apply(root);
+                root = CSharpSyntaxTree.ParseText(root.ToFullString(), CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview)).GetRoot();
+            }
+            var canonicalTree = CSharpSyntaxTree.ParseText(root.ToFullString(), CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview), path);
+
+            _ = Model(tree);
+            var model = m_compilation!.ReplaceSyntaxTree(tree, canonicalTree).GetSemanticModel(canonicalTree);
+            var names = new Dictionary<ISymbol, string>(SymbolEqualityComparer.Default);
+
+            foreach (var node in canonicalTree.GetRoot().DescendantNodes()) {
+                if ((node is ParameterSyntax) && (node.Parent?.Parent is RecordDeclarationSyntax)) { continue; }
+                if ((node is ParameterSyntax or VariableDeclaratorSyntax or SingleVariableDesignationSyntax or ForEachStatementSyntax or CatchDeclarationSyntax)
+                    && (model.GetDeclaredSymbol(node) is ILocalSymbol or IParameterSymbol)) {
+                    var symbol = model.GetDeclaredSymbol(node)!;
+
+                    names.TryAdd(symbol, $"local{names.Count.ToString(CultureInfo.InvariantCulture)}");
+                }
+            }
+            AppendShape(canonicalTree.GetRoot(), builder, model, names);
+            fragment = builder.ToString();
+            m_fragments[path] = fragment;
+            return fragment;
+        }
+    }
+
+    private static void AppendShape(SyntaxNode node, StringBuilder builder, SemanticModel model, IReadOnlyDictionary<ISymbol, string> names) {
+        if ((node is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } })
+            && (model.GetConstantValue(node) is { HasValue: true, Value: string nameOf })) {
+            builder.Append("nameof:").Append(nameOf.Length.ToString(CultureInfo.InvariantCulture)).Append(':');
+            AppendText(nameOf, builder);
+            return;
+        }
+        if (node is ParenthesizedExpressionSyntax parentheses) {
+            AppendShape(parentheses.Expression, builder, model, names);
+            return;
+        }
+        builder.Append(node.RawKind.ToString(CultureInfo.InvariantCulture)).Append('{');
+        if ((node is ArgumentListSyntax list) && (ArgumentBindings(list, model) is { } bindings)) {
+            var arguments = bindings.AsEnumerable();
+
+            if (!arguments.Any(binding => ExpressionSafety.HasSideEffect(binding.Argument.Expression, model))) {
+                arguments = arguments.OrderBy(binding => binding.Ordinal);
+            }
+            foreach (var (argument, ordinal) in arguments) {
+                builder.Append(ordinal.ToString(CultureInfo.InvariantCulture)).Append(':');
+                builder.Append(argument.RefKindKeyword.ValueText).Append(':');
+                AppendShape(argument.Expression, builder, model, names);
+            }
+        } else {
+            foreach (var child in node.ChildNodesAndTokens()) {
+                if (child.IsNode) {
+                    AppendShape(child.AsNode()!, builder, model, names);
+                } else {
+                    var token = child.AsToken();
+
+                    if (token.IsKind(SyntaxKind.CommaToken)) { continue; }
+                    var text = token.ValueText;
+
+                    if (token.IsKind(SyntaxKind.IdentifierToken)) {
+                        var symbol = (model.GetDeclaredSymbol(node) ?? model.GetSymbolInfo(node).Symbol);
+
+                        if ((symbol is not null) && names.TryGetValue(symbol, out var name)) { text = name; }
+                    }
+                    builder.Append(token.RawKind.ToString(CultureInfo.InvariantCulture)).Append(':')
+                        .Append(text.Length.ToString(CultureInfo.InvariantCulture)).Append(':');
+                    AppendText(text, builder);
+                    builder.Append(';');
+                }
+            }
+        }
+        builder.Append('}');
+    }
+    private static void AppendText(string text, StringBuilder builder) {
+        foreach (var character in text) { builder.Append(((int)character).ToString("x4", CultureInfo.InvariantCulture)); }
+    }
+    private static IReadOnlyList<(ArgumentSyntax Argument, int Ordinal)>? ArgumentBindings(ArgumentListSyntax list, SemanticModel model) {
+        if (model.GetSymbolInfo(list.Parent!).Symbol is not IMethodSymbol method) { return null; }
+        var bindings = new List<(ArgumentSyntax, int)>();
+
+        for (var index = 0; (index < list.Arguments.Count); index++) {
+            var argument = list.Arguments[index];
+            var parameter = ((argument.NameColon is { } name)
+                ? method.Parameters.FirstOrDefault(parameter => (parameter.Name == name.Name.Identifier.ValueText))
+                : method.Parameters.ElementAtOrDefault(index));
+
+            if ((parameter is null) || parameter.IsParams) { return null; }
+            bindings.Add((argument, parameter.Ordinal));
+        }
+        return bindings;
+    }
+    private static IEnumerable<string> ShapeSources(IReadOnlyDictionary<string, string> files, string source) {
         var directory = DirectoryOf(path: source);
         var stem = StemOf(path: source);
-        var builder = new StringBuilder();
 
-        foreach (var path in files.Keys.Where(predicate: path => (
+        return files.Keys.Where(predicate: path => ((
             path.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: directory
@@ -187,25 +358,35 @@ internal static partial class FormatVersionsLedger {
                 comparisonType: StringComparison.Ordinal,
                 value: $"{stem}."
             ))
-        )).Order(comparer: StringComparer.Ordinal)) {
-            foreach (var token in CSharpSyntaxTree.ParseText(
-                options: CSharpParseOptions.Default.WithLanguageVersion(version: LanguageVersion.Preview),
-                text: files[path]
-            ).GetRoot().DescendantTokens()) {
-                builder.Append(value: token.Text).Append(value: '\n');
-            }
-
-            builder.Append(value: '\u0001');
-        }
-
-        return Convert.ToHexString(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: builder.ToString())))[..16].ToLowerInvariant();
+        ) || IsShapeDependency(source, path))).Order(comparer: StringComparer.Ordinal);
     }
+    private static bool IsShapeDependency(string source, string path) {
+        var sharedWorldLeaves = (path is "src/Puck.World.Protocol/Protocol/WorldWireCodec.cs" or "src/Puck.World.Protocol/Protocol/WorldWireTags.cs" or "src/Puck.Networking/WireCodec.cs");
+
+        if (source is "src/Puck.World.Protocol/Protocol/WorldProtocol.cs") {
+            return (sharedWorldLeaves || path.StartsWith("src/Puck.World.Protocol/Protocol/WorldSubmissionCodec", StringComparison.Ordinal)
+                || (path is "src/Puck.World.Protocol/Protocol/WorldFrameCodec.cs" or "src/Puck.World.Protocol/Codecs/WorldPeerWireFormat.cs"));
+        }
+        if (source is "src/Puck.World.Server/WorldReplaySnapshot.cs" or "src/Puck.World.Server/WorldFederationCodec.cs"
+            or "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs" or "src/Puck.World.Protocol/Codecs/WorldAuthorityStoreWireCodec.cs") {
+            return (sharedWorldLeaves || path.StartsWith("src/Puck.World.Protocol/Protocol/WorldSubmissionCodec", StringComparison.Ordinal));
+        }
+        if (source is "src/Puck.HumbleGamingBrick/MachineSnapshot.cs" or "src/Puck.AdvancedGamingBrick/AgbMachineSnapshot.cs"
+            or "src/Puck.HumbleGamingDeck/HgdMachineSnapshot.cs") {
+            return (path.StartsWith(DirectoryOf(source), StringComparison.Ordinal)
+                || (path is "src/Puck.Machines/StateWriter.cs" or "src/Puck.Machines/StateReader.cs" or "src/Puck.Machines/SnapshotImage.cs"
+                    or "src/Puck.Machines/SnapshotSection.cs"));
+        }
+        return false;
+    }
+
     /// <summary>Finds every strict format the source declares.</summary>
     /// <param name="files">Every source file's text, by repository-relative path with forward slashes.</param>
     /// <returns>The formats in ordinal id order. A declaring type and member that two files share are told apart by
     /// appending <c>@</c> and the path to both ids.</returns>
     public static IReadOnlyList<FormatEntry> Discover(IReadOnlyDictionary<string, string> files) {
-        var found = new List<(string Id, string Source, string Token, bool Schema)>();
+        var found = new List<(string Id, string Source, string Token)>();
+        var shapes = new Shapes(files: files);
 
         foreach (var (path, text) in files.OrderBy(keySelector: static pair => pair.Key, comparer: StringComparer.Ordinal)) {
             // A Post stage's magic numbers frame its test ROMs and probes, not a format the engine reads back.
@@ -229,11 +410,10 @@ internal static partial class FormatVersionsLedger {
                 foreach (var (name, value) in Initializers(member: member)) {
                     if (TryTokenOf(
                         memberName: name,
-                        schema: out var schema,
                         token: out var token,
                         value: value
                     )) {
-                        found.Add(item: ($"{owner.Identifier.Text}.{name}", path, token, schema));
+                        found.Add(item: ($"{owner.Identifier.Text}.{name}", path, token));
                     }
                 }
             }
@@ -248,12 +428,7 @@ internal static partial class FormatVersionsLedger {
             Id: (shared.Contains(item: item.Id)
                 ? $"{item.Id}@{item.Source}"
                 : item.Id),
-            Shape: (item.Schema
-                ? null
-                : ShapeOf(
-                    files: files,
-                    source: item.Source
-                )),
+            Shape: shapes.Of(source: item.Source),
             Source: item.Source,
             Token: item.Token
         )).OrderBy(
@@ -275,9 +450,7 @@ internal static partial class FormatVersionsLedger {
 
             builder.Append(value: $"        {Quote(text: entry.Id)}: {{\n");
 
-            if (entry.Shape is not null) {
-                builder.Append(value: $"            \"shape\": {Quote(text: entry.Shape)},\n");
-            }
+            builder.Append(value: $"            \"shape\": {Quote(text: entry.Shape)},\n");
 
             builder.Append(value: $"            \"source\": {Quote(text: entry.Source)},\n");
             builder.Append(value: $"            \"token\": {Quote(text: entry.Token)}\n");
@@ -323,26 +496,19 @@ internal static partial class FormatVersionsLedger {
             }
 
             foreach (var member in root.GetProperty(propertyName: "formats").EnumerateObject()) {
-                var names = member.Value.EnumerateObject().Select(selector: static item => item.Name).ToHashSet(comparer: StringComparer.Ordinal);
-
                 if (
                     (member.Value.ValueKind != JsonValueKind.Object) ||
-                    !names.IsSupersetOf(other: ["source", "token"]) ||
-                    !names.IsSubsetOf(other: ["shape", "source", "token"]) ||
+                    !member.Value.EnumerateObject().Select(item => item.Name).Order(StringComparer.Ordinal).SequenceEqual(["shape", "source", "token"]) ||
                     member.Value.EnumerateObject().Any(predicate: static item => (item.Value.ValueKind != JsonValueKind.String))
                 ) {
-                    error = $"'{member.Name}' must be an object of string members source, token, and optionally shape";
+                    error = $"'{member.Name}' must be an object of exactly the string members shape, source and token";
 
                     return false;
                 }
 
                 parsed.Add(item: new FormatEntry(
                     Id: member.Name,
-                    Shape: (member.Value.TryGetProperty(
-                        propertyName: "shape",
-                        value: out var shape)
-                        ? shape.GetString()
-                        : null),
+                    Shape: member.Value.GetProperty("shape").GetString()!,
                     Source: member.Value.GetProperty(propertyName: "source").GetString()!,
                     Token: member.Value.GetProperty(propertyName: "token").GetString()!
                 ));

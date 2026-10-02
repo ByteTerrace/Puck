@@ -131,11 +131,13 @@ internal static class FormatsCommand {
             token that is a four- to eight-character code is spelled as text (the key
             0x354445464B435550 is PUCKFED5).
 
-            Each entry carries its token and the file declaring it. A binary format also
-            carries a digest of the non-trivia tokens of that file and its partial siblings, so
+            Each entry carries its token, the file declaring it and a digest of canonical
+            syntax of that file, its partial siblings and its data and codec dependencies, so
             two branches that bump one format to the same new token still conflict on the
             digest line, and a codec edited without a bump fails the check until its author
             records the new digest and decides whether the token should move.
+            Formatting, comments and local renames preserve the digest. Operator grouping,
+            argument binding, evaluation order and serialized member names remain significant.
 
             --check writes nothing and exits 1 for an unrecorded, stale, bumped, reshaped, or
             moved format, or a ledger whose bytes differ from what the verb writes. The

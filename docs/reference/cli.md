@@ -2883,7 +2883,7 @@ puck formats --check    write nothing; exit 1 for an unrecorded, stale, bumped, 
 A declaration is a format when it is a `const`, a `static readonly` field, or a static or expression-bodied property
 whose initializer is one of two things:
 
-- a named document schema, a string of the form `puck.<name>.v<N>` such as `puck.world.definition.v1`;
+- a named document schema literal, a string of the form `puck.<name>.v<N>` such as `puck.world.definition.v1`;
 - a literal under one of the recognized token member names (`WireKey`, `WireProtocolKey`, `ProtocolKey`,
   `Revision`, `ShapeToken`, `SupportedVersion`, `CurrentVersion`, `Format`, `FormatVersion`, `SupportedFormat`,
   `Version`, `Magic`, `JournalMagic`, `JournalVersion`, `PackMagic`, `PackVersion`, `CompilerVersion`,
@@ -2894,21 +2894,26 @@ whose initializer is one of two things:
 Declarations under a `*.Post` project and generated files are outside the ledger. An entry that is none of these
 needs its member added to the recognized names in `FormatVersionsLedger`, which is a deliberate edit of the verb.
 
-An entry holds its id (`Type.Member`), the file declaring it, and its token, each on a line of its own. A binary
-format, one that is not a named document schema, also holds `shape`, a digest of the non-trivia tokens of the
-declaring file and of its partial siblings (`Stem.cs` and `Stem.*.cs` beside it), so a comment or a blank line never
-moves it. The digest is what lets two lanes collide. Git merges two identical edits of one line without a conflict,
+An entry holds its id (`Type.Member`), the file declaring it, its token and a `shape` digest, each on a line of its
+own. The digest covers canonical syntax of the declaring file and its partial siblings (`Stem.cs` and
+`Stem.*.cs` beside it), source-declared field and property types, record constructor types and base types,
+including their data dependencies. Shared World wire leaves also feed the wire, replay, checkpoint, federation
+and journal digests; snapshot identities cover their machine project's source and the shared state reader,
+writer and image layout. A version-shaped string inside an object initializer is an identity, not a schema literal.
+The digest is what lets two lanes collide. Git merges two identical edits of one line without a conflict,
 and two lanes that bump a codec to the same next token write the same token line; they changed the codec
 differently, so their digest lines differ and conflict. A lane that edits a codec without bumping its token fails
 `--check` with a `reshaped` finding until the author reruns `puck formats`, which is the moment to decide whether
-the encoding changed and the token should too. A document schema carries no digest, because its declaring file
-gains fields under the same version as an ordinary edit.
+the encoding changed and the token should too. This also covers document schemas: a field change under an
+unchanged schema token requires recording its new shape.
 
-The digest counts every token the formatter can add, such as the parentheses and argument names
-[`puck format`](#puck-formatthe-one-formatter) inserts, because dropping them would let two different expressions
-digest alike. Format a changed codec before recording it: `puck format` over the lane's files, then `puck formats`.
-A codec that reaches CI unformatted is rewritten by the automatic format commit, and that rewrite moves its digest
-and fails the check.
+The digest uses the existing formatter's syntactic and null-pattern normalizers before hashing syntax structure
+without trivia. Parentheses do not contribute an extra node, but operator grouping remains in the tree. Resolved
+call arguments are identified by parameter position, and only expressions the formatter considers safe to reorder
+are sorted. Local and parameter names are replaced by declaration identities; `nameof` retains its resulting text.
+Formatting, comments and local renames preserve the digest, while changed argument binding and evaluation order
+move it. Unresolved calls retain their written syntax. These are conservative source fingerprints: an implementation
+edit within the covered files can require recording even when its encoding stays the same.
 
 CI runs `puck formats --check` in the `ledgers` job of `verify.yml`.
 
