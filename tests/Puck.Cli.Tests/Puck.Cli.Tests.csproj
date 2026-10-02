@@ -14,19 +14,19 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Cli\Puck.Cli.csproj" />
+        <ProjectReference Include="../../src/Puck.Assets/Puck.Assets.csproj" />
+        <ProjectReference Include="../../src/Puck.Cli/Puck.Cli.csproj" />
         <!-- TestCommandLawTests boots the real Puck.World executable out of its own Release output, so that
              output has to exist before the suite runs; nothing here links against the assembly. -->
-        <ProjectReference Include="..\..\src\Puck.World\Puck.World.csproj" ReferenceOutputAssembly="false" Private="false" />
+        <ProjectReference Include="../../src/Puck.World/Puck.World.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="..\Shared\VirtualClock.cs" Link="VirtualClock.cs" />
-        <Compile Include="..\Shared\TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
-        <Compile Include="..\Shared\ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
+        <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
+        <Compile Include="../Shared/TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
+        <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
     </ItemGroup>
     <ItemGroup>
-        <None Update="Assets\**">
+        <None Update="Assets/**">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>

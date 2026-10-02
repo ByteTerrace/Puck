@@ -416,6 +416,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 w.WriteString(value: row.Border);
             }
         );
+        writer.WriteUInt64(value: section.CrossingSequence);
 
         return writer.ToArray();
     }
@@ -486,6 +487,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             },
             maximum: MaxCollectionCount
         );
+        var crossingSequence = reader.ReadUInt64();
 
         if (!reader.TryFinish(failure: out var failure)) {
             section = null!;
@@ -497,6 +499,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         section = new WorldTransferEscrowCheckpoint(
             BorderAdmissions: borderAdmissions,
             Committed: committed,
+            CrossingSequence: crossingSequence,
             LatestCommittedTransfer: latest,
             Leases: leases,
             MobilityAdmissions: mobilityAdmissions,

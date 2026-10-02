@@ -374,6 +374,13 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     renderHeight: counts.RenderHeight
                 ) ?? (counts.Width, counts.Height)))
             ) ||
+            (
+                (current.Kind == ShaderPipelineResourceKind.Buffer) &&
+                (
+                    (old.ElementBytes != current.ElementBytes) ||
+                    (old.ResolveSizeBytes(counts: previousCounts) != current.ResolveSizeBytes(counts: counts))
+                )
+            ) ||
             (old.SizeBytes != current.SizeBytes) ||
             (old.Initialization != current.Initialization)
         ) {
@@ -1051,55 +1058,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         throw new InvalidDataException(message: $"Unknown shader pipeline format '{format}'.");
     }
 
-    private void PresentSelectedOutput() {
-        WaitAll();
-        HoldLeases();
-        var slot = ((int)((m_frame - 1) % m_inFlight));
-        var selected = m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput)];
-
-        m_latestSlot = slot;
-        var commands = m_commands;
-        var command = BeginFrameCommands(slot: slot);
-
-        commands.Clear();
-        if (NeedsPreview(spec: selected.Spec)) {
-            m_preview!.Record(
-                PreviewSource(
-                    selected: selected,
-                    slot: slot
-                ),
-                ResolveImage(
-                    selected,
-                    selected.Spec.Name,
-                    slot
-                ),
-                slot,
-                command
-            );
-        }
-        FinalizeOutputs(
-            command: command,
-            exported: null,
-            slot: slot
-        );
-        m_gpu.Recorder.EndCommandBuffer(commandBufferHandle: command);
-        commands.Add(item: command);
-        SubmitCounted(
-            commands: commands,
-            fence: m_slots[slot].Fence!
-        );
-        m_frameLeases.MoveTo(destination: m_slots[slot].Leases);
-        Publish(surface: Output(slot: slot));
-        m_outputRefreshRequested = false;
-    }
-    private RuntimeResource PresentationResource(RuntimeResource selected) {
-        var selectedFormat = ParseFormat(format: selected.Spec.Format);
-
-        if (Surface.IsImageFormat(format: selectedFormat)) {
-            return selected;
-        }
-        throw new InvalidDataException(message: $"Selected output '{selected.Spec.Name}' is {selectedFormat}, which no surface carries.");
-    }
     // Moves the carried history's instances out of the replaced graph into the installed one. The carried instances keep
     // their contents and the states the replaced graph left them in.
     private void PreserveCompatibleHistory(IReadOnlyDictionary<int, CarriedHistory> carried, ShaderPipelinePlan? previousPlan) {

@@ -1,4 +1,6 @@
+using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
@@ -8,8 +10,9 @@ namespace Puck.Shaders;
 /// region bound to its input port and writing the image bound to its output.
 /// <para>
 /// The kernel reads the pass group the catalog declares (<see cref="RenderGraphPackageCatalog.SourceMembers"/>): the
-/// region at binding 1, the image at binding 2 and the work counters at binding 3 of set 3, eight by eight threads a
-/// group, one thread a pixel, each pixel it writes counting one texel (<see cref="RenderGraphPackageWorkCounters"/>). Its build
+/// paper-white level in its pass block, which the recorder writes every frame, the region at binding 1, the image at
+/// binding 2 and the work counters at binding 3 of set 3, eight by eight threads a group, one thread a pixel, each pixel it
+/// writes counting one texel (<see cref="RenderGraphPackageWorkCounters"/>). Its build
 /// leases the compute pipeline, one for every conversion of its kind on the device, from the pass-pipeline cache on the
 /// thread pool; its recorder allocates its sets from the
 /// instance's pool. Its ports are a compute read and a compute write, so the node's planned barriers leave the region
@@ -20,20 +23,27 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
 
     private readonly string m_directory;
     private readonly string m_package;
+    private readonly float m_paperWhiteNits;
 
     /// <summary>Initializes a new instance of the <see cref="SourceConversionPackage"/> class.</summary>
     /// <param name="package">The conversion package's id, one of <see cref="RenderGraphPackageCatalog.SourceConversions"/>,
     /// which is also the stem of its kernel's file.</param>
     /// <param name="directory">The directory holding the deployed kernels, or <see langword="null"/> for
     /// <c>Assets/Shaders/Sources</c> beside the executable.</param>
+    /// <param name="paperWhiteNits">The paper-white level, in cd/m², a working value of one shows at: the host's
+    /// (<c>PresentationOptions.PaperWhiteNits</c>), which an HDR source's luminance is converted relative to.</param>
     /// <exception cref="ArgumentException"><paramref name="package"/> names no conversion package.</exception>
-    public SourceConversionPackage(string package, string? directory = null) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="paperWhiteNits"/> is outside the range
+    /// <see cref="DisplayOutput.RequirePaperWhite"/> accepts.</exception>
+    public SourceConversionPackage(string package, string? directory = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits) {
         if (!RenderGraphPackageCatalog.SourceConversions.Contains(value: package)) {
             throw new ArgumentException(
                 message: $"'{package}' is not a conversion package.",
                 paramName: nameof(package)
             );
         }
+
+        m_paperWhiteNits = ((float)DisplayOutput.RequirePaperWhite(nits: paperWhiteNits));
 
         m_directory = (directory ?? Path.Combine(
             path1: AppContext.BaseDirectory,
@@ -49,16 +59,20 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
     /// <param name="packages">The host's packages.</param>
     /// <param name="directory">The directory holding the deployed kernels, or <see langword="null"/> for
     /// <c>Assets/Shaders/Sources</c> beside the executable.</param>
+    /// <param name="paperWhiteNits">The paper-white level, in cd/m², every conversion writes relative to.</param>
     /// <exception cref="ArgumentNullException"><paramref name="packages"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A conversion package already has a recorder.</exception>
-    public static void RegisterAll(RenderGraphPackageRecorders packages, string? directory = null) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="paperWhiteNits"/> is outside the range
+    /// <see cref="DisplayOutput.RequirePaperWhite"/> accepts.</exception>
+    public static void RegisterAll(RenderGraphPackageRecorders packages, string? directory = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits) {
         ArgumentNullException.ThrowIfNull(argument: packages);
 
         foreach (var package in RenderGraphPackageCatalog.SourceConversions) {
             packages.Register(
                 factory: new SourceConversionPackage(
                     directory: directory,
-                    package: package
+                    package: package,
+                    paperWhiteNits: paperWhiteNits
                 ),
                 package: package
             );
@@ -129,7 +143,8 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
         return new Recorder(
             built: objects,
             context: context,
-            groups: groups
+            groups: groups,
+            paperWhiteNits: m_paperWhiteNits
         );
     }
 
@@ -145,6 +160,8 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
     private sealed class Recorder : IRenderGraphPackageRecorder {
         private readonly Built m_built;
         private readonly uint m_image;
+        private readonly float m_paperWhiteNits;
+        private readonly int m_paperWhiteOffset;
         private readonly uint m_region;
         private readonly GpuDeviceServices m_services;
         private readonly RenderGraphPackageSets m_sets = null!;
@@ -152,8 +169,10 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
 
         private bool m_disposed;
 
-        public Recorder(RenderGraphPackageRecorderContext context, Built built, RenderGraphPackageGroups groups) {
+        public Recorder(RenderGraphPackageRecorderContext context, Built built, RenderGraphPackageGroups groups, float paperWhiteNits) {
             m_built = built;
+            m_paperWhiteNits = paperWhiteNits;
+            m_paperWhiteOffset = ((int)context.Parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.SourcePaperWhite));
             m_services = context.Services;
 
             try {
@@ -190,6 +209,10 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
             var set = m_sets.PassSet(slot: recording.Slot);
             var region = recording.Inputs[0].Buffer!;
 
+            BinaryPrimitives.WriteSingleLittleEndian(
+                destination: recording.PassBlock[m_paperWhiteOffset..],
+                value: m_paperWhiteNits
+            );
             m_workCounters.Write(
                 passSet: set,
                 recording: recording

@@ -157,7 +157,7 @@ public sealed class ParkedGrantReleaseLawTests {
         }
 
         Assert.Equal(
-            actual: tape.Verify(name: name).DivergedAt,
+            actual: tape.Verify(name: name).Primary.DivergedAt,
             expected: -1
         );
     }

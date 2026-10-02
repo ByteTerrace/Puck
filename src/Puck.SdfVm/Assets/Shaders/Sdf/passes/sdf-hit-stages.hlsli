@@ -16,8 +16,11 @@
 
 #ifdef SDF_VIEWS_PASS
 // The views stage: the pixel's light stage over its surface sample, the bounded volumes composited last, and the debug
-// view. A lane past the render extent returns black, which the caller never stores.
-float3 sdfViewsStage(SdfPixel p) {
+// view, with the shaded emission's reactivity and one where a volume covers it. A lane past the render
+// extent returns black, which the caller never stores.
+float3 sdfViewsStage(SdfPixel p, out float reactivity) {
+    reactivity = 0.0;
+
     if (!p.active) {
         return float3(0.0, 0.0, 0.0);
     }
@@ -27,12 +30,14 @@ float3 sdfViewsStage(SdfPixel p) {
     // The query tally the evals heatmap reads, from the marches every stage before this one made.
     sdfEvalCount = s.queries;
 
-    float3 color = sdfLightStage(p, s);
+    float3 color = sdfLightStage(p, s, reactivity);
 
 #ifdef SDF_SCREEN_SOURCES
     // The bounded emissive volumes composite after the surface or sky color is final, and never paint through solid
     // geometry: each is clipped to the span from the near plane to the hit distance, or to the far distance on a miss.
-    color = shadeVolumes(color, p.rayOrigin, p.rayDirection, worldRayDistanceAt(p.view, p.rayDirection, worldNearDistance(p.view)), (s.hit ? s.t : p.farDistance), p.pixel);
+    float covered;
+    color = shadeVolumes(color, p.rayOrigin, p.rayDirection, worldRayDistanceAt(p.view, p.rayDirection, worldNearDistance(p.view)), (s.hit ? s.t : p.farDistance), p.pixel, covered);
+    reactivity = max(reactivity, covered);
 #endif
 
     return sdfDebugView(p, s, color);

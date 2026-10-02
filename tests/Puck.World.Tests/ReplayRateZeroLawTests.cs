@@ -252,7 +252,7 @@ public sealed class ReplayRateStampLawTests {
             var result = tape.StopRecording();
 
             Assert.Null(@object: result.VerifyFault);
-            Assert.NotNull(value: result.Verdict);
+            Assert.NotNull(@object: result.Verdict);
 
             using var stream = File.OpenRead(path: tape.PathFor(name: name));
 
@@ -309,7 +309,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
         var result = tape.StopRecording();
 
         Assert.Null(@object: result.VerifyFault);
-        Assert.NotNull(value: result.Verdict);
+        Assert.NotNull(@object: result.Verdict);
 
         using var stream = File.OpenRead(path: tape.PathFor(name: name));
         var persisted = WorldReplaySnapshot.Read(stream: stream);
@@ -374,7 +374,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
         var result = tape.StopRecording();
 
         Assert.Null(@object: result.VerifyFault);
-        Assert.NotNull(value: result.Verdict);
+        Assert.NotNull(@object: result.Verdict);
 
         using var stream = File.OpenRead(path: tape.PathFor(name: name));
         var persisted = WorldReplaySnapshot.Read(stream: stream);
@@ -420,7 +420,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
         var result = tape.StopRecording();
 
         Assert.Null(@object: result.VerifyFault);
-        Assert.NotNull(value: result.Verdict);
+        Assert.NotNull(@object: result.Verdict);
 
         using var stream = File.OpenRead(path: tape.PathFor(name: name));
         var persisted = WorldReplaySnapshot.Read(stream: stream);
@@ -466,7 +466,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
         var result = tape.StopRecording();
 
         Assert.Null(@object: result.VerifyFault);
-        Assert.NotNull(value: result.Verdict);
+        Assert.NotNull(@object: result.Verdict);
 
         using var stream = File.OpenRead(path: tape.PathFor(name: name));
         var persisted = WorldReplaySnapshot.Read(stream: stream);

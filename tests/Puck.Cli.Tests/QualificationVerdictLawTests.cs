@@ -279,11 +279,11 @@ public sealed class QualificationVerdictLawTests {
         var withheld = QualificationPackage.LegEnvironment(
             compiler: ReleaseCompilerDiscovery.None,
             holdsCompiler: static directory => directory.EndsWith(comparisonType: StringComparison.Ordinal, value: "dxc-bin"),
-            searchPath: $"C:/tools{separator}C:/dxc-bin{separator}C:/other"
+            searchPath: $"/tools{separator}/dxc-bin{separator}/other"
         );
 
-        Assert.Equal(actual: withheld["PATH"], expected: $"C:/tools{separator}C:/other");
-        Assert.Empty(collection: QualificationPackage.LegEnvironment(compiler: ReleaseCompilerDiscovery.Path, holdsCompiler: static _ => true, searchPath: "C:/dxc-bin"));
+        Assert.Equal(actual: withheld["PATH"], expected: $"/tools{separator}/other");
+        Assert.Empty(collection: QualificationPackage.LegEnvironment(compiler: ReleaseCompilerDiscovery.Path, holdsCompiler: static _ => true, searchPath: "/dxc-bin"));
 
         var profile = new ReleaseProfile(
             Backends: ["vulkan", "directx"],

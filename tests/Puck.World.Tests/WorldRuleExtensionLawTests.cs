@@ -697,6 +697,8 @@ public sealed class WorldRuleExtensionLawTests {
     [Fact]
     public void ReplayAuthoritativeTraceDetectsStateChangesThatPoseHashesCannotSee() {
         static WorldReplaySnapshot Snapshot(WorldDefinition definition) => new() {
+            Authority = "boot",
+            Instance = "boot",
             DefinitionJson = WorldDefinitionSerialization.Serialize(definition: definition),
             MountedAddons = [],
             RecordedHashes = new ulong[2],

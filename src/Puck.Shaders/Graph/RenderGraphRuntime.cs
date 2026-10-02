@@ -119,6 +119,12 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     // Each instance's producer whose tainted output its latest render bound (a graph instance's inputs, an external
     // producer's reads), or null when everything it bound was untainted; a capture of the instance waits until it is null.
     private string?[] m_taintedReads;
+    // Each instance's unread frames: the frames whose schedule left it unread and no displayed output shows or reads it,
+    // including through held consumer outputs. Its packages read it, so a parked instance shown again
+    // starts what depends on continuity anew.
+    private long[] m_unreadFrames;
+    // The instances visible through this frame's roots, footprints and buffer reads, independent of render cadence.
+    private bool[] m_visible;
     // The instance the capture armed on the runtime reads.
     private int m_captureInstance;
     private bool m_captureFollowsRoot;
@@ -152,6 +158,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_standInReads = new string?[nodes.Length];
         m_taintedReads = new string?[nodes.Length];
         m_producerTainted = new bool[nodes.Length];
+        m_unreadFrames = new long[nodes.Length];
+        m_visible = new bool[nodes.Length];
         m_captureInstance = root;
 
         Array.Fill(
@@ -1137,6 +1145,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             prior: prior,
             schedule: schedule
         );
+        CountUnread(frame: in scheduled, schedule: schedule);
 
         var renders = schedule.Renders;
         // The node that submitted last this frame, whose submission follows the host's presentation of the last frame.
@@ -1274,6 +1283,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
             // The root is shown as the display, at its own extent; every other instance is resampled by what reads it.
             node.ShownAtItsExtent = (index == m_root);
+            node.UnreadFrames = m_unreadFrames[index];
 
             try {
                 surface = node.ProduceFrame(context: in context);

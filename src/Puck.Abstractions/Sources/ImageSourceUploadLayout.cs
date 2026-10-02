@@ -30,6 +30,7 @@ public readonly record struct ImageSourceUploadHeader(uint Width, uint Height, I
 /// <list type="bullet">
 /// <item><description><see cref="ImagePixelFormat.R8G8B8A8Unorm"/>, <see cref="ImagePixelFormat.B8G8R8A8Unorm"/> and
 /// <see cref="ImagePixelFormat.R10G10B10A2Unorm"/>: one plane of four-byte pixels.</description></item>
+/// <item><description><see cref="ImagePixelFormat.R16G16B16A16Float"/>: one plane of eight-byte pixels.</description></item>
 /// <item><description><see cref="ImagePixelFormat.Indexed8"/>: plane 0 is the <see cref="PaletteEntries"/>-entry RGBA8
 /// palette and plane 1 the index rows, one byte per pixel.</description></item>
 /// <item><description><see cref="ImagePixelFormat.Nv12"/>: plane 0 is the Y rows and plane 1 the half-height rows of
@@ -77,6 +78,16 @@ public static class ImageSourceUploadLayout {
                 Height: height,
                 Plane0Offset: First,
                 Plane0Stride: (width * 4U),
+                Plane1Offset: 0U,
+                Plane1Stride: 0U,
+                Width: width
+            ),
+            ImagePixelFormat.R16G16B16A16Float => new ImageSourceUploadHeader(
+                Color: color,
+                Format: format,
+                Height: height,
+                Plane0Offset: First,
+                Plane0Stride: (width * 8U),
                 Plane1Offset: 0U,
                 Plane1Stride: 0U,
                 Width: width

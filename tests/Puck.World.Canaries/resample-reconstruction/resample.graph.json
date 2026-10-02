@@ -93,6 +93,13 @@
           "min": 0,
           "type": "float4"
         },
+        "sharpen": {
+          "default": 0,
+          "max": 1,
+          "description": "1 sharpens a source at the rect's own extent by a contrast-adaptive sharpen of the sharpness's strength; 0 keeps its exact copy.",
+          "min": 0,
+          "type": "uint"
+        },
         "sharpness": {
           "default": 0,
           "max": 1,

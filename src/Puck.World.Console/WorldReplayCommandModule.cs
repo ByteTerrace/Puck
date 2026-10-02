@@ -92,6 +92,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
         )) {
             return CommandResult.Error(output: $"[replay.record: refused to arm — {refusal}]");
         }
+        m_instances.RecordCompanions(tape: m_tape);
 
         return new CommandResult(Output: $"[replay.record: recording '{name}' — replay.stop persists it, replay.cancel drops it]");
     }
@@ -146,17 +147,21 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
                 return CommandResult.Error(output: $"[replay.stop: wrote {result.Path}, but the post-persist verify refused — the LIVE TREE moved past this recording's mounted set: {fault}]");
             }
 
-            var verdict = result.Verdict!.Value;
+            var verdict = result.Verdict!;
 
-            if (verdict.Match) {
+            if (verdict.Passing) {
                 return new CommandResult(Output: $"[replay.stop: wrote {result.Path} | {verdict.Describe()} — faithful, boot-anchored capture]");
             }
 
-            // Tick 0 indicts the STARTING state (a mid-session capture the boot image cannot reproduce); any later tick
-            // means the start matched and the trajectory drifted, which is a determinism defect, not a capture boundary.
-            var reading = (verdict.DivergedAtStart
-                ? "mid-session capture; the fresh re-drive starts from the definition boot image"
-                : "the capture was boot-anchored, so this is TRAJECTORY drift — investigate the tick above"
+            // Every authority matched, so the set fails only on a crossing whose other half no tape here replays.
+            // Otherwise tick 0 indicts the STARTING state (a mid-session capture the boot image cannot reproduce), and
+            // any later tick means the start matched and the trajectory drifted, a determinism defect.
+            var reading = (verdict.Match
+                ? "every authority replayed, but a crossing's other half is on no tape in this set, so the crossing is not verified"
+                : ((verdict.Primary.DivergedAtStart || verdict.Companions.Any(predicate: static companion => companion.Verdict.DivergedAtStart))
+                    ? "mid-session capture; the fresh re-drive starts from the definition boot image"
+                    : "the capture was boot-anchored, so this is TRAJECTORY drift — investigate the tick above"
+                )
             );
 
             return new CommandResult(Output: $"[replay.stop: wrote {result.Path} | {verdict.Describe()} — {reading}]");
@@ -186,7 +191,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
 
             // One rendering, one error flag: the verdict decides both, so a MATCH and a MISMATCH cannot drift apart in
             // wording the way two hand-written branches do.
-            return new CommandResult(Output: $"[replay.verify: '{name}' | {verdict.Describe()}]") { IsError = !verdict.Match };
+            return new CommandResult(Output: $"[replay.verify: '{name}' | {verdict.Describe()}]") { IsError = !verdict.Passing };
         } catch (FileNotFoundException) {
             return CommandResult.Error(output: $"[replay.verify: no replay named '{name}' — replay.list shows what's saved]");
         } catch (WorldReplayCodecException exception) {
@@ -204,7 +209,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.record",
-            description: "Arms deterministic recording (Immediate): replay.record <name> begins capturing the running session's per-tick server-input stream and starting state; replay.stop persists it. Refuses to arm, loudly, on any of THREE boot-anchored conditions this session: an addon has already had an admitted execution attempted (offline replay creates fresh guests at sim-counter zero, which cannot re-establish a guest's prior accumulated state), a screen machine has already stepped, or a screen op (insert/eject/select/options/link/unlink) has already applied — the latter two because offline replay reconstructs a FRESH WorldMachineHost from the tape's own definition snapshot, which can never recover a booted cartridge's accumulated core state or an already-landed screen op. Grant verb masks ride the shared tape leaf codec.",
+            description: "Arms deterministic recording (Immediate): replay.record <name> begins capturing the running session's per-tick server-input stream and starting state, and tapes every other row of the process beside it as one set (a row that cannot be taped is named on stderr); replay.stop persists the set. Refuses to arm, loudly, on any of THREE boot-anchored conditions this session: an addon has already had an admitted execution attempted (offline replay creates fresh guests at sim-counter zero, which cannot re-establish a guest's prior accumulated state), a screen machine has already stepped, or a screen op (insert/eject/select/options/link/unlink) has already applied — the latter two because offline replay reconstructs a FRESH WorldMachineHost from the tape's own definition snapshot, which can never recover a booted cartridge's accumulated core state or an already-landed screen op. Grant verb masks ride the shared tape leaf codec.",
             handler: (_, args) => Record(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
@@ -234,7 +239,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.verify",
-            description: "Replays a saved recording through a FRESH world and reports MATCH/MISMATCH (Immediate): replay.verify <name> rehydrates the boot-image starting state, re-drives the recorded stream offline, and compares the replayed tail hash against the recorded LIVE tail (a genuine live-vs-replay fidelity check).",
+            description: "Replays a saved recording through a FRESH world and reports MATCH/MISMATCH (Immediate): replay.verify <name> rehydrates the boot-image starting state, re-drives the recorded stream offline, and compares the replayed tail hash against the recorded LIVE tail (a genuine live-vs-replay fidelity check). Every row taped beside it is re-driven the same way, and every crossing between them is paired by its handoff token; a crossing whose other half is on a remote or untaped authority is NOT VERIFIED, and the verb fails unless every authority matches and every crossing is verified.",
             handler: (_, args) => Verify(args: args)
         );
         yield return CommandDefinition.WithWireArgs(

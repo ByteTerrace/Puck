@@ -26,6 +26,10 @@ public sealed record WorldTestPatternSettings(int Width, int Height);
 /// at least 4, and a borderless code does not scan; validation refuses only a negative width, since a screen's framing
 /// sometimes supplies the margin itself.</param>
 public sealed record WorldQrSettings(string Payload, string EcLevel = "M", int QuietZoneModules = 4);
+/// <summary>The settings of the <c>color</c> producer: one flat colour, a one-pixel image a screen stretches over its
+/// face. A session screen past the presentation's nesting depth shows its fallback colour through it.</summary>
+/// <param name="Color">The colour, as <c>#RRGGBB</c>.</param>
+public sealed record WorldColorSettings(string Color);
 /// <summary>The settings of the <c>camera</c> producer: the platform's live camera feed. The platform may negotiate a
 /// nearby extent; every screen and probe socket naming the same sensor of the same seat shares one feed, opened at the
 /// richest profile any consumer requests.</summary>
@@ -75,6 +79,8 @@ public static class WorldImageProducerSettings {
     public const string CameraId = "camera";
     /// <summary>The desktop-capture producer's id.</summary>
     public const string CaptureId = "capture";
+    /// <summary>The flat-colour producer's id.</summary>
+    public const string ColorId = "color";
     /// <summary>The producer id of a <see cref="WorldScreenSource.Machine"/> source's render-graph instance. The machine
     /// arm stays typed because it names a <c>machines</c> row, so no document producer may take this id.</summary>
     public const string MachineId = "machine";

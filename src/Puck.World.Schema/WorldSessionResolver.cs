@@ -43,9 +43,11 @@ namespace Puck.World;
 /// <c>ReapIfEmpty</c> (a persisted-lifetime resolution is retained — see
 /// <c>Puck.World.WorldInstanceHost.TransferDestination</c>'s own remarks) — only an explicit
 /// <c>world.instance.stop</c> clears it, mirroring "an explicit reset ends a generation through the same target
-/// decision" (docs/architecture/worlds.md). Releasing an observation lease alone never advances anything here, because
-/// nothing about observation reaches this type yet — see docs/architecture/worlds.md's own "Observation and display"
-/// gap.</para>
+/// decision" (docs/architecture/worlds.md). A screen's observation resolves through this type like a crossing
+/// (<c>Puck.World.WorldInstanceHost</c>'s observation door), but releasing its lease never advances a generation here:
+/// a closed screen session stops its destination only through <c>ReapIfEmpty</c>, when no other screen observes it and
+/// nobody stands in it, and that instance's retirement is what clears an ephemeral entry
+/// (<see cref="NotifyInstanceRetired"/>).</para>
 /// <para><b>Scope keys never collide across kinds:</b> <c>user:&lt;identity-id&gt;</c>, <c>group:&lt;group-id&gt;</c>,
 /// and the fixed <see cref="GlobalScopeKey"/> live in one namespace by construction (an identity id and a group id
 /// are both opaque strings a bare prefix cannot confuse for the other kind, and neither can ever equal the fixed

@@ -65,7 +65,7 @@ public readonly record struct WorldAuthorityRootSnapshot(WorldAuthorityRoot Root
 public readonly record struct WorldAuthorityRecovery(
     WorldAuthorityRootSnapshot Root,
     WorldAuthorityCheckpointBlob? Checkpoint,
-    WorldMutationJournalTail Journal
+    WorldAuthorityJournalTail Journal
 ) {
     /// <summary>The root-qualified, fully validated definition, or <see langword="null"/> when no definition is published.</summary>
     public WorldDefinition? Definition => Admission?.Definition;

@@ -424,6 +424,7 @@ public sealed partial class ShaderPipelineRenderNode {
             Reads: Reads,
             Recorder: recorder,
             Slot: slot,
+            UnreadFrames: UnreadFrames,
             Width: pass.Width,
             WorkCounters: (pass.CountsKernelWork
                 ? m_passes[0].KernelCounters!.RowOf(

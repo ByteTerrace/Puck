@@ -20,6 +20,9 @@ internal static class ParityCommand {
     private const string WorldPath = "tests/Puck.Parity/parity.world.json";
     // The ticks a leg runs past the world's last scheduled capture, so the frame that serves it lands first.
     private const ulong WaitMarginTicks = 30;
+    // The ticks the leg turns temporal reconstruction on before the world's first converging station, so every view's
+    // temporal graph has installed before that station arms.
+    private const ulong ReconstructionLeadTicks = 60;
 
     private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 900);
 
@@ -100,30 +103,59 @@ internal static class ParityCommand {
         );
     }
 
-    // The tick the leg waits to, past the last tick the world's captures rows schedule, read from the document itself
-    // so a station added there is captured without a second statement of its schedule here. A world that cannot be
-    // read, or whose last tick leaves no room for the margin, is refused by name.
-    internal static bool TryReadWaitTick(string worldPath, out ulong waitTick, out string error) {
+    // The tick the leg waits to, past the last tick the world's captures rows schedule, and the tick it turns temporal
+    // reconstruction on at, ReconstructionLeadTicks before the first station that converges, or null for a world with
+    // none: both read from the document itself, so a station added there is captured without a second statement of its
+    // schedule here. Every station that does not converge must lie before the reconstruction tick, since parity's
+    // existing stations hold with reconstruction off. A world that cannot be read, whose last tick leaves no room for the
+    // margin, whose first converging station leaves no room for the lead, or that captures a station that does not
+    // converge once reconstruction is on, is refused by name.
+    internal static bool TryReadSchedule(string worldPath, out ulong waitTick, out ulong? reconstructionTick, out string error) {
         waitTick = 0UL;
+        reconstructionTick = null;
         error = string.Empty;
 
-        ulong lastTick;
+        IReadOnlyList<WorldCaptureRow> rows;
 
         try {
-            lastTick = (WorldDefinitionSerialization.Deserialize(
+            rows = (WorldDefinitionSerialization.Deserialize(
                 documentDirectory: Path.GetDirectoryName(path: worldPath),
                 utf8Json: File.ReadAllBytes(path: worldPath)
-            ).Captures?.Rows.SelectMany(selector: static row => row.Ticks).DefaultIfEmpty().Max() ?? 0UL);
+            ).Captures?.Rows ?? []);
         } catch (Exception exception) when ((exception is InvalidDataException or JsonException or IOException or UnauthorizedAccessException or InvalidOperationException or FormatException or NotSupportedException)) {
             error = $"the parity world '{worldPath}' could not be read for its capture schedule: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
 
+        var lastTick = rows.SelectMany(selector: static row => row.Ticks).DefaultIfEmpty().Max();
+
         if (lastTick > (ulong.MaxValue - WaitMarginTicks)) {
             error = $"the parity world '{worldPath}' schedules a capture at tick {lastTick}, which leaves no room for the {WaitMarginTicks}-tick wait margin.";
 
             return false;
+        }
+
+        var converging = rows.Where(predicate: static row => (row.Converge > 0)).SelectMany(selector: static row => row.Ticks).ToArray();
+
+        if (converging.Length > 0) {
+            var first = converging.Min();
+
+            if (first <= ReconstructionLeadTicks) {
+                error = $"the parity world '{worldPath}' converges a station at tick {first}, which leaves no room for the {ReconstructionLeadTicks}-tick reconstruction lead.";
+
+                return false;
+            }
+
+            var on = (first - ReconstructionLeadTicks);
+
+            if (rows.FirstOrDefault(predicate: row => ((row.Converge == 0) && row.Ticks.Any(predicate: tick => (tick >= on)))) is { } late) {
+                error = $"the parity world '{worldPath}' captures station '{late.Station}' at or after tick {on}, when reconstruction is on, without converging; a station that does not converge holds with reconstruction off.";
+
+                return false;
+            }
+
+            reconstructionTick = on;
         }
 
         waitTick = checked((lastTick + WaitMarginTicks));
@@ -273,8 +305,9 @@ internal static class ParityCommand {
             path2: $"captures-{backend}"
         );
 
-        if (!TryReadWaitTick(
+        if (!TryReadSchedule(
             error: out var scheduleError,
+            reconstructionTick: out var reconstructionTick,
             waitTick: out var waitTick,
             worldPath: shippedWorld
         )) {
@@ -285,7 +318,9 @@ internal static class ParityCommand {
 
         // The parity world drives no seats and reads no input, so no controller-clearing guard is needed; the script
         // only turns the bakes off when asked (a world carrying its bakes draws them), composes the world's companion SDF
-        // document and waits past the last tick its captures rows schedule.
+        // document, turns temporal reconstruction on at the reconstruction tick when the world converges a station, and
+        // waits past the last tick its captures rows schedule. A line after a wait releasing at tick R runs before tick
+        // R + 1, so the reconstruction tick is exact.
         // It closes by reading the bake counts, which the leg is then held to (BakeRefusal).
         var script = $"{(bakes ? string.Empty : "world.bakes off\n")}world.sdf.load \"{Path.Combine(
             path1: Path.GetDirectoryName(path: shippedWorld)!,
@@ -293,7 +328,7 @@ internal static class ParityCommand {
         ).Replace(
             newChar: '/',
             oldChar: '\\'
-        )}\"\nworld.wait {waitTick}\nworld.counters sdf.bakes\n";
+        )}\"\n{((reconstructionTick is { } on) ? $"world.wait {on}\nworld.temporal on\nworld.wait {(waitTick - on)}\n" : $"world.wait {waitTick}\n")}world.counters sdf.bakes\n";
         var leg = WorldOffscreenLeg.Run(
             arguments: ["--capture-dir", captureDirectory],
             artifact: artifact,

@@ -178,6 +178,9 @@ public enum RenderGraphInstanceRefusalCode : byte {
     SourceDeclaration = 11,
     /// <summary>An authored output extent is non-positive, or belongs to a buffer or negotiated source.</summary>
     ExtentInvalid = 12,
+    /// <summary>The set's declared nesting depth is negative or past
+    /// <see cref="RenderGraphInstanceSet.MaxNestingDepth"/>.</summary>
+    NestingDepthInvalid = 13,
 }
 /// <summary>A refused set of render-graph instances.</summary>
 /// <param name="Code">Why it was refused.</param>

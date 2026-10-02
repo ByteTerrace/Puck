@@ -100,8 +100,10 @@ public abstract record WorldScreenSource {
     /// <para>The projection renders the destination's authored static placement geometry (terrain, structures) plus
     /// every mirrored-active body, each posed from the destination's own previous/current snapshot pair at
     /// <c>WorldSessionMirror.InterpolationAlpha</c> — the destination's clock, never the host's presentation alpha
-    /// (<c>Client.WorldSessionSceneEmitter</c>). Creation text stays omitted until session delivery transports pinned
-    /// font assets.</para>
+    /// (<c>Client.WorldSessionSceneEmitter</c>), and the destination's own screens, so a portal inside it shows its own
+    /// destination, recursively to the presentation's <c>views.nestingDepth</c>; a session screen at that depth shows
+    /// <paramref name="Fallback"/> instead. Creation text stays omitted until session delivery transports pinned font
+    /// assets.</para>
     /// <para><b>Staged boundary — global scope only.</b> A <c>user</c>/<c>group</c>-scoped destination makes the
     /// resolved image viewer-dependent, and the shipped one-image-per-screen-index binding shows every viewer the
     /// same image — showing one viewer's world to everyone would be silently wrong, so a session face naming a
@@ -130,11 +132,15 @@ public abstract record WorldScreenSource {
     /// the default 160x144 panel (<c>Puck.World.Client.WorldViewInstances.DefaultSessionWidth</c> x
     /// <c>DefaultSessionHeight</c>). Each axis is validated within
     /// <c>1..WorldDefinitionValidator.MaxSurfaceDimension</c>. Omitted from the wire when null.</param>
+    /// <param name="Fallback">The colour the face shows, as <c>#RRGGBB</c>, when the screen is as many screens deep as
+    /// the presentation nests (<c>views.nestingDepth</c>), so two portals facing each other end on it; or
+    /// <see langword="null"/> for black. Omitted from the wire when null.</param>
     public sealed record Session(
         string Destination,
         [property: JsonPropertyName("camera"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CameraName = null,
         WorldScreenProjection Projection = WorldScreenProjection.Camera,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenResolution? Resolution = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenResolution? Resolution = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fallback = null
     ) : WorldScreenSource;
     /// <summary>Authored reading text on the screen face, rendered through the engine's glyph-decal tier
     /// (<c>Puck.SdfVm.SdfWorldTables.SetScreenDecal</c>): a fixed monospace cell grid sampled from the world's packed

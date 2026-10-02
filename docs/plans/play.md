@@ -222,9 +222,10 @@ the platform's public-content identity.
 **Delivers:** the wave above. The remainder is one package that waits for the
 forcing world to be played, because every row is a question a played world
 asks: per-viewport user- and group-scoped destination images; a
-destination-clock interpolation ease; multi-authority replay (a destination
-arrival is not taped today, and `replay.verify` reports a remote or
-unavailable target as not verified, never as passing); bounded queues,
+destination-clock interpolation ease; verifying a crossing between processes
+from tapes each process recorded on its own (a set verifies a crossing only
+between rows of one process, and reports a remote half as not verified);
+bounded queues,
 backpressure, and query redaction on the observation feed; derived-band
 read-back with a long-run remainder-drift demonstration; destination and
 session resolution on the wire, an unembodied session authority carried across
@@ -234,11 +235,8 @@ beyond the window: a camera-projection portal's click (a deterministic
 destination camera pose on the authority's side), one session per viewer for
 split screen, a click on arbitrary destination geometry rather than a
 destination `Simulation` screen, a rule addressing one session rather than
-`any`, and hover feedback; destination tapes, since only the source world's
-tape records the input a portal forwards, and a replay forwards nothing; issuer-qualified group and document claims,
-entry reservations and idempotent handoff tokens fenced by epochs, leases, and
-durable commit records, hydrate, suspend, and migrate for persisted worlds,
-and durable recovery when an authority dies mid-transaction; retry-safe
+`any`, and hover feedback; issuer-qualified group and document claims, and
+hydrate, suspend, and migrate for persisted worlds; retry-safe
 cross-document write-back (an operation id, a precondition, atomic persistence,
 an observable receipt); cloud-catalog discovery through
 `storage.discoveryEndpoint`; latency equalisation from a real round-trip

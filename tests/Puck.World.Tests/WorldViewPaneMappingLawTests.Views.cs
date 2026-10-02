@@ -226,5 +226,15 @@ public sealed partial class WorldViewPaneMappingLawTests {
 
             return false;
         }
+        public bool TryPlacements(string view, out IReadOnlyList<SourceMapping> placements) {
+            placements = [];
+
+            return false;
+        }
+        public WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass) {
+            glass = null;
+
+            return WorldPortalGlass.None;
+        }
     }
 }

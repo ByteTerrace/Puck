@@ -4,7 +4,7 @@
   "bootShape": "headless",
   "requirements": [],
   "timeoutSeconds": 120,
-  "binding": "Five real Puck.World processes (nw, ne, se, sw, island), each booting this canary's own delta over the shipped Four Corners shard or island that stops the arcade's machines (running: false, so the host keeps their state and never advances them) and names its neighbours as the other deltas, each bind a distinct dynamic loopback endpoint and trust each other's generated federation identity, and each raises its own bodies.networkPlayers so an arrival from a peer has a slot to land in. Only nw's script drives a body: posed five units inside nw's own ground on its east face's centre line and flown outward, it crosses that face at x=66 onto ne's process — not onto a local shadow of ne's document — and nw's own transcript names the endpoint it forwarded to and reads the traveler back at an instance-qualified address on the far side. The discriminating leg keeps the same five worlds and the same topology and poses the traveler at the same spot, but never flies it, so no crossing and no remote-authority naming can be asserted against it. The onward hops of the ring are not asserted here: a body that has arrived over a federation hop is minted rigid on the destination, and a rigid body's own transfer is refused by name (\"cross-world transfer of a rigid body is not supported\"), so a second remote hop cannot leave the first destination at all. seamless-four-corners-circuit proves the same four-hop ring colocated.",
+  "binding": "Five real Puck.World processes (nw, ne, se, sw, island), each booting this canary's own delta over the shipped Four Corners shard or island that stops the arcade's machines (running: false, so the host keeps their state and never advances them) and names its neighbours as the other deltas, each bind a distinct dynamic loopback endpoint and trust each other's generated federation identity, and each raises its own bodies.networkPlayers so an arrival from a peer has a slot to land in. Only nw's script drives a body: posed five units inside nw's own ground on its east face's centre line and flown outward, it crosses that face at x=66 onto ne's process — not onto a local shadow of ne's document — and nw's own transcript names the endpoint it forwarded to and reads the traveler back at an instance-qualified address on the far side. The discriminating leg keeps the same five worlds and the same topology and poses the traveler at the same spot, but never flies it, so no crossing and no remote-authority naming can be asserted against it. The onward hops of the ring are not asserted here: a body that has arrived over a federation hop is minted rigid on the destination, and a rigid body's own transfer is refused by name (\"cross-world transfer of a rigid body is not supported\"), so a second remote hop cannot leave the first destination at all. seamless-four-corners-circuit proves the same four-hop ring colocated. In the positive leg nw and ne each record a tape: nw's names the crossing not verified, because its arrival rides a tape in another process, and ne's lands the arrival again, replays every step it held the traveler's federated input for to the state ne reached, and names the arrival from nw not verified for the same reason.",
   "fixtures": [],
   "positive": {
     "world": "tests/Puck.World.Canaries/four-corners-sharded/quilt-nw.world.json",
@@ -18,7 +18,7 @@
       {
         "id": "ne",
         "world": "tests/Puck.World.Canaries/four-corners-sharded/quilt-ne.world.json",
-        "script": "ground-watch.script.txt"
+        "script": "ne-arrival.script.txt"
       },
       {
         "id": "se",
@@ -214,6 +214,32 @@
         "stream": "stdout",
         "match": "contains",
         "text": "[replay.stop: wrote ",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "nw's tape names the crossing to the remote authority not verified",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "NOT VERIFIED (its arrival is on remote authority ",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "ne's own tape carries the arrival and replays it to the state ne reached",
+        "authority": "ne",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "every authority replayed, but a crossing's other half is on no tape in this set",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "ne's tape names the arrival from the remote source not verified",
+        "authority": "ne",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "whose tape is not in this set)",
         "present": true
       },
       {

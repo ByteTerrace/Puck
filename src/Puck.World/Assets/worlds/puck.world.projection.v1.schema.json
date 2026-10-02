@@ -143,9 +143,14 @@
           "title": "WorldRenderScaleTier"
         },
         "upscaleSharpness": {
-          "description": "The boot reduced-resolution reconstruction blend (0 bilinear .. 1 Catmull-Rom).",
+          "description": "The boot reconstruction sharpness: the spatial resolve\u0027s blend (0 bilinear .. 1 Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect\u0027s own extent.",
           "type": "number",
           "default": 0
+        },
+        "temporal": {
+          "description": "Whether the world\u0027s own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.",
+          "type": "boolean",
+          "default": false
         },
         "low": {
           "description": "The world.quality low preset.",
@@ -178,6 +183,10 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
+            },
+            "temporal": {
+              "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
+              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -215,6 +224,10 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
+            },
+            "temporal": {
+              "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
+              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -252,6 +265,10 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
+            },
+            "temporal": {
+              "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
+              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -1607,6 +1624,14 @@
                     "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
                     "default": null,
                     "title": "WorldScreenResolution"
+                  },
+                  "fallback": {
+                    "description": "The colour the face shows, as #RRGGBB, when the screen is as many screens deep as the presentation nests (views.nestingDepth), so two portals facing each other end on it; or null for black. Omitted from the wire when null.",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "default": null
                   }
                 },
                 "required": [
@@ -1902,6 +1927,14 @@
                           "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
                           "default": null,
                           "title": "WorldScreenResolution"
+                        },
+                        "fallback": {
+                          "description": "The colour the face shows, as #RRGGBB, when the screen is as many screens deep as the presentation nests (views.nestingDepth), so two portals facing each other end on it; or null for black. Omitted from the wire when null.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
                         }
                       },
                       "required": [
@@ -17766,6 +17799,14 @@
                           "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
                           "default": null,
                           "title": "WorldScreenResolution"
+                        },
+                        "fallback": {
+                          "description": "The colour the face shows, as #RRGGBB, when the screen is as many screens deep as the presentation nests (views.nestingDepth), so two portals facing each other end on it; or null for black. Omitted from the wire when null.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
                         }
                       },
                       "required": [
@@ -19844,6 +19885,14 @@
               }
             ]
           },
+          "default": null
+        },
+        "nestingDepth": {
+          "description": "How many screens deep a view of a world shows another world\u0027s view, or null for DefaultNestingDepth; refused past MaxNestingDepth. NestingDepth is what a reader resolves through.",
+          "type": [
+            "integer",
+            "null"
+          ],
           "default": null
         },
         "layouts": {

@@ -1,11 +1,12 @@
 using System.Buffers.Binary;
 using System.Text.Json;
+using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 
 namespace Puck.Shaders.Tests;
 
 /// <summary>
-/// The <c>source-conversion</c> canary's expectations are the CPU reference's, not recorded numbers. Each leg's four regions
+/// The <c>source-conversion</c> canary's expectations are the CPU reference's, not recorded numbers. Each leg's five regions
 /// are rebuilt here from the rules its seed pass follows, converted through <see cref="ImageSourceConversion"/>, and every
 /// <c>imageRegion</c> bound in the manifest is held to the reference's pixels over that region: a bound that holds must
 /// equal every pixel, and a bound that must fail must differ from them by more than its tolerance.
@@ -158,6 +159,52 @@ public sealed class SourceConversionCanaryFixtureTests {
         2 => (96, 200, 32),
         _ => (140, 20, 180),
     };
+    // seed.hlsli's half-float region: scRgbOf's quadrant values under a header naming the linear (scRGB) transfer function,
+    // alpha one.
+    private static byte[] HdrRegion() {
+        var header = ImageSourceUploadLayout.HeaderOf(
+            color: new ImageColorEncoding(
+                Primaries: ImageColorPrimaries.Bt709,
+                Transfer: ImageTransferFunction.Linear
+            ),
+            format: ImagePixelFormat.R16G16B16A16Float,
+            height: Extent,
+            width: Extent
+        );
+        var region = new byte[ImageSourceUploadLayout.ByteCount(header: in header)];
+
+        ImageSourceUploadLayout.Write(
+            header: in header,
+            region: region
+        );
+
+        var pixels = ImageSourceUploadLayout.PlaneOf(
+            header: in header,
+            plane: 0,
+            region: region
+        );
+
+        for (var y = 0; (y < Extent); y++) {
+            for (var x = 0; (x < Extent); x++) {
+                var (r, g, b) = ScRgb(quadrant: (((x >= 16) ? 1 : 0) + ((y >= 16) ? 2 : 0)));
+                var pixel = pixels[((y * ((int)header.Plane0Stride)) + (x * 8))..];
+
+                BinaryPrimitives.WriteHalfLittleEndian(destination: pixel, value: ((Half)r));
+                BinaryPrimitives.WriteHalfLittleEndian(destination: pixel[2..], value: ((Half)g));
+                BinaryPrimitives.WriteHalfLittleEndian(destination: pixel[4..], value: ((Half)b));
+                BinaryPrimitives.WriteHalfLittleEndian(destination: pixel[6..], value: Half.One);
+            }
+        }
+
+        return region;
+    }
+    // scRgbOf's quadrant values, each exact in a half float.
+    private static (double, double, double) ScRgb(int quadrant) => quadrant switch {
+        0 => (12.5, 12.5, 12.5),
+        1 => (1.0, 0.5, 0.25),
+        2 => (2.5, 1.25, 0.0),
+        _ => (5.0, -0.25, 0.0625),
+    };
     // encodedOf's quadrant code, stored R, G, B.
     private static (byte, byte, byte) Encoded(int quadrant) => quadrant switch {
         0 => (255, 255, 255),
@@ -165,24 +212,25 @@ public sealed class SourceConversionCanaryFixtureTests {
         2 => (200, 32, 160),
         _ => (16, 240, 96),
     };
-    // The transfer pass's linear light as a capture reads it back through the SDR display encode: clamped to 0-1 and
-    // alpha opaque, the encode's dither within one code of it.
-    private static byte[] Preview(byte[] region) {
-        var linear = new float[((Extent * Extent) * 4)];
-        var rgba = new byte[linear.Length];
+    // The transfer pass's working values at a paper white as a capture reads them back through the SDR display encode:
+    // clamped to 0-1 and alpha opaque, the encode's dither within one code of it.
+    private static byte[] Preview(byte[] region, double paperWhiteNits) {
+        var working = new float[((Extent * Extent) * 4)];
+        var rgba = new byte[working.Length];
 
-        ImageSourceConversion.ToLinear(
-            linear: linear,
-            region: region
+        ImageSourceConversion.ToWorking(
+            paperWhiteNits: paperWhiteNits,
+            region: region,
+            working: working
         );
 
-        for (var index = 0; (index < linear.Length); index++) {
+        for (var index = 0; (index < working.Length); index++) {
             rgba[index] = (((index % 4) == 3)
                 ? ((byte)0xFF)
                 : ImageSourceConversion.ToUnorm8(value: Math.Clamp(
                     max: 1.0,
                     min: 0.0,
-                    value: linear[index]
+                    value: working[index]
                 )));
         }
 
@@ -224,19 +272,24 @@ public sealed class SourceConversionCanaryFixtureTests {
             actual: SeedHeaderWords(region: FourByteRegion(bytesOf: Encoded, format: ImagePixelFormat.R8G8B8A8Unorm, transfer: ImageTransferFunction.Linear))
         );
         Assert.Equal(
-            expected: [2080, 1568, 4128],
-            actual: [PaletteRegion(indexBase: 5U).Length, Nv12Region(matrix: ImageYuvMatrix.Bt709).Length, FourByteRegion(bytesOf: Bgra, format: ImagePixelFormat.B8G8R8A8Unorm, transfer: ImageTransferFunction.Srgb).Length]
+            expected: [32U, 32U, 6U, (1U | (1U << 16)), 32U, 256U, 0U, 0U],
+            actual: SeedHeaderWords(region: HdrRegion())
+        );
+        Assert.Equal(
+            expected: [2080, 1568, 4128, 8224],
+            actual: [PaletteRegion(indexBase: 5U).Length, Nv12Region(matrix: ImageYuvMatrix.Bt709).Length, FourByteRegion(bytesOf: Bgra, format: ImagePixelFormat.B8G8R8A8Unorm, transfer: ImageTransferFunction.Srgb).Length, HdrRegion().Length]
         );
     }
-    [InlineData("positive", 5U, ImageYuvMatrix.Bt709, ImagePixelFormat.B8G8R8A8Unorm, ImageTransferFunction.Srgb)]
-    [InlineData("discriminating", 6U, ImageYuvMatrix.Bt601, ImagePixelFormat.R8G8B8A8Unorm, ImageTransferFunction.Linear)]
+    [InlineData("positive", 5U, ImageYuvMatrix.Bt709, ImagePixelFormat.B8G8R8A8Unorm, ImageTransferFunction.Srgb, 1_000.0)]
+    [InlineData("discriminating", 6U, ImageYuvMatrix.Bt601, ImagePixelFormat.R8G8B8A8Unorm, ImageTransferFunction.Linear, 80.0)]
     [Theory]
-    public void EveryImageRegionBoundIsTheCpuReferencesPixels(string leg, uint indexBase, ImageYuvMatrix matrix, ImagePixelFormat fourByte, ImageTransferFunction transfer) {
+    public void EveryImageRegionBoundIsTheCpuReferencesPixels(string leg, uint indexBase, ImageYuvMatrix matrix, ImagePixelFormat fourByte, ImageTransferFunction transfer, double hdrPaperWhite) {
         var captures = new Dictionary<string, byte[]>(comparer: StringComparer.Ordinal) {
+            ["hdr.png"] = Preview(paperWhiteNits: hdrPaperWhite, region: HdrRegion()),
             ["nv12.png"] = Convert(region: Nv12Region(matrix: matrix)),
             ["palette.png"] = Convert(region: PaletteRegion(indexBase: indexBase)),
             ["rgba.png"] = Convert(region: FourByteRegion(bytesOf: Bgra, format: fourByte, transfer: ImageTransferFunction.Srgb)),
-            ["transfer.png"] = Preview(region: FourByteRegion(bytesOf: Encoded, format: ImagePixelFormat.R8G8B8A8Unorm, transfer: transfer)),
+            ["transfer.png"] = Preview(paperWhiteNits: DisplayOutput.SdrWhiteNits, region: FourByteRegion(bytesOf: Encoded, format: ImagePixelFormat.R8G8B8A8Unorm, transfer: transfer)),
         };
 
         using var manifest = JsonDocument.Parse(json: File.ReadAllText(path: RepositoryPaths.Resolve(relativePath: "tests/Puck.World.Canaries/source-conversion/canary.json")));
@@ -288,7 +341,7 @@ public sealed class SourceConversionCanaryFixtureTests {
 
         Assert.Equal(
             actual: checkedRegions,
-            expected: ((leg == "positive") ? 16 : 30)
+            expected: ((leg == "positive") ? 20 : 37)
         );
     }
 }

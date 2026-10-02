@@ -22,6 +22,10 @@ internal sealed partial class ScreenCommandModule {
             _ => "none",
         };
     }
+    // The world.nesting listing: every level of nested worlds, as the binder last reconciled them.
+    private CommandResult NestingHandler(CommandContext context, WireArgs args) => ((args.Count != 0)
+        ? CommandResult.Error(output: "[world.nesting: no arguments — lists every level of nested worlds]")
+        : new CommandResult(Output: $"[world.nesting: {m_binder.DescribeNesting()}]"));
     // The world.screens listing: one segment per declared screen — index, source kind, live bound/unbound state (a
     // nonzero provider handle this frame), engage policy, and the destination a pointer hit on it goes to. A query (not AcknowledgementOnly): its listing always surfaces, so a
     // piped proof can assert the test-pattern screen is bound and the None screen stays unbound (dark glass).

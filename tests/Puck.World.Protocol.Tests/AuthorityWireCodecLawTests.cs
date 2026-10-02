@@ -147,13 +147,13 @@ public sealed class AuthorityWireCodecLawTests {
     }
     [Fact]
     public void JournalPageRoundTripsEveryEntryInAppendOrder() {
-        IReadOnlyList<WorldMutationJournalEntry> entries = [
-            new WorldMutationJournalEntry(
+        IReadOnlyList<WorldAuthorityJournalEntry> entries = [
+            new WorldAuthorityJournalEntry(
                 Encoded: new byte[] { 1, 2, 3 },
                 EngineTick: 1UL,
                 Tick: 1UL
             ),
-            new WorldMutationJournalEntry(
+            new WorldAuthorityJournalEntry(
                 Encoded: new byte[] { 4, 5 },
                 EngineTick: 2UL,
                 Tick: 2UL
@@ -192,7 +192,7 @@ public sealed class AuthorityWireCodecLawTests {
     }
     [Fact]
     public void JournalPageRefusesAForeignMagic() {
-        var corrupted = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries: [new WorldMutationJournalEntry(
+        var corrupted = WorldAuthorityStoreWireCodec.EncodeJournalPage(entries: [new WorldAuthorityJournalEntry(
             Encoded: new byte[] { 1 },
             EngineTick: 1UL,
             Tick: 1UL

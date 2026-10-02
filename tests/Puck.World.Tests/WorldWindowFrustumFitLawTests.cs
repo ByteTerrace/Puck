@@ -28,7 +28,7 @@ namespace Puck.World.Tests;
 /// its rays start on the aperture: the destination's occluder, standing between the mapped eye and the glass, is never
 /// met, and the marker beyond it is.
 /// </summary>
-public sealed class WorldWindowFrustumFitLawTests {
+public sealed partial class WorldWindowFrustumFitLawTests {
     internal const string Destination = "tests/Puck.World.Canaries/portal-window/beyond.world.json";
 
     private const string Local = "tests/Puck.World.Canaries/portal-window/fixture.world.json";
@@ -562,7 +562,14 @@ public sealed class WorldWindowFrustumFitLawTests {
             var window = fit();
 
             Assert.NotNull(@object: window);
-            Assert.Equal(expected: Fit(eye: spectator.Position), actual: window.Value);
+            Assert.True(condition: WorldWindowFrustumFit.TryFitFromEye(
+                camera: out var fromSpectator,
+                destination: AuthoredGameFixtures.Load(relativePath: Destination),
+                eye: spectator.Position,
+                local: AuthoredGameFixtures.Load(relativePath: Local),
+                screen: DoorRow()
+            ));
+            Assert.Equal(expected: fromSpectator, actual: window.Value);
 
             return (spectator, window.Value);
         }

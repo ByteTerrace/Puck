@@ -189,7 +189,7 @@ over a plain record or a parameter the caller supplies:
   handshake verified against a document's own `admission` trust list
   (`WorldAdmissionEntry`, in `Puck.World.Schema`), never a shared secret.
   `LocalKeySigningOracle` is the offline, locally-held-key oracle shape.
-- `WorldAuthorityStoreWireCodec.cs`—the whole-page `WorldMutationJournalEntry`
+- `WorldAuthorityStoreWireCodec.cs`—the whole-page `WorldAuthorityJournalEntry`
   journal codec. `Puck.World.Server`'s authority root names each page as an
   immutable content-addressed blob beside the checkpoint it extends.
 - `WorldReplayCodecException.cs`—the tape codec's own host-bug exception

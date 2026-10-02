@@ -12,8 +12,8 @@ namespace Puck.World.Tests;
 // A pick through a portal (rendering plan P13's portal check): the portal-window canary's door, whose glass shows a
 // window session onto its destination, is a screen standing in the world, the world's view is a pane, and a display
 // point on the marker's image walks through the pane into the world, onto the glass, and through the camera the session
-// last rendered with into the destination, where no screen stands under the depth-one policy, so the walk ends in the
-// destination's world, on the marker's surface.
+// last rendered with into the destination, which stands no screen of its own, so the walk ends in the destination's
+// world, on the marker's surface.
 public sealed partial class WorldViewPaneMappingLawTests {
     // The door's window, seen by a seat whose eye is the window's eye, the view on the display's left half, and the
     // session's emitter dressed through the window it fits.
@@ -151,6 +151,21 @@ public sealed partial class WorldViewPaneMappingLawTests {
             point = default;
 
             return false;
+        }
+        // The destination stands no screen of its own.
+        public bool TryPlacements(string view, out IReadOnlyList<SourceMapping> placements) {
+            placements = [];
+
+            return string.Equals(
+                a: view,
+                b: Name,
+                comparisonType: StringComparison.Ordinal
+            );
+        }
+        public WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass) {
+            glass = null;
+
+            return WorldPortalGlass.None;
         }
     }
 }

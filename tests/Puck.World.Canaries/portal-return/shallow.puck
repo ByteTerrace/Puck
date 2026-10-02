@@ -1,0 +1,9 @@
+// The portal-return rooms nested no screen deep: the boot world's views.nestingDepth 0, so every session screen shows
+// its fallback colour and no world's screens observe another.
+
+schema: "puck.world.definition.v1"
+
+import "rooms.puck"
+
+entry world lobby = lobby(nesting: 0)
+world garden = garden(nesting: 0)

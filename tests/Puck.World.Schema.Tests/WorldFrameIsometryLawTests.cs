@@ -9,7 +9,7 @@ namespace Puck.World.Schema.Tests;
 /// invisible adjacency borders both cross by. Pure and fixed-point, so this proves the math directly rather than
 /// through <c>Puck.World.WorldInstanceHost</c> (the composition root, out of reach for this project — see
 /// <c>PortalSweepOriginLawTests</c>' own remarks for the same "prove the primitive, not the orchestration" shape).
-/// The scan/coalesce/transfer/arrival orchestration is verified by RUNNING <c>Puck.World</c> (CLAUDE.md rule 3).
+/// The scan/coalesce/transfer/arrival orchestration is verified by RUNNING <c>Puck.World</c> (AGENTS.md rule 3).
 /// </summary>
 public sealed class WorldFrameIsometryLawTests {
     private static readonly FixedVector3 UpAxis = new(

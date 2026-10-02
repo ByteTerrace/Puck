@@ -176,9 +176,13 @@ internal static class WorldRenderRoot {
         }
 
         // An uploaded producer's source instance and a machine source convert the region their upload writes through
-        // the conversion its descriptor names; any other producer's instance, and a probe source, renders through an
-        // external producer that hands out its image through the binder's capture gate.
-        SourceConversionPackage.RegisterAll(packages: packages);
+        // the conversion its descriptor names, into working values relative to the host's paper white; any other
+        // producer's instance, and a probe source, renders through an external producer that hands out its image through
+        // the binder's capture gate.
+        SourceConversionPackage.RegisterAll(
+            packages: packages,
+            paperWhiteNits: hostSettings.PaperWhiteNits
+        );
         packages.RegisterSource(package: WorldFrameComparison.SourcePackage, factory: context => {
             var slot = WorldComparisonGraph.SeatOf(source: context.Instance);
             var snapshot = ((slot >= 0) ? comparison.Seat(slot: slot) : null);
@@ -228,17 +232,18 @@ internal static class WorldRenderRoot {
         var overlaid = (overlay is not null);
         var timing = sp.GetRequiredService<WorldGpuTiming>();
 
-        // The host composes the root again whenever the document's panes, views, views.post or render.tonemap move, from
-        // the post passes and tonemap the document names then, so a live views.post or render.tonemap edit reaches the
-        // running root.
-        // A debug view shows its own colors, so the root runs no tonemap while one is on.
+        // The host composes the root again whenever the document's panes, views, views.post or render.tonemap move, or a
+        // temporally resolved view starts or stops sharpening, from the post passes and tonemap the document names then,
+        // so a live views.post, render.tonemap or lever edit reaches the running root.
+        // A debug view shows its own colors, so the root runs no tonemap and no sharpen while one is on.
         host.ShowsDebugView = () => (residency.DebugMode != 0);
         host.Attach(
-            compose: (panes, views, post, tonemap) => WorldRootGraph.Compose(
+            compose: (panes, views, post, tonemap, sharpens) => WorldRootGraph.Compose(
                 overlay: overlaid,
                 packages: RenderGraphPackageCatalog.Engine,
                 post: post,
                 panes: panes,
+                sharpens: sharpens,
                 tonemap: tonemap,
                 views: views
             ),

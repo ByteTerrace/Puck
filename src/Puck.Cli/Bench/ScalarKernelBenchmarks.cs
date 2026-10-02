@@ -5,8 +5,10 @@ using Puck.Maths;
 namespace Puck.Cli.Bench;
 
 // The scalar multiply's two lanes: operands below 2^31 (the machine-word lane) against operands that force the
-// Int128 product, plus the transcendentals whose kernels changed shape — Sqrt's nearest settle and Pow's Q32 exponent
-// route — and the fused divide behind the planar and dual quotients.
+// Int128 product, plus the transcendentals whose kernels changed shape — Sqrt's nearest settle, Pow's exponential
+// route (the relative-accuracy logarithm and the Q56 exponent) and its exact whole-exponent route, both the UInt128
+// lane small powers of a base near one take and the limb lane with the one-shot quotient a deep negative power takes
+// — and the fused divide behind the planar and dual quotients.
 [MemoryDiagnoser]
 [DisassemblyDiagnoser(maxDepth: 3)]
 public class ScalarKernels {
@@ -18,6 +20,8 @@ public class ScalarKernels {
     private FixedQ4816[] m_wideRight = [];
     private FixedQ4816[] m_positive = [];
     private FixedQ4816[] m_exponents = [];
+    private FixedQ4816[] m_unitBases = [];
+    private FixedQ4816[] m_nearOneBases = [];
     private FixedComplex[] m_complexLeft = [];
     private FixedComplex[] m_complexRight = [];
 
@@ -31,6 +35,8 @@ public class ScalarKernels {
         m_wideRight = new FixedQ4816[Count];
         m_positive = new FixedQ4816[Count];
         m_exponents = new FixedQ4816[Count];
+        m_unitBases = new FixedQ4816[Count];
+        m_nearOneBases = new FixedQ4816[Count];
         m_complexLeft = new FixedComplex[Count];
         m_complexRight = new FixedComplex[Count];
 
@@ -48,6 +54,17 @@ public class ScalarKernels {
                 maxValue: (3L << 16),
                 minValue: -(3L << 16)
             ) | 1L);
+            // A superellipsoid's |q|/m: a base in (0, 1], raised to a small whole exponent.
+            m_unitBases[i] = FixedQ4816.FromRawBits(value: rng.NextInt64(
+                maxValue: ((1L << 16) + 1L),
+                minValue: 1L
+            ));
+            // A base within a sixteenth of one, raised to −24: its power outgrows 2^127, so the limb lane and the
+            // quotient estimate run.
+            m_nearOneBases[i] = FixedQ4816.FromRawBits(value: rng.NextInt64(
+                maxValue: ((1L << 16) + (1L << 12)),
+                minValue: ((1L << 16) - (1L << 12))
+            ));
             m_complexLeft[i] = new(
                 Real: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng)),
                 Imaginary: FixedQ4816.FromRawBits(value: Operands.NarrowRaw(rng: rng))
@@ -92,6 +109,34 @@ public class ScalarKernels {
                 ? -m_narrowRight[i]
                 : m_narrowRight[i]),
                 y: m_exponents[i]
+            ).Value;
+        }
+
+        return sink;
+    }
+    [Benchmark]
+    public long PowWholeSmall() {
+        var four = FixedQ4816.FromRawBits(value: (4L << 16));
+        var sink = 0L;
+
+        for (var i = 0; (i < Count); ++i) {
+            sink ^= FixedQ4816.Pow(
+                x: m_unitBases[i],
+                y: four
+            ).Value;
+        }
+
+        return sink;
+    }
+    [Benchmark]
+    public long PowWholeDeepNegative() {
+        var minusTwentyFour = FixedQ4816.FromRawBits(value: -(24L << 16));
+        var sink = 0L;
+
+        for (var i = 0; (i < Count); ++i) {
+            sink ^= FixedQ4816.Pow(
+                x: m_nearOneBases[i],
+                y: minusTwentyFour
             ).Value;
         }
 

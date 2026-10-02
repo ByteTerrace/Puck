@@ -104,6 +104,12 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.nesting",
+            description: "Lists every level of nested worlds the presentation shows: world.nesting — the nesting depth (the boot world's views.nestingDepth), then each world a seat is presented in (routed$<digest> depth 0 world <authority>, the digest 16 hex characters of the authority identity's SHA-256) and each session view at every depth by name (session$<screen>, then one $<screen> more a level), with its depth, its destination, the residency it renders through (endpoint:<authority>, the one every seat and fully disclosed window presenting that world shares, or own), and what each of its world's screens shows: <index>:<instance> naming a session view one level deeper, a shared source instance (source$<producer>$<digest>), a fallback colour's source instance past the depth (source$color$<digest>), or none. No argument. A query — its listing always echoes, even under wire.ack quiet.",
+            handler: NestingHandler
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.view-refresh",
             description: "Sets the diegetic views' deterministic offscreen refresh cadence: world.view-refresh [1..8]. 1 renders every produced frame; 4 (the default) renders every fourth frame and preserves the previous images between refreshes. No argument echoes the current divisor and how many camera views are registered in the offscreen pool (a removed View screen releases its camera's render, dropping that count). Every boot shape answers it.",
             handler: ViewRefreshHandler
@@ -878,7 +884,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         foreach (var command in Commands()) {
-            yield return ((command.Name is "screen.state" or "screen.peek" or "screen.links" or "world.machines" or "world.screens" or "world.view-refresh")
+            yield return ((command.Name is "screen.state" or "screen.peek" or "screen.links" or "world.machines" or "world.screens" or "world.nesting" or "world.view-refresh")
                 ? command
                 : command with { Routing = CommandRouting.Simulation }
             );

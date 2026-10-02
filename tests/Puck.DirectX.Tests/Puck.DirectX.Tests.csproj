@@ -14,13 +14,13 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.DirectX\Puck.DirectX.csproj" />
+        <ProjectReference Include="../../src/Puck.DirectX/Puck.DirectX.csproj" />
     </ItemGroup>
     <ItemGroup>
         <!-- The neutral group layouts the backends' planners and the spike's interfaces are held to. -->
-        <Compile Include="..\Shared\GpuGroupLayoutTables.cs" Link="GpuGroupLayoutTables.cs" />
+        <Compile Include="../Shared/GpuGroupLayoutTables.cs" Link="GpuGroupLayoutTables.cs" />
         <!-- The software device API and the devices the device laws run on. -->
-        <Compile Include="..\Shared\WarpDeviceApi.cs" Link="WarpDeviceApi.cs" />
-        <Compile Include="..\Shared\DirectXTestDevices.cs" Link="DirectXTestDevices.cs" />
+        <Compile Include="../Shared/WarpDeviceApi.cs" Link="WarpDeviceApi.cs" />
+        <Compile Include="../Shared/DirectXTestDevices.cs" Link="DirectXTestDevices.cs" />
     </ItemGroup>
 </Project>
