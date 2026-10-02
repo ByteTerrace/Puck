@@ -20,6 +20,11 @@ internal static partial class Subjects {
         var a = IntervalOf(first: (left[0] >> fold), second: (left[1] >> fold));
         var b = IntervalOf(first: (left[2] >> fold), second: (left[3] >> fold));
         var c = IntervalOf(first: (right[1] >> fold), second: (right[2] >> fold));
+        // Hull is a covered subject, not a trusted input factory. Check it against the drawn raws before using its
+        // endpoints in any oracle: a Hull that collapses every input to zero must not silently shrink this domain.
+        if (Mismatch(name: "Hull of A", actual: a, expected: (Math.Min(val1: (left[0] >> fold), val2: (left[1] >> fold)), Math.Max(val1: (left[0] >> fold), val2: (left[1] >> fold)))) is { } hullA) { return hullA; }
+        if (Mismatch(name: "Hull of B", actual: b, expected: (Math.Min(val1: (left[2] >> fold), val2: (left[3] >> fold)), Math.Max(val1: (left[2] >> fold), val2: (left[3] >> fold)))) is { } hullB) { return hullB; }
+        if (Mismatch(name: "Hull of C", actual: c, expected: (Math.Min(val1: (right[1] >> fold), val2: (right[2] >> fold)), Math.Max(val1: (right[1] >> fold), val2: (right[2] >> fold)))) is { } hullC) { return hullC; }
         var aLower = a.Lower.Value;
         var aUpper = a.Upper.Value;
         var bLower = b.Lower.Value;

@@ -442,6 +442,12 @@ public sealed partial class SdfFieldEvaluator {
     // the reach of the two nearest features (every feature offset lies within 1/2 + |randomness|/2 of its cell's centre, and
     // the second nearest is no farther than the nearer of two adjacent cells' features).
     private static FixedInterval CellBounds(IntervalVector3 point, uint seed, SdfCellMode mode, FixedQ4816 randomness) {
+        // The frequency multiplication is a point-evaluation step even though a cell distance is bounded. Its
+        // overflow must reach the program result rather than being hidden by the lattice's finite reach.
+        if (point.X.IsUnbounded || point.Y.IsUnbounded || point.Z.IsUnbounded) {
+            return FixedInterval.Entire;
+        }
+
         var cx = (point.X.Lower.Value >> FixedQ4816.FractionBitCount);
         var cy = (point.Y.Lower.Value >> FixedQ4816.FractionBitCount);
         var cz = (point.Z.Lower.Value >> FixedQ4816.FractionBitCount);
@@ -449,8 +455,7 @@ public sealed partial class SdfFieldEvaluator {
         if (
             (cx != (point.X.Upper.Value >> FixedQ4816.FractionBitCount)) ||
             (cy != (point.Y.Upper.Value >> FixedQ4816.FractionBitCount)) ||
-            (cz != (point.Z.Upper.Value >> FixedQ4816.FractionBitCount)) ||
-            point.X.IsUnbounded || point.Y.IsUnbounded || point.Z.IsUnbounded
+            (cz != (point.Z.Upper.Value >> FixedQ4816.FractionBitCount))
         ) {
             // Each delta component lies within |x| + 1/2 + |randomness|/2 + 1 of zero; the own cell (x = 0) bounds the
             // nearest feature and a face neighbour bounds the second, and F2 − F1 is at most the second.
@@ -588,6 +593,11 @@ public sealed partial class SdfFieldEvaluator {
         var top = (a * height);
         FixedInterval? joined = null;
 
+        // Joining branch results cannot certify a predicate whose point arithmetic may have wrapped.
+        if (k.IsUnbounded) {
+            return FixedInterval.Entire;
+        }
+
         if (k.Lower < FixedQ4816.Zero) {
             joined = Join(joined: joined, next: (FixedInterval.Magnitude(x: qx, y: qy) - Point(value: lowerRadius)));
         }
@@ -608,6 +618,10 @@ public sealed partial class SdfFieldEvaluator {
         var test = (((qy - Point(value: b)) * Point(value: d)) - (qx * Point(value: b)));
         var cap = FixedInterval.Magnitude(x: qx, y: (qy - Point(value: b)));
         var body = (FixedInterval.Magnitude(x: (qx + Point(value: d)), y: qy) - Point(value: r));
+
+        if (test.IsUnbounded) {
+            return FixedInterval.Entire;
+        }
 
         // The point test compares two separately rounded products; their difference's interval decides it wherever it
         // keeps one sign.
