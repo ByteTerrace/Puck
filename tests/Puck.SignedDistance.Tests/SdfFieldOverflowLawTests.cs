@@ -15,6 +15,42 @@ namespace Puck.SignedDistance.Tests;
 /// </summary>
 public sealed class SdfFieldOverflowLawTests {
     [Fact]
+    public void CellDistanceCannotHideAnOverflowedFrequencyProduct() {
+        var evaluator = Program(emit: (builder, material) => builder
+            .Plane(material: material, normal: Vector3.UnitY, offset: 1f)
+            .CellDisplace(amplitude: 0.0000152587890625f, frequency: 1048576f, mode: SdfCellMode.F1, randomness: 0f, seed: 0u));
+        // At x = 2^44, x * frequency = 2^64 world units, which wraps to zero. A finite cell-distance
+        // envelope must not make that point evaluable. The origin's arithmetic remains expressible.
+        var outside = FixedPosition.FromLocal(local: new FixedVector3(X: FixedQ4816.FromInteger(value: (1L << 44)), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero));
+
+        Assert.True(condition: evaluator.TryDistance(position: FixedPosition.Zero, distance: out _, material: out _));
+        Assert.True(condition: (evaluator.Frame < FixedQ4816.FromInteger(value: (1L << 44))));
+        Assert.False(condition: evaluator.TryDistance(distance: out _, material: out _, position: outside));
+        Assert.False(condition: evaluator.TryDistanceBounds(distance: out _, lower: outside, upper: outside));
+    }
+    [Fact]
+    public void RoundConeCannotHideAnOverflowedBranchPredicate() {
+        var evaluator = Program(emit: (builder, material) => builder
+            .Translate(offset: new Vector3(x: -17592186044416f, y: 0f, z: 0f))
+            .RoundCone(lowerRadius: 1048576f, upperRadius: 0f, height: 1f, material: material));
+        // At the origin qx = 2^44 and b = 2^20: k = -2^64 wraps to zero, selecting the cone's
+        // body (-2^20) instead of its distant lower cap. The predicate overflows even in the smallest cube.
+        Assert.True(condition: (evaluator.Frame < FixedQ4816.Zero));
+        Assert.False(condition: evaluator.TryDistance(position: FixedPosition.Zero, distance: out _, material: out _));
+        Assert.False(condition: evaluator.TryDistanceBounds(lower: FixedPosition.Zero, upper: FixedPosition.Zero, distance: out _));
+    }
+    [Fact]
+    public void VesicaCannotHideAnOverflowedBranchPredicate() {
+        var evaluator = Program(emit: (builder, material) => builder.Vesica(radius: 1099511627776f, halfSeparation: 549755813888f, material: material));
+        var position = FixedPosition.FromLocal(local: FixedVector3.UnitY);
+
+        // b*d leaves the carrier around the origin. At y = 1 its wrapped comparison selects the positive
+        // cap, although the body distance is approximately -2^39. Joining the two arms hides the overflow.
+        Assert.True(condition: (evaluator.Frame < FixedQ4816.Zero));
+        Assert.False(condition: evaluator.TryDistance(distance: out _, material: out _, position: position));
+        Assert.False(condition: evaluator.TryDistanceBounds(distance: out _, lower: position, upper: position));
+    }
+    [Fact]
     public void AFieldThatOverflowsEverywhereIsRefusedByBothInterpreters() {
         // The review's case: a dilation by the carrier's whole negative range pushes every distance past its top, where
         // the point evaluator once wrapped to a large negative distance and the bounds read the saturated top as finite.
