@@ -19,7 +19,7 @@ gitignored build products; never commit them.
 `ValidateShaderBytecodeSources` removes bytecode without a same-stem `.hlsl`
 when its sidecar records its bytes (the build wrote it), printing one line per
 file, and fails the build on any other sourceless bytecode, which it leaves in
-place; `ValidateShaderBytecodeFresh` fails it on bytecode stale against its
+place; `CollectShaderBytecode` fails it on bytecode stale against its
 source or sidecar. Shaders target Vulkan 1.3 / SPIR-V 1.6 and Shader Model 6.6;
 do not raise that floor without evidence from every supported GPU.
 

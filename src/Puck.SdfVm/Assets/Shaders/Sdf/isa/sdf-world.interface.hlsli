@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/ef8ded06731fc366714a93e4f6385e3dbcf0c23dfbbf79b31ee70ce927d91d2e). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/c4a528ef131eb7903afb5795549e9a0af268193afb899c5c1f8c4e370aefe474). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -78,6 +78,8 @@ struct SdfWorldFrame {
     [[vk::offset(64)]] float3 cameraTarget;
     [[vk::offset(76)]] uint _pad76;
     [[vk::offset(80)]] float3 cameraUp;
+    [[vk::offset(92)]] uint _pad92;
+    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SdfWorldFrame> frameGroup : register(b0, space0);
 

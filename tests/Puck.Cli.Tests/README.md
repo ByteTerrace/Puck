@@ -46,6 +46,13 @@ path, a directory that holds no evidence is deleted whatever the verdict, and
 the age sweep removes only stale directories of its own prefix. It also checks
 that a recording keeps its inner canary transcript when that run fails, and that
 a law's `TemporaryDirectory` outlives its disposal until the law's verdict.
+`ShaderBuildTargetsLawTests` runs the shared shader targets over isolated projects
+with a CPU-only compiler stand-in. It checks restored include inputs, unchanged
+builds, temporary cleanup, refusal of missing compiler outputs, and collection
+of existing Direct3D 11 kernels without compiling during pack.
+`ShaderDeclarationBuildLawTests` runs the generator targets with the built
+`Puck.Shaders.Generator` host. It checks repair of drift and missing declarations,
+unchanged file times, and explicit checking without generation.
 `CanaryListenerLawTests` checks that the canary port probe hands out UDP ports.
 It also checks that a World refusing its listener is classified as an
 infrastructure failure rather than unsupported.

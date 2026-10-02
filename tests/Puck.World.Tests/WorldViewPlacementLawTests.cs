@@ -97,8 +97,8 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         var right = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0.5f, Y: 0f);
 
         // A view not yet shown is still read at its rect's extent, so it renders before the root first shows it.
-        Assert.True(condition: m_host.PlaceView(region: left, sharpness: 0.25f, shown: false, uncovered: false, view: 0));
-        Assert.True(condition: m_host.PlaceView(region: right, sharpness: 0.25f, shown: false, uncovered: false, view: 1));
+        Assert.True(condition: m_host.PlaceView(outputRegion: left, region: left, sharpness: 0.25f, shown: false, uncovered: false, view: 0));
+        Assert.True(condition: m_host.PlaceView(outputRegion: right, region: right, sharpness: 0.25f, shown: false, uncovered: false, view: 1));
         Assert.Equal(
             actual: WorldFootprints(),
             expected: new Dictionary<string, (double Width, double Height)>(comparer: StringComparer.Ordinal) {
@@ -109,8 +109,8 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         Assert.False(condition: PlacementOf(view: 1).Shown);
 
         m_host.BeginFrame(views: Views);
-        Assert.True(condition: m_host.PlaceView(region: left, sharpness: 0.25f, shown: true, uncovered: false, view: 0));
-        Assert.True(condition: m_host.PlaceView(region: right, sharpness: 0.25f, shown: true, uncovered: false, view: 1));
+        Assert.True(condition: m_host.PlaceView(outputRegion: left, region: left, sharpness: 0.25f, shown: true, uncovered: false, view: 0));
+        Assert.True(condition: m_host.PlaceView(outputRegion: right, region: right, sharpness: 0.25f, shown: true, uncovered: false, view: 1));
         Assert.Equal(
             actual: WorldFootprints(),
             expected: new Dictionary<string, (double Width, double Height)>(comparer: StringComparer.Ordinal) {
@@ -125,7 +125,7 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
 
         // A view the frame does not place is not shown, and one past the root's views is not placed at all.
         Assert.False(condition: PlacementOf(view: 2).Shown);
-        Assert.False(condition: m_host.PlaceView(region: Whole, sharpness: 0f, shown: true, uncovered: false, view: m_viewPasses.Count));
+        Assert.False(condition: m_host.PlaceView(outputRegion: Whole, region: Whole, sharpness: 0f, shown: true, uncovered: false, view: m_viewPasses.Count));
     }
     [Fact]
     public void BeforeTheWorldsFirstFrameTheFirstViewIsPlacedHiddenOverTheWholeDisplay() {

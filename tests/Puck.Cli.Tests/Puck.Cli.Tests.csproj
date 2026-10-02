@@ -22,6 +22,7 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
+        <Compile Include="../Shared/DirectoryLinks.cs" Link="DirectoryLinks.cs" />
         <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
     </ItemGroup>
     <ItemGroup>

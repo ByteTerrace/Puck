@@ -332,6 +332,7 @@ internal static partial class CanaryAssertions {
                 extraction: extraction,
                 line: ((extraction.Line is { } start)
                     ? ContinuationLine(
+                        after: extraction.After,
                         occurrence: assertion.Occurrence,
                         start: start,
                         stream: assertion.Stream,
@@ -459,8 +460,9 @@ internal static partial class CanaryAssertions {
     );
     // The first line inside a response's record — the lines after its "[verb:" line that the console indents
     // (ConsoleRecord) — whose text past the indent starts with the given prefix, rewritten as "<prefix>:<rest>" so the
-    // field reader parses the rest; an empty line, which carries no field, when none does.
-    private static string ContinuationLine(CanaryTranscript transcript, CanaryStream stream, string verb, int occurrence, string start) {
+    // field reader parses the rest; an empty line, which carries no field, when none does. With after, the search starts
+    // past the record's first line that starts with it, and finds nothing when none does.
+    private static string ContinuationLine(CanaryTranscript transcript, CanaryStream stream, string verb, int occurrence, string start, string? after) {
         var lines = Lines(
             stream: stream,
             transcript: transcript
@@ -476,9 +478,19 @@ internal static partial class CanaryAssertions {
                 continue;
             }
 
+            var headed = (after is null);
+
             for (var next = (index + 1); ((next < lines.Count) && ConsoleRecord.IsContinuation(line: lines[next])); next++) {
                 var text = lines[next].TrimStart();
 
+                if (!headed) {
+                    headed = text.StartsWith(
+                        comparisonType: StringComparison.Ordinal,
+                        value: after!
+                    );
+
+                    continue;
+                }
                 if (text.StartsWith(
                     comparisonType: StringComparison.Ordinal,
                     value: start
@@ -496,11 +508,18 @@ internal static partial class CanaryAssertions {
         value = string.Empty;
         error = string.Empty;
 
-        if (!TryReadField(
-            line: line,
-            field: extraction.Field,
-            value: out var fieldValue
-        )) {
+        if (
+            !TryReadField(
+                field: extraction.Field,
+                line: line,
+                value: out var fieldValue
+            ) &&
+            !TryReadCount(
+                field: extraction.Field,
+                line: line,
+                value: out fieldValue
+            )
+        ) {
             error = $"field '{extraction.Field}' was absent from the selected response";
 
             return false;
@@ -534,6 +553,28 @@ internal static partial class CanaryAssertions {
             provider: CultureInfo.InvariantCulture,
             result: out number
         ) && double.IsFinite(d: number));
+    // A counter report's "<kind> <value>" line, selected by a line prefix that names the whole kind, reads its value
+    // under the kind's own name: the line arrives as "<kind>: <value>".
+    private static bool TryReadCount(string line, string field, out string value) {
+        value = string.Empty;
+
+        if (!line.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: $"{field}:"
+        )) {
+            return false;
+        }
+
+        var rest = line[(field.Length + 1)..].Trim();
+
+        if ((rest.Length == 0) || rest.Contains(value: ' ')) {
+            return false;
+        }
+
+        value = rest;
+
+        return true;
+    }
     private static bool TryReadField(string line, string field, out string value) {
         value = string.Empty;
 

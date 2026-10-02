@@ -93,6 +93,7 @@ public static partial class WorldSessionLevers {
             RenderScale = WorldRenderScaleTiers.Nearest(scale: settings.RenderScale),
             UpscaleSharpness = settings.UpscaleSharpness,
             Temporal = settings.Temporal,
+            DynamicResolution = settings.DynamicResolution,
         });
 
         return ((captured == render)

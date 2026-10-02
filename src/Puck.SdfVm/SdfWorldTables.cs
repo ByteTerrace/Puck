@@ -460,6 +460,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
 
             SdfWorldInterfaces.BrickBakeParameters.WriteFrame(
                 block: frameBlockBytes,
+                extent: default,
                 frame: 0UL,
                 values: default
             );

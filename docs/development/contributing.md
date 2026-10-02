@@ -485,6 +485,9 @@ framed as unverified when no device run exists.
 
 ## Hardware and toolchain cautions
 
+- In Git Bash on Windows, `python3` and `python` can resolve to the Microsoft
+  Store alias, which waits on standard input until the command times out. Use
+  the repository's own tools, or `sed`, `awk` or `perl`, instead.
 - On the reference Windows/RTX 4070 system, enabling the Direct3D 12 debug
   layer can make `D3D12CreateDevice` fail with `0x887A0007`; it is opt-in.
 - Vulkan import of a Direct3D 12 shared texture on NVIDIA uses handle type

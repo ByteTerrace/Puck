@@ -516,10 +516,10 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             actual: run.TicksWhileArmed
         );
     }
-    /// <summary>Law 4: a pump that does not hold its clock (the windowed host's) never asks, and steps one tick per
+    /// <summary>Law 4: a pump explicitly configured not to hold its clock never asks, and steps one tick per
     /// iteration past the armed tick while the build is held, exactly as before; the scheduler counts those ticks.</summary>
     [Fact]
-    public void ControlTheWindowedPumpNeverAsksAndStepsPastTheArmedTick() {
+    public void ControlANonholdingPumpNeverAsksAndStepsPastTheArmedTick() {
         using var run = new Run(
             directory: m_directory.RootPath,
             holdsClock: false

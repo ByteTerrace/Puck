@@ -1,17 +1,8 @@
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 
 namespace Puck.Cli;
-
-/// <summary>Builds <c>src/Puck.World</c> into <paramref name="outputDirectory"/>.</summary>
-/// <param name="outputDirectory">The empty directory the build writes into.</param>
-/// <param name="timeout">How long the build may run.</param>
-/// <param name="build">The captured build process, or <see langword="null"/> when it could not start.</param>
-/// <param name="error">One line saying why the build failed, or empty on success.</param>
-/// <returns><see langword="true"/> when the build exited 0 inside its budget.</returns>
-internal delegate bool WorldArtifactBuilder(string outputDirectory, TimeSpan timeout, out CliProcessResult? build, out string error);
 
 /// <summary>
 /// Resolves the real <c>Puck.World</c> executable for a verb that boots it, building it in Release only when no run
@@ -27,85 +18,39 @@ internal delegate bool WorldArtifactBuilder(string outputDirectory, TimeSpan tim
 /// compilation stays incremental through the checkout's <c>obj</c> directories.
 /// </para>
 /// <para>
-/// The build restores only when the World has no <c>obj/project.assets.json</c> yet, as in a freshly created worktree.
+/// Every build restores. NuGet's no-op check compares each closure project's restore inputs with the hash its last
+/// restore recorded, so restoring an unchanged closure starts no process beyond the build's own, writes no file and
+/// makes no request, while a closure that gained a project or a package since its last restore is restored before it
+/// builds.
+/// </para>
+/// <para>
+/// A run that builds keeps the build's whole output in <c>Puck.World.build.log</c> inside the caller's log directory,
+/// and a failed build's refusal quotes the output's first error lines and names that file.
 /// </para>
 /// </summary>
 internal static class WorldArtifactBuild {
     /// <summary>The artifact a leg launches, inside every build.</summary>
     public const string ArtifactName = "Puck.World.dll";
 
-    // The build's command line apart from the restore choice and the output directory, neither of which changes what
-    // the sources build into. The key covers it, so a change here is never answered with a build made the old way.
-    private static readonly string[] BuildArguments = ["build", "--disable-build-servers", WorldArtifactClosure.WorldProject, "-c", "Release", "--nologo", "-p:NuGetAudit=false"];
-
-    private static bool TryBuild(string repositoryRoot, string outputDirectory, TimeSpan timeout, out CliProcessResult? build, out string error) {
-        build = null;
-
-        // A checkout that has never restored the World (a fresh worktree) has no assets file, and a no-restore build of
-        // it fails with NETSDK1004; one that has restored skips the restore's cost and network.
-        var restored = File.Exists(path: Path.Combine(
-            path1: repositoryRoot,
-            path2: "src",
-            path3: "Puck.World",
-            path4: "obj/project.assets.json"
-        ));
-        List<string> arguments = [.. BuildArguments, .. (restored ? (string[])["--no-restore"] : []), "--output", outputDirectory];
-
-        try {
-            build = CliProcess.RunCaptured(
-                arguments: arguments,
-                fileName: "dotnet",
-                input: string.Empty,
-                timeout: timeout,
-                workingDirectory: repositoryRoot
-            );
-        } catch (Exception exception) when ((exception is InvalidOperationException or Win32Exception)) {
-            error = $"could not start the Puck.World build: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
-            return false;
-        }
-
-        if (build.TimedOut) {
-            error = $"the Puck.World build exceeded its {timeout.TotalSeconds.ToString(format: "0", provider: CultureInfo.InvariantCulture)}-second budget.";
-
-            return false;
-        }
-        if (build.ExitCode != 0) {
-            error = $"the Puck.World build exited {build.ExitCode.ToString(provider: CultureInfo.InvariantCulture)}.";
-
-            return false;
-        }
-
-        error = string.Empty;
-
-        return true;
-    }
-
     /// <summary>Resolves the World build for the checkout's current sources, building it only when the store holds
     /// none.</summary>
     /// <param name="verb">The calling verb's name, which prefixes the progress lines written to standard error;
     /// standard output carries only the calling verb's results.</param>
     /// <param name="repositoryRoot">The checkout whose sources are built.</param>
+    /// <param name="logDirectory">The calling run's directory, which keeps <c>Puck.World.build.log</c> when this run
+    /// builds; created only when the build's output is kept.</param>
     /// <param name="timeout">How long resolving may take, waiting for another run's build included.</param>
     /// <param name="artifact">The leased build, which the caller disposes once its last World process has exited;
     /// <see langword="null"/> on failure.</param>
-    /// <param name="build">The captured build process when this run built, or <see langword="null"/> when it reused a
-    /// build or could not start one. A caller that keeps build logs writes them from here whether or not the build
-    /// succeeded.</param>
-    /// <param name="error">One line saying why the artifact is unavailable, or empty on success.</param>
+    /// <param name="error">Why the artifact is unavailable, or empty on success. A failed build's reason quotes its
+    /// first error lines on further lines and names its log.</param>
     /// <returns><see langword="true"/> when an artifact is available.</returns>
-    public static bool TryResolve(string verb, string repositoryRoot, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out CliProcessResult? build, out string error) =>
+    public static bool TryResolve(string verb, string repositoryRoot, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error) =>
         TryResolve(
             artifact: out artifact,
-            build: out build,
-            builder: (string outputDirectory, TimeSpan remaining, out CliProcessResult? process, out string failure) => TryBuild(
-                build: out process,
-                error: out failure,
-                outputDirectory: outputDirectory,
-                repositoryRoot: repositoryRoot,
-                timeout: remaining
-            ),
+            builder: null,
             error: out error,
+            logDirectory: logDirectory,
             repositoryRoot: repositoryRoot,
             store: new WorldArtifactStore(root: WorldArtifactStore.DefaultRoot),
             timeout: timeout,
@@ -116,16 +61,16 @@ internal static class WorldArtifactBuild {
     /// <param name="named">The entry assembly the caller named, or <see langword="null"/> for the checkout's build.</param>
     /// <param name="verb">The calling verb's name, which prefixes the progress lines.</param>
     /// <param name="repositoryRoot">The checkout whose sources are built when nothing is named.</param>
+    /// <param name="logDirectory">The calling run's directory, which keeps <c>Puck.World.build.log</c> when this run
+    /// builds.</param>
     /// <param name="timeout">How long resolving the checkout's build may take.</param>
     /// <param name="path">The entry assembly every leg launches, or <see langword="null"/> on failure.</param>
     /// <param name="lease">The leased checkout build, which the caller disposes once its last World process has
     /// exited; <see langword="null"/> for a named artifact or on failure.</param>
-    /// <param name="build">The captured build process when this run built, or <see langword="null"/>.</param>
-    /// <param name="error">One line saying why no artifact is available, or empty on success.</param>
+    /// <param name="error">Why no artifact is available, or empty on success.</param>
     /// <returns><see langword="true"/> when an artifact is available.</returns>
-    public static bool TryResolveNamed(string? named, string verb, string repositoryRoot, TimeSpan timeout, [NotNullWhen(returnValue: true)] out string? path, out WorldArtifact? lease, out CliProcessResult? build, out string error) {
+    public static bool TryResolveNamed(string? named, string verb, string repositoryRoot, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out string? path, out WorldArtifact? lease, out string error) {
         lease = null;
-        build = null;
 
         if (named is { }) {
             path = Path.GetFullPath(path: named);
@@ -143,8 +88,8 @@ internal static class WorldArtifactBuild {
         }
         if (!TryResolve(
             artifact: out lease,
-            build: out build,
             error: out error,
+            logDirectory: logDirectory,
             repositoryRoot: repositoryRoot,
             timeout: timeout,
             verb: verb
@@ -162,22 +107,22 @@ internal static class WorldArtifactBuild {
     /// <param name="verb">The calling verb's name, which prefixes the progress lines.</param>
     /// <param name="repositoryRoot">The checkout whose sources are keyed.</param>
     /// <param name="store">The store builds are kept in.</param>
-    /// <param name="builder">What builds a missing key into an empty directory.</param>
+    /// <param name="builder">A captured build runner, or null to launch dotnet.</param>
+    /// <param name="logDirectory">The calling run's directory, which keeps <c>Puck.World.build.log</c> when this run
+    /// builds.</param>
     /// <param name="timeout">How long resolving may take, waiting for another run's build included.</param>
     /// <param name="artifact">The leased build, or <see langword="null"/> on failure.</param>
-    /// <param name="build">The captured build process when this run built, or <see langword="null"/>.</param>
-    /// <param name="error">One line saying why the artifact is unavailable, or empty on success.</param>
+    /// <param name="error">Why the artifact is unavailable, or empty on success.</param>
     /// <returns><see langword="true"/> when an artifact is available.</returns>
-    public static bool TryResolve(string verb, string repositoryRoot, WorldArtifactStore store, WorldArtifactBuilder builder, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out CliProcessResult? build, out string error) {
+    public static bool TryResolve(string verb, string repositoryRoot, WorldArtifactStore store, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? builder, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error) {
         var clock = Stopwatch.StartNew();
 
         artifact = null;
-        build = null;
 
         var (roots, _) = WorldArtifactClosure.Walk(repositoryRoot: repositoryRoot);
 
         if (!WorldArtifactKey.TryCompute(
-            buildArguments: BuildArguments,
+            buildArguments: CliProjectBuild.Arguments(project: WorldArtifactClosure.WorldProject),
             key: out var key,
             reason: out var unkeyed,
             repositoryRoot: repositoryRoot,
@@ -238,25 +183,23 @@ internal static class WorldArtifactBuild {
 
             Console.Error.WriteLine(value: $"{verb}: building Puck.World once (Release) for source state {key}.");
 
-            if (!builder(
-                build: out build,
+            var built = CliProjectBuild.TryBuild(
+                artifactName: ArtifactName,
+                build: out _,
+                project: WorldArtifactClosure.WorldProject,
+                repositoryRoot: repositoryRoot,
+                logDirectory: logDirectory,
+                runner: builder,
                 error: out error,
                 outputDirectory: staging,
                 timeout: CliProcess.RemainingBudget(
                     budget: timeout,
                     clock: clock
                 )
-            )) {
-                RunDirectory.TryDelete(path: staging);
+            );
 
-                return false;
-            }
-            if (!File.Exists(path: Path.Combine(
-                path1: staging,
-                path2: ArtifactName
-            ))) {
+            if (!built) {
                 RunDirectory.TryDelete(path: staging);
-                error = $"the Puck.World build exited 0 but did not produce {ArtifactName}.";
 
                 return false;
             }

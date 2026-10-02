@@ -1084,6 +1084,7 @@ internal static partial class CanaryManifestLoader {
                     context: $"{context} extract[{index}]",
                     unknownMemberDetail: UnknownMemberDetail,
                     refusal: Refusal,
+                    "after",
                     "component",
                     "field",
                     "line",
@@ -1137,11 +1138,30 @@ internal static partial class CanaryManifestLoader {
                     }
                 }
 
+                string? after = null;
+
+                if (row.TryGetProperty(
+                    propertyName: "after",
+                    value: out _
+                )) {
+                    after = CliStrictJson.ReadRequiredString(
+                        context: $"{context} extract[{index}]",
+                        element: row,
+                        member: "after",
+                        refusal: Refusal
+                    );
+
+                    if (string.IsNullOrWhiteSpace(value: after) || (line is null)) {
+                        throw new CanaryManifestRefusal(message: $"{context} extract[{index}] after must name the start of a response line, and only beside a line it heads.");
+                    }
+                }
+
                 if (!values.Add(item: valueName)) {
                     throw new CanaryManifestRefusal(message: $"{context} repeats extracted value name '{valueName}'.");
                 }
 
                 extractions.Add(item: new CanaryValueExtraction(
+                    After: after,
                     Component: component,
                     Field: field,
                     Line: line,

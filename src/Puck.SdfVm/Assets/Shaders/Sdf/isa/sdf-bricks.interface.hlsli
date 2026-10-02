@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-bricks' (sha256/adcfca98a81c459893d572aa9bb946a307e033183c76dde4882573323e3022dc). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-bricks' (sha256/b159cf83b2e62bbc58f7beab7b9b8b39fdf4fcc12ae05b054c5ade6083c24544). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_BRICKS
 #define PUCK_SHADER_INTERFACE_SDF_BRICKS
 
@@ -19,6 +19,8 @@ struct SdfBricksFrame {
     [[vk::offset(64)]] float3 cameraTarget;
     [[vk::offset(76)]] uint _pad76;
     [[vk::offset(80)]] float3 cameraUp;
+    [[vk::offset(92)]] uint _pad92;
+    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SdfBricksFrame> frameGroup : register(b0, space0);
 

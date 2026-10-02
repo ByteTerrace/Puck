@@ -59,18 +59,19 @@ public sealed partial class SdfWorldPassesLawTests {
         _ = request.TryFail(error: new OperationCanceledException());
     }
     // Cadence never keeps a jittered sample: once the converging capture ends, a still view renders once more at the
-    // pixel center and then stands.
+    // pixel center and then stands. The capture asks for one sample more than the law renders, so it is still waiting,
+    // never served, when the law withdraws it.
     [Fact]
     public void AStillViewRendersOnceUnjitteredAfterItsCaptureEndsAndThenStands() {
-        const int Converge = 8;
+        const int Rendered = 8;
         using var rig = new TemporalRig(views: 1, cadence: true);
 
         rig.Produce();
         Assert.True(condition: rig.Stood());
-        var request = new FrameCaptureRequest(converge: Converge, path: "unused-still-temporal-law.png");
+        var request = new FrameCaptureRequest(converge: (Rendered + 1), path: "unused-still-temporal-law.png");
 
         rig.Runtime.RequestCapture(request: request);
-        for (var sample = 0U; (sample < Converge); sample++) {
+        for (var sample = 0U; (sample < Rendered); sample++) {
             rig.Produce();
             Assert.Equal(expected: sample, actual: rig.HistoryFrames());
         }
@@ -81,6 +82,28 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: Vector2.Zero, actual: rig.Jitter());
         rig.Produce();
         Assert.True(condition: rig.Stood());
+    }
+    // A reconfiguration that keeps the view leaves its still output standing: the view rendered once and renders no
+    // more, whatever set the runtime runs around it.
+    [Fact]
+    public void AStillViewKeptByAReconfigurationRendersNoMore() {
+        using var rig = new TemporalRig(views: 1, cadence: true);
+
+        Assert.Equal(expected: 1UL, actual: rig.World.FrameCounter);
+        for (var reconfiguration = 0; (reconfiguration < 3); reconfiguration++) {
+            Assert.True(condition: RenderGraphInstanceSet.TryCreate(instances: [.. rig.Runtime.Instances.Instances], refusal: out _, set: out var set));
+            Assert.True(condition: rig.Runtime.TryReconfigure(graphs: new RenderGraphRuntimeGraph?[set.Instances.Count], refusal: out var refusal, root: "world", set: set), userMessage: refusal?.Message);
+            for (var frame = 0; (frame < 4); frame++) {
+                rig.Produce();
+                Assert.True(condition: rig.Stood(), userMessage: $"reconfiguration {reconfiguration}, frame {frame}");
+            }
+        }
+        Assert.Equal(expected: 1UL, actual: rig.World.FrameCounter);
+
+        var completed = new GpuWorkSample();
+
+        Assert.True(condition: rig.World.TryReadCompleted(sample: completed));
+        Assert.Equal(expected: 1L, actual: completed.Submission);
     }
     // The motion view reads the previous view: turned on over a still scene it renders once with none, once with the
     // stationary previous view, and only then stands.
@@ -99,6 +122,30 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.True(condition: rig.PreviousValid());
         rig.Produce();
         Assert.True(condition: rig.Stood());
+        Assert.True(condition: rig.PreviousValid());
+    }
+    [Fact]
+    public void RebuildingAnUnnamedViewDiscardsItsPreviousCameraEvenWhenItsEpochAndPosesStayStill() {
+        using var rig = new TemporalRig(views: 1, cadence: true);
+
+        rig.Selected.DebugMode = DebugViewModes.Motion;
+        rig.Produce();
+        rig.Produce();
+        Assert.True(condition: rig.PreviousValid());
+        var revision = rig.Passes.CounterOf(instance: "world")!.Revision;
+
+        rig.Produce(named: false);
+        Assert.Equal(expected: 0UL, actual: rig.Runtime.Node(instance: 0).OwnedBytes);
+        Assert.False(condition: rig.Passes.HasRenderedResolvedView(instance: "world"));
+        TestLiveness.Until(step: () => {
+            rig.Produce();
+            return !rig.Stood();
+        }, reason: () => "The released view never rendered again.");
+
+        Assert.Equal(expected: revision, actual: rig.Passes.CounterOf(instance: "world")!.Revision);
+        Assert.False(condition: rig.PreviousValid());
+        Assert.Equal(expected: 0U, actual: rig.HistoryFrames());
+        rig.Produce();
         Assert.True(condition: rig.PreviousValid());
     }
     // A temporal view's resolve pipeline is leased into the residency it crosses to, so its passes follow in place, with
@@ -161,6 +208,80 @@ public sealed partial class SdfWorldPassesLawTests {
             rig.Produce();
             Assert.True(condition: rig.Stood(), userMessage: $"frame {frame} after the period");
         }
+    }
+    [Fact]
+    public void AGridMoveSettlesForOnePeriodWithoutDiscardingHistoryOrRebuilding() {
+        using var rig = new TemporalRig(views: 1, cadence: true, temporal: true, renderScale: 0.75f);
+
+        for (var frame = 0U; (frame <= SdfTemporalHistory.Period); frame++) {
+            rig.Produce();
+        }
+        Assert.True(condition: rig.Stood());
+        var revision = rig.World.WorkRevision;
+
+        foreach (var grid in new[] { 0.5f, 0.625f }) {
+            var preceding = rig.HistoryFrames();
+
+            rig.RenderGrid = grid;
+            for (var sample = 0U; (sample < SdfTemporalHistory.Period); sample++) {
+                rig.Produce();
+                Assert.False(condition: rig.Stood(), userMessage: $"grid {grid}, sample {sample}");
+                Assert.Equal(expected: ((preceding + sample) + 1u), actual: rig.HistoryFrames());
+                Assert.True(condition: rig.PreviousValid());
+                Assert.Equal(expected: revision, actual: rig.World.WorkRevision);
+            }
+            // The node records the quantized grid with each submission it renders, as its completed work names them.
+            var completed = new GpuWorkSample();
+            var node = rig.Runtime.Node(instance: 0);
+
+            Assert.True(condition: node.TryReadCompleted(sample: completed));
+            Assert.True(condition: node.TryGetRenderGrid(grid: out var recorded, submission: completed.Submission));
+            Assert.Equal(expected: RenderGraphExtent.Quantize(fraction: grid), actual: recorded);
+            rig.Produce();
+            Assert.True(condition: rig.Stood());
+            // A different requested fraction in the same quantized grid needs no new samples.
+            rig.RenderGrid = (grid - 0.001f);
+            rig.Produce();
+            Assert.True(condition: rig.Stood());
+        }
+    }
+    [Fact]
+    public void TheCompletionSummaryNamesEveryRenderNotOnlyTheNewest() {
+        using var rig = new TemporalRig(views: 1, renderScale: 0.75f);
+        var node = rig.Runtime.Node(instance: 0);
+        var completed = new GpuWorkSample();
+
+        rig.RenderGrid = 0.625f;
+        for (var frame = 0; (frame < 4); frame++) {
+            rig.Produce();
+        }
+        _ = node.TakeCompletions();
+
+        // A render at 0.5 and then renders at 0.625 complete between two reads: the newest completed submission names
+        // 0.625, but the summary spans both grids and names none.
+        rig.RenderGrid = 0.5f;
+        rig.Produce();
+        rig.RenderGrid = 0.625f;
+        for (var frame = 0; (frame < 3); frame++) {
+            rig.Produce();
+        }
+        var mixed = node.TakeCompletions();
+
+        Assert.True(condition: node.TryReadCompleted(sample: completed));
+        Assert.True(condition: node.TryGetRenderGrid(grid: out var newest, submission: completed.Submission));
+        Assert.Equal(actual: newest, expected: 0.625d);
+        Assert.True(condition: (mixed.Renders >= 2), userMessage: $"{mixed.Renders} renders");
+        Assert.Equal(expected: 0d, actual: mixed.Grid);
+
+        // Renders at one grid since the read name it, and a read with nothing new names nothing.
+        for (var frame = 0; (frame < 4); frame++) {
+            rig.Produce();
+        }
+        var uniform = node.TakeCompletions();
+
+        Assert.True(condition: (uniform.Renders > 0));
+        Assert.Equal(expected: 0.625d, actual: uniform.Grid);
+        Assert.Equal(expected: default, actual: node.TakeCompletions());
     }
     [InlineData(16u)]
     [InlineData(128u)]
@@ -285,6 +406,9 @@ public sealed partial class SdfWorldPassesLawTests {
             set => m_feed!.Filling = value;
         }
         public SdfWorldPasses Passes { get; }
+        public float RenderGrid {
+            set => m_sourceFrame = m_sourceFrame with { Views = [m_sourceFrame.Views[0] with { ResolvedRenderScale = value }] };
+        }
         public RenderGraphRuntime Runtime { get; }
         public SdfWorldResidency? Second { get; }
         public SdfWorldResidency Selected { get; set; }
@@ -299,11 +423,11 @@ public sealed partial class SdfWorldPassesLawTests {
         }
         public ShaderPipelineRenderNode World => Runtime.Node(instance: Runtime.Instances.IndexOf(name: "world"));
 
-        public void Produce() {
+        public void Produce(bool named = true) {
             m_rendered = World.FrameCounter;
             var scheduled = new RenderGraphFrame(DisplayHeight: ((int)OutputExtent), DisplayHertz: 60, DisplayWidth: ((int)OutputExtent),
                 Footprints: ((m_feed is null) ? [] : [new RenderGraphFootprint(Consumer: "world", Height: 1.0, Producer: "feed", Width: 1.0)]),
-                Index: m_index, Roots: (Parked ? [] : [new RenderGraphRoot(Height: 1, Instance: "world", Width: 1)]), Tick: m_index++);
+                Index: m_index, Named: (named ? ["world"] : []), Roots: ((named && !Parked) ? [new RenderGraphRoot(Height: 1, Instance: "world", Width: 1)] : []), Tick: m_index++);
 
             var context = m_context with { TargetHeight = OutputExtent, TargetWidth = OutputExtent };
 

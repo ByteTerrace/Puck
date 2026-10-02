@@ -83,6 +83,9 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// <summary>The presentation's render settings, whose <see cref="WorldRenderSettings.DrawsBakes"/> says whether it
     /// draws its bakes, or <see langword="null"/> until the render factory has run.</summary>
     public WorldRenderSettings? Settings { get; set; }
+    /// <summary>The presentation's dynamic-resolution controller, whose grid and signal <c>world.dynamic-resolution</c>
+    /// reports, or <see langword="null"/> until the render factory has run.</summary>
+    public WorldDynamicResolution? DynamicResolution { get; set; }
 
     // A schedule must reconcile before readiness can decide whether it draws bakes, and settle while it draws them.
     private bool BakesSettled => ((Settings is not { } settings) || (Bakes is not { } bakes) || bakes.IsReadyForDrawing(bakes: settings.Bakes));
@@ -105,7 +108,8 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// <inheritdoc/>
     /// <remarks>The world's residency's uploads read as <c>sdf:world</c>, each render-graph instance that renders a graph
     /// by its instance name (an SDF view's passes, <c>sdf.world$sky</c> through <c>sdf.world$views</c>; the root's, its
-    /// place and post passes and the overlay), and each registered view's residency as <c>sdf:&lt;name&gt;</c>.</remarks>
+    /// place and post passes and the overlay), and each registered view's residency as <c>sdf:&lt;name&gt;</c>. A render-graph
+    /// instance's node also reports the bytes it owns (<see cref="ShaderPipelineRenderNode.OwnedBytes"/>).</remarks>
     public void CopyNodes(List<GpuWorkNode> nodes) {
         ArgumentNullException.ThrowIfNull(nodes);
 
@@ -128,6 +132,7 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
                 nodes.Add(item: new GpuWorkNode(
                     Lifetime: instance,
                     Name: runtime.Instances.Instances[index].Name,
+                    OwnedBytes: instance.OwnedBytes,
                     Work: instance
                 ));
             }

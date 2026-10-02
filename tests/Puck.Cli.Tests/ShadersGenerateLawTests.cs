@@ -151,6 +151,73 @@ public sealed class ShadersGenerateLawTests {
         Assert.DoesNotContain(actualString: error, expectedSubstring: "brick-bake");
         Assert.DoesNotContain(actualString: error, expectedSubstring: "package '");
     }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void AFileThatMatchesTheModelOnlyInTheWorkingTreeFailsTheCheckUntilItIsStaged(bool restoredMissingDeclaration) {
+        // A kernel build writes every declaration the model changed, so after a build the working tree matches the model
+        // whatever the change staged: the check holds each file to the index too.
+        (string Path, string Text)[] files = [
+            (IsaPath, SdfIsaHlsl.Generate()),
+            (FilmGrainPath, InterfaceOf(id: RenderGraphPackageCatalog.SdfFilmGrain)),
+            (OverlayPath, InterfaceOf(id: RenderGraphPackageCatalog.Overlay)),
+            (PlacePath, InterfaceOf(id: RenderGraphPackageCatalog.Place)),
+            .. SourceIncludes,
+            .. EngineKernels,
+        ];
+        var root = Directory.CreateTempSubdirectory(prefix: "puck-shaders-generate-index-");
+        var unstagedPath = (restoredMissingDeclaration ? IsaPath : OverlayPath);
+
+        try {
+            foreach (var (path, text) in files) {
+                var full = Path.Combine(path1: root.FullName, path2: path);
+
+                _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: full)!);
+                File.WriteAllText(contents: ((!restoredMissingDeclaration && string.Equals(a: path, b: OverlayPath, comparisonType: StringComparison.Ordinal)) ? "// stale\n" : text), path: full);
+            }
+            Assert.Equal(actual: CliGit.Run(root.FullName, "init", "-q").ExitCode, expected: 0);
+            Assert.Equal(actual: CliGit.Run(root.FullName, "add", "-A").ExitCode, expected: 0);
+            if (restoredMissingDeclaration) {
+                Assert.Equal(actual: CliGit.Run(root.FullName, "rm", "-f", "--", unstagedPath).ExitCode, expected: 0);
+                var problems = new List<string>();
+
+                ShaderDeclarations.Reconcile(problems: problems, repositoryRoot: root.FullName, written: []);
+                Assert.Empty(collection: problems);
+            } else {
+                File.WriteAllText(contents: InterfaceOf(id: RenderGraphPackageCatalog.Overlay), path: Path.Combine(path1: root.FullName, path2: OverlayPath));
+            }
+
+            (int ExitCode, string Error) Check() {
+                var (exitCode, _, error) = ConsoleCapture.RunSplit(run: () => GenerateCommand.Run(
+                    check: true,
+                    files: [.. files.Select(selector: static file => file.Path)],
+                    packages: RenderGraphPackageCatalog.Engine,
+                    repositoryRoot: root.FullName
+                ));
+
+                return (exitCode, error);
+            }
+
+            var unstaged = Check();
+
+            Assert.Equal(actual: unstaged.ExitCode, expected: 1);
+            Assert.Contains(actualString: unstaged.Error, expectedSubstring: $"{unstagedPath} matches the model only in the working tree");
+            Assert.DoesNotContain(actualString: unstaged.Error, expectedSubstring: PlacePath);
+
+            Assert.Equal(actual: CliGit.Run(root.FullName, "add", "--", unstagedPath).ExitCode, expected: 0);
+
+            var staged = Check();
+
+            Assert.Equal(actual: staged.ExitCode, expected: 0);
+            Assert.Empty(collection: staged.Error.Trim());
+        } finally {
+            // Git writes its objects read-only.
+            foreach (var file in Directory.EnumerateFiles(path: root.FullName, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
+                File.SetAttributes(fileAttributes: FileAttributes.Normal, path: file);
+            }
+            CliScratchDirectories.TryDelete(path: root.FullName);
+        }
+    }
     [Fact]
     public void OnTheTreeEveryGeneratedInterfaceIsChecked() {
         Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));

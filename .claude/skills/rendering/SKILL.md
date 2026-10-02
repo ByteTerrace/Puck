@@ -61,8 +61,9 @@ over `RotatePlane`). A new instruction touches every partner in one change:
    which writes every declaration in `ShaderDeclarations` whose text moved, so a
    new member and the kernel reading it build in one pass, and
    `puck shaders generate` writes the same files by hand. Never seed a header.
-   A CI build (`ContinuousIntegrationBuild`) only checks: it fails naming a
-   drifted generated file and writes nothing.
+   Builds generate on every machine, CI included; `puck shaders generate
+   --check` also refuses a generated file whose staged copy differs from the
+   model, so a build's rewrite never hides a forgotten regeneration.
    The new member appears as its enum's
    prefix plus its name in upper snake case (`SdfOp.CellDisplace` is
    `SDF_OP_CELL_DISPLACE`). Never hand-write a `#define` for an ISA value: a new
@@ -1487,7 +1488,28 @@ output layout, the one its consumer's descriptor is written with, and hands a
 host's image back in the host's own. The output may be read only by later
 package passes, which `ShaderPipelineRenderNode.StandingOf` hands the input it
 stands for, so a chain of stand-ins resolves to its first input
-(`RenderGraphRuntimeLawTests.Chain`); any other reader refuses the stand-in. An
+(`RenderGraphRuntimeLawTests.Chain`); any other reader refuses the stand-in.
+Across instances the runtime never keeps such an image as the instance's own: an
+output standing for a producer's (`PublishedBinding`) resolves on every read to
+that producer's newest output (`RenderGraphRuntime.Standing.cs`), so it follows
+the producer at the producer's cadence and never names an image the producer
+released, replaced or retired; one that resolves to nothing is rerendered when
+shown, and a frame releasing its producer is scheduled again so it does that
+frame (`RenderGraphRuntimeLawTests.Standing`, whose fake device records every
+command naming a released image in `FakePipelineGpu.UsesAfterRelease`). A new
+reader of an instance output reads it through `OutputAt` or `LatestOf`, never
+`m_current` directly, and binds it under `LeaseOf`'s lease: every node image is
+one of the runtime's `GpuImageLeases` (`RenderGraphRuntime.Leases.cs`), disposed
+only once its owner dropped it and every reader's lease retired, so a reader
+never needs to know whose image it is (`RenderGraphRuntimeLawTests.ImageLeases`,
+whose fake queue finishes submissions in order through
+`FakePipelineGpu.CompletedThrough` and flags an image disposed under a pending
+reader). A lease retires once; a second retirement throws. A node never stands
+for its own image (`OwnImageInput`), so feedback draws rather than closing a
+loop of standing outputs, and a capture a node serves without rendering while it
+publishes another instance's image reads a copy of that frame's image
+(`ShaderPipelineRenderNode.CapturePin.cs`): a lease pins lifetime, never
+pixels, and a node's slot ring cannot rotate past an image. An
 external producer's output declares the layout its own submissions leave the
 image in (`RenderGraphExternalOutput.Layout`); a declared layout the producer
 does not leave it in shows only as Vulkan validation errors, since the
@@ -1599,6 +1621,20 @@ records `ImageSourceVerdict`'s exact verdict (`WorldCaptureManifestEntry.SourceV
 resolved through `IWorldCaptureSources`), which `puck parity compare` reads as
 `SOURCE-OK`/`SOURCE-FAILED`.
 
+Both rendered hosts hold the simulation at a tick-scheduled capture until it
+is served or refused. A window resize delays frame production without moving
+that tick. `WorldFramePresenter.CapturePending` reads the runtime's pending
+request, forwarded captures included, and pins bound state and body poses to
+fraction one while the frame is owed. Preparation writes graph parameters
+after that fraction is applied. The swapchain follows the client extent while
+the world's logical frame stays fixed. The hold budgets and named refusals
+are documented in the `puck-world` skill's
+[capture contract](../puck-world/references/schedules-and-tests.md#captures);
+`WorldCaptureSchedulerLawTests.AWindowResizeStormWritesEveryScheduledTicksFrameWithoutBlockingTheNextCapture`
+checks every delayed PNG's tick and state hash, and
+`WorldTemporalCaptureLawTests.AWindowedCapturePinsItsClockAndBodyPoseAndReleasesTheFractionAfterServing`
+checks pinning and release on a windowed presentation.
+
 `views.graphs` rows run on the same runtime. `WorldViewGraphHost`
 (`src/Puck.World.Client/WorldViewGraphHost*.cs`) drives it through
 `IRenderGraphInstances` (`src/Puck.Shaders/Graph`, implemented by
@@ -1622,17 +1658,28 @@ from the row's `inputs`. A row naming an engine `package` (such as `sdf.world`)
 compiles nothing. Panes are placed by the `place` package (`PlacePackage`,
 `IRenderGraphPlacements`, which the host implements):
 `WorldFramePresenter.PrepareGraph`, installed as
-`RenderGraphRuntimeNode.Prepare`, places every instance a slot of the last
-composed layout shows at the slot's rect with `world.upscale-sharpness`'s
-sharpness, adds a footprint (consumer `main`, producer the pane, at the slot's
-width and height), advances the pane's clock and feeds its camera, pointer and
-time. A pane the active layout does not show draws nothing in its place pass
-and is not scheduled. The composer runs inside the world producer's frame, so a
-layout change places panes one frame later, and a layout transition's
-render-scale dip does not reach panes. A pane slot adds no SDF view. Each SDF
-view of the last composed frame is placed through
-`WorldViewGraphHost.PlaceViews`, which `PrepareGraph` calls, and `PlaceView`
-(footprint: native rect; placement: rect with `world.upscale-sharpness`).
+`RenderGraphRuntimeNode.Prepare`, reconciles delivery and the graph set. The
+package's `BeginFrame` captures the world before scheduling; that capture runs
+the existing composer once and then places its views and panes. Each placement
+uses the rect its camera projects in that same frame, including an interrupted
+transition (`WorldCameraPlacementLawTests.EveryTransitionFramePlacesTheRectItsCameraProjects`).
+The capture advances each pane's clock and feeds its camera, pointer, time and
+bound parameters before publishing its mapping. A pane the active layout does
+not show draws nothing in its place pass and is not scheduled. A pane slot adds
+no SDF view. `WorldViewGraphHost.PlaceViews` and `Place` add footprints at the
+envelope the presenter hands them: the largest width and height each occupant
+reaches over the layout transition in flight (`WorldViewOutputRegions` over
+`WorldViewComposer.StartSlots` and `EndSlots`), including a whole-display
+spectator at an endpoint without a rendered slot. Reservations retain their largest
+extent through interrupted transitions until the chain settles, then request the
+occupant's own rect, subject to scheduler quantization and shrink hysteresis.
+Placement uses the current eased rect with
+`world.upscale-sharpness`; the envelope holds through easing, so quantization
+and hysteresis rebuild nothing during an uninterrupted ease. Allocations grow as
+it starts and shrink as it settles; growth on one axis and shrinkage on the other
+rebuild at both boundaries
+(`WorldCameraPlacementLawTests.AnEasedRectCrossesQuantizationStepsWithoutRebuildingItsNodeUntilTheTransitionSettles`,
+`ASteadySplitLayoutAllocatesItsFirstViewAtItsPlacedHalf`).
 The view package reconstructs a reduced render grid to that native output
 before `place` composes it, and `place` resamples it once more unless the
 scheduled extent equals the rect's pixels. The presenter sets each view's
@@ -1646,8 +1693,7 @@ so the world is still scheduled. A view is shown only once its instance has
 completed an image (`WorldFramePresenter.ViewRendered`,
 `RenderGraphRuntime.TryLatestImage`),
 and a lone full-display view without tonemap is not shown, so `main` stands for
-`world` and parity holds (`WorldViewPlacementLawTests`). Views, like panes, are
-placed one frame after a layout change. The first view's place pass carries
+`world` and parity holds (`WorldViewPlacementLawTests`). The first view's place pass carries
 the `place` config's `letterbox`, so pixels no view or pane covers show the
 letterbox color `place.comp.hlsl` states, and a layout covering the whole
 display pays nothing for it. While the first view is not shown, its pass still
@@ -1737,8 +1783,8 @@ screen pointer path reads a mapping rather than scaling a rect by hand. A warp
 pass is an input path only with a declared exact inverse; a new warp kind is a
 new `SourceWarpInverse` arm. The screen glass's bezel is data: its one statement
 is `WorldScreenMappings.Glass`, the warp every screen row's mapping carries. Panes publish their
-mappings from the placements `place` draws: `WorldFramePresenter.PrepareGraph`
-ends with `WorldViewGraphHost.PublishPanes`, which writes one whole-image
+mappings from the placements `place` draws: the world's capture completes
+placement with `WorldViewGraphHost.PublishPanes`, which writes one whole-image
 mapping per shown view and pane, in drawing order, named by the instance's
 `RenderGraphInstance.Handle` at the extent the runtime's latest schedule
 renders it at (`IRenderGraphInstances.Latest`), into `Panes` and the host's
@@ -1844,11 +1890,17 @@ binding: a load refuses a module whose reflected bindings differ from its layout
 `ShaderPipelineParameterLayout.WriteFrame` and the extent through `WriteExtent`
 alone, so a new frame value is a row in `ShaderFrameInterface.FrameGroupMembers`
 and a write there, nothing else. The node writes `ShaderPipelineRenderNode.Frame`
-whole and derives no value of it: `tick` and `time` come from the World's one
+whole and derives no other value of it: `tick` and `time` come from the World's one
 presentation clock, the state mirror (`WorldViewGraphHost.PresentedFrame` over
 `WorldStateMirror.PresentedEngineTick`), never the frame context or a wall
 clock, and a pane's time is that clock through its `timeScale` and the
-`pipeline.time` controls (`WorldPresentedFrameLawTests`). `ShaderFrameBlockLawTests` compiles every shipped pipeline source
+`pipeline.time` controls (`WorldPresentedFrameLawTests`). The one value
+`WriteFrame` completes is `placedExtent`: the presenter names a pane's placed
+rect in display pixels (`WorldFramePresenter.PlacedExtent`, the same extent its
+paired camera projects for), and values naming none are written with the node's
+own extent. A pane renders at its allocation envelope while its rect eases, so
+a pane shader projects at the placed aspect, never its output's
+(`WorldCameraPlacementLawTests`). `ShaderFrameBlockLawTests` compiles every shipped pipeline source
 and holds the offsets DXC assigned in both bytecodes to the host writer's, so a
 new shipped pass joins its data; `ShaderInterfaceEcho` generates the echo passes
 the `pipeline-echo` and `interface-echo` canaries run with `pipeline.sentinels`
@@ -1944,7 +1996,7 @@ dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~Creat
 dotnet test tests/Puck.SdfVm.Tests -c Release               # kernel variants, camera programs, environment packing
 dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~WorldRenderEnvelopeLawTests|FullyQualifiedName~ShapePanelLawTests|FullyQualifiedName~WorldStampPoolBoundLawTests"
 dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~SdfPipelineBuildLivenessLawTests"   # the pump never blocks on pipeline creation
-dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~WorldCaptureHoldLawTests"   # offscreen holds its clock at an armed capture, bounded, settled before disposal
+dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~WorldCaptureHoldLawTests"   # rendered hosts hold the capture tick, bounded, settled before disposal
 puck parity                                                 # parity world, offscreen, Vulkan then Direct3D 12
 puck canary sdf-decode-sign-refusal                         # puck.sdf.v1 decode sign refusals, offscreen on both backends
 puck canary world-counters                                  # world.counters gpu counted work, offscreen on both backends
@@ -2112,6 +2164,42 @@ exactly). Run `temporal-convergence`,
 backends with `--debug-layers` after changing the resolve, the fragment or the
 reprojection; `SdfPassPlanLawTests.Temporal` and `SdfWorldPassesLawTests.Temporal`
 hold the plan and the convergence rule without a device.
+
+## Dynamic resolution
+
+`WorldDynamicResolution` (`src/Puck.World.Client`) is the one controller; the
+presenter (`WorldFramePresenter.DynamicResolution.cs`) advances it once a
+frame and writes its grid as `ResolvedRenderScale`, times the transition dip,
+with `RenderScale = WorldRenderSettings.RenderCeiling`. Off, every view's
+values are exactly what they were without it. Never add a second grid or
+quantizer: the grid reaches `RenderGraphExtent.Quantize`, and the controller
+compares grids through `WorldDynamicResolution.GridOf`, the same quantization.
+All three signals go through `WorldDynamicResolution.Take` and `Respond`, so a
+policy change is one edit there. A sample counts only at the grid the views
+render now: a node records the grid each rendered submission ran at
+(`IShaderPipelineRenderExtent.Grid`, `ShaderPipelineRenderNode.TryGetRenderGrid`),
+and a reading names its renders' common grid. The load reaches the controller
+only through `IWorldFrameLoadSource`; the World's `WorldFrameLoadSource` sums
+each view's newest timed (`LatestTimingSubmission`,
+`LatestTimingMilliseconds`) or completed (`TryReadCompleted`) submission not
+read before through a `WorldFrameLoadAggregate`, so a standing view adds
+nothing and never decides freshness. Present association reads each node's
+`TakeCompletions`, the summary of every render completed since its last read,
+never the newest submission alone. The runtime polls a standing node's
+readbacks only while it `OwesReadbacks` (`RenderGraphRuntime.ReadbackPolls`
+counts the polls). A node leaving the graph hands its completions to
+`RenderGraphRuntime.TakeRetiredCompletions` in `Retire`, only under a name the
+reader declared through `RenderGraphRuntime.AccountFor` (disposed: after its
+fences are waited; held: polled through `m_retiredOwing` until it owes nothing
+or its hold releases), and `WorldFrameLoadSource.TakeCompletions` folds the
+retired views' in. Pending render completion fences survive an install's
+counter invalidation; device loss drops renders whose completion is unobserved.
+Timing runs under `WorldGpuTiming.Require`
+(the operator's `world.gpu-timing` demand and the controller's are one
+demand), and the step budget comes from the embedded `counters.ceilings.json`,
+so `puck counters --record` moves the budget. Run
+`WorldDynamicResolutionLawTests` and the `dynamic-resolution` canary on both
+backends with `--debug-layers` after changing it.
 
 ## Route adjacent work
 

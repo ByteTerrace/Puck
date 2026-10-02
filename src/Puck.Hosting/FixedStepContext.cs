@@ -28,13 +28,13 @@ public interface IFixedStepSimulation {
     /// this decides only whether the frame is composed again while it stays owed.</summary>
     bool AwaitsFrame { get; }
 
-    /// <summary>Asked before every step by a host that holds its clock for owed frames (the offscreen host, whose
-    /// frames are its only output): whether to withhold that step because a frame the last step owes has not been
+    /// <summary>Asked before every step by windowed and offscreen hosts that hold their clock for owed frames:
+    /// whether to withhold that step because a frame the last step owes has not been
     /// served yet. <see langword="true"/> withholds it: the host spends <paramref name="withheldTicks"/> of its
     /// accumulated time without stepping, produces another frame, and asks again, so no tick past the one the frame
     /// must show runs while that frame is owed. <see langword="false"/> lets the step run. The simulation bounds the
     /// hold itself: once it will wait no longer, it settles what the frame owed (a capture refused by name) and
-    /// answers <see langword="false"/>. A host that paces to a display never asks.</summary>
+    /// answers <see langword="false"/>. A headless host never asks.</summary>
     /// <param name="withheldTicks">The host time, in <see cref="EngineTicks"/>, the host withholds when the answer is
     /// <see langword="true"/>. It is spent, never stepped later, so serving the frame releases no burst.</param>
     /// <returns><see langword="true"/> to withhold the step.</returns>

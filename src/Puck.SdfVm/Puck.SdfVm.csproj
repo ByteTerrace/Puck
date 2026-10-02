@@ -52,7 +52,7 @@
         <ShaderInclude Include="../Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli" />
     </ItemGroup>
 
-    <!-- CompileShaders / CollectShaderBytecode / ValidateShaderBytecodeSources / ValidateShaderBytecodeFresh all
+    <!-- CompileShaders / CollectShaderBytecode / ValidateShaderBytecodeSources all
          live in the shared build/Shaders.targets now (imported by Directory.Build.targets), item-driven purely
          over the ItemGroup globs above. Both DXIL opt-out properties (PuckShaderDxilEnabled,
          PuckComputeShaderDxilEnabled) stay at their shared default true — unchanged behavior: every kernel still

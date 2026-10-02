@@ -34,8 +34,14 @@ public sealed class WorldViewComposer {
     private float m_transitionStart;
 
     private readonly List<WorldComposedSlot> m_slots = new();
+    private readonly List<WorldComposedSlot> m_startSlots = new();
+    private readonly List<WorldComposedSlot> m_endSlots = new();
     private readonly List<WorldComposedSlot> m_targetSlots = new();
     private readonly List<ViewBinding> m_currentBindings = new();
+    // The transition in flight's endpoints, padded slot for slot as ViewTransition pads them, or both the settled
+    // bindings.
+    private readonly List<ViewBinding> m_startBindings = new();
+    private readonly List<ViewBinding> m_endBindings = new();
     private readonly List<ViewBinding> m_toScratch = new();
     // A camera or instance slot's view id indexes this table, so the transition carries either occupant by id alone.
     private readonly Dictionary<(bool Instance, string Name), int> m_occupantIds = new();
@@ -55,6 +61,16 @@ public sealed class WorldViewComposer {
 
     /// <summary>This frame's resolved slots (a reused buffer, valid until the next <see cref="Compose"/>).</summary>
     public IReadOnlyList<WorldComposedSlot> Slots => m_slots;
+    /// <summary>The transition in flight's starting slots, each at its starting rect with its starting occupant, slot for
+    /// slot with <see cref="EndSlots"/>: a slot the start lacks holds the end's occupant collapsed to the center of its
+    /// end rect, as the transition eases it. Settled, the starting and ending slots are both <see cref="Slots"/>. Every
+    /// rect a slot eases through lies between its two endpoints, and its occupant is one of theirs, so the two lists
+    /// bound whatever the transition places (a reused buffer, valid until the next <see cref="Compose"/>).</summary>
+    public IReadOnlyList<WorldComposedSlot> StartSlots => m_startSlots;
+    /// <summary>The transition in flight's ending slots, slot for slot with <see cref="StartSlots"/>: a slot the end lacks
+    /// holds the start's occupant collapsed to the center of its start rect. Settled, they are <see cref="Slots"/>
+    /// (a reused buffer, valid until the next <see cref="Compose"/>).</summary>
+    public IReadOnlyList<WorldComposedSlot> EndSlots => m_endSlots;
 
     // Every camera-bearing slot resolves to the live camera override (SelectCamera) when one is set.
     private void ApplyCameraOverride(string? cameraOverride) {
@@ -111,14 +127,14 @@ public sealed class WorldViewComposer {
             into.Add(item: source[index]);
         }
     }
-    private void DecodeSlots() {
-        m_slots.Clear();
+    private void DecodeSlots(List<ViewBinding> bindings, List<WorldComposedSlot> slots) {
+        slots.Clear();
 
-        foreach (var binding in m_currentBindings) {
+        foreach (var binding in bindings) {
             var value = binding.View.Value;
 
             if (value < 0) {
-                m_slots.Add(item: new WorldComposedSlot(
+                slots.Add(item: new WorldComposedSlot(
                     Region: binding.Region,
                     SeatOrder: (-value - 1),
                     Camera: null
@@ -129,7 +145,7 @@ public sealed class WorldViewComposer {
 
             var (instance, name) = m_occupants[index: value];
 
-            m_slots.Add(item: new WorldComposedSlot(
+            slots.Add(item: new WorldComposedSlot(
                 Camera: (instance
                     ? null
                     : name),
@@ -141,6 +157,22 @@ public sealed class WorldViewComposer {
             ));
         }
     }
+    // Pads the shorter endpoint as ViewTransition does: its missing slot holds the other endpoint's occupant collapsed
+    // to the center of that occupant's rect.
+    private static void PadEndpoints(List<ViewBinding> start, List<ViewBinding> end) {
+        for (var index = start.Count; (index < end.Count); index++) {
+            start.Add(item: end[index] with { Region = CenterOf(rect: end[index].Region) });
+        }
+        for (var index = end.Count; (index < start.Count); index++) {
+            end.Add(item: start[index] with { Region = CenterOf(rect: start[index].Region) });
+        }
+    }
+    private static NormalizedRect CenterOf(NormalizedRect rect) => new(
+        Height: 0f,
+        Width: 0f,
+        X: (rect.X + (0.5f * rect.Width)),
+        Y: (rect.Y + (0.5f * rect.Height))
+    );
     private static WorldViewLayout? FindBySeatCount(IReadOnlyList<WorldViewLayout> layouts, int seatCount) {
         for (var index = 0; (index < layouts.Count); index++) {
             var layout = layouts[index];
@@ -344,6 +376,18 @@ public sealed class WorldViewComposer {
             comparisonType: StringComparison.Ordinal
         )) {
             // The selection changed: ease from the current (possibly mid-transition) bindings toward the new target.
+            CopyBindings(
+                into: m_startBindings,
+                source: m_currentBindings
+            );
+            CopyBindings(
+                into: m_endBindings,
+                source: m_toScratch
+            );
+            PadEndpoints(
+                end: m_endBindings,
+                start: m_startBindings
+            );
             m_transition = new ViewTransition(
                 from: new ViewLayout(Bindings: m_currentBindings.ToArray()),
                 to: new ViewLayout(Bindings: m_toScratch.ToArray()),
@@ -397,6 +441,29 @@ public sealed class WorldViewComposer {
             CurrentRenderScale = 1f;
         }
 
-        DecodeSlots();
+        // Settled, both endpoints are the composition itself.
+        if (m_transition is null) {
+            CopyBindings(
+                into: m_startBindings,
+                source: m_currentBindings
+            );
+            CopyBindings(
+                into: m_endBindings,
+                source: m_currentBindings
+            );
+        }
+
+        DecodeSlots(
+            bindings: m_currentBindings,
+            slots: m_slots
+        );
+        DecodeSlots(
+            bindings: m_startBindings,
+            slots: m_startSlots
+        );
+        DecodeSlots(
+            bindings: m_endBindings,
+            slots: m_endSlots
+        );
     }
 }

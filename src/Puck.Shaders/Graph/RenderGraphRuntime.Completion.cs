@@ -170,7 +170,7 @@ public sealed partial class RenderGraphRuntime {
                 (m_producers[producer] is null) &&
                 !Stands(index: producer) &&
                 (read.Frame >= 0) &&
-                (OutputAt(
+                (RecordedAt(
                     frame: read.Frame,
                     producer: producer
                 ).Frame < read.Frame)

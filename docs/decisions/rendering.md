@@ -407,17 +407,19 @@ after one tick may show a later one. For the simulation tick a scheduled capture
 already does both. It fences, because the pump ends its burst at the armed
 tick through `IFixedStepSimulation.AwaitsFrame`, so the host composes that
 tick's frame before stepping on; only frame interleaving changes, never the steps. The
-offscreen host, whose frames are its only output, also holds its clock: it
-steps no tick past the armed one until the capture is served or refused, and
-refuses it by name after a bounded hold. It also
+windowed and offscreen hosts also hold their clock: they
+step no tick past the armed one until the capture is served or refused, and
+refuse it by name after a bounded hold. Repeated window resizes delay serving
+without advancing its tick or blocking the next scheduled capture. A pending
+capture presents bound state and poses at fraction one. The scheduler also
 reports: `WorldCaptureScheduler` refuses a capture served by a frame showing
 another tick as `stale`, naming both ticks, rather than leaving it out of the
 manifest. Bindings are priced too: a world's bindings appear in the cost report
 as bytes per tick and bytes per frame, beside and separate from the
 simulation's cycle bound, and a document over its ceiling is refused at
 validation naming the pipeline and the binding. A state-bound parameter adds a
-second tick, the one its regions were refreshed at, which the fence does not
-pin. That tick is reported: a capture carries it as its region tick, and
+second tick, the one its regions were refreshed at, pinned by the capture hold
+along with the simulation. A capture carries it as its region tick, and
 `puck parity`'s tick verdict holds it to the armed tick, ordered before the
 pixel verdict, so a skewed capture fails as a skew. `puck parity` pins one
 reference tier, `high`, and its `bound` station's pixels depend on a bound row

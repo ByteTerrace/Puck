@@ -635,10 +635,13 @@ include a generated declaration references `Puck.Shaders.Generator`, whose build
 writes each declaration the model has changed before those kernels compile. A
 change that adds a declaration and a kernel reading it builds with an ordinary
 `dotnet build`; the verb is needed to write the recipe and to check the tree,
-and never to seed a header by hand. A continuous-integration build only checks:
-it fails naming each generated file that disagrees with the model and writes
-nothing
-([generated declarations](shaders.md#generated-declarations)).
+and never to seed a header by hand
+([generated declarations](shaders.md#generated-declarations)). Because a build
+writes every declaration the model changed, `--check` in a git work tree also
+fails on a file that matches the model only in the working tree while its
+staged copy differs or is missing: the index must carry each generated file.
+CI's artifacts and formatting jobs install their candidate CLI by building and
+packing the checkout, then run the check before the solution build.
 
 `interface` prints the [frame-block](shaders.md#frame-values-extent-and-ports) declarations
 each pass of a graph document or one-off shader reads, or, with
@@ -1139,7 +1142,10 @@ exact-cardinality responses, ordered sequences of responses (`sequence`) and
 of lines (`lines`: each listed line matches, exactly or as contained text, past
 the previous one's match), named response field
 extraction (from the response's first line, or with `"line"` from the first
-indented line of its record that starts with that text), equality/inequality, strict ordering of two extracted numbers
+indented line of its record that starts with that text, past the first that
+starts with the text an `"after"` names; a `"line"` naming a whole
+counter kind reads that `<kind> <value>` line's value as the field the kind
+names), equality/inequality, strict ordering of two extracted numbers
 (`greater`: left above right), inclusive bounds, minimum margins,
 byte-level file equality/inequality (`filesDiffer`), per-channel bounds over a
 region of one capture (`imageRegion`), a capture's mean difference from a
@@ -1259,6 +1265,27 @@ error, so standard output carries only results. Each build is several hundred
 megabytes. The store keeps the four most recently used builds, plus any build a
 run still holds, and prunes the rest. A build directory left by a killed run is
 deleted after six hours.
+
+Every build restores first. NuGet's no-op check compares each closure
+project's restore inputs with the ones its last restore recorded. An unchanged
+closure therefore restores without another process, a written file, or a
+network request, while a closure that has gained a project or a package since
+its last restore is restored before it builds. A run that builds keeps the
+build's standard output and error in `Puck.World.build.log` in its own scratch
+run directory. A failed build's refusal quotes the output's first error lines,
+or its last lines when none is an error, and names that log. `puck test` keeps
+its run directory when the build fails and the directory holds that log;
+otherwise it removes the directory unless `--keep` is supplied. Canary names
+its World build-log directory without creating it: reusing a stored build or
+naming `--world-artifact` leaves that directory absent.
+
+When a selected canary needs `Puck.Launcher.Stub`, the same helper builds it
+with restore and `--output` into the canary run's own directory. Its log,
+`Puck.Launcher.Stub.build.log`, stays beside the output directory, so copying
+the stub output into a leg's install carries only the build artifacts. This
+run directory is also created only when the build writes output or its log.
+Build log names come from the project name, so projects can share a log
+directory without overwriting each other's output.
 
 None of these verbs builds in place. `Puck.World` has a build-time reference to
 `Puck.Cli`, whose build compiles the shipped `.puck` worlds, so an in-place

@@ -1,7 +1,6 @@
 using Puck.Testing;
 using System.Runtime.InteropServices;
 using System.Text;
-using Microsoft.Win32.SafeHandles;
 using Puck.Storage;
 using Xunit;
 
@@ -112,8 +111,8 @@ public sealed partial class ConfinedStorageLawTests {
             path2: "linked"
         );
 
-        CreateDirectoryLink(
-            name: link,
+        DirectoryLinks.Create(
+            link: link,
             target: directory.RootPath
         );
         try {
@@ -193,8 +192,8 @@ public sealed partial class ConfinedStorageLawTests {
             path2: "linked"
         );
 
-        CreateDirectoryLink(
-            name: link,
+        DirectoryLinks.Create(
+            link: link,
             target: outside
         );
         try {
@@ -590,8 +589,8 @@ public sealed partial class ConfinedStorageLawTests {
             path3: "junction"
         );
 
-        CreateDirectoryLink(
-            name: stagedLink,
+        DirectoryLinks.Create(
+            link: stagedLink,
             target: outside
         );
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token: Cancel);
@@ -669,77 +668,9 @@ public sealed partial class ConfinedStorageLawTests {
             } catch (IOException) when (!Cancel.IsCancellationRequested) { Thread.Yield(); }
         }
     }
-    private static void CreateDirectoryLink(string name, string target) {
-        if (!OperatingSystem.IsWindows()) {
-            Directory.CreateSymbolicLink(
-            path: name,
-            pathToTarget: target
-        ); return;
-        }
-        // NTFS junctions exercise the reparse-point boundary without requiring SeCreateSymbolicLinkPrivilege.
-        Directory.CreateDirectory(path: name);
-        using var handle = OpenDirectory(
-            access: 0x40000000,
-            disposition: 3,
-            flags: 0x02200000,
-            name: name,
-            security: 0,
-            share: 7,
-            template: 0
-        );
-
-        Assert.False(condition: handle.IsInvalid);
-        var substitute = Encoding.Unicode.GetBytes(s: ("\\??\\" + Path.GetFullPath(path: target)));
-        var print = Encoding.Unicode.GetBytes(s: Path.GetFullPath(path: target));
-        var buffer = new byte[((20 + substitute.Length) + print.Length)];
-
-        BitConverter.TryWriteBytes(
-            destination: buffer.AsSpan(start: 0),
-            value: 0xA0000003u
-        );
-        BitConverter.TryWriteBytes(
-            destination: buffer.AsSpan(start: 4),
-            value: checked((ushort)(buffer.Length - 8))
-        );
-        BitConverter.TryWriteBytes(
-            destination: buffer.AsSpan(start: 10),
-            value: checked((ushort)substitute.Length)
-        );
-        BitConverter.TryWriteBytes(
-            destination: buffer.AsSpan(start: 12),
-            value: checked((ushort)(substitute.Length + 2))
-        );
-        BitConverter.TryWriteBytes(
-            destination: buffer.AsSpan(start: 14),
-            value: checked((ushort)print.Length)
-        );
-        substitute.CopyTo(
-            array: buffer,
-            index: 16
-        );
-        print.CopyTo(
-            array: buffer,
-            index: (18 + substitute.Length)
-        );
-        Assert.True(condition: SetReparse(
-            handle,
-            0x900A4,
-            buffer,
-            ((uint)buffer.Length),
-            0,
-            0,
-            out _,
-            0
-        ));
-    }
     [LibraryImport("kernel32.dll", EntryPoint = "CreateHardLinkW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool CreateHardLink(string name, string existing, nint security);
     [LibraryImport("libc", EntryPoint = "link", StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
     private static partial int Link(string existing, string name);
-    [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-    private static partial SafeFileHandle OpenDirectory(string name, uint access, uint share, nint security, uint disposition, uint flags, nint template);
-    [LibraryImport("kernel32.dll", EntryPoint = "DeviceIoControl", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool SetReparse(SafeFileHandle handle, uint code, byte[] input, uint inputSize, nint output, uint outputSize, out uint returned, nint overlapped);
 }

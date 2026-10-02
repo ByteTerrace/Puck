@@ -44,6 +44,7 @@ public sealed class ShaderPipelineParameterLayout {
     private readonly uint m_extent;
     private readonly uint m_frame;
     private readonly Dictionary<string, uint> m_passOffsets;
+    private readonly uint m_placedExtent;
     private readonly uint m_pointer;
     private readonly uint m_pointerDown;
     private readonly uint m_pointerPresses;
@@ -99,6 +100,7 @@ public sealed class ShaderPipelineParameterLayout {
         m_cameraFov = frameOffsets[ShaderFrameInterface.CameraFov];
         m_cameraTarget = frameOffsets[ShaderFrameInterface.CameraTarget];
         m_cameraUp = frameOffsets[ShaderFrameInterface.CameraUp];
+        m_placedExtent = frameOffsets[ShaderFrameInterface.PlacedExtent];
     }
 
     /// <summary>Gets the frame group block's size in bytes, a multiple of 16: the block <see cref="WriteFrame"/>
@@ -393,12 +395,14 @@ public sealed class ShaderPipelineParameterLayout {
     /// <param name="block">The block, at least <see cref="FrameBlockSizeBytes"/> long.</param>
     /// <param name="values">The host's frame values, the presented engine tick among them.</param>
     /// <param name="frame">The frames the node submitted before this one; only the low 32 bits are written.</param>
+    /// <param name="extent">The node's own extent, in pixels, written as the placed extent when
+    /// <paramref name="values"/> names none (<see cref="ShaderFrameValues.PlacedExtent"/>).</param>
     /// <param name="tickRate">The rate, in ticks a second, the tick is written at: the plan's
     /// <c>ShaderPipelinePlan.TickRate</c>, or <see cref="ShaderFrameInterface.EngineTickRate"/>.</param>
     /// <exception cref="ArgumentException"><paramref name="block"/> is shorter than
     /// <see cref="FrameBlockSizeBytes"/>, or <paramref name="tickRate"/> does not divide the engine rate exactly.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tickRate"/> is zero.</exception>
-    public void WriteFrame(Span<byte> block, in ShaderFrameValues values, ulong frame, uint tickRate = ShaderFrameInterface.EngineTickRate) {
+    public void WriteFrame(Span<byte> block, in ShaderFrameValues values, ulong frame, (uint Width, uint Height) extent, uint tickRate = ShaderFrameInterface.EngineTickRate) {
         Require(
             block: block,
             sizeBytes: FrameBlockSizeBytes
@@ -420,6 +424,11 @@ public sealed class ShaderPipelineParameterLayout {
         WriteSingle(block: block, offset: m_cameraFov, value: values.CameraFov);
         WriteVector3(block: block, offset: m_cameraTarget, value: values.CameraTarget);
         WriteVector3(block: block, offset: m_cameraUp, value: values.CameraUp);
+
+        var placed = (values.PlacedExtent ?? new Vector2(x: extent.Width, y: extent.Height));
+
+        WriteSingle(block: block, offset: m_placedExtent, value: placed.X);
+        WriteSingle(block: block, offset: (m_placedExtent + 4), value: placed.Y);
     }
 
     private static void Require(Span<byte> block, uint sizeBytes) {

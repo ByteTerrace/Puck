@@ -56,8 +56,10 @@ internal static partial class CompileCommand {
 
         var owned = ((string[])[WorldDocumentName.DocumentSuffix, CompiledWorld.Extension, WorldBakePack.Extension])
             .SelectMany(selector: suffix => Directory.EnumerateFiles(path: catalog, searchOption: SearchOption.AllDirectories, searchPattern: ("*" + suffix)))
+            // A package's lock beside its directory coordinates writers and ships nothing.
             .Concat(second: (Directory.Exists(path: Path.Combine(path1: catalog, path2: ShaderPackager.StoreDirectoryName))
                 ? Directory.EnumerateFiles(path: Path.Combine(path1: catalog, path2: ShaderPackager.StoreDirectoryName), searchOption: SearchOption.AllDirectories, searchPattern: "*")
+                    .Where(predicate: file => !(file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".lock") && string.Equals(a: Path.GetDirectoryName(path: file), b: Path.Combine(path1: catalog, path2: ShaderPackager.StoreDirectoryName), comparisonType: StringComparison.Ordinal)))
                 : []
             ))
             .Select(selector: file => Path.GetRelativePath(path: file, relativeTo: catalog).Replace(newChar: '/', oldChar: '\\'))

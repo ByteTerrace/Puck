@@ -376,9 +376,9 @@ internal static partial class CanaryCommand {
         // Every leg launches one World: the --world-artifact named, or the build keyed by this checkout's sources, reused
         // when an earlier run built it and leased until the last leg has exited (see WorldArtifactBuild).
         if (!WorldArtifactBuild.TryResolveNamed(
-            build: out var build,
             error: out var buildError,
             lease: out var world,
+            logDirectory: BuildRunDirectory(id: "world"),
             named: worldArtifact,
             path: out var artifact,
             repositoryRoot: repositoryRoot,
@@ -389,10 +389,6 @@ internal static partial class CanaryCommand {
             verb: "canary"
         )) {
             Console.Error.WriteLine(value: $"ERROR: {buildError}");
-
-            if (build is not null) {
-                PrintCaptured(result: build);
-            }
 
             return CliExit.Refused;
         }
@@ -406,45 +402,31 @@ internal static partial class CanaryCommand {
         string? stubArtifact = null;
 
         if (manifests.Any(predicate: static manifest => (manifest.BootShape == CanaryBootShape.Stub))) {
-            var stubProject = Path.Combine(
-                path1: repositoryRoot,
-                path2: "src",
-                path3: "Puck.Launcher.Stub",
-                path4: "Puck.Launcher.Stub.csproj"
-            );
+            const string StubProject = "src/Puck.Launcher.Stub/Puck.Launcher.Stub.csproj";
+            var stubDirectory = BuildRunDirectory(id: "stub");
+            var stubOutput = Path.Combine(path1: stubDirectory, path2: "output");
 
-            stubArtifact = Path.Combine(paths: [repositoryRoot, "src", "Puck.Launcher.Stub", "bin", "Release", "net10.0", "Puck.Launcher.Stub.exe"]);
+            stubArtifact = Path.Combine(path1: stubOutput, path2: "Puck.Launcher.Stub.exe");
 
             Console.Error.WriteLine(value: "canary: building Puck.Launcher.Stub once (Release).");
 
-            var stubBuild = CliProcess.RunCaptured(
-                fileName: "dotnet",
-                arguments: ["build", "--disable-build-servers", stubProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
-                input: string.Empty,
-                workingDirectory: repositoryRoot,
+            if (!CliProjectBuild.TryBuild(
+                artifactName: Path.GetFileName(path: stubArtifact),
+                build: out _,
+                error: out var stubError,
+                project: StubProject,
+                repositoryRoot: repositoryRoot,
+                outputDirectory: stubOutput,
+                logDirectory: stubDirectory,
                 timeout: CliProcess.RemainingBudget(
                     budget: BuildBudget,
                     clock: buildClock
                 )
-            );
-
-            if (
-                stubBuild.TimedOut ||
-                (stubBuild.ExitCode != 0)
-            ) {
-                Console.Error.WriteLine(value: (stubBuild.TimedOut
-                    ? $"ERROR: the one Puck.Launcher.Stub build exceeded the {BuildBudget.TotalSeconds:0}-second build budget."
-                    : $"ERROR: the one Puck.Launcher.Stub build exited {stubBuild.ExitCode}."));
-                PrintCaptured(result: stubBuild);
+            )) {
+                Console.Error.WriteLine(value: $"ERROR: {stubError}");
 
                 return CliExit.Refused;
             }
-            if (!File.Exists(path: stubArtifact)) {
-                Console.Error.WriteLine(value: $"ERROR: the Puck.Launcher.Stub build exited 0 but did not produce the exact artifact {stubArtifact}.");
-
-                return CliExit.Refused;
-            }
-
             Console.Error.WriteLine(value: $"canary: built artifact {stubArtifact}");
         }
 
@@ -601,7 +583,7 @@ internal static partial class CanaryCommand {
         }
 
         PrintTally(
-            built: (build is not null),
+            built: (world is { Reused: false }),
             endings: endings,
             plan: plan,
             seed: budget.Seed,
@@ -1467,6 +1449,13 @@ internal static partial class CanaryCommand {
             Kind: CanarySelectionKind.Automatic
         );
     }
+
+    /// <summary>Names a build run directory without creating it, so a reused or named artifact leaves no directory.</summary>
+    /// <param name="id">The build's name.</param>
+    /// <returns>A unique path under the canary scratch prefix, created when the build writes its output or log.</returns>
+    public static string BuildRunDirectory(string id) =>
+        Path.Combine(path1: Path.GetTempPath(), path2: $"{ScratchPrefix}{id}-build-{Guid.NewGuid():N}");
+
     // The run directory names its canary and leg after the prefix RunSelected sweeps.
     private static string CreateRunDirectory(string id, string leg) =>
         RunDirectory.CreatePath(prefix: $"{ScratchPrefix}{id}-{leg}-");
@@ -1493,16 +1482,6 @@ internal static partial class CanaryCommand {
             options: StringSplitOptions.RemoveEmptyEntries,
             separator: '\n'
         );
-    private static void PrintCaptured(CliProcessResult result) {
-        if (result.Stdout.Length != 0) {
-            Console.Error.WriteLine(value: "--- build stdout ---");
-            Console.Error.Write(value: result.Stdout);
-        }
-        if (result.Stderr.Length != 0) {
-            Console.Error.WriteLine(value: "--- build stderr ---");
-            Console.Error.Write(value: result.Stderr);
-        }
-    }
     private static string Verdict(bool value) => (value
         ? "PASS"
         : "FAIL"

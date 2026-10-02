@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-film-grain' (sha256/149ae9c6ae2cda016045652330107113749bd9bf513e89a3c80c00235c6e5395). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-film-grain' (sha256/3be512d9622fdab5eb055c751cfbde183c362c686fdaaf36a348223ae58ccb29). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_FILM_GRAIN
 #define PUCK_SHADER_INTERFACE_SDF_FILM_GRAIN
 
@@ -19,6 +19,8 @@ struct SdfFilmGrainFrame {
     [[vk::offset(64)]] float3 cameraTarget;
     [[vk::offset(76)]] uint _pad76;
     [[vk::offset(80)]] float3 cameraUp;
+    [[vk::offset(92)]] uint _pad92;
+    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SdfFilmGrainFrame> frameGroup : register(b0, space0);
 

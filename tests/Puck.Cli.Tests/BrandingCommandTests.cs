@@ -188,21 +188,18 @@ public sealed class BrandingCommandTests {
     public void ReparsePointPathRefusesBeforeWriting() {
         using var fixture = Fixture.Create(copyPath: "link/copy.bin");
         using var outside = new TemporaryDirectory(prefix: "puck-branding-outside-");
+        var link = Path.Combine(
+            path1: fixture.Root,
+            path2: "link"
+        );
+
+        DirectoryLinks.Create(link: link, target: outside.RootPath);
 
         try {
-            Directory.CreateSymbolicLink(
-                path: Path.Combine(
-                    path1: fixture.Root,
-                    path2: "link"
-                ),
-                pathToTarget: outside.RootPath
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
-            Assert.Skip(reason: $"symbolic links are unavailable: {exception.Message}");
-            return;
+            AssertRefusesWithoutChangingCopy(fixture: fixture);
+        } finally {
+            DirectoryLinks.Remove(link: link);
         }
-
-        AssertRefusesWithoutChangingCopy(fixture: fixture);
     }
     [Fact]
     public void RootedDestinationRefusesBeforeWriting() {

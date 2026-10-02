@@ -146,7 +146,7 @@ public static partial class WorldFederationCodec {
     /// both dialects off the first eight bytes. A dialer opens every federation connection by writing it through
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames.</summary>
-    public const ulong WireKey = 0x364445464B435550UL; // "PUCKFED6", a presentation-tier projection travels as member deltas.
+    public const ulong WireKey = 0x364445464B435550UL; // "PUCKFED6", mutation payloads carry their expected activation, a projection-invalidated response carries its detach reason, and a presentation-tier projection travels as member deltas.
     /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
     /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
     public const int DocumentHeaderBytes = 25;

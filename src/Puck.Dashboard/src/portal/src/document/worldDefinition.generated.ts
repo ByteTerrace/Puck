@@ -8776,6 +8776,10 @@ export type WorldQualityPreset = {
    * Whether the preset reconstructs the world's views over time (world.temporal).
    */
   temporal?: boolean;
+  /**
+   * Whether the preset moves each view's render extent with the load (world.dynamic-resolution).
+   */
+  dynamicResolution?: boolean;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -8946,6 +8950,14 @@ export type WorldRenderDefaults = {
    * Whether the world's own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.
    */
   temporal?: boolean;
+  /**
+   * Whether the world's own views boot with dynamic resolution (world.dynamic-resolution): each frame one controller moves each view's render grid between DynamicResolutionFloor and the render-scale ceiling, by the present timing or, where the presenter reports none, by the views' counted march steps against the budget the floor tier's committed counters ceilings give per output pixel. A native ceiling is lowered to three-quarter while it is on, since a native view reconstructs nothing.
+   */
+  dynamicResolution?: boolean;
+  /**
+   * The lowest render-scale tier dynamic resolution moves a view's grid to.
+   */
+  dynamicResolutionFloor?: WorldRenderScaleTier;
   /**
    * The world.quality low preset.
    */

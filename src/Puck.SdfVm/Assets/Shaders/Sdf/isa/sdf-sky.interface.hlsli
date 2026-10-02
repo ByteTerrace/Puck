@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/018467fc967015468bbf8b3feba9b4c7c3a91c4bcae43fa1798df480a576170f). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/d0146113a0f5945f89c4f8af02bd3a797094086730a7024706b18e1bc16adbac). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -78,6 +78,8 @@ struct SdfSkyFrame {
     [[vk::offset(64)]] float3 cameraTarget;
     [[vk::offset(76)]] uint _pad76;
     [[vk::offset(80)]] float3 cameraUp;
+    [[vk::offset(92)]] uint _pad92;
+    [[vk::offset(96)]] float2 placedExtent;
 };
 [[vk::binding(0, 0)]] ConstantBuffer<SdfSkyFrame> frameGroup : register(b0, space0);
 

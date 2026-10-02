@@ -92,6 +92,7 @@ internal static partial class TestCommand {
             artifact: out var artifact,
             lease: out var lease,
             repositoryRoot: repositoryRoot,
+            runDirectory: runDirectory,
             worldArtifact: worldArtifact
         )) {
             return 2;
