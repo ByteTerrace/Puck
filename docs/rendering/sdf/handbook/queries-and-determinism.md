@@ -205,6 +205,15 @@ Two certified queries are built on it:
   clear, or a point of it is proved inside. Anything it cannot prove within its
   budget is `Undecided`.
 
+Both take a bounds-query budget and report the queries they spent, each one
+walk of the program over one box, so a caller counts its cost. A run under a
+smaller budget is a prefix of the run under a larger one. A cut-short sweep keeps
+the ground it proved, and a cut-short line of sight is `Undecided`. A line of
+sight also has a ceiling whatever its budget,
+`CertifiedLineOfSightMaximumBoundsQueries` (2·(2¹⁷ − 1)). The segment splits
+on the Q16 grid of its own length, so no piece lies deeper than sixteen
+halvings, and each costs at most two queries.
+
 `SdfFieldBoundsLawTests` sweeps every op, shape and blend's point answers
 through boxes against the bounds, and holds the bounds interpreter's rule sets
 to the point interpreter's. `SdfCertifiedQueryLawTests` holds the sweep to a

@@ -9,7 +9,7 @@ public enum SdfCertifiedSweepOutcome {
     /// <summary>The sweep stopped where the certified clearance no longer exceeds the radius: a surface may lie within
     /// one more step.</summary>
     Contact = 1,
-    /// <summary>The step budget ran out first; the fraction reached is still certified clear.</summary>
+    /// <summary>The caller's bounds-query budget ran out first; the fraction reached is still certified clear.</summary>
     Exhausted = 2,
 }
 /// <summary>A certified sweep's answer: how far along the displacement the sphere is proved clear, and why it
@@ -20,23 +20,34 @@ public enum SdfCertifiedSweepOutcome {
 /// carries its fraction at 2⁻³² of the displacement, finer than <paramref name="Fraction"/>, so this is where a
 /// fast body may be placed.</param>
 /// <param name="Outcome">Why the sweep stopped.</param>
-/// <param name="Steps">The bounds queries the sweep spent, each over one segment's box.</param>
-public readonly record struct SdfCertifiedSweep(FixedQ4816 Fraction, FixedPosition Reached, SdfCertifiedSweepOutcome Outcome, int Steps);
+/// <param name="BoundsQueries">The bounds queries the sweep spent, each one walk of the program over one box: never
+/// more than the caller's budget.</param>
+public readonly record struct SdfCertifiedSweep(FixedQ4816 Fraction, FixedPosition Reached, SdfCertifiedSweepOutcome Outcome, int BoundsQueries);
 /// <summary>A certified line of sight's verdict.</summary>
 public enum SdfCertifiedVisibility {
     /// <summary>Every point of the segment is proved outside the solid.</summary>
     Clear = 0,
     /// <summary>A point of the segment is proved inside the solid.</summary>
     Blocked = 1,
-    /// <summary>The box budget ran out before either could be proved.</summary>
+    /// <summary>Neither could be proved: the caller's bounds-query budget ran out, or a one-raw piece of the segment
+    /// straddles the surface too closely for its box to decide.</summary>
     Undecided = 2,
 }
+/// <summary>A certified line of sight's answer: the verdict and what it cost.</summary>
+/// <param name="Visibility">The verdict.</param>
+/// <param name="BoundsQueries">The bounds queries spent, each one walk of the program over one box: never more than the
+/// caller's budget, and never more than <see cref="SdfFieldEvaluator.CertifiedLineOfSightMaximumBoundsQueries"/>
+/// whatever the budget.</param>
+public readonly record struct SdfCertifiedSight(SdfCertifiedVisibility Visibility, int BoundsQueries);
 // THE CERTIFIED QUERIES, built on TryDistanceBounds. Each answers about the exact segment between its endpoints, never a
 // sampled approximation of it: a segment's bounding box is formed with outward rounding, so it holds every real point
 // of the segment, and the box's interval bounds the field there.
 public sealed partial class SdfFieldEvaluator {
-    private const int CertifiedSweepStepBudget = 4096;
-    private const int CertifiedLineOfSightBoxBudget = 4096;
+    /// <summary>The most bounds queries <see cref="TryCertifiedLineOfSight"/> can spend on one segment, whatever its
+    /// budget: the segment splits on the Q16 grid of its own length, so a piece one raw long is never split and no
+    /// piece lies deeper than sixteen halvings. That bounds the pieces examined by 2¹⁷ − 1, and each costs at most two
+    /// queries, its box and its midpoint's.</summary>
+    public const int CertifiedLineOfSightMaximumBoundsQueries = (2 * ((1 << (FixedQ4816.FractionBitCount + 1)) - 1));
 
     /// <summary>Advances a sphere along a displacement by conservative advancement, certifying every step: the step
     /// is the certified clearance at the current point divided by the program's Lipschitz bound, and each step's whole
@@ -44,16 +55,20 @@ public sealed partial class SdfFieldEvaluator {
     /// <param name="origin">The sphere's centre at the start.</param>
     /// <param name="displacement">The whole motion; the answer is a fraction of it.</param>
     /// <param name="radius">The sphere's radius, at least zero.</param>
-    /// <param name="sweep">The certified fraction, the outcome and the steps on success.</param>
+    /// <param name="boundsQueryBudget">The most bounds queries the sweep may spend, at least one; each walks the program
+    /// once over one box, so this caps the sweep's cost.</param>
+    /// <param name="sweep">The certified fraction, the outcome and the queries spent on success.</param>
     /// <returns><see langword="false"/> when the program has no shape or the origin leaves the evaluator's frame.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is negative.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is negative, or
+    /// <paramref name="boundsQueryBudget"/> is below one.</exception>
     /// <exception cref="NotSupportedException">The program holds an instruction with no inclusion rule.</exception>
     /// <remarks>Certified means proved, not estimated: every point of the swept sphere up to the returned fraction keeps
     /// both the exact field and every fixed-point answer above zero, however fast the motion, so a thin wall is never
     /// crossed between two samples. The Lipschitz bound only proposes a step; the bounds query proves it, so the answer
     /// does not rest on the bound being exact for the program's quantized constants.</remarks>
-    public bool TryCertifiedSweep(FixedPosition origin, FixedVector3 displacement, FixedQ4816 radius, out SdfCertifiedSweep sweep) {
+    public bool TryCertifiedSweep(FixedPosition origin, FixedVector3 displacement, FixedQ4816 radius, int boundsQueryBudget, out SdfCertifiedSweep sweep) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: radius, other: FixedQ4816.Zero);
+        ArgumentOutOfRangeException.ThrowIfLessThan(value: boundsQueryBudget, other: 1);
 
         sweep = default;
 
@@ -74,19 +89,23 @@ public sealed partial class SdfFieldEvaluator {
         const int FractionBits = 32;
         const long Whole = (1L << FractionBits);
         var fraction = 0L;
-        var steps = 0;
+        var queries = 0;
         var outcome = SdfCertifiedSweepOutcome.Exhausted;
 
-        while (steps < CertifiedSweepStepBudget) {
+        while (true) {
             if (fraction >= Whole) {
                 outcome = SdfCertifiedSweepOutcome.Clear;
+                break;
+            }
+
+            if (queries >= boundsQueryBudget) {
                 break;
             }
 
             var here = SweepBounds(displacement: displacement, from: fraction, start: start, to: fraction);
             var clearance = (here.Lower - radius);
 
-            ++steps;
+            ++queries;
 
             if ((clearance <= FixedQ4816.Zero) || here.IsUnboundedBelow) {
                 outcome = SdfCertifiedSweepOutcome.Contact;
@@ -99,15 +118,20 @@ public sealed partial class SdfFieldEvaluator {
                 ? Whole
                 : (long)Int128.Min(x: Whole, y: ((reach << FractionBits) / lengthRaw)));
             var next = Math.Min(val1: Whole, val2: (fraction + Math.Max(val1: proposed, val2: 1L)));
+            var proved = false;
 
-            // Prove the whole segment; halve the step until it holds.
-            while (SweepBounds(displacement: displacement, from: fraction, start: start, to: next).Lower <= radius) {
-                ++steps;
+            // Prove the whole segment; halve the step until it holds, while the budget lasts.
+            while (queries < boundsQueryBudget) {
+                ++queries;
+
+                if (SweepBounds(displacement: displacement, from: fraction, start: start, to: next).Lower > radius) {
+                    proved = true;
+                    break;
+                }
 
                 var half = ((next - fraction) >> 1);
 
                 if (half == 0L) {
-                    next = fraction;
                     outcome = SdfCertifiedSweepOutcome.Contact;
                     break;
                 }
@@ -115,15 +139,11 @@ public sealed partial class SdfFieldEvaluator {
                 next = (fraction + half);
             }
 
-            if (next == fraction) {
+            if (!proved) {
                 break;
             }
 
             fraction = next;
-        }
-
-        if ((outcome == SdfCertifiedSweepOutcome.Exhausted) && (fraction >= Whole)) {
-            outcome = SdfCertifiedSweepOutcome.Clear;
         }
 
         // The point box at the reached fraction lies inside the last certified segment's box, so any corner of it is
@@ -134,7 +154,7 @@ public sealed partial class SdfFieldEvaluator {
             Fraction: FixedQ4816.FromRawBits(value: (fraction >> (FractionBits - FixedQ4816.FractionBitCount))),
             Reached: FixedPosition.FromLocal(local: reached),
             Outcome: outcome,
-            Steps: steps
+            BoundsQueries: queries
         );
         return true;
     }
@@ -142,15 +162,23 @@ public sealed partial class SdfFieldEvaluator {
     /// into boxes until each box's bounds are above zero (clear) or a point of it is proved inside (blocked).</summary>
     /// <param name="from">One end of the segment.</param>
     /// <param name="to">The other end.</param>
-    /// <param name="visibility">The verdict on success.</param>
+    /// <param name="boundsQueryBudget">The most bounds queries the verdict may spend, at least one; each walks the
+    /// program once over one box. Past <see cref="CertifiedLineOfSightMaximumBoundsQueries"/> a larger budget changes
+    /// nothing.</param>
+    /// <param name="sight">The verdict and the queries spent on success.</param>
     /// <returns><see langword="false"/> when the program has no shape or an end leaves the evaluator's frame.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="boundsQueryBudget"/> is below one.</exception>
     /// <exception cref="NotSupportedException">The program holds an instruction with no inclusion rule.</exception>
     /// <remarks>Unlike <see cref="LineOfSight"/>, which marches samples and so can step over a surface thinner than its
     /// step, this answers <see cref="SdfCertifiedVisibility.Clear"/> only when no point of the segment can be inside,
     /// and <see cref="SdfCertifiedVisibility.Blocked"/> only when one surely is; anything it cannot prove within its
-    /// box budget is <see cref="SdfCertifiedVisibility.Undecided"/>.</remarks>
-    public bool TryCertifiedLineOfSight(FixedPosition from, FixedPosition to, out SdfCertifiedVisibility visibility) {
-        visibility = SdfCertifiedVisibility.Undecided;
+    /// budget is <see cref="SdfCertifiedVisibility.Undecided"/>. The pieces are examined depth first, nearest
+    /// <paramref name="from"/> first, so a run under a smaller budget is the prefix of a run under a larger one: a
+    /// verdict proved under one budget is the same verdict, at the same cost, under every larger one.</remarks>
+    public bool TryCertifiedLineOfSight(FixedPosition from, FixedPosition to, int boundsQueryBudget, out SdfCertifiedSight sight) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(value: boundsQueryBudget, other: 1);
+
+        sight = new(BoundsQueries: 0, Visibility: SdfCertifiedVisibility.Undecided);
 
         if (
             !m_hasShape ||
@@ -163,30 +191,39 @@ public sealed partial class SdfFieldEvaluator {
         var displacement = (end - start);
         var one = FixedQ4816.One.Value;
         var pending = new Stack<(long From, long To)>();
-        var boxes = 0;
+        var queries = 0;
 
         pending.Push(item: (0L, one));
 
         while (pending.TryPop(result: out var segment)) {
-            if (++boxes > CertifiedLineOfSightBoxBudget) {
+            if (queries >= boundsQueryBudget) {
+                sight = new(BoundsQueries: queries, Visibility: SdfCertifiedVisibility.Undecided);
                 return true;
             }
 
-            var bounds = SegmentBounds(displacement: displacement, from: segment.From, start: start, to: segment.To);
+            ++queries;
 
-            if (bounds.Lower > FixedQ4816.Zero) {
+            if (SegmentBounds(displacement: displacement, from: segment.From, start: start, to: segment.To).Lower > FixedQ4816.Zero) {
                 continue;
+            }
+
+            if (queries >= boundsQueryBudget) {
+                sight = new(BoundsQueries: queries, Visibility: SdfCertifiedVisibility.Undecided);
+                return true;
             }
 
             var middle = (segment.From + ((segment.To - segment.From) >> 1));
 
+            ++queries;
+
             // A point of the segment whose own tiny box lies wholly below zero is surely inside.
             if (SegmentBounds(displacement: displacement, from: middle, start: start, to: middle).Upper < FixedQ4816.Zero) {
-                visibility = SdfCertifiedVisibility.Blocked;
+                sight = new(BoundsQueries: queries, Visibility: SdfCertifiedVisibility.Blocked);
                 return true;
             }
 
             if ((segment.To - segment.From) <= 1L) {
+                sight = new(BoundsQueries: queries, Visibility: SdfCertifiedVisibility.Undecided);
                 return true;
             }
 
@@ -194,7 +231,7 @@ public sealed partial class SdfFieldEvaluator {
             pending.Push(item: (segment.From, middle));
         }
 
-        visibility = SdfCertifiedVisibility.Clear;
+        sight = new(BoundsQueries: queries, Visibility: SdfCertifiedVisibility.Clear);
         return true;
     }
 
