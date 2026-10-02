@@ -8502,6 +8502,7 @@
     {
       "CoveredBy": [
         "rigid.exp-log-seam",
+        "rigid.exp-matches-the-series",
         "rigid.round-trip-ladder-self-consistency",
         "rigid.sclerp-endpoints-and-screw"
       ],
@@ -8558,6 +8559,7 @@
     {
       "CoveredBy": [
         "rigid.exp-log-seam",
+        "rigid.log-matches-the-series",
         "rigid.round-trip-ladder-self-consistency",
         "rigid.sclerp-endpoints-and-screw"
       ],

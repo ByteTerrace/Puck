@@ -25,6 +25,18 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.4,
         NeighborhoodFraction: 0.3
     );
+    private static readonly Domain RigidExpSeries = new(
+        Key: "rigid-exp-series",
+        Block: 512,
+        EdgeFraction: 0.4,
+        NeighborhoodFraction: 0.3
+    );
+    private static readonly Domain RigidLogSeries = new(
+        Key: "rigid-log-series",
+        Block: 512,
+        EdgeFraction: 0.4,
+        NeighborhoodFraction: 0.3
+    );
     private static readonly Domain TryArithmetic = new(
         Key: "integer-try-arithmetic",
         Block: 512,
@@ -66,6 +78,18 @@ internal static partial class LawRegistry {
             domain: QuaternionAntiparallel,
             id: "quaternion.from-to-near-antiparallel",
             width: 3
+        ),
+        SweptCase(
+            claim: Subjects.FixedRigidExpMatchesTheSeries,
+            domain: RigidExpSeries,
+            id: "rigid.exp-matches-the-series",
+            width: 3
+        ),
+        SweptCase(
+            claim: Subjects.FixedRigidLogMatchesTheSeries,
+            domain: RigidLogSeries,
+            id: "rigid.log-matches-the-series",
+            width: 4
         ),
         SweptCase(
             claim: Subjects.FixedVectorIsWithinMatchesLength,

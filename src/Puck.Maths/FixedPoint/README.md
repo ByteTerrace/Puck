@@ -683,13 +683,20 @@ of 65534 raw, where `Log`'s screw division would amplify quantization by about
 
 **Precision.** For the representation and for composition, about `2⁻¹⁵`
 relative to translation magnitude, which is the Q16 unit-quaternion norm
-quantization, so sub-millimetre at ten world units. `ScLerp`'s screw path sits
-outside that envelope: the `1/sin` amplification of the delta's quantized
-operands reaches a measured ~2.7 mm per component at ten world units near the
-blend threshold, tightening as the relative rotation grows. That band belongs
-to the operands and to `Exp`—`Log`'s lanes each close in a single
-`DivideProductSum` rounding, and fusing them left the measured worst case
-unchanged.
+quantization, so sub-millimetre at ten world units. `ScLerp`'s screw path stays
+inside that envelope too: measured against a double-precision screw
+interpolation of the same inputs, its worst per-component translation error is
+about 0.45 mm at ten world units, flat across relative rotations from 0.001 to
+2.5 rad. That holds because both halves of the screw divide by the rotation's
+sine at more than Q16: `Exp` forms `sin θ/θ`, `cos θ − sin θ/θ` and the slide's
+`−(d/2)·sin θ` from the Q60 sine and cosine, and `Log` carries its sine and half
+angle at Q20 before its lanes close in a single `DivideProductSum` rounding.
+Rounding either of them to Q16 first put `2⁻¹⁷/sin` of relative error into
+every dual lane, about 3 mm at ten world units near a 0.08 rad relative
+rotation. `Log` still divides by the sine, so a rotation within a few raws of
+a full turn (`W` near −1, a vector part of a few raws) answers a screw whose
+lanes are as uncertain as that sine; `rigid.log-matches-the-series` states the
+bound.
 `Rotation` and `Translation` read the parts back out; `TransformPoint` rotates
 and then translates; `Inverse` conjugates both quaternion parts.
 

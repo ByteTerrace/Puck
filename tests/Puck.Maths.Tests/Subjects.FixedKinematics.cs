@@ -1707,17 +1707,16 @@ internal static partial class Subjects {
             }
         }
 
-        // Two exact pins on the fused lanes, hand-picked where the fused and the chained formulations answer one raw
-        // apart: the axial-slide row's dual Z is the exactly-representable 32768 (the chained quotients answered
-        // 32767) and the pure-moment row's dual X is 32769, the single correct rounding of its quantized-input
-        // rational (the real closed form's 32768 sits across the input quantization). A reintroduced quotient chain
-        // fails here by name.
+        // Exact pins where fused and chained answers differ by a raw: the axial-slide row's dual Z is the exact 32768
+        // (chained quotients answered 32767); the pure-moment row's dual X is 32768, rounding 29502·(π/4)/(46341/2¹⁶) =
+        // 32768.16 (Log's Q20 half angle reads 32768.37; a Q16 one, 51472, read 32768.55 and answered 32769). A
+        // reintroduced quotient chain, or a half angle narrowed back to Q16, fails here by name.
         {
             var (_, slideDual) = RigidOf(lanes: RigidLogLadder[1].Transform).Log();
             var (_, momentDual) = RigidOf(lanes: RigidLogLadder[2].Transform).Log();
 
             if (slideDual.Z.Value != 32768L) { return $"the axial-slide row's fused dual Z is {slideDual.Z.Value}, expected exactly 32768"; }
-            if (momentDual.X.Value != 32769L) { return $"the pure-moment row's fused dual X is {momentDual.X.Value}, expected exactly 32769"; }
+            if (momentDual.X.Value != 32768L) { return $"the pure-moment row's fused dual X is {momentDual.X.Value}, expected exactly 32768"; }
         }
 
         if (FixedRigidTransform.Exp(

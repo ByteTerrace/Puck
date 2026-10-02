@@ -26,6 +26,9 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
     // the complementary norm rounds to 512 (not blended), while at dot raw 65535 it rounds below 512 (blended).
     private static readonly FixedQ4816 BlendDotThreshold = FixedQ4816.FromRawBits(value: 65534L);
 
+    // The guard bits below the Q16 grid that Log carries its sine and half angle at.
+    private const int LogGuardBitCount = 4;
+
     /// <summary>Gets the identity transform.</summary>
     public static FixedRigidTransform Identity => new(Value: new(
         Real: FixedQuaternion.Identity,
@@ -165,7 +168,12 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
             ));
         }
 
-        var (sin, cos) = FixedQ4816.SinCosRaw(rawAngle: angle);
+        // The rotation lanes take the narrowed sine and cosine; the dual lanes take the Q60 pair, because θ's
+        // reciprocal amplifies a Q16 sine's half-raw rounding (2⁻¹⁷/θ relative) into sin/θ and cos − sin/θ, and the
+        // half slide d/2 (up to the dual's own magnitude) would carry it into −(d/2)·sin.
+        var (sinQ60, cosQ60) = FixedQ4816.SinCosRawQ60(rawAngle: angle);
+        var sin = FixedQ4816.FromRawBits(value: FixedQ4816.NarrowSinCosQ60(value: sinQ60));
+        var cos = FixedQ4816.FromRawBits(value: FixedQ4816.NarrowSinCosQ60(value: cosQ60));
         // Half slide d/2 = û·dual, taken as (real·dual)/θ with an EXACT Int128 dot — a Q16-quantized axis dotted
         // against a large dual manufactures spurious slide (~|dual|·2⁻¹⁷). The closure dual·(sin/θ) + û·(d/2)·(cos −
         // sin/θ) is evaluated at Q63, where every product fits Int128, the small-θ cos − sin/θ difference keeps ~30
@@ -178,12 +186,12 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
             real: real
         );
         var scaleQ62 = SinOverAngleQ62(
-            sinRaw: sin.Value,
-            angleRaw: angle
+            angleRaw: angle,
+            sinQ60: sinQ60
         );
         // Both dual terms share the 2^78 product scale (raw·Q62 and rawSlide·Q32·Q46), so each component fuses into
         // ONE ties-even rounding; the summed Int128 magnitudes stay below 2^127.
-        var diffQ46 = ((long)((((Int128)cos.Value) << 30) - (scaleQ62 >> 16)));
+        var diffQ46 = ((long)(((((Int128)cosQ60) << 2) - scaleQ62) >> 16));
         var slideDiff = (halfSlide * diffQ46);
 
         return new(Value: new(
@@ -206,7 +214,10 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
                     product: unchecked(((((Int128)dual.Z.Value) * scaleQ62) + (unitZ * slideDiff))),
                     fractionBitCount: 62
                 )),
-                W: FixedQ4816.FromRawBits(value: unchecked(-FixedQ4816.RoundProductSum(productSum: (halfSlide * sin.Value))))
+                W: FixedQ4816.FromRawBits(value: unchecked(-FixedQ4816.RoundProduct(
+                    fractionBitCount: 60,
+                    product: (halfSlide * sinQ60)
+                )))
             )
         ));
     }
@@ -294,29 +305,30 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
             : ((Int128)quotient)
         );
     }
-    // sin θ / θ at Q62 (|sin| ≤ θ keeps the ratio within [−1, 1]), ties to even. |sin raw| ≤ angleRaw keeps the
-    // shifted numerator's high word below the divisor, and the hardware arm tests that precondition itself — the
-    // sibling shape DotOverAngle and FixedQ4816.operator / carry — rather than resting on SinCosRaw's accuracy: an
-    // unguarded DivRem would fault where the portable arm silently truncates, a cross-machine divergence.
-    private static Int128 SinOverAngleQ62(long sinRaw, ulong angleRaw) {
-        var sign = (sinRaw >> 63);
-        var magnitude = ((ulong)((sinRaw ^ sign) - sign));
+    // sin θ / θ at Q62 from the Q60 sine and the raw Q16 angle (sinQ60·2¹⁸/angleRaw; |sin| ≤ θ keeps the ratio
+    // within [−1, 1]), ties to even. |sin| ≤ θ keeps the shifted numerator's high word near a quarter of the divisor,
+    // and the hardware arm tests that precondition itself — the sibling shape DotOverAngle and FixedQ4816.operator /
+    // carry — rather than resting on the kernel's accuracy: an unguarded DivRem would fault where the portable arm
+    // silently truncates, a cross-machine divergence.
+    private static Int128 SinOverAngleQ62(long sinQ60, ulong angleRaw) {
+        var sign = (sinQ60 >> 63);
+        var magnitude = ((ulong)((sinQ60 ^ sign) - sign));
         ulong quotient;
         ulong remainder;
 
         if (
             X86Base.X64.IsSupported &&
-            ((magnitude >> 2) < angleRaw)
+            ((magnitude >> 46) < angleRaw)
         ) {
 #pragma warning disable SYSLIB5004
             (quotient, remainder) = X86Base.X64.DivRem(
                 divisor: angleRaw,
-                lower: (magnitude << 62),
-                upper: (magnitude >> 2)
+                lower: (magnitude << 18),
+                upper: (magnitude >> 46)
             );
 #pragma warning restore SYSLIB5004
         } else {
-            var numerator = (((UInt128)magnitude) << 62);
+            var numerator = (((UInt128)magnitude) << 18);
             var wide = (numerator / angleRaw);
 
             quotient = ((ulong)wide);
@@ -340,11 +352,11 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
     /// <param name="from">The transform at <paramref name="amount"/> zero.</param>
     /// <param name="to">The transform at <paramref name="amount"/> one.</param>
     /// <param name="amount">The interpolation parameter, expected in <c>[0, 1]</c>.</param>
-    /// <returns>The interpolated transform, normalized. On the screw path — a relative-rotation cosine at or below
-    /// 65534 raw — <see cref="Log"/>'s division by the relative rotation's sine amplifies quantization by about
-    /// <c>1/sin</c>, so the type's 2⁻¹⁵-relative envelope does not bind here: near the blend threshold the measured
-    /// worst per-component translation error reaches ~2.7 mm at ten world units (roughly 10× that envelope),
-    /// tightening as the relative rotation grows.</returns>
+    /// <returns>The interpolated transform, normalized. The screw path (a relative-rotation cosine at or below 65534
+    /// raw) divides by the relative rotation's sine in both <see cref="Log"/> and <see cref="Exp"/>, which carry that
+    /// sine and its angle wider than Q16, so the type's 2⁻¹⁵-relative envelope holds here too: the measured worst
+    /// per-component translation error is about 0.45 mm at ten world units, flat across relative rotations from 0.001
+    /// to 2.5 rad.</returns>
     public static FixedRigidTransform ScLerp(FixedRigidTransform from, FixedRigidTransform to, FixedQ4816 amount) {
         // Shortest path: a dual quaternion and its negation are the same transform.
         var target = to.Value;
@@ -436,21 +448,23 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
             ));
         }
 
-        var halfAngle = FixedQ4816.Atan2(
-            y: sine,
-            x: Value.Real.W
-        );
-        // Each returned lane is ONE ties-to-even rounding of its exact rational in the quantized inputs. With
-        // K = 2¹⁶ and raws H = halfAngle, S = sine, the real lanes are R·H/S, and the dual part
-        // Dv·(θ/2)/s + rv·(d/2)·(1 − w·(θ/2)/s)/s with d/2 = −Dw/s closes to (D·H·S² − R·Dw·(K·S − W·H))/S³ per
-        // lane — the three quotients folded into a single fraction, accumulated exactly in Int128 (the numerators
-        // stay under 2¹¹⁶ for unit transforms) and narrowed once. A naive per-lane Q16 quotient chain would round
-        // four to five times, each amplified by ~1/sine.
-        var h = halfAngle.Value;
-        var s = sine.Value;
-        var tilt = (((1L << FixedQ4816.FractionBitCount) * s) - (Value.Real.W.Value * h));
+        // Each returned lane is ONE ties-to-even rounding of its exact rational in the quantized inputs and in the
+        // sine S and half angle H, which are carried at Q20 (LogGuardBitCount bits below the Q16 grid): with K = 2²⁰ and
+        // W lifted to Q20, the real lanes are R·H/S, and the dual part Dv·(θ/2)/s + rv·(d/2)·(1 − w·(θ/2)/s)/s with
+        // d/2 = −Dw/s closes to (D·H·S² − 2⁴·R·Dw·(K·S − W·H))/S³ per lane — the three quotients folded into a single
+        // fraction, accumulated exactly in Int128 (the numerators stay under 2¹²⁵ for unit transforms) and narrowed
+        // once. The guard bits matter because H/S and (K·S − W·H)/S³ divide by the sine: a Q16 H or S, off by half a
+        // raw, would put 2⁻¹⁷/sin of relative error into every dual lane, about a hundred raw on a ten-unit screw at a
+        // 0.08 rad relative rotation.
+        var (s, w) = LogSineAndScalar(sine: sine);
+        var h = ((FixedQ4816.Atan2Q61(
+            x: w,
+            y: s
+        ) + (1L << (60 - (FixedQ4816.FractionBitCount + LogGuardBitCount)))) >> (61 - (FixedQ4816.FractionBitCount + LogGuardBitCount)));
+        var tilt = (((1L << (FixedQ4816.FractionBitCount + LogGuardBitCount)) * s) - (w * h));
         var dualScalar = Value.Dual.W.Value;
         var sSquared = (((Int128)s) * s);
+        var scaledTilt = (((Int128)tilt) << LogGuardBitCount);
         var realDenominator = (((UInt128)((ulong)s)) << FixedQ4816.FractionBitCount);
         var dualDenominator = ((((UInt128)((ulong)s)) * ((ulong)(s * s))) << FixedQ4816.FractionBitCount);
 
@@ -471,19 +485,45 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
         ),
             new FixedVector3(
             X: FixedQ4816.FromRawBits(value: RoundLogLane(
-                numerator: (((((Int128)Value.Dual.X.Value) * h) * sSquared) - ((((Int128)Value.Real.X.Value) * dualScalar) * tilt)),
+                numerator: (((((Int128)Value.Dual.X.Value) * h) * sSquared) - ((((Int128)Value.Real.X.Value) * dualScalar) * scaledTilt)),
                 denominator: dualDenominator
             )),
             Y: FixedQ4816.FromRawBits(value: RoundLogLane(
-                numerator: (((((Int128)Value.Dual.Y.Value) * h) * sSquared) - ((((Int128)Value.Real.Y.Value) * dualScalar) * tilt)),
+                numerator: (((((Int128)Value.Dual.Y.Value) * h) * sSquared) - ((((Int128)Value.Real.Y.Value) * dualScalar) * scaledTilt)),
                 denominator: dualDenominator
             )),
             Z: FixedQ4816.FromRawBits(value: RoundLogLane(
-                numerator: (((((Int128)Value.Dual.Z.Value) * h) * sSquared) - ((((Int128)Value.Real.Z.Value) * dualScalar) * tilt)),
+                numerator: (((((Int128)Value.Dual.Z.Value) * h) * sSquared) - ((((Int128)Value.Real.Z.Value) * dualScalar) * scaledTilt)),
                 denominator: dualDenominator
             ))
         )
         );
+    }
+    // The sine S = |vector part| and the scalar W at Q20, LogGuardBitCount bits below the Q16 grid: S is the nearest
+    // root of the exact raw sum of squares shifted by twice the guard. A vector part whose sum of squares reaches 2¹¹⁹
+    // (lanes past 2⁵⁹, far from any unit transform) cannot take the shift inside UInt128, so it reads the Q16 sine,
+    // lifted.
+    private (long Sine, long Scalar) LogSineAndScalar(FixedQ4816 sine) {
+        var x = Value.Real.X.Value;
+        var y = Value.Real.Y.Value;
+        var z = Value.Real.Z.Value;
+        var sum = (((((UInt128)FixedVectorMath.RawMagnitude(value: x)) * FixedVectorMath.RawMagnitude(value: x)) +
+            (((UInt128)FixedVectorMath.RawMagnitude(value: y)) * FixedVectorMath.RawMagnitude(value: y))) +
+            (((UInt128)FixedVectorMath.RawMagnitude(value: z)) * FixedVectorMath.RawMagnitude(value: z)));
+        var scalar = (Value.Real.W.Value << LogGuardBitCount);
+
+        if ((sum >> 119) != UInt128.Zero) {
+            return ((sine.Value << LogGuardBitCount), scalar);
+        }
+
+        var radicand = (sum << (2 * LogGuardBitCount));
+        var root = radicand.SquareRoot();
+
+        if ((radicand - (root * root)) > root) {
+            ++root;
+        }
+
+        return (((long)root), scalar);
     }
     // The denominator carries the extra K so DivideProductSum's built-in ·2¹⁶ cancels: the result is
     // round(numerator / (denominator >> 16)), ties to even, in one narrowing.

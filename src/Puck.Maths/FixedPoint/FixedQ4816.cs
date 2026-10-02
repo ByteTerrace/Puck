@@ -1595,19 +1595,40 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <remarks>Pure integer arithmetic (one hardware ratio division, then a per-interval cubic at Q61);
     /// bit-identical across machines. Maximum observed error is 0.51 ULP.</remarks>
     public static FixedQ4816 Atan2(FixedQ4816 y, FixedQ4816 x) {
+        var angle = Atan2Q61(
+            x: x.Value,
+            y: y.Value
+        );
+
+        // Half up on the magnitude, then re-signed, so Atan2(−y, x) is exactly −Atan2(y, x): the angle of a point off
+        // the axes is irrational, so a tie here is an artifact of the approximation.
+        var magnitude = ((angle < 0L)
+            ? -angle
+            : angle);
+        var raw = ((magnitude + (1L << 44)) >> 45);
+
+        return new(Value: ((angle < 0L)
+            ? -raw
+            : raw));
+    }
+
+    /// <summary>The signed angle of <c>(x, y)</c> at Q61, before <see cref="Atan2"/> narrows it to Q16: the octant
+    /// fold, the per-interval cubic and the reflections, unrounded. The operands are any raws at a shared scale, since
+    /// only their ratio is read; the origin answers zero.</summary>
+    internal static long Atan2Q61(long y, long x) {
         if (
-            (x.Value == 0L) &&
-            (y.Value == 0L)
+            (x == 0L) &&
+            (y == 0L)
         ) {
-            return Zero;
+            return 0L;
         }
 
         // Octant fold: z = min/max ∈ [0, 1] at Q62 via one 128-by-64 division (the quotient always fits — the
         // dividend's high word is min >> 2, below the divisor).
-        var signY = (y.Value >> 63);
-        var signX = (x.Value >> 63);
-        var yMagnitude = unchecked((ulong)((y.Value ^ signY) - signY));
-        var xMagnitude = unchecked((ulong)((x.Value ^ signX) - signX));
+        var signY = (y >> 63);
+        var signX = (x >> 63);
+        var yMagnitude = unchecked((ulong)((y ^ signY) - signY));
+        var xMagnitude = unchecked((ulong)((x ^ signX) - signX));
         var swapped = (yMagnitude > xMagnitude);
         var numerator = (swapped
             ? xMagnitude
@@ -1664,13 +1685,10 @@ public readonly partial record struct FixedQ4816(long Value)
             angle = (PiQ61 - angle);
         }
 
-        var raw = ((angle + (1L << 44)) >> 45);
-
-        return new(Value: ((signY != 0L)
-            ? -raw
-            : raw));
+        return ((signY != 0L)
+            ? -angle
+            : angle);
     }
-
     // Rounds a wide product (a raw Q16 factor times a 2^fractionBitCount-scaled ratio) to raw Q16, ties to even.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     internal static long RoundProduct(Int128 product, int fractionBitCount) {
