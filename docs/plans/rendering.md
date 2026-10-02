@@ -4975,6 +4975,37 @@ so one could be added later as another mode of `resolve`.
 **Depends on:** P4's motion and jitter contract, P11 for per-instance history,
 and P14.
 
+#### Research input: per-tile interval pruning
+
+A CPU study measured how much of a render program interval analysis could stop
+evaluating per screen tile, beyond what the per-tile instance mask already
+removes. It enclosed each primitive over a ball of the tile's view cone in
+centered Lipschitz form, mapped the ball through every transform and fold,
+decided a hard min or max when the intervals separated (a smooth one only when
+they separated by more than its radius), and dropped the dead instructions. On
+the counters camera at 1440x810 with 16-pixel tiles, one tape per tile removed
+5.9% of the instructions the mask leaves in the counters world, 9.5% in the
+parity world's vocabulary station, 84.1% in nexus and 83.0% in the courtyard.
+Per march sample, shape evaluations fell against today's mask plus sphere and
+rigid-leaf skips by 2.3%, 9.1%, 71.4% and 84.7%, and by 10.1%, 46.2%, 83.6% and
+91.1% with a tape per depth slab. Every pruned tape returned the full walk's
+value at all 1.79 million march samples, at tile sizes 8, 16 and 32. The gain is
+large for dense programs, negligible for small ones, and larger per slab.
+
+The figures count shape evaluations and dispatched instructions on the CPU, not
+GPU time, and do not price building, uploading or indexing a tape per tile. The
+study ran static placements only, with no active bodies or adjacency bands, and
+records its figures for 16-pixel tiles. An op with no interval model stays live,
+and a wallpaper fold was transcribed approximately. The figures were printed by
+an explicit experiment and survive only in a commit message; the study's code is
+not part of the engine.
+
+A production version builds on Puck.Maths' certified interval rules
+(`FixedInterval` and the SDF interval rules over it), never on a second,
+float-based evaluator. The study's soundness law failed once its outward
+rounding was removed: a tape pruned by an uncertified bound can silently change
+what is drawn.
+
 ### P16 — Display output
 
 **Starts from:** P14-10's float working targets. The pieces are in place:
