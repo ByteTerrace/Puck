@@ -671,6 +671,15 @@ public static partial class WorldFederationCodec {
             return false;
         }
 
+        if (body.Length > (WireLimits.MaxDocumentBytes + ProjectionDeltaHeaderBytes)) {
+            failure = new WireFailure(
+                Detail: $"projection delta is {body.Length} bytes; cap is {(WireLimits.MaxDocumentBytes + ProjectionDeltaHeaderBytes)}",
+                Refusal: WireRefusal.PayloadTooLarge
+            );
+
+            return false;
+        }
+
         if (((WorldDisclosureTier)body[0]) != WorldDisclosureTier.Presentation) {
             failure = new WireFailure(
                 Detail: $"a projection delta names tier {body[0]}; only a presentation-tier projection travels as deltas",
@@ -691,7 +700,7 @@ public static partial class WorldFederationCodec {
             Sequence: BinaryPrimitives.ReadInt64LittleEndian(source: body[17..])
         );
 
-        if (!version.IsDelivered) {
+        if (!version.IsDelivered || (version.Sequence < 0L)) {
             failure = new WireFailure(
                 Detail: $"projection delta version {version.Activation}/{version.Sequence} is no delivery",
                 Refusal: WireRefusal.PayloadMalformed

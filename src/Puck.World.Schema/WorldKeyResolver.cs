@@ -11,11 +11,11 @@ public interface IWorldClockSource {
     /// <summary>Gets the engine tick the source presents at.</summary>
     PresentedTick Presented { get; }
 
-    /// <summary>Reads a state clock's row as the source presents it.</summary>
+    /// <summary>Reads a state clock's phase, reducing the raw value before conversion to presentation precision.</summary>
     /// <param name="clock">The state clock.</param>
-    /// <param name="value">The row's presented value, or zero when it reads none.</param>
+    /// <param name="phase">The presented phase, or zero when it reads none.</param>
     /// <returns><see langword="true"/> when the row reads a number.</returns>
-    bool TryClockValue(WorldClock clock, out double value);
+    bool TryClockPhase(WorldClock clock, out double phase);
 }
 /// <summary>The segment of a keyed value a phase falls in: the key it leaves, the key it reaches, and how far along
 /// it the phase stands. Every length is in phase, a share of the clock's span.</summary>
@@ -83,16 +83,10 @@ public static class WorldKeyResolver {
         }
 
         if (clock.IsStateClock) {
-            if (!source.TryClockValue(
+            return source.TryClockPhase(
                 clock: clock,
-                value: out var value
-            )) {
-                return false;
-            }
-
-            phase = WorldClocks.Phase(value: value);
-
-            return true;
+                phase: out phase
+            );
         }
 
         if (clock.IsAnchored) {

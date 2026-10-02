@@ -16,7 +16,7 @@ namespace Puck.World.Tests;
 /// whose row the recipient may not read refuses before any derived value is emitted; and the last anchor per recipient
 /// per clock is a counted row, released when the recipient leaves or loses disclosure.
 /// </summary>
-public sealed class ProjectionAnchorLawTests(ITestOutputHelper output) {
+public sealed partial class ProjectionAnchorLawTests(ITestOutputHelper output) {
     private const string Clock = "trace";
     private const string Viewer = "viewer/portal";
 
@@ -579,7 +579,7 @@ public sealed class ProjectionAnchorLawTests(ITestOutputHelper output) {
         var deltas = 0;
 
         for (var tick = 4UL; (tick < 40UL); tick++) {
-            var delivery = feed.Step(definition: definition, engineTick: (tick * step), tick: tick);
+            var delivery = feed.Step(arena: arena, definition: definition, engineTick: (tick * step), tick: tick);
 
             if (delivery.Kind == WorldProjectionDeliveryKind.None) {
                 continue;

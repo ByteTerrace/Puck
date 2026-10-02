@@ -100,7 +100,7 @@ public sealed class WorldSessionObservation : IDisposable {
         // upper bound: every reader restriction admitted, and every dealt child showing the costliest prototype its
         // deal can deal to some reader. Any failure to lay out or compose it is the candidate's
         // refusal, never a throw through the envelope or the step.
-        var time = m_server.Time;
+        var time = m_server.DeliveryTime;
 
         try {
             if (!StateArena.TryCreate(

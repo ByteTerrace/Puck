@@ -122,6 +122,23 @@ public sealed class WorldClockAnchorLedger(IReadOnlyDictionary<string, ulong>? s
 
         return sent;
     }
+    /// <summary>Releases clocks no longer carried by the recipient's projection.</summary>
+    /// <param name="clocks">The projection's current clocks.</param>
+    public void Retain(IReadOnlyList<WorldClock> clocks) {
+        for (var index = (m_carried.Count - 1); index >= 0; index--) {
+            var name = m_carried[index];
+
+            if (clocks.Any(predicate: clock => (clock.IsAnchored && string.Equals(a: clock.Name, b: name, comparisonType: StringComparison.Ordinal)))) {
+                continue;
+            }
+
+            m_carried.RemoveAt(index: index);
+
+            if (m_held.Remove(key: name)) {
+                WorldProjectionWork.Count(kind: WorldProjectionWork.AnchorRowsReleased);
+            }
+        }
+    }
     /// <summary>Releases every row the recipient holds: it left, or lost disclosure, and is sent nothing derived until a
     /// projection is composed for it again.</summary>
     public void Release() {
