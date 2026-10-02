@@ -26,7 +26,7 @@ internal static class ParityCommand {
 
     private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 900);
 
-    private static int Run(bool bakes) {
+    private static int Run(bool bakes, bool debugLayers) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -68,22 +68,30 @@ internal static class ParityCommand {
             return CliExit.Refused;
         }
 
+        var validated = true;
+
         foreach (var backend in WorldOffscreenLeg.Backends) {
             var leg = RunBackend(
                 artifact: world.Path,
                 backend: backend,
                 bakes: bakes,
+                debugLayers: debugLayers,
                 shippedWorld: shippedWorld,
                 runDirectory: runDirectory,
-                suiteClock: suiteClock
+                suiteClock: suiteClock,
+                validation: out var validation
             );
 
+            if (validation is { } verdict) {
+                Console.WriteLine(value: ValidationLine(backend: backend, verdict: verdict));
+                validated &= verdict.Passed;
+            }
             if (leg != CliExit.Success) {
                 return leg;
             }
         }
 
-        return ParityCompareCommand.Run(
+        return Fold(compared: ParityCompareCommand.Run(
             contractPath: Path.Combine(
                 path1: repositoryRoot,
                 path2: ContractPath
@@ -100,9 +108,24 @@ internal static class ParityCommand {
                 path1: runDirectory,
                 path2: "captures-directx"
             )
-        );
+        ), validated: validated);
     }
 
+    /// <summary>Returns the verdict line a leg booted under its backend's validation layer prints: the backend, then
+    /// <c>VALIDATION-OK</c> or <c>VALIDATION-FAIL</c>, then what the layer reported.</summary>
+    /// <param name="backend">The leg's backend.</param>
+    /// <param name="verdict">The leg's verdict (<see cref="DebugLayerOutput.Verdict"/>).</param>
+    /// <returns>The line.</returns>
+    internal static string ValidationLine(string backend, DebugLayerVerdict verdict) =>
+        $"parity: {backend} {(verdict.Passed ? "VALIDATION-OK" : "VALIDATION-FAIL")} {verdict.Detail}";
+    /// <summary>Folds the legs' validation verdicts into the comparison's exit code: a validation failure fails a
+    /// comparison that held every verdict, and leaves a failed or refused comparison as it was.</summary>
+    /// <param name="compared">The comparison's exit code.</param>
+    /// <param name="validated">Whether every leg booted under its validation layer reported nothing.</param>
+    /// <returns>The run's exit code.</returns>
+    internal static int Fold(int compared, bool validated) => (((compared == CliExit.Success) && !validated)
+        ? CliExit.Failed
+        : compared);
     // The tick the leg waits to, past the last tick the world's captures rows schedule, and the tick it turns temporal
     // reconstruction on at, ReconstructionLeadTicks before the first station that converges, or null for a world with
     // none: both read from the document itself, so a station added there is captured without a second statement of its
@@ -299,7 +322,9 @@ internal static class ParityCommand {
 
         return null;
     }
-    private static int RunBackend(string artifact, string backend, bool bakes, string shippedWorld, string runDirectory, Stopwatch suiteClock) {
+    private static int RunBackend(string artifact, string backend, bool bakes, bool debugLayers, string shippedWorld, string runDirectory, Stopwatch suiteClock, out DebugLayerVerdict? validation) {
+        validation = null;
+
         var captureDirectory = Path.Combine(
             path1: runDirectory,
             path2: $"captures-{backend}"
@@ -330,7 +355,7 @@ internal static class ParityCommand {
             oldChar: '\\'
         )}\"\n{((reconstructionTick is { } on) ? $"world.wait {on}\nworld.temporal on\nworld.wait {(waitTick - on)}\n" : $"world.wait {waitTick}\n")}world.counters sdf.bakes\n";
         var leg = WorldOffscreenLeg.Run(
-            arguments: ["--capture-dir", captureDirectory],
+            arguments: ["--capture-dir", captureDirectory, .. DebugLayerOutput.Arguments(debugLayers: debugLayers)],
             artifact: artifact,
             backend: backend,
             budget: SuiteBudget,
@@ -348,9 +373,31 @@ internal static class ParityCommand {
             world: shippedWorld
         );
 
+        return EvaluateBackend(
+            backend: backend,
+            bakes: bakes,
+            captureDirectory: captureDirectory,
+            debugLayers: debugLayers,
+            leg: leg,
+            process: process,
+            validation: out validation
+        );
+    }
+
+    // Judge stderr even when the process failed, before any refusal leaves the leg.
+    internal static int EvaluateBackend(string backend, bool bakes, string captureDirectory, bool debugLayers, int leg, CliProcessResult? process, out DebugLayerVerdict? validation) {
+        validation = DebugLayerOutput.Verdict(
+            backend: backend,
+            debugLayers: debugLayers,
+            stderr: (process?.OutputLines ?? [])
+                .Where(predicate: static line => (line.Stream == CliProcessOutputStream.Stderr))
+                .Select(selector: static line => line.Line)
+        );
+
         if (leg != CliExit.Success) {
             return leg;
         }
+
         if (BakeRefusal(bakes: bakes, stdout: (process?.Stdout ?? string.Empty)) is { } refusal) {
             Console.Error.WriteLine(value: $"ERROR: the {backend} leg: {refusal}.");
 
@@ -396,18 +443,30 @@ internal static class ParityCommand {
             --bakes off every creation draws through its field, and `puck parity compare` of an on run
             against an off run holds each capture's stateHash, since bakes are presentation only.
 
+            With --debug-layers each leg boots its World under its backend's validation layer, as
+            `puck canary --debug-layers` does, and prints one validation verdict: VALIDATION-OK, or
+            VALIDATION-FAIL naming the first validation message, or the statement that the layer never
+            loaded. A leg's messages cannot be attributed to one capture, so a VALIDATION-FAIL fails the
+            run (exit 1) after every capture's verdicts are printed.
+
             Requires both a Vulkan and a Direct3D 12 device on this machine; no display is taken over.
 
-            Exit codes: 0 every capture held all three verdicts, 1 a verdict failed, 2 a leg/build
-            refusal or a malformed manifest or contract.
+            Exit codes: 0 every capture held every verdict, and under --debug-layers every leg's validation
+            verdict held, 1 a verdict failed, 2 a leg/build refusal or a malformed manifest or contract.
             """);
 
         var bakesOption = new Option<string>(name: "--bakes") { DefaultValueFactory = static _ => "on", Description = "Whether the parity world's static creations draw their bakes (on, the default) or their fields (off)." };
 
         bakesOption.AcceptOnlyFromAmong(values: ["on", "off"]);
+        var debugLayersOption = new Option<bool>(name: DebugLayerOutput.Flag) { Description = "Boot each backend's leg with --debug-layers, the validation layer of that backend, and fail the run when a leg's stderr has a validation message or says the layer never loaded." };
+
         command.Options.Add(item: bakesOption);
+        command.Options.Add(item: debugLayersOption);
         command.Subcommands.Add(item: ParityCompareCommand.Create());
-        command.SetAction(action: result => Run(bakes: string.Equals(a: result.GetValue(option: bakesOption), b: "on", comparisonType: StringComparison.Ordinal)));
+        command.SetAction(action: result => Run(
+            bakes: string.Equals(a: result.GetValue(option: bakesOption), b: "on", comparisonType: StringComparison.Ordinal),
+            debugLayers: result.GetValue(option: debugLayersOption)
+        ));
         return command;
     }
 }

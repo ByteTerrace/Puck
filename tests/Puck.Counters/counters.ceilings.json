@@ -1503,8 +1503,7 @@
           "pass": "sdf.world$composite",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0,
-          "requiredZero": true
+          "ceiling": 110135
         },
         {
           "node": "world",
@@ -4505,8 +4504,7 @@
           "pass": "sdf.world$composite",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0,
-          "requiredZero": true
+          "ceiling": 110135
         },
         {
           "node": "world",

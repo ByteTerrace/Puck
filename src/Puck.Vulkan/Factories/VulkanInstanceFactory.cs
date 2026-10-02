@@ -64,10 +64,15 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
     public VulkanInstance Create(
         string applicationName,
         NativeDisplayKind displayKind,
-        bool enableValidation
+        bool enableValidation,
+        TextWriter? debugOutput = null
     ) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: applicationName);
 
+        // The writer both messengers report to, held for the instance's life; none with validation off.
+        var output = ((enableValidation && (debugOutput is not null))
+            ? new VulkanDebugOutput(writer: debugOutput)
+            : null);
         VulkanInstanceCreateRequest request;
         VkResult result;
         VulkanInstanceCommands? instance;
@@ -76,6 +81,7 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
         try {
             request = new VulkanInstanceCreateRequest(
                 ApplicationName: applicationName,
+                DebugUserData: (output?.UserData ?? 0),
                 DisplayKind: displayKind,
                 EnableValidation: enableValidation,
                 ExtensionNames: BuildExtensionNames(
@@ -91,13 +97,23 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
                 request: request
             );
         } catch (Exception exception) when ((exception is DllNotFoundException or EntryPointNotFoundException)) {
+            output?.Dispose();
+
             throw VulkanResultExtensions.Unavailable(
                 innerException: exception,
                 reason: $"no Vulkan loader: {exception.Message}"
             );
+        } catch {
+            output?.Dispose();
+
+            throw;
         }
 
         // No installable client driver makes vkCreateInstance fail (VK_ERROR_INCOMPATIBLE_DRIVER).
+        if ((result != VkResult.Success) || (instance is null)) {
+            output?.Dispose();
+        }
+
         result.ThrowIfUnavailable(operation: "vkCreateInstance");
 
         if (instance is null) {
@@ -112,12 +128,25 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
             // With validation on, register the debug-utils messenger so validation messages reach the console — parity
             // with the Direct3D 12 info-queue drain. Best-effort: a zero handle just means no messenger.
             debugMessengerHandle = (enableValidation
-                ? m_instanceApi.CreateDebugMessenger(instance: instance)
+                ? m_instanceApi.CreateDebugMessenger(
+                    instance: instance,
+                    userData: (output?.UserData ?? 0)
+                )
                 : 0
             );
 
+            // A requested layer states whether it is live, so a validation run that prints no [vulkan-debug] line can
+            // tell a clean run from one the layer never watched. The prefix is not [vulkan-debug], which a run's checks
+            // fail on.
+            if (enableValidation) {
+                VulkanDebugOutput.Writer(userData: (output?.UserData ?? 0)).WriteLine(value: ((0 != debugMessengerHandle)
+                    ? VulkanInstance.ValidationLiveLine
+                    : VulkanInstance.ValidationNotLiveLine));
+            }
+
             return new(
                 debugMessengerHandle: debugMessengerHandle,
+                debugOutput: output,
                 displayKind: displayKind,
                 enabledExtensions: request.ExtensionNames,
                 enabledLayers: request.LayerNames,
@@ -130,6 +159,7 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
                 messengerHandle: debugMessengerHandle
             );
             m_instanceApi.DestroyInstance(instance: instance);
+            output?.Dispose();
 
             throw;
         }

@@ -888,9 +888,12 @@ whose stderr holds a validation message, naming the first: a
 `[vulkan-debug] validation` line or any `[d3d12-debug]` line, a teardown
 live-object report included. The Vulkan loader's `general` notices do not
 count, and the Direct3D 12 drain never prints the one message the layer raises
-by design, a pipeline-library miss. A Direct3D 12 leg that prints
-`[d3d12] debug layer requested but not loaded` fails too, since nothing
-validated it. The runner keeps stdout and stderr
+by design, a pipeline-library miss. A leg must also say its backend's layer is
+live: a Vulkan World prints `[vulkan] validation layer live` and a Direct3D 12
+World `[d3d12] debug layer live`. A leg that never prints its backend's live
+line, or prints `[vulkan] validation layer requested but not live` or
+`[d3d12] debug layer requested but not loaded`, fails, since nothing validated
+it. The runner keeps stdout and stderr
 separate, pins BOM-less UTF-8 stdin, closes the pipe, drains both streams,
 checks the absolute `--world` boot-origin line, enforces per-leg and
 whole-suite budgets, and kills the process tree on timeout.
@@ -1511,9 +1514,20 @@ refused by name before a leg starts.
 The two manifest directories are then compared by `puck parity compare` under
 the contract versioned beside the world
 (`tests/Puck.Parity/parity.contract.json`).
+With `--debug-layers` each leg boots its World under its backend's validation
+layer, with the same arguments and the same rule as `puck canary
+--debug-layers`: a `[vulkan-debug] validation` line, any `[d3d12-debug]` line,
+the statement that the layer is not live, or no live line for its backend fails
+the leg. Each
+leg prints one line, `parity: <backend> VALIDATION-OK` or `VALIDATION-FAIL`
+naming the first such line, including when its World process fails or cannot start.
+A refused leg keeps its refusal exit code. A leg's messages cannot be attributed to one
+capture, so a `VALIDATION-FAIL` fails the run (exit 1) after every capture's
+verdicts are printed.
 
 ```text
 puck parity                                            full run: both backends, then compare
+puck parity --debug-layers                             the same, each leg under its backend's validation layer
 puck parity compare <leftDir> <rightDir> --contract <file> [--output <dir>]   compare two captured runs
 ```
 

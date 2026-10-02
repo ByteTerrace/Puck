@@ -101,10 +101,7 @@ internal static class QualificationPackage {
     /// <param name="profile">The profile.</param>
     /// <param name="backend">The backend the World runs on.</param>
     /// <returns>The arguments to append to the World's command line.</returns>
-    public static string[] DebugLayerArguments(ReleaseProfile profile, string backend) => (profile.DebugLayers.Contains(value: backend)
-        ? [WorldOffscreenLeg.DebugLayersFlag]
-        : []
-    );
+    public static string[] DebugLayerArguments(ReleaseProfile profile, string backend) => DebugLayerOutput.Arguments(debugLayers: profile.DebugLayers.Contains(value: backend));
     /// <summary>Returns the environment a matrix leg's World gets over the run's own: under
     /// <see cref="ReleaseCompilerDiscovery.None"/>, the search path with every directory holding <c>dxc</c> removed, so a
     /// world that asks for a compile finds no compiler; under <see cref="ReleaseCompilerDiscovery.Path"/>, nothing

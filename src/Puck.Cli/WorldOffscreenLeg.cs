@@ -16,9 +16,6 @@ internal static class WorldOffscreenLeg {
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private static readonly string UnsupportedPrefix = Puck.Launcher.LauncherHostRun.UnsupportedLinePrefix(label: "world");
 
-    /// <summary>The World flag that creates the GPU device with its backend's validation layer.</summary>
-    public const string DebugLayersFlag = "--debug-layers";
-
     /// <summary>The graphics backends a leg runs on, in the order a verb runs them.</summary>
     public static IReadOnlyList<string> Backends { get; } = ["vulkan", "directx"];
 
