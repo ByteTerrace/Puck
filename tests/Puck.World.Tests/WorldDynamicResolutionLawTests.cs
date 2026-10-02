@@ -569,6 +569,7 @@ public sealed class WorldDynamicResolutionLawTests {
             ? controller.Grid
             : WorldDynamicResolution.GridOf(ceiling: Ceiling, scale: Ceiling));
         public void RequireGpuTiming(bool required) { }
+        public void RequireCompletions(bool required) { }
         public bool TryReadGpuFrame(out WorldFrameLoadReading reading) {
             reading = m_timed;
             m_timed = (m_timed with { Renders = 0 });

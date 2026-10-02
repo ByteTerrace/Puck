@@ -43,6 +43,8 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
 
     private ShaderPipelineRenderNode?[] m_nodes = [];
 
+    private bool m_accounting;
+
     /// <inheritdoc/>
     public PresentTimingSample LastPresentTiming {
         get {
@@ -70,6 +72,24 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
 
     /// <inheritdoc/>
     public void RequireGpuTiming(bool required) => timing.Require(required: required);
+    /// <inheritdoc/>
+    /// <remarks>While asked, the runtime accounts for exactly the world's own views of the set it runs
+    /// (<see cref="RenderGraphRuntime.AccountFor"/>), declared again whenever that set changes; once not, it accounts for
+    /// none.</remarks>
+    public void RequireCompletions(bool required) {
+        if (required == m_accounting) {
+            return;
+        }
+
+        m_accounting = required;
+
+        if (required) {
+            // The next read finds the views again and declares them.
+            m_set = null;
+        } else {
+            probe.Root?.Runtime?.AccountFor(instances: []);
+        }
+    }
     /// <inheritdoc/>
     /// <remarks>A view whose node has no timed submission yet adds nothing; the views are timed while any one is. A
     /// submission whose grid its node no longer records adds nothing either.</remarks>
@@ -157,7 +177,7 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         }
 
         FindViews(runtime: runtime);
-        completions = runtime.TakeRetiredCompletions(instance: IsView);
+        completions = runtime.TakeRetiredCompletions();
 
         foreach (var node in m_nodes) {
             if (node is not null) {
@@ -193,6 +213,10 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         m_nodes = nodes;
         m_gpu.Reset(survivors: survivors);
         m_steps.Reset(survivors: survivors);
+
+        if (m_accounting) {
+            runtime.AccountFor(instances: instances.Select(selector: static instance => instance.Name).Where(predicate: IsView));
+        }
     }
     // Whether an instance is one of the world's own views: world, or world$2 on.
     private static bool IsView(string instance) =>

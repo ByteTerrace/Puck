@@ -4649,7 +4649,10 @@ resolution, and stay there.
   was last read (`ShaderPipelineRenderNode.TakeCompletions`), not only the
   newest, and the interval needs every view's summary to name the current
   grid. A view that leaves the graph hands its completed renders to the
-  runtime by instance name (`RenderGraphRuntime.TakeRetiredCompletions`): a
+  runtime by instance name (`RenderGraphRuntime.TakeRetiredCompletions`), but
+  only for the names its reader declares (`RenderGraphRuntime.AccountFor`: the
+  world load source declares its views while dynamic resolution is on and
+  none once it is off), so a pane or source keeps no entry: a
   disposed node waits out its submissions first, and a node a kept consumer
   still holds stays polled until it owes nothing or is released. So a removed
   view's render still counts, across any number of reconfigurations between

@@ -3,40 +3,55 @@ namespace Puck.Shaders;
 // The instances whose nodes owe a readback (ShaderPipelineRenderNode.OwesReadbacks), each listed once in
 // m_owing[..m_owingCount] and flagged in m_owes, both sized with the nodes, so a frame polls only nodes with work
 // outstanding and allocates nothing. A node that leaves the graph hands its completed renders to the runtime, by
-// instance name, until a reader takes them: one disposed at its retirement has waited out its submissions, and one a
-// kept consumer still holds stays listed in m_retiredOwing, polled like any other, until it owes nothing or is released.
+// instance name, when a reader accounts for that name (m_accounted), until the reader takes them: one disposed at its
+// retirement has waited out its submissions, and one a kept consumer still holds stays listed in m_retiredOwing, polled
+// like any other, until it owes nothing or is released. No instance nobody accounts for keeps an entry.
 public sealed partial class RenderGraphRuntime {
     private int[] m_owing = [];
+
     private int m_owingCount;
+
     private bool[] m_owes = [];
+
     private long m_readbackPolls;
 
+    private readonly HashSet<string> m_accounted = new(comparer: StringComparer.Ordinal);
     private readonly List<(string Instance, ShaderPipelineCompletions Completions)> m_retiredCompletions = [];
     private readonly List<(string Instance, ShaderPipelineRenderNode Node)> m_retiredOwing = [];
 
     private bool m_releasingLostDevice;
 
-    /// <summary>Reads and clears the renders completed by nodes that have left the graph since the previous read, folded
-    /// over the retired instances <paramref name="instance"/> selects
-    /// (<see cref="ShaderPipelineCompletions.Then"/>). A node that leaves keeps handing its renders over until it has
-    /// none in flight, across any number of reconfigurations, a held one included; a render is handed over once, so an
-    /// instance added again under the same name counts its new node's renders only through that node.</summary>
-    /// <param name="instance">Selects the retired instances, by name, whose completions are read; the others stay.</param>
-    /// <returns>The selected retired instances' completions since the previous read.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="instance"/> is <see langword="null"/>.</exception>
-    public ShaderPipelineCompletions TakeRetiredCompletions(Predicate<string> instance) {
-        ArgumentNullException.ThrowIfNull(instance);
+    /// <summary>Declares the instances whose retired renders a reader accounts for, replacing the previous declaration:
+    /// a node that leaves the graph under one of these names hands its completed renders over
+    /// (<see cref="TakeRetiredCompletions"/>), and one under any other name hands nothing over and keeps no entry. An
+    /// entry handed over under a name since dropped stays until the next read; an empty declaration, a reader that no
+    /// longer reads, drops every entry.</summary>
+    /// <param name="instances">The instance names accounted for.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="instances"/> is <see langword="null"/>.</exception>
+    public void AccountFor(IEnumerable<string> instances) {
+        ArgumentNullException.ThrowIfNull(instances);
 
+        m_accounted.Clear();
+        m_accounted.UnionWith(other: instances);
+
+        if (m_accounted.Count == 0) {
+            m_retiredCompletions.Clear();
+        }
+    }
+    /// <summary>Reads and clears the renders completed by accounted-for nodes that have left the graph since the previous
+    /// read, folded over them (<see cref="ShaderPipelineCompletions.Then"/>). A node that leaves keeps handing its renders
+    /// over until it has none in flight, across any number of reconfigurations, a held one included; a render is handed
+    /// over once, so an instance added again under the same name counts its new node's renders only through that
+    /// node.</summary>
+    /// <returns>The retired completions since the previous read.</returns>
+    public ShaderPipelineCompletions TakeRetiredCompletions() {
         var completions = default(ShaderPipelineCompletions);
 
-        for (var index = (m_retiredCompletions.Count - 1); (index >= 0); index--) {
-            var (name, retired) = m_retiredCompletions[index];
-
-            if (instance(obj: name)) {
-                completions = completions.Then(later: retired);
-                m_retiredCompletions.RemoveAt(index: index);
-            }
+        foreach (var (_, retired) in m_retiredCompletions) {
+            completions = completions.Then(later: retired);
         }
+
+        m_retiredCompletions.Clear();
 
         return completions;
     }
@@ -103,6 +118,13 @@ public sealed partial class RenderGraphRuntime {
     // Retires a node that left the graph once the device is idle: a disposed node waits out its submissions first, so
     // every render it made is handed over; a held one hands over what has completed and stays polled while it owes more.
     private void RetireNode(string instance, ShaderPipelineRenderNode node, bool held) {
+        if (!m_accounted.Contains(item: instance)) {
+            if (!held) {
+                node.Dispose();
+            }
+
+            return;
+        }
         if (held) {
             node.PollReadbacks();
             HandOver(instance: instance, node: node);
@@ -125,7 +147,7 @@ public sealed partial class RenderGraphRuntime {
                 m_retiredOwing.RemoveAt(index: position);
             }
         }
-        if (!m_releasingLostDevice) {
+        if (!m_releasingLostDevice && m_accounted.Contains(item: instance)) {
             node.PollReadbacks();
             HandOver(instance: instance, node: node);
         }

@@ -17,13 +17,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         // The removed view's render at 0.5 completed before the next read, so the views' renders since the last read
         // name no one grid, though the view that remains rendered at 0.625 alone.
-        var retired = views.Runtime.TakeRetiredCompletions(instance: static _ => true);
+        var retired = views.Runtime.TakeRetiredCompletions();
         var remaining = views.Live();
 
         Assert.Equal(expected: new ShaderPipelineCompletions(Grid: 0.5d, Renders: 1), actual: retired);
         Assert.Equal(expected: 0.625d, actual: remaining.Grid);
         Assert.Equal(expected: 0d, actual: retired.Then(later: remaining).Grid);
-        Assert.Equal(expected: default, actual: views.Runtime.TakeRetiredCompletions(instance: static _ => true));
+        Assert.Equal(expected: default, actual: views.Runtime.TakeRetiredCompletions());
     }
     [Fact]
     public void ReconfigurationsBetweenReadsLoseNoRetiredRender() {
@@ -46,9 +46,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         Assert.True(condition: views.Reconfigure(PackageView));
 
-        Assert.Equal(expected: new ShaderPipelineCompletions(Grid: 0.5d, Renders: renders), actual: views.Runtime.TakeRetiredCompletions(instance: static name => (name == "second")));
-        Assert.Equal(expected: new ShaderPipelineCompletions(Grid: 0.75d, Renders: 2), actual: views.Runtime.TakeRetiredCompletions(instance: static name => (name == "third")));
-        Assert.Equal(expected: default, actual: views.Runtime.TakeRetiredCompletions(instance: static _ => true));
+        // The second view's renders at 0.5, both nodes', and the third's two at 0.75.
+        Assert.Equal(expected: new ShaderPipelineCompletions(Grid: 0d, Renders: (renders + 2)), actual: views.Runtime.TakeRetiredCompletions());
+        Assert.Equal(expected: default, actual: views.Runtime.TakeRetiredCompletions());
     }
     [Fact]
     public void AHeldRetiredNodeHandsEachRenderOverOnce() {
@@ -63,6 +63,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             runtime: runtime
         );
 
+        runtime.AccountFor(instances: ["camera"]);
         frames.Settle();
         var camera = runtime.NodeOf(instance: "camera")!;
         var main = runtime.NodeOf(instance: "main")!;
@@ -92,8 +93,37 @@ public sealed partial class RenderGraphRuntimeLawTests {
         });
         after.Next(count: 3);
 
-        Assert.Equal(expected: new ShaderPipelineCompletions(Grid: 1d, Renders: rendered), actual: runtime.TakeRetiredCompletions(instance: static name => (name == "camera")));
-        Assert.Equal(expected: default, actual: runtime.TakeRetiredCompletions(instance: static _ => true));
+        Assert.Equal(expected: new ShaderPipelineCompletions(Grid: 1d, Renders: rendered), actual: runtime.TakeRetiredCompletions());
+        Assert.Equal(expected: default, actual: runtime.TakeRetiredCompletions());
+    }
+    [Fact]
+    public void AnInstanceNobodyAccountsForKeepsNoRetiredEntry() {
+        using var views = new PackageViews(grids: [(PackageView, 0.625d), ("second", 0.5d), ("pane", 0.75d), ("source$a", 1d), ("source$b", 1d)]);
+
+        // Only the second view is read for; the pane and the sources leave over two reconfigurations and keep nothing.
+        views.Runtime.AccountFor(instances: ["second"]);
+        views.Clear();
+        views.Frame();
+        Assert.True(condition: views.Reconfigure(PackageView, "second", "source$b"));
+        views.Frame();
+        Assert.True(condition: views.Reconfigure(PackageView, "second"));
+        Assert.Equal(expected: default, actual: views.Runtime.TakeRetiredCompletions());
+
+        // The view read for still hands its renders over when it leaves: one in each of the three frames since the read.
+        views.Frame();
+        Assert.True(condition: views.Reconfigure(PackageView));
+        Assert.Equal(expected: new ShaderPipelineCompletions(Grid: 0.5d, Renders: 3), actual: views.Runtime.TakeRetiredCompletions());
+
+        // A reader that stops reading drops what it has not read.
+        views.Runtime.AccountFor(instances: ["third"]);
+        Assert.True(condition: views.Reconfigure(PackageView, "third"));
+        TestLiveness.Until(step: () => {
+            views.Frame();
+            return (views.Runtime.NodeOf(instance: "third") is { FrameCounter: > 0UL });
+        });
+        Assert.True(condition: views.Reconfigure(PackageView));
+        views.Runtime.AccountFor(instances: []);
+        Assert.Equal(expected: default, actual: views.Runtime.TakeRetiredCompletions());
     }
 
     // Package views, each a root at its own render grid, on a device that holds fences until a wait or the law completes
@@ -115,6 +145,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             m_names = [.. grids.Select(selector: static view => view.Name)];
             recorders.Registry.Register(factory: m_view, package: RenderGraphPackageCatalog.SdfWorld);
             Runtime = RenderGraphRuntimeLawTests.Runtime(m_gpu, recorders, SetOf(names: m_names), PackageView, new RenderGraphRuntimeGraph[m_names.Length]);
+            Runtime.AccountFor(instances: m_names);
             TestLiveness.Until(step: () => {
                 Frame();
                 return m_names.All(predicate: name => (Runtime.NodeOf(instance: name) is { FrameCounter: > 0UL }));
@@ -129,7 +160,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             CompleteAll();
             Frame();
             _ = Live();
-            _ = Runtime.TakeRetiredCompletions(instance: static _ => true);
+            _ = Runtime.TakeRetiredCompletions();
         }
         public void Dispose() => Runtime.Dispose();
         public void Frame() {

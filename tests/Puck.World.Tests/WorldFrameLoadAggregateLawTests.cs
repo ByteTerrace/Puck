@@ -89,6 +89,7 @@ public sealed class WorldFrameLoadAggregateLawTests {
             m_secondSeconds = (periods / Hertz);
         }
         public void RequireGpuTiming(bool required) { }
+        public void RequireCompletions(bool required) { }
         public bool TryReadGpuFrame(out WorldFrameLoadReading reading) {
             var grid = ((controller.Grid > 0d) ? controller.Grid : WorldDynamicResolution.GridOf(ceiling: 0.875f, scale: 0.875f));
 

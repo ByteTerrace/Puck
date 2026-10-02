@@ -23,6 +23,7 @@ public sealed partial class WorldFramePresenter {
     private void AdvanceDynamicResolution(in FrameContext context) {
         // The GPU's frame time is read only against a known display rate, so only then is it measured.
         FrameLoad?.RequireGpuTiming(required: (m_settings.DynamicResolution && (context.DisplayHertz > 0)));
+        FrameLoad?.RequireCompletions(required: m_settings.DynamicResolution);
         m_dynamicGrid = (m_settings.DynamicResolution
             ? m_dynamicResolution.Advance(
                 ceiling: m_settings.RenderCeiling,

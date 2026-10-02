@@ -1951,7 +1951,8 @@ nothing and never decides freshness. Present association reads each node's
 never the newest submission alone. The runtime polls a standing node's
 readbacks only while it `OwesReadbacks` (`RenderGraphRuntime.ReadbackPolls`
 counts the polls). A node leaving the graph hands its completions to
-`RenderGraphRuntime.TakeRetiredCompletions` in `Retire` (disposed: after its
+`RenderGraphRuntime.TakeRetiredCompletions` in `Retire`, only under a name the
+reader declared through `RenderGraphRuntime.AccountFor` (disposed: after its
 fences are waited; held: polled through `m_retiredOwing` until it owes nothing
 or its hold releases), and `WorldFrameLoadSource.TakeCompletions` folds the
 retired views' in. Pending render completion fences survive an install's

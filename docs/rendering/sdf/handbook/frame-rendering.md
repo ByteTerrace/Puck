@@ -239,7 +239,8 @@ interval names no frame, so each view's node also keeps a summary of every
 render completed since it was last read, and an interval counts only when every
 view's summary names the current grid. A view removed from the graph hands its
 completed renders to the runtime first, so a render it finished before leaving
-still counts in the next read. Render completion fences survive an install's
+still counts in the next read; the runtime keeps them only for the views the
+controller reads, never for a pane or a source. Render completion fences survive an install's
 counter invalidation; device loss drops renders whose completion is
 unobserved. When the budget lies between two
 adjacent grids, the controller settles on the cheaper one rather than

@@ -29,6 +29,11 @@ public interface IWorldFrameLoadSource {
     /// per frame in flight, so they are recorded only while a reader asks.</summary>
     /// <param name="required">Whether the controller reads the GPU's frame time.</param>
     void RequireGpuTiming(bool required);
+    /// <summary>Asks for the views' render completions to be accounted for, or stops asking: while asked, a view that
+    /// leaves the graph keeps its completed renders for <see cref="TakeCompletions"/>; once not, nothing is kept for a
+    /// reader that no longer reads.</summary>
+    /// <param name="required">Whether the controller reads the views' completions.</param>
+    void RequireCompletions(bool required);
     /// <summary>Reads the GPU's time for the views' renders timed since the previous reading: each view's newest timed
     /// render not read before, its summed pass time in seconds, summed over the views.</summary>
     /// <param name="reading">The reading, which is not fresh when no view was timed since the previous one.</param>
