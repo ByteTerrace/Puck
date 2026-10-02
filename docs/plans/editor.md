@@ -47,6 +47,15 @@ placement but does not select it; `world.place` aims at a surface. `world.nudge`
 printer, preserving unrelated text and proving the recomposed document before
 the atomic write. Generated rows refuse by name and offer a JSON delta.
 
+`world.history` is deterministic time travel over the boot world (the
+[state reference](../reference/state/worlds.md#travel-through-recorded-time)
+lists its forms). With it on, a builder seeks or steps to any tick of a bounded
+window, backward or forward, each move proved against the hash recorded there;
+resumes from the past, discarding the future or keeping it as a named branch;
+diffs the state at two ticks; and replays an edit some ticks earlier to see
+where it would first have changed the world. Its verbs are console-only, unbindable
+and operator-only; no HUD shows the window.
+
 Several pieces exist with nothing using them:
 
 - `world.debug-view` selects one of twelve modes (`off`, `depth`, `normals`,
@@ -841,6 +850,45 @@ rendering plan's brick-baking capability row.
 
 **Depends on:** E1 and E2 for the pointer's surface hit, E3 for one step per
 stroke.
+
+### E14 — Scrub the recorded past
+
+**Problem:** time travel answers on the console only. A builder cannot drag
+through the window, step a tick from a key, or take a branch anywhere: a kept
+branch can be neither re-entered nor saved, and a tape can still only start from
+a world's boot image.
+
+**Delivers:**
+
+1. **A scrubber row.** An editor HUD row draws the window as a bar — keyframes as
+   ticks, the cursor, kept branches as forks — and a drag on it seeks. It reads
+   `world.history status` and submits `world.history seek`; it draws nothing a
+   verb cannot echo.
+2. **Bindable stepping.** `world.history step <±n>`, `resume` and `branch` become
+   bindable in the build-mode binding group, checked at dispatch under the
+   pressing seat's principal, with a grant that names them, so a seat can scrub
+   without the operator console.
+3. **Branches that go somewhere.** `world.history switch <name>` re-enters a
+   kept branch (the current future becomes a branch in its place), and
+   `world.history save <name> <tape>` writes a branch as a `.puckreplay` with
+   `ForkedFrom` naming its fork. Both need a tape that starts from a
+   checkpoint instead of a boot image, which also lets a mid-session
+   `replay.record` match from its first tick.
+4. **Cheaper keyframes.** A keyframe whose base document equals its live one
+   stores one copy, and consecutive keyframes share unchanged content, so the
+   same budget holds a longer window or a denser keyframe spacing.
+
+**Touches:** `Puck.World.Server` (`WorldHistory`, `WorldReplaySnapshot`,
+`WorldAuthorityCheckpointCodec`), the history command module, the editor HUD.
+
+**Check:** a scrubber law drives the row by a seat's pointer and reads the seek
+back (red leg: a seat without the grant is refused by name); a switch law
+proves the re-entered branch reproduces its recorded hashes; a saved branch
+passes `replay.verify` (red leg: a tape whose checkpoint was taken at the wrong
+tick reports MISMATCH at its first tick); a keyframe-size law pins that a span
+of unchanged ticks adds no document bytes.
+
+**Depends on:** E2 for the HUD row's picking.
 
 ## Decisions
 

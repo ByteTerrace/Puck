@@ -58,7 +58,13 @@ itself (`WorldReplayTape`, `WorldReplaySnapshot`, `WorldReplayInspector`,
 `WorldReplaySnapshot` reads `WorldReplayInspector.DescribeRate`, a Server-internal
 coupling this project cannot see through, so only the verb surface lives here; the
 module reaches the tape, the inspector, and `WorldInstanceHost` by their
-already-public surface. `WorldCommandArguments` (the free-text-tail
+already-public surface. `world.history` (`WorldHistoryCommandModule`) is the
+in-session time-travel surface over the boot world's `WorldHistory`: on/off,
+status, seek, step, resume, branch, diff, and replay-edit; it pauses the boot
+row through `WorldInstanceHost` when a seek lands behind the head and releases
+it on resume. The history itself lives in
+[`Puck.World.Server`](../Puck.World.Server/README.md#in-session-history-worldhistorycs-worldreplaytapecapturecs).
+`WorldCommandArguments` (the free-text-tail
 reconstruction every JSON/prose-tailed verb shares) lives in
 [`Puck.World.Server`](../Puck.World.Server/README.md) instead, since modules
 in `Puck.World` need it too.

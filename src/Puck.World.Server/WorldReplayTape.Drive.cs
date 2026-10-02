@@ -24,6 +24,9 @@ public sealed partial class WorldReplayTape {
     /// local route epochs so input deduplication and presentation do not retain the replaced timeline's cursor.</summary>
     public event Action? TimelineRestored;
 
+    // The history's seek installs a past timeline through the same subscribers a drive's boot image reaches.
+    internal void RaiseTimelineRestored() => TimelineRestored?.Invoke();
+
     // One live drive's whole mutable state — dropped the instant the drive ends, so no field of it can leak into
     // the recording a fork hands over to.
     private sealed class DriveState {
@@ -108,6 +111,7 @@ public sealed partial class WorldReplayTape {
             (drive.ForkName is not { } forkName)
         ) {
             m_mode = WorldReplayMode.Idle;
+            RefreshCapture();
 
             return;
         }
@@ -137,8 +141,8 @@ public sealed partial class WorldReplayTape {
             ParentName: drive.SourceName,
             Tick: drive.Target
         );
-        AttachTaps();
         m_mode = WorldReplayMode.Recording;
+        RefreshCapture();
         if (m_liveServer.Output.HasNarrationSink) {
             m_liveServer.Output.Narrate(
                 channel: "replay.fork",
@@ -484,6 +488,7 @@ public sealed partial class WorldReplayTape {
         };
         m_transport.InputMasked = true;
         m_mode = WorldReplayMode.Replaying;
+        RefreshCapture();
         TimelineRestored?.Invoke();
         refusal = "";
 

@@ -53,13 +53,11 @@ public static class WorldServerStepShell {
             // measures completed simulation ticks rather than frames or wall time.
             publishTick(tick);
 
-            // Close this tick's captured server-input group while a recording is armed, or compare and advance a
-            // drive (a no-op otherwise) — the whole tick's intent/command stream has reached the loopback taps by
-            // now (submitted during ApplySnapshot, before this Step call), so the group is complete regardless of
-            // what a presentation-side post-step does next.
-            if (tape is { Mode: not WorldReplayMode.Idle }) {
-                tape.NoteTick();
-            }
+            // Close this tick's captured server-input group for an armed recording or an in-session history, or
+            // compare and advance a drive (a no-op otherwise) — the whole tick's intent/command stream has reached
+            // the loopback taps by now (submitted during ApplySnapshot, before this Step call), so the group is
+            // complete regardless of what a presentation-side post-step does next.
+            tape?.NoteTick();
 
             if (
                 (tape is not { WantsFastForwardStep: true }) ||

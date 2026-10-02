@@ -210,3 +210,4 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] E11 source-preserving save for authored rows has landed, with named generated-row refusals; E3's live duplicate and rename workflow remains.
 - [ ] E12 the shape gallery as a world, retiring `Puck.SdfVm.Debug` once the gallery reaches parity with it.
 - [ ] E13 carving and the brick bake: a carve brush whose dabs are document rows.
+- [ ] E14 scrub the recorded past: `world.history` seek, branch, diff and replay-edit have landed as console verbs; the scrubber row, bindable stepping, re-entering and saving a branch, and cheaper keyframes remain.

@@ -592,6 +592,16 @@ public static class WorldBootComposition {
         // The one source every live document swap and replay re-read goes through: a .puck origin lowers here.
         services.AddSingleton<IWorldDocumentSource>(implementationInstance: PuckDocumentComposer.Instance);
         services.AddSingleton<ICommandModule, WorldReplayCommandModule>();
+        // The in-session history (world.history): keyframes plus the tape capture's per-tick input, for deterministic
+        // seek, branch, diff, and replay-edit over the boot world. Off until world.history on.
+        services.AddSingleton(implementationFactory: static sp => new WorldHistory(
+            engines: sp.GetServices<IMachineEngine>(),
+            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
+            server: sp.GetRequiredService<WorldServer>(),
+            stateRoot: sp.GetRequiredService<WorldStateRoot>(),
+            tape: sp.GetRequiredService<WorldReplayTape>()
+        ));
+        services.AddSingleton<ICommandModule, WorldHistoryCommandModule>();
 
         // The console's sequencing primitive: the tick barrier world.wait arms (published by the shared server-step
         // shell each fixed step) and the verb that arms it. CORE — world.wait is a server-safe verb by name (DELIVER

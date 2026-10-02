@@ -465,15 +465,17 @@ public sealed partial class WorldPersistence {
     /// <param name="adjacencies">The restored authority's live adjacency source. When present, it is installed
     /// before checkpoint state so contact-field observations rebase against the final effective field rather than
     /// acquiring a host-construction-only pending wake afterward.</param>
+    /// <param name="documentDirectory">The directory the captured document's relative paths resolve against, or
+    /// <see langword="null"/> for a document that names none.</param>
     /// <returns>The restored server and the population it owns.</returns>
-    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null) {
+    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
         var admission = WorldDefinitionSerialization.DeserializeForAdmission(
-            utf8Json: checkpoint.Server.DefinitionJson, machines: machines.ValidationCatalog);
+            documentDirectory: documentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: machines.ValidationCatalog);
         var definition = admission.Definition;
         var population = new WorldPopulation(definition: definition);
         var server = new WorldServer(
@@ -807,6 +809,14 @@ public sealed partial class WorldPersistence {
             reason: out arenaKeyReason
         )) {
             throw new InvalidOperationException(message: $"the checkpoint's arena keys do not survive restored rule compilation: {arenaKeyReason}");
+        }
+        // A restore over a live arena (a history seek) drops the names interned after the checkpoint, so the
+        // retained ledger the authoritative hash folds is exactly the captured one.
+        if (!Host.Arena.TryRewindKeys(
+            names: server.ArenaKeys,
+            reason: out arenaKeyReason
+        )) {
+            throw new InvalidOperationException(message: $"the checkpoint's arena keys do not rewind the live ledger: {arenaKeyReason}");
         }
         if (!Host.Arena.TryImportUndoSnapshot((server.Undo ?? new ArenaUndoSnapshot(Groups: [])), out var undoReason)) {
             throw new InvalidOperationException(message: $"the checkpoint's retained turns do not restore: {undoReason}");

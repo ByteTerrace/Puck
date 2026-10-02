@@ -267,10 +267,12 @@ emit. Presentation resampling does not feed back into emulated state.
 Queued hosts implement `IMachineCheckpointRuntime`. Capture joins the worker
 queue after accepted steps and returns an owned, checksummed image of the core,
 held input, fractional clock conversion, completed-step count, and playback
-settings. Restore targets a fresh, unstepped host with identical firmware,
-cartridge, behavioral options, and snapshot format. Invalid checksums or content
-identities refuse before changing the core. Discard the fresh host if a core
-restore fails. Audio and uploaded pixels are presentation outputs rebuilt after
+settings. Restore targets a host with identical firmware, cartridge, behavioral
+options, and snapshot format: a fresh one, or the stepped host the image came
+from, which a world's in-session history rewinds in place. Restore joins the
+worker queue behind accepted steps like capture, and the completed-step count
+lands on the captured one either way. Invalid checksums or content identities
+refuse before changing the core. Discard a fresh host if a core restore fails. Audio and uploaded pixels are presentation outputs rebuilt after
 restore; queued audio from the retired host is not replayed.
 
 Enabled rewind history and cores lent to a live link currently refuse capture.

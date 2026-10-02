@@ -7,7 +7,8 @@ re-drives a tape into the LIVE session at the recorded rate, and
 `replay.fork` fast-forwards a tape into the live session and keeps recording
 from there into a standalone child. Files (all in
 `src/Puck.World.Server/`, namespace `Puck.World`): `WorldReplayTape.cs` +
-`WorldReplayTape.Drive.cs` (the live drive), `WorldReplayTape.Extensions.cs`,
+`WorldReplayTape.Drive.cs` (the live drive), `WorldReplayTape.Capture.cs` (the
+per-tick capture the in-session history shares), `WorldReplayTape.Extensions.cs`,
 `WorldReplaySnapshot.cs`, `WorldReplayRefusal.cs`, `WorldReplayVerdict.cs`, the
 read-back in `WorldReplayInspector.cs` + `WorldReplayEntryDescriber.cs`;
 `WorldReplayCodecException.cs` is in `src/Puck.World.Protocol/Codecs/`. The verb
@@ -24,6 +25,7 @@ surface.
 - Verify semantics
 - Inspect — reading a tape back
 - The live drive and forking
+- The in-session history
 - Rules for changes
 
 ## Format and development version
@@ -577,6 +579,43 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   provenance refused, prefix copied verbatim, the boot-image reset
   reproducing the parent's hashes on the live server, the mask with its
   unmasked control, cancel abandoning a fork).
+
+## The in-session history
+
+`world.history` (`WorldHistory*.cs` in Server, `WorldHistoryCommandModule` in
+Console) is time travel over the running boot world; the mechanism is in
+[the server guide](../../../../src/Puck.World.Server/README.md#in-session-history-worldhistorycs-worldreplaytapecapturecs).
+The contracts a change must keep:
+
+- **One capture.** The tape's taps (`WorldReplayTape.Capture.cs`) attach while
+  a recording is armed or a history is on, never during a live drive, and never
+  while a history re-simulation suspends them. `NoteTick` closes one
+  `WorldReplayTickInput` and hands it to both; the recording's first tick alone
+  carries the arm-time session prefix. A new tap belongs in the capture, so the
+  history records it too; a new entry kind owes `ApplyRecordedTick` its arm and,
+  if its consequence lives at another authority, the history's unrewindable
+  list.
+- **Proof, not trust.** Every seek proves the restored keyframe against the hash
+  its tick recorded and every re-simulated tick against its recorded hash and
+  mutation outcomes. A disagreement is reported by tick and fails the verb.
+- **Restore exactly.** In-place restore keeps the live base and journal by
+  identity only when the keyframe's fingerprint (base reference, journal
+  length and tail, solid revision) matches; otherwise the keyframe's document
+  goes through the forced load door first. `StateArena.TryRewindKeys` makes the
+  key ledger exactly the captured one, and machine hosts restore over running
+  machines.
+- **Steady ticks allocate nothing.** Capture buffers are reused when only the
+  history records, spans are sized on the keyframe tick, and per-tick paths
+  avoid capturing lambdas. `ASteadyRecordedTickAllocatesNothing` pins it.
+- **Shadows for what-ifs.** `diff` and `replay-edit` run on a
+  `WorldHistoryShadow` (`FromCheckpoint`, its own machine host, a scratch
+  owned-world catalog), never on the live server.
+- **Verify.** `tests/Puck.World.Tests/InSessionHistoryLawTests.cs` covers seeks to
+  every tick across seeds and worlds, the wrong-keyframe and wrong-order red
+  legs, branch, diff, replay-edit, budget, and allocation. Live: `world.history
+  on`, `body.press forward 1 1 0`, `world.wait 90`, `world.history seek 30`
+  (matches, paused), `body.where 0`, `world.history step 40`, `world.history
+  diff 30 90`, `world.history resume`.
 
 ## Rules for changes
 

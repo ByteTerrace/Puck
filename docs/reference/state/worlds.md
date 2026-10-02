@@ -421,6 +421,7 @@ principal's grants and can be scripted through stdin.
 | `world.rule.hazards [top]`, `world.budget.rules [top \| --why <rule>]`, `world.rule.failures` | Read the analyses described in [Rule analysis, scheduling, and work budgets](analysis.md) and the refusal counts. |
 | `world.tables`, `world.patterns`, `world.topologies`, `world.topology`, `world.match` | Echo tables, compiled patterns, and topologies, and walk one word through a pattern. |
 | `world.undo [n]` | Undoes the last applied mutations by replaying the journal minus its tail. |
+| `world.history …` | Records the boot world's recent past and travels through it: seek, step, branch, diff, and replay an edit earlier (see [below](#travel-through-recorded-time)). |
 
 Read-backs land on stdout; refusals, mutation echoes and host log lines land on
 stderr.
@@ -461,6 +462,46 @@ hash. The world-level rules for transfer,
 determinism, and replay are in [Worlds and federation](../../architecture/worlds.md),
 and the tape format is in the
 [server guide](../../../src/Puck.World.Server/README.md#deterministic-replay-worldreplaytapecs-worldreplaytapedrivecs-worldreplaysnapshotcs).
+
+## Travel through recorded time
+
+`world.history` keeps a bounded record of the boot world's recent past and moves
+the live world through it. It is off until switched on, and it answers the
+operator only, because it prints the values the rules computed.
+
+| Form | What it does |
+|---|---|
+| `world.history on [<MiB>]` | Starts recording, with a memory budget (64 MiB unless named). The next tick captures the first keyframe; a history already on takes the new budget. |
+| `world.history off` | Stops recording and releases everything it held. |
+| `world.history` or `world.history status` | Echoes the window (oldest and newest tick), the cursor, the keyframe spacing, the bytes held against the budget split into keyframes, input and branches, and the counted cost: ticks recorded, hash folds, keyframes captured, deferred and evicted, seeks, ticks re-simulated, and restores. |
+| `world.history seek <tick>` | Moves the live world to any tick in the window, backward or forward, and proves the result against the hash recorded there. A seek behind the newest tick pauses the world. |
+| `world.history step <±n>` | Seeks relative to the cursor. |
+| `world.history resume` | Continues live input from the cursor. The recorded future behind it is discarded when the next tick lands. |
+| `world.history branch <name>` | Continues live input from the cursor and keeps the recorded future as a named branch instead of discarding it. |
+| `world.history diff <a> <b> [--json]` | Re-simulates both ticks in an isolated copy and prints which bodies, cells, fields and hash components changed, with values. `--json` prints every change with exact raw values. |
+| `world.history replay-edit <n>` | Takes the document edits made at the cursor, applies them `n` ticks earlier in an isolated copy, and reports the first tick the world would have diverged, with the diff there. |
+
+The history records a full checkpoint (a keyframe) every few seconds of
+simulation at most, and each tick's input and authoritative hash in between. A
+seek restores the nearest keyframe at or before its target and re-simulates the
+recorded input, so every tick it reaches is checked against the hash the live
+run recorded; a disagreement is reported by tick and the verb fails. The
+keyframe spacing balances keyframe bytes against input bytes, and the oldest
+keyframe span is dropped when the budget fills. A tick that captures no keyframe
+allocates nothing; `world.history status` echoes what the keyframes and the
+input cost in the running world.
+
+The history refuses by name what it cannot rewind: a seek while `replay.record`
+captures the timeline or `replay.drive` holds it, while input typed since the
+cursor's tick has not run, across a crossing, an arrival or a remote peer in the
+window, and while a remote occupant, a transfer obligation or an engagement
+depends on the timeline. A keyframe cannot be captured while an addon guest has
+run or a screen operation has applied. A live neighbour linked through an
+adjacency is re-read as it stands now, so seam contact with a neighbour that has
+moved since shows up as a reported divergence. The history covers the boot world
+only. The server guide's
+[in-session history](../../../src/Puck.World.Server/README.md#in-session-history-worldhistorycs-worldreplaytapecapturecs)
+section describes the mechanism.
 
 ## Verify world state behavior
 

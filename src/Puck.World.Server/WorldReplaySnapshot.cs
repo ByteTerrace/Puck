@@ -1187,10 +1187,11 @@ public sealed partial class WorldReplaySnapshot {
         what: "designation",
         writer: writer
     );
+
     // The authority-INPUT tagged union: one discriminant byte, then the entry's own payload. Kept distinct from the
     // command tagged union — that one discriminates WorldCommand's sealed subtypes, this one discriminates what KIND
     // of authority write crossed the link at all.
-    private static void WriteEntry(WireWriter writer, WorldReplayEntry entry) {
+    internal static void WriteEntry(WireWriter writer, WorldReplayEntry entry) {
         switch (entry) {
             case WorldReplayEntry.Command command:
                 writer.WriteByte(value: 0);
@@ -1397,6 +1398,7 @@ public sealed partial class WorldReplaySnapshot {
                 throw new WorldReplayCodecException(message: $"no .puckreplay encoding for authority entry kind '{entry.GetType().Name}'.");
         }
     }
+
     private static void WriteGrantLeaf(WireWriter writer, WorldGrant grant, bool revoke) => WriteLeaf(
         tryEncode: (revoke
         ? WorldSubmissionCodec.TryEncodeRevoke

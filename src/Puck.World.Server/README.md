@@ -2123,7 +2123,8 @@ The `replay.*` verb surface (`WorldReplayCommandModule`) lives in
 [`Puck.World.Console`](../Puck.World.Console/README.md); it holds this
 project's `WorldReplayTape`, `WorldReplayInspector`, and
 `WorldReplayEntryDescriber` by their public surface, the same way every other
-moved module reaches a Server type it does not own.
+moved module reaches a Server type it does not own. The tape's per-tick capture
+also feeds the [in-session history](#in-session-history-worldhistorycs-worldreplaytapecapturecs).
 
 `replay.drive <name> [to <tick>]` re-drives a saved tape into the running
 session: a forced `world.load` of the embedded definition plus the complete
@@ -2188,6 +2189,86 @@ verification re-drives the tape and every companion a crossing involves and
 pairs each crossing's halves by handoff token (`WorldReplaySetVerdict.cs`),
 reporting a crossing whose other half is on a remote or untaped authority as not
 verified.
+
+## In-session history (`WorldHistory*.cs`, `WorldReplayTape.Capture.cs`)
+
+`world.history` (`WorldHistoryCommandModule` in
+[`Puck.World.Console`](../Puck.World.Console/README.md)) is deterministic time
+travel over the running boot world, built on the tape rather than beside it.
+The tape's capture (`WorldReplayTape.Capture.cs`) attaches its taps while a
+recording is armed or a `WorldHistory` is on, and closes one
+`WorldReplayTickInput` per tick for both, so the history holds the tape's own
+entries and never a second input format. A tick only the history captures
+reuses the capture's lists; a recording keeps them.
+
+The history is a ring of keyframe spans. Each span starts at an authority
+checkpoint (`TryCaptureCheckpoint`, encoded by `WorldAuthorityCheckpointCodec`)
+and holds each following tick's authority entries, intents, step width, and the
+authoritative hash the tick reached. The keyframe spacing is the last keyframe's
+encoded size over the mean recorded input per tick, clamped between an eighth of
+a second and four seconds of simulation; the oldest span is evicted whenever the
+bytes held exceed the budget (64 MiB unless `world.history on <MiB>` names
+another). A span's per-tick arrays are sized for its interval on the keyframe
+tick, so a tick that captures no keyframe allocates nothing. A keyframe the
+boundary refuses (a buffered edit, an open arena scope, an engagement) is
+counted as deferred and retried at the next tick.
+
+`TrySeek` restores the latest keyframe at or before its target, or keeps the
+live state when the target lies ahead of the cursor in the same span, and
+re-simulates the recorded ticks through `WorldReplaySnapshot.ApplyRecordedTick`,
+`WorldServer.Advance`, and `EnforceJournalDepth`, the order the step shell takes.
+The restore's own proof is the keyframe tick's recorded hash; each re-simulated
+tick is proved against its recorded hash and mutation outcomes, and the first
+disagreement is reported by tick. A keyframe whose base, journal, and solid
+revision are the live document's restores in place and keeps the live base and
+journal by identity; otherwise the keyframe's document is installed through the
+forced load door first, as a replay drive does. Either way
+`StateArena.TryRewindKeys` drops the key names interned after the keyframe, so
+the retained ledger the hash folds is the captured one, and a machine host
+restores over its running machines (`IWorldMachineCheckpointHost`). The capture
+is suspended for the re-simulation, the restored timeline is delivered without a
+step (`WorldTick.PresentRestoredTimeline`), and `TimelineRestored` refreshes the
+local route epochs. A re-simulated step sets `ReplaysInput`, so nothing is
+forwarded through a portal to a world that is not rewinding.
+
+The first live tick taken while the cursor sits behind the head replaces the
+recorded future: it is discarded, or kept as a named `WorldHistoryBranch` (the
+tape's tick groups and their hashes from the fork) when `TryArmBranch` named one.
+
+`TryDiff` and `TryReplayEdit` never touch the live world. Each opens a
+`WorldHistoryShadow` — `WorldServer.FromCheckpoint` over a keyframe, its own
+machine host, and a scratch owned-world catalog under the state root — and
+re-simulates there. A diff images both ticks (`WorldHistoryImage`: every
+authoritative component's digest folded alone, every active body's pose lanes,
+every stored cell's resolved value through `WorldStateExport.VisitResolvedCells`,
+and every field cell) and reports exactly what differs (`WorldHistoryDiff`, with
+a canonical JSON machine form). A replay-edit runs an unedited control shadow and
+an edited one in lockstep; the edits — the document changes submitted since the
+cursor's tick closed, or those recorded at the cursor's tick — land ahead of the
+first tick of the span, and the first tick whose authoritative hash leaves the
+recording is reported with the diff there. `OpenShadow`, `Resimulate` (with an
+input rewrite), `RecordedInput`, and `RecordedHash` are public, so a tool
+composes its own what-if over the window.
+
+A seek is refused by name while a recording captures the timeline or a drive
+holds it, while input submitted since the cursor's tick closed has not run, while
+a buffered edit or ordered submission is pending, across a crossing, an arrival,
+a federated traveler or a remote peer in the window, while a remote occupant,
+transfer obligation or engagement depends on the timeline, and when the
+keyframe's key ledger is not a prefix of the live one. A keyframe cannot be
+captured while an addon guest has pumped or a screen operation has applied (the
+checkpoint's own refusals). A live neighbour linked through an adjacency is
+re-read as it stands now: seam contact with a neighbour that has moved since
+shows up as the divergence the per-tick proof names.
+
+`tests/Puck.World.Tests/InSessionHistoryLawTests.cs` holds the laws: a seek to every
+tick of the window, then a seeded scatter of jumps, reproduces the hash the live
+run reached, across seeds on the fixture, `snake`, and the shipped island; a
+keyframe from the wrong span and input fed in the wrong order each fail the
+proof; a branch resumed behind the head is the run that took that path; a diff
+reports exactly the changed cells; a replay-edit names its landing tick and a
+no-op edit names none; the budget holds and counts its evictions; and a steady
+recorded tick allocates nothing.
 
 ## Verifying a change here
 
