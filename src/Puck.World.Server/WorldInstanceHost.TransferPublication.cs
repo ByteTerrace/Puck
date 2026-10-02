@@ -266,6 +266,7 @@ public sealed partial class WorldInstanceHost {
                             seed: initialRoute
                         );
                         routedAuthority = routeAuthority;
+                        m_travelerRouteStarted?.Invoke(obj: routeAuthority);
                     }
                     endpoint = EndpointFor(
                         identity: routeName,

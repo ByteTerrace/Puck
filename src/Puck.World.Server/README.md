@@ -1296,6 +1296,22 @@ and every retained branch for that incarnation in each forwarding host, without
 removing another traveler's routes. The final body still follows the world's
 authored reconnect-grace policy.
 
+A local seat that follows a traveler to a remote destination follows it through
+one route wrapper per seat (`WorldRemoteAuthority`), created at the seat's first
+such crossing and reused by every later one. When `PublishCommittedTransfer`
+creates the wrapper, it holds the commit's accumulated turn and publishes the
+seat's claim through `WorldRemoteAuthority.PublishClaim`, which runs the
+publication and then delivers the latest observed route, both under the wrapper's
+route gate. An onward route observed before the claim reaches the seat once the
+claim stands, and one observed while the claim is delivered waits on the gate, so
+the seat takes each onward turn once and an older route never overtakes a newer
+one. A claim published through a reused wrapper does not take the gate. The host
+constructor's optional `travelerRouteStarted` callback is told of each newly
+created wrapper before its claim is held and published, and every production
+composition passes none. The federated-hosts harness in `tests/Puck.World.Tests`
+(`FederatedHosts`, `RoutedSeats`) passes it to observe an onward route before,
+during and after the claim, across two hosts joined over QUIC.
+
 The console can move any active body through that same transfer path:
 `world.transfer <source-instance> body:<index> <target-instance>` uses a zero-based
 body index, including creature and network-peer slots. Bare numbers select the
