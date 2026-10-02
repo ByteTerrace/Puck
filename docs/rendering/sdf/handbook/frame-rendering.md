@@ -258,9 +258,9 @@ renders one jitter period after its inputs last change and then stands, its
 output converged (`SdfTemporalHistory.Stands`). A render-grid dip or recovery
 restarts this settling period, including a grid change that takes effect only
 when a replacement graph installs. A view the display stopped showing is parked:
-the render graph counts the frames its schedule leaves an instance unread and
-absent from displayed outputs, including held consumer outputs. Cadence gaps in
-a consumer do not park its nested views. Every recording carries the count
+the render graph counts the frames its schedule leaves an instance unread, which
+means nothing the display shows reaches it, held consumer outputs included.
+Cadence gaps in a consumer do not park its nested views. Every recording carries the count
 (`RenderGraphPackageRecording.UnreadFrames`), and `IsUnchanged` receives it too.
 The count is part of the epoch, so a temporal view shown again starts
 a new epoch while a spatial view's still output stands without a render.

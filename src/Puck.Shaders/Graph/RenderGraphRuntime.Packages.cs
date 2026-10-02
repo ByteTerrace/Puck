@@ -205,61 +205,13 @@ public sealed partial class RenderGraphRuntime {
 
         return true;
     }
-    // A held consumer output still shows its nested views. The scheduler demands those views only when the consumer
-    // renders, so an Unread row alone cannot distinguish parking from cadence. Follow the frame's visible reads even
-    // through consumers that stand, then count only instances both unread and absent from that closure.
-    private void CountUnread(in RenderGraphFrame frame, RenderGraphSchedule schedule) {
-        // Walked by index: the frame's lists are interfaces, whose enumerators a steady frame must not allocate.
-        var roots = frame.Roots;
-        var footprints = frame.Footprints;
-
-        Array.Clear(array: m_visible);
-        for (var position = 0; (position < roots.Count); position++) {
-            var root = roots[position];
-
-            if ((root.Width > 0) && (root.Height > 0)) {
-                m_visible[m_set.IndexOf(name: root.Instance)] = true;
-            }
-        }
-
-        var changed = true;
-
-        while (changed) {
-            changed = false;
-            for (var position = 0; (position < footprints.Count); position++) {
-                var footprint = footprints[position];
-
-                if ((footprint.Width <= 0) || (footprint.Height <= 0)) {
-                    continue;
-                }
-                var consumer = m_set.IndexOf(name: footprint.Consumer);
-                var producer = m_set.IndexOf(name: footprint.Producer);
-
-                if (m_visible[consumer] && !m_visible[producer]) {
-                    m_visible[producer] = true;
-                    changed = true;
-                }
-            }
-            for (var consumer = 0; (consumer < m_visible.Length); consumer++) {
-                if (!m_visible[consumer]) {
-                    continue;
-                }
-                var reads = m_set.Reads[consumer];
-
-                for (var position = 0; (position < reads.Count); position++) {
-                    var read = reads[position];
-
-                    if ((read.Kind == ShaderPipelineResourceKind.Buffer) && !m_visible[read.Producer]) {
-                        m_visible[read.Producer] = true;
-                        changed = true;
-                    }
-                }
-            }
-        }
+    // Counts the frames an instance stays unread: nothing the display shows reaches it, though something still names it. The
+    // scheduler already keeps an instance a held consumer shows or reads waiting, so only a parked row is unread.
+    private void CountUnread(RenderGraphSchedule schedule) {
         var instances = schedule.Instances;
 
         for (var index = 0; (index < instances.Count); index++) {
-            if ((instances[index].Status == RenderGraphInstanceStatus.Unread) && !m_visible[index]) {
+            if (instances[index].Status == RenderGraphInstanceStatus.Unread) {
                 m_unreadFrames[index]++;
             }
         }

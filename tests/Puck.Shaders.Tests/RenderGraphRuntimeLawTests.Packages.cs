@@ -217,8 +217,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
         }
         Assert.True(condition: (view.Parts.Count > recorded));
     }
-    // A nested view remains visible in held consumer outputs. Skipped consumer renders, whether paced by refresh or
-    // standing unchanged, do not park it and cannot restart its temporal epoch. Removing the roots really parks it.
+    // A nested view remains visible in held consumer outputs: the scheduler keeps it waiting, never unread, while a consumer
+    // the display shows skips its render, whether paced by refresh or standing unchanged, so its temporal epoch never
+    // restarts. Removing the roots really parks it.
     [InlineData(2, false)]
     [InlineData(3, false)]
     [InlineData(1, true)]
@@ -256,13 +257,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 !runtime.Node(instance: 1).HasPendingCandidate && !runtime.Node(instance: 2).HasPendingCandidate);
         });
         var recorded = view.Parts.Count;
-        var unread = false;
+        var waited = false;
 
         for (var frame = 0; (frame < 24); frame++) {
             Produce(stands: unchanged);
-            unread |= (runtime.Latest!.Instances[0].Status == RenderGraphInstanceStatus.Unread);
+            Assert.NotEqual(expected: RenderGraphInstanceStatus.Unread, actual: runtime.Latest!.Instances[0].Status);
+            waited |= (runtime.Latest!.Instances[0].Status == RenderGraphInstanceStatus.Waiting);
         }
-        Assert.True(condition: unread);
+        Assert.True(condition: waited);
         Assert.All(collection: view.AskedUnread, action: static count => Assert.Equal(actual: count, expected: 0L));
         Assert.All(collection: view.RecordedUnread, action: static count => Assert.Equal(actual: count, expected: 0L));
         if (unchanged) {

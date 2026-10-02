@@ -344,7 +344,6 @@ public sealed partial class RenderGraphRuntime {
         m_taintedReads = new string?[count];
         m_unproduced = 0;
         m_unreadFrames = unreadFrames;
-        m_visible = new bool[count];
         refusal = null;
 
         // The pending request follows this composition's indices and dependency closure. A changed composition
