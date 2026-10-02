@@ -33,7 +33,14 @@ same three devices, uploaded and drawn through the display encode in SDR, and
 holds each RGBA8 channel within one code of the value's own code, headroom
 saturating to 255; it shares that collection for the same debug-layer leg.
 The device laws share `tests/Shared`'s
-`HeadlessVulkanDevice` and `DirectXTestDevices`. `SharedFenceLawTests` orders a
+`HeadlessVulkanDevice` and `DirectXTestDevices`. A Vulkan device law's
+instance runs under `VK_LAYER_KHRONOS_validation` as the one switch
+`HeadlessVulkanDevice.Validation` says (on), unless the law passes
+`validation` itself; a host without the layer skips the law by name, and the
+layer writes what it finds to standard error as `[vulkan-debug] validation`
+lines. `HeadlessVulkanDeviceValidationLawTests` reads the switch back from the
+device: a device asked for validation reports the layer and a deliberate
+violation, and one asked for none reports no layer. `SharedFenceLawTests` orders a
 Direct3D 11 writer and a Direct3D 12 or Vulkan reader by a shared fence alone.
 
 `SeamCrossingOrchestrationLawTests` exercises authored adjacency hysteresis through

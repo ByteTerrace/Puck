@@ -32,7 +32,7 @@ internal static partial class CanaryCommand {
         };
         var planOption = new Option<bool>(name: "--plan") { Description = "Print what the selection would run — proofs, legs, World boots, process spawns, builds, and the summed leg budget against its ceiling — without building or running." };
         var worldArtifactOption = new Option<string?>(name: "--world-artifact") { Description = "Run every leg on this Puck.World entry assembly, such as a producer-built package's, instead of the build of the checkout's sources. Never builds." };
-        var debugLayersOption = new Option<bool>(name: WorldOffscreenLeg.DebugLayersFlag) { Description = "Boot every leg that names a backend with --debug-layers, the validation layer of that backend, and fail any such leg whose stderr has a validation message or says the layer never loaded." };
+        var debugLayersOption = new Option<bool>(name: DebugLayerOutput.Flag) { Description = "Boot every leg that names a backend with --debug-layers, the validation layer of that backend, and fail any such leg whose stderr has a validation message or says the layer never loaded." };
         var command = new Command(
             description: "Run bounded, two-leg behavioral proofs against the real Puck.World executable.",
             name: "canary"
@@ -1223,23 +1223,6 @@ internal static partial class CanaryCommand {
             Unsupported = unsupported,
         };
     }
-
-    /// <summary>The runner's one rule for a leg booted with its backend's validation layer: any validation message, or
-    /// the statement that the layer never loaded, fails the leg, and the verdict names the first such line
-    /// (<see cref="DebugLayerOutput.FirstFailure"/>). A leg booted without the layer has no such invariant.</summary>
-    /// <param name="debugLayers">Whether the leg's World was booted with <c>--debug-layers</c>.</param>
-    /// <param name="stderr">The leg's standard-error lines, in order.</param>
-    /// <returns>The invariant, or <see langword="null"/> when the leg ran without the layer.</returns>
-    internal static CanaryAssertionResult? DebugLayerInvariant(bool debugLayers, IReadOnlyList<string> stderr) {
-        if (!debugLayers) {
-            return null;
-        }
-
-        return ((DebugLayerOutput.FirstFailure(stderr: stderr) is { } failure)
-            ? new CanaryAssertionResult(Detail: $"validation layer reported nothing (first: {failure})", Passed: false)
-            : new CanaryAssertionResult(Detail: "validation layer reported nothing", Passed: true));
-    }
-
     private static IReadOnlyList<CanaryAssertionResult> EvaluateRunnerInvariants(
         CanaryManifest manifest,
         CanaryLeg leg,
@@ -1275,8 +1258,8 @@ internal static partial class CanaryCommand {
         ));
         results.AddRange(collection: PipelineWaitInvariants(transcript: transcript));
 
-        if (DebugLayerInvariant(debugLayers: debugLayers, stderr: transcript.Stderr) is { } validation) {
-            results.Add(item: validation);
+        if (DebugLayerOutput.Verdict(debugLayers: debugLayers, stderr: transcript.Stderr) is { } validation) {
+            results.Add(item: new CanaryAssertionResult(Detail: validation.Detail, Passed: validation.Passed));
         }
 
         return results;

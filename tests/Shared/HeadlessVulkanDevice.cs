@@ -13,9 +13,15 @@ namespace Puck.Testing;
 
 /// <summary>A Vulkan device with no surface, for device laws: the first physical device with a graphics queue family, a
 /// discrete one first, brought up through the presenter's own registrations and holding the services
-/// <see cref="VulkanPresenterServiceRegistration.DeviceServices"/> creates for it, as a presented device's are.</summary>
+/// <see cref="VulkanPresenterServiceRegistration.DeviceServices"/> creates for it, as a presented device's are. Its
+/// instance runs under the Khronos validation layer as <see cref="Validation"/> says, unless the law asks otherwise, and
+/// the layer writes what it finds to standard error as <c>[vulkan-debug] validation</c> lines.</summary>
 internal sealed class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuDeviceContext, IDisposable {
     private readonly ServiceProvider m_provider;
+
+    /// <summary>Whether a device law's instance runs under the validation layer when the law does not say: the one
+    /// switch every Vulkan device law follows.</summary>
+    public const bool Validation = true;
 
     private HeadlessVulkanDevice(ServiceProvider provider, VulkanInstance instance, VulkanLogicalDevice device, string name, long adapterLuid) {
         m_provider = provider;
@@ -37,17 +43,21 @@ internal sealed class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuDeviceCon
     public VkPhysicalDevice PhysicalDevice => LogicalDevice.PhysicalDevice;
     public GpuDeviceServices Services { get; }
     public VulkanSurface Surface => throw new NotSupportedException(message: "A headless device has no surface.");
+    /// <summary>Gets whether the instance was created with the validation layer enabled, as the instance reports its
+    /// layers.</summary>
+    public bool IsValidated => Instance.EnabledLayers.Contains(value: VulkanInstanceCreateChain.ValidationLayer);
 
     /// <summary>Brings the device up; skips the calling law by name when the host has no Vulkan loader, driver or device
-    /// with a graphics queue family.</summary>
+    /// with a graphics queue family, or no validation layer when the device asks for one.</summary>
     /// <param name="applicationName">The application name the instance is created with.</param>
+    /// <param name="validation">Whether the instance runs under the validation layer.</param>
     /// <returns>The device, owned by the caller.</returns>
-    public static HeadlessVulkanDevice Create(string applicationName) {
+    public static HeadlessVulkanDevice Create(string applicationName, bool validation = Validation) {
         var provider = new ServiceCollection()
             .AddPuckAllocator()
             .AddVulkanNativeApis()
             .AddVulkanFactories()
-            .AddSingleton(implementationInstance: new VulkanRendererOptions { ApplicationName = applicationName, EnableValidation = false })
+            .AddSingleton(implementationInstance: new VulkanRendererOptions { ApplicationName = applicationName, EnableValidation = validation })
             .AddSingleton(implementationInstance: new VulkanQueueSubmitter())
             .BuildServiceProvider();
         VulkanInstance? instance = null;
@@ -57,10 +67,12 @@ internal sealed class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuDeviceCon
                 instance = provider.GetRequiredService<IVulkanInstanceFactory>().Create(
                     applicationName: applicationName,
                     displayKind: NativeDisplayKind.Win32,
-                    enableValidation: false
+                    enableValidation: validation
                 );
             } catch (GpuDeviceUnavailableException exception) {
-                Assert.Skip(reason: $"no Vulkan loader or driver: {exception.Message}");
+                Assert.Skip(reason: (validation
+                    ? $"no Vulkan loader, driver or validation layer: {exception.Message}"
+                    : $"no Vulkan loader or driver: {exception.Message}"));
             }
 
             var physicalDeviceApi = provider.GetRequiredService<IVulkanPhysicalDeviceApi>();

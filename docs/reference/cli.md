@@ -1469,9 +1469,18 @@ refused by name before a leg starts.
 The two manifest directories are then compared by `puck parity compare` under
 the contract versioned beside the world
 (`tests/Puck.Parity/parity.contract.json`).
+With `--debug-layers` each leg boots its World under its backend's validation
+layer, with the same arguments and the same rule as `puck canary
+--debug-layers`: a `[vulkan-debug] validation` line, any `[d3d12-debug]` line,
+or the statement that the Direct3D 12 layer never loaded fails the leg. Each
+leg prints one line, `parity: <backend> VALIDATION-OK` or `VALIDATION-FAIL`
+naming the first such line. A leg's messages cannot be attributed to one
+capture, so a `VALIDATION-FAIL` fails the run (exit 1) after every capture's
+verdicts are printed.
 
 ```text
 puck parity                                            full run: both backends, then compare
+puck parity --debug-layers                             the same, each leg under its backend's validation layer
 puck parity compare <leftDir> <rightDir> --contract <file> [--output <dir>]   compare two captured runs
 ```
 
