@@ -325,6 +325,56 @@ public sealed partial class RenderGraphRuntimeLawTests {
         }
         Assert.True(condition: (view.Parts.Count > recorded));
     }
+    // A reconfiguration keeps a surviving instance's node, graph and history, and so the frames it went unread: a parked
+    // temporal view whose set is reconfigured around it still carries its count into the frame it is shown again in, while
+    // an instance new to the set starts at zero, whatever the others have counted.
+    [Fact]
+    public void AKeptInstanceKeepsItsUnreadFramesThroughAReconfigurationAndANewOneStartsFresh() {
+        const string Second = "second";
+        var gpu = new FakePipelineGpu();
+        var recorders = new Recorders();
+        var view = new ViewPackage();
+
+        recorders.Registry.Register(factory: view, package: RenderGraphPackageCatalog.SdfWorld);
+        using var runtime = Runtime(gpu, recorders, Set(PackageInstance()), PackageView, new RenderGraphRuntimeGraph[1]);
+        var index = 0L;
+
+        TestLiveness.Until(
+            reason: () => $"The view recorded {view.Parts.Count} part(s).",
+            step: () => {
+                ProducePackageFrame(frameIndex: index++, runtime: runtime);
+
+                return (view.Parts.Count >= SdfWorldPackage.NativeFragment.Passes.Count);
+            }
+        );
+        for (var frame = 0; (frame < 3); frame++) {
+            ProducePackageFrame(frameIndex: index++, parked: true, runtime: runtime);
+        }
+        Assert.True(condition: runtime.TryReconfigure(
+            graphs: new RenderGraphRuntimeGraph?[2],
+            refusal: out var refusal,
+            root: PackageView,
+            set: Set(PackageInstance(), PackageInstance() with { Name = Second })
+        ), userMessage: refusal?.Message);
+
+        var asked = view.AskedUnreadBy[PackageView].Count;
+        var newcomerAsked = false;
+
+        for (var frame = 0; (frame < 40) && !newcomerAsked; frame++) {
+            var before = (view.AskedUnreadBy.TryGetValue(key: Second, value: out var seen) ? seen.Count : 0);
+
+            ProducePackageFrame(frameIndex: index++, parked: true, runtime: runtime);
+            // The kept view carries the three frames it was parked for before the reconfiguration, and one more a frame.
+            Assert.Equal(expected: (3L + frame), actual: view.AskedUnreadBy[PackageView][asked + frame]);
+            if (view.AskedUnreadBy.TryGetValue(key: Second, value: out var after) && (after.Count > before)) {
+                // The newcomer counted nothing before the reconfiguration, so its first question carries only the frames
+                // parked since.
+                Assert.Equal(expected: ((long)frame), actual: after[before]);
+                newcomerAsked = true;
+            }
+        }
+        Assert.True(condition: newcomerAsked, userMessage: "The new instance was never asked.");
+    }
     // A nested view remains visible in held consumer outputs: the scheduler keeps it waiting, never unread, while a consumer
     // the display shows skips its render, whether paced by refresh or standing unchanged, so its temporal epoch never
     // restarts. Removing the roots really parks it.
@@ -444,8 +494,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
             owner: this,
             part: context.Part!
         );
+        public Dictionary<string, List<long>> AskedUnreadBy { get; } = [];
         public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) {
             AskedUnread.Add(item: unreadFrames);
+            if (!AskedUnreadBy.TryGetValue(key: instance, value: out var asked)) {
+                AskedUnreadBy[instance] = (asked = []);
+            }
+
+            asked.Add(item: unreadFrames);
 
             return Unchanged;
         }
