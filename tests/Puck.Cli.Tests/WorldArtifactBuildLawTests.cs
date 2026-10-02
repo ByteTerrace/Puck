@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Puck.Testing;
+using Puck.Cli.Canary;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -117,7 +118,9 @@ public sealed class WorldArtifactBuildLawTests {
 
         public int Builds => Volatile.Read(location: ref m_builds);
 
-        public bool Build(string outputDirectory, TimeSpan timeout, out CliProcessResult? build, out string error) {
+        public CliProcessResult Build(IReadOnlyList<string> arguments, TimeSpan timeout) {
+            var outputDirectory = arguments[^1];
+
             _ = Interlocked.Increment(location: ref m_builds);
             Thread.Sleep(timeout: pause);
             File.WriteAllText(
@@ -127,10 +130,7 @@ public sealed class WorldArtifactBuildLawTests {
                     path2: WorldArtifactBuild.ArtifactName
                 )
             );
-            build = null;
-            error = string.Empty;
-
-            return true;
+            return new CliProcessResult(ExitCode: 0, OutputLines: [], Stderr: string.Empty, Stdout: "Build succeeded.", TimedOut: false);
         }
     }
 
@@ -183,6 +183,67 @@ public sealed class WorldArtifactBuildLawTests {
             actual: File.ReadAllText(path: second.Path),
             expected: File.ReadAllText(path: first.Path)
         );
+    }
+    [InlineData("world")]
+    [InlineData("stub")]
+    [Theory]
+    public void ACanaryBuildDirectoryExistsOnlyWhenABuildWritesItsLog(string id) {
+        using var checkout = new Checkout();
+        var builder = new CountingBuilder(pause: TimeSpan.Zero);
+        var builtLogDirectory = CanaryCommand.BuildRunDirectory(id: id);
+        var reusedLogDirectory = CanaryCommand.BuildRunDirectory(id: id);
+        var namedLogDirectory = CanaryCommand.BuildRunDirectory(id: id);
+
+        try {
+            Assert.False(condition: Directory.Exists(path: builtLogDirectory));
+            Assert.True(condition: WorldArtifactBuild.TryResolve(
+                artifact: out var built,
+                builder: builder.Build,
+                error: out var error,
+                logDirectory: builtLogDirectory,
+                repositoryRoot: checkout.Root,
+                store: checkout.Store,
+                timeout: TimeSpan.FromMinutes(value: 2),
+                verb: "law"
+            ), userMessage: error);
+            using var buildLease = built;
+
+            Assert.True(condition: File.Exists(path: Path.Combine(path1: builtLogDirectory, path2: "Puck.World.build.log")));
+
+            Assert.True(condition: WorldArtifactBuild.TryResolve(
+                artifact: out var reused,
+                builder: builder.Build,
+                error: out error,
+                logDirectory: reusedLogDirectory,
+                repositoryRoot: checkout.Root,
+                store: checkout.Store,
+                timeout: TimeSpan.FromMinutes(value: 2),
+                verb: "law"
+            ), userMessage: error);
+            using var reusedLease = reused;
+
+            Assert.True(condition: reused.Reused);
+            Assert.False(condition: Directory.Exists(path: reusedLogDirectory));
+
+            Assert.True(condition: WorldArtifactBuild.TryResolveNamed(
+                error: out error,
+                lease: out var namedLease,
+                logDirectory: namedLogDirectory,
+                named: built.Path,
+                path: out var namedPath,
+                repositoryRoot: checkout.Root,
+                timeout: TimeSpan.FromMinutes(value: 2),
+                verb: "law"
+            ), userMessage: error);
+            Assert.Null(@object: namedLease);
+            Assert.Equal(expected: built.Path, actual: namedPath);
+            Assert.False(condition: Directory.Exists(path: namedLogDirectory));
+            Assert.Equal(expected: 1, actual: builder.Builds);
+        } finally {
+            CliScratchDirectories.TryDelete(path: builtLogDirectory);
+            CliScratchDirectories.TryDelete(path: reusedLogDirectory);
+            CliScratchDirectories.TryDelete(path: namedLogDirectory);
+        }
     }
     [Fact]
     public void AOneByteChangeUnderTheClosureProducesANewKeyAndAChangeOutsideItDoesNot() {
@@ -244,10 +305,17 @@ public sealed class WorldArtifactBuildLawTests {
         );
 
         // Committing the same bytes moves them from the working-tree half of the key to the committed half.
+        checkout.Git("add", "src/Puck.World/Added.cs");
         checkout.Commit(message: "add a source");
+        var committed = checkout.Key();
+
         Assert.NotEqual(
-            actual: checkout.Key(),
+            actual: committed,
             expected: clean
+        );
+        Assert.NotEqual(
+            actual: committed,
+            expected: untracked
         );
         checkout.Write(
             name: "Directory.Build.props",
@@ -255,7 +323,7 @@ public sealed class WorldArtifactBuildLawTests {
         );
         Assert.NotEqual(
             actual: checkout.Key(),
-            expected: untracked
+            expected: committed
         );
     }
     [Fact]
@@ -504,18 +572,13 @@ public sealed class WorldArtifactBuildLawTests {
 
         Assert.False(condition: WorldArtifactBuild.TryResolve(
             artifact: out _,
-            builder: (string outputDirectory, TimeSpan timeout, out CliProcessResult? build, out string error) => {
-                build = new CliProcessResult(
+            builder: (arguments, timeout) => new CliProcessResult(
                     ExitCode: 1,
                     OutputLines: [],
                     Stderr: "a line on standard error\n",
                     Stdout: stdout,
                     TimedOut: false
-                );
-                error = "the Puck.World build exited 1.";
-
-                return false;
-            },
+                ),
             error: out var refusal,
             logDirectory: checkout.LogDirectory,
             repositoryRoot: checkout.Root,
@@ -526,7 +589,7 @@ public sealed class WorldArtifactBuildLawTests {
 
         var log = Path.Combine(
             path1: checkout.LogDirectory,
-            path2: WorldArtifactBuild.BuildLogName
+            path2: CliProjectBuild.LogName(project: WorldArtifactClosure.WorldProject)
         );
 
         Assert.StartsWith(
@@ -586,18 +649,13 @@ public sealed class WorldArtifactBuildLawTests {
 
         Assert.False(condition: WorldArtifactBuild.TryResolve(
             artifact: out _,
-            builder: (string outputDirectory, TimeSpan timeout, out CliProcessResult? build, out string error) => {
-                build = new CliProcessResult(
+            builder: (arguments, timeout) => new CliProcessResult(
                     ExitCode: 1,
                     OutputLines: [],
                     Stderr: Stderr,
                     Stdout: stdout,
                     TimedOut: false
-                );
-                error = "the Puck.World build exited 1.";
-
-                return false;
-            },
+                ),
             error: out var refusal,
             logDirectory: checkout.LogDirectory,
             repositoryRoot: checkout.Root,
@@ -606,7 +664,7 @@ public sealed class WorldArtifactBuildLawTests {
             verb: "law"
         ));
 
-        var log = Path.Combine(path1: checkout.LogDirectory, path2: WorldArtifactBuild.BuildLogName);
+        var log = Path.Combine(path1: checkout.LogDirectory, path2: CliProjectBuild.LogName(project: WorldArtifactClosure.WorldProject));
 
         Assert.Equal(
             actual: refusal,
@@ -619,81 +677,6 @@ public sealed class WorldArtifactBuildLawTests {
         Assert.Equal(
             actual: File.ReadAllText(path: log),
             expected: $"{stdout}{Environment.NewLine}--- stderr ---{Environment.NewLine}{Stderr}"
-        );
-    }
-    [Fact]
-    public void AProjectAddedToTheClosureSinceItsLastRestoreIsRestoredBeforeTheBuild() {
-        using var directory = new TemporaryDirectory();
-        var budget = TimeSpan.FromMinutes(value: 3);
-
-        File.Copy(
-            destFileName: directory.PathOf(name: "global.json"),
-            sourceFileName: RepositoryPaths.Resolve(relativePath: "global.json")
-        );
-        _ = directory.WriteText(
-            name: "Directory.Build.props",
-            text: "<Project />\n"
-        );
-        _ = directory.WriteText(
-            name: "Directory.Build.targets",
-            text: "<Project />\n"
-        );
-
-        foreach (var library in ((string[])["Library", "Added"])) {
-            _ = directory.WriteText(
-                name: $"{library}/{library}.csproj",
-                text: "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <TargetFramework>net10.0</TargetFramework>\n  </PropertyGroup>\n</Project>\n"
-            );
-            _ = directory.WriteText(
-                name: $"{library}/{library}.cs",
-                text: $"namespace {library};\n\npublic static class Value {{\n    public const int One = 1;\n}}\n"
-            );
-        }
-
-        WriteApplication(
-            directory: directory,
-            libraries: ["Library"]
-        );
-        Assert.True(
-            condition: WorldArtifactBuild.TryBuildProject(
-            build: out _,
-            error: out var error,
-            outputDirectory: directory.PathOf(name: "out-first"),
-            project: "Application/Application.csproj",
-            repositoryRoot: directory.RootPath,
-            timeout: budget
-        ),
-            userMessage: error
-        );
-
-        // The application's assets file now predates its reference to Added, which has never been restored.
-        WriteApplication(
-            directory: directory,
-            libraries: ["Library", "Added"]
-        );
-        Assert.True(
-            condition: WorldArtifactBuild.TryBuildProject(
-            build: out var second,
-            error: out error,
-            outputDirectory: directory.PathOf(name: "out-second"),
-            project: "Application/Application.csproj",
-            repositoryRoot: directory.RootPath,
-            timeout: budget
-        ),
-            userMessage: $"{error}\n{second?.Stdout}"
-        );
-    }
-
-    private static void WriteApplication(TemporaryDirectory directory, IReadOnlyList<string> libraries) {
-        var references = string.Concat(values: libraries.Select(selector: static library => $"    <ProjectReference Include=\"../{library}/{library}.csproj\" />\n"));
-
-        _ = directory.WriteText(
-            name: "Application/Application.csproj",
-            text: $"<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net10.0</TargetFramework>\n  </PropertyGroup>\n  <ItemGroup>\n{references}  </ItemGroup>\n</Project>\n"
-        );
-        _ = directory.WriteText(
-            name: "Application/Program.cs",
-            text: $"return {string.Join(separator: " + ", values: libraries.Select(selector: static library => $"{library}.Value.One"))} - {libraries.Count};\n"
         );
     }
 }

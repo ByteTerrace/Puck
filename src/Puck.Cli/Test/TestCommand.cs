@@ -79,7 +79,7 @@ internal static partial class TestCommand {
             )) {
                 keepBuildLog = File.Exists(path: Path.Combine(
                     path1: runDirectory,
-                    path2: WorldArtifactBuild.BuildLogName
+                    path2: CliProjectBuild.LogName(project: WorldArtifactClosure.WorldProject)
                 ));
 
                 return 2;
