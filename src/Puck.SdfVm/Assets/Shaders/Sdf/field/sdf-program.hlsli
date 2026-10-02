@@ -369,10 +369,6 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // Clamps length(p) away from 0 in the log-spherical fold so log() never sees -inf at the Droste center (the origin is
 // a measure-zero singularity, kept finite). A host-contracted literal — identical across DXC targets.
 #define SDF_LOGSPHERE_MIN_RADIUS 1.0e-4
-// Floors the fold-safe boundary gap (relative to the sample's radius) so a sample landing exactly ON a shell boundary
-// cannot stall the march: a step of up to 0.1% of the local radius may cross the boundary, an overestimate window far
-// below visible scale (a shell band is ~w/2 of the radius). Host-contracted literal.
-#define SDF_LOGSPHERE_GAP_FLOOR 1.0e-3
 // SDF_FLARE_MIN_SCALE floors SDF_OP_AXIAL_PROFILE's scale profile s(t) so an authored amount/bulge combination that
 // drives it non-positive still yields a finite warp rather than a divide-by-zero or a sign flip.
 // SDF_LANE_ERODE_RAGGED_AMOUNT is SDF_OP_LANE_ERODE's ragged-front noise weight: how far the noise sample (centered,

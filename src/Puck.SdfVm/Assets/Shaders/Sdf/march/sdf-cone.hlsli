@@ -43,14 +43,15 @@ struct TileBounds {
 // A cone step through sdfMarchAdvance, the march step across a symmetry-LOD switch. Every beam cone's apex is the
 // view's camera, which sdf-beam also makes the LOD origin, and every ray of the cone is unit, so each ray meets a switch
 // sphere at the depth its center ray does: the slab a step proves lies on one side of the switch exactly when the
-// center ray's segment does. The cone's proven step is its clearance and its advance at once. A crossing lands at most
+// center ray's segment does. A log-sphere fold's shells are centred elsewhere, so they stay in the cone's clearance
+// (sdfMapConeClearance) and are not crossed. The cone's proven step is its clearance and its advance at once. A crossing lands at most
 // `tolerance` past the switch and reports the switch's depth in switchAt (SDF_STEP_BOUND_NONE otherwise): every cone
 // point in that sliver lies within tolerance plus the cone's radius of the landing sample, so a landing that passes
 // its clear test covers the sliver, and one that fails it bounds an entry at the switch, the earliest unproven depth.
 float coneMarchAdvance(float3 origin, TileCone cone, float t, float step, float tolerance, float limit, out float switchAt) {
     bool proven;
 
-    return sdfMarchAdvance(origin, cone.centerDirection, t, step, step, tolerance, limit, proven, switchAt);
+    return sdfMarchAdvance(origin, cone.centerDirection, t, step, step, tolerance, limit, false, proven, switchAt);
 }
 
 // F1 TAIL PHASE. Proves the FAR BOUND: the depth past which the tile's cone cannot produce any
@@ -59,13 +60,13 @@ float coneMarchAdvance(float3 origin, TileCone cone, float t, float step, float 
 // max(SurfaceEpsilon, footprint*t) (sdf-world-views computes footprint = 2*right.w/rectDims.y; the beam computes the
 // identical value from regionSizePx), and footprint*t ~ 0.001*t exceeds ConeEpsilon past t~2 — so a bare ConeEpsilon
 // proof is ANTI-conservative and could bound above a real footprint hit. Inflating the cone's transverse radius by the
-// pixel footprint (spread = chord + footprint) and requiring clearance = min(map(center), sdfMapStepBound) -
+// pixel footprint (spread = chord + footprint) and requiring clearance = sdfMapConeClearance(map(center)) -
 // spread*t > SurfaceEpsilon (stepping by clearance/(1 + spread), the 1-Lipschitz cone guarantee for the inflated cone)
 // guarantees that for every ray and every t' in [farBound, farDistance] the hit-accept fieldDistance <
 // max(SurfaceEpsilon, footprint*t') can NEVER fire — so the ray renders skyColor whether it exits at farBound or marches
 // on, i.e. the far exit is OUTPUT-IDENTICAL on the shipped shading path (only step counts and the termination debug view
 // change). The same rule is what the primary march's exhaustion arm accepts a closest-approach candidate against, so the proof
-// covers that arm too. FOLD-SAFE like the gap phases (the bounded clearance rides sdfMapStepBound), and it crosses an
+// covers that arm too. FOLD-SAFE like the gap phases (the bounded clearance rides sdfMapConeClearance), and it crosses an
 // LOD switch through coneMarchAdvance as they do. Total function: no
 // proven clear-to-far span within the budget => the far distance.
 float coneMarchFarBound(ViewportData view, TileCone cone, uint instanceMaskBase, float footprint, float startT) {
@@ -84,7 +85,7 @@ float coneMarchFarBound(ViewportData view, TileCone cone, uint instanceMaskBase,
             return (clear ? clearStart : farDistance);
         }
 
-        float clearance = (min(mapDistanceMasked(origin + (cone.centerDirection * t), instanceMaskBase), sdfMapStepBound) - (spread * t));
+        float clearance = (sdfMapConeClearance(mapDistanceMasked(origin + (cone.centerDirection * t), instanceMaskBase)) - (spread * t));
         sdfWorkSteps += 1u;
 
         if (clearance > SurfaceEpsilon) {
@@ -145,13 +146,13 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
 
     [loop]
     for (int i = 0; (i < entrySteps); i++) {
-        // FOLD-SAFE: the clearance proof rides min(value, sdfMapStepBound). A folded field's raw value can
+        // FOLD-SAFE: the clearance proof rides sdfMapConeClearance. A folded field's raw value can
         // overestimate near a fold boundary, and a cone proof built on it classifies tiles straight through shell
         // geometry (the Droste tile-shatter). min with the published boundary gap
         // is an honest unbounding sphere of the TRUE field on this sample's side of any LOD switch, and
         // coneMarchAdvance never lets a step carry it across one, so entry, TileEmpty, and the gap proofs stay sound;
         // a fold-free program publishes SDF_STEP_BOUND_NONE and this min is the identity.
-        float clearance = (min(mapDistanceMasked(origin + (cone.centerDirection * t), instanceMaskBase), sdfMapStepBound) - (cone.chord * t));
+        float clearance = (sdfMapConeClearance(mapDistanceMasked(origin + (cone.centerDirection * t), instanceMaskBase)) - (cone.chord * t));
         sdfWorkSteps += 1u;
 
         if (clearance <= ConeEpsilon) {
@@ -190,7 +191,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
     for (int j = 0; (j < TileGapSteps); j++) {
         // FOLD-SAFE, same as phase 1: a raw-value overestimate here would prove a FALSE clear span across a fold
         // boundary — an unsafe teleport. The bounded clearance keeps firstExit/secondEntry honest.
-        float clearance = (min(mapDistanceMasked(origin + (cone.centerDirection * t), instanceMaskBase), sdfMapStepBound) - (cone.chord * t));
+        float clearance = (sdfMapConeClearance(mapDistanceMasked(origin + (cone.centerDirection * t), instanceMaskBase)) - (cone.chord * t));
         sdfWorkSteps += 1u;
 
         if (!clear) {

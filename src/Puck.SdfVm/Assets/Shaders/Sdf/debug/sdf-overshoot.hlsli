@@ -32,13 +32,13 @@ float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStar
             break;
         }
 
-        // FOLD-SAFE: both detector marches honor the published boundary gap and cross an LOD switch as the shipped
-        // marches do, so the ONLY remaining variable between them stays the Lipschitz clamp (the detector's purpose).
-        float advance = (min(radius, sdfMapStepBound) * stepMultiplier);
+        // FOLD-SAFE: both detector marches cross every fold wall as the shipped marches do, so the ONLY remaining
+        // variable between them stays the Lipschitz clamp (the detector's purpose).
+        float advance = (radius * stepMultiplier);
         bool proven;
         float switchAt;
 
-        traveled = sdfMarchAdvance(rayOrigin, rayDirection, traveled, advance, advance, (0.5 * hitThreshold), farDistance, proven, switchAt);
+        traveled = sdfMarchAdvance(rayOrigin, rayDirection, traveled, advance, advance, (0.5 * hitThreshold), farDistance, true, proven, switchAt);
 
         // The four-bound teleport (bound-proven for either march): jump the proven-empty gap once.
         if ((traveled >= firstExit) && (traveled < secondEntry)) {

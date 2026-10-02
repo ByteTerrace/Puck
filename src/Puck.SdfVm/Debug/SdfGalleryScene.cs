@@ -160,8 +160,8 @@ public sealed class SdfGalleryScene {
             Distance: 2.6f,
             Plaque: [
                 "An aggressive LogSphere (shellRatio ~2.8, twist) with the camera DOWN INSIDE the fold near a floor.",
-                "The folded field can overestimate distance near shell boundaries, so marchers step on the minimum of",
-                "the field value and the published boundary gap while terminating on the field value (sdfMapStepBound).",
+                "The folded field can overestimate distance past a shell boundary, so marchers cross each boundary just",
+                "past it (sdfMarchAdvance) and sample the next shell there, while terminating on the field value.",
                 "The world-droste-solidity stage protects this contract. The accepted residual is pixel-level containment-crease",
                 "speckle + MaxSteps filaments at extreme grazes. PAIR WITH world.debug-view overshoot AND world.debug-view termination",
                 "— a regression re-opens tile-size holes, which that solidity gate now catches.",

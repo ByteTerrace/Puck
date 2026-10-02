@@ -28,32 +28,36 @@ SdfHit sdfIsaErrorHit() {
 // correct.
 static float3 sdfLodOrigin = float3(0.0, 0.0, 0.0);
 
-// The FOLD-SAFE STEP BOUND: a world-travel bound, in the same Lipschitz-clamped units as the returned field, from the
-// last map sample to the nearest fold-cell boundary of any radial fold on its chain. The boundary floor permits small
-// crossings. A wallpaper fold's symmetry-LOD switch is not in it: a march crosses the switch (sdfMarchAdvance), and a
-// ball proof reads sdfMapBallClearance, which adds the switch gap below.
-// SDF_STEP_BOUND_NONE means no fold bound. A folded field measures only the NEAREST cell's copy, so its VALUE can OVERESTIMATE true
-// distance near a cell boundary (the neighbor cell's geometry may be closer — the containment ≠ nearest-copy class
-// the Repeat/CellJitter crease verdict documents); the sound marchable field is min(value, boundary gap). Marchers
-// therefore STEP — and build cone-clearance proofs — with min(distance, sdfMapStepBound) while still TERMINATING on
-// the raw value: the zero set is exact in the owning cell, so accepts stay honest and no phantom boundary surfaces
-// appear. Unbounded, this is exactly the Droste tile-shatter: the beam's cone proof trusted an overestimating value
-// and classified tiles straight through shell geometry. Written by mapCore on EVERY call (per-thread mutable static,
-// the sdfLodOrigin pattern); a consumer reads it immediately after the map call it pairs with.
+// THE FOLD WALLS of the last map sample: the boundaries across which a fold's field changes lattice. A folded field
+// measures only the NEAREST cell's copy, so its VALUE can OVERESTIMATE true distance past a cell boundary (the
+// neighbor cell's geometry may be closer — the containment ≠ nearest-copy class the Repeat/CellJitter crease verdict
+// documents); within its own cell it is exact, so a march TERMINATES on the raw value and STEPS with
+// sdfMarchAdvance, which never lets a step carry a value across a wall. Unbounded, this is exactly the Droste
+// tile-shatter: the beam's cone proof trusted an overestimating value and classified tiles straight through shell
+// geometry. Every wall is a sphere:
+// - THE SYMMETRY-LOD SHELL. Every wallpaper fold's switch is a sphere of its lodDistance about sdfLodOrigin, so the
+//   switches are concentric and the sample lies in one shell between two of them: sdfMapLodInner is the largest
+//   switch radius the sample lies past (0 when none), sdfMapLodOuter the smallest it lies within, sdfMapLodGap the
+//   distance to the nearer. World units: the switch is measured from the camera, outside every warp.
+// - THE FOLD SHELL. A log-sphere fold whose chain is a similarity has world-sphere shells about sdfMapFoldCenter; the
+//   one whose wall lies nearest the sample publishes its shell's radii (sdfMapFoldInner, sdfMapFoldOuter) and the gap
+//   to the nearer (sdfMapFoldGap), in world units.
+// - THE BALL WALLS. Every other log-sphere shell wall, where the chain warps the shells or another fold's wall lies
+//   nearer: sdfMapStepBound is the distance to the nearest, in the same Lipschitz-clamped units as the returned field,
+//   which bound world travel even when a non-conformal warp sits upstream. A march crosses these by its acceptance
+//   distance rather than exactly.
+// SDF_STEP_BOUND_NONE means no such wall (and an inner radius of 0 no inner LOD wall). A ball proof reads
+// sdfMapBallClearance. Written by mapCore on EVERY call (per-thread mutable statics, the sdfLodOrigin pattern); a
+// consumer reads them immediately after the map call they pair with.
 #define SDF_STEP_BOUND_NONE 1.0e30
 static float sdfMapStepBound = SDF_STEP_BOUND_NONE;
-
-// THE SYMMETRY-LOD SHELL of the last map sample. Every wallpaper fold's switch is a sphere of its lodDistance about
-// sdfLodOrigin, so the switches are concentric and the sample lies in one shell between two of them, where each fold's
-// LOD side is fixed: sdfMapLodInner is the largest switch radius the sample lies past (0 when none), sdfMapLodOuter the
-// smallest it lies within (SDF_STEP_BOUND_NONE when none), and sdfMapLodGap the world-space distance to the nearer of
-// the two (SDF_STEP_BOUND_NONE when the program has no switch). Inside its shell the field is one lattice's; across a
-// wall it is another's, and a value measured on one side says nothing about a copy that exists only on the other.
-// World units: the switch is measured from the camera, outside every warp, so no Lipschitz correction applies.
-// Written by mapCore on EVERY call, like sdfMapStepBound.
 static float sdfMapLodGap = SDF_STEP_BOUND_NONE;
 static float sdfMapLodInner = 0.0;
 static float sdfMapLodOuter = SDF_STEP_BOUND_NONE;
+static float sdfMapFoldGap = SDF_STEP_BOUND_NONE;
+static float3 sdfMapFoldCenter = float3(0.0, 0.0, 0.0);
+static float sdfMapFoldInner = 0.0;
+static float sdfMapFoldOuter = SDF_STEP_BOUND_NONE;
 
 // The MATERIAL BLEND CHANNEL (material-blend-at-seams). A smooth blend blends the two operands' DISTANCE smoothly, but
 // result.material is an integer that can only carry ONE winner — so the material snaps as a HARD cut at the geometric

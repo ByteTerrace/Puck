@@ -27,6 +27,7 @@ SdfHit sdfPrimarySample(float3 position, uint mask, uint4 part, bool localPart) 
         sdfMapLodGap = SDF_STEP_BOUND_NONE;
         sdfMapLodInner = 0.0;
         sdfMapLodOuter = SDF_STEP_BOUND_NONE;
+        sdfMapFoldGap = SDF_STEP_BOUND_NONE;
         SdfHit hit;
         hit.distance = SDF_FAR_DISTANCE;
         hit.material = 0;
@@ -86,14 +87,14 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
         sdfEvalCount += 1.0; // one primary-march sample
         sdfWorkSteps += 1u;
 
-        // FOLD-SAFE split: STEP (sizing, unbounding spheres, the slope EMA) on min(value, sdfMapStepBound) —
-        // the sound marchable field near a fold boundary — but TERMINATE on the raw value (exact in the owning
-        // cell; the bound never invents a phantom boundary hit). Fold-free programs: the min is the identity.
-        // `clearance` proves the ray clear on this sample's side of any LOD switch; `radius`, the unbounding sphere
-        // the relaxation tests, also stops at the switch, since a ball reaching across it proves nothing there.
+        // FOLD-SAFE split: TERMINATE on the raw value (exact in the owning cell; a wall never invents a phantom
+        // boundary hit), but STEP through sdfMarchAdvance, which never carries the value across a fold wall. The
+        // value is the clearance on this sample's side of every wall; `radius`, the unbounding sphere the relaxation
+        // tests, stops at the nearest wall, since a ball reaching across one proves nothing there. Fold-free
+        // programs: the two are the same.
         float fieldDistance = hit.distance;
-        float clearance = min(fieldDistance, sdfMapStepBound);
-        float radius = min(clearance, sdfMapLodGap);
+        float clearance = fieldDistance;
+        float radius = sdfMapBallClearance(fieldDistance);
         float hitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
         // The closest-approach candidate (see its declaration): every evaluated sample competes, INCLUDING one an
         // overshoot retreat is about to skip — that skipped sample is exactly the one the exhaustion arm exists
@@ -186,7 +187,7 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
         }
         else {
             traveled = sdfMarchAdvance(rayOrigin, rayDirection, stepFrom, clearance, stepLength, crossingTolerance,
-                min(farBound, farDistance), proven, switchAt);
+                min(farBound, farDistance), true, proven, switchAt);
         }
 
         // A proven step needs no disjoint-sphere test.
@@ -217,7 +218,7 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
         }
         else {
             traveled = sdfMarchAdvance(rayOrigin, rayDirection, stepFrom, clearance, advance, crossingTolerance,
-                min(farBound, farDistance), proven, switchAt);
+                min(farBound, farDistance), true, proven, switchAt);
         }
 
         // A proven step (across an LOD switch, or the clearance in its place) needs no disjoint-sphere test, and

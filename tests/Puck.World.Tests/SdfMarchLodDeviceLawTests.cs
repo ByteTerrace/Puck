@@ -17,8 +17,10 @@ namespace Puck.World.Tests;
 /// fixed evaluator, so the cases have an analytic oracle: a P2 lattice whose prototype is a sphere off its cell's
 /// center, so an odd cell turns its copy half way inside the switch and keeps it upright past it. A mirror alone (PM)
 /// cannot show the hazard: dropping a mirror only removes copies, so nothing stands past the switch that the mirrored
-/// lattice lacks. The thin cases each sample within a hundredth of the switch, where a step floored at a fixed
-/// fraction of the LOD distance, or a soft shadow's minimum stride, jumps the copy.</summary>
+/// lattice lacks. The thin cases each sample within a hundredth of a wall, where a step floored at a fixed fraction of
+/// the LOD distance or of a log-sphere fold's radius, or a soft shadow's minimum stride, jumps the copy. A log-sphere
+/// fold's shells are the other wall a march crosses: spheres about the fold's center, exactly crossed when the chain
+/// before the fold is a similarity.</summary>
 [Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 public sealed class SdfMarchLodDeviceLawTests {
@@ -65,6 +67,12 @@ public sealed class SdfMarchLodDeviceLawTests {
         // P2 four-unit cells with a sphere of radius 0.006 at the cell's x = 1.095: cell -1's upright copy spans 2.899 to
         // 2.911 past a switch at 2.9. The shadow's first sample sits at -2.899, 0.001 inside the switch, reading the turned
         // copy 2.19 away; a 0.02 minimum stride lands at -2.919, past the copy, and the ray then reads open space.
+        // A log-sphere fold of ratio two about the origin, whose prototype is a sphere of radius 0.0003125 at x = 1.41406:
+        // shell 4's copy, scaled by 16, spans 22.620 to 22.630, and the shell ends at 2^4.5 = 22.6274. A march from
+        // 0.0016 past that wall reads shell 5's copy 16 away; a step floored at 1e-3 of the radius (0.016 after the
+        // fold's step scale) lands at 22.613, past the 0.0075 of the copy that lies in shell 4.
+        new("a thin copy just inside a log-sphere shell is hit", MarchMode.Primary, new Vector3(x: 22.629f, y: 0, z: 0), -Vector3.UnitX, DrosteProgram(), (0.0015f, 0.003f),
+            Far: 30),
         new("a soft shadow's minimum stride does not jump the switch", MarchMode.Shadow, new Vector3(x: -2.859f, y: 0, z: 0), -Vector3.UnitX, ShadowLattice(), (0f, 0.01f),
             Input: 1),
     ];
@@ -209,6 +217,16 @@ public sealed class SdfMarchLodDeviceLawTests {
         Assert.Equal(expected: 0.05f, actual: program.StepScale);
 
         return program;
+    }
+    // Shells of ratio two about the origin, each holding the sphere of radius 0.0003125 at x = 1.41406 scaled by its shell.
+    private static SdfProgram DrosteProgram() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.LogSphere(shellRatio: 2)
+            .Translate(offset: new Vector3(x: 1.41406f, y: 0, z: 0)).Sphere(material: material, radius: 0.0003125f);
+
+        return builder.Build();
     }
     // A P2 lattice of four-unit cells in the XZ plane, two cells either way, whose prototype is a sphere at the cell's
     // x = 1: cell 0 holds it at x = 1, and cell -1 at x = -5 inside the switch and x = -3 past it.
