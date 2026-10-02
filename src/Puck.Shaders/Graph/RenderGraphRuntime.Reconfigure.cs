@@ -301,7 +301,9 @@ public sealed partial class RenderGraphRuntime {
 
         m_current = current;
         m_graphs = effective;
-        m_history = RenderGraphHistory.Empty(set: set);
+        // A kept instance keeps its history: a reconfiguration that leaves it alone neither renders it again nor resets its
+        // cadence.
+        m_history = RenderGraphHistory.Carried(kept: kept, previous: m_history, set: set);
         m_inputs = inputs;
         m_latest = null;
         m_nodes = nodes;

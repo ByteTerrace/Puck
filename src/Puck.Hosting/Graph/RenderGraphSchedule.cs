@@ -94,6 +94,46 @@ public sealed class RenderGraphHistory {
 
         return new RenderGraphHistory(count: set.Instances.Count);
     }
+    /// <summary>Creates the history of a set that replaces another: each instance kept from the previous set keeps when it
+    /// last rendered and the extent its targets are allocated at, so a kept instance whose output still stands is not
+    /// rendered again only because the set around it changed; an instance new to the set has not rendered.</summary>
+    /// <param name="set">The new instance set.</param>
+    /// <param name="previous">The history of the set it replaces.</param>
+    /// <param name="kept">For each instance of <paramref name="set"/>, its index in the previous set, or -1 for an instance
+    /// the previous set did not keep.</param>
+    /// <returns>The carried history.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="set"/> or <paramref name="previous"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="kept"/> does not cover <paramref name="set"/>, or names an index
+    /// <paramref name="previous"/> does not cover.</exception>
+    public static RenderGraphHistory Carried(RenderGraphInstanceSet set, RenderGraphHistory previous, ReadOnlySpan<int> kept) {
+        ArgumentNullException.ThrowIfNull(argument: set);
+        ArgumentNullException.ThrowIfNull(argument: previous);
+
+        if (kept.Length != set.Instances.Count) {
+            throw new ArgumentException(message: $"The kept indices cover {kept.Length} instances; the set has {set.Instances.Count}.", paramName: nameof(kept));
+        }
+
+        var carried = new RenderGraphHistory(count: kept.Length) { Frame = previous.Frame };
+
+        for (var index = 0; (index < kept.Length); index++) {
+            var old = kept[index];
+
+            if (old < 0) {
+                continue;
+            }
+            if (old >= previous.Count) {
+                throw new ArgumentException(message: $"Instance {index} is kept from index {old}, past the previous set's {previous.Count}.", paramName: nameof(kept));
+            }
+
+            carried.Height[index] = previous.Height[old];
+            carried.Latest[index] = previous.Latest[old];
+            carried.Ticks[index] = previous.Ticks[old];
+            carried.Width[index] = previous.Width[old];
+        }
+
+        return carried;
+    }
     /// <summary>Returns the frame an instance last rendered.</summary>
     /// <param name="index">The instance's index in its set.</param>
     /// <returns>The frame, or -1 when it has never rendered.</returns>
