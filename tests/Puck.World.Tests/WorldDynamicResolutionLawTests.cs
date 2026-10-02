@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using System.Numerics;
 using System.Text.Json;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SdfVm;
+using Puck.Shaders;
 using Puck.World.Client;
 using Xunit;
 
@@ -122,6 +124,30 @@ public sealed class WorldDynamicResolutionLawTests {
         Assert.Equal(expected: ((Ceiling * Fall) * Fall), actual: Advance(controller: controller, load: load), tolerance: 1e-6f);
     }
     [Fact]
+    public void APresentIntervalOverRendersAtTwoGridsIsNoSample() {
+        var controller = new WorldDynamicResolution();
+        var load = new ScriptedLoad(controller: controller);
+        var current = WorldDynamicResolution.GridOf(ceiling: Ceiling, scale: Ceiling);
+
+        // The clock starts at the current grid.
+        load.Present(periods: 1.0);
+        Assert.Equal(expected: Ceiling, actual: Advance(controller: controller, load: load));
+
+        // A render at 0.5 and then one at the current grid complete between two reads; the newer alone is at the current
+        // grid, but the interval spans both, so a missed period in it moves nothing and only restarts the clock.
+        load.CompleteFrame(grid: 0.5d);
+        load.CompleteFrame(grid: current);
+        load.Present(periods: 3.0);
+        Assert.Equal(expected: Ceiling, actual: Advance(controller: controller, load: load));
+
+        // Once renders complete at the current grid alone, the next present starts the clock and the one after is a
+        // sample.
+        load.Present(periods: 3.0);
+        Assert.Equal(expected: Ceiling, actual: Advance(controller: controller, load: load));
+        load.Present(periods: 3.0);
+        Assert.Equal(expected: (Ceiling * Fall), actual: Advance(controller: controller, load: load), tolerance: 1e-6f);
+    }
+    [Fact]
     public void UnderAPresentPacedDisplayTheGpuTimeRaisesTheGridAgain() {
         // Every kept present reads exactly the display period, as a present-paced (FIFO) swapchain reports them, so the
         // present timing alone lowers the grid on a miss and never raises it again.
@@ -235,18 +261,16 @@ public sealed class WorldDynamicResolutionLawTests {
         counted.CompleteFrame(grid: current, steps: ((long)(80d * OutputPixels)));
         Assert.Equal(expected: (Ceiling * Fall), actual: Advance(controller: steps, load: counted), tolerance: 1e-6f);
     }
-    [InlineData(false, 0.625f, 0.5625d)]
-    [InlineData(true, 0.625f, 0.5625d)]
-    [InlineData(false, 0.8125f, 0.75d)]
-    [InlineData(true, 0.8125f, 0.75d)]
-    [InlineData(false, 0.875f, 0.8125d)]
-    [InlineData(true, 0.875f, 0.8125d)]
+    [InlineData(0.625f, 0.5625d)]
+    [InlineData(0.8125f, 0.75d)]
+    [InlineData(0.875f, 0.8125d)]
     [Theory]
-    public void AMarkedGridPredictedExactlyAtBudgetClearsAndResolutionRecovers(bool timed, float marked, double cheaper) {
+    public void AMarkedGridPredictedExactlyAtBudgetClearsAndResolutionRecovers(float marked, double cheaper) {
         var controller = new WorldDynamicResolution();
         var units = (marked * 16d);
-        // An integer budget proportional to the marked grid's area keeps every cheaper grid's step count integral.
-        var load = new ScriptedLoad(controller: controller) { BudgetPerPixel = (units * units), Timed = timed };
+        // An integer budget proportional to the marked grid's area keeps every cheaper grid's step count integral, so
+        // the counted steps meet the budget exactly at the mark.
+        var load = new ScriptedLoad(controller: controller) { BudgetPerPixel = (units * units) };
 
         controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, forced: marked, load: load, outputPixels: OutputPixels);
         void Sample(double share) {
@@ -256,8 +280,7 @@ public sealed class WorldDynamicResolutionLawTests {
         }
 
         // Two over-budget samples reach the cheaper grid and mark the dearer one. The lighter scene meets the budget
-        // exactly at the mark: 81% at 0.5625 predicts 100% at 0.625, for example. A rounded ratio reads above 100%;
-        // even cross-multiplied GPU times can differ by one ULP at the other pairs.
+        // exactly at the mark: 81% at 0.5625 predicts 100% at 0.625, for example, which a rounded ratio reads above 100%.
         Sample(share: 1.2d);
         Sample(share: 1.2d);
         Assert.Equal(expected: cheaper, actual: controller.Grid);
@@ -272,6 +295,44 @@ public sealed class WorldDynamicResolutionLawTests {
         }
         Assert.Equal(expected: ((double)marked), actual: controller.Grid);
         Assert.Equal(expected: 0d, actual: controller.OverGrid);
+    }
+    [InlineData(0.625f, 0.5625d)]
+    [InlineData(0.8125f, 0.75d)]
+    [InlineData(0.875f, 0.8125d)]
+    [Theory]
+    public void TheMarkClearsExactlyAtTheBudgetAndNotOneTimeAbove(float marked, double cheaper) {
+        // A GPU time is no exact multiple of a 60 Hz period, so the tie is the largest time whose product with the marked
+        // grid's area does not exceed the period's with the cheaper grid's, in exact rationals; the next time above it
+        // keeps the mark.
+        var budget = (1d / Hertz);
+        var area = (((double)marked) * marked);
+        var cheaperArea = (cheaper * cheaper);
+        var tie = ((budget * cheaperArea) / area);
+
+        while (!ExactlyAtMost(a: tie, b: area, c: budget, d: cheaperArea)) {
+            tie = Math.BitDecrement(x: tie);
+        }
+        while (ExactlyAtMost(a: Math.BitIncrement(x: tie), b: area, c: budget, d: cheaperArea)) {
+            tie = Math.BitIncrement(x: tie);
+        }
+
+        foreach (var (seconds, clears) in (((double Seconds, bool Clears)[])[(Math.BitIncrement(x: tie), false), (tie, true)])) {
+            var controller = new WorldDynamicResolution();
+            var load = new ScriptedLoad(controller: controller) { Timed = true };
+
+            controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, forced: marked, load: load, outputPixels: OutputPixels);
+            load.TimeFrame(periods: 1.2d);
+            Advance(controller: controller, load: load);
+            load.TimeFrame(periods: 1.2d);
+            Advance(controller: controller, load: load);
+            Assert.Equal(expected: cheaper, actual: controller.Grid);
+            Assert.Equal(expected: ((double)marked), actual: controller.OverGrid);
+            load.TimeFrame(periods: (seconds * Hertz), seconds: seconds);
+            Advance(controller: controller, load: load);
+            Assert.Equal(expected: (clears ? 0d : marked), actual: controller.OverGrid);
+            // A held mark holds the rise below it.
+            Assert.True(condition: (clears || (controller.Grid == cheaper)), userMessage: $"grid {controller.Grid}");
+        }
     }
     [InlineData(0)]
     [InlineData(1)]
@@ -453,6 +514,26 @@ public sealed class WorldDynamicResolutionLawTests {
 
         return scale;
     }
+    // a * b <= c * d over the doubles' exact rational values, an oracle independent of the controller's arithmetic.
+    private static bool ExactlyAtMost(double a, double b, double c, double d) {
+        static (BigInteger Significand, int Exponent) Exact(double value) {
+            var bits = BitConverter.DoubleToInt64Bits(value: value);
+            var exponent = ((int)((bits >> 52) & 0x7FFL));
+            var fraction = bits & 0xFFFFFFFFFFFFFL;
+
+            return ((exponent == 0) ? (fraction, -1074) : (fraction | (1L << 52), (exponent - 1075)));
+        }
+
+        var (sa, ea) = Exact(value: a);
+        var (sb, eb) = Exact(value: b);
+        var (sc, ec) = Exact(value: c);
+        var (sd, ed) = Exact(value: d);
+        var left = (sa * sb);
+        var right = (sc * sd);
+        var shift = ((ea + eb) - (ec + ed));
+
+        return ((shift >= 0) ? ((left << shift) <= right) : (left <= (right << -shift)));
+    }
     private static string RepositoryRoot() {
         for (var directory = new DirectoryInfo(path: AppContext.BaseDirectory); (directory is not null); directory = directory.Parent) {
             if (File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx"))) {
@@ -470,6 +551,7 @@ public sealed class WorldDynamicResolutionLawTests {
     // the controller last chose unless the law names another. An untimed load reads no GPU time.
     private sealed class ScriptedLoad(WorldDynamicResolution controller) : IWorldFrameLoadSource {
         private WorldFrameLoadReading m_completed;
+        private ShaderPipelineCompletions m_completions;
         private bool m_counts;
         private WorldFrameLoadReading m_timed;
         private bool m_times;
@@ -493,10 +575,10 @@ public sealed class WorldDynamicResolutionLawTests {
 
             return (Timed && m_times);
         }
-        public void TimeFrame(double periods, bool fresh = true, double? grid = null) {
+        public void TimeFrame(double periods, bool fresh = true, double? grid = null, double? seconds = null) {
             if (fresh) {
                 m_times = true;
-                m_timed = new WorldFrameLoadReading(Grid: (grid ?? RenderGrid()), Load: (periods / Hertz), Renders: 1);
+                m_timed = new WorldFrameLoadReading(Grid: (grid ?? RenderGrid()), Load: (seconds ?? (periods / Hertz)), Renders: 1);
             }
         }
         public void Unpresent() => LastPresentTiming = PresentTimingSample.Unavailable;
@@ -505,6 +587,7 @@ public sealed class WorldDynamicResolutionLawTests {
 
             m_counts = true;
             m_completed = new WorldFrameLoadReading(Grid: at, Load: (steps ?? StepsAt(grid: at)), Renders: 1);
+            m_completions = m_completions.Then(later: new ShaderPipelineCompletions(Grid: at, Renders: 1));
         }
         public void Present(double periods) {
             CompleteFrame();
@@ -520,6 +603,13 @@ public sealed class WorldDynamicResolutionLawTests {
             m_completed = (m_completed with { Renders = 0 });
 
             return m_counts;
+        }
+        public ShaderPipelineCompletions TakeCompletions() {
+            var completions = m_completions;
+
+            m_completions = default;
+
+            return completions;
         }
     }
 }

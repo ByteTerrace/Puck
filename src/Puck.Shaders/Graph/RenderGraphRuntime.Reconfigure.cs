@@ -304,6 +304,7 @@ public sealed partial class RenderGraphRuntime {
         m_inputs = inputs;
         m_latest = null;
         m_nodes = nodes;
+        ResetOwedReadbacks();
         m_previous = previous;
         m_producers = producers;
         m_producerTainted = producerTainted;

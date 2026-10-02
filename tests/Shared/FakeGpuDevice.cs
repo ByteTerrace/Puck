@@ -120,6 +120,8 @@ internal sealed class FakeGpuDevice :
     /// <summary>Gets the fence submitted last, as it reached the device.</summary>
     public IGpuSubmissionFence? LastSubmittedFence { get; private set; }
 
+    /// <summary>Gets every fence a submission has reached the device with.</summary>
+    public HashSet<Fence> SubmittedFences { get; } = [];
     /// <summary>Gets the device-local memory of the tracked images and device-local buffers: an image is its width times
     /// its height times four bytes, a buffer its size.</summary>
     public GpuDeviceMemoryWork Memory { get; } = new(backend: "fake");
@@ -421,6 +423,7 @@ internal sealed class FakeGpuDevice :
         LastSubmittedFence = fence;
         // A backend accepts only its own fence type; a counting fence reaching here is a missed unwrap.
         ((Fence)fence).Arm();
+        _ = SubmittedFences.Add(item: ((Fence)fence));
         Submissions++;
         CarryWaits(
             commandBuffers: commandBufferHandles.Length,

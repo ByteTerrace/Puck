@@ -1946,7 +1946,11 @@ only through `IWorldFrameLoadSource`; the World's `WorldFrameLoadSource` sums
 each view's newest timed (`LatestTimingSubmission`,
 `LatestTimingMilliseconds`) or completed (`TryReadCompleted`) submission not
 read before through a `WorldFrameLoadAggregate`, so a standing view adds
-nothing and never decides freshness. Timing runs under `WorldGpuTiming.Require`
+nothing and never decides freshness. Present association reads each node's
+`TakeCompletions`, the summary of every render completed since its last read,
+never the newest submission alone. The runtime polls a standing node's
+readbacks only while it `OwesReadbacks` (`RenderGraphRuntime.ReadbackPolls`
+counts the polls). Timing runs under `WorldGpuTiming.Require`
 (the operator's `world.gpu-timing` demand and the controller's are one
 demand), and the step budget comes from the embedded `counters.ceilings.json`,
 so `puck counters --record` moves the budget. Run

@@ -1,4 +1,5 @@
 using Puck.Abstractions.Presentation;
+using Puck.Shaders;
 using Puck.World.Client;
 using Xunit;
 
@@ -103,6 +104,7 @@ public sealed class WorldFrameLoadAggregateLawTests {
 
             return false;
         }
+        public ShaderPipelineCompletions TakeCompletions() => default;
 
         private static WorldFrameLoadAggregate CreateAggregate() {
             var aggregate = new WorldFrameLoadAggregate();

@@ -196,6 +196,44 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.True(condition: rig.Stood());
         }
     }
+    [Fact]
+    public void TheCompletionSummaryNamesEveryRenderNotOnlyTheNewest() {
+        using var rig = new TemporalRig(views: 1, renderScale: 0.75f);
+        var node = rig.Runtime.Node(instance: 0);
+        var completed = new GpuWorkSample();
+
+        rig.RenderGrid = 0.625f;
+        for (var frame = 0; (frame < 4); frame++) {
+            rig.Produce();
+        }
+        _ = node.TakeCompletions();
+
+        // A render at 0.5 and then renders at 0.625 complete between two reads: the newest completed submission names
+        // 0.625, but the summary spans both grids and names none.
+        rig.RenderGrid = 0.5f;
+        rig.Produce();
+        rig.RenderGrid = 0.625f;
+        for (var frame = 0; (frame < 3); frame++) {
+            rig.Produce();
+        }
+        var mixed = node.TakeCompletions();
+
+        Assert.True(condition: node.TryReadCompleted(sample: completed));
+        Assert.True(condition: node.TryGetRenderGrid(grid: out var newest, submission: completed.Submission));
+        Assert.Equal(actual: newest, expected: 0.625d);
+        Assert.True(condition: (mixed.Renders >= 2), userMessage: $"{mixed.Renders} renders");
+        Assert.Equal(expected: 0d, actual: mixed.Grid);
+
+        // Renders at one grid since the read name it, and a read with nothing new names nothing.
+        for (var frame = 0; (frame < 4); frame++) {
+            rig.Produce();
+        }
+        var uniform = node.TakeCompletions();
+
+        Assert.True(condition: (uniform.Renders > 0));
+        Assert.Equal(expected: 0.625d, actual: uniform.Grid);
+        Assert.Equal(expected: default, actual: node.TakeCompletions());
+    }
 
     // One sdf.world instance, "world", over a fixed frame on the upload model, optionally reading a feed that hands out a
     // tainted image until it fills. Construction produces until the view has rendered its installed graph.

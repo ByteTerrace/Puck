@@ -4645,11 +4645,16 @@ resolution, and stay there.
   reading from another grid, as one delayed past a grid move is, moves
   nothing. A present names no frame, so a present interval is a sample only
   while every view render completed from its start to its end was at the
-  current grid. When the budget falls between two adjacent grids the
+  current grid: each node keeps a summary of every render completed since it
+  was last read (`ShaderPipelineRenderNode.TakeCompletions`), not only the
+  newest, and the interval needs every view's summary to name the current
+  grid. When the budget falls between two adjacent grids the
   controller settles on the cheaper one: an over-budget sample marks its grid,
   and a rise stops below the mark until a sample, scaled by the two grids'
   area ratio, predicts the marked grid within the budget itself, which clears
-  the mark. Extent changes allocate
+  the mark. The grids are dyadic, so the prediction is compared exactly: the
+  load times the marked grid's area against the budget times the current
+  grid's, as exact products of the doubles given, inclusive at the budget. Extent changes allocate
   nothing inside the ceiling. Ordinary canaries and parity pin the lever off;
   P15-8 decides default enablement from its counted comparison.
 - **The counters are always on.** A pass counts its march steps and texels into

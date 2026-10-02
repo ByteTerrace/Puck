@@ -78,6 +78,23 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         }
     }
 
+    /// <summary>Gets the newest submission found complete, by a fence observed signaled or waited on, or zero before
+    /// the first. It never falls: a submission an invalidation dropped is never found complete, and one sealed after it
+    /// is numbered higher.</summary>
+    public long CompletedSubmission => Volatile.Read(location: ref m_published);
+    /// <summary>Gets whether a sealed submission waits on a fence that <see cref="Poll"/> would complete it by once the
+    /// fence signals.</summary>
+    public bool HasPending {
+        get {
+            foreach (var record in m_records) {
+                if ((record.State == RecordState.Sealed) && (record.Fence is { } fence) && (fence.ArmedSubmission == record.Submission)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
     /// <inheritdoc/>
     public string Name { get; }
     /// <inheritdoc/>

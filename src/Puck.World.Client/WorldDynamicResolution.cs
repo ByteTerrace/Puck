@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Shaders;
 
 namespace Puck.World.Client;
 
@@ -45,6 +46,11 @@ public interface IWorldFrameLoadSource {
     /// <param name="reading">The reading, which is not fresh when no view completed a render since the previous one.</param>
     /// <returns><see langword="true"/> when a view's completed render was counted.</returns>
     bool TryReadMarchSteps(out WorldFrameLoadReading reading);
+    /// <summary>Reads and clears every view's renders completed since the previous read, summarized over all of them
+    /// (<see cref="ShaderPipelineCompletions.Then"/>): every render, not only each view's newest, so the summary names a
+    /// grid only when every one of them recorded it.</summary>
+    /// <returns>The completions since the previous read; none when the views' completions cannot be read.</returns>
+    ShaderPipelineCompletions TakeCompletions();
 }
 /// <summary>
 /// The one dynamic-resolution controller: each frame it chooses the render grid, a fraction of the output on each axis,
@@ -66,10 +72,12 @@ public interface IWorldFrameLoadSource {
 /// The views render the grid quantized (<see cref="GridOf"/>), so a sample is taken only at the grid the views are
 /// rendering now: a reading whose renders recorded another grid, as a reading delayed past a grid move does, moves
 /// nothing. A present names no frame, so a present interval is a sample only when the views' completed renders were
-/// all at the current grid from the present that started it to the one that ends it. When the budget falls between two
+/// all at the current grid from the present that started it to the one that ends it, as their completion summaries
+/// (<see cref="IWorldFrameLoadSource.TakeCompletions"/>) state. When the budget falls between two
 /// adjacent grids the controller settles on the cheaper one: a sample over the budget marks its grid
 /// (<see cref="OverGrid"/>), and a rise stops below the marked grid until a sample predicts the marked grid within the
-/// budget, its share scaled by the two grids' area ratio, which clears the mark.
+/// budget, its share scaled by the two grids' area ratio, which clears the mark. The grids are dyadic, so that
+/// prediction is compared exactly, inclusive at the budget.
 /// </para>
 /// </summary>
 public sealed class WorldDynamicResolution {
@@ -214,7 +222,7 @@ public sealed class WorldDynamicResolution {
     // name the grid: an interval is a sample only when every render completed from its start to its end was at the
     // current grid, and otherwise only restarts the clock.
     private float AdvancePresent(IWorldFrameLoadSource? load, PresentTimingSample present, int displayHertz, float ceiling, float floor, float scale) {
-        if ((load is not null) && load.TryReadMarchSteps(reading: out var completed) && completed.IsFresh) {
+        if ((load?.TakeCompletions() is { Renders: > 0 } completed)) {
             m_completedGrid = completed.Grid;
 
             if (completed.Grid != m_presentGrid) {
@@ -268,12 +276,8 @@ public sealed class WorldDynamicResolution {
         if (double.IsFinite(d: share) && (share > (1d + Deadband))) {
             m_overGrid = current;
         } else if ((next > scale) && (m_overGrid > 0d)) {
-            // Cross-multiply the quantized areas rather than squaring a rounded ratio. Each product rounds once, so
-            // include the budget product's next representable value: an exactly budgeted grid can differ by one ULP.
-            var markedLoad = (reading.Load * (m_overGrid * m_overGrid));
-            var markedBudget = (budget * (current * current));
-
-            if (markedLoad <= Math.BitIncrement(x: markedBudget)) {
+            // The grids are dyadic, so their areas are exact; the comparison of the products is exact too.
+            if (ProductAtMost(a: reading.Load, b: (m_overGrid * m_overGrid), c: budget, d: (current * current))) {
                 m_overGrid = 0d;
             } else if (GridOf(ceiling: ceiling, scale: next) >= m_overGrid) {
                 next = Math.Max(val1: scale, val2: Math.Min(val1: ((float)current), val2: ceiling));
@@ -281,5 +285,46 @@ public sealed class WorldDynamicResolution {
         }
 
         return next;
+    }
+    // Whether a * b <= c * d exactly, for finite non-negative doubles: each product of two 53-bit significands is exact
+    // in 106 bits, and the two are compared at their binary exponents without rounding.
+    private static bool ProductAtMost(double a, double b, double c, double d) {
+        var (left, leftExponent) = Product(x: a, y: b);
+        var (right, rightExponent) = Product(x: c, y: d);
+
+        if (left == UInt128.Zero) {
+            return true;
+        }
+        if (right == UInt128.Zero) {
+            return false;
+        }
+
+        // The product with the higher top bit is the larger; with equal top bits, align the exponents and compare.
+        var leftTop = ((128 - ((int)UInt128.LeadingZeroCount(value: left))) + leftExponent);
+        var rightTop = ((128 - ((int)UInt128.LeadingZeroCount(value: right))) + rightExponent);
+
+        if (leftTop != rightTop) {
+            return (leftTop < rightTop);
+        }
+
+        return ((leftExponent >= rightExponent)
+            ? ((left << (leftExponent - rightExponent)) <= right)
+            : (left <= (right << (rightExponent - leftExponent))));
+    }
+    // A product of two finite non-negative doubles as an exact significand and binary exponent.
+    private static (UInt128 Significand, int Exponent) Product(double x, double y) {
+        var (xs, xe) = Decompose(value: x);
+        var (ys, ye) = Decompose(value: y);
+
+        return ((((UInt128)xs) * ys), (xe + ye));
+    }
+    private static (ulong Significand, int Exponent) Decompose(double value) {
+        var bits = BitConverter.DoubleToUInt64Bits(value: value);
+        var exponent = ((int)((bits >> 52) & 0x7FFUL));
+        var fraction = bits & 0xFFFFFFFFFFFFFUL;
+
+        return ((exponent == 0)
+            ? (fraction, -1074)
+            : (fraction | (1UL << 52), (exponent - 1075)));
     }
 }

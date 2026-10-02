@@ -68,6 +68,19 @@ public sealed partial class ShaderPipelineRenderNode {
         }
     }
 
+    // Whether a slot still holds work PollTimings acts on: a fence to read back after, or a pool to retire once timing
+    // stopped.
+    private bool TimingPending {
+        get {
+            foreach (var slot in m_timingSlots) {
+                if ((slot.Fence is not null) || (!TimingActive && (slot.Pool is not null))) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
     // Timing records only while it is enabled and not refused.
     private bool TimingActive => (m_timingEnabled && (m_timingRefusal is null));
 

@@ -68,6 +68,57 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.True(condition: node.TryReadCompleted(sample: completed));
         Assert.Equal(expected: 1L, actual: completed.Submission);
     }
+    // The runtime polls a node between its renders only while it owes a readback, so standing instances cost no poll
+    // once their submissions are read back, however many there are.
+    [Fact]
+    public void StandingInstancesThatOweNoReadbackAreNeverPolled() {
+        var gpu = new FakeGpuDevice(holdFences: true);
+        var recorders = new Recorders();
+        var view = new ViewPackage();
+        string[] names = [PackageView, "second", "third", "fourth"];
+
+        recorders.Registry.Register(factory: view, package: RenderGraphPackageCatalog.SdfWorld);
+        using var runtime = Runtime(gpu, recorders, Set([.. names.Select(selector: static name => PackageInstance() with { Name = name })]), PackageView, new RenderGraphRuntimeGraph[names.Length]);
+        var index = 0L;
+
+        void Frame() {
+            var frame = new RenderGraphFrame(
+                DisplayHeight: Display,
+                DisplayHertz: 60,
+                DisplayWidth: Display,
+                Footprints: [],
+                Index: index,
+                Roots: [.. names.Select(selector: static name => new RenderGraphRoot(Height: 1.0, Instance: name, Width: 1.0))],
+                Tick: index
+            );
+
+            index++;
+            _ = runtime.ProduceFrame(context: default, frame: in frame);
+        }
+
+        TestLiveness.Until(step: () => {
+            Frame();
+            return names.Select(selector: name => runtime.Node(instance: runtime.Instances.IndexOf(name: name))).All(predicate: static node => (node.FrameCounter > 0UL));
+        });
+        view.Unchanged = true;
+        Frame();
+        // While their last submissions are in flight every standing node owes a readback and is polled once a frame.
+        var owing = runtime.ReadbackPolls;
+
+        Frame();
+        Assert.Equal(expected: (owing + names.Length), actual: runtime.ReadbackPolls);
+        foreach (var fence in gpu.SubmittedFences) {
+            fence.Completed = true;
+        }
+        Frame();
+        var settled = runtime.ReadbackPolls;
+
+        for (var frame = 0; (frame < 12); frame++) {
+            Frame();
+        }
+        Assert.Equal(expected: settled, actual: runtime.ReadbackPolls);
+        Assert.All(collection: names.Select(selector: name => runtime.Node(instance: runtime.Instances.IndexOf(name: name))), action: static node => Assert.False(condition: node.OwesReadbacks));
+    }
     [Fact]
     public void APackageInstanceRendersItsFragmentOnANodeAndStandsWhileUnchanged() {
         var gpu = new FakePipelineGpu();

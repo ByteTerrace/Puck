@@ -147,6 +147,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_taintedReads = new string?[nodes.Length];
         m_producerTainted = new bool[nodes.Length];
         m_captureInstance = root;
+        ResetOwedReadbacks();
 
         Array.Fill(
             array: m_current,
@@ -1076,11 +1077,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
 
         RebuildDriftedSources();
-        // Standing instances still owe their submitted work's readback. Poll before scheduling, since those instances
-        // do not enter ProduceFrame again until their inputs change.
-        foreach (var node in m_nodes) {
-            node?.PollReadbacks();
-        }
+        PollOwedReadbacks();
         PackagesBeginFrame(context: in context);
 
         var schedule = m_schedules[m_turn];
@@ -1234,6 +1231,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             } finally {
                 node.Reads?.RetireUntaken();
                 node.Reads = null;
+                NoteOwedReadbacks(index: index);
             }
 
             if (node.FrameCounter == submitted) {

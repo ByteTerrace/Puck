@@ -146,6 +146,24 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
 
         return counted;
     }
+    /// <inheritdoc/>
+    public ShaderPipelineCompletions TakeCompletions() {
+        var completions = default(ShaderPipelineCompletions);
+
+        if (probe.Root?.Runtime is not { } runtime) {
+            return completions;
+        }
+
+        FindViews(runtime: runtime);
+
+        foreach (var node in m_nodes) {
+            if (node is not null) {
+                completions = completions.Then(later: node.TakeCompletions());
+            }
+        }
+
+        return completions;
+    }
 
     // Finds each instance's view again only when the runtime runs another instance set or another node for a view. A
     // view whose node survives keeps the submissions it counted, since a node numbers its submissions on; any other view

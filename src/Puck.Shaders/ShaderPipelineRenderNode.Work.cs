@@ -46,18 +46,19 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
     /// <remarks>The passes are the installed graph's, labelled by pass name. A submission becomes available once the
     /// node finds its fence signaled through <see cref="PollReadbacks"/>, at the start of a produced frame, paused frames
     /// included, or waits on it. An install, a resize, a <see cref="Reset"/>, a device loss and disposal withdraw the
-    /// sample until a later
-    /// submission completes.</remarks>
+    /// sample until a later submission completes.</remarks>
     public bool TryReadCompleted(GpuWorkSample sample) =>
         m_work.TryReadCompleted(sample: sample);
-    /// <summary>Reads completed work counters and timestamps without rendering or waiting. The render runtime calls
-    /// this on its frame thread even for an instance whose latest image stands, so its last submission is read back
-    /// after its fence signals even when it renders no further frames.</summary>
+    /// <summary>Reads completed work counters and timestamps without rendering or waiting, and folds the renders found
+    /// complete into the summary <see cref="TakeCompletions"/> reads. The render runtime calls this on its frame thread
+    /// for an instance whose latest image stands while it <see cref="OwesReadbacks"/>, so its last submission is read
+    /// back after its fence signals even when it renders no further frames.</summary>
     public void PollReadbacks() {
         if (m_disposed) { return; }
 
         m_work.Poll();
         PollTimings();
+        FoldCompletions();
     }
 
     // A successful install, reload or resize: submissions still in flight were completed by the install's drain, so
