@@ -643,7 +643,6 @@ public readonly partial record struct FixedQ4816(long Value)
             ? (1L << ((int)(k + FractionBitCount)))
             : 0L
         ));
-
     // Narrows a Q62 mantissa of 2^f by shift (46 − k), already known to be below 64, half up. Only a whole exponent
     // has a true tie, and Exp2Whole answers those exactly; any other 2^x is irrational, so a tie here is an artifact
     // of the approximation and the cheaper rule takes it. The round-shift runs unsigned: the mantissa sits just below
@@ -653,7 +652,6 @@ public readonly partial record struct FixedQ4816(long Value)
         new(Value: ((shift <= 0L)
             ? mantissa
             : ((long)((((ulong)mantissa) + (1UL << (((int)shift) - 1))) >> ((int)shift)))));
-
     // The shared core of Exp2, Exp2Q56 and Pow's whole-exponent estimate: the interval mantissa times the quartic of
     // the Q62 residual, 2^(i/128 + r) at Q62, unrounded.
     private static long Exp2MantissaQ62(int index, long residualQ62) {
@@ -1010,13 +1008,13 @@ public readonly partial record struct FixedQ4816(long Value)
             return -1L;
         }
 
-        var f = (e & ((1L << ExponentFractionBitCount) - 1L));
+        var f = e & ((1L << ExponentFractionBitCount) - 1L);
         var mantissa = ((ulong)Exp2MantissaQ62(
             index: ((int)(f >> ResidualBitCount)),
             residualQ62: ((f & ((1L << ResidualBitCount) - 1L)) << (62 - ExponentFractionBitCount))
         ));
         var shift = ((int)(46L - k));
-        var discarded = (mantissa & ((1UL << shift) - 1UL));
+        var discarded = mantissa & ((1UL << shift) - 1UL);
         var half = (1UL << (shift - 1));
         var error = ((mantissa >> 40) + 64UL);
         var above = (discarded > half);

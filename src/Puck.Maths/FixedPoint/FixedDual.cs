@@ -101,6 +101,7 @@ public static class FixedDual {
             ))
         );
     }
+
     // round(b·log2(e)/a · 2^16) with one ties-to-even rounding, wrapped to the carrier. The exact numerator
     // |b|·log2(e)·2^62 fits 128 bits and the divisor a is one machine word, so two 128-by-64 divides (the high word's
     // remainder is below a, so neither can fault) give the exact quotient at Q62 and its remainder; the 46 bits below
@@ -112,17 +113,18 @@ public static class FixedDual {
             low: out var low
         );
         var high = (numerator / real);
+
         var (quotientLow, remainder) = DivideWord(
             divisor: real,
             lower: low,
             upper: (numerator - (high * real))
         );
-        var discarded = (quotientLow & ((1UL << 46) - 1UL));
+        var discarded = quotientLow & ((1UL << 46) - 1UL);
         var result = unchecked((long)((high << 18) | (quotientLow >> 46)));
         var half = (1UL << 45);
 
         if ((discarded > half) || ((discarded == half) && ((remainder != 0UL) || ((result & 1L) != 0L)))) {
-            result = unchecked(result + 1L);
+            result = unchecked((result + 1L));
         }
 
         return ((dual < 0L)
@@ -142,7 +144,7 @@ public static class FixedDual {
 #pragma warning restore SYSLIB5004
         }
 
-        var dividend = ((((UInt128)upper) << 64) | lower);
+        var dividend = (((UInt128)upper) << 64) | lower;
         var quotient = (dividend / divisor);
 
         return (
@@ -150,6 +152,7 @@ public static class FixedDual {
             Remainder: ((ulong)(dividend - (quotient * divisor)))
         );
     }
+
     /// <summary>Computes the sine and cosine and their derivatives.</summary>
     /// <param name="angle">The angle in fixed-point radians.</param>
     /// <returns>The pair <c>(sin a + b·cos a·ε, cos a − b·sin a·ε)</c>.</returns>
