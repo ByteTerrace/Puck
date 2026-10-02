@@ -625,7 +625,10 @@ The contracts a change must keep:
   on`, `body.press forward 1 1 0`, `world.wait 90`, `world.history seek 30`
   (matches, paused), `body.where 0`, `world.history step 40`, `world.history
   diff 30 90`, `world.history resume`. `HistoryBoundaryLawTests.cs` covers
-  capture isolation, replay-edit placement, restore context and named refusals.
+  capture isolation, replay-edit placement, restore context and named refusals;
+  `HistoryRefusalLawTests.cs` the rebuild content pins (seek, diff shadow,
+  replay-edit edited run), the replay-edit span and edit refusals, and the live
+  session and session event refusals apart from each other.
 
 ## Rules for changes
 

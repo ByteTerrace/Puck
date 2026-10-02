@@ -578,6 +578,16 @@ public sealed partial class WorldPersistence {
 
             Host.Engagement.AssertCheckpointQuiescent();
 
+            if (!Host.Profiles.TryCapture(
+                checkpoint: out var ownedWorlds,
+                reason: out var ownedReason
+            )) {
+                checkpoint = null;
+                reason = ownedReason;
+
+                return false;
+            }
+
             WorldMachineHostCheckpoint? machines = null;
 
             if (Host.Machines is IWorldMachineCheckpointHost machineHost) {
@@ -661,7 +671,7 @@ public sealed partial class WorldPersistence {
                 Escrow: Host.TransferEscrow.Capture(),
                 InputHold: Host.InputHold.Capture(),
                 EventFeed: Host.Events.Capture(),
-                OwnedWorlds: Host.Profiles.Capture(),
+                OwnedWorlds: ownedWorlds!,
                 HostRow: hostRow,
                 Fields: Host.Population.Fields?.Capture(),
                 Search: Host.Search.Capture(),
@@ -707,6 +717,7 @@ public sealed partial class WorldPersistence {
         var restoredArena = PrepareCheckpointArena(compilation: admission.Compilation, server: server);
 
         Host.Events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
+        Host.Profiles.ValidateCheckpoint(checkpoint: checkpoint.OwnedWorlds);
         Decisions.ValidateCheckpoint(
             checkpoint: server,
             definition: restoredDefinition

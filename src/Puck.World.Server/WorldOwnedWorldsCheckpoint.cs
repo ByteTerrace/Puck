@@ -6,7 +6,20 @@ namespace Puck.World.Server;
 /// exclusion class as a body's <c>PressOutcome</c>/<c>StopOutcome</c> — nothing but a read-back verb consults
 /// it, and the next real submission repopulates it).</summary>
 public sealed record WorldOwnedWorldsCheckpoint(IReadOnlyList<WorldOwnedDocumentCheckpoint> Documents, long Revision);
-/// <summary>An owned document and the directory its relative asset references resolve beside.</summary>
+/// <summary>The root an owned document's asset directory is named relative to in a checkpoint. A checkpoint is durable
+/// and crosses machines, so it never carries a machine-local absolute path: the restoring host supplies the root.</summary>
+public enum WorldOwnedDocumentAnchor : byte {
+    /// <summary>The document is in memory and resolves no relative path.</summary>
+    None,
+    /// <summary>Relative to the owned-world catalog's own directory, where loaded owned documents live.</summary>
+    Catalog,
+    /// <summary>Relative to the hosting world's document directory, where a seeded owned document resolves its assets.</summary>
+    World,
+}
+/// <summary>An owned document and where its relative asset references resolve.</summary>
 /// <param name="DefinitionJson">The serialized document.</param>
-/// <param name="DocumentDirectory">The captured asset context, or null for an in-memory document.</param>
-public sealed record WorldOwnedDocumentCheckpoint(byte[] DefinitionJson, string? DocumentDirectory);
+/// <param name="Anchor">The root the asset directory is named relative to.</param>
+/// <param name="RelativeDirectory">The asset directory under <paramref name="Anchor"/>'s root, forward-slashed and empty
+/// for the root itself; <see langword="null"/> exactly when <paramref name="Anchor"/> is
+/// <see cref="WorldOwnedDocumentAnchor.None"/>.</param>
+public sealed record WorldOwnedDocumentCheckpoint(byte[] DefinitionJson, WorldOwnedDocumentAnchor Anchor, string? RelativeDirectory);
