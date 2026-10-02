@@ -183,13 +183,14 @@ public static class ShapeDomainOps {
     /// the un-folded shape's own sphere. Ops compose, so each op's displacement bound is summed: a symmetry plane
     /// through the origin is an origin-preserving isometry (0); an offset plane displaces by twice its offset; a
     /// repeat lattice reaches its per-axis limit times its spacing (an unbounded one, <see cref="ShapeDomainOp.Repeat.IsUnbounded"/>,
-    /// has no bound at all and answers <see cref="SdfProgram.UnmaskableBoundRadius"/> like an unbounded wallpaper below),
+    /// has no bound at all and answers <see cref="SdfBoundAlgebra.Unbounded"/> like an unbounded wallpaper below),
     /// unaffected by its own origin (a repeat's fold is
     /// a pure translation, so its physical copies sit at the same offsets from the shape's own position regardless
     /// of where cell selection centres — only a polar fold's rotation pivot moves the copies, by twice the pivot's
     /// distance from the creation origin); a wallpaper lattice reaches its per-axis limit times its spacing, and one with
     /// an unbounded limit (<see cref="SdfWallpaperFold.IsUnbounded"/>) has no bound at all: it answers
-    /// <see cref="SdfProgram.UnmaskableBoundRadius"/>, the program's own mark for an influence nothing contains.</summary>
+    /// <see cref="SdfBoundAlgebra.Unbounded"/>, the bound algebra's state for an influence nothing contains (positive
+    /// infinity, which a margin, a composition and a positive scale all keep).</summary>
     /// <param name="domain">The shape's domain ops, or null/empty for 0.</param>
     /// <returns>The displacement bound, creation units.</returns>
     public static float Reach(IReadOnlyList<ShapeDomainOp>? domain) {
@@ -206,7 +207,7 @@ public static class ShapeDomainOps {
             reach += op switch {
                 ShapeDomainOp.Symmetry symmetry => (2f * MathF.Abs(x: (symmetry.Offset ?? 0f))),
                 ShapeDomainOp.Repeat repeat => (repeat.IsUnbounded
-                    ? SdfProgram.UnmaskableBoundRadius
+                    ? SdfBoundAlgebra.Unbounded
                     : (repeat.Spacing.Value * repeat.Limit!.Value).Length()),
                 ShapeDomainOp.Polar polar => (2f * (polar.Origin?.Length() ?? 0f)),
                 ShapeDomainOp.Wallpaper wallpaper => WallpaperReach(wallpaper: wallpaper),
@@ -222,7 +223,7 @@ public static class ShapeDomainOps {
 
             // A lattice with no edge has copies at every distance: no bound, the program's own sentinel for one.
             if (SdfWallpaperFold.IsUnbounded(limit: limit)) {
-                return SdfProgram.UnmaskableBoundRadius;
+                return SdfBoundAlgebra.Unbounded;
             }
 
             return ((wallpaper.Group >= SdfWallpaperGroup.P3)

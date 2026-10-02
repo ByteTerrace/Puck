@@ -1154,7 +1154,8 @@ public static class CreationStampEmitter {
     /// a finite one is finite; a subtraction keeps its subject's) instead of taking the largest. Only an instance
     /// holding the whole creation, as one scope, may compose: an instance holding a subset of the shapes has not
     /// seen the blends that bound them.</param>
-    /// <returns>The radius, in the builder's current coordinate space.</returns>
+    /// <returns>The radius, in the builder's current coordinate space, or <see cref="SdfBoundAlgebra.Unbounded"/> when
+    /// the creation's composed bound has none.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="scale"/> is not finite and greater than zero.</exception>
     public static float RenderReach(CreationDocument document, float scale, Func<string?, FontAtlas>? fontFor, IReadOnlyList<TextLayoutResult>? textLayouts = null, bool composeBlends = false) {

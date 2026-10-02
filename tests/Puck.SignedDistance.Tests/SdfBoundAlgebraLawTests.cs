@@ -187,14 +187,122 @@ public sealed class SdfBoundAlgebraLawTests {
         Assert.False(condition: cost.Unmaskable);
         Assert.InRange(actual: cost.BoundRadius, low: BoxBound, high: (BoxBound * 1.05f));
     }
+    // An instance begins under the point state the stream left it (BeginInstance emits no reset), so a fold with no edge
+    // opened before the instance and not reset since leaves its shapes at every distance: the witness holds no wallpaper
+    // instruction of its own and must still pack the unmaskable bound, where its authored radius would drop the surface
+    // at (30, 1, 0) from a camera at (30, 2, 0).
+    [Fact]
+    public void AnInstanceBeginningUnderAnUnboundedFoldIsUncullable() {
+        foreach (var lattice in Enum.GetValues<Lattice>()) {
+            foreach (var scoped in new[] { true, false }) {
+                var cost = Inherited(lattice: lattice, resetBetween: false, resetInside: false, scoped: scoped);
+
+                Assert.True(condition: cost.Unmaskable, userMessage: $"{lattice} opened before the instance, scoped {scoped}");
+                Assert.Equal(expected: SdfProgram.UnmaskableBoundRadius, actual: cost.BoundRadius);
+            }
+        }
+    }
+    [Fact]
+    public void AResetBeforeOrInsideTheInstanceEndsTheInheritedFold() {
+        foreach (var lattice in Enum.GetValues<Lattice>()) {
+            foreach (var scoped in new[] { true, false }) {
+                Assert.False(condition: Inherited(lattice: lattice, resetBetween: true, resetInside: false, scoped: scoped).Unmaskable, userMessage: $"{lattice} reset before the instance, scoped {scoped}");
+                Assert.False(condition: Inherited(lattice: lattice, resetBetween: false, resetInside: true, scoped: scoped).Unmaskable, userMessage: $"{lattice} reset inside the instance, scoped {scoped}");
+            }
+        }
+    }
+    [Fact]
+    public void AFoldOpenedInAnEarlierInstanceReachesTheNextOne() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f);
+        _ = builder.ResetPoint();
+        Fold(builder: builder, lattice: Lattice.P6m);
+        _ = builder.EndInstance();
+        _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f);
+        _ = builder.Sphere(material: material, radius: 1f);
+        _ = builder.EndInstance();
+
+        var program = builder.Build();
+
+        Assert.True(condition: program.InspectInstance(index: 1).Unmaskable);
+    }
+    // The authored radius SdfBoundAlgebra.Unbounded is the declaration that nothing bounds the instance, wherever the tree
+    // it covers is bounded; no other non-finite or negative radius is admitted.
+    [Fact]
+    public void AnUnboundedAuthoredRadiusPacksTheUnmaskableBound() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        Assert.Null(@object: Record.Exception(testCode: () => builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: SdfBoundAlgebra.Unbounded)));
+
+        _ = builder.Sphere(material: material, radius: 1f);
+        _ = builder.EndInstance();
+
+        var cost = builder.Build().InspectInstance(index: 0);
+
+        Assert.True(condition: cost.Unmaskable);
+        Assert.Equal(expected: SdfProgram.UnmaskableBoundRadius, actual: cost.BoundRadius);
+
+        foreach (var refused in new[] { float.NaN, float.NegativeInfinity, -1f }) {
+            _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfProgramBuilder().BeginInstance(boundCenter: Vector3.Zero, boundRadius: refused));
+        }
+    }
+
+    private static void Fold(SdfProgramBuilder builder, Lattice lattice) {
+        switch (lattice) {
+            case Lattice.P6m:
+                _ = builder.WallpaperFold(cell: new Vector2(value: 0.001f), group: SdfWallpaperGroup.P6M, limit: new Vector2(value: SdfWallpaperFold.UnboundedLimit));
+                break;
+            case Lattice.Repeat:
+                _ = builder.Repeat(spacing: Spacing);
+                break;
+            default:
+                _ = builder.RepeatLimited(spacing: Spacing, limit: new Vector3(value: SdfDomainOps.UnboundedRepeatLimit));
+                break;
+        }
+    }
+    // The fold opens in the world stream, the instance begins after it and holds only a unit sphere.
+    private static SdfInstanceCost Inherited(Lattice lattice, bool scoped, bool resetBetween, bool resetInside) {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.ResetPoint();
+        Fold(builder: builder, lattice: lattice);
+
+        if (resetBetween) {
+            _ = builder.ResetPoint();
+        }
+
+        _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f);
+
+        if (scoped) {
+            _ = builder.PushField(compose: SdfBlendOp.Union);
+        }
+        if (resetInside) {
+            _ = builder.ResetPoint();
+        }
+
+        _ = builder.Sphere(material: material, radius: 1f);
+
+        if (scoped) {
+            _ = builder.PopField();
+        }
+
+        _ = builder.EndInstance();
+
+        return builder.Build().InspectInstance(index: 0);
+    }
+
     [Fact]
     public void TheComposeIsTheSmallerForAnIntersectionTheSubjectForASubtractionAndTheLargerOtherwise() {
         Assert.Equal(expected: 2f, actual: SdfBoundAlgebra.Compose(accumulated: 5f, blend: SdfBlendOp.Intersection, operand: 2f));
         Assert.Equal(expected: 2f, actual: SdfBoundAlgebra.Compose(accumulated: 2f, blend: SdfBlendOp.SmoothIntersection, operand: 5f));
-        Assert.Equal(expected: 5f, actual: SdfBoundAlgebra.Compose(accumulated: 5f, blend: SdfBlendOp.Subtraction, operand: SdfProgram.UnmaskableBoundRadius));
+        Assert.Equal(expected: 5f, actual: SdfBoundAlgebra.Compose(accumulated: 5f, blend: SdfBlendOp.Subtraction, operand: SdfBoundAlgebra.Unbounded));
         Assert.Equal(expected: 5f, actual: SdfBoundAlgebra.Compose(accumulated: 5f, blend: SdfBlendOp.Union, operand: 2f));
-        Assert.Equal(expected: SdfProgram.UnmaskableBoundRadius, actual: SdfBoundAlgebra.Compose(accumulated: 5f, blend: SdfBlendOp.Union, operand: SdfProgram.UnmaskableBoundRadius));
-        Assert.Equal(expected: 5f, actual: SdfBoundAlgebra.Compose(accumulated: SdfProgram.UnmaskableBoundRadius, blend: SdfBlendOp.Intersection, operand: 5f));
+        Assert.Equal(expected: SdfBoundAlgebra.Unbounded, actual: SdfBoundAlgebra.Compose(accumulated: 5f, blend: SdfBlendOp.Union, operand: SdfBoundAlgebra.Unbounded));
+        Assert.Equal(expected: 5f, actual: SdfBoundAlgebra.Compose(accumulated: SdfBoundAlgebra.Unbounded, blend: SdfBlendOp.Intersection, operand: 5f));
     }
 
     // Soundness. The field outside a bound is at least the distance to it: every sampled point past the packed bound

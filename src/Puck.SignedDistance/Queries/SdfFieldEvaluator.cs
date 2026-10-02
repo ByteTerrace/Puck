@@ -490,10 +490,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             // small the instance declared; the program's own test is the one the GPU prepass trusts.
             if (
                 instance.IsDynamic ||
-                program.HasUnmaskableInfluence(
-                first: instance.First,
-                end: instance.End
-            ) ||
+                program.IsUnmaskable(instance: instance) ||
                 !IsPureUnionInstance(
                 instance: instance,
                 instructions: instructions

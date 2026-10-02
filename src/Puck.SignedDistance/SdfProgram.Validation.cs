@@ -794,12 +794,12 @@ public sealed partial class SdfProgram {
             }
             if (
                 !VectorFunctions.IsFinite(vector: instance.Center) ||
-                !float.IsFinite(f: instance.Radius) ||
+                (!float.IsFinite(f: instance.Radius) && !SdfBoundAlgebra.IsUnbounded(bound: instance.Radius)) ||
                 (instance.Radius < 0f)
             ) {
                 throw new ArgumentOutOfRangeException(
                     paramName: instancesParamName,
-                    message: $"An instance bound must carry a finite center and a finite, non-negative radius; got center {instance.Center} and radius {instance.Radius}."
+                    message: $"An instance bound must carry a finite center and a non-negative radius, finite or SdfBoundAlgebra.Unbounded; got center {instance.Center} and radius {instance.Radius}."
                 );
             }
         }

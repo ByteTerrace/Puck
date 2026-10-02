@@ -65,7 +65,7 @@ public sealed class CreationWallpaperGroupLawTests {
         ];
 
         foreach (var op in unbounded) {
-            Assert.Equal(expected: SdfProgram.UnmaskableBoundRadius, actual: ShapeDomainOps.Reach(domain: [op]));
+            Assert.True(condition: SdfBoundAlgebra.IsUnbounded(bound: ShapeDomainOps.Reach(domain: [op])));
         }
         Assert.InRange(
             actual: ShapeDomainOps.Reach(domain: [new ShapeDomainOp.Wallpaper(Cell: new Vector2(value: 1f), Group: SdfWallpaperGroup.P4M, Limit: new Vector2(value: 2f))]),

@@ -232,11 +232,18 @@ These are one-line cautions; the owning pages hold the derivations.
   limit and no clamp, and `Data0.zw` is exactly `InverseCell`. A fold with an
   unbounded limit (`SdfWallpaperFold.IsUnbounded`, one axis at the sentinel) has
   no bound: `SdfProgram.HasUnmaskableInfluence` and `ShapeDomainOps.Reach` both
-  answer it, with `SdfProgram.UnmaskableBoundRadius`, never a number of cells.
-  An infinite `Repeat`, or a `RepeatLimited` with a limit at
-  `SdfDomainOps.UnboundedRepeatLimit` on any axis (`SdfDomainOps.IsUnboundedRepeat`,
-  `ShapeDomainOp.Repeat.IsUnbounded`), is the same answer: there is one sentinel,
-  and no 1e6-cells radius anywhere.
+  answer it, never a number of cells. An infinite `Repeat`, or a `RepeatLimited`
+  with a limit at `SdfDomainOps.UnboundedRepeatLimit` on any axis
+  (`SdfDomainOps.IsUnboundedRepeat`, `ShapeDomainOp.Repeat.IsUnbounded`), is the
+  same answer, and no 1e6-cells radius exists anywhere.
+- **Unbounded is a state, not a number.** `SdfBoundAlgebra.Unbounded` (positive
+  infinity) is what `Reach`, `RenderReach` and an authored instance radius carry;
+  composition, a margin and a positive scale keep it, so no arithmetic runs on a
+  large stand-in that a scale could overflow or shrink. `BeginInstance` admits it,
+  `SdfProgram.IsUnmaskable` is the one classification every reader of an instance's
+  bound asks (a declared `Unbounded` radius, or a tree whose composed bound is
+  unbounded, an inherited fold included, since an instance begins under the point
+  state before it), and only the packing writes `UnmaskableBoundRadius`.
 - **Bounds compose through the set operations.** `SdfBoundAlgebra` is the one
   statement: an intersection takes the smaller operand bound (unbounded and
   finite is finite), a subtraction its subject's, a union the larger (one

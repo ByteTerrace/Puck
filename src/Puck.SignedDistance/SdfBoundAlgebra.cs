@@ -4,8 +4,10 @@ namespace Puck.SignedDistance;
 /// program, deciding whether an instance's authored bound can cull it (<see cref="SdfProgram.HasUnmaskableInfluence"/>),
 /// and the authoring stamper, sizing that bound (<c>CreationStampEmitter.RenderReach</c>), read.
 /// <para>A bound is the radius of a sphere outside which an operand's field is at least its distance to the sphere, so
-/// culling the operand there changes nothing it could win. <see cref="SdfProgram.UnmaskableBoundRadius"/> stands for
-/// no bound: an operand whose influence has no edge (a lattice fold with an unbounded limit, an infinite repeat).</para>
+/// culling the operand there changes nothing it could win. <see cref="Unbounded"/> stands for no bound: an operand
+/// whose influence has no edge (a lattice fold with an unbounded limit, an infinite repeat). Unbounded is a state, carried
+/// as IEEE positive infinity so that composing, adding a finite margin and scaling by a positive factor keep it, and
+/// only the program's packing (<see cref="SdfProgram.UnmaskableBoundRadius"/>) turns it into a number.</para>
 /// <para>Each operation bounds its result by what survives it. An intersection, <c>max(a, b)</c>, is at least either
 /// operand, so the smaller bound is a bound of it, and an unbounded operand imposes nothing: unbounded and finite is
 /// finite. A subtraction, <c>max(a, -b)</c>, is at least <c>a</c>, so <c>a</c>'s bound is its bound whatever <c>b</c> is. A
@@ -13,6 +15,15 @@ namespace Puck.SignedDistance;
 /// unbounded operand makes it unbounded. A smooth or chamfered variant composes the same way; the blend radius it adds
 /// is the instance's halo, which the program adds once for the whole instance.</para></summary>
 public static class SdfBoundAlgebra {
+    /// <summary>The bound of an influence nothing contains: a state, never a radius. Composition, a finite margin and a
+    /// positive scale all leave it unbounded; <see cref="SdfProgramBuilder.BeginInstance"/> accepts it as an instance's
+    /// authored radius, and the packed bound is then <see cref="SdfProgram.UnmaskableBoundRadius"/>.</summary>
+    public const float Unbounded = float.PositiveInfinity;
+
+    /// <summary>Whether <paramref name="bound"/> is <see cref="Unbounded"/>.</summary>
+    /// <param name="bound">The bound.</param>
+    /// <returns><see langword="true"/> for the unbounded state.</returns>
+    public static bool IsUnbounded(float bound) => float.IsPositiveInfinity(f: bound);
     /// <summary>Whether <paramref name="blend"/> is an intersection, whose result is bounded by its smaller operand.</summary>
     /// <param name="blend">The blend.</param>
     /// <returns><see langword="true"/> for <see cref="SdfBlendOp.Intersection"/>, <see cref="SdfBlendOp.SmoothIntersection"/>

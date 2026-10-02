@@ -140,8 +140,8 @@ canonicalizer state each rule once, through `LimitRefusal` and `CellRefusal`.
 A fold whose limit is unbounded (`SdfWallpaperFold.IsUnbounded`) has copies at every
 distance, so its influence has no bound, and so has an infinite `Repeat` or a
 `RepeatLimited` whose limit reaches `SdfDomainOps.UnboundedRepeatLimit`: such a
-shape's bound is the unmaskable sentinel, and the stamper's reach for it is that
-sentinel, where a million cells of a small pitch would be a radius a camera can
+shape's bound is `SdfBoundAlgebra.Unbounded`, and the stamper's reach for it is
+that state, where a million cells of a small pitch would be a radius a camera can
 leave behind. An influence with no bound still composes (see
 [bounds compose through set operations](#bounds-compose-through-set-operations)). The hex reduction
 clamps its fold-plane point to `MaximumHexCoordinate` before the multiply, which
@@ -153,8 +153,14 @@ thousand, and holds every configuration a builder accepts to the same stretch.
 ## Bounds compose through set operations
 
 An instance's cull bound is the radius of a sphere outside which its field is at
-least the distance to the sphere; the sentinel `SdfProgram.UnmaskableBoundRadius`
-stands for no such sphere. `SdfBoundAlgebra` composes the bounds of a field's
+least the distance to the sphere; `SdfBoundAlgebra.Unbounded` stands for no such
+sphere. Unbounded is a state, positive infinity, never a radius: composing it, adding
+a finite margin and scaling it by a positive factor all leave it unbounded, so no
+placement scale overflows it, and only the program's packing turns it into
+`SdfProgram.UnmaskableBoundRadius`, the number the kernels read. An instance
+declares it by authoring `Unbounded` as its radius, and a tree the program finds
+unbounded packs the same bound, which also covers an instance that begins under a
+fold opened before it. `SdfBoundAlgebra` composes the bounds of a field's
 operands through its set operations, and the program and the authoring stamper
 both read it:
 
