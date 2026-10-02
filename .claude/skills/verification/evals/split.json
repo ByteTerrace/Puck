@@ -1,11 +1,23 @@
 {
-  "seed": 4242157166,
+  "seed": 3958237715,
   "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
+  "seed_note": "Drawn at random from 32 bits. The first draw put 11 of 14 cases in train, so seeds were redrawn (1 draws in all) until train held 8 or 9 of the 14; the redraw looked at case counts only, before any case had been run.",
   "train": [
     "c01-lane-handback",
-    "c02-flake-vs-failure"
+    "c02-flake-vs-failure",
+    "c07-world-tests-during-gpu",
+    "c08-two-dot-is-not-ancestry",
+    "c09-mutant-is-what-you-meant",
+    "c10-batch-with-integration-head",
+    "c11-older-timestamp-restore",
+    "c13-scan-law-cannot-fail",
+    "c14-scratch-repo-maintenance"
   ],
   "test": [
-    "c03-stale-binaries"
+    "c03-stale-binaries",
+    "c04-skip-is-not-red",
+    "c05-gpu-idle-detector",
+    "c06-docs-citations-during-gpu",
+    "c12-ledger-rerecorded"
   ]
 }
