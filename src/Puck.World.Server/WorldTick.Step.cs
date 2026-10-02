@@ -204,7 +204,7 @@ public sealed partial class WorldTick {
     /// completed tick's snapshot, so a paused world shows the state it was moved to.</summary>
     internal void PresentRestoredTimeline() {
         lock (Host.AuthorityGate) {
-            Host.Document.PendingDefinitionDelivery = true;
+            Host.Document.MarkDefinitionDeliveryPending();
             Host.Document.DeliverPending();
             EmitSnapshot(
                 stepTicks: m_lastStepTicks,

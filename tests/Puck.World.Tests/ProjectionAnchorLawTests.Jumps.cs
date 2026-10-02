@@ -88,7 +88,7 @@ public sealed partial class ProjectionAnchorLawTests {
                 fixture.Server.RestoreCheckpoint(checkpoint: checkpoint!);
                 break;
             case "reset":
-                fixture.Server.EnqueueRebuild(principal: Principal.Console, request: new WorldRebuildRequest(Definition: null, Force: true, Kind: WorldRebuildKind.Reset, PathHint: null));
+                fixture.Server.EnqueueRebuild(principal: Principal.Console, request: new WorldRebuildRequest(Definition: null, Force: true, Kind: WorldRebuildKind.Reset, Origin: null));
                 fixture.Step();
                 break;
             case "load" or "reload":
@@ -97,7 +97,7 @@ public sealed partial class ProjectionAnchorLawTests {
                     Definition: definition,
                     Force: true,
                     Kind: ((jump == "reload") ? WorldRebuildKind.Reload : WorldRebuildKind.Load),
-                    PathHint: path
+                    Origin: new WorldRebuildOrigin.File(Path: path)
                 ));
                 fixture.Step();
                 break;
