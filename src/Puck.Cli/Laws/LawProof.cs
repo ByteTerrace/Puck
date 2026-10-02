@@ -309,8 +309,14 @@ internal static partial class LawProof {
         XNamespace schema = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010";
         var results = document.Descendants(name: (schema + "UnitTestResult")).ToArray();
         var incomplete = results.FirstOrDefault(predicate: static result => (((string?)result.Attribute(name: "outcome")) is not ("Passed" or "Failed")));
-        var infrastructureError = (document.Descendants(name: (schema + "RunInfo")).Any(predicate: static info => (((string?)info.Attribute(name: "outcome")) is "Error" or "Aborted" or "Timeout")) ||
-            document.Descendants(name: (schema + "ResultSummary")).Any(predicate: static summary => (((string?)summary.Attribute(name: "outcome")) is "Error" or "Aborted" or "Timeout")));
+        // The VSTest adapter echoes every failed xUnit test as a run-level error whose text ends in "[FAIL]"; that is a
+        // test verdict, already counted from its result, not a fault of the run. Any other run-level error is one.
+        var infrastructureError = (document.Descendants(name: (schema + "RunInfo")).Any(predicate: info => (
+                (((string?)info.Attribute(name: "outcome")) is "Error" or "Aborted" or "Timeout") &&
+                !((string?)info.Element(name: (schema + "Text")) ?? string.Empty).TrimEnd().EndsWith(comparisonType: StringComparison.Ordinal, value: "[FAIL]")
+            )) ||
+            document.Descendants(name: (schema + "ResultSummary")).Any(predicate: static summary => (((string?)summary.Attribute(name: "outcome")) is "Error" or "Aborted" or "Timeout")) ||
+            document.Descendants(name: (schema + "Counters")).Any(predicate: static counters => (new[] { "error", "timeout", "aborted" }.Any(name => (((int?)counters.Attribute(name: name)) is > 0)))));
         var failures = results.Where(predicate: static result => (((string?)result.Attribute(name: "outcome")) == "Failed"))
             .Select(selector: result => new LawFailure(
                 Message: (Lines(text: (((string?)result.Descendants(name: (schema + "Message")).FirstOrDefault()) ?? string.Empty)).FirstOrDefault()?.Trim() ?? "no message"),

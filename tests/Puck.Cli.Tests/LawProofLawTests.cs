@@ -332,6 +332,32 @@ public sealed class LawProofLawTests {
         Assert.NotNull(@object: run.Error);
     }
     [Fact]
+    public void AnXunitFailureEchoIsAVerdictNotAnInfrastructureFault() {
+        var process = new CliProcessResult(ExitCode: 1, OutputLines: [], Stderr: "", Stdout: "", TimedOut: false);
+        var run = DotnetLawRunner.ReadRun(report: """
+            <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+              <Results><UnitTestResult testName="Holds" outcome="Failed"><Output><ErrorInfo><Message>broken</Message></ErrorInfo></Output></UnitTestResult></Results>
+              <ResultSummary outcome="Failed"><Counters total="1" executed="1" passed="0" failed="1" error="0" timeout="0" aborted="0" />
+                <RunInfos><RunInfo outcome="Error"><Text>[xUnit.net 00:00:01.37]     Lib.Holds [FAIL]</Text></RunInfo></RunInfos></ResultSummary>
+            </TestRun>
+            """, run: process);
+
+        Assert.Null(@object: run.Error);
+        Assert.Equal(actual: Assert.Single(collection: run.Failures).Message, expected: "broken");
+    }
+    [Fact]
+    public void AnAbortedCounterCannotProveALaw() {
+        var process = new CliProcessResult(ExitCode: 1, OutputLines: [], Stderr: "", Stdout: "", TimedOut: false);
+        var run = DotnetLawRunner.ReadRun(report: """
+            <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+              <Results><UnitTestResult testName="Holds" outcome="Failed" /></Results>
+              <ResultSummary outcome="Failed"><Counters total="2" executed="1" passed="0" failed="1" error="0" timeout="0" aborted="1" /></ResultSummary>
+            </TestRun>
+            """, run: process);
+
+        Assert.NotNull(@object: run.Error);
+    }
+    [Fact]
     public void AProofRefusesLinksBeforeMirroringOrBuilding() {
         using var checkout = Checkout(initial: "broken");
         using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
