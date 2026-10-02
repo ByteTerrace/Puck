@@ -121,7 +121,7 @@ leave it that way (rules 2 and 5).
    `puck-dsl`, `rendering`, `sdf-authoring`, `maths-usage`, `maths-laws`,
    `gaming-bricks`, `rom-forge`, `dotnet10-performance`, `symbol-analysis`,
    `content-search`, `documentation`, `boy-scout`, `verification`,
-   `review-passes`), then ask the code with `puck references`,
+   `review-passes`, `orchestration`), then ask the code with `puck references`,
    `puck declarations` or `puck search -M 0`. `experimental/` is one of the
    places to look. A second implementation is a defect, and a skill wrong about
    its own area is corrected in the same change.
@@ -200,6 +200,10 @@ steps it gives. Its rules in brief:
   worktree holds it.
 
 ## Delegated work
+
+Load [`orchestration`](.claude/skills/orchestration/SKILL.md) when leading
+delegated work, sequencing integration merges, scheduling machines or routing
+reviews.
 
 When you delegate, inventory the work first, assign each agent explicit file
 ownership and its skills, and sequence edits to shared files. Each brief holds
