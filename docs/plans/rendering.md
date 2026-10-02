@@ -5160,6 +5160,21 @@ stated error against the SDF; state hashes are equal with bakes on and off.
 **Depends on:** P3 for indexed geometry, P4 for shared visibility, P5 for
 packaging, and compiled worlds in the runtime and delivery programme.
 
+#### Research input: manifold meshes and octree sign resolution
+
+A CPU study of the baker counted two things against the mesher's one vertex per
+cell. At the standard tier, 19 of the 93 prototypes baked from the counters,
+parity, nexus, standard and courtyard worlds carry edges shared by more than two
+triangles (a nexus kart ramp 33, a kart bank wall 30, a granary anchor 27, each
+hex tile 8, the courtyard floor 1), while every mesh is closed. A plate one cell
+thick meshes with 84 such edges; plates 0.4, 0.7 and 1.3 to 3 cells thick have
+none. An octree sign resolution saved 20.9% of sign evaluations but 0.5% of a
+whole bake's evaluations. The limits: the census does not separate its causes (a
+cell shared by two sheets and coincident clamped vertices both count), covers one
+tier, matches vertices by position to 1e-5, and does not ask whether any consumer
+of the mesh needs a two-manifold. The figures survive only in the study's commit
+messages.
+
 ### P18 — Sky and atmosphere
 
 **Starts from:** the sky as the code holds it: its lanes, its passes, its
