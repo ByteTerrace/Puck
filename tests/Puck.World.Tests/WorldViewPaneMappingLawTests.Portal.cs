@@ -20,7 +20,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
     private (WorldSessionSceneEmitter Session, string Name, Vector2 Marker) ShowPortal(bool dress) {
         var row = WorldWindowFrustumFitLawTests.DoorRow();
         var name = WorldViewNames.Session(screen: row.Index);
-        var screens = new WorldScreenMappingSet();
+        var screens = new WorldScreenMappingSet(world: WorldDefinitionLoader.BootInstanceName);
         var eye = WorldWindowFrustumFitLawTests.Eyes[0];
         var seat = CameraSnapshot.LookAt(
             fieldOfViewRadians: 1f,

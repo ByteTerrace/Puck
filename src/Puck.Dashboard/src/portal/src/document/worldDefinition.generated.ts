@@ -5116,7 +5116,7 @@ export type WorldEffectScaleVerticalVelocity = {
 };
 
 /**
- * Writes one fact on the identity a world-addressed body drives under: the body's cell in the world's reserved WorldIdentityFactLane row and the identity's own persisted facts row, together. Exactly one of Value and Expression is authored; a body driving under no owned identity refuses the write rather than minting one.
+ * Writes one fact on the identity a world-addressed body drives under: the body's cell in the world's reserved WorldIdentityFactLane row and the identity's facts row, together. An owned identity's row is persisted; a visitor's is its travelling row, which its own authority adopts when it comes home. Exactly one of Value and Expression is authored; a body driving under no identity refuses the write rather than minting one.
  */
 export type WorldEffectSetIdentityFact = {
   $type?: "setIdentityFact";

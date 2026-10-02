@@ -84,13 +84,15 @@ surface.
   `Read` refuses a mismatch loudly (`ReplayRefusal.ShapeMismatch`, naming
   found vs expected) — there is NO tolerant reader, no version negotiation,
   no legacy branch. That is the contract: never write one.
-- The declared `replay.tape` refusal catalog has eleven members: shape
+- The declared `replay.tape` refusal catalog has twelve members: shape
   mismatch, rate mismatch, three addon-receipt mismatches, rebuild content
   mismatch, rebuild source unavailable, a rate-zero tape carrying recorded
   ticks, a tampered transfer content signature, a recorded mutation
   outcome disagreeing with what the replay's own apply pipeline produced, and a
-  recorded arrival the shadow's own escrow cannot land in the body indices it
-  landed in live (`ArrivalRefused`).
+  recorded arrival the shadow's own escrow does not reproduce: its body indices,
+  each traveler's generation, or its rollback (`ArrivalRefused`), and a
+  recorded departure or its rollback the shadow's own population does not
+  reproduce (`DepartureRefused`).
   `ScreenOpContentMismatch`
   is emitted by `WorldMachineHost` as a named screen-op refusal, not a
   `ReplayRefusal` enum member.
@@ -120,10 +122,23 @@ never the document rows), and the active local seats with a pinned profile
 (`WorldIdentityProjection`, including id, name, authored color, records and raw
 fixed-point movement rates). There is no captured identity/profile catalog on the tape —
 owned identities are ordinary `puck.world.definition.v1` documents on disk, outside
-the tape's scope. `Drive(profiles, engines, addonHostFactory)` reconstructs each
-seat from its recorded projection. The live `WorldOwnedWorlds` catalog supplies
-only the rate-drift report (`ReportProfileDrift` reports, never substitutes,
-a drifted rate). The re-drive mounts its own guest set
+the tape's scope. An arrival entry is the exception for the travellers it lands: its
+leaf carries each landed profile's identity projection and nothing of its owned document, so a
+re-driven landing holds the same identity, owned records and facts the live one did.
+`Drive(profiles, engines, addonHostFactory)` reconstructs each seat from its
+recorded projection. The live `WorldOwnedWorlds` catalog supplies only the
+rate-drift report (`ReportProfileDrift` reports, never substitutes, a drifted
+rate). The shadow server holds a detached
+`WorldOwnedWorlds.CreateReplayCopy` of that catalog: session changes, facts and
+records change only the replay's identities, their saves perform no file I/O,
+and the copy narrates through the live catalog's hub. A re-driven home arrival
+(any `TryReland` with a recorded outcome) adopts into a detached copy of the
+owned identity, never the catalog's, and
+`WorldReplaySnapshot.ReportAdoptionDrift` reports on `replay.profile`, as
+`ReportProfileDrift` does for a pin, where that copy differs from the taped
+projection: the name, either rate, and every differing fact in ordinal key
+order, including a taped fact the current identity's capacity refuses. The
+live drive refuses a tape that lands travelers. The re-drive mounts its own guest set
 through the injected `addonHostFactory` rather than reusing the live
 session's.
 
@@ -137,11 +152,17 @@ actor)` (6), `Session(request)` (7), `Designation(designation, actor)` (8),
 `Mutation(mutation, actor, outcome)` (11), `Undo(count, actor)` (12),
 `Composition(composition, actor)` (13), `Query(query, actor)` (14),
 `LinkDelivery(adjacencyName)` (15), the session events (16–18),
-`Arrival(sourceAuthority, transferId, encoded)` (19), and
-`FederatedIntents(held)` (20). `Transfer` is the source's settled crossing: its
-target authority, whether that target is remote, and the slots that departed,
-which a re-drive detaches; it is taped for every source row, before an emptied
-source is reaped. The
+`Arrival(sourceAuthority, transferId, encoded, outcome)` (19),
+`FederatedIntents(held)` (20), and `Departure(transferId, slot, restored)` (21).
+`Departure` is one source body a crossing detached, or restored in a rollback,
+taped by `WorldServer.DepartureTap` inside the authority operation that did it,
+so it keeps the decision's own position however long the crossing then stays in
+doubt and whatever arrives meanwhile; the re-drive detaches and restores through
+the same `WorldServer.DetachForTransfer` and `RestoreDetachedForTransfer`.
+`Transfer` is the source's settled crossing: its target authority, whether that
+target is remote, and the slots whose departure it made final, as narration and
+for pairing; a re-drive changes nothing at it. It is taped for every source row,
+before an emptied source is reaped. The
 peer events
 carry generation-bearing identities and
 the grants minted/revoked through the ordinary server doors. The
@@ -218,16 +239,25 @@ pre-step position, so staleness counts, edges, and rule firings reproduce. The
 delivered CONTENT (neighbour poses, definition revisions) is still absent: a
 replay reproduces WHEN a seam went dark, never what the neighbour showed.
 
-A destination tapes its arrivals. `WorldServer.ArrivalTap` hears each cohort
-the escrow lands — held under the authority gate and handed over at the start of
-the next step, on the stepping thread — and the tape records it as an `Arrival`
-carrying the same leaf the crossing log writes
-(`WorldAuthorityCheckpointCodec.EncodeCrossingArrival`). The re-drive decodes
-it against the recorded world's player defaults and lands it again through the
-shadow's own escrow (`WorldTransferEscrow.TryReland`, preferring the recorded
-body indices); a cohort that cannot land there refuses by name
-(`ArrivalRefused`). The admissions the landing makes are its own consequences,
-so they are not taped as separate server events. `WorldServer.FederatedIntentTap`
+A destination tapes its arrivals. `WorldServer.ArrivalTap` hears each commit
+that landed at least one traveler, under the authority gate on the thread that
+carried it, at the commit's position among the authority's inputs; a step and
+its tape close hold the same gate (`WorldServerStepShell.Step`), so an arrival
+after a step joins the next tick. The tape records it as an `Arrival` carrying
+the same leaf the crossing log writes
+(`WorldAuthorityCheckpointCodec.EncodeCrossingArrival`) and the commit's
+`WorldArrivalOutcome`: each landed traveler's generation, and whether the commit
+rolled the landings back (a refused member, or a record that could not be made
+durable). Read refuses an arrival no commit could have decided: a malformed
+cohort, an outcome that does not fit it, or a handoff token arriving again after
+its commit stood. The re-drive decodes it against the recorded world's player
+defaults and lands it again through the shadow's own escrow
+(`WorldTransferEscrow.TryReland` with the outcome), under the lease the arrival
+bound rather than a second reservation; each traveler must land at its recorded
+body index and generation, and a recorded rollback stops at the same traveler.
+An arrival that does not reproduce refuses by name (`ArrivalRefused`). The
+admissions the landing makes are its own consequences, so they are not taped as
+separate server events. `WorldServer.FederatedIntentTap`
 hears, at the start of every step that holds any, the federated device images
 the step applies — a forwarded or federated traveler's input, which crosses no
 loopback — and the tape records the held set as `FederatedIntents`; the re-drive
@@ -433,7 +463,8 @@ the tape and every companion a crossing involves against its own recorded world
 returns a `WorldReplaySetVerdict`: each re-driven authority's own verdict plus
 every crossing,
 paired by handoff token — a source tape's committed `Transfer` against the
-destination tape's `Arrival` with the same source authority and transfer id.
+destination tape's `Arrival` whose commit stood, with the same source authority
+and transfer id.
 A crossing is verified only when both halves are on tapes in the set and both
 tapes match. Its other half on a remote authority, on a row nothing taped, or
 missing from the paired tape reports it `NOT VERIFIED (<why>)`. The set passes
@@ -528,6 +559,8 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   after `SeatRecordedSeats` joins the recorded seats on their pinned rates.
   `WorldServer.RestoreCheckpoint` resets clocks, decisions,
   rule latches, fields, grants, held input, events, and population together.
+  The replay boot restore keeps the pinned seat identities detached and leaves
+  the owned catalog unchanged; recovery's home-seat rebind does not run here.
   `VerifyMountedAddons` then pins the live receipts. On
   success `LoopbackTransport.InputMasked = true` and the mode is
   `Replaying`. The authority clock rewinds to the boot image. Hosts call

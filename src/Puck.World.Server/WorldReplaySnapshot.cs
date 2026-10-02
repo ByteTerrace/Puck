@@ -121,10 +121,9 @@ public abstract record WorldReplayEntry {
     internal sealed record RateLever(bool Paused) : WorldReplayEntry;
     /// <summary>A crossing this authority decided as its source, recorded by
     /// <see cref="Puck.World.WorldReplayTape.NoteTransfer"/> when <c>Puck.World.WorldInstanceHost</c> settles the
-    /// transfer. A re-drive acts on its departure: every slot in <see cref="DepartedSlots"/> leaves the shadow
-    /// population exactly as it left live, so an inactive index stops contributing to the hash on the same tick. The
-    /// arrival is the destination's own fact and rides the destination's tape as a <see cref="Arrival"/>; a set of
-    /// tapes pairs the two by <see cref="Target"/> and <see cref="TransferId"/>.
+    /// transfer. It changes nothing on a re-drive: each body left, and any came back, at its own
+    /// <see cref="Departure"/> entry. The arrival is the destination's own fact and rides the destination's tape as an
+    /// <see cref="Arrival"/>; a set of tapes pairs the two by <see cref="Target"/> and <see cref="TransferId"/>.
     /// <see cref="Outcome"/>, <see cref="DestinationName"/>, <see cref="ScopeKey"/> and <see cref="GenerationId"/> are
     /// narration. The entry sits partly outside the hash's coverage, so
     /// <see cref="WorldReplaySnapshot.ReadTransferEntry"/> recomputes a content signature over every decoded field and
@@ -137,21 +136,37 @@ public abstract record WorldReplayEntry {
     /// <param name="ScopeKey">The resolved scope key, or empty for a console transfer.</param>
     /// <param name="GenerationId">The resolver-issued generation id, or 0 for a console transfer.</param>
     /// <param name="Outcome">A short canonical outcome summary.</param>
-    /// <param name="DepartedSlots">The 0-based body indices this crossing removed from this authority's population;
-    /// empty for a refused or aborted transfer.</param>
+    /// <param name="DepartedSlots">The 0-based body indices whose departure the settlement made final; empty for a
+    /// refused or aborted transfer.</param>
     internal sealed record Transfer(ulong TransferId, string Target, bool TargetRemote, string DestinationName, string ScopeKey, ulong GenerationId, string Outcome, IReadOnlyList<int> DepartedSlots) : WorldReplayEntry;
-    /// <summary>A cohort this authority landed as a crossing's destination: the reservation, the assigned body indices
-    /// and the commit, encoded with the same leaf the authority's crossing log writes
-    /// (<see cref="Server.WorldAuthorityCheckpointCodec.EncodeCrossingArrival"/>). A re-drive lands it again through
-    /// the shadow's own escrow (<see cref="Server.WorldTransferEscrow.TryReland"/>) at the tick it landed live, and
-    /// refuses by name (<see cref="ReplayRefusal.ArrivalRefused"/>) when the shadow cannot land it in the same body
-    /// indices. The identity it carries hydrates against the recorded definition's player defaults, so it decodes at
-    /// re-drive rather than at read.</summary>
+
+    /// <summary>An arrival a commit decided in this authority as a crossing's destination: the reservation, the
+    /// assigned body indices and the commit, encoded with the same leaf the authority's crossing log writes
+    /// (<see cref="Server.WorldAuthorityCheckpointCodec.EncodeCrossingArrival"/>), and its outcome
+    /// (<see cref="WorldServer.ArrivalTap"/>). A traveler's admission, a transferred peer's <c>PeerAdmitted</c>
+    /// included, is the landing's own consequence and is not taped beside it. A re-drive lands the arrival again
+    /// through the shadow's own escrow (<see cref="Server.WorldTransferEscrow.TryReland"/>) at the commit's position
+    /// among the tick's authority entries: each traveler at its recorded body index and generation, and a recorded
+    /// rollback at the same traveler, because a landing advances its index's generation, which outlives the rollback.
+    /// It refuses by name (<see cref="ReplayRefusal.ArrivalRefused"/>) when the shadow cannot. The identity it carries
+    /// hydrates against the recorded definition's player defaults, so it decodes at re-drive; read decodes it against
+    /// the engine defaults to refuse a malformed arrival at intake.</summary>
     /// <param name="SourceAuthority">The source's authority identity — the half of the handoff token a set of tapes
     /// pairs against the source's <see cref="Transfer"/>.</param>
     /// <param name="TransferId">The source-scoped transfer id.</param>
     /// <param name="Encoded">The encoded arrival.</param>
-    internal sealed record Arrival(string SourceAuthority, ulong TransferId, byte[] Encoded) : WorldReplayEntry;
+    /// <param name="Outcome">What the commit decided: each landed traveler's generation, and whether it rolled back.</param>
+    public sealed record Arrival(string SourceAuthority, ulong TransferId, byte[] Encoded, WorldArrivalOutcome Outcome) : WorldReplayEntry;
+
+    /// <summary>One source body a crossing detached or restored (<see cref="WorldServer.DepartureTap"/>), at the
+    /// position among the tick's authority entries where the authority decided it, however long the crossing then
+    /// stayed in doubt. A re-drive detaches the body through the same detach the live crossing used, keeping what the
+    /// shadow captured, and a recorded rollback restores exactly that body; one it cannot reproduce refuses by name
+    /// (<see cref="ReplayRefusal.DepartureRefused"/>).</summary>
+    /// <param name="TransferId">The source-scoped transfer id.</param>
+    /// <param name="Slot">The source body index.</param>
+    /// <param name="Restored">Whether the body came back in a rollback rather than left.</param>
+    internal sealed record Departure(ulong TransferId, int Slot, bool Restored) : WorldReplayEntry;
     /// <summary>The federated device images a recorded step held — the input forwarded and federated travelers drive
     /// this authority's bodies with, which crosses no loopback. Taped at every step that holds any and once as the
     /// set empties; a re-drive replaces the shadow's held images with exactly this set at the same position, and the
@@ -272,10 +287,12 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
     // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
-    // Shape 6 carries the recorded authority and its typed rebuild origins, each starting seat's full identity
-    // projection, the companion tapes of a set, departures by target authority, arrivals, and federated input. Refuse
-    // earlier tapes at intake instead of reporting their old shape as a simulation divergence.
-    private const uint ShapeToken = 6u;
+    // Shape 9 carries the recorded authority, its typed rebuild origins and its document paths, each starting seat's
+    // full identity projection, the companion tapes of a set, each departure and its rollback where the authority
+    // decided it, settlements by target authority, every arrival a commit decided with its outcome and each traveler as
+    // its identity projection alone, and federated input. Refuse earlier tapes at intake instead of reporting their old
+    // shape as a simulation divergence.
+    private const uint ShapeToken = 9u;
 
     /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
     /// tapes pairs one authority's departure with another's arrival.</summary>
@@ -513,14 +530,16 @@ public sealed partial class WorldReplaySnapshot {
                     );
 
                     break;
-                case WorldReplayEntry.Transfer transferEvent:
-                    // The departure half: a departed body stops contributing to HashState here exactly as it did
-                    // live. A slot already inactive is a no-op by TryDetachSeatForTransfer's own contract.
-                    foreach (var departedSlot in transferEvent.DepartedSlots) {
-                        _ = population.TryDetachSeatForTransfer(
-                            profile: out _,
-                            slot: departedSlot
-                        );
+                case WorldReplayEntry.Transfer:
+                    // Narration and pairing only: each body left at its own Departure entry.
+                    break;
+                case WorldReplayEntry.Departure departure:
+                    if (server.ExecuteAuthorityOperation(operation: () => server.RedriveDeparture(
+                        restored: departure.Restored,
+                        slot: departure.Slot,
+                        transferId: departure.TransferId
+                    )) is { } departureRefusal) {
+                        throw ReplayRefusal.DepartureRefused.Raise(message: departureRefusal);
                     }
 
                     break;
@@ -535,41 +554,6 @@ public sealed partial class WorldReplaySnapshot {
             var submission = intent;
 
             server.EnqueueIntent(submission: in submission);
-        }
-    }
-    /// <summary>Re-joins this recording's seats into <paramref name="server"/> and re-seats each profiled one on a
-    /// detached handle carrying its pinned locomotion rates — the recorded values, never the live catalog's current
-    /// ones, which are only read for the drift report. Shared by the offline <see cref="Drive"/> and the live drive's
-    /// boot image.</summary>
-    /// <param name="server">A server at its boot image, with no seat joined yet.</param>
-    /// <param name="population">That server's population.</param>
-    /// <param name="definition">The embedded definition, for the pinned handle's player defaults.</param>
-    /// <param name="profiles">The live catalog the drift report reads.</param>
-    internal void SeatRecordedSeats(WorldServer server, WorldPopulation population, WorldDefinition definition, WorldOwnedWorlds profiles) {
-        foreach (var seat in Seats) {
-            // Seat(slot) directly: there is no PlayerRoster (and so no claim) behind this join to ask PrincipalOf of.
-            _ = server.ApplySession(request: new SessionRequest.Join(
-                Principal: Principal.Seat(slot: seat.Slot),
-                Slot: seat.Slot,
-                IdentityName: seat.Profile?.Name,
-                WireProtocolKey: WorldProtocol.WireProtocolKey
-            ));
-
-            if (seat.Profile is not { } pin) {
-                continue;
-            }
-
-            ReportProfileDrift(
-                pin: pin,
-                profiles: profiles
-            );
-            population.SetSeatProfile(
-                slot: seat.Slot,
-                profile: WorldIdentity.FromProjection(
-                    projection: pin,
-                    defaults: definition.PlayerDefaults
-                )
-            );
         }
     }
     // The mount pin compares index-by-index: mount order is document order, and the recording pins the whole receipt
@@ -856,6 +840,8 @@ public sealed partial class WorldReplaySnapshot {
                 return new WorldReplayEntry.LinkDelivery(Adjacency: reader.ReadString(field: "link delivery adjacency"));
             case 19:
                 return ReadArrivalEntry(reader: ref reader);
+            case 21:
+                return ReadDepartureEntry(reader: ref reader);
             case 20:
                 return new WorldReplayEntry.FederatedIntents(Held: reader.ReadArray(
                     field: "federated intents",
@@ -936,9 +922,6 @@ public sealed partial class WorldReplaySnapshot {
 
         return (entries, grants);
     }
-    private static WorldIdentityProjection? ReadProfilePin(ref WireReader reader) => reader.ReadOptional(
-        readValue: static (ref WireReader r) => WorldAuthorityCheckpointCodec.ReadIdentityProjection(reader: ref r)
-    );
     private static WorldQuery ReadQueryLeaf(ref WireReader reader) => ReadLeaf<WorldQuery>(
         reader: ref reader,
         tryDecode: WorldSubmissionCodec.TryDecodeQuery,
@@ -1002,61 +985,106 @@ public sealed partial class WorldReplaySnapshot {
         );
     }
     // The arrival's carried identity hydrates against the recorded world's own player defaults, which only the
-    // re-drive holds; read validates the leaf against the engine defaults and keeps the bytes.
+    // re-drive holds; read validates the leaf against the engine defaults and keeps the bytes. An outcome must name a
+    // landing for every traveler of a commit that stood, and at least one and at most every traveler of one that
+    // rolled back, each at a generation an admission can mint.
     private static WorldReplayEntry ReadArrivalEntry(ref WireReader reader) {
         var encoded = reader.ReadBlock(
             field: "arrival",
             maxBytes: WireLimits.MaxDocumentBytes
         );
+        var generations = reader.ReadArray(
+            field: "arrival generations",
+            readItem: static (ref WireReader r) => r.ReadInt32(),
+            maximum: WorldBodiesLimits.CapacityCeiling
+        );
+        var outcome = new WorldArrivalOutcome(
+            Generations: generations,
+            RolledBack: reader.ReadBoolean()
+        );
+        var refused = new WorldReplayEntry.Arrival(
+            Encoded: encoded,
+            Outcome: outcome,
+            SourceAuthority: string.Empty,
+            TransferId: 0
+        );
 
         if (reader.Failed) {
-            return new WorldReplayEntry.Arrival(
-                Encoded: encoded,
-                SourceAuthority: string.Empty,
-                TransferId: 0
-            );
+            return refused;
         }
         if (!WorldAuthorityCheckpointCodec.TryDecodeCrossingArrival(
             arrival: out var arrival,
             bytes: encoded,
-            defaults: WorldPlayerDefaults.Default,
             reason: out var reason
         )) {
             reader.Fail(
                 detail: reason,
                 refusal: WireRefusal.PayloadMalformed
             );
-            return new WorldReplayEntry.Arrival(
-                Encoded: encoded,
-                SourceAuthority: string.Empty,
-                TransferId: 0
+            return refused;
+        }
+
+        var travelers = arrival!.Members.Count;
+
+        if (
+            (generations.Length == 0) ||
+            (generations.Length > travelers) ||
+            (!outcome.RolledBack && (generations.Length != travelers)) ||
+            generations.Any(predicate: static generation => (generation <= 0))
+        ) {
+            reader.Fail(
+                detail: $"arrival #{arrival.Request.TransferId} records {generations.Length} landing(s) for {travelers} traveler(s){(outcome.RolledBack ? " before its rollback" : string.Empty)}, or a generation no admission mints",
+                refusal: WireRefusal.PayloadMalformed
             );
+            return refused;
         }
 
         return new WorldReplayEntry.Arrival(
             Encoded: encoded,
-            SourceAuthority: arrival!.Request.SourceAuthority,
+            Outcome: outcome,
+            SourceAuthority: arrival.Request.SourceAuthority,
             TransferId: arrival.Request.TransferId
+        );
+    }
+    private static WorldReplayEntry ReadDepartureEntry(ref WireReader reader) {
+        var transferId = reader.ReadUInt64();
+        var slot = reader.ReadInt32();
+        var restored = reader.ReadBoolean();
+
+        if (
+            !reader.Failed &&
+            (((uint)slot) >= WorldBodiesLimits.CapacityCeiling)
+        ) {
+            reader.Fail(
+                detail: $"departure of transfer {transferId} names body:{slot}, outside 0..{(WorldBodiesLimits.CapacityCeiling - 1)}",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return new WorldReplayEntry.Departure(
+            Restored: restored,
+            Slot: slot,
+            TransferId: transferId
         );
     }
     private static void RelandArrival(WorldServer server, WorldReplayEntry.Arrival arrival) {
         if (!WorldAuthorityCheckpointCodec.TryDecodeCrossingArrival(
             arrival: out var decoded,
             bytes: arrival.Encoded,
-            defaults: server.Definition.PlayerDefaults,
             reason: out var decodeReason
         )) {
             throw ReplayRefusal.ArrivalRefused.Raise(message: $"transfer {arrival.TransferId} from '{arrival.SourceAuthority}' does not decode against the recorded world — {decodeReason}");
         }
 
         var reason = string.Empty;
-        var landed = server.ExecuteAuthorityOperation(operation: () => server.TransferEscrow.TryReland(
+        var reproduced = server.ExecuteAuthorityOperation(operation: () => server.TransferEscrow.TryReland(
             arrival: decoded!,
-            reason: out reason
+            reason: out reason,
+            recorded: arrival.Outcome
         ));
 
-        if (!landed) {
-            throw ReplayRefusal.ArrivalRefused.Raise(message: $"transfer {arrival.TransferId} from '{arrival.SourceAuthority}' landed live but the re-drive's own escrow refused it — {reason}");
+        if (!reproduced) {
+            throw ReplayRefusal.ArrivalRefused.Raise(message: $"transfer {arrival.TransferId} from '{arrival.SourceAuthority}' {(arrival.Outcome.RolledBack ? "rolled back" : "landed")} live but the re-drive's own escrow did not reproduce it — {reason}");
         }
     }
     private static WorldReplayEntry ReadTransferEntry(ref WireReader reader) {
@@ -1129,19 +1157,84 @@ public sealed partial class WorldReplaySnapshot {
             name: pin.Name,
             field: "move-speed",
             pinned: pin.MoveSpeed,
-            live: live.FixedMoveSpeed
+            live: live.FixedMoveSpeed,
+            used: PinnedUsed
         );
         ReportRateDrift(
             narrationHub: profiles.NarrationHub,
             name: pin.Name,
             field: "turn-speed",
             pinned: pin.TurnSpeed,
-            live: live.FixedTurnSpeed
+            live: live.FixedTurnSpeed,
+            used: PinnedUsed
         );
     }
+
+    /// <summary>Reports, as a pinned seat's drift is reported, where the identity a re-driven home arrival bound differs
+    /// from the projection its tape carried: the name, either rate, and every fact whose presence or value differs,
+    /// in ordinal key order. The bound identity is the owner's identity as it stands now with the carried facts and
+    /// records adopted, so an edit made to it after the recording reaches the re-drive, and this names it rather than
+    /// letting it surface as an unexplained divergence. Nothing here refuses.</summary>
+    /// <param name="narrationHub">The hub the report is narrated through, or <see langword="null"/> for none.</param>
+    /// <param name="taped">The identity rebuilt from the taped projection.</param>
+    /// <param name="bound">The identity the re-driven seat bound.</param>
+    internal static void ReportAdoptionDrift(WorldOutputHub? narrationHub, WorldIdentity taped, WorldIdentity bound) {
+        if (narrationHub is not { HasNarrationSink: true }) {
+            return;
+        }
+        if (!string.Equals(
+            a: taped.Name,
+            b: bound.Name,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            narrationHub.Narrate(
+                channel: "replay.profile",
+                text: $"[replay.profile: '{taped.Name}' name drifted since record-start — taped '{taped.Name}', live '{bound.Name}'; {LiveUsed}]"
+            );
+        }
+        ReportRateDrift(
+            narrationHub: narrationHub,
+            name: taped.Name,
+            field: "move-speed",
+            pinned: taped.FixedMoveSpeed,
+            live: bound.FixedMoveSpeed,
+            used: LiveUsed
+        );
+        ReportRateDrift(
+            narrationHub: narrationHub,
+            name: taped.Name,
+            field: "turn-speed",
+            pinned: taped.FixedTurnSpeed,
+            live: bound.FixedTurnSpeed,
+            used: LiveUsed
+        );
+
+        var carried = (taped.Facts?.Cells ?? []).ToDictionary(keySelector: static cell => cell.Key, elementSelector: static cell => cell.Value.AsInt);
+        var adopted = (bound.Facts?.Cells ?? []).ToDictionary(keySelector: static cell => cell.Key, elementSelector: static cell => cell.Value.AsInt);
+
+        foreach (var key in carried.Keys.Concat(second: adopted.Keys).Distinct().OrderBy(keySelector: static key => key.Value, comparer: StringComparer.Ordinal)) {
+            var had = carried.TryGetValue(key: key, value: out var before);
+            var has = adopted.TryGetValue(key: key, value: out var after);
+
+            if ((had == has) && (before == after)) {
+                continue;
+            }
+            var tapedValue = (had ? before.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) : "none");
+            var boundValue = (has ? after.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) : "none");
+
+            narrationHub.Narrate(
+                channel: "replay.profile",
+                text: $"[replay.profile: '{taped.Name}' fact '{key}' drifted since record-start — taped {tapedValue}, live {boundValue}; {LiveUsed}]"
+            );
+        }
+    }
+
+    private const string LiveUsed = "the home arrival used a detached copy of the current owned identity, so this verdict reflects the difference";
+    private const string PinnedUsed = "the replay used the PINNED value, so this verdict reports the recording, not the edit";
+
     // Compared on the RAW fixed lane, never on the rendered decimal: a drift too small to show in four places is still
     // a different trajectory, and a comparison that reads the display string would miss exactly those.
-    private static void ReportRateDrift(WorldOutputHub? narrationHub, string name, string field, FixedQ4816? pinned, FixedQ4816? live) {
+    private static void ReportRateDrift(WorldOutputHub? narrationHub, string name, string field, FixedQ4816? pinned, FixedQ4816? live, string used) {
         if (pinned?.Value == live?.Value) {
             return;
         }
@@ -1149,7 +1242,7 @@ public sealed partial class WorldReplaySnapshot {
         if (narrationHub is { HasNarrationSink: true }) {
             narrationHub?.Narrate(
                 channel: "replay.profile",
-                text: $"[replay.profile: '{name}' {field} drifted since record-start — pinned {Describe(rate: pinned)}, live {Describe(rate: live)}; the replay used the PINNED value, so this verdict reports the recording, not the edit]"
+                text: $"[replay.profile: '{name}' {field} drifted since record-start — pinned {Describe(rate: pinned)}, live {Describe(rate: live)}; {used}]"
             );
         }
     }
@@ -1353,6 +1446,18 @@ public sealed partial class WorldReplaySnapshot {
             case WorldReplayEntry.Arrival arrival:
                 writer.WriteByte(value: 19);
                 writer.WriteBlock(value: arrival.Encoded);
+                writer.WriteArray(
+                    items: arrival.Outcome.Generations,
+                    writeItem: static (w, generation) => w.WriteInt32(value: generation)
+                );
+                writer.WriteBoolean(value: arrival.Outcome.RolledBack);
+
+                break;
+            case WorldReplayEntry.Departure departure:
+                writer.WriteByte(value: 21);
+                writer.WriteUInt64(value: departure.TransferId);
+                writer.WriteInt32(value: departure.Slot);
+                writer.WriteBoolean(value: departure.Restored);
 
                 break;
             case WorldReplayEntry.FederatedIntents federated:
@@ -1556,10 +1661,11 @@ public sealed partial class WorldReplaySnapshot {
         );
         // A fresh, unconfigured render envelope reads as "fits" — the replay applies no render-growing edits, and the
         // authoritative simulation never consults GPU capacity, so no probe is needed offline.
+        var replayProfiles = profiles.CreateReplayCopy();
         var server = new WorldServer(
             definition: definition,
             population: population,
-            profiles: profiles,
+            profiles: replayProfiles,
             envelope: new WorldRenderEnvelope(),
             machines: machines,
             instanceIdentity: Instance

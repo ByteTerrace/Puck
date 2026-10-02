@@ -32,6 +32,9 @@ public static partial class WorldAuthorityCheckpointCodec {
 
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader.</summary>
+    // Version 21 carries, besides the time-travel and determinism shapes, the escrow's crossing sequence, the watermark
+    // crossing-log recovery redoes from, each occupant's, each committed traveler's and each peer event entry's
+    // accumulated arrival turn, and every identity projection's facts row.
     public const ushort SupportedVersion = 21;
 
     /// <summary>Encodes a full checkpoint.</summary>
@@ -202,17 +205,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             return false;
         }
 
-        WorldDefinition definition;
-
         try {
-            definition = WorldDefinitionSerialization.Deserialize(documentDirectory: documentDirectory, utf8Json: server.DefinitionJson);
+            _ = WorldDefinitionSerialization.Deserialize(documentDirectory: documentDirectory, utf8Json: server.DefinitionJson);
         } catch (Exception exception) when ((exception is ArgumentException or InvalidDataException or NotSupportedException)) {
             reason = $"server section: definition failed to parse — {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
 
-        var defaults = definition.PlayerDefaults;
 
         if (!TryDecodePopulation(
             bytes: populationBytes,
@@ -230,7 +230,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
         if (!TryDecodeEscrow(
             bytes: escrowBytes,
-            defaults: defaults,
             reason: out reason,
             section: out var escrow
         )) {
@@ -259,7 +258,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
         if (!TryDecodeHostRow(
             bytes: hostRowBytes,
-            defaults: defaults,
             reason: out reason,
             section: out var hostRow
         )) {

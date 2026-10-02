@@ -220,6 +220,9 @@ public sealed partial class WorldPopulation {
     /// <summary>The entity-owned procedural appearance rig. Unlike a look row, this follows the occupant when
     /// authority transfer assigns it a different population slot.</summary>
     public byte CatalogRig(int index) => m_entries[index].CatalogRig;
+    /// <summary>The occupant's accumulated arrival turn (<see cref="WorldFrameIsometry.AccumulateTurn"/>), which follows
+    /// it through every authority transfer.</summary>
+    public FixedQ4816 TravelTurn(int index) => m_entries[index].TravelTurn;
     /// <summary>Clears designation outputs after the world authority has applied them.</summary>
     public void ClearDesignationOutputs() => m_designationOutputs.Clear();
     /// <summary>Clears staged generator invocations after the world authority has enqueued them.</summary>
@@ -866,6 +869,12 @@ public sealed partial class WorldPopulation {
     public void SetCatalogRig(int slot, byte catalogRig) {
         if (((uint)slot) < Capacity) {
             m_entries[slot].CatalogRig = catalogRig;
+        }
+    }
+    /// <summary>Restores a transferred occupant's accumulated arrival turn.</summary>
+    public void SetTravelTurn(int slot, FixedQ4816 travelTurn) {
+        if (((uint)slot) < Capacity) {
+            m_entries[slot].TravelTurn = travelTurn;
         }
     }
     /// <summary>Writes one already-validated target into a body's named register. Wakes the target body — its own

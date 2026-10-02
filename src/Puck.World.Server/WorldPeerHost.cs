@@ -770,7 +770,6 @@ public sealed class WorldPeerHost : IDisposable {
     private async Task<bool> ServeCommitAsync(Stream stream, string sourceAuthority, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (!WorldFederationCodec.TryDecodeCommit(
             body: body.Span,
-            defaults: m_server.Definition.PlayerDefaults,
             sourceAuthority: out var carriedAuthority,
             transferId: out var transferId,
             members: out var members,
@@ -997,7 +996,6 @@ public sealed class WorldPeerHost : IDisposable {
         if (
             !WorldFederationCodec.TryDecodeReservation(
             body: body.Span,
-            defaults: m_server.Definition.PlayerDefaults,
             request: out var request,
             failure: out var failure
         ) ||

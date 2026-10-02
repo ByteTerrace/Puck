@@ -53,6 +53,7 @@ public sealed partial class WorldPopulation {
         entry.KitIndex = kitIndex;
         entry.LookIndex = ResolveInhabitLook(placement: placement);
         entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: index);
+        entry.TravelTurn = FixedQ4816.Zero;
         entry.ProducerState.PreferredAltitude = altitude;
         entry.ProducerState.AcquiredTarget = -1;
         entry.ProducerState.CurveArcRaw = 0L;
@@ -67,6 +68,7 @@ public sealed partial class WorldPopulation {
     // Warp/Face is a server-authoritative spawn (a one-time write into the sim); from here the pose flows only out.
     private void ActivateSimulated(int index, int? generation = null, IntentSource? source = null) {
         m_entries[index].CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: index);
+        m_entries[index].TravelTurn = FixedQ4816.Zero;
         SeedSimulated(index: index);
 
         var entry = m_entries[index];
@@ -140,7 +142,8 @@ public sealed partial class WorldPopulation {
             IdentitySubject: entry.IdentitySubject,
             AuthorityTransferred: entry.IsAuthorityTransferred,
             PlacementId: entry.PlacementId,
-            CatalogRig: entry.CatalogRig
+            CatalogRig: entry.CatalogRig,
+            TravelTurn: entry.TravelTurn
         );
     }
     // Retire an inhabited peer slot back to an inactive census peer (its body dropped, its placement tag cleared). The
@@ -157,7 +160,7 @@ public sealed partial class WorldPopulation {
         entry.NavigationState.Clear();
         ClearDesignations(entry: entry);
     }
-    private bool TryAdmitTransferredEntityAtCore(int slot, IntentSource source, bool remoteHuman, bool authorityTransferred, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal) {
+    private bool TryAdmitTransferredEntityAtCore(int slot, IntentSource source, bool remoteHuman, bool authorityTransferred, WorldTransferredOccupant? occupant, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal) {
         ArgumentNullException.ThrowIfNull(argument: grantTemplates);
 
         if (
@@ -201,6 +204,11 @@ public sealed partial class WorldPopulation {
         entry.Active = true;
         entry.IsRemoteHuman = remoteHuman;
         entry.IsAuthorityTransferred = authorityTransferred;
+        // Before the admitted event is taken, so the event a tape records carries the arrival's turn.
+        if (occupant is { } transferred) {
+            entry.CatalogRig = transferred.CatalogRig;
+            entry.TravelTurn = transferred.TravelTurn;
+        }
         // The server-authored PeerAdmitted event applies the requested rows through the live grant door immediately
         // after this allocation and then records ONLY the rows that succeeded. Nothing is installed yet at this
         // point, so the revocation baseline must begin empty rather than containing authored attempts.
@@ -259,6 +267,7 @@ public sealed partial class WorldPopulation {
         entry.Body = body;
         entry.BodyColor = (profile?.Color ?? Vector3.Zero);
         entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: slot);
+        entry.TravelTurn = FixedQ4816.Zero;
         entry.Generation = checked((entry.Generation + 1));
         entry.Active = true;
         m_revision++;
@@ -288,7 +297,6 @@ public sealed partial class WorldPopulation {
             );
             entry.Active = true;
             entry.IsRemoteHuman = (peer.Source == IntentSource.Live);
-            m_simulatedCount = CountActiveCensus();
             m_revision++;
         }
         // A resumed connection rides the same PeerAdmitted event as a fresh one, and a replay reaches it against an
@@ -308,6 +316,7 @@ public sealed partial class WorldPopulation {
         entry.IsAuthorityTransferred = peer.AuthorityTransferred;
         entry.PlacementId = peer.PlacementId;
         entry.CatalogRig = peer.CatalogRig;
+        entry.TravelTurn = peer.TravelTurn;
 
         // Live admission already installed these fields before emitting the event, so this is idempotent there.
         // Replay reaches this path with a fresh population and needs the verified identity restored so a later
@@ -316,6 +325,7 @@ public sealed partial class WorldPopulation {
         entry.AdmissionRevokedKeys.Clear();
         entry.IdentityDomain = peer.IdentityDomain;
         entry.IdentitySubject = peer.IdentitySubject;
+        m_simulatedCount = CountActiveCensus();
     }
     /// <summary>Re-applies one recorded disconnect through the population door. Park-with-grace: on the same terms as
     /// <see cref="DeactivateSeat"/>, this defers the body/occupancy half of the teardown (<see cref="Entry.Body"/>,
@@ -1127,13 +1137,16 @@ public sealed partial class WorldPopulation {
     /// <param name="authorityTransferred">Whether the peer arrived through authority transfer and is therefore not
     /// eligible for destination census reconciliation.</param>
     /// <returns><see langword="true"/> on success.</returns>
-    public bool TryAdmitRemotePeerAt(int slot, IntentSource source, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal, bool authorityTransferred = false) {
+    /// <param name="occupant">What a transferred traveler brings, which the admitted event records; <see langword="null"/>
+    /// for a connection.</param>
+    public bool TryAdmitRemotePeerAt(int slot, IntentSource source, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal, bool authorityTransferred = false, WorldTransferredOccupant? occupant = null) {
         return TryAdmitTransferredEntityAtCore(
             admitted: out admitted,
             authorityTransferred: authorityTransferred,
             grantTemplates: grantTemplates,
             identityDomain: identityDomain,
             identitySubject: identitySubject,
+            occupant: occupant,
             refusal: out refusal,
             remoteHuman: true,
             slot: slot,
@@ -1141,13 +1154,14 @@ public sealed partial class WorldPopulation {
         );
     }
     /// <summary>Admits an autonomous traveler at the peer body index already bound by a transfer reservation.</summary>
-    public bool TryAdmitTransferredEntityAt(int slot, IntentSource source, out WorldPeerEventEntry admitted, out string refusal) =>
+    public bool TryAdmitTransferredEntityAt(int slot, IntentSource source, WorldTransferredOccupant occupant, out WorldPeerEventEntry admitted, out string refusal) =>
         TryAdmitTransferredEntityAtCore(
             admitted: out admitted,
             authorityTransferred: true,
             grantTemplates: [],
             identityDomain: string.Empty,
             identitySubject: string.Empty,
+            occupant: occupant,
             refusal: out refusal,
             remoteHuman: false,
             slot: slot,

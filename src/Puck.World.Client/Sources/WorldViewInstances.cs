@@ -17,11 +17,13 @@ public enum WorldViewDemand : byte {
     /// its declared extent, whether or not anything schedules the world.</summary>
     Root = 2,
 }
-/// <summary>One view a world renders beside its own: a camera it films itself from, or another world's session.</summary>
+/// <summary>One view a world renders beside its own: a camera it films itself from, another world's session, or a camera
+/// of a world shown through a screen.</summary>
 /// <param name="Name">The instance's name, which a screen's mapping names: a camera's registration or a session's view
 /// name.</param>
-/// <param name="FilmsWorld">Whether the view films this world, whose screens it shows as the world does; a session
-/// renders another world, whose own screens show what <see cref="WorldView.Reads"/> names.</param>
+/// <param name="FilmsWorld">Whether the view films this world, whose screens it shows as the world does; a session, or a
+/// camera of the world a session shows, renders another world, whose own screens show what <see cref="WorldView.Reads"/>
+/// and <see cref="WorldView.PreviousReads"/> name.</param>
 /// <param name="Demand">How the render graph demands it.</param>
 /// <param name="Width">The fraction of the display's width its declared extent covers, which its footprint or root
 /// asks (<see cref="WorldViewInstances.Fit"/>).</param>
@@ -34,10 +36,15 @@ public readonly record struct WorldView(string Name, bool FilmsWorld, WorldViewD
     /// world the display shows directly shows (the boot world, or a world a seat is presented in), which every view of
     /// those worlds reads.</summary>
     public string? Parent { get; init; }
-    /// <summary>What a session view's own screens read within the frame, one level deeper: the sessions they show and
-    /// the source instances they show, or <see langword="null"/> for none. A list kept while it holds, since a view whose
-    /// list is replaced is a changed view.</summary>
+    /// <summary>What the screens of the world a view renders read within the frame, when that world is another: the
+    /// sessions they show one level deeper, the camera views of that world a session reads, and the source instances
+    /// they show, or <see langword="null"/> for none. A list kept while it holds, since a view whose list is replaced is
+    /// a changed view.</summary>
     public IReadOnlyList<string>? Reads { get; init; }
+    /// <summary>What the screens of the world a camera view of another world renders read at their previous frame: the
+    /// camera views of that world, itself included, so a camera filming a screen that shows a camera never reads it
+    /// within one frame; <see langword="null"/> for none.</summary>
+    public IReadOnlyList<string>? PreviousReads { get; init; }
 }
 /// <summary>
 /// The view instances a world renders beside its own: each camera a screen, a HUD frame or a probe export shows, and
@@ -188,7 +195,13 @@ public sealed class WorldViewInstances {
                             Producer: read.Name
                         )),
                     ]
-                    : [.. (view.Reads ?? []).Select(selector: static read => new RenderGraphRead(Producer: read))]),
+                    : [
+                        .. (view.Reads ?? []).Select(selector: static read => new RenderGraphRead(Producer: read)),
+                        .. (view.PreviousReads ?? []).Select(selector: static read => new RenderGraphRead(
+                            PreviousFrame: true,
+                            Producer: read
+                        )),
+                    ]),
                 Refresh: view.Refresh
             ) { OutputExtent = view.OutputExtent });
         }

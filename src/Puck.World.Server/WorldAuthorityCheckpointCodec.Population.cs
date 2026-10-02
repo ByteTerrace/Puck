@@ -56,6 +56,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         if (includeAppearance) {
             writer.WriteVector(value: entry.BodyColor);
             writer.WriteByte(value: entry.CatalogRig);
+            // The arrival turn a seat's view carries across crossings: presentation, which the simulation never reads.
+            writer.WriteFixed(value: entry.TravelTurn);
         }
         writer.WriteArray(
             items: entry.Designations,
@@ -137,9 +139,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             residue: entry.Residue
         );
-        writer.WriteOptional(
-            value: entry.Profile,
-            writeValue: WriteIdentityProjection
+        WorldIdentityProjectionWire.WriteOptional(
+            projection: entry.Profile,
+            writer: writer
         );
         writer.WriteOptional(
             value: entry.Navigation,
@@ -162,6 +164,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         var kitIndex = reader.ReadByte();
         var bodyColor = reader.ReadFiniteVector(field: "population entry body color");
         var catalogRig = reader.ReadByte();
+        var travelTurn = WorldWireLeaves.ReadTravelTurn(
+            field: "population entry travel turn",
+            reader: ref reader
+        );
         var designations = reader.ReadArray(
             field: "population entry designations",
             readItem: static (ref WireReader r) => ReadTargetDesignation(reader: ref r),
@@ -250,9 +256,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var yaw = reader.ReadFixed();
         var dynamicState = ReadTransferState(reader: ref reader);
         var residue = ReadResidue(reader: ref reader);
-        var profile = reader.ReadOptional(
-            readValue: static (ref WireReader r) => ReadIdentityProjection(reader: ref r)
-        );
+        var profile = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
         var navigation = reader.ReadOptional(
             readValue: static (ref WireReader r) => new WorldPopulationNavigationCheckpoint(
                 ActiveProducerDomainIndex: r.ReadInt32(),
@@ -305,6 +309,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             Residue: residue,
             SpawnPosition: spawnPosition,
             SpawnYaw: spawnYaw,
+            TravelTurn: travelTurn,
             Yaw: yaw
         );
     }

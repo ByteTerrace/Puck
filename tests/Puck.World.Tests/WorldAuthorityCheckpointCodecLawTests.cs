@@ -132,7 +132,8 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
                 IdentityDomain: "example.test",
                 IdentitySubject: "traveler",
                 PlacementId: null,
-                Source: IntentSource.Live
+                Source: IntentSource.Live,
+                TravelTurn: FixedQ4816.FromDouble(value: -1.25)
             ),
             Position: new FixedVector3(
                 X: FixedQ4816.FromInteger(value: 5),

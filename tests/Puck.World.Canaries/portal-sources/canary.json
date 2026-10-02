@@ -1,0 +1,575 @@
+{
+  "id": "portal-sources",
+  "title": "A world seen through a portal, and the world a seat crosses into, shows its own cabinet, its own text and its own camera on its screens",
+  "binding": "Both legs boot an offscreen 256x144 lobby whose arch shows the gallery as a window and carries a seat into it, the gallery's arrival arch facing it so the pair maps as the identity. The positive gallery has three screens ten units past its arrival: two lines of text in its own font, its own cabinet's picture in the middle, and a view through its own camera of a green lamp behind the arrival, which no seat looking along the walk sees. world.nesting names the window level's machine source, text and its camera view session$24$camera$lamp, and after the seat crosses, the routed level presenting the gallery names the same sources with its own camera view. Each capture reads one region per screen, by mean code on both backends alike. Through the window: the text region reads 0.17 and is held at least 0.11, the cabinet's lit half 1.0 held at least 0.5, and the camera screen green 0.68 held at least 0.4 with red at most 0.15 and blue at most 0.4. After the crossing: text 0.14, cabinet 1.0 and camera green 0.88 under the same bounds. The discriminating leg boots the same rooms with the gallery's three screens showing nothing: every level lists them as none, each region reads at most 0.08, and every source observation turns red.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [
+    "rooms.puck"
+  ],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/portal-sources/portal-sources.puck",
+    "script": "portal.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.nesting",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.nesting",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "the-window-shows-the-gallerys-own-sources",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "session$24 depth 1 destination gallery via endpoint:6~global7~gallery screens 0:source$machine$",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-window-films-the-gallerys-camera",
+        "stream": "stdout",
+        "match": "contains",
+        "text": " 1:text 2:session$24$camera$lamp]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-door-mints-a-mapped-transfer",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "arch/glass seat 1 entered",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-gallery-is-presented-with-its-own-sources",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "depth 0 world 6~global7~gallery screens 0:source$machine$",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-presented-gallery-films-its-own-camera",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "$camera$lamp | session$24",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "no-text-fault",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "text-fault",
+        "present": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "before-the-cabinet-shows-its-picture",
+        "capture": "before.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.477539,
+          0.272569,
+          0.495117,
+          0.338542
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.5,
+          0.5,
+          0.5,
+          1
+        ],
+        "maximum": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "before-the-text-screen-draws-its-glyphs",
+        "capture": "before.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.442383,
+          0.265625,
+          0.463867,
+          0.331597
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.11,
+          0.11,
+          0.11,
+          1
+        ],
+        "maximum": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "before-the-camera-screen-shows-the-lamp",
+        "capture": "before.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.543945,
+          0.272569,
+          0.557617,
+          0.310764
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0.4,
+          0,
+          1
+        ],
+        "maximum": [
+          0.15,
+          1,
+          0.4,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "after-the-cabinet-shows-its-picture",
+        "capture": "after.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.473633,
+          0.272569,
+          0.495117,
+          0.352431
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.5,
+          0.5,
+          0.5,
+          1
+        ],
+        "maximum": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "after-the-text-screen-draws-its-glyphs",
+        "capture": "after.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.387695,
+          0.265625,
+          0.448242,
+          0.359375
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.11,
+          0.11,
+          0.11,
+          1
+        ],
+        "maximum": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "after-the-camera-screen-shows-the-lamp",
+        "capture": "after.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.555664,
+          0.272569,
+          0.608398,
+          0.317708
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0.4,
+          0,
+          1
+        ],
+        "maximum": [
+          0.15,
+          1,
+          0.4,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/portal-sources/dark.puck",
+    "script": "portal.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.nesting",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "body.fly",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.nesting",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "line",
+        "name": "the-window-shows-the-dark-gallery",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "session$24 depth 1 destination gallery via endpoint:6~global7~gallery screens 0:none 1:none 2:none]",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-door-mints-a-mapped-transfer",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "arch/glass seat 1 entered",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-dark-gallery-is-presented",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "depth 0 world 6~global7~gallery screens 0:none 1:none 2:none |",
+        "present": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "before-the-cabinet-shows-its-picture",
+        "capture": "before.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.477539,
+          0.272569,
+          0.495117,
+          0.338542
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.5,
+          0.5,
+          0.5,
+          1
+        ],
+        "maximum": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "before-the-text-screen-draws-its-glyphs",
+        "capture": "before.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.442383,
+          0.265625,
+          0.463867,
+          0.331597
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.11,
+          0.11,
+          0.11,
+          1
+        ],
+        "maximum": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "before-the-camera-screen-shows-the-lamp",
+        "capture": "before.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.543945,
+          0.272569,
+          0.557617,
+          0.310764
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0.4,
+          0,
+          1
+        ],
+        "maximum": [
+          0.15,
+          1,
+          0.4,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "after-the-cabinet-shows-its-picture",
+        "capture": "after.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.473633,
+          0.272569,
+          0.495117,
+          0.352431
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.5,
+          0.5,
+          0.5,
+          1
+        ],
+        "maximum": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "after-the-text-screen-draws-its-glyphs",
+        "capture": "after.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.387695,
+          0.265625,
+          0.448242,
+          0.359375
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.11,
+          0.11,
+          0.11,
+          1
+        ],
+        "maximum": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "after-the-camera-screen-shows-the-lamp",
+        "capture": "after.png",
+        "extent": [
+          256,
+          144
+        ],
+        "region": [
+          0.555664,
+          0.272569,
+          0.608398,
+          0.317708
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0,
+          0.4,
+          0,
+          1
+        ],
+        "maximum": [
+          0.15,
+          1,
+          0.4,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": false
+      }
+    ]
+  }
+}

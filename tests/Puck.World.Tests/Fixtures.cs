@@ -771,7 +771,10 @@ internal static class Fixtures {
     /// <see langword="null"/> for none when no <paramref name="machineCatalog"/> is supplied.</param>
     /// <param name="machineCatalog">An explicit catalog including content providers, instead of engine-only registration.</param>
     /// <param name="documentPath">The source document path for resolving relative machine content, or null for the host default.</param>
-    public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IMachineEngine>? engines = null, WorldMachineCatalog? machineCatalog = null, string? documentPath = null) {
+    /// <param name="landingRefusal">Optional transfer admission policy supplied by the law.</param>
+    /// <param name="catalogNarration">The hub the fixture's owned-world catalog narrates through, or <see langword="null"/> for none.</param>
+    /// <param name="consoleNarration">Whether the server narrates to the console, or attaches no narration sink at all.</param>
+    public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IMachineEngine>? engines = null, WorldMachineCatalog? machineCatalog = null, string? documentPath = null, Func<int, string?>? landingRefusal = null, WorldOutputHub? catalogNarration = null, bool consoleNarration = true) {
         // The default document's BYTES are serialized once for the whole run. Each fixture still deserializes its
         // own graph — that is what keeps one test's mutation off the next test's document — but the serialize half
         // of the round trip is the same work every time and is not worth repeating seven hundred times.
@@ -800,7 +803,8 @@ internal static class Fixtures {
         var profiles = new WorldOwnedWorlds(
             template: definition,
             directory: stateDirectory,
-            machineId: Guid.NewGuid()
+            machineId: Guid.NewGuid(),
+            narrationHub: catalogNarration
         );
         var server = new WorldServer(
             definition: definition,
@@ -808,7 +812,8 @@ internal static class Fixtures {
             profiles: profiles,
             envelope: new WorldRenderEnvelope(),
             machines: machines,
-            narrationSink: new WorldConsoleNarrationSink()
+            narrationSink: (consoleNarration ? new WorldConsoleNarrationSink() : null),
+            landingRefusal: landingRefusal
         );
 
         return new WorldFixture(

@@ -130,6 +130,7 @@ public sealed partial class WorldPopulation {
             KitIndex: entry.KitIndex,
             BodyColor: entry.BodyColor,
             CatalogRig: entry.CatalogRig,
+            TravelTurn: entry.TravelTurn,
             Designations: (alias
                 ? entry.Designations
                 : [.. entry.Designations]),
@@ -318,6 +319,7 @@ public sealed partial class WorldPopulation {
             entry.KitIndex = captured.KitIndex;
             entry.BodyColor = captured.BodyColor;
             entry.CatalogRig = captured.CatalogRig;
+            entry.TravelTurn = captured.TravelTurn;
             entry.Generation = captured.Generation;
             entry.IsAuthorityTransferred = captured.IsAuthorityTransferred;
             entry.IsRemoteHuman = captured.IsRemoteHuman;

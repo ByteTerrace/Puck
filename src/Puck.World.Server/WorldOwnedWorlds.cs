@@ -34,6 +34,7 @@ public sealed class WorldOwnedWorlds {
     private readonly WorldOutputHub? m_narrationHub;
     private readonly List<WorldOwnedWorldRefusal> m_refused = [];
     private readonly WorldDefinition m_template;
+    private readonly bool m_persist = true;
     // The hosting world's document directory: the root a seeded owned document's assets resolve under.
     private readonly string? m_worldDirectory;
 
@@ -42,6 +43,31 @@ public sealed class WorldOwnedWorlds {
 
     private static readonly CellName MoveSpeedState = WorldIdentityRows.MoveSpeed;
     private static readonly CellName TurnSpeedState = WorldIdentityRows.TurnSpeed;
+
+    private WorldOwnedWorlds(WorldOwnedWorlds source) {
+        m_catalogFingerprint = source.m_catalogFingerprint;
+        m_directory = source.m_directory;
+        m_machineCatalog = source.m_machineCatalog;
+        m_narrationHub = source.m_narrationHub;
+        m_template = source.m_template;
+        m_identities = [];
+        m_persist = false;
+        m_worldDirectory = source.m_worldDirectory;
+        MachineId = source.MachineId;
+        Defaults = source.Defaults;
+
+        if (!source.TryCapture(checkpoint: out var checkpoint, reason: out var reason)) {
+            throw new InvalidOperationException(message: $"a replay cannot copy the owned-world catalog: {reason}");
+        }
+
+        Restore(checkpoint: checkpoint!);
+    }
+
+    /// <summary>Creates a detached catalog for offline replay. Identities are rebuilt through the checkpoint
+    /// leaves, so replay writes cannot mutate the live objects, and saving an owned replay identity performs no
+    /// file I/O. The copy narrates through this catalog's hub, so what a replay reports reaches the live session.</summary>
+    /// <returns>The replay's own catalog.</returns>
+    public WorldOwnedWorlds CreateReplayCopy() => new(source: this);
 
     /// <summary>Loads owned worlds from a directory, seeding authored identities when it is empty.</summary>
     /// <param name="template">The document every seeded identity derives from.</param>
@@ -177,7 +203,7 @@ public sealed class WorldOwnedWorlds {
                 );
 
                 m_identities.Add(item: identity);
-                Save(identity: identity);
+                Persist(identity: identity);
             }
         }
     }
@@ -377,7 +403,7 @@ public sealed class WorldOwnedWorlds {
                 );
             }
 
-            Save(identity: owner);
+            Persist(identity: owner);
             return new WorldDocumentSubmissionReceipt(
                 Accepted: true,
                 Reason: "owner accepted the granted operation",
@@ -448,7 +474,7 @@ public sealed class WorldOwnedWorlds {
             )],
         });
 
-        Save(identity: owner);
+        Persist(identity: owner);
         return new WorldDocumentSubmissionReceipt(
             Accepted: true,
             Reason: "owner accepted the granted operation",
@@ -810,7 +836,7 @@ public sealed class WorldOwnedWorlds {
     /// this catalog already holds (<c>FindById</c>/<c>Find</c>, both ignoring case), or an entry occupying the id's
     /// catalog path that this boot did not admit — a refused document, a failed disposal, or a directory. The second
     /// check reads the directory rather than the identity list, because a boot that admitted nothing leaves the list
-    /// empty while the bytes are still on disk, and <see cref="Save(WorldIdentity)"/> would write straight over
+    /// empty while the bytes are still on disk, and <see cref="TrySave"/> would write straight over
     /// them.</summary>
     /// <param name="name">The new world's id and display name.</param>
     /// <param name="colorHex">The avatar color.</param>
@@ -873,7 +899,7 @@ public sealed class WorldOwnedWorlds {
         );
 
         m_identities.Add(item: identity);
-        Save(identity: identity);
+        Persist(identity: identity);
         reason = string.Empty;
         return identity;
     }
@@ -963,7 +989,7 @@ public sealed class WorldOwnedWorlds {
                 )]
         ));
         profile.ReplaceDocument(document: profile.Document with { Identity = definition with { Controllers = [.. (definition.Controllers ?? []), slots] } });
-        Save(identity: profile);
+        Persist(identity: profile);
     }
     /// <summary>Adopts a pulled cloud copy of an owned world: replaces the in-memory identity that shares its id (or
     /// adds a new one), then persists it locally through the ordinary save path. The caller has already validated the
@@ -1013,7 +1039,7 @@ public sealed class WorldOwnedWorlds {
             m_identities.Add(item: incoming);
             reason = "added a new owned world";
         }
-        Save(identity: incoming);
+        Persist(identity: incoming);
         return true;
     }
     /// <summary>Refuses, before anything is restored, a checkpoint whose owned documents' asset directories do not
@@ -1069,14 +1095,26 @@ public sealed class WorldOwnedWorlds {
     /// catalog's own <c>*.world.json</c> glob) keeps that derivation across every save; a flat identity keeps
     /// writing flat. <see cref="Revision"/> advances only when the write actually changed the file's bytes, so a
     /// caller that re-saves an identity already matching disk (e.g. a push publishing live state before resolving
-    /// its chain) never dirties the catalog by itself.</summary>
+    /// its chain) never dirties the catalog by itself.
+    /// <para>Only an identity this catalog owns is saved. A visitor — an identity another authority's traveler
+    /// arrived as — is refused by name, so a destination never writes a traveler into its own catalog.</para></summary>
     /// <param name="identity">The identity to persist.</param>
-    public void Save(WorldIdentity identity) {
+    /// <param name="reason">Why the identity was refused or its file could not be saved, or empty on success.</param>
+    /// <returns><see langword="true"/> when the identity was saved.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="identity"/> is <see langword="null"/>.</exception>
+    public bool TrySave(WorldIdentity identity, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: identity);
         if (
+            !Owns(identity: identity) ||
             (identity.Document is not { } document) ||
             (document.Identity is not { } identitySection)
         ) {
-            return;
+            reason = NotOwned(identity: identity);
+            return false;
+        }
+        if (!m_persist) {
+            reason = string.Empty;
+            return true;
         }
         var path = Path.Combine(
             path1: m_directory,
@@ -1097,15 +1135,30 @@ public sealed class WorldOwnedWorlds {
             before = null;
         }
 
-        _ = WorldDefinitionSerialization.SavePreservingBasis(
-            basisPath: out _,
-            catalog: m_machineCatalog,
-            catalogFingerprint: m_catalogFingerprint,
-            definition: document,
-            imports: out _,
-            note: out var note,
-            path: path
-        );
+        string note;
+
+        try {
+            _ = WorldDefinitionSerialization.SavePreservingBasis(
+                basisPath: out _,
+                catalog: m_machineCatalog,
+                catalogFingerprint: m_catalogFingerprint,
+                definition: document,
+                imports: out _,
+                note: out note,
+                path: path
+            );
+            if (
+                (before is null) ||
+                !before.AsSpan().SequenceEqual(other: File.ReadAllBytes(path: path))
+            ) {
+                m_revision++;
+            }
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            // An arrival may already be durable. Report the file refusal so its caller can finish binding the owned
+            // identity and recording the arrival, rather than stranding a committed seat on its travelling copy.
+            reason = $"could not save identity '{identity.Id}': {exception.Message}";
+            return false;
+        }
 
         if (note.Length > 0) {
             if (m_narrationHub is { HasNarrationSink: true }) {
@@ -1115,19 +1168,41 @@ public sealed class WorldOwnedWorlds {
                 );
             }
         }
+        reason = string.Empty;
+        return true;
+    }
+
+    // Saves an identity for a caller that has no refusal to return. Any refusal, a file this process cannot write
+    // included, is narrated rather than dropped, so a write that never reached disk is never silent.
+    private void Persist(WorldIdentity identity) {
         if (
-            (before is null) ||
-            !before.AsSpan().SequenceEqual(other: File.ReadAllBytes(path: path))
+            !TrySave(
+                identity: identity,
+                reason: out var reason
+            ) &&
+            (m_narrationHub is { HasNarrationSink: true })
         ) {
-            m_revision++;
+            m_narrationHub.Narrate(
+                channel: "identity",
+                text: $"[identity] {reason}"
+            );
         }
     }
+
     /// <summary>Persists every owned world.</summary>
     public void Save() {
         foreach (var identity in m_identities) {
-            Save(identity: identity);
+            Persist(identity: identity);
         }
     }
+    /// <summary>Returns whether this catalog owns <paramref name="identity"/>: it is one of the identities the catalog
+    /// holds, not an identity that merely shares an id with one.</summary>
+    /// <param name="identity">The identity.</param>
+    /// <returns><see langword="true"/> when the catalog owns it.</returns>
+    public bool Owns(WorldIdentity identity) => m_identities.Contains(item: identity);
+
+    private string NotOwned(WorldIdentity identity) => $"identity '{identity.Id}' is not owned by this catalog, so it is never saved into '{m_directory}'";
+
     /// <summary>Asks an owned world to apply one tick-stamped durable-state operation.</summary>
     public WorldDocumentSubmissionReceipt Submit(WorldDocumentSubmission submission) {
         var receipt = Decide(submission: submission);
@@ -1190,18 +1265,32 @@ public sealed class WorldOwnedWorlds {
                 return false;
         }
     }
-    /// <summary>Writes one fact on an identity's own row and persists the identity when the row changed — the one
-    /// door a rule effect and the console share, so a fact reaches disk through the same save every other identity
-    /// edit takes.</summary>
+    /// <summary>Writes one fact on an identity's facts row, the one door a rule effect and the console share. An
+    /// identity this catalog owns is persisted when the row changed, through the same save every other identity edit
+    /// takes. A visitor — an identity another authority's traveler arrived as — keeps the fact on its travelling row,
+    /// which its next crossing carries on and its own authority adopts when it comes home; nothing is saved here. An
+    /// identity carrying an owned document this catalog does not own is refused by name and left unchanged.</summary>
     /// <param name="identity">The identity to write.</param>
     /// <param name="key">The fact key.</param>
     /// <param name="value">The fact's integer value.</param>
     /// <param name="changed">Whether the identity's row changed.</param>
     /// <param name="reason">Why the write was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the fact is in place.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="identity"/> is <see langword="null"/>.</exception>
     public bool TrySetFact(WorldIdentity identity, CellName key, long value, out bool changed, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: identity);
 
+        var owned = Owns(identity: identity);
+
+        if (
+            !owned &&
+            (identity.Document is not null)
+        ) {
+            changed = false;
+            reason = NotOwned(identity: identity);
+
+            return false;
+        }
         if (!identity.TrySetFact(
             changed: out changed,
             key: key,
@@ -1210,10 +1299,46 @@ public sealed class WorldOwnedWorlds {
         )) {
             return false;
         }
-        if (changed) {
-            Save(identity: identity);
+
+        return (
+            !changed ||
+            !owned ||
+            TrySave(
+            identity: identity,
+            reason: out reason
+        ));
+    }
+    /// <summary>Adopts into an identity this catalog owns what its own traveler carried home — the facts and records
+    /// (<see cref="WorldIdentity.TryAdopt"/>) and nothing else — and saves it.</summary>
+    /// <param name="owned">The identity the traveler left with.</param>
+    /// <param name="carried">The identity the traveler arrived as, rebuilt from its projection.</param>
+    /// <param name="reason">The first carried value refused, or why <paramref name="owned"/> was not saved; empty when
+    /// everything was adopted and saved.</param>
+    /// <returns><see langword="true"/> when everything was adopted and saved.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="owned"/> or <paramref name="carried"/> is
+    /// <see langword="null"/>.</exception>
+    public bool TryAdopt(WorldIdentity owned, WorldIdentity carried, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: owned);
+        ArgumentNullException.ThrowIfNull(argument: carried);
+        if (!Owns(identity: owned)) {
+            reason = NotOwned(identity: owned);
+
+            return false;
         }
 
-        return true;
+        var adopted = owned.TryAdopt(
+            carried: carried,
+            reason: out var adoptReason
+        );
+        var saved = TrySave(
+            identity: owned,
+            reason: out var saveReason
+        );
+
+        reason = (adopted
+            ? saveReason
+            : adoptReason);
+
+        return (adopted && saved);
     }
 }

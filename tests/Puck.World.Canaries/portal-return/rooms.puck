@@ -217,12 +217,12 @@ module garden(nesting) {
           }
         }
       ]
-      position [0, 1.5, -14]
+      position [0, 1.5, 2]
       prototype: "arch"
-      yawDegrees: 180
+      yawDegrees: 0
     }
     placement "wall" {
-      position [0, 1.5, -26]
+      position [0, 1.5, 14]
       prototype: "wall"
     }
   }

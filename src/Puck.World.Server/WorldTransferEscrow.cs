@@ -9,13 +9,14 @@ namespace Puck.World.Server;
 /// <summary>One prospective traveler in a destination reservation.</summary>
 /// <param name="Principal">The source-stamped acting principal for a colocated transfer.</param>
 /// <param name="PreferredSlot">The body index the traveler prefers to retain.</param>
-/// <param name="Identity">The attested owned-world identity carried by a federated traveler.</param>
+/// <param name="Identity">The traveler's identity projection at reservation: everything of its identity a crossing
+/// discloses, and nothing of the owned document behind it.</param>
 /// <param name="Source">The traveler's authored intent source, preserved across the authority boundary.</param>
 /// <param name="BodyColor">The source body's exact rendered material color, preserved across ownership.</param>
 /// <param name="CatalogRig">The source body's entity-owned procedural rig, preserved across ownership. Destination
 /// look authoring may deliberately override it; ordinary admission may not.</param>
 /// <param name="Mobility">The traveler's immutable incarnation and current committed ownership epoch.</param>
-public readonly record struct WorldTransferReservationMember(Principal Principal, int PreferredSlot, WorldIdentity? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null);
+public readonly record struct WorldTransferReservationMember(Principal Principal, int PreferredSlot, WorldIdentityProjection? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null);
 /// <summary>The destination's binding reservation request. The deadline is stated in the source authority's own
 /// simulation ticks; the destination converts the remaining interval through the exact 50400 engine-tick bridge.</summary>
 public sealed record WorldTransferReservationRequest(
@@ -113,9 +114,12 @@ public sealed record WorldTransferReservationReply(bool Accepted, string Reason,
         Reason: reason
     );
 }
-/// <summary>One detached source body carried into a previously reserved destination index.</summary>
+/// <summary>One detached source body carried into a previously reserved destination index. <c>TravelTurn</c> is the
+/// traveler's accumulated arrival turn once it lands (<see cref="WorldFrameIsometry.AccumulateTurn"/>), which the
+/// destination keeps on the occupant for the routes it describes. <c>Profile</c> is the traveler's identity projection
+/// at commit, which the destination lands in place of the reservation's.</summary>
 public sealed record WorldTransferCommitMember(
-    WorldIdentity? Profile,
+    WorldIdentityProjection? Profile,
     bool HasMappedArrival,
     string BodyMotionProgramName,
     FixedVector3 Position,
@@ -123,7 +127,8 @@ public sealed record WorldTransferCommitMember(
     FixedVector3 PlanarVelocity,
     FixedQ4816 VerticalVelocity,
     WorldTransferActionContinuity? ActionContinuity = null,
-    WorldContinuumTrajectory? Continuum = null
+    WorldContinuumTrajectory? Continuum = null,
+    FixedQ4816 TravelTurn = default
 );
 /// <summary>The transfer escrow table shared by colocated and QUIC authority transports. It owns destination capacity
 /// from reserve until commit, explicit abort, or deterministic deadline expiry; it never queues a full request.</summary>
@@ -152,6 +157,7 @@ public sealed partial class WorldTransferEscrow {
     private readonly record struct MobilityLease(WorldTransferKey Transfer, ulong ExpectedEpoch);
 
     private readonly WorldServer m_server;
+    private readonly Func<int, string?>? m_landingRefusal;
 
     // Sorted by DeadlineTick so ReclaimExpired sweeps only what has actually arrived; every m_leases entry has
     // exactly one live row here, added alongside the lease and removed by ReleaseLease, whether that release is
@@ -176,8 +182,20 @@ public sealed partial class WorldTransferEscrow {
     private ulong m_crossingSequence;
     // Set while a recorded arrival lands again: its record is already durable, so it is not written twice.
     private bool m_relanding;
+    // Set while a re-drive lands a taped arrival: the outcome its landings must reproduce, and whether the landing
+    // reached the recorded rollback.
+    private WorldArrivalOutcome? m_relandOutcome;
+    private bool m_relandRolledBack;
 
-    public WorldTransferEscrow(WorldServer server) => m_server = server;
+    /// <summary>Initializes a new instance of the <see cref="WorldTransferEscrow"/> class for one authority.</summary>
+    /// <param name="server">The authority the escrow lands travelers in.</param>
+    /// <param name="landingRefusal">An admission policy evaluated at each commit member's ordinal, returning a refusal
+    /// reason or <see langword="null"/> to admit, fixed at composition. No production composition passes one; a law
+    /// passes one to refuse a member after the members ahead of it have landed.</param>
+    public WorldTransferEscrow(WorldServer server, Func<int, string?>? landingRefusal = null) {
+        m_server = server;
+        m_landingRefusal = landingRefusal;
+    }
 
     /// <summary>Gets the first crossing sequence this authority has not yet made durable.</summary>
     public ulong CrossingSequence => m_crossingSequence;
@@ -362,7 +380,7 @@ public sealed partial class WorldTransferEscrow {
             var b = right[index];
 
             if (
-                !IdentityMatches(
+                !WorldIdentityProjectionWire.Matches(
                 left: a.Profile,
                 right: b.Profile
             ) ||
@@ -376,6 +394,7 @@ public sealed partial class WorldTransferEscrow {
                 (a.YawRadians != b.YawRadians) ||
                 (a.PlanarVelocity != b.PlanarVelocity) ||
                 (a.VerticalVelocity != b.VerticalVelocity) ||
+                (a.TravelTurn != b.TravelTurn) ||
                 (a.Continuum != b.Continuum) ||
                 !ActionContinuityMatches(
                 left: a.ActionContinuity,
@@ -405,36 +424,6 @@ public sealed partial class WorldTransferEscrow {
         )
         : null),
     };
-    private static bool IdentityMatches(WorldIdentity? left, WorldIdentity? right) {
-        if (ReferenceEquals(
-            objA: left,
-            objB: right
-        )) {
-            return true;
-        }
-
-        if (
-            (left is null) ||
-            (right is null)
-        ) {
-            return false;
-        }
-
-        if (
-            (left.Document is not { } leftDocument) ||
-            (right.Document is not { } rightDocument)
-        ) {
-            return (
-                (left.Document is null) &&
-                (right.Document is null)
-            );
-        }
-
-        var leftBytes = WorldDefinitionSerialization.Serialize(definition: leftDocument);
-        var rightBytes = WorldDefinitionSerialization.Serialize(definition: rightDocument);
-
-        return leftBytes.AsSpan().SequenceEqual(other: rightBytes);
-    }
     private static int PreferredOrLowestFree(bool[] consumed, int preferred, int first) {
         if (
             (preferred >= first) &&
@@ -522,7 +511,7 @@ public sealed partial class WorldTransferEscrow {
                 (a.BodyColor != b.BodyColor) ||
                 (a.CatalogRig != b.CatalogRig) ||
                 (a.Mobility != b.Mobility) ||
-                !IdentityMatches(
+                !WorldIdentityProjectionWire.Matches(
                 left: a.Identity,
                 right: b.Identity
             )
@@ -742,139 +731,94 @@ public sealed partial class WorldTransferEscrow {
         for (var index = 0; (index < members.Count); index++) {
             var member = members[index];
 
+            if (CommitMemberFault(member: member) is { } fault) {
+                reason = $"transfer {transferId} traveler {(index + 1)} {fault}";
+                return WorldTransferStatus.Missing;
+            }
             if (
                 member.HasMappedArrival &&
-                (string.IsNullOrWhiteSpace(value: member.BodyMotionProgramName)
-                || !lease.DestinationDefinition.BodyMotionPrograms.Any(predicate: program => ((program.Kind == BodyProgramKind.Motion)
-                    && string.Equals(
-                a: program.Name,
-                b: member.BodyMotionProgramName,
-                comparisonType: StringComparison.Ordinal
-            ))))
+                !lease.DestinationDefinition.BodyMotionPrograms.Any(predicate: program => ((program.Kind == BodyProgramKind.Motion) && string.Equals(
+                    a: program.Name,
+                    b: member.BodyMotionProgramName,
+                    comparisonType: StringComparison.Ordinal
+                )))
             ) {
                 reason = $"transfer {transferId} traveler {(index + 1)} names unavailable destination motion program '{member.BodyMotionProgramName}'";
                 return WorldTransferStatus.Missing;
             }
-            if (
-                (member.Continuum is { } continuum) &&
-                (!member.HasMappedArrival ||
-                 (continuum.ContinuumEndEngineTick <= continuum.ContinuumStartEngineTick) ||
-                 (continuum.ConsumedThroughEngineTick < continuum.ContinuumEndEngineTick) ||
-                 (continuum.BoundaryEvents == 0) ||
-                 (continuum.BoundaryEvents > WorldContinuumTrajectory.MaxBoundaryEvents))
-            ) {
-                reason = $"transfer {transferId} traveler {(index + 1)} carries an invalid continuum interval or boundary count";
-                return WorldTransferStatus.Missing;
-            }
         }
 
-        var landed = new List<int>(capacity: members.Count);
-
-        void Unland() {
-            foreach (var landedSlot in landed) {
-                if (lease.Request.PeerAdmission) {
-                    m_server.GrantTable.RollbackTransferredEntity(slot: landedSlot);
-                } else {
-                    _ = m_server.Population.TryDetachSeatForTransfer(
-                        profile: out _,
-                        slot: landedSlot
-                    );
-                }
-                _ = m_borderAdmissions.Remove(key: landedSlot);
-            }
-        }
-
-        for (var index = 0; (index < members.Count); index++) {
-            var slot = lease.Slots[index];
-            var reservationMember = lease.Request.Members[index];
-            var principal = reservationMember.Principal;
-            SessionReply reply;
-
-            if (lease.Request.PeerAdmission) {
-                reply = (reservationMember.Source.IsLive
-                    ? m_server.GrantTable.AdmitTransferredPeer(
-                        slot: slot,
-                        verdict: lease.Arrival
-                    )
-                    : m_server.GrantTable.AdmitTransferredEntity(
-                        slot: slot,
-                        source: reservationMember.Source,
-                        identity: reservationMember.Identity
-                    )
-                );
-            } else {
-                reply = m_server.ApplySession(request: new SessionRequest.Join(
-                    IdentityName: null,
-                    Principal: principal,
-                    Slot: slot,
-                    WireProtocolKey: WorldProtocol.WireProtocolKey
-                ));
-            }
-
-            if (!reply.Accepted) {
-                Unland();
-                reason = $"body:{slot} refused reserved commit — {reply.Reason}";
-
-                return WorldTransferStatus.Missing;
-            }
-
-            var member = members[index];
-
-            var profile = (member.Profile ?? reservationMember.Identity);
-
-            if (profile is not null) {
-                m_server.Population.SetSeatProfile(
-                    profile: profile,
-                    slot: slot
-                );
-            }
-            m_server.Population.SetBodyColor(
-                slot: slot,
-                color: reservationMember.BodyColor
-            );
-            m_server.Population.SetCatalogRig(
-                slot: slot,
-                catalogRig: reservationMember.CatalogRig
-            );
-
-            // The occupant is identified before it is placed: placing resolves contact, and the identity is what
-            // tells contact that a neighbour's record of the slot it departed from shows this same occupant.
-            var committedMobility = reservationMember.Mobility!.Value.Advance();
-
-            m_server.Population.SetMobility(
-                index: slot,
-                mobility: in committedMobility
-            );
-
-            if (member.HasMappedArrival) {
-                m_server.Population.ApplyMappedArrival(
-                    slot: slot,
-                    motionProgramName: member.BodyMotionProgramName,
-                    position: member.Position,
-                    yawRadians: member.YawRadians,
-                    planarVelocity: member.PlanarVelocity,
-                    verticalVelocity: member.VerticalVelocity,
-                    actionContinuity: (member.ActionContinuity ?? new WorldTransferActionContinuity(
-                        Channels: [],
-                        Registers: []
-                    )),
-                    continuum: member.Continuum,
-                    destinationCompletedEngineTick: m_server.CompletedEngineTicks
-                );
-            }
-
-            landed.Add(item: slot);
-            m_borderAdmissions[slot] = lease.Request.Border;
-        }
-
-        // Written ahead of the answer: a destination that cannot make its arrival durable lands nothing, so a
-        // restart can never lose a body the source was told had arrived. An uncertain record lands nothing either,
-        // but the record may still be in the log, so the answer is neither a refusal nor a commit.
         var arrival = new WorldCrossingArrival(
             Members: [.. members],
             Request: lease.Request,
             Slots: [.. lease.Slots]
         );
+        var generations = new List<int>(capacity: members.Count);
+        // A re-drive stops where the recorded commit rolled back; a live commit or a recovery lands every traveler.
+        var stop = ((m_relandOutcome is { RolledBack: true } recorded)
+            ? recorded.Generations.Count
+            : -1);
+
+        // Every landing this commit made is undone, then reported with its rollback, so a re-drive lands and rolls
+        // back the same travelers: a landing advances its index's generation, which outlives it.
+        void RollBack() {
+            RollBackArrival(
+                arrival: arrival,
+                landed: generations.Count
+            );
+            if (generations.Count > 0) {
+                m_server.ArrivalTap?.Invoke(
+                    arg1: arrival,
+                    arg2: new WorldArrivalOutcome(
+                        Generations: [.. generations],
+                        RolledBack: true
+                    )
+                );
+            }
+        }
+
+        for (var index = 0; (index < members.Count); index++) {
+            if (index == stop) {
+                RollBack();
+                m_relandRolledBack = true;
+                reason = $"transfer {transferId} rolled back ahead of traveler {(index + 1)}, as recorded";
+                return WorldTransferStatus.Missing;
+            }
+
+            var slot = lease.Slots[index];
+            var reply = LandMember(
+                arrival: arrival,
+                index: index,
+                verdict: lease.Arrival
+            );
+
+            if (!reply.Accepted) {
+                RollBack();
+                reason = $"body:{slot} refused reserved commit — {reply.Reason}";
+                return WorldTransferStatus.Missing;
+            }
+
+            generations.Add(item: m_server.Population.Generation(index: slot));
+
+            if (
+                (m_relandOutcome is { } pinned) &&
+                (generations[index] != pinned.Generations[index])
+            ) {
+                RollBack();
+                reason = $"body:{slot} landed at generation {generations[index]} where the recorded commit landed it at {pinned.Generations[index]}";
+                return WorldTransferStatus.Missing;
+            }
+        }
+        if (stop == members.Count) {
+            RollBack();
+            m_relandRolledBack = true;
+            reason = $"transfer {transferId} rolled back after landing every traveler, as recorded";
+            return WorldTransferStatus.Missing;
+        }
+
+        // Written ahead of the answer: a destination that cannot make its arrival durable lands nothing, so a
+        // restart can never lose a body the source was told had arrived. An uncertain record lands nothing either,
+        // but the record may still be in the log, so the answer is neither a refusal nor a commit.
         var durability = WorldCrossingDurability.Durable;
         var durabilityReason = string.Empty;
 
@@ -885,7 +829,7 @@ public sealed partial class WorldTransferEscrow {
             );
         }
         if (durability != WorldCrossingDurability.Durable) {
-            Unland();
+            RollBack();
             if (durability == WorldCrossingDurability.Uncertain) {
                 return HoldUncertain(
                     arrival: arrival,
@@ -939,10 +883,257 @@ public sealed partial class WorldTransferEscrow {
             );
         }
         m_committedIncarnations[key] = committedIncarnations;
-        m_server.NoteArrival(arrival: arrival);
+        AdoptHomeProfiles(arrival: arrival);
+        // Reported once the commit stands, with the generation each traveler landed at.
+        m_server.ArrivalTap?.Invoke(
+            arg1: arrival,
+            arg2: new WorldArrivalOutcome(
+                Generations: [.. generations],
+                RolledBack: false
+            )
+        );
         reason = string.Empty;
 
         return WorldTransferStatus.Committed;
+    }
+    // The one landing: admits traveler `index` of a commit at its reserved index (a local seat by its session join, a
+    // transferred peer or entity through its verified admission, whose PeerAdmitted event applies inline), then writes
+    // the occupant the commit carried onto it. A live commit, a recovery and a re-drive all land here.
+    private SessionReply LandMember(WorldCrossingArrival arrival, int index, WorldAdmissionVerdict? verdict) {
+        var slot = arrival.Slots[index];
+        var reservationMember = arrival.Request.Members[index];
+        var member = arrival.Members[index];
+
+        if (m_landingRefusal?.Invoke(index) is { } landingRefusal) {
+            return new SessionReply(
+                Accepted: false,
+                AssignedIndex: -1,
+                Reason: landingRefusal,
+                RosterEcho: string.Empty
+            );
+        }
+
+        // An ordinary join can take a reserved seat before commit. Join itself is idempotent over an active seat;
+        // a transfer must refuse it rather than overwrite its occupant or detach it during a later rollback.
+        if (m_server.Population.IsActive(index: slot)) {
+            return new SessionReply(
+                Accepted: false,
+                AssignedIndex: -1,
+                Reason: $"reserved body:{slot} is no longer free",
+                RosterEcho: string.Empty
+            );
+        }
+
+        SessionReply reply;
+        var profile = ArrivingProfile(
+            arrival: arrival,
+            index: index
+        );
+
+        if (arrival.Request.PeerAdmission) {
+            var occupant = new WorldTransferredOccupant(
+                CatalogRig: reservationMember.CatalogRig,
+                TravelTurn: member.TravelTurn
+            );
+
+            reply = (reservationMember.Source.IsLive
+                ? m_server.GrantTable.AdmitTransferredPeer(
+                    occupant: occupant,
+                    slot: slot,
+                    verdict: verdict
+                )
+                : m_server.GrantTable.AdmitTransferredEntity(
+                    identity: profile,
+                    occupant: occupant,
+                    slot: slot,
+                    source: reservationMember.Source
+                ));
+        } else {
+            reply = m_server.ApplySession(request: new SessionRequest.Join(
+                IdentityName: null,
+                Principal: reservationMember.Principal,
+                Slot: slot,
+                WireProtocolKey: WorldProtocol.WireProtocolKey
+            ));
+        }
+        if (reply.Accepted) {
+            Land(
+                bodyColor: reservationMember.BodyColor,
+                border: arrival.Request.Border,
+                catalogRig: reservationMember.CatalogRig,
+                member: member,
+                mobility: reservationMember.Mobility!.Value.Advance(),
+                profile: profile,
+                slot: slot
+            );
+        }
+
+        return reply;
+    }
+    // The identity traveler `index` lands as: the projection its commit carried, or its reservation's when the commit
+    // carries none, rebuilt against this world's player defaults. Nothing of the owned document behind it ever arrives.
+    // Home adoption waits until every landing succeeds and the arrival is durable.
+    private WorldIdentity? ArrivingProfile(WorldCrossingArrival arrival, int index) {
+        if ((arrival.Members[index].Profile ?? arrival.Request.Members[index].Identity) is not { } projection) {
+            return null;
+        }
+
+        return WorldIdentity.FromProjection(
+            defaults: m_server.Definition.PlayerDefaults,
+            projection: in projection
+        );
+    }
+    // Catalog writes cannot be undone by detaching a seat. Adopt only after the arrival stands, on recovery too;
+    // a taped rollback never reaches this point. Keep the material color the ordinary landing already installed.
+    private void AdoptHomeProfiles(WorldCrossingArrival arrival) {
+        for (var index = 0; (index < arrival.Slots.Count); index++) {
+            var slot = arrival.Slots[index];
+
+            if ((m_server.Population.EntryBody(index: slot)?.Profile is not { } carried) ||
+                (HomeIdentity(arrival: arrival, index: index, id: carried.Id) is not { } owned)) {
+                continue;
+            }
+            // A re-drive of a recorded outcome saves nothing: it binds a detached copy of the owned identity, as a
+            // replay's pinned seats are detached, and reports where that copy differs from the taped projection.
+            var bound = owned;
+            bool adopted;
+            string reason;
+
+            if (m_relandOutcome is null) {
+                adopted = m_server.Profiles.TryAdopt(carried: carried, owned: owned, reason: out reason);
+            } else {
+                bound = WorldIdentity.FromProjection(
+                    defaults: m_server.Definition.PlayerDefaults,
+                    projection: owned.Project()
+                );
+                adopted = bound.TryAdopt(carried: carried, reason: out reason);
+                WorldReplaySnapshot.ReportAdoptionDrift(
+                    bound: bound,
+                    narrationHub: m_server.Profiles.NarrationHub,
+                    taped: carried
+                );
+            }
+            if (!adopted && m_server.Output.HasNarrationSink) {
+                m_server.Output.Narrate(
+                    channel: "world.identity",
+                    text: $"[world.identity: world:{owned.Id} came home and did not adopt everything it carried — {reason}]"
+                );
+            }
+            var color = m_server.Population.BodyColor(index: slot);
+
+            m_server.Population.SetSeatProfile(profile: bound, slot: slot);
+            m_server.Population.SetBodyColor(color: color, slot: slot);
+        }
+    }
+    // The owned identity a local seat of this authority left with, when traveler `index` is that seat coming home: a
+    // colocated arrival of this process's own local seats (a remote one admits peers, and a remote incarnation claim is
+    // unauthenticated) at the seat this authority minted it at (WorldServer.HomeSeatIdentity).
+    private WorldIdentity? HomeIdentity(WorldCrossingArrival arrival, int index, string id) => ((
+        !arrival.Request.PeerAdmission &&
+        (arrival.Request.Members[index].Mobility is { } mobility)
+    )
+        ? m_server.HomeSeatIdentity(
+            id: id,
+            mobility: mobility,
+            slot: arrival.Slots[index]
+        )
+        : null);
+    // The one undo of a landing: the first `landed` travelers of a commit that rolled back leave their indices, a
+    // transferred peer or entity with the grants its admission minted, a local seat by leaving its seat. A refused
+    // member, an arrival record that could not be made durable and a re-drive reproducing a recorded rollback all
+    // undo here.
+    private void RollBackArrival(WorldCrossingArrival arrival, int landed) {
+        for (var index = 0; (index < landed); index++) {
+            var slot = arrival.Slots[index];
+
+            if (arrival.Request.PeerAdmission) {
+                m_server.GrantTable.RollbackTransferredEntity(slot: slot);
+            } else {
+                _ = m_server.Population.TryDetachSeatForTransfer(
+                    profile: out _,
+                    slot: slot
+                );
+            }
+            _ = m_borderAdmissions.Remove(key: slot);
+        }
+    }
+
+    /// <summary>Returns why a commit member's carried motion cannot land anywhere, or <see langword="null"/> when its
+    /// shape is sound: an unreduced arrival turn, a mapped arrival naming no motion program, or a continuum interval
+    /// that is empty, unconsumed, carries no or too many boundary events, or rides an unmapped arrival. A commit, a
+    /// crossing-log record and a taped arrival all refuse a member this names; only a commit can also check the
+    /// destination's own motion programs.</summary>
+    /// <param name="member">The commit member.</param>
+    /// <returns>The fault, or <see langword="null"/>.</returns>
+    internal static string? CommitMemberFault(WorldTransferCommitMember member) {
+        if (!WorldFrameIsometry.IsTurn(turn: member.TravelTurn)) {
+            return $"carries an unreduced arrival turn {member.TravelTurn}";
+        }
+        if (
+            member.HasMappedArrival &&
+            string.IsNullOrWhiteSpace(value: member.BodyMotionProgramName)
+        ) {
+            return "names no destination motion program for its mapped arrival";
+        }
+        if (
+            (member.Continuum is { } continuum) &&
+            (!member.HasMappedArrival ||
+             (continuum.ContinuumEndEngineTick <= continuum.ContinuumStartEngineTick) ||
+             (continuum.ConsumedThroughEngineTick < continuum.ContinuumEndEngineTick) ||
+             (continuum.BoundaryEvents == 0) ||
+             (continuum.BoundaryEvents > WorldContinuumTrajectory.MaxBoundaryEvents))
+        ) {
+            return "carries an invalid continuum interval or boundary count";
+        }
+        return null;
+    }
+
+    // Writes an admitted occupant's carried state onto its slot: the profile, appearance and arrival turn, its committed
+    // mobility identity, and, for a mapped arrival, the pose and motion the commit carried.
+    private void Land(int slot, WorldIdentity? profile, Vector3 bodyColor, byte catalogRig, in WorldMobilityIdentity mobility, string border, WorldTransferCommitMember member) {
+        if (profile is not null) {
+            m_server.Population.SetSeatProfile(
+                profile: profile,
+                slot: slot
+            );
+        }
+        m_server.Population.SetBodyColor(
+            color: bodyColor,
+            slot: slot
+        );
+        m_server.Population.SetCatalogRig(
+            catalogRig: catalogRig,
+            slot: slot
+        );
+        m_server.Population.SetTravelTurn(
+            slot: slot,
+            travelTurn: member.TravelTurn
+        );
+        // The occupant is identified before it is placed: placing resolves contact, and the identity is what tells
+        // contact that a neighbour's record of the slot it departed from shows this same occupant.
+        m_server.Population.SetMobility(
+            index: slot,
+            mobility: in mobility
+        );
+
+        if (member.HasMappedArrival) {
+            m_server.Population.ApplyMappedArrival(
+                actionContinuity: (member.ActionContinuity ?? new WorldTransferActionContinuity(
+                    Channels: [],
+                    Registers: []
+                )),
+                continuum: member.Continuum,
+                destinationCompletedEngineTick: m_server.CompletedEngineTicks,
+                motionProgramName: member.BodyMotionProgramName,
+                planarVelocity: member.PlanarVelocity,
+                position: member.Position,
+                slot: slot,
+                verticalVelocity: member.VerticalVelocity,
+                yawRadians: member.YawRadians
+            );
+        }
+
+        m_borderAdmissions[slot] = border;
     }
 
     public void ReclaimExpired(ulong tick) {
@@ -1005,62 +1196,16 @@ public sealed partial class WorldTransferEscrow {
             return WorldTransferReservationReply.Refused(reason: "reservation carries no travelers");
         }
 
-        var reservationIncarnations = new HashSet<WorldEntityAddress>();
-
-        for (var index = 0; (index < request.Members.Count); index++) {
-            if (request.Members[index].CatalogRig >= WorldLookSource.Catalog.RigCount) {
-                return WorldTransferReservationReply.Refused(reason: $"traveler {(index + 1)} catalog rig {request.Members[index].CatalogRig} is outside 0..{(WorldLookSource.Catalog.RigCount - 1)}");
-            }
-            if (request.Members[index].Mobility is not { } mobility) {
-                return WorldTransferReservationReply.Refused(reason: $"traveler {(index + 1)} carries no stable mobility identity");
-            }
-            if (!reservationIncarnations.Add(item: mobility.Incarnation)) {
-                return WorldTransferReservationReply.Refused(reason: $"traveler {(index + 1)} repeats mobility incarnation {mobility.Incarnation}");
-            }
-            if (m_mobilityLeases.TryGetValue(
-                key: mobility.Incarnation,
-                value: out var mobilityLease
-            )) {
-                return WorldTransferReservationReply.Refused(reason: $"traveler {(index + 1)} mobility incarnation is already leased to transfer {mobilityLease.Transfer.TransferId} at epoch {mobilityLease.ExpectedEpoch}");
-            }
-            if (
-                TryKnownMobilityEpoch(
-                incarnation: mobility.Incarnation,
-                epoch: out var knownEpoch
-            ) &&
-                (knownEpoch >= mobility.Epoch)
-            ) {
-                return WorldTransferReservationReply.Refused(reason: $"traveler {(index + 1)} mobility epoch {mobility.Epoch} is stale; destination has consumed through {knownEpoch}");
-            }
+        if (TravelerRefusal(request: request) is { } travelerRefusal) {
+            return WorldTransferReservationReply.Refused(reason: travelerRefusal);
+        }
+        if (LeaseDeadlineRefusal(
+            deadline: out var deadline,
+            request: request
+        ) is { } deadlineRefusal) {
+            return WorldTransferReservationReply.Refused(reason: deadlineRefusal);
         }
 
-        if (
-            (request.SourceRateHz <= 0) ||
-            (request.DeadlineSourceTick <= request.SourceTick)
-        ) {
-            return WorldTransferReservationReply.Refused(reason: "source lease deadline does not advance on a positive simulation rate");
-        }
-
-        if ((FixedTickConversion.TicksPerSecond % checked((ulong)request.SourceRateHz)) != 0UL) {
-            return WorldTransferReservationReply.Refused(reason: $"source simulation rate {request.SourceRateHz}Hz does not divide the exact {FixedTickConversion.TicksPerSecond}-tick bridge");
-        }
-
-        var destinationRate = m_server.Definition.SimulationRateHz;
-
-        if (destinationRate <= 0) {
-            return WorldTransferReservationReply.Refused(reason: "destination simulation rate is stopped, so no binding lease can expire there");
-        }
-
-        if ((FixedTickConversion.TicksPerSecond % checked((ulong)destinationRate)) != 0UL) {
-            return WorldTransferReservationReply.Refused(reason: $"destination simulation rate {destinationRate}Hz does not divide the exact {FixedTickConversion.TicksPerSecond}-tick bridge");
-        }
-
-        var sourceStepTicks = (FixedTickConversion.TicksPerSecond / checked((ulong)request.SourceRateHz));
-        var destinationStepTicks = (FixedTickConversion.TicksPerSecond / checked((ulong)destinationRate));
-        var remainingSourceSteps = (request.DeadlineSourceTick - request.SourceTick);
-        var remainingEngineTicks = checked((remainingSourceSteps * sourceStepTicks));
-        var destinationSteps = checked((((remainingEngineTicks + destinationStepTicks) - 1UL) / destinationStepTicks));
-        var deadline = checked(((m_server.NextInputTick - 1UL) + destinationSteps));
         // The admission decision runs once, here, against the authenticated source-authority namespace, and the
         // lease carries its verdict to commit: reserve and commit can never disagree about what an arrival is
         // authorized. A colocated request is produced in-process by the host that owns both authorities, so its
@@ -1161,6 +1306,166 @@ public sealed partial class WorldTransferEscrow {
             slots[index] = slot;
         }
 
+        return InstallLease(
+            arrival: arrival,
+            deadline: deadline,
+            key: key,
+            request: request,
+            slots: slots
+        );
+    }
+
+    // Refuses a cohort whose travelers cannot hold a lease: a catalog rig outside the catalog, no stable mobility
+    // identity, an incarnation repeated within the cohort or already leased to another transfer, or a mobility epoch
+    // this destination has already consumed.
+    private string? TravelerRefusal(WorldTransferReservationRequest request) {
+        var reservationIncarnations = new HashSet<WorldEntityAddress>();
+
+        for (var index = 0; (index < request.Members.Count); index++) {
+            if (request.Members[index].CatalogRig >= WorldLookSource.Catalog.RigCount) {
+                return $"traveler {(index + 1)} catalog rig {request.Members[index].CatalogRig} is outside 0..{(WorldLookSource.Catalog.RigCount - 1)}";
+            }
+            if (request.Members[index].Mobility is not { } mobility) {
+                return $"traveler {(index + 1)} carries no stable mobility identity";
+            }
+            if (!reservationIncarnations.Add(item: mobility.Incarnation)) {
+                return $"traveler {(index + 1)} repeats mobility incarnation {mobility.Incarnation}";
+            }
+            if (m_mobilityLeases.TryGetValue(
+                key: mobility.Incarnation,
+                value: out var mobilityLease
+            )) {
+                return $"traveler {(index + 1)} mobility incarnation is already leased to transfer {mobilityLease.Transfer.TransferId} at epoch {mobilityLease.ExpectedEpoch}";
+            }
+            if (
+                TryKnownMobilityEpoch(
+                incarnation: mobility.Incarnation,
+                epoch: out var knownEpoch
+            ) &&
+                (knownEpoch >= mobility.Epoch)
+            ) {
+                return $"traveler {(index + 1)} mobility epoch {mobility.Epoch} is stale; destination has consumed through {knownEpoch}";
+            }
+        }
+        return null;
+    }
+    // The deadline a reservation's lease expires at here: the source's remaining lease converted onto this authority's
+    // ticks through the exact engine-tick bridge. Returns why no binding lease can be made, or null.
+    private string? LeaseDeadlineRefusal(WorldTransferReservationRequest request, out ulong deadline) {
+        deadline = 0UL;
+
+        if (
+            (request.SourceRateHz <= 0) ||
+            (request.DeadlineSourceTick <= request.SourceTick)
+        ) {
+            return "source lease deadline does not advance on a positive simulation rate";
+        }
+        if ((FixedTickConversion.TicksPerSecond % checked((ulong)request.SourceRateHz)) != 0UL) {
+            return $"source simulation rate {request.SourceRateHz}Hz does not divide the exact {FixedTickConversion.TicksPerSecond}-tick bridge";
+        }
+
+        var destinationRate = m_server.Definition.SimulationRateHz;
+
+        if (destinationRate <= 0) {
+            return "destination simulation rate is stopped, so no binding lease can expire there";
+        }
+        if ((FixedTickConversion.TicksPerSecond % checked((ulong)destinationRate)) != 0UL) {
+            return $"destination simulation rate {destinationRate}Hz does not divide the exact {FixedTickConversion.TicksPerSecond}-tick bridge";
+        }
+
+        var sourceStepTicks = (FixedTickConversion.TicksPerSecond / checked((ulong)request.SourceRateHz));
+        var destinationStepTicks = (FixedTickConversion.TicksPerSecond / checked((ulong)destinationRate));
+        var remainingSourceSteps = (request.DeadlineSourceTick - request.SourceTick);
+        var remainingEngineTicks = checked((remainingSourceSteps * sourceStepTicks));
+        var destinationSteps = checked((((remainingEngineTicks + destinationStepTicks) - 1UL) / destinationStepTicks));
+
+        deadline = checked(((m_server.NextInputTick - 1UL) + destinationSteps));
+        return null;
+    }
+    // Installs the lease a recorded arrival bound without deciding its reservation again. The commit stood under the
+    // decision its reservation made against the state of its own moment, which a reland need not share: a grant revoked
+    // between reservation and commit refuses a seat at its join, never at a second reservation. What keeps the landing
+    // safe is kept: the token is neither committed nor suspended, each traveler's mobility epoch is unleased and
+    // unconsumed, every body index is of the kind the cohort lands in, and an arriving peer's verdict comes from this
+    // destination's own admission entries. Only the indices that actually landed must be free: a later occupied index
+    // can be the reason the live commit rolled back, and the recorded stop never lands or undoes that occupant.
+    private WorldTransferReservationReply RestoreLease(WorldCrossingArrival arrival, int landings) {
+        var key = arrival.Key;
+
+        if (m_committed.Contains(item: key)) {
+            return WorldTransferReservationReply.Refused(reason: $"transfer {key.TransferId} already committed");
+        }
+        if (IsSuspended(
+            reason: out var suspended,
+            request: arrival.Request
+        )) {
+            return WorldTransferReservationReply.Refused(reason: suspended);
+        }
+        if (!TryCopyReservation(
+            owned: out var request,
+            reason: out var reservationReason,
+            request: arrival.Request
+        )) {
+            return WorldTransferReservationReply.Refused(reason: reservationReason);
+        }
+        if (TravelerRefusal(request: request) is { } travelerRefusal) {
+            return WorldTransferReservationReply.Refused(reason: travelerRefusal);
+        }
+        if (LeaseDeadlineRefusal(
+            deadline: out var deadline,
+            request: request
+        ) is { } deadlineRefusal) {
+            return WorldTransferReservationReply.Refused(reason: deadlineRefusal);
+        }
+
+        WorldAdmissionVerdict? verdict = null;
+
+        if (
+            request.PeerAdmission &&
+            (WorldAdmissionDoor.TryAdmitArrival(
+                entries: m_server.Definition.Admission,
+                sourceAuthority: request.SourceAuthority,
+                verdict: out verdict
+            ) is { } arrivalRefusal)
+        ) {
+            return WorldTransferReservationReply.Refused(reason: $"no admission entry authorizes arrivals from '{request.SourceAuthority}' ({arrivalRefusal})");
+        }
+
+        PruneDepartedAdmissions();
+        var first = (request.PeerAdmission
+            ? m_server.Population.LocalSeatCount
+            : 0);
+        var end = (request.PeerAdmission
+            ? m_server.Population.Capacity
+            : m_server.Population.LocalSeatCount);
+        var held = m_leases.Values.SelectMany(selector: static lease => lease.Slots).ToHashSet();
+
+        for (var index = 0; (index < arrival.Slots.Count); index++) {
+            var slot = arrival.Slots[index];
+
+            if ((slot < first) || (slot >= end)) {
+                return WorldTransferReservationReply.Refused(reason: $"body:{slot} is outside the indices {first}..{(end - 1)} this cohort lands in");
+            }
+            if (
+                ((index < landings) && m_server.Population.IsActive(index: slot)) ||
+                !held.Add(item: slot)
+            ) {
+                return WorldTransferReservationReply.Refused(reason: $"body:{slot} is occupied or held by another reservation");
+            }
+        }
+
+        return InstallLease(
+            arrival: verdict,
+            deadline: deadline,
+            key: key,
+            request: request,
+            slots: [.. arrival.Slots]
+        );
+    }
+    // Holds the reserved body indices and each traveler's mobility epoch for one transfer until its commit, abort or
+    // deadline. A reservation installs it once its decision admits the cohort; a reland installs the one the recorded
+    // arrival bound.
+    private WorldTransferReservationReply InstallLease(WorldTransferKey key, WorldTransferReservationRequest request, int[] slots, ulong deadline, WorldAdmissionVerdict? arrival) {
         var destinationDefinition = m_server.Definition;
 
         m_leases.Add(
@@ -1197,30 +1502,48 @@ public sealed partial class WorldTransferEscrow {
             Reason: string.Empty
         );
     }
-    /// <summary>Lands a recorded arrival again through the same reservation and commit doors that landed it, each
-    /// traveler preferring the body index it was given. A replay re-executes a destination tape's arrival this way,
-    /// and recovery re-executes a crossing-log arrival its checkpoint does not reflect; the record is already
-    /// durable, so it is not written again. The caller holds the authority gate.</summary>
+
+    /// <summary>Lands a recorded arrival again through the commit door that landed it, under the lease it bound: a lease
+    /// a restored checkpoint still holds, or the one the arrival recorded, restored without deciding its reservation
+    /// again, since the commit stood under the reservation's own decision. Recovery re-executes a crossing-log arrival its checkpoint does
+    /// not reflect, with no recorded outcome: every traveler lands. A replay re-executes a destination tape's arrival
+    /// with the outcome the commit decided live: each traveler must land at the generation it landed at, and a recorded
+    /// rollback stops at the same traveler and undoes the landings ahead of it. The record is already durable, so it is
+    /// not written again. The caller holds the authority gate.</summary>
     /// <param name="arrival">The recorded arrival.</param>
-    /// <param name="reason">The named refusal, when the arrival did not land.</param>
-    /// <returns><see langword="true"/> when the arrival landed in its recorded body indices.</returns>
+    /// <param name="recorded">The outcome the commit decided live, or <see langword="null"/> when every traveler must
+    /// land.</param>
+    /// <param name="reason">The named refusal, when the arrival did not reproduce.</param>
+    /// <returns><see langword="true"/> when the arrival landed in its recorded body indices and, with
+    /// <paramref name="recorded"/>, at its recorded generations and to its recorded outcome.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="arrival"/> is <see langword="null"/>.</exception>
-    public bool TryReland(WorldCrossingArrival arrival, out string reason) {
+    public bool TryReland(WorldCrossingArrival arrival, WorldArrivalOutcome? recorded, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: arrival);
+
+        if (
+            (recorded is not null) &&
+            ((recorded.Generations.Count == 0) ||
+             (recorded.Generations.Count > arrival.Members.Count) ||
+             (!recorded.RolledBack && (recorded.Generations.Count != arrival.Members.Count)))
+        ) {
+            reason = $"transfer {arrival.Request.TransferId} records {recorded.Generations.Count} landing(s) for {arrival.Members.Count} traveler(s){(recorded.RolledBack ? " before its rollback" : string.Empty)}";
+            return false;
+        }
 
         if (arrival.Slots.Count != arrival.Request.Members.Count) {
             reason = $"transfer {arrival.Request.TransferId} records {arrival.Slots.Count} body index(es) for {arrival.Request.Members.Count} traveler(s)";
             return false;
         }
 
-        // A checkpoint can hold the original reservation, including a preference the destination could not honor.
-        // Reuse that exact request while its lease exists; rewriting the preference would change the bound token.
-        var request = (m_leases.ContainsKey(key: arrival.Key)
-            ? arrival.Request
-            : arrival.Request with {
-                Members = [.. arrival.Request.Members.Select(selector: (member, index) => member with { PreferredSlot = arrival.Slots[index] })],
-            });
-        var reply = Reserve(request: request);
+        // A checkpoint can hold the original reservation's lease; the exact request answers it again. Otherwise the
+        // lease the arrival bound is restored as it was decided.
+        var request = arrival.Request;
+        var reply = (m_leases.ContainsKey(key: arrival.Key)
+            ? Reserve(request: request)
+            : RestoreLease(
+                arrival: arrival,
+                landings: (recorded?.Generations.Count ?? arrival.Members.Count)
+            ));
 
         if (!reply.Accepted) {
             reason = $"transfer {request.TransferId} reservation refused — {reply.Reason}";
@@ -1242,16 +1565,32 @@ public sealed partial class WorldTransferEscrow {
         }
 
         m_relanding = true;
+        m_relandOutcome = recorded;
+        m_relandRolledBack = false;
 
         try {
-            return (Commit(
+            var status = Commit(
                 members: arrival.Members,
                 reason: out reason,
                 sourceAuthority: request.SourceAuthority,
                 transferId: request.TransferId
-            ) == WorldTransferStatus.Committed);
+            );
+
+            if (recorded is not { RolledBack: true }) {
+                return (status == WorldTransferStatus.Committed);
+            }
+            if (m_relandRolledBack) {
+                reason = string.Empty;
+                return true;
+            }
+            if (status == WorldTransferStatus.Committed) {
+                reason = $"transfer {request.TransferId} committed where the recorded commit rolled back";
+            }
+            return false;
         } finally {
             m_relanding = false;
+            m_relandOutcome = null;
+            m_relandRolledBack = false;
         }
     }
     public void RetireMobility(in WorldMobilityIdentity mobility) {

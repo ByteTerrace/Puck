@@ -12,6 +12,7 @@ public readonly record struct WorldPopulationEntryCheckpoint(
     byte KitIndex,
     Vector3 BodyColor,
     byte CatalogRig,
+    Puck.Maths.FixedQ4816 TravelTurn,
     WorldTargetDesignation[] Designations,
     int Generation,
     bool IsAuthorityTransferred,

@@ -417,6 +417,10 @@ public sealed partial class WorldPopulation {
         // The occupant's implicit procedural rig, separate from its authority-local slot. Explicit authored looks can
         // override it, but an authority handoff preserves it.
         public required byte CatalogRig { get; set; }
+        // The occupant's accumulated arrival turn (WorldFrameIsometry.AccumulateTurn): zero for an occupant that has made
+        // no mapped arrival, carried and advanced by every authority transfer. A route describes it so an observer
+        // turns its view by the change.
+        public FixedQ4816 TravelTurn { get; set; }
         public required WorldTargetDesignation[] Designations { get; set; }
         // Bumped every time this peer slot transitions inactive -> active. Never reset on disconnect.
         public int Generation { get; set; }

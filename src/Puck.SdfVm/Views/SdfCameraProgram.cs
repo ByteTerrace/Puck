@@ -633,6 +633,27 @@ public sealed class SdfCameraBoomFollower {
 
         eye = (target + boom);
     }
+    /// <summary>Carries the eased boom through a rigid rotation of the world it eases in, so a framing the rotation
+    /// moves whole keeps easing from where it was rather than swinging round to it.</summary>
+    /// <param name="rotation">The rotation the world's coordinates turn by.</param>
+    public void Rotate(Quaternion rotation) {
+        if (!m_follower.Seeded) {
+            return;
+        }
+
+        m_follower.Value = Vector3.Transform(
+            rotation: rotation,
+            value: m_follower.Value
+        );
+        m_follower.Velocity = Vector3.Transform(
+            rotation: rotation,
+            value: m_follower.Velocity
+        );
+        m_follower.PreviousTarget = Vector3.Transform(
+            rotation: rotation,
+            value: m_follower.PreviousTarget
+        );
+    }
     /// <summary>Drops the eased value, so the next <see cref="Apply"/> seeds at that frame's pose — the cut a caller
     /// wants when the framing changes discontinuously.</summary>
     public void Reseed() {

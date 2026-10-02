@@ -135,6 +135,10 @@ internal sealed partial class WorldScreenBinder {
 
         feed.FrameSource = frameSource;
         feed.Emitter = emitter;
+        emitter.Film = views => FilmFeed(
+            feed: feed,
+            views: views
+        );
         feed.WindowFit = (isWindow
             ? FitWindow(feed: feed)
             : null);

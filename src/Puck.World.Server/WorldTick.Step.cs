@@ -272,9 +272,6 @@ public sealed partial class WorldTick {
         }
     }
     private void StepCore(in FixedStepContext context) {
-        // Arrivals landed since the last step reach the tape here, on the stepping thread, ahead of everything this
-        // step applies — the position a replay re-lands them at.
-        Host.FlushArrivalNotes();
         TapFederatedIntents();
         // Settled here, before anything below can compose or rebase a mutation: context.ElapsedTicks is this whole
         // step's own engine-time coordinate (the exact engine tick the step completes at), so every write and read

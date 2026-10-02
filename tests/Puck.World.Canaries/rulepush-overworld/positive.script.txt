@@ -1,6 +1,6 @@
 # A fresh identity walks the rulepush overworld: east into Hedges, which it clears, and back; north into Rewrite,
 # which it clears, and back; then west, where a gate stands until both clears are on its
-# record, into Sink, which it clears too.
+# record, into Sink, which it clears too, and back. Each clear lands on the record when the body comes home.
 identity.create impfan
 player.identity impfan
 world.wait 5
@@ -30,10 +30,11 @@ world.wait 3
 body.press south
 world.wait 3
 world.wait 6
-identity.facts
-# West back across the border into the overworld; the west gate is still closed.
+# West back across the border into the overworld, which adopts the clear onto the record; the west gate is still
+# closed.
 body.fly 0 -1 0 0 0 0 3 0
 world.wait 110
+identity.facts
 world.state westOpen
 # North across the border into Rewrite.
 body.pose 0 1 -9 0 0 0 0
@@ -59,10 +60,10 @@ world.wait 3
 body.press east
 world.wait 3
 world.wait 6
-identity.facts
-# South back across the border into the overworld, where the record decides the west gate.
+# South back across the border into the overworld, which adopts the second clear; the record decides the west gate.
 body.fly -1 0 0 0 0 0 3 0
 world.wait 110
+identity.facts
 world.state westOpen
 world.placements
 # West toward Sink: through the gate when it is open, into it when it is not.
@@ -87,5 +88,8 @@ world.wait 3
 body.press west
 world.wait 3
 world.wait 6
+# East back across the border into the overworld, which adopts the third clear.
+body.fly 0 1 0 0 0 0 3 0
+world.wait 110
 identity.facts
 wire.errors

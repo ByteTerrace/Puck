@@ -172,7 +172,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeItem: WriteLandedMember
         );
     }
-    private static WorldInDoubtTransferCheckpoint ReadInDoubtTransfer(ref WireReader reader, WorldPlayerDefaults defaults) {
+    private static WorldInDoubtTransferCheckpoint ReadInDoubtTransfer(ref WireReader reader) {
         var sourceInstance = reader.ReadString(
             field: "in-doubt transfer source instance",
             maxBytes: MaxStringBytes
@@ -207,7 +207,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         var commitMembers = reader.ReadArray(
             field: "in-doubt transfer commit members",
             readItem: (ref WireReader r) => ReadCommitMember(
-                defaults: defaults,
                 reader: ref r
             ),
             maximum: MaxCollectionCount

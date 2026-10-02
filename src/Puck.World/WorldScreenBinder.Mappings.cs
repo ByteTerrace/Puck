@@ -13,7 +13,7 @@ internal sealed partial class WorldScreenBinder : IWorldScreenImages {
     /// rebuilt from the rows <see cref="ReconcileScreens"/> last applied and the live binds over them;
     /// <see cref="Publish"/> publishes it each frame. Its <see cref="WorldScreenMappingSet.Sources"/> are the source
     /// instances the render graph runs for the screens.</summary>
-    public WorldScreenMappingSet Mappings { get; } = new();
+    public WorldScreenMappingSet Mappings { get; } = new(world: WorldInstanceHost.BootInstanceName);
 
     /// <inheritdoc/>
     /// <remarks>A machine output's extent is its framebuffer's, and a producer's or a probe output's its feed's descriptor's

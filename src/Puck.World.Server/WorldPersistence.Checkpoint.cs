@@ -701,12 +701,14 @@ public sealed partial class WorldPersistence {
     /// checkpoint. Called immediately after construction and before the first <see cref="WorldTick.Step"/> — the definition
     /// this restore installs is the checkpoint's own, never re-composed by replaying the journal.</summary>
     /// <param name="checkpoint">The captured image to restore.</param>
-    internal void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint) {
+    /// <param name="restoreOwnedIdentities">Whether to restore the catalog and bind its home seats. A live replay's
+    /// boot image keeps its pinned identities detached and leaves the live catalog alone.</param>
+    internal void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         var admission = WorldDefinitionSerialization.DeserializeForAdmission(
             documentDirectory: Host.Document.Definition.DocumentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: Host.Machines.ValidationCatalog);
 
-        RestoreCheckpointCore(admission: admission, checkpoint: checkpoint);
+        RestoreCheckpointCore(admission: admission, checkpoint: checkpoint, restoreOwnedIdentities: restoreOwnedIdentities);
     }
 
     // A base loaded from a file names that file relative to the base's own document directory, which the loader set to
@@ -749,7 +751,7 @@ public sealed partial class WorldPersistence {
             )),
         });
     }
-    private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission) {
+    private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true) {
         var server = checkpoint.Server;
 
         if ((Host.Population.Fields is null) != (checkpoint.Fields is null)) {
@@ -906,7 +908,33 @@ public sealed partial class WorldPersistence {
         Host.TransferEscrow.Restore(checkpoint: checkpoint.Escrow);
         Host.InputHold.Restore(checkpoint: checkpoint.InputHold);
         Host.Events.Restore(checkpoint: checkpoint.EventFeed);
-        Host.Profiles.Restore(checkpoint: checkpoint.OwnedWorlds);
+        if (restoreOwnedIdentities) {
+            Host.Profiles.Restore(checkpoint: checkpoint.OwnedWorlds);
+        }
+        // Projection leaves never carry owned documents. Reconnect a local home seat to this restored catalog;
+        // a visitor with a colliding id keeps its projection, including on a silo move or a history restore.
+        foreach (var entry in checkpoint.Population.Entries) {
+            if (
+                !restoreOwnedIdentities ||
+                entry.IsRemoteHuman ||
+                (entry.Profile is not { } projection) ||
+                (Host.HomeSeatIdentity(
+                    id: projection.Id,
+                    mobility: entry.Mobility,
+                    slot: entry.Index
+                ) is not { } owned)
+            ) {
+                continue;
+            }
+            Host.Population.SetSeatProfile(
+                profile: owned,
+                slot: entry.Index
+            );
+            Host.Population.SetBodyColor(
+                color: entry.BodyColor,
+                slot: entry.Index
+            );
+        }
         Host.RecompileRules(definition: restoredDefinition, compilation: admission.Compilation);
         if (!Host.Arena.TryImportUndoSnapshot((server.Undo ?? new ArenaUndoSnapshot(Groups: [])), out var undoReason)) {
             throw new InvalidOperationException(message: $"the checkpoint's retained turns do not restore: {undoReason}");
