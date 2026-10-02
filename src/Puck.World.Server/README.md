@@ -707,7 +707,7 @@ authored producers, replay tapes) only produce inputs; poses flow out through
 the tick snapshot. Simulation state is `Puck.Maths` fixed point and exact
 engine-tick durations throughout—no wall clock, no RNG, no float. That
 determinism is a design contract verified by running and by the replay verbs
-below; no build gate enforces it for this game (see `CLAUDE.md` rule 3).
+below; no build gate enforces it for this game (see `AGENTS.md` rule 3).
 
 A body's pose is always six-degrees-of-freedom (a `Vector3` position and a
 quaternion attitude); its body motion program (`grounded` or `free`) decides how an
@@ -2188,7 +2188,7 @@ proved by `AuthorityAdministrationLawTests`, `EngageAuthorityLawTests`, and
 `tests/Puck.World.Tests`.
 
 A change that moves simulation math is expected to change replay hashes;
-re-record any persisted tape it invalidates in the same change (`CLAUDE.md`
+re-record any persisted tape it invalidates in the same change (`AGENTS.md`
 rule 4).
 
 Adjacency/federation changes additionally run

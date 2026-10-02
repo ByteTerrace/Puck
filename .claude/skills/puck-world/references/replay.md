@@ -521,7 +521,7 @@ from child tick 30. Omitted, a drive runs to the tape's end.
 
 - A change that moves simulation math is EXPECTED to change replay hashes;
   re-record any persisted tape it invalidates in the same change
-  (`CLAUDE.md` rule 4).
+  (`AGENTS.md` rule 4).
 - Tape byte-layout and semantic changes update the first format in place. Regenerate
   relevant verification recordings; do not add compatibility readers or version bumps.
 - The authored float fields in commands round-trip bit-exactly through the

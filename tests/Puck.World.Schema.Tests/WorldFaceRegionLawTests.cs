@@ -9,7 +9,7 @@ namespace Puck.World.Schema.Tests;
 /// picks one winner per body (<see cref="WorldFaceCrossingClaim"/>), and the edge latch that turns a region answer
 /// into a fired crossing (<see cref="WorldPortalOccupancy"/>). <c>Puck.World.WorldInstanceHost</c> — the composition
 /// root that drives all three — is out of reach for this project (see README.md), so these laws prove the primitives
-/// it orchestrates; the orchestration is verified by RUNNING <c>Puck.World</c> (CLAUDE.md rule 3).
+/// it orchestrates; the orchestration is verified by RUNNING <c>Puck.World</c> (AGENTS.md rule 3).
 /// </summary>
 public sealed class WorldFaceRegionLawTests {
     private const double Depth = 0.5;

@@ -104,7 +104,7 @@ puck compile <file> --validate
 ```
 
 Then, for a world, run it (`dotnet run --project src/Puck.World -c Release --
---exit-after-seconds 2`, per `CLAUDE.md` rule 3); for a cartridge, verify
+--exit-after-seconds 2`, per `AGENTS.md` rule 3); for a cartridge, verify
 through the emulator battery, never a standalone driver (`gaming-bricks`,
 `rom-forge`). A committed source additionally owes the byte-for-byte
 regeneration gate above before merge.

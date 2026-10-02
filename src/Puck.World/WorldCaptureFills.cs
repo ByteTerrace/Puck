@@ -128,6 +128,7 @@ public sealed class WorldCaptureFills : IDisposable {
         ReadOnlySpan<byte> pixel = [((byte)rgba), ((byte)(rgba >> 8)), ((byte)(rgba >> 16)), ((byte)(rgba >> 24))];
 
         _ = fill.TryConvert(
+            color: ImageColorEncoding.Srgb,
             context: in context,
             format: ImagePixelFormat.R8G8B8A8Unorm,
             height: 1U,
