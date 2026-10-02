@@ -268,9 +268,12 @@ public sealed class WorldDynamicResolution {
         if (double.IsFinite(d: share) && (share > (1d + Deadband))) {
             m_overGrid = current;
         } else if ((next > scale) && (m_overGrid > 0d)) {
-            var ratio = (m_overGrid / current);
+            // Cross-multiply the quantized areas rather than squaring a rounded ratio. Each product rounds once, so
+            // include the budget product's next representable value: an exactly budgeted grid can differ by one ULP.
+            var markedLoad = (reading.Load * (m_overGrid * m_overGrid));
+            var markedBudget = (budget * (current * current));
 
-            if (((share * ratio) * ratio) <= 1d) {
+            if (markedLoad <= Math.BitIncrement(x: markedBudget)) {
                 m_overGrid = 0d;
             } else if (GridOf(ceiling: ceiling, scale: next) >= m_overGrid) {
                 next = Math.Max(val1: scale, val2: Math.Min(val1: ((float)current), val2: ceiling));

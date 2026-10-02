@@ -1076,6 +1076,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
 
         RebuildDriftedSources();
+        // Standing instances still owe their submitted work's readback. Poll before scheduling, since those instances
+        // do not enter ProduceFrame again until their inputs change.
+        foreach (var node in m_nodes) {
+            node?.PollReadbacks();
+        }
         PackagesBeginFrame(context: in context);
 
         var schedule = m_schedules[m_turn];

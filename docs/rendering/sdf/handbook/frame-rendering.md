@@ -231,7 +231,9 @@ A sample counts only at the grid the views render now. Each view's node
 records the quantized grid of every submission it renders, and a reading,
 summed over each view's renders not read before, names their common grid; a
 reading from another grid, such as one read back after the grid moved, is not
-a sample, and a view standing on a render already read adds nothing. When the
+a sample, and a view standing on a render already read adds nothing. The runtime
+polls completed counters and timestamps while a view stands, so its final
+submission becomes readable when its fence signals. When the
 budget lies between two adjacent grids, the controller settles on the cheaper
 one rather than alternating: a sample over the budget marks its grid, and the
 grid rises onto the mark only once a sample predicts it within the budget.

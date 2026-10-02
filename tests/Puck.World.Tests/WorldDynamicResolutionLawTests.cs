@@ -235,6 +235,44 @@ public sealed class WorldDynamicResolutionLawTests {
         counted.CompleteFrame(grid: current, steps: ((long)(80d * OutputPixels)));
         Assert.Equal(expected: (Ceiling * Fall), actual: Advance(controller: steps, load: counted), tolerance: 1e-6f);
     }
+    [InlineData(false, 0.625f, 0.5625d)]
+    [InlineData(true, 0.625f, 0.5625d)]
+    [InlineData(false, 0.8125f, 0.75d)]
+    [InlineData(true, 0.8125f, 0.75d)]
+    [InlineData(false, 0.875f, 0.8125d)]
+    [InlineData(true, 0.875f, 0.8125d)]
+    [Theory]
+    public void AMarkedGridPredictedExactlyAtBudgetClearsAndResolutionRecovers(bool timed, float marked, double cheaper) {
+        var controller = new WorldDynamicResolution();
+        var units = (marked * 16d);
+        // An integer budget proportional to the marked grid's area keeps every cheaper grid's step count integral.
+        var load = new ScriptedLoad(controller: controller) { BudgetPerPixel = (units * units), Timed = timed };
+
+        controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, forced: marked, load: load, outputPixels: OutputPixels);
+        void Sample(double share) {
+            load.TimeFrame(periods: share);
+            load.CompleteFrame(steps: ((long)Math.Round(a: ((share * load.BudgetPerPixel) * OutputPixels))));
+            Advance(controller: controller, load: load);
+        }
+
+        // Two over-budget samples reach the cheaper grid and mark the dearer one. The lighter scene meets the budget
+        // exactly at the mark: 81% at 0.5625 predicts 100% at 0.625, for example. A rounded ratio reads above 100%;
+        // even cross-multiplied GPU times can differ by one ULP at the other pairs.
+        Sample(share: 1.2d);
+        Sample(share: 1.2d);
+        Assert.Equal(expected: cheaper, actual: controller.Grid);
+        Assert.Equal(expected: ((double)marked), actual: controller.OverGrid);
+        Sample(share: ((cheaper * cheaper) / (marked * ((double)marked))));
+        Assert.Equal(expected: 0d, actual: controller.OverGrid);
+
+        for (var frame = 0; (frame < 32); frame++) {
+            var ratio = (controller.Grid / marked);
+
+            Sample(share: (ratio * ratio));
+        }
+        Assert.Equal(expected: ((double)marked), actual: controller.Grid);
+        Assert.Equal(expected: 0d, actual: controller.OverGrid);
+    }
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
