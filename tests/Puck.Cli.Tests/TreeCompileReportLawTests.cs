@@ -29,6 +29,63 @@ public sealed class TreeCompileReportLawTests {
         oldChar: '\\'
     )).Order(comparer: StringComparer.Ordinal)];
 
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void PackageCleanupRefusesLinkedStoresAndPackages(bool linkPackage) {
+        using var directory = new TemporaryDirectory();
+        var source = directory.WriteText(name: "worlds/field.puck", text: World);
+        const string Key = "0123456789abcdef";
+        var sentinel = directory.WriteText(name: $"outside/{Key}/foreign.hlsl", text: "keep this file");
+        var link = directory.PathOf(name: (linkPackage ? $"out/packages/{Key}" : "out/packages"));
+        var target = directory.PathOf(name: (linkPackage ? $"outside/{Key}" : "outside"));
+
+        Directory.CreateDirectory(path: Path.GetDirectoryName(path: link)!);
+
+        try {
+            Directory.CreateSymbolicLink(path: link, pathToTarget: target);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
+            Assert.Skip(reason: $"symbolic links are unavailable: {exception.Message}");
+            return;
+        }
+
+        try {
+            var (exitCode, log) = ConsoleCapture.Run(run: () => PuckRootCommand.Invoke(args: [
+                "compile", "--tree", directory.PathOf(name: "worlds"),
+                "--output", directory.PathOf(name: "out"), source,
+            ]));
+
+            Assert.True(condition: (exitCode != 0), userMessage: log);
+            Assert.Contains(actualString: log, expectedSubstring: "SHADERPKG_OUTPUT");
+            Assert.Equal(actual: File.ReadAllText(path: sentinel), expected: "keep this file");
+            Assert.True(condition: ((File.GetAttributes(path: link) & FileAttributes.ReparsePoint) != 0));
+        } finally {
+            if (new DirectoryInfo(path: link).LinkTarget is not null) {
+                Directory.Delete(path: link);
+            }
+        }
+    }
+    [Fact]
+    public void PackageCleanupPreservesAnotherWritersStagingAndReplacementDirectories() {
+        using var directory = new TemporaryDirectory();
+        var source = directory.WriteText(name: "worlds/field.puck", text: World);
+        const string Key = "0123456789abcdef";
+        var staged = directory.WriteText(name: $"out/packages/{Key}.partial-111111111111/staged.hlsl", text: "being written");
+        var replaced = directory.WriteText(name: $"out/packages/{Key}.replaced-222222222222/saved.hlsl", text: "being replaced");
+        var stale = directory.WriteText(name: $"out/packages/{Key}/unused.hlsl", text: "unreferenced package");
+        var report = directory.PathOf(name: "worlds.written");
+
+        var (exitCode, log) = ConsoleCapture.Run(run: () => PuckRootCommand.Invoke(args: [
+            "compile", "--tree", directory.PathOf(name: "worlds"),
+            "--output", directory.PathOf(name: "out"), "--written", report, source,
+        ]));
+
+        Assert.True(condition: (exitCode == 0), userMessage: log);
+        Assert.Equal(actual: File.ReadAllText(path: staged), expected: "being written");
+        Assert.Equal(actual: File.ReadAllText(path: replaced), expected: "being replaced");
+        Assert.False(condition: Directory.Exists(path: Path.GetDirectoryName(path: stale)!));
+        Assert.Equal(actual: File.ReadAllText(path: report), expected: "field.puckb\nfield.world.json\n");
+    }
     /// <summary>The tree the targets hand the run, in the order they hand it (every source, then every document) and
     /// in the reverse order: a module library alone, a library beside a hand-authored document of its name, and a
     /// world beside a stale document of its name.</summary>

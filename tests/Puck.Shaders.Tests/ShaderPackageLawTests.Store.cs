@@ -138,9 +138,65 @@ public sealed partial class ShaderPackageLawTests {
             expectedSubstring: ShaderClosureRefusedException.PackageAbsent
         );
     }
+    [InlineData("package")]
+    [InlineData("store")]
+    [InlineData("ancestor")]
+    [Theory]
+    public async Task A_store_refuses_linked_directories_without_removing_or_writing_through_them(string linked) {
+        using var fixture = new Fixture(name: "transitive");
+        var outside = fixture.Output(name: "outside");
+        var store = fixture.Output(name: ((linked == "ancestor") ? "link/store" : "store"));
+        var runner = new PackageRunner();
+        var packager = new ShaderPackager(
+            compiler: fixture.Compiler(runner: runner, toolchain: Toolchain(fixture: fixture)),
+            reflectDxil: false,
+            store: store
+        );
+        var source = fixture.PathOf(logicalPath: "transitive.graph.json");
+        var package = ShaderPackager.StorePathOf(
+            key: packager.KeyOf(name: "graph", source: source),
+            store: store
+        );
+        var link = linked switch {
+            "package" => package,
+            "store" => store,
+            _ => fixture.Output(name: "link"),
+        };
+        var targetPackage = linked switch {
+            "package" => outside,
+            "store" => Path.Combine(path1: outside, path2: Path.GetFileName(path: package)),
+            _ => Path.Combine(path1: outside, path2: "store", path3: Path.GetFileName(path: package)),
+        };
+        var sentinel = Path.Combine(path1: targetPackage, path2: "foreign.hlsl");
+
+        Directory.CreateDirectory(path: targetPackage);
+        Directory.CreateDirectory(path: Path.GetDirectoryName(path: link)!);
+        File.WriteAllText(contents: "keep this file", path: sentinel);
+
+        try {
+            Directory.CreateSymbolicLink(path: link, pathToTarget: outside);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
+            Assert.Skip(reason: $"symbolic links are unavailable: {exception.Message}");
+            return;
+        }
+
+        try {
+            var (result, _) = await packager.StoreAsync(cancellationToken: Token, name: "graph", source: source);
+
+            AssertRefused(code: ShaderClosureRefusedException.PackageOutput, result: result);
+            Assert.Equal(actual: File.ReadAllText(path: sentinel), expected: "keep this file");
+            Assert.True(condition: ((File.GetAttributes(path: link) & FileAttributes.ReparsePoint) != 0));
+            Assert.Equal(actual: runner.CompileRuns, expected: 0);
+            Assert.False(condition: File.Exists(path: Path.Combine(path1: targetPackage, path2: ShaderPackageManifest.FileName)));
+        } finally {
+            if (new DirectoryInfo(path: link).LinkTarget is not null) {
+                Directory.Delete(path: link);
+            }
+        }
+    }
 
     // A store holding a published package whose manifest, the commit record a publication writes last, is gone: what a
-    // clean or rebuild that stopped part way leaves, and what a publication cut short would leave at its final path.
+    // clean or rebuild that stopped part way leaves.
     private static async Task<(ShaderPackager Packager, string Toolchain, string Source, string Package)> StrandedPackage(Fixture fixture) {
         var toolchain = Toolchain(fixture: fixture);
         var packager = new ShaderPackager(
@@ -205,6 +261,10 @@ public sealed partial class ShaderPackageLawTests {
         Assert.Equal(
             actual: ShaderPackager.KeyOf(manifest: ShaderPackager.Open(package: package)),
             expected: packager.KeyOf(name: "graph", source: source)
+        );
+        Assert.Equal(
+            actual: File.ReadAllText(path: Path.Combine(path1: (package + ".partial-abandoned"), path2: "staged.hlsl")),
+            expected: "a staged file"
         );
     }
     [Fact]

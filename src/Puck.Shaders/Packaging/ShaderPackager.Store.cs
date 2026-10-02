@@ -15,6 +15,13 @@ public sealed partial class ShaderPackager {
     // finds a candidate: a load holds the candidate's whole key to the source's before using it.
     private const int StoreNameLength = 16;
 
+    /// <summary>Whether a directory name names a package in a store, rather than a writer's staging or replacement
+    /// directory.</summary>
+    /// <param name="name">The directory name.</param>
+    /// <returns>Whether the name is the leading sixteen lowercase hexadecimal digits of a package key.</returns>
+    public static bool IsStorePackageName(string name) =>
+        ((name.Length == StoreNameLength) && name.All(predicate: static character => (character is (>= '0' and <= '9') or (>= 'a' and <= 'f'))));
+
     /// <summary>Gets the full path of the build's package store this packager loads a source's package from, or
     /// <see langword="null"/> when it has none.</summary>
     public string? Store { get; }
@@ -73,9 +80,10 @@ public sealed partial class ShaderPackager {
     /// <summary>Writes a source's package into the <see cref="Store"/> under its key, compiling it with this packager's
     /// compiler, unless the store already holds a package with that key, which is verified and kept.
     /// <para>A package is written beside its directory and moved into place whole, its manifest written last: the manifest
-    /// is the package's commit record. A store directory holding files but no manifest is therefore never a package, but
-    /// what an interrupted publication or a partial removal (a clean or rebuild that stopped part way) left behind, and the
-    /// store removes it before writing the package in its place.</para></summary>
+    /// is the package's commit record. A store directory holding files but no manifest is never a package; a partial
+    /// removal (a clean or rebuild that stopped part way) can leave it behind, and the store removes it before writing
+    /// the package in its place. A linked package directory, store, or ancestor is refused before anything is
+    /// removed or written through it.</para></summary>
     /// <param name="source">The graph document or one-off shader source.</param>
     /// <param name="name">The instance name, which names a one-off shader's pipeline and its one pass.</param>
     /// <param name="cancellationToken">The token that cancels the build.</param>
@@ -100,6 +108,12 @@ public sealed partial class ShaderPackager {
             store: store
         );
 
+        try {
+            RequireUnlinkedStorePath(package: package);
+        } catch (Exception exception) when (IsSourceRefusal(exception: exception)) {
+            return (Refusal(exception: exception), package);
+        }
+
         if (IsCommitted(package: package)) {
             var kept = await LoadAsync(
                 cancellationToken: cancellationToken,
@@ -118,7 +132,7 @@ public sealed partial class ShaderPackager {
             }
         }
 
-        // The store owns every directory under it, and one with no manifest is an abandoned publication.
+        // A directory reached through a link is not the store's to remove.
         if (Directory.Exists(path: package) && !IsCommitted(package: package)) {
             Directory.Delete(
                 path: package,
@@ -141,6 +155,31 @@ public sealed partial class ShaderPackager {
         path1: package,
         path2: ShaderPackageManifest.FileName
     ));
+
+    /// <summary>Refuses a store path whose directory or an ancestor is a link or junction.</summary>
+    /// <param name="package">The store or package directory's full path.</param>
+    /// <exception cref="ShaderClosureRefusedException">The path traverses a linked directory.</exception>
+    /// <exception cref="IOException">An existing directory's attributes cannot be read.</exception>
+    /// <exception cref="UnauthorizedAccessException">An existing directory's attributes cannot be read.</exception>
+    public static void RequireUnlinkedStorePath(string package) {
+        for (DirectoryInfo? directory = new(path: package); (directory is not null); directory = directory.Parent) {
+            FileAttributes attributes;
+
+            try {
+                attributes = File.GetAttributes(path: directory.FullName);
+            } catch (Exception exception) when ((exception is FileNotFoundException or DirectoryNotFoundException)) {
+                continue;
+            }
+
+            if ((attributes & FileAttributes.ReparsePoint) != 0) {
+                throw new ShaderClosureRefusedException(
+                    code: ShaderClosureRefusedException.PackageOutput,
+                    message: $"'{directory.FullName}' is a linked directory; the store cannot replace packages through it."
+                );
+            }
+        }
+    }
+
     private static bool IsSourceRefusal(Exception exception) =>
         (exception is ShaderClosureRefusedException or IOException or UnauthorizedAccessException or JsonException or ArgumentException or InvalidDataException or ShaderPipelineCompilationException);
     private static string Key(string document, string name, IEnumerable<(string Path, string Pin)> files, IEnumerable<(string Name, string Interface, string Declarations)> passes) {

@@ -324,13 +324,26 @@ internal static partial class CompileCommand {
             return 0;
         }
 
-        foreach (var stale in Directory.EnumerateDirectories(path: store).Where(predicate: package => !packages.ContainsKey(key: Path.GetFullPath(path: package))).ToArray()) {
+        try {
+            ShaderPackager.RequireUnlinkedStorePath(package: store);
+        } catch (Exception exception) when ((exception is ShaderClosureRefusedException or IOException or UnauthorizedAccessException)) {
+            Console.Error.WriteLine(value: $"error: the package store '{store}' cannot be cleaned: {exception.Message}");
+
+            return 2;
+        }
+
+        // Staging and replacement siblings belong to their writer, which can still be publishing another tree's run.
+        foreach (var stale in Directory.EnumerateDirectories(path: store).Where(predicate: package =>
+            (ShaderPackager.IsStorePackageName(name: Path.GetFileName(path: package)) &&
+            !packages.ContainsKey(key: Path.GetFullPath(path: package)))
+        ).ToArray()) {
             try {
+                ShaderPackager.RequireUnlinkedStorePath(package: stale);
                 Directory.Delete(
                     path: stale,
                     recursive: true
                 );
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            } catch (Exception exception) when ((exception is ShaderClosureRefusedException or IOException or UnauthorizedAccessException)) {
                 Console.Error.WriteLine(value: $"error: the package '{stale}' has no pipeline in the tree naming it and could not be removed: {exception.Message}");
 
                 return 2;
