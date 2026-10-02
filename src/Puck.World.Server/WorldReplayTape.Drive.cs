@@ -123,6 +123,7 @@ public sealed partial class WorldReplayTape {
         m_definitionJson = source.DefinitionJson;
         m_recordRateHz = source.SimulationRate;
         m_pipelineSourceDirectory = source.PipelineSourceDirectory;
+        m_documentDirectory = source.DocumentDirectory;
         m_mountedAddons = [.. source.MountedAddons];
         m_seats = [.. source.Seats];
         m_ticks = prefix;
@@ -384,7 +385,7 @@ public sealed partial class WorldReplayTape {
             source = WorldReplaySnapshot.Read(stream: stream);
         }
 
-        var definition = WorldDefinitionSerialization.Deserialize(documentDirectory: source.PipelineSourceDirectory, utf8Json: source.DefinitionJson);
+        var definition = WorldDefinitionSerialization.Deserialize(documentDirectory: source.DocumentDirectory, utf8Json: source.DefinitionJson);
 
         if (source.SimulationRate != ((uint)definition.SimulationRateHz)) {
             throw ReplayRefusal.RateMismatch.Raise(message: $"This .puckreplay recording's header pins {source.SimulationRate} Hz, but its own embedded world definition authors {definition.SimulationRateHz} Hz — this tape is internally inconsistent; re-record it.");
@@ -445,6 +446,11 @@ public sealed partial class WorldReplayTape {
             m_liveServer.AnyAddonEverPumped
         ) {
             refusal = "the tape pins mounted addons and a live guest has already been pumped — the rebuild door reuses an unchanged addon row's guest with its accumulated state, so the boot image cannot be reached in this session";
+            return false;
+        }
+
+        if (source.Ticks.Any(predicate: static tick => tick.Authority.Any(predicate: static entry => (entry is WorldReplayEntry.Arrival)))) {
+            refusal = $"'{name}' lands travelers another authority handed over — driving it here would embody them with no source releasing them; replay.verify lands them again offline";
             return false;
         }
 

@@ -8,18 +8,22 @@ namespace Puck.SignedDistance.Baking;
 /// program evaluation counted in <see cref="Evaluations"/>. A distance counts one evaluation, a normal the six probes
 /// of <see cref="SdfFieldEvaluator.TryFieldGradient(FixedPosition, FixedQ4816, out FixedVector3)"/>, and a ray each
 /// sample its march takes. Points are world-space displacements from the program's origin. One instance serves one
-/// bake on one thread.
+/// bake on one thread. Every evaluation first checks the bake's cancellation, so a canceled bake stops at its next
+/// evaluation whichever stage it is in.
 /// </summary>
 public sealed class SdfBakeField {
     private readonly SdfFieldEvaluator m_evaluator;
+    private readonly CancellationToken m_cancellationToken;
 
     /// <summary>Initializes a new instance of the <see cref="SdfBakeField"/> class.</summary>
     /// <param name="evaluator">The evaluator of the program being baked.</param>
+    /// <param name="cancellationToken">Cancels the bake at its next evaluation.</param>
     /// <exception cref="ArgumentNullException"><paramref name="evaluator"/> is <see langword="null"/>.</exception>
-    public SdfBakeField(SdfFieldEvaluator evaluator) {
+    public SdfBakeField(SdfFieldEvaluator evaluator, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(argument: evaluator);
 
         m_evaluator = evaluator;
+        m_cancellationToken = cancellationToken;
     }
 
     /// <summary>Gets the program evaluations this field has made.</summary>
@@ -35,8 +39,9 @@ public sealed class SdfBakeField {
     /// <param name="distance">The field value: negative inside, positive outside.</param>
     /// <param name="material">The material of the winning shape.</param>
     /// <returns><see langword="true"/> when the program has a shape and the point is inside its frame.</returns>
+    /// <exception cref="OperationCanceledException">The bake was canceled.</exception>
     public bool TryDistance(FixedVector3 point, out FixedQ4816 distance, out int material) {
-        Evaluations++;
+        Count(evaluations: 1);
 
         return m_evaluator.TryDistance(
             distance: out distance,
@@ -49,8 +54,9 @@ public sealed class SdfBakeField {
     /// <param name="epsilon">The probe span, in world units.</param>
     /// <param name="normal">The unit gradient, pointing out of the surface.</param>
     /// <returns><see langword="true"/> when every probe evaluated and the gradient is not zero.</returns>
+    /// <exception cref="OperationCanceledException">The bake was canceled.</exception>
     public bool TryNormal(FixedVector3 point, FixedQ4816 epsilon, out FixedVector3 normal) {
-        Evaluations += 6;
+        Count(evaluations: 6);
 
         return m_evaluator.TryFieldGradient(
             epsilon: epsilon,
@@ -65,6 +71,7 @@ public sealed class SdfBakeField {
     /// <param name="hit">The hit, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the march proved a surface within <paramref name="maxDistance"/>; a march
     /// that neither proved a hit nor cleared the ray reports no hit.</returns>
+    /// <exception cref="OperationCanceledException">The bake was canceled.</exception>
     public bool TryRay(FixedVector3 origin, FixedVector3 direction, FixedQ4816 maxDistance, out RayHit hit) {
         Rays++;
 
@@ -84,10 +91,15 @@ public sealed class SdfBakeField {
         ) == MarchOutcome.Hit);
     }
 
+    private void Count(int evaluations) {
+        m_cancellationToken.ThrowIfCancellationRequested();
+        Evaluations += evaluations;
+    }
+
     private readonly struct CountingSampler(SdfBakeField field) : ISdfMarchSampler {
         public bool TrySample(FixedPosition position, FixedQ4816 radius, out FixedQ4816 distance, out int material, out bool exact) {
             exact = true;
-            field.Evaluations++;
+            field.Count(evaluations: 1);
 
             return field.m_evaluator.TryDistance(
                 distance: out distance,

@@ -23,7 +23,7 @@ namespace Puck.World.Tests;
 /// document, a fresh in-process <see cref="WorldServer"/>) comes from, kept out of the law bodies themselves.
 /// The base document is COMPILER-MAINTAINED: <see cref="BuildDocument"/> constructs a minimal, valid
 /// <see cref="WorldDefinition"/> directly in code (never read from <c>src/Puck.World/Assets/worlds</c> — Puck.World,
-/// the composition root, is out of scope; see README.md, and CLAUDE.md's greenfield/scope rules). A change to
+/// the composition root, is out of scope; see README.md, and AGENTS.md's greenfield/scope rules). A change to
 /// <see cref="WorldDefinition"/>'s required member set breaks this file at COMPILE time rather than at a runtime
 /// parse of a JSON fixture nobody is watching — the whole point of the shape.
 /// </summary>

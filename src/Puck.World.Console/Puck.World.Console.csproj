@@ -11,11 +11,11 @@
         <PuckLayer>Engine services</PuckLayer>
     </PropertyGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
-        <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
-        <ProjectReference Include="..\Puck.World.Protocol\Puck.World.Protocol.csproj" />
-        <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
-        <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
+        <ProjectReference Include="../Puck.Commands/Puck.Commands.csproj" />
+        <ProjectReference Include="../Puck.Launcher/Puck.Launcher.csproj" />
+        <ProjectReference Include="../Puck.World.Protocol/Puck.World.Protocol.csproj" />
+        <ProjectReference Include="../Puck.World.Schema/Puck.World.Schema.csproj" />
+        <ProjectReference Include="../Puck.World.Server/Puck.World.Server.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />

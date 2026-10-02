@@ -352,7 +352,7 @@ public sealed class LightGunLawTests {
 
             using var file = File.OpenRead(path: tape.PathFor(name: name));
 
-            return (WorldReplaySnapshot.Read(stream: file), tape.Verify(name: name), machine, sensed);
+            return (WorldReplaySnapshot.Read(stream: file), tape.Verify(name: name).Primary, machine, sensed);
         }
 
         var recorded = Record(stream: aims);

@@ -60,7 +60,7 @@ public static class TextureMipChain {
     /// <param name="filter">The filter, which must suit <paramref name="format"/>.</param>
     /// <param name="coverage">Per-texel weights for every level but the last, or <see langword="null"/> to weight
     /// evenly. <see cref="TextureMipFilter.Srgb"/> weights by its own alpha and <see cref="TextureMipFilter.Majority"/>
-    /// ignores weights.</param>
+    /// counts only texels of non-zero weight, all four when none has any.</param>
     /// <returns>The levels, the first being <paramref name="level0"/> itself.</returns>
     /// <exception cref="ArgumentException">The extent is not whole tiles, <paramref name="level0"/> is not exactly the
     /// level, the filter does not suit the format, or <paramref name="coverage"/> lacks a level.</exception>
@@ -207,15 +207,20 @@ public static class TextureMipChain {
                             break;
                         }
                     case TextureMipFilter.Majority: {
+                            // Only covered texels vote (a weight of zero is a miss); when all four miss, all four vote.
                             var best = source[at[0]];
                             var bestCount = 0;
 
                             for (var index = 0; (index < 4); index++) {
+                                if (weight[index] == 0) {
+                                    continue;
+                                }
+
                                 var value = source[at[index]];
                                 var count = 0;
 
                                 for (var other = 0; (other < 4); other++) {
-                                    count += ((source[at[other]] == value) ? 1 : 0);
+                                    count += (((weight[other] != 0) && (source[at[other]] == value)) ? 1 : 0);
                                 }
 
                                 if ((count > bestCount) || ((count == bestCount) && (value < best))) {

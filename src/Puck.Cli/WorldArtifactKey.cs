@@ -25,7 +25,7 @@ namespace Puck.Cli;
 /// </summary>
 internal static class WorldArtifactKey {
     // Bumped whenever what the key covers changes, so no entry keyed under an older rule is ever reused.
-    private const string Schema = "puck.world-artifact-key.v1";
+    private const string Schema = "puck.world-artifact-key.v2";
 
     private static bool TryGit(string repositoryRoot, IReadOnlyList<string> arguments, out string stdout, out string reason) {
         ChildProcessResult result;

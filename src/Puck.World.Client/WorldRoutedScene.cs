@@ -11,8 +11,7 @@ namespace Puck.World.Client;
 /// The scene of one endpoint's world as this presentation renders it: the endpoint's own static scene, stamp pool and
 /// population, drawn from its delivered definition and state mirror by a <see cref="WorldSessionSceneEmitter"/> over
 /// <see cref="WorldAuthorityEndpoint.Mirror"/>, the same emitter a session screen draws a destination with, which lights it
-/// under the destination's own sky and lighting (its <c>render.cycle</c> or static lanes) on the destination's own sky
-/// clock. Every view of the world is a view of
+/// under the destination's own sky and lighting, its keys read on the destination's own clocks. Every view of the world is a view of
 /// the scene's one frame, so they share one program and one residency, each with its own camera and quality
 /// (<see cref="SdfViewSnapshot.Quality"/>):
 /// <list type="bullet">

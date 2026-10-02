@@ -141,7 +141,7 @@ public sealed record SdfBakedImpostor(Vector3 Center, float Radius, int Views, i
             Albedo: SdfBakedTexture.Compress(chain: albedoChain, height: side, tileTexels: viewTexels, usage: SdfBakeTextureUsage.Albedo, width: side),
             Center: center,
             Depth: SdfBakedTexture.Store(coverage: coverage, height: side, level0: depth, tileTexels: viewTexels, usage: SdfBakeTextureUsage.Depth, width: side),
-            Material: SdfBakedTexture.Store(height: side, level0: materials, tileTexels: viewTexels, usage: SdfBakeTextureUsage.Material, width: side),
+            Material: SdfBakedTexture.Store(coverage: coverage, height: side, level0: materials, tileTexels: viewTexels, usage: SdfBakeTextureUsage.Material, width: side),
             Emission: SdfBakedTexture.Store(coverage: coverage, height: side, level0: emission, tileTexels: viewTexels, usage: SdfBakeTextureUsage.Emission, width: side),
             Normal: SdfBakedTexture.Store(coverage: coverage, height: side, level0: normals, tileTexels: viewTexels, usage: SdfBakeTextureUsage.Normal, width: side),
             Radius: radius,

@@ -1,53 +1,391 @@
 {
   "id": "sdf-bake-impostor",
-  "title": "A bake too small on screen for its mesh draws as its impostor, and a view records the card and not the mesh",
-  "binding": "The positive leg boots an offscreen 1024x576 world of the bake-switch canary's one static block, a chamfered box, a hundred units from a fixed camera, where its bounding sphere spans about ten pixels, under the sixteen-pixel edge of its impostor's views. It turns world.bakes on and waits while the presentation's bake schedule bakes the block in the background. Until the bake lands the block draws through its field; once it is ready the static scene rebuilds and the block's placement emits two draws, its mesh and its impostor's card, bounded by the same sphere. The view records the card and not the mesh, so the mesh pass counts impostor draws and no mesh draws of baked placements (sdf.mesh.lod.far counts, sdf.mesh.lod.near reads zero). The leg selects the visibility debug view, which colors each pixel by the kind of its visibility record, and captures a frame: the block's center pixels read as mesh, the kind a card's pixels carry. The discriminating leg is the same world and script with world.bakes off, so the block keeps reading as its field and no card is recorded (sdf.mesh.lod.far reads zero).",
+  "title": "A bake too small on screen for its mesh draws as its impostor card at a coarse level, a view records the card and not the mesh, and the card names each region's own material",
+  "binding": "The positive leg boots an offscreen 1024x576 world of one static prototype, two boxes of two materials, 281 units from a fixed camera, where its bake's bounding sphere spans about ten pixels, under the sixteen-pixel edge of its impostor's views and at their second level (BakeImpostorCanaryGeometryLawTests holds those numbers on the CPU). It turns world.bakes on and waits while the presentation's bake schedule bakes the prototype in the background. Until the bake lands the prototype draws through its field; once it is ready the static scene rebuilds and the placement emits two draws, its mesh and its impostor's card, bounded by the same sphere. The view records the card and not the mesh (sdf.mesh.lod.far counts, sdf.mesh.lod.near reads zero). The visibility view reads the middle pixels, and one pixel either side of the boxes' seam, as mesh, the kind a card's pixels carry. The material-id view then colors each pixel by the material it names; the leg turns world.bakes off, captures the field's own material ids, and holds the card's pixel on each side of the seam to the field's, so a card that names the first material everywhere, or a coarse texel that votes its misses, differs on one side. The discriminating leg is the same world with world.bakes off throughout: the pixels read as the field and no card is recorded (sdf.mesh.lod.far reads zero).",
   "bootShape": "offscreen",
-  "backends": ["vulkan", "directx"],
-  "requirements": ["gpu"],
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
   "timeoutSeconds": 60,
   "positive": {
     "world": "tests/Puck.World.Canaries/sdf-bake-impostor/fixture.puck",
     "script": "baked.script.txt",
     "commands": [
-      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.bakes", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
-      { "verb": "world.debug-view", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
-      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.counters", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.counters", "occurrence": 2, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.bakes",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.debug-view",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.debug-view",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.bakes",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 7,
+        "outcome": "accepted"
+      }
     ],
     "expect": [
-      { "type": "imageRegion", "name": "the-block-is-its-impostors-card", "capture": "block.png", "extent": [1024, 576], "region": [0.499, 0.4983, 0.501, 0.5017], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": true },
-      { "type": "line", "name": "no-mesh-of-a-baked-placement-is-recorded", "stream": "stdout", "match": "contains", "text": "sdf.mesh.lod.near 0", "present": true },
-      { "type": "line", "name": "the-card-is-recorded", "stream": "stdout", "match": "contains", "text": "sdf.mesh.lod.far 0", "present": false },
-      { "type": "line", "name": "the-switch-is-counted", "stream": "stdout", "match": "contains", "text": "sdf.bakes.drawn 1", "present": true }
+      {
+        "type": "imageRegion",
+        "name": "the-middle-is-its-impostors-card",
+        "capture": "kind.png",
+        "extent": [
+          1024,
+          576
+        ],
+        "region": [
+          0.499,
+          0.4983,
+          0.501,
+          0.5017
+        ],
+        "reduce": "every",
+        "holds": true,
+        "minimum": [
+          0.85,
+          0.45,
+          0.02,
+          1
+        ],
+        "maximum": [
+          1,
+          0.65,
+          0.2,
+          1
+        ],
+        "toleranceCodes": 2
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-left-of-the-seam-is-a-card",
+        "capture": "kind.png",
+        "extent": [
+          1024,
+          576
+        ],
+        "region": [
+          0.498047,
+          0.498264,
+          0.499023,
+          0.501736
+        ],
+        "reduce": "every",
+        "holds": true,
+        "minimum": [
+          0.85,
+          0.45,
+          0.02,
+          1
+        ],
+        "maximum": [
+          1,
+          0.65,
+          0.2,
+          1
+        ],
+        "toleranceCodes": 2
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-right-of-the-seam-is-a-card",
+        "capture": "kind.png",
+        "extent": [
+          1024,
+          576
+        ],
+        "region": [
+          0.500977,
+          0.498264,
+          0.501953,
+          0.501736
+        ],
+        "reduce": "every",
+        "holds": true,
+        "minimum": [
+          0.85,
+          0.45,
+          0.02,
+          1
+        ],
+        "maximum": [
+          1,
+          0.65,
+          0.2,
+          1
+        ],
+        "toleranceCodes": 2
+      },
+      {
+        "type": "line",
+        "name": "no-mesh-of-a-baked-placement-is-recorded",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "sdf.mesh.lod.near 0",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-card-is-recorded",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "sdf.mesh.lod.far 0",
+        "present": false
+      },
+      {
+        "type": "line",
+        "name": "the-switch-is-counted",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "sdf.bakes.drawn 1",
+        "present": true
+      },
+      {
+        "type": "imageDifference",
+        "name": "the-left-names-the-fields-material",
+        "capture": "card.png",
+        "reference": "field.png",
+        "extent": [
+          1024,
+          576
+        ],
+        "region": [
+          0.498047,
+          0.498264,
+          0.499023,
+          0.501736
+        ],
+        "maximumMeanCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageDifference",
+        "name": "the-right-names-the-fields-material",
+        "capture": "card.png",
+        "reference": "field.png",
+        "extent": [
+          1024,
+          576
+        ],
+        "region": [
+          0.500977,
+          0.498264,
+          0.501953,
+          0.501736
+        ],
+        "maximumMeanCodes": 2,
+        "holds": true
+      }
     ]
   },
   "discriminating": {
     "world": "tests/Puck.World.Canaries/sdf-bake-impostor/fixture.puck",
     "script": "field.script.txt",
     "commands": [
-      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.bakes", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
-      { "verb": "world.debug-view", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
-      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.counters", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.counters", "occurrence": 2, "outcome": "accepted" },
-      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" }
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.bakes",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.debug-view",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      }
     ],
     "expect": [
-      { "type": "imageRegion", "name": "the-block-is-its-impostors-card", "capture": "block.png", "extent": [1024, 576], "region": [0.499, 0.4983, 0.501, 0.5017], "reduce": "every", "minimum": [0.85, 0.45, 0.02, 1], "maximum": [1, 0.65, 0.2, 1], "toleranceCodes": 2, "holds": false },
-      { "type": "imageRegion", "name": "the-block-is-its-field", "capture": "block.png", "extent": [1024, 576], "region": [0.499, 0.4983, 0.501, 0.5017], "reduce": "every", "minimum": [0.1, 0.8, 0.15, 1], "maximum": [0.2, 1, 0.35, 1], "toleranceCodes": 2, "holds": true },
-      { "type": "line", "name": "the-card-is-recorded", "stream": "stdout", "match": "contains", "text": "sdf.mesh.lod.far 0", "present": true },
-      { "type": "line", "name": "the-switch-is-counted", "stream": "stdout", "match": "contains", "text": "sdf.bakes.drawn 1", "present": false }
+      {
+        "type": "imageRegion",
+        "name": "the-middle-is-its-impostors-card",
+        "capture": "kind.png",
+        "extent": [
+          1024,
+          576
+        ],
+        "region": [
+          0.499,
+          0.4983,
+          0.501,
+          0.5017
+        ],
+        "reduce": "every",
+        "holds": false,
+        "minimum": [
+          0.85,
+          0.45,
+          0.02,
+          1
+        ],
+        "maximum": [
+          1,
+          0.65,
+          0.2,
+          1
+        ],
+        "toleranceCodes": 2
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-middle-is-its-field",
+        "capture": "kind.png",
+        "extent": [
+          1024,
+          576
+        ],
+        "region": [
+          0.499,
+          0.4983,
+          0.501,
+          0.5017
+        ],
+        "reduce": "every",
+        "holds": true,
+        "minimum": [
+          0.1,
+          0.8,
+          0.15,
+          1
+        ],
+        "maximum": [
+          0.2,
+          1,
+          0.35,
+          1
+        ],
+        "toleranceCodes": 2
+      },
+      {
+        "type": "line",
+        "name": "the-card-is-recorded",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "sdf.mesh.lod.far 0",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-switch-is-counted",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "sdf.bakes.drawn 1",
+        "present": false
+      }
     ]
   }
 }

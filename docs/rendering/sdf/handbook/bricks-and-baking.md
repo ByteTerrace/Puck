@@ -256,7 +256,9 @@ block alignment. Each usage filters its own way:
 - material identity keeps the id most of its four texels hold, the smallest id
   winning a tie. A box footprint has no nearest texel, since all four are
   equidistant from its center, and a blended id would name a material nothing
-  authored.
+  authored. An impostor's chain weights the vote by the albedo's coverage: a texel
+  the view's ray missed holds 0 and casts no vote, so a coarse texel over two
+  misses and two hits names the hits' material, and 0 only where all four miss.
 
 **Compression** is `Puck.Assets.Textures`: a CPU encoder per format whose bytes
 are the same on every machine, and an exact decoder that is its test oracle.

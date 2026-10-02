@@ -29,7 +29,7 @@ public sealed class ReplayForkLawTests {
         );
 
         Assert.Equal(
-            expected: 4u,
+            expected: 5u,
             actual: BitConverter.ToUInt32(
                 startIndex: sizeof(uint),
                 value: buffer.ToArray()
@@ -83,6 +83,8 @@ public sealed class ReplayForkLawTests {
         }
 
         return new WorldReplaySnapshot {
+            Authority = "boot",
+            Instance = "boot",
             DefinitionJson = WorldDefinitionSerialization.Serialize(definition: Fixtures.BuildDocument()),
             ForkedFrom = forkedFrom,
             MountedAddons = [],
@@ -325,8 +327,8 @@ public sealed class ReplayForkLawTests {
 
         Assert.Null(@object: parentStop.VerifyFault);
         Assert.True(
-            condition: parentStop.Verdict!.Value.Match,
-            userMessage: parentStop.Verdict.Value.Describe()
+            condition: parentStop.Verdict!.Primary.Match,
+            userMessage: parentStop.Verdict.Primary.Describe()
         );
 
         var parentTape = ReadTape(
@@ -414,8 +416,8 @@ public sealed class ReplayForkLawTests {
 
         Assert.Null(@object: childStop.VerifyFault);
         Assert.True(
-            condition: childStop.Verdict!.Value.Match,
-            userMessage: childStop.Verdict.Value.Describe()
+            condition: childStop.Verdict!.Primary.Match,
+            userMessage: childStop.Verdict.Primary.Describe()
         );
 
         var childTape = ReadTape(
@@ -471,6 +473,6 @@ public sealed class ReplayForkLawTests {
             actual: childTape.RecordedHashes[2]
         );
         // STANDALONE: the child verifies from its own boot image with the parent never consulted.
-        Assert.True(condition: tape.Verify(name: child).Match);
+        Assert.True(condition: tape.Verify(name: child).Primary.Match);
     }
 }

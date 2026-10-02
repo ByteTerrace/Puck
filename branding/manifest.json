@@ -148,7 +148,7 @@
     "adapters": ["docs/site/_theme/theme.css", "docs/api/templates/byteterrace/public/main.css", "src/Puck.Dashboard/src/portal/src/theme/global.css", "src/Puck.Dashboard/src/host/src/host.css"]
   },
   "wiring": [
-    { "path": "build/Packaging.targets", "contains": "branding\\assets\\puck-logo-200.png", "description": "NuGet packages consume the canonical product mark." },
+    { "path": "build/Packaging.targets", "contains": "branding/assets/puck-logo-200.png", "description": "NuGet packages consume the canonical product mark." },
     { "path": "docs/site/_theme/theme.css", "contains": "@import url(\"/_theme/tokens.css\");", "description": "The staged site theme consumes its shared token copy." },
     { "path": "docs/site/_theme/theme.css", "contains": "font-family: var(--font-body);", "description": "The site consumes the canonical body font stack." },
     { "path": "docs/site/_theme/theme.css", "contains": "font-family: var(--font-code);", "description": "The site consumes the canonical code font stack." },

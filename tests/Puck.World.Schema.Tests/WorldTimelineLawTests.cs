@@ -6,7 +6,8 @@ namespace Puck.World.Schema.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: the <c>timeline</c> section's clocks. A tick clock's period is a whole number of engine ticks and
 /// its phase at a tick is exact; a state clock reads a Fixed or Int row; each clock is one or the other, named once, and
-/// a cloud layer's rates are never keyed on a state row, whose value can jump between two ticks.
+/// a cloud layer's rates are never keyed on a state clock or bound to a state row, whose value can jump between two
+/// ticks.
 /// </summary>
 public sealed class WorldTimelineLawTests {
     private static WorldStateRow Row(string name, CellKind kind) => new(
@@ -82,38 +83,37 @@ public sealed class WorldTimelineLawTests {
         Assert.Equal(expected: 0.75d, actual: WorldClocks.Phase(value: 41.75d));
     }
     [Fact]
-    public void A_cycle_key_may_not_move_a_cloud_rate() {
-        var definition = new WorldDefinition(
-            RenderRaw: new WorldRenderDefaults(
-                Cycle: new WorldRenderCycle(
-                    State: "tide",
-                    Keys: [
-                        new WorldRenderCycleKey(At: 0f),
-                        new WorldRenderCycleKey(At: 0.5f, Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Spin: 0.2f)])),
-                    ]
-                ),
-                Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Coverage: 0.4f)])
-            ),
-            StateRaw: new WorldStateSection(World: [Row(kind: CellKind.Int, name: "tide")])
-        );
+    public void A_cloud_rate_keyed_on_a_state_clock_is_refused() {
+        static WorldDefinition Spinning(string clock) => Definition(
+            new WorldClock(Name: "day", PeriodSeconds: 60d),
+            new WorldClock(Name: "tide", State: "tide")
+        ) with {
+            RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(
+                Coverage: 0.4f,
+                Spin: new BindableScalar(keys: new WorldKeyTrack<float>(
+                    clock: clock,
+                    keys: [new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0f), new WorldKey<float>(At: 0.5d, Ease: WorldEase.Linear, Value: 0.2f)]
+                ))
+            )])),
+        };
 
         Assert.Contains(
-            expectedSubstring: "may not key drift, shear or spin",
-            actualString: Validate(definition: definition)
+            expectedSubstring: "may key only on a tick clock; clock 'tide' reads state row 'tide'",
+            actualString: Validate(definition: Spinning(clock: "tide"))
         );
-        // Control: the same key moving the coverage, which is no rate, is admitted.
+        // Control: the same rate keyed on a tick clock is admitted.
         Assert.Equal(
-            actual: Validate(definition: definition with {
-                RenderRaw = definition.Render with {
-                    Cycle = definition.Render.Cycle! with {
-                        Keys = [
-                            new WorldRenderCycleKey(At: 0f),
-                            new WorldRenderCycleKey(At: 0.5f, Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Coverage: 0.8f)])),
-                        ],
-                    },
-                },
-            }),
+            actual: Validate(definition: Spinning(clock: "day")),
             expected: string.Empty
+        );
+    }
+    [Fact]
+    public void A_cloud_rate_may_not_bind_a_state_row() {
+        Assert.Contains(
+            expectedSubstring: "may not bind a state row",
+            actualString: Validate(definition: Definition() with {
+                RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Spin: new BindableScalar(binding: "state.tide"))])),
+            })
         );
     }
 }

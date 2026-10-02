@@ -31,8 +31,8 @@ public sealed class CreationBakeLawTests {
         """;
     // The bake pack of this file's world at the baker's current version. A change to what the baker produces moves
     // SdfBaker.Version and re-records this pin.
-    private const uint PinnedVersion = 8;
-    private const string PinnedProduct = "sha256-64/c446756418ab2e5e";
+    private const uint PinnedVersion = 9;
+    private const string PinnedProduct = "sha256-64/6a01e98f613d2426";
 
     private static readonly TimeSpan Patience = TimeSpan.FromMinutes(minutes: 2);
 
@@ -129,8 +129,8 @@ public sealed class CreationBakeLawTests {
     public void BakingOneCreationTwiceGivesOneKeyAndTheSameBytes() {
         var request = WorldBakeStore.RequestsOf(definition: Definition(), quality: SdfBakeQuality.Preview)[0];
         var again = WorldBakeStore.RequestsOf(definition: Definition(), quality: SdfBakeQuality.Preview)[0];
-        var first = WorldBakeStore.Bake(request: request, work: out var work);
-        var second = WorldBakeStore.Bake(request: again, work: out _);
+        var first = WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: request, work: out var work);
+        var second = WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: again, work: out _);
 
         Assert.Equal(expected: request.Key, actual: again.Key);
         Assert.Equal(expected: request.Key.Pin, actual: again.Key.Pin);
@@ -143,7 +143,7 @@ public sealed class CreationBakeLawTests {
     public void TheCodecRefusesAnImpostorTextureInAnotherUsagesSlot() {
         var request = WorldBakeStore.RequestsOf(definition: Definition(), quality: SdfBakeQuality.Preview)[0];
 
-        Assert.True(condition: CreationBakeCodec.TryDecode(bake: out var bake, content: WorldBakeStore.Bake(request: request, work: out _), refusal: out _));
+        Assert.True(condition: CreationBakeCodec.TryDecode(bake: out var bake, content: WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: request, work: out _), refusal: out _));
 
         var swapped = CreationBakeCodec.Encode(bake: (bake with { Impostor = (bake.Impostor with { Depth = bake.Impostor.Emission, Emission = bake.Impostor.Depth }) }));
 
@@ -193,6 +193,36 @@ public sealed class CreationBakeLawTests {
         Assert.True(condition: later.HasReconciled);
         Assert.False(condition: later.Ships);
     }
+    /// <summary>A disposed schedule writes nothing more under its store's directory, so the directory's owner may delete
+    /// it: the bake it was running stops at its next field evaluation, and disposal returns once it has. Red leg: a
+    /// schedule that only signals its bake leaves it to finish and keep its outcome after disposal.</summary>
+    [Fact]
+    public void ADisposedScheduleWritesNothingMoreUnderItsStore() {
+        using var directory = new TemporaryDirectory();
+        var definition = Definition();
+        var store = directory.PathOf(name: "bakes");
+
+        using (var schedule = new WorldBakeSchedule(quality: SdfBakeQuality.Preview, store: new WorldBakeStore(directory: store))) {
+            schedule.Pump(definition: definition);
+            Assert.True(condition: schedule.IsBusy);
+            // A schedule disposed before its bake began has nothing in flight to stop, so wait until the bake runs.
+            Assert.True(condition: SpinWait.SpinUntil(condition: () => schedule.IsBaking, timeout: TestLiveness.Bound));
+        }
+
+        var disposed = Entries(directory: store);
+
+        // Baking every prototype here takes at least as long as the one bake the schedule started would.
+        foreach (var request in WorldBakeStore.RequestsOf(definition: definition, quality: SdfBakeQuality.Preview)) {
+            _ = WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: request, work: out _);
+        }
+
+        Assert.Equal(expected: disposed, actual: Entries(directory: store));
+    }
+
+    private static string[] Entries(string directory) => (Directory.Exists(path: directory)
+        ? [.. Directory.EnumerateFileSystemEntries(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*").Order(comparer: StringComparer.Ordinal)]
+        : []);
+
     /// <summary>A ready bake draws in place of its field, and the switch is counted once. Before its bake lands, a
     /// placement draws through its field: no mesh draw, and a camera-visible instance. Once the bake is ready it draws
     /// the baked mesh and its impostor's card, with its instance camera-hidden so its field still casts shadows and
@@ -300,7 +330,7 @@ public sealed class CreationBakeLawTests {
 
         foreach (var request in WorldBakeStore.RequestsOf(definition: boot.Admission.Definition, quality: WorldBakeChunk.Quality)) {
             Assert.True(condition: store.TryGetHeld(key: request.Key.Pin, outcome: out var loaded));
-            Assert.Equal(expected: WorldBakeStore.Bake(request: request, work: out _), actual: loaded.ToArray());
+            Assert.Equal(expected: WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: request, work: out _), actual: loaded.ToArray());
         }
 
         using var schedule = new WorldBakeSchedule(store: store);
@@ -344,6 +374,58 @@ public sealed class CreationBakeLawTests {
         Assert.True(condition: schedule.Ships);
         Assert.Equal(expected: (((long)creations), 0L, 0L, 0L), actual: Counts(schedule: schedule));
         Assert.Equal(expected: WorldBakeState.Ready, actual: schedule.StateOf(prototypeId: "vocabRig"));
+    }
+    /// <summary>A bake held under a key that this baker cannot read, such as one a build before the impostor carried its
+    /// material plane kept (a plane in the wrong place, or bytes cut short), never silently suppresses cards: the
+    /// prototype draws through its field, the refusal is counted under <c>sdf.bakes.undecodable</c> once and named on the
+    /// error stream, and no exception reaches the frame thread. The bake's key carries the baker's version, which is how
+    /// such bytes stop matching once the baker moves.</summary>
+    [Fact]
+    public void AHeldBakeThisBakerCannotDecodeDrawsTheFieldAndIsCountedByName() {
+        var definition = Definition();
+        var request = WorldBakeStore.RequestsOf(definition: definition, quality: WorldBakeChunk.Quality).Single(predicate: static request => (request.PrototypeId == "block"));
+        var fresh = WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: request, work: out _);
+
+        Assert.True(condition: CreationBakeCodec.TryDecode(bake: out var bake, content: fresh, refusal: out _));
+
+        // A bake as an older build wrote it: the impostor's slot after the depth holds the emission texture, not the material
+        // plane this baker expects there.
+        byte[][] held = [
+            CreationBakeCodec.Encode(bake: (bake! with { Impostor = (bake.Impostor with { Material = bake.Impostor.Emission }) })),
+            fresh[..^9],
+        ];
+
+        foreach (var bytes in held) {
+            var store = new WorldBakeStore();
+
+            Assert.True(condition: store.Keep(key: request.Key.Pin, outcome: bytes));
+
+            using var schedule = new WorldBakeSchedule(store: store);
+
+            schedule.Pump(definition: definition);
+
+            var asked = schedule.TryGetDraw(draw: out var draw, prototypeId: "block");
+
+            Assert.False(condition: asked);
+            Assert.Null(@object: draw);
+            Assert.Equal(expected: 1L, actual: schedule.Read(kind: WorldBakeSchedule.Undecodable));
+            // Asked again, it is the same refusal and is counted once.
+            Assert.False(condition: schedule.TryGetDraw(draw: out _, prototypeId: "block"));
+            Assert.Equal(expected: 1L, actual: schedule.Read(kind: WorldBakeSchedule.Undecodable));
+            Assert.Equal(expected: 0L, actual: schedule.Read(kind: WorldBakeSchedule.Drawn));
+        }
+
+        // The red leg: a held bake this baker wrote draws, with its impostor.
+        var healthy = new WorldBakeStore();
+
+        Assert.True(condition: healthy.Keep(key: request.Key.Pin, outcome: fresh));
+
+        using var good = new WorldBakeSchedule(store: healthy);
+
+        good.Pump(definition: definition);
+        Assert.True(condition: good.TryGetDraw(draw: out var shown, prototypeId: "block"));
+        Assert.NotNull(@object: shown!.Impostor);
+        Assert.Equal(expected: 0L, actual: good.Read(kind: WorldBakeSchedule.Undecodable));
     }
     [Fact]
     public void ReadinessWaitsForAReconcileAndAnEmptyWorldSettles() {
@@ -498,8 +580,8 @@ public sealed class CreationBakeLawTests {
         var request = WorldBakeStore.RequestsOf(definition: Definition(), quality: SdfBakeQuality.Preview)[0];
         var other = WorldBakeStore.RequestsOf(definition: Definition(), quality: SdfBakeQuality.Preview)[2];
         var outcomes = new[] {
-            KeyValuePair.Create(key: request.Key.Pin, value: ((ReadOnlyMemory<byte>)WorldBakeStore.Bake(request: request, work: out _))),
-            KeyValuePair.Create(key: other.Key.Pin, value: ((ReadOnlyMemory<byte>)WorldBakeStore.Bake(request: other, work: out _))),
+            KeyValuePair.Create(key: request.Key.Pin, value: ((ReadOnlyMemory<byte>)WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: request, work: out _))),
+            KeyValuePair.Create(key: other.Key.Pin, value: ((ReadOnlyMemory<byte>)WorldBakeStore.Bake(cancellationToken: TestContext.Current.CancellationToken, request: other, work: out _))),
         };
         var pack = WorldBakePack.Encode(outcomes: outcomes);
 

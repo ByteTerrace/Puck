@@ -97,8 +97,6 @@ public readonly record struct WorldQualityPreset(
 /// <param name="Sky">The procedural sky — a gradient, sun disc, star field, and distance fog. Optional; an absent
 /// section renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section
 /// existed.</param>
-/// <param name="Cycle">Lighting and sky keyed over a state row's value (a day/night cycle when that row advances).
-/// Optional; absent leaves <paramref name="Lighting"/>/<paramref name="Sky"/> static.</param>
 /// <param name="Environment">The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe
 /// reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.</param>
 /// <param name="Tonemap">The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs
@@ -124,7 +122,6 @@ public sealed record WorldRenderDefaults(
     [property: JsonPropertyName("high"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? HighRaw = null,
     WorldRenderLighting? Lighting = null,
     WorldRenderSky? Sky = null,
-    WorldRenderCycle? Cycle = null,
     WorldRenderEnvironment? Environment = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTonemap? Tonemap = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FarDistance = null
@@ -162,20 +159,44 @@ public sealed record WorldRenderDefaults(
 /// <summary>The lit path's lights and stylization as world data. Absent renders the pinned sun and hemisphere an
 /// unauthored world always had; present, the list IS the lights — an authored list without a hemisphere has no
 /// ambient. Every field of every light is optional individually and resolves to the engine's pinned default for its
-/// kind.</summary>
-/// <param name="Lights">The lights, at most <c>SdfEnvironment.MaxLights</c>, in slot order (a <c>render.cycle</c> key
-/// moves a light by its slot). At most one directional may shadow: the soft-shadow march runs once per lit
-/// pixel.</param>
+/// kind. Every value a light or the curvature carries may be keyed on a clock on its own; the section may instead be
+/// keyed whole (<paramref name="Clock"/>, <paramref name="Keys"/>), each key a partial record addressing lights by
+/// name.</summary>
+/// <param name="Lights">The lights, at most <c>SdfEnvironment.MaxLights</c>, in slot order. At most one directional
+/// may shadow: the soft-shadow march runs once per lit pixel.</param>
 /// <param name="Curvature">The stylized curvature enrichment — cavity darkening, curvature rim light, and an ink
 /// outline. Optional; absent (and all-zero) shades exactly as a world that declares none.</param>
-public sealed record WorldRenderLighting(IReadOnlyList<WorldRenderLight>? Lights = null, WorldRenderCurvature? Curvature = null) {
+/// <param name="Clock">The clock the section's keys read, by name in the <c>timeline</c> section. Required with
+/// <paramref name="Keys"/> and refused without them.</param>
+/// <param name="Keys">The section's keys, ascending in time. A field a key states is keyed on
+/// <paramref name="Clock"/> through the keys that state it, blended by the field's type and eased by each key's ease;
+/// a field no key states keeps its authored value.</param>
+public sealed record WorldRenderLighting(
+    IReadOnlyList<WorldRenderLight>? Lights = null,
+    WorldRenderCurvature? Curvature = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Clock = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRenderLightingKey>? Keys = null
+) {
     /// <summary>The topology an absent <c>render.lighting</c> resolves to — the pinned shadowing sun and the pinned
-    /// hemisphere — which a <c>render.cycle</c> key over unauthored lighting is validated against.</summary>
+    /// hemisphere.</summary>
     public static WorldRenderLighting Pinned { get; } = new(Lights: [
         new WorldRenderLight.Directional(Shadows: true),
         new WorldRenderLight.Hemisphere(),
     ]);
 }
+/// <summary>One key of <see cref="WorldRenderLighting.Keys"/>: a partial record of the section at one time.</summary>
+/// <param name="At">Where on the section's clock the key sits, in the clock's span units, in <c>[0, span)</c>.</param>
+/// <param name="Ease">How time eases from this key to the next key that states each field. Absent is
+/// <see cref="WorldEase.Linear"/>.</param>
+/// <param name="Lights">The lights this key moves, by name: each the same kind as the light of that name, stating only
+/// the fields it moves. A light's name and shadowing are structure, which a key never states.</param>
+/// <param name="Curvature">The curvature fields this key moves.</param>
+public sealed record WorldRenderLightingKey(
+    double At,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEase? Ease = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldRenderLight>? Lights = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderCurvature? Curvature = null
+);
 /// <summary>One light. The <c>$type</c> string is the JSON discriminator; a new kind is a new derived record, its
 /// <see cref="JsonDerivedTypeAttribute"/> line, and its lane semantics in <c>SdfEnvironment</c>.</summary>
 [JsonDerivedType(typeof(WorldRenderLight.Directional), typeDiscriminator: "directional")]
@@ -188,44 +209,64 @@ public abstract record WorldRenderLight {
     private WorldRenderLight() {
     }
 
+    /// <summary>Gets the light's name, which a section key addresses it by, or <see langword="null"/> for an unnamed
+    /// light no key can address.</summary>
+    [JsonIgnore]
+    public abstract string? LightName { get; }
+
     /// <summary>A Lambert directional light.</summary>
     /// <param name="Direction">The direction from a lit surface toward the light, any nonzero length (normalized
     /// host-side before upload). Absent is the pinned sun direction.</param>
-    /// <param name="Color">The light's linear colour.</param>
+    /// <param name="Color">The light's colour.</param>
     /// <param name="Weight">The diffuse weight. Absent is the pinned sun weight.</param>
-    /// <param name="AngularRadius">The light's angular radius in radians, in <c>[0, atan 0.3]</c>: the penumbra
+    /// <param name="AngularRadius">The light's angular radius, in <c>[0, atan 0.3]</c> radians: the penumbra
     /// half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned
     /// penumbra.</param>
     /// <param name="Shadows">Whether this light drives the soft-shadow march (at most one light per world). Absent is
     /// <see langword="false"/>. An unshadowed directional is scaled by ambient occlusion instead.</param>
+    /// <param name="Name">The name a section key addresses the light by, unique among the lights.</param>
     public sealed record Directional(
-        DocumentVector3? Direction = null,
+        BindableDirection? Direction = null,
         BindableColor? Color = null,
-        float? Weight = null,
-        float? AngularRadius = null,
-        bool? Shadows = null
-    ) : WorldRenderLight;
+        BindableScalar? Weight = null,
+        BindableAngle? AngularRadius = null,
+        bool? Shadows = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+    ) : WorldRenderLight {
+        /// <inheritdoc/>
+        public override string? LightName => Name;
+    }
     /// <summary>A hemisphere ambient: a floor plus a gradient on the surface normal's Y (sky above, darker below),
     /// scaled by ambient occlusion.</summary>
-    /// <param name="Color">The ambient's linear colour.</param>
+    /// <param name="Color">The ambient's colour.</param>
     /// <param name="Base">The floor. Absent is the pinned ambient floor.</param>
     /// <param name="Gradient">The hemisphere gradient. Absent is the pinned gradient.</param>
+    /// <param name="Name">The name a section key addresses the light by, unique among the lights.</param>
     public sealed record Hemisphere(
         BindableColor? Color = null,
-        float? Base = null,
-        float? Gradient = null
-    ) : WorldRenderLight;
+        BindableScalar? Base = null,
+        BindableScalar? Gradient = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+    ) : WorldRenderLight {
+        /// <inheritdoc/>
+        public override string? LightName => Name;
+    }
     /// <summary>A view-dependent silhouette brighten: <c>weight · color · pow(1 − saturate(dot(normal,
     /// −rayDirection)), power)</c>, added after the material shade.</summary>
-    /// <param name="Color">The rim's linear colour.</param>
+    /// <param name="Color">The rim's colour.</param>
     /// <param name="Weight">The strength. Absent is zero, which adds nothing.</param>
     /// <param name="Power">The falloff exponent — larger confines the highlight nearer the silhouette. Absent is the
     /// engine default.</param>
+    /// <param name="Name">The name a section key addresses the light by, unique among the lights.</param>
     public sealed record Rim(
         BindableColor? Color = null,
-        float? Weight = null,
-        float? Power = null
-    ) : WorldRenderLight;
+        BindableScalar? Weight = null,
+        BindableScalar? Power = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+    ) : WorldRenderLight {
+        /// <inheritdoc/>
+        public override string? LightName => Name;
+    }
     /// <summary>A point light with inverse-square falloff and a soft core:
     /// <c>intensity = weight / (1 + (distance / radius)^2)</c>. No shadow march in v1 — a point light never occludes
     /// and is never occluded.</summary>
@@ -233,18 +274,38 @@ public abstract record WorldRenderLight {
     /// An offset in the anchor frame when an anchor is authored.</param>
     /// <param name="Radius">The falloff radius. Absent is the engine default.</param>
     /// <param name="Anchor">An entity, entity part, or placement frame. A missing live target disables the light.</param>
-    /// <param name="Color">The light's linear colour.</param>
+    /// <param name="Color">The light's colour.</param>
     /// <param name="Weight">The strength. Absent is the engine default.</param>
+    /// <param name="Name">The name a section key addresses the light by, unique among the lights.</param>
     public sealed record Point(
-        DocumentVector3? Position = null,
-        float? Radius = null,
+        BindableVector3? Position = null,
+        BindableScalar? Radius = null,
         WorldAnchor? Anchor = null,
         BindableColor? Color = null,
-        float? Weight = null
-    ) : WorldRenderLight;
+        BindableScalar? Weight = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+    ) : WorldRenderLight {
+        /// <inheritdoc/>
+        public override string? LightName => Name;
+    }
     /// <summary>A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement
-    /// frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.</summary>
-    public sealed record Occluder(DocumentVector3? Position = null, float? Radius = null, WorldAnchor? Anchor = null, float? Weight = null) : WorldRenderLight;
+    /// frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light
+    /// capacity.</summary>
+    /// <param name="Position">The world-space position, or the offset in the anchor's frame.</param>
+    /// <param name="Radius">The field's radius, positive.</param>
+    /// <param name="Anchor">An entity, entity part, or placement frame.</param>
+    /// <param name="Weight">The attenuation, in <c>[0, 1]</c>.</param>
+    /// <param name="Name">The name a section key addresses the light by, unique among the lights.</param>
+    public sealed record Occluder(
+        BindableVector3? Position = null,
+        BindableScalar? Radius = null,
+        WorldAnchor? Anchor = null,
+        BindableScalar? Weight = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+    ) : WorldRenderLight {
+        /// <inheritdoc/>
+        public override string? LightName => Name;
+    }
 }
 /// <summary>The stylized curvature enrichment, keyed on the level-set mean curvature the lit path already measures
 /// at each hit. Every field is optional individually — absent resolves to the engine's pinned default. The three
@@ -259,23 +320,42 @@ public abstract record WorldRenderLight {
 /// the ridge and cavity terms saturate.</param>
 /// <param name="InkHigh">The curvature magnitude at which the outline saturates.</param>
 /// <param name="InkColor"><see cref="BindableColor"/>'s grammar: the outline colour.</param>
-public sealed record WorldRenderCurvature(float? Cavity = null, float? Rim = null, float? Ink = null, float? InkLow = null, float? InkHigh = null, BindableColor? InkColor = null);
+public sealed record WorldRenderCurvature(
+    BindableScalar? Cavity = null,
+    BindableScalar? Rim = null,
+    BindableScalar? Ink = null,
+    BindableScalar? InkLow = null,
+    BindableScalar? InkHigh = null,
+    BindableColor? InkColor = null
+);
 /// <summary>The procedural sky as an ordered stack of layers. Absent is a hard gate: the world renders the pinned
 /// two-stop gradient and fog density, as before this section existed. The layers composite in a fixed order —
 /// gradient, stars, sun disc, clouds — whatever order they are authored in; fog is read every frame on its own. A
-/// layer kind appears at most once.</summary>
+/// layer kind appears at most once. Every value a layer carries may be keyed on a clock on its own; the section may
+/// instead be keyed whole (<paramref name="Clock"/>, <paramref name="Keys"/>), each key a partial record addressing
+/// layers by name.</summary>
 /// <param name="Layers">The layers.</param>
-public sealed record WorldRenderSky(IReadOnlyList<WorldRenderSkyLayer>? Layers = null) {
-    /// <summary>The topology an absent <c>render.sky</c> resolves to — the pinned two-stop gradient and the pinned
-    /// fog — which a <c>render.cycle</c> key over an unauthored sky is validated against.</summary>
-    public static WorldRenderSky Pinned { get; } = new(Layers: [
-        new WorldRenderSkyLayer.Gradient(Stops: [
-            new WorldRenderSkyStop(Elevation: -1f),
-            new WorldRenderSkyStop(Elevation: 1f),
-        ]),
-        new WorldRenderSkyLayer.Fog(),
-    ]);
-}
+/// <param name="Clock">The clock the section's keys read, by name in the <c>timeline</c> section. Required with
+/// <paramref name="Keys"/> and refused without them.</param>
+/// <param name="Keys">The section's keys, ascending in time. A field a key states is keyed on
+/// <paramref name="Clock"/> through the keys that state it; a field no key states keeps its authored value.</param>
+public sealed record WorldRenderSky(
+    IReadOnlyList<WorldRenderSkyLayer>? Layers = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Clock = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRenderSkyKey>? Keys = null
+);
+/// <summary>One key of <see cref="WorldRenderSky.Keys"/>: a partial record of the sky at one time.</summary>
+/// <param name="At">Where on the section's clock the key sits, in the clock's span units, in <c>[0, span)</c>.</param>
+/// <param name="Ease">How time eases from this key to the next key that states each field. Absent is
+/// <see cref="WorldEase.Linear"/>.</param>
+/// <param name="Layers">The layers this key moves, by name: each the same kind as the layer of that name, stating only
+/// the fields it moves. A gradient states every stop the layer has, in order. Counts, seeds, a layer's name and the
+/// sun disc's light are structure, which a key never states.</param>
+public sealed record WorldRenderSkyKey(
+    double At,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEase? Ease = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldRenderSkyLayer>? Layers = null
+);
 /// <summary>One sky layer. The <c>$type</c> string is the JSON discriminator.</summary>
 [JsonDerivedType(typeof(WorldRenderSkyLayer.Gradient), typeDiscriminator: "gradient")]
 [JsonDerivedType(typeof(WorldRenderSkyLayer.Fog), typeDiscriminator: "fog")]
@@ -287,26 +367,63 @@ public abstract record WorldRenderSkyLayer {
     private WorldRenderSkyLayer() {
     }
 
+    /// <summary>Gets the layer's name, which a section key addresses it by, or <see langword="null"/> for an unnamed
+    /// layer no key can address.</summary>
+    [JsonIgnore]
+    public abstract string? LayerName { get; }
+
     /// <summary>The colour gradient over elevation: piecewise-linear between stops, clamped to the end stops.</summary>
-    /// <param name="Stops">Two to <c>SdfEnvironment.MaxSkyStops</c> stops, strictly ascending in elevation. A
-    /// <c>render.cycle</c> key moves a stop by its index and may not add or remove one.</param>
-    public sealed record Gradient(IReadOnlyList<WorldRenderSkyStop>? Stops = null) : WorldRenderSkyLayer;
+    /// <param name="Stops">Two to <c>SdfEnvironment.MaxSkyStops</c> stops, strictly ascending in elevation.</param>
+    /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
+    public sealed record Gradient(
+        IReadOnlyList<WorldRenderSkyStop>? Stops = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+    ) : WorldRenderSkyLayer {
+        /// <inheritdoc/>
+        public override string? LayerName => Name;
+    }
     /// <summary>The exponential distance fog fading toward the sky gradient.</summary>
     /// <param name="Density">The density per world unit. Absent is the pinned density.</param>
-    public sealed record Fog(float? Density = null) : WorldRenderSkyLayer;
+    /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
+    public sealed record Fog(
+        BindableScalar? Density = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+    ) : WorldRenderSkyLayer {
+        /// <inheritdoc/>
+        public override string? LayerName => Name;
+    }
     /// <summary>The visible sun disc — an additive highlight about one directional light's direction.</summary>
     /// <param name="Light">The <see cref="WorldRenderLighting.Lights"/> slot of a directional light. Absent is the
     /// shadow light, or the first directional when none shadows.</param>
-    /// <param name="Radius">The disc's angular half-radius in radians, in <c>(0, π/2]</c>. Absent is the engine
+    /// <param name="Radius">The disc's angular half-radius, in <c>(0, π/2]</c> radians. Absent is the engine
     /// default.</param>
     /// <param name="Intensity">The peak additive brightness. Absent is zero, which draws nothing.</param>
-    public sealed record SunDisc(int? Light = null, float? Radius = null, float? Intensity = null) : WorldRenderSkyLayer;
+    /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
+    public sealed record SunDisc(
+        int? Light = null,
+        BindableAngle? Radius = null,
+        BindableScalar? Intensity = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+    ) : WorldRenderSkyLayer {
+        /// <inheritdoc/>
+        public override string? LayerName => Name;
+    }
     /// <summary>The procedural star field: a deterministic per-cell hash over an octahedral sky projection.</summary>
     /// <param name="Density">The star grid's cell count per octahedral axis. Absent is the engine default.</param>
     /// <param name="Brightness">The peak per-star brightness. Absent is zero, which draws nothing.</param>
     /// <param name="Seed">The hash seed folded into every cell.</param>
     /// <param name="Twinkle">Scintillation for a share of the stars. Optional; absent twinkles none.</param>
-    public sealed record Stars(float? Density = null, float? Brightness = null, uint? Seed = null, WorldRenderSkyTwinkle? Twinkle = null) : WorldRenderSkyLayer;
+    /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
+    public sealed record Stars(
+        float? Density = null,
+        BindableScalar? Brightness = null,
+        uint? Seed = null,
+        WorldRenderSkyTwinkle? Twinkle = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+    ) : WorldRenderSkyLayer {
+        /// <inheritdoc/>
+        public override string? LayerName => Name;
+    }
     /// <summary>The procedural cloud layer: a deterministic hashed-lattice noise on a plane above the camera,
     /// thresholded by coverage, drawn over the gradient, stars and sun disc and fading into the horizon.</summary>
     /// <param name="Coverage">The fraction of the sky the layer covers, in <c>[0, 1]</c>. Absent is zero.</param>
@@ -316,52 +433,41 @@ public abstract record WorldRenderSkyLayer {
     /// <param name="Seed">The hash seed folded into the lattice.</param>
     /// <param name="Color"><see cref="BindableColor"/>'s grammar: the cloud colour. Absent is white.</param>
     /// <param name="Drift">The layer's wind, in layer units per second along world X and Z, integrated on the tick
-    /// clock. Absent holds still.</param>
+    /// clock. A rate: it keys only on a tick clock, and binds no state row. Absent holds still.</param>
     /// <param name="Spin">The layer's rotation about the zenith in radians per second; positive is counter-clockwise
-    /// seen from below. Absent is none.</param>
-    /// <param name="Curl">The Coriolis twist in radians at 45° elevation, falling off toward the horizon and the
+    /// seen from below. A rate, as <paramref name="Drift"/> is. Absent is none.</param>
+    /// <param name="Curl">The Coriolis twist at 45° elevation, in radians, falling off toward the horizon and the
     /// zenith. Positive winds counter-clockwise. Absent is none.</param>
-    /// <param name="Shear">The wind of the shaping field relative to the cloud field, in layer units per second.
-    /// Absent holds the shapes.</param>
+    /// <param name="Shear">The wind of the shaping field relative to the cloud field, in layer units per second. A
+    /// rate, as <paramref name="Drift"/> is. Absent holds the shapes.</param>
+    /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
     public sealed record Clouds(
-        float? Coverage = null,
-        float? Softness = null,
-        float? Scale = null,
+        BindableScalar? Coverage = null,
+        BindableScalar? Softness = null,
+        BindableScalar? Scale = null,
         uint? Seed = null,
         BindableColor? Color = null,
-        DocumentVector2? Drift = null,
-        float? Spin = null,
-        float? Curl = null,
-        DocumentVector2? Shear = null
-    ) : WorldRenderSkyLayer;
+        BindableVector2? Drift = null,
+        BindableScalar? Spin = null,
+        BindableAngle? Curl = null,
+        BindableVector2? Shear = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+    ) : WorldRenderSkyLayer {
+        /// <inheritdoc/>
+        public override string? LayerName => Name;
+    }
 }
 /// <summary>One gradient stop.</summary>
 /// <param name="Elevation">The direction's Y component this stop sits at, in <c>[−1, 1]</c>.</param>
-/// <param name="Color"><see cref="BindableColor"/>'s grammar: the colour at this elevation. Absent (in a cycle key)
-/// keeps the previous key's colour.</param>
-public sealed record WorldRenderSkyStop(float? Elevation = null, BindableColor? Color = null);
+/// <param name="Color"><see cref="BindableColor"/>'s grammar: the colour at this elevation. Absent is white.</param>
+public sealed record WorldRenderSkyStop(BindableScalar? Elevation = null, BindableColor? Color = null);
 /// <summary>Scintillation: a hash-chosen share of the stars dip and recover on the simulation clock, each at its own
 /// harmonic and phase of one authored rate, so no two twinkle in step. Presentation-only, keyed on the tick.</summary>
 /// <param name="Share">The fraction of stars that twinkle, in <c>[0, 1]</c>. Zero twinkles none.</param>
 /// <param name="Depth">How far a twinkling star dips below its steady brightness, in <c>[0, 1]</c>.</param>
-/// <param name="Rate">The fundamental scintillation rate in hertz.</param>
-public sealed record WorldRenderSkyTwinkle(float? Share = null, float? Depth = null, float? Rate = null);
-/// <summary>Lighting and sky as a function of a state row: presentation reads the row's live value each frame, takes
-/// its fractional part (an advancing clock wraps once per unit), and interpolates between the two keys that bracket
-/// it — every environment lane by its own kind: colours and scalars linearly, directions along the arc, counts, kinds,
-/// seeds and flags held from the earlier key. A key states only the fields it moves; every other field holds its
-/// value from the previous key (the first key starts from the static <see cref="WorldRenderDefaults.Lighting"/>/
-/// <see cref="WorldRenderDefaults.Sky"/>, and the last key wraps into the first). A key addresses a light by its
-/// slot and a stop by its index, with the same kind the statics author there, and may not add or remove either.
-/// Presentation-only: the row is simulation state, the interpolation is not.</summary>
-/// <param name="State">The state row read (its slot cell; <c>Fixed</c> or <c>Int</c>).</param>
-/// <param name="Keys">At least two keys, strictly ascending <see cref="WorldRenderCycleKey.At"/> in <c>[0, 1)</c>.</param>
-public sealed record WorldRenderCycle(string State, IReadOnlyList<WorldRenderCycleKey> Keys);
-/// <summary>One point on a <see cref="WorldRenderCycle"/>.</summary>
-/// <param name="At">The row-value fraction this key sits at, in <c>[0, 1)</c>.</param>
-/// <param name="Lighting">The lighting fields this key moves, or <see langword="null"/>.</param>
-/// <param name="Sky">The sky fields this key moves, or <see langword="null"/>.</param>
-public sealed record WorldRenderCycleKey(float At, WorldRenderLighting? Lighting = null, WorldRenderSky? Sky = null);
+/// <param name="Rate">The fundamental scintillation rate in hertz. A rate: it keys only on a tick clock, and binds no
+/// state row.</param>
+public sealed record WorldRenderSkyTwinkle(BindableScalar? Share = null, BindableScalar? Depth = null, BindableScalar? Rate = null);
 /// <summary>The tonemap the root graph applies to the frame before the HUD — see
 /// <see cref="WorldRenderDefaults.Tonemap"/>.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldTonemap>))]

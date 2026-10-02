@@ -112,10 +112,13 @@ public sealed class WorldBakeStore {
     /// <summary>Bakes one request and encodes its outcome, a bake or a refusal.</summary>
     /// <param name="request">The request.</param>
     /// <param name="work">The bake's work, or <see langword="default"/> for a refusal.</param>
+    /// <param name="cancellationToken">Cancels the bake at its next field evaluation.</param>
     /// <returns>The encoded outcome.</returns>
-    public static byte[] Bake(WorldBakeRequest request, out SdfBakeWork work) {
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public static byte[] Bake(WorldBakeRequest request, out SdfBakeWork work, CancellationToken cancellationToken = default) {
         if (!CreationBaker.TryBake(
             bake: out var bake,
+            cancellationToken: cancellationToken,
             document: request.Document,
             quality: request.Key.Quality,
             reason: out var reason

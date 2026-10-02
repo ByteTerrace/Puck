@@ -1,5 +1,5 @@
-// The bake-impostor canary's world: one static block, which bakes, a hundred units from a fixed camera, so small on screen
-// that its bake draws as its impostor.
+// The bake-impostor canary's world: one static prototype of two boxes, one material each, which bakes, 281 units from a fixed
+// camera, so small on screen that its bake draws as its impostor, at a coarse level of the impostor's chains.
 
 schema: "puck.world.definition.v1"
 documentId: "sdf-bake-impostor"
@@ -13,8 +13,8 @@ cameras [
     rig {
       name: "bake-cam"
       operations [
-        anchor(subject: worldPoint(point: [0, 0.6, 100]))
-        lookAt(subject: worldPoint(point: [0, 0.6, 0]))
+        anchor(subject: worldPoint(point: [0, 0.5, 281]))
+        lookAt(subject: worldPoint(point: [0, 0.5, 0]))
         fieldOfView(fieldOfViewRadians: 0.9)
       ]
       version: "puck.camera.program.v1"
@@ -51,21 +51,35 @@ prototypes {
       name: "block"
       palette [
         {
-          color: "#8C7A5D"
+          color: "#C03020"
           roughness: 0.55
           sheen: 0
           specular: 0.25
         }
+        {
+          color: "#2040C0"
+          roughness: 0.2
+          sheen: 0
+          specular: 0.6
+        }
       ]
       schema: "puck.creation.v1"
-      shape Box "base" {
-        chamfer: 0.2
+      shape Box "left" {
         material: 0
-        position [0, 0.6, 0]
-        scale [0.6, 0.6, 0.6]
+        position [-0.6, 0.5, 0]
+        scale [1, 1, 1]
+      }
+      shape Box "right" {
+        material: 1
+        position [0.6, 0.5, 0]
+        scale [1, 1, 1]
       }
     }
   }
+}
+
+render {
+  farDistance: 600
 }
 
 simulation {

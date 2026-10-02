@@ -172,11 +172,9 @@ public sealed class SdfImpostorLawTests(ITestOutputHelper output) {
             Assert.True(condition: (tail <= TailError), userMessage: $"{name}: 95th percentile distance error {tail} radii");
         }
     }
-    [Fact]
-    public void ATwoMaterialCardNamesEachRegionsOwnMaterialAndTheFirstMaterialMutantDoesNot() {
-        // Two spheres of different materials side by side along X. A ray aimed at a sphere's center from any direction
-        // across Y and Z meets that sphere first, so the texel the views hold there names its material: 0 on the left, 1 on
-        // the right. The mutant, the first-material shading the material plane replaced, names 0 everywhere.
+
+    // Two spheres of different materials side by side along X, baked at the standard tier.
+    private static SdfBakedImpostor TwoMaterialImpostor() {
         SdfMaterial[] materials = [new(Albedo: new Vector3(x: 0.8f, y: 0.2f, z: 0.1f)), new(Albedo: new Vector3(x: 0.1f, y: 0.5f, z: 0.9f), Emissive: 2f)];
         var builder = new SdfProgramBuilder();
 
@@ -187,13 +185,21 @@ public sealed class SdfImpostorLawTests(ITestOutputHelper output) {
         _ = builder.ResetPoint().Translate(offset: new Vector3(x: -0.4f, y: 0f, z: 0f)).Sphere(material: 0, radius: 0.3f);
         _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0.4f, y: 0f, z: 0f)).Sphere(material: 1, radius: 0.3f);
 
-        var impostor = SdfBaker.Bake(
+        return SdfBaker.Bake(
             center: Vector3.Zero,
             materials: materials,
             program: builder.Build(buildInstanceGrid: false),
             reach: 0.8f,
             tier: SdfBakeTier.For(quality: SdfBakeQuality.Standard)
         ).Impostor;
+    }
+
+    [Fact]
+    public void ATwoMaterialCardNamesEachRegionsOwnMaterialAndTheFirstMaterialMutantDoesNot() {
+        // Two spheres of different materials side by side along X. A ray aimed at a sphere's center from any direction
+        // across Y and Z meets that sphere first, so the texel the views hold there names its material: 0 on the left, 1 on
+        // the right. The mutant, the first-material shading the material plane replaced, names 0 everywhere.
+        var impostor = TwoMaterialImpostor();
         // Level zero, and level one, whose nearest texel is a coarser tile's: a coarse hit reads that level's own texel.
         SdfImpostorOracle[] oracles = [new(impostor: impostor), new(impostor: impostor, level: 1)];
         Vector3[] directions = [-Vector3.UnitZ, Vector3.UnitZ, -Vector3.UnitY, Vector3.UnitY, Vector3.Normalize(value: new Vector3(x: 0f, y: -0.5f, z: -1f)), Vector3.Normalize(value: new Vector3(x: 0f, y: 0.5f, z: 1f))];
@@ -230,6 +236,36 @@ public sealed class SdfImpostorLawTests(ITestOutputHelper output) {
         Assert.Equal(actual: checkedRays, expected: 24);
         // Half the rays are the second material's, and the mutant names every one of them wrong.
         Assert.Equal(actual: mutantWrong, expected: 12);
+    }
+    [Fact]
+    public void TheMaterialChainVotesOnlyCoveredTexelsAtEveryLevel() {
+        var impostor = TwoMaterialImpostor();
+        var plainDiffers = 0;
+
+        for (var level = 1; (level < impostor.Material.Levels.Count); level++) {
+            var (sourceWidth, _) = impostor.Material.LevelExtent(level: (level - 1));
+            var (width, height) = impostor.Material.LevelExtent(level: level);
+            var source = impostor.Material.Levels[(level - 1)];
+            var coverage = impostor.Albedo.Decode(level: (level - 1));
+            var target = impostor.Material.Levels[level];
+
+            for (var y = 0; (y < height); y++) {
+                for (var x = 0; (x < width); x++) {
+                    var at = new[] { (((2 * y) * sourceWidth) + (2 * x)), ((((2 * y) * sourceWidth) + (2 * x)) + 1), ((((2 * y) + 1) * sourceWidth) + (2 * x)), (((((2 * y) + 1) * sourceWidth) + (2 * x)) + 1) };
+                    var covered = at.Where(predicate: index => (coverage[((index * 4) + 3)] > 0)).ToArray();
+                    var voters = ((covered.Length == 0) ? at : covered);
+                    // The most common value among the voters, the smallest on a tie.
+                    var expected = voters.GroupBy(keySelector: index => source[index]).OrderByDescending(keySelector: group => group.Count()).ThenBy(keySelector: group => group.Key).First().Key;
+                    var plain = at.GroupBy(keySelector: index => source[index]).OrderByDescending(keySelector: group => group.Count()).ThenBy(keySelector: group => group.Key).First().Key;
+
+                    Assert.True(condition: (target[((y * width) + x)] == expected), userMessage: $"level {level} texel ({x}, {y}) names {target[((y * width) + x)]}, where its covered texels vote {expected}");
+                    plainDiffers += ((plain != expected) ? 1 : 0);
+                }
+            }
+        }
+
+        // The red leg, the vote that counts misses, would have named a different material somewhere on this bake.
+        Assert.True(condition: (plainDiffers > 0), userMessage: "no texel separates the covered-only vote from the plain one");
     }
     [Fact]
     public void AnUncoveredViewNeverNamesThePixelsMaterialEvenWhenItsFilteredAlphaWins() {

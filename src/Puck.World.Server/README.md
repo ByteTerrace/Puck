@@ -707,7 +707,7 @@ authored producers, replay tapes) only produce inputs; poses flow out through
 the tick snapshot. Simulation state is `Puck.Maths` fixed point and exact
 engine-tick durations throughout—no wall clock, no RNG, no float. That
 determinism is a design contract verified by running and by the replay verbs
-below; no build gate enforces it for this game (see `CLAUDE.md` rule 3).
+below; no build gate enforces it for this game (see `AGENTS.md` rule 3).
 
 A body's pose is always six-degrees-of-freedom (a `Vector3` position and a
 quaternion attitude); its body motion program (`grounded` or `free`) decides how an
@@ -1221,6 +1221,16 @@ The committed codec admits only the canonical world actor and does not relax
 nested grant validation.
 
 ### Transfer recovery and forwarding
+
+With a crossing log installed (`WorldServer.InstallCrossingLog`,
+`WorldServer.Crossings.cs`), every crossing step a peer can see is written ahead
+(`WorldCrossingRecord.cs`): the source's departure before its commit, the
+destination's arrival before its answer (`WorldTransferEscrow`), and the source's
+settlement before its acknowledgement or its return (`WorldInstanceHost.CrossingLog.cs`).
+A record that does not land refuses its step. `RecoverCrossings` redoes the
+records a restored checkpoint does not reflect — the escrow's crossing sequence
+is the watermark — and the drain reconciles the rest. A silo row's log is its
+authority journal (`Puck.World.Silo`'s `WorldSiloHost.Crossings.cs`).
 
 An occupied source slot retains its pending recovery; a rollback-only checkpoint
 keeps only the remaining paired body/profile records and can never retry Commit.
@@ -2123,8 +2133,9 @@ grants, held input, and population together. `WorldServer.Advance` continues
 from the restored clock; console waits retain a separate monotonic host-work
 count, and local route epochs refresh so input can resume immediately.
 Live replay refuses unresolved transfer reservations or
-credentials, remote occupants, and host-owned transfer history. A tape owns
-one authority's inputs; it cannot rewind obligations held by another world.
+credentials, remote occupants, host-owned transfer history, and a tape that
+lands arrivals. A tape owns one authority's inputs; it cannot rewind
+obligations held by another world.
 The ownership check and reset share the authority gate, so concurrent
 federation ingress cannot reserve between them.
 `WorldServerStepShell` feeds one recorded
@@ -2166,6 +2177,18 @@ peer-lifecycle server events; a mid-session capture honestly reports
 MISMATCH at tick 0—carried in
 [`docs/game/design.md`](../../docs/game/design.md).
 
+Each authority tapes its own half of a crossing: a source its departure
+(`Transfer`, naming the target authority and the slots that left), a
+destination its arrival (`Arrival`, landed again through the shadow's own
+escrow) and the federated device images its forwarded and federated travelers
+drove it with (`FederatedIntents`). `replay.record` arms a companion tape on
+every other row of the host (`WorldReplayTape.Companions.cs`,
+`WorldInstanceHost.CrossingTapes.cs`) and writes the set in one file;
+verification re-drives the tape and every companion a crossing involves and
+pairs each crossing's halves by handoff token (`WorldReplaySetVerdict.cs`),
+reporting a crossing whose other half is on a remote or untaped authority as not
+verified.
+
 ## Verifying a change here
 
 No build gate covers this project's behavior; verify by RUNNING `Puck.World`
@@ -2188,7 +2211,7 @@ proved by `AuthorityAdministrationLawTests`, `EngageAuthorityLawTests`, and
 `tests/Puck.World.Tests`.
 
 A change that moves simulation math is expected to change replay hashes;
-re-record any persisted tape it invalidates in the same change (`CLAUDE.md`
+re-record any persisted tape it invalidates in the same change (`AGENTS.md`
 rule 4).
 
 Adjacency/federation changes additionally run

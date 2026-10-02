@@ -962,6 +962,7 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
         );
 
         _ = TryConvert(
+            color: ImageColorEncoding.Srgb,
             context: in context,
             pixels: feed.Pixels,
             surface: in panelSurface

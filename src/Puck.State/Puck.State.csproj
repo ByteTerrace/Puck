@@ -20,8 +20,8 @@
              IJsonSchemaNodeConverter, IJsonSchemaStringConverter); Puck.Assets for the canonical-document boundary the
              table document crosses; Puck.Maths for the Q48.16 carrier every state value rides. Each is declared here
              rather than inherited so the package's dependencies are its whole closure. -->
-        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>
 </Project>

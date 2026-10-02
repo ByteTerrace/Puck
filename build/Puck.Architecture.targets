@@ -6,7 +6,7 @@
         RoslynCodeTaskFactory's own defaults (Microsoft.Build.Framework, Microsoft.Build.Utilities.Core, mscorlib,
         netstandard) are UNIONED with whatever a task adds via <Reference>, never replaced — but the mscorlib and
         netstandard it resolves them to are the classic .NET Framework facades bundled at
-        $(MSBuildToolsPath)\ref\ (measured: those exact four names are the only files there). Adding the modern
+        $(MSBuildToolsPath)/ref/ (measured: those exact four names are the only files there). Adding the modern
         .NET-Core shared-framework System.Reflection.Metadata.dll conflicts with that pair — it is built against
         System.Private.CoreLib, a DIFFERENT corlib than the one this compilation already committed to, so Object
         and IDisposable stop resolving and every type the facades also carry (Dictionary, List, SortedSet) becomes
@@ -16,13 +16,13 @@
         cleanly alongside them.
     -->
     <PropertyGroup>
-        <PuckArchitectureNetFrameworkToolsDirectory>$([System.IO.Path]::Combine('$(MSBuildToolsPath)', 'Sdks', 'Microsoft.NET.Sdk', 'tools', 'net472'))\</PuckArchitectureNetFrameworkToolsDirectory>
+        <PuckArchitectureNetFrameworkToolsDirectory>$([System.IO.Path]::Combine('$(MSBuildToolsPath)', 'Sdks', 'Microsoft.NET.Sdk', 'tools', 'net472'))/</PuckArchitectureNetFrameworkToolsDirectory>
         <PuckArchitectureReferenceImmutable>$(PuckArchitectureNetFrameworkToolsDirectory)System.Collections.Immutable.dll</PuckArchitectureReferenceImmutable>
         <PuckArchitectureReferenceMetadata>$(PuckArchitectureNetFrameworkToolsDirectory)System.Reflection.Metadata.dll</PuckArchitectureReferenceMetadata>
     </PropertyGroup>
 
     <UsingTask
-        AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
+        AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll"
         Condition="'$(PuckArchitectureGateEnabled)' == 'true'"
         TaskFactory="RoslynCodeTaskFactory"
         TaskName="PuckArchitectureGate"
@@ -50,7 +50,7 @@
     </UsingTask>
 
     <UsingTask
-        AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
+        AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll"
         Condition="'$(PuckArchitectureGateEnabled)' == 'true'"
         TaskFactory="RoslynCodeTaskFactory"
         TaskName="PuckArchitectureDeniedApiGate"

@@ -15,7 +15,7 @@ namespace Puck.World.Tests;
 /// origin at the top, before any movement, and a hard teleport (<see cref="WorldBody.Pose(FixedVector3, Puck.Maths.FixedQ4816, Puck.Maths.FixedQ4816, Puck.Maths.FixedQ4816)"/>,
 /// <see cref="WorldBody.Reconcile"/>) resets it to the landing position rather than leaving a ghost segment behind.
 /// The swept-crossing matrix itself (ordinary walk / tunnelling / warp-through-and-beyond / warp-into) is verified
-/// by RUNNING <c>Puck.World</c> (CLAUDE.md rule 3 — game features are not gated).
+/// by RUNNING <c>Puck.World</c> (AGENTS.md rule 3 — game features are not gated).
 /// </summary>
 public sealed class PortalSweepOriginLawTests {
     [Fact]

@@ -1,6 +1,6 @@
 ---
 name: rendering
-description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and camera views, how world render data reaches SdfFrame, Puck.Shaders packages and pipelines, and the views.post post passes. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
+description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and camera views, how world render data reaches SdfFrame, Puck.Shaders packages, pipelines and the frame-graph runtime, and views.post passes. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
 ---
 
 # Rendering
@@ -35,7 +35,7 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | Image sources and producers | `src/Puck.Abstractions/Sources` (contract, upload layout, conversion reference, verdict); `src/Puck.Shaders/Assets/Shaders/Sources` (conversion kernels); `WorldImageProducerVocabulary`/`WorldImageProducerSettings` (`src/Puck.World.Schema`); `WorldImageProducers`, `WorldCaptureGate` (`src/Puck.World.Client/Sources`); `WorldCaptureFills`, `WorldScreenBinder.Producers.cs` (`src/Puck.World`) | [the World guide's image producers](../../../src/Puck.World/README.md#image-producers), [rendering plan P12](../../../docs/plans/rendering.md#p12--image-sources) |
 | Backends | `src/Puck.Vulkan`, `src/Puck.DirectX` | [contributing: GPU support](../../../docs/development/contributing.md#gpu-support-and-shader-builds), [Vulkan](../../../docs/rendering/vulkan.md), [Direct3D 12](../../../docs/rendering/directx.md) |
 
-Before adding a mechanism, find the existing one (`CLAUDE.md` rule 8): ask the
+Before adding a mechanism, find the existing one (`AGENTS.md` rule 8): ask the
 code with `puck references`, `puck declarations`, or `puck search -M 0` via the
 `symbol-analysis` and `content-search` skills.
 
@@ -199,7 +199,9 @@ These are one-line cautions; the owning pages hold the derivations.
 - **The version moves with the bytes.** `SdfBaker.Version` keys every bake and is
   the `BAKE` chunk's version; any change to what the baker, `CreationBaker` or
   `CreationBakeCodec` produces bumps it and re-records the product pin in
-  `CreationBakeLawTests`.
+  `CreationBakeLawTests`. A held bake is keyed by the version, never by the code that wrote it, so
+  two lanes that change the bytes must not share a number; a held bake this baker cannot
+  decode draws the field, counted and named (`sdf.bakes.undecodable`).
 - **Portable bytes.** A bake is content-addressed and one build's pack stands in
   for any device's bake, so its bytes must not depend on the machine: scalar
   IEEE arithmetic in a written order, no transcendental function, no `Vector3`
@@ -238,8 +240,10 @@ These are one-line cautions; the owning pages hold the derivations.
   Direct3D 12 hardware and WARP; a fixture regeneration is checked there on the
   GPU.
 - **One pixel-format vocabulary.** `GpuPixelFormat` is the format of a GPU
-  image, a swapchain, a `Surface` (which admits only `R8G8B8A8Unorm` and
-  `B8G8R8A8Unorm`, `Surface.IsSurfaceFormat`) and a baked texture's levels;
+  image, a swapchain, a `Surface` (whose shared texture admits only
+  `R8G8B8A8Unorm` and `B8G8R8A8Unorm`, `Surface.IsSurfaceFormat`, and whose CPU
+  pixels and same-device image the float formats too, `Surface.IsImageFormat`)
+  and a baked texture's levels;
   `GpuPixelFormats.UnitBytes` is the one statement of a texel's or block's
   bytes, which the codecs, `LevelByteLength` and the pipeline budget read. Never
   add a second format enum or a conversion between two; a new format is a member
@@ -451,8 +455,23 @@ These are one-line cautions; the owning pages hold the derivations.
   An uploaded
   source's region layout and the conversion kernels are a
   sync pair ([references/sync-pairs.md](references/sync-pairs.md#image-sources));
-  a change to either moves `ImageSourceConversionLawTests`, the
-  `source-conversion` canary and `SourceConversionCanaryFixtureTests` together.
+  a change to either moves `ImageSourceConversionLawTests`,
+  `ImageSourceWorkingSpaceLawTests`, the `source-conversion` canary and
+  `SourceConversionCanaryFixtureTests` together. Every conversion writes
+  working values; `source-transfer` writes them relative to the host's paper
+  white, the pass-block value `SourceConversionPackage` writes each frame, so
+  an HDR sample shows at its own luminance. A desktop capture of an HDR display
+  hands over half-float scRGB (`INativeImageCaptureFeed.Output`), which
+  converts on its CPU tier, never the B8G8R8A8 GPU route.
+  An HDR toggle, a move to a display that differs in it, or unavailable display
+  discovery ends the native feed; its consumer reopens it with fresh metadata.
+  Frame callbacks and background checks queued by consumer liveness polls check
+  the display through `Win32DisplayColorSpaceProbe`, including when no frames arrive,
+  which holds one DXGI factory and opens another only when it goes stale; never
+  read DXGI from `IsEnded`, which the render thread polls.
+  Unknown discovery refuses the open instead of guessing SDR. Presented CPU float surfaces pass through
+  `SurfaceEncoder` before capture sinks receive their RGBA8 pixels; `SurfaceEncoderUploadDeviceLawTests`
+  holds that upload route on both backends.
 - **Builder exception safety.** A throwing `Instance`/`DynamicInstance` callback
   leaves the builder with an open instance; discard it.
 - **Captures.** Create the `FrameCaptureRequest`, arm it with
@@ -1060,8 +1079,8 @@ These are one-line cautions; the owning pages hold the derivations.
 ## Performance work
 
 Judged by code, disassembly, and deterministic work counters — never
-wall-clock or GPU timestamps. Measure before and after on the same scene,
-without competing builds or GPU workloads:
+wall-clock or GPU timestamps. Measure before and after on the same scene, as
+one GPU run at a time ([`verification`](../verification/SKILL.md#gpu-legs)):
 
 ```text
 world.cadence off      # a still scene otherwise skips frames and reads near zero
@@ -1138,7 +1157,10 @@ explanation is [Qualifying a package](../../../docs/development/qualification.md
 
 ## World render data
 
-`WorldFramePresenter` re-reads `render.lighting`, `render.sky`, `render.cycle`,
+`WorldFramePresenter` re-reads `render.lighting`, `render.sky` (their keyed values
+resolved through the state mirror by `WorldEnvironmentResolve`, which also
+integrates every cloud and twinkle rate to the presented tick, so the
+environment rows carry offsets and a phase, never a rate),
 `render.environment`, `render.tonemap`, and `render.farDistance` from the live
 definition every frame, so a `world.row.set render …` lands on the next frame
 without a program rebuild; `render.tonemap` reaches the root graph
@@ -1801,9 +1823,24 @@ shader of its own; the Direct3D 12 one binds a set of a pool admitted into the
 device's heaps. No Puck assembly may
 import `d3dcompiler_*.dll` (`NoDeviceShaderCompileLawTests`).
 
+## Render-graph runtime contracts
+
+[references/runtime-contracts.md](references/runtime-contracts.md) states the
+five invariants every change to the frame-graph runtime keeps, with the code
+and laws that hold each, where the code is weaker than the rule, and the
+violations a review hunts: image lifetime leased per image and per reader;
+nothing resolving silently to nothing; a capture's pixels pinned or copied;
+render completion as rendered, not yet renderable or refused, with a permanent
+condition always refused; and history epochs that reset for unseen views but
+never for cadence gaps. Read it before changing `RenderGraphRuntime`,
+`ShaderPipelineRenderNode`, a package recorder, a capture path or a host's
+pacing, and when briefing a review of such a change.
+
 ## Verifying
 
-Say plainly what a change was not checked against. Only `puck parity`'s
+The [`verification`](../verification/SKILL.md) skill owns the gate route, the
+CLI copy, red-leg proofs, GPU grants and the flake rule; this section owns which
+checks a render change owes. Say plainly what a change was not checked against. Only `puck parity`'s
 stations gate GPU kernel behavior by machine.
 
 ```bash
@@ -1991,3 +2028,5 @@ hold the plan and the convergence rule without a device.
 | `maths-usage` | Fixed-point primitives and determinism for the query evaluator and anything simulation-facing. |
 | `dotnet10-performance` | C# hot paths on the host side (packing, emission, grid building). |
 | `documentation` | Editing the rendering handbook, reference pages, or READMEs. |
+| `verification` | Running gates, proving red legs, GPU legs under a grant, flake versus failure. |
+| `review-passes` | Briefing a review-and-fix pass over a render lane; the runtime contracts supply its hunt list. |

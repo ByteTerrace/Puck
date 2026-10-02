@@ -1437,6 +1437,18 @@ The engine ships four producers, each with its settings record in
 | `camera` | `sensor` (`Color`), `seat`, `profile`, `controls` | imported | external |
 | `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (a staged copy under Vulkan) | external |
 
+A capture selects its format and encoding from its display when it opens. An
+HDR toggle, a move to a display that differs in it, or failed display discovery
+ends the feed, which the consumer reopens with fresh metadata; unknown discovery
+refuses the open. An SDR
+display is captured in B8G8R8A8 sRGB, which a Direct3D 12 host copies into
+shared targets the screen samples and a Vulkan host converts through
+`source-rgba`. An HDR display is captured in half-float scRGB on either host
+and converts on its CPU tier through `source-transfer` into working values at
+the host section's `paperWhiteNits`, so its highlights keep their luminance
+above SDR white. On an SDR output those highlights clip at the display encode,
+as any working value above 1 does.
+
 Every feed carries an `ImageSourceDescriptor` (`Puck.Abstractions.Sources`),
 the one contract for an image entering rendering from outside a pass: its
 producer, transport, extent, pixel format, color encoding, cadence, stamp and
@@ -1937,7 +1949,8 @@ hits and each native tool's runs) and the process's SDF kernel loads,
 allocated and released at their allocation sizes, and the peak held; swapchain
 images are never counted), and Vulkan adds `procedures.vulkan`. A rendering
 shape also registers `sdf.bakes`: the creation bakes its cache held, scheduled,
-baked and refused, and the field evaluations the bakes spent; and `sdf.mesh.lod`: the
+baked and refused, the held bakes that could not be decoded (`undecodable`, each named
+once on the error stream, the prototype drawing through its field), and the field evaluations the bakes spent; and `sdf.mesh.lod`: the
 mesh draws (`near`) and impostor cards (`far`) of baked placements the views
 recorded. The
 client registers `presentation.mirror`, the cells its state mirror read. A
@@ -2003,18 +2016,8 @@ star hash-dealt its own blackbody colour and apparent luminosity;
 and `clouds` (`coverage, softness, scale, seed, color, drift, spin, curl, shear`
 —a hashed, warped noise layer over everything above it, all on the tick clock),
 composited in that order whatever order they are authored in. Every field is
-optional individually. `world.lighting` echoes both sections. `render.cycle`
-keys both over a state row: `{ "state": "timeOfDay", "keys": [ { "at": 0.25,
-"lighting": {…}, "sky": {…} }, … ] }`—the row's live value (its fractional
-part, so an advancing row wraps once per unit) picks the two bracketing keys
-and every lighting/sky lane interpolates between them (directions along the
-arc; counts, kinds, seeds and flags held); a key states only the fields it
-moves, addresses a light by slot and a stop by index with the kinds the statics
-author, and the rest hold from the previous key. The clock is simulation
-state (an advancing `state` row—deterministic, replayed, settable with
-`world.row.set state`); the interpolation is presentation. A key may not move
-a cloud layer's `drift`, `shear` or `spin`: each is a rate integrated from the
-tick, and a state row's value can jump between two ticks.
+optional individually, and a light or a layer may carry a `name`.
+`world.lighting` echoes both sections.
 
 The sky's twinkle and cloud motion and each bounded volume's advection and
 pulse run on the presented engine tick of the world the frame draws, the tick
@@ -2026,8 +2029,40 @@ names presentation clocks: `{ "clocks": [ { "name": "day", "periodSeconds":
 "state": "tide" } ] }`. A tick clock's period is a whole number of engine
 ticks and its span is what one period reads as (in `.puck`, `periodSeconds:
 20min, spanSeconds: 24h`); a state clock's phase is its Fixed or Int row's
-fractional part. `world.timeline` echoes each clock's source, its period and
-start in engine ticks, and its phase and reading at the authority's tick.
+fractional part, read eased like every binding.
+
+Any colour, scalar, angle, direction or vector a presentation section
+authors (the lights, the sky, the theme, markers, camera programs,
+`views.graphs` parameters) may instead be keyed on a clock:
+`{ "clock": "day", "keys": [ { "at": 0, "value": 0.2 }, { "at": 43200,
+"value": 1, "ease": "Smooth" } ] }`, written in `.puck` as a block,
+`intensity { clock: day  keys [ { at: 0h, value: 0.2 } { at: 12h, value: 1,
+ease: Smooth } ] }`; a clock is a declared name, written bare wherever a key or
+a section names it, and a quoted one is refused naming the bare spelling. A key's `at` is a time on its clock's span, ascending, in
+`[0, span)`; the last key wraps into the first. Between two keys the value
+blends by its type—a colour in linear light, an angle along the shorter arc
+across a whole turn, a direction along the great circle, a scalar or vector
+linearly—and the earlier key's `ease` (`Linear`, `Smooth` or `Step`) shapes
+the time. `render.lighting` and `render.sky` may also be keyed whole: a
+section's `clock` and `keys` hold partial records that address a light or a
+layer by its `name`, of its own kind (`keys [ { at: 0, layers { haze:
+fog(density: 0) } } ]`), each field keyed through the keys that state it. A
+key states values only: a count, a seed, a kind, a name, a light's shadowing,
+the sun disc's light slot and a gradient's stop count are structure and
+refused by name, as is a field keyed both by its own keys and by the
+section's. Values that must hold an order (a gradient's stop elevations, the
+ink band's `inkLow` below its `inkHigh`) key on one clock and bind no state
+row, and are judged over every phase of that clock, between keys as well as at
+them: a pair that may meet anywhere is refused by name. A cloud's `drift`, `shear` and `spin` and a twinkle's `rate` are
+rates the tick integrates in closed form, so a key changing one never jumps
+the layer; a rate keys only on a tick clock and binds no state row. Keys are
+presentation: a clock reads the tick or a state row and nothing keyed feeds
+the simulation. A presentation-tier projection carries the tick clocks, which
+the recipient evaluates at the tick it presents, and no state clock, so a
+projection whose values key on a state clock refuses to hydrate by name. `world.timeline` echoes each clock's source, its period and
+start in engine ticks, its phase and reading at the authority's tick, and how
+many keyed values the presentation has resolved, which rises only while a
+clock a key reads moves.
 
 ## Engine boundaries worth knowing
 
@@ -2045,7 +2080,7 @@ start in engine ticks, and its phase and reading at the authority's tick.
 
 ## Verifying
 
-`Puck.World` is greenfield (`CLAUDE.md` rule 3): verify by RUNNING the game
+`Puck.World` is greenfield (`AGENTS.md` rule 3): verify by RUNNING the game
 and driving stdin verbs—no gate stages, no `--validate` flags, and no
 golden corpus. Byte-identity observations (the canonical save round-trip,
 `git diff` on shipped worlds) are useful evidence but never acceptance

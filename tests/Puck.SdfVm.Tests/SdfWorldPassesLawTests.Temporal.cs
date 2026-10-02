@@ -190,7 +190,6 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.True(condition: rig.Stood());
         }
     }
-
     // A view the display stops showing is parked: nothing renders it. Shown again, a temporal view starts a new epoch, its
     // first render at the pixel center with no history and a full period before it stands, even though its binding,
     // camera, poses and extent never moved; a spatial view's still output stands at once, costing no render.
@@ -290,9 +289,9 @@ public sealed partial class SdfWorldPassesLawTests {
         public int ViewIndex { get; set; }
 
         public uint OutputExtent { get; set; } = Extent;
+
         // Whether the display shows nothing, so the scheduler leaves the view unread.
         public bool Parked { get; set; }
-
         public float ResolvedScale {
             set => m_sourceFrame = m_sourceFrame with { Views = [.. m_sourceFrame.Views.Select(selector: view => view with { ResolvedRenderScale = value })] };
         }

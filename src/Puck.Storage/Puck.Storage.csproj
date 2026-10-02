@@ -5,7 +5,7 @@
         <PuckLayer>Leaf contracts and data</PuckLayer>
     </PropertyGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Azure.Identity" Version="[1.*, )" />

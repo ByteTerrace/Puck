@@ -1,0 +1,23 @@
+{
+  "skill_name": "verification",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Finish a delegated lane that changed a render-graph law and two Puck.Shaders sources. The brief grants no GPU. What do you run before handing back?",
+      "expected_output": "Checks `puck --help` from a lane-named copy of the worktree's own built CLI for `gate` and `laws prove`; without them, merges the integration tip, builds the solution with zero warnings, runs `puck affected --since` the merge base without `--run`, runs the plan's suites, proves the changed law red with the fix withheld and green with it restored, runs `lengths --check`, `comment-smells --check` and `format --check --file-list`, and lists the plan's canary and parity lines as GPU legs owed in the hand-back report.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "A GPU canary failed during a granted run with a listener timeout while a solution build was running. Another failed on a tile verdict. What now?",
+      "expected_output": "Re-runs each failed leg once, alone, with nothing else on the machine. Reports the timeout as a flake with its original message if it passes alone; treats the tile verdict as a failure to fix whatever the re-run shows, never re-running it hoping for green.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "A build of the lane failed with transient errors, then the test step ran with --no-build and passed. Is the lane verified?",
+      "expected_output": "No. A failed build leaves old binaries in place, so the tests measured old code; rebuilds until the build exits 0 after the last edit, keeps the full log in a lane-named file, and only then runs the tests.",
+      "files": []
+    }
+  ]
+}

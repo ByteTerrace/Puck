@@ -1158,7 +1158,7 @@ P13b-2 has landed: the simulation destination runs end to end. A seat folds the
 `source.pointer.origin` and `source.pointer.direction` verbs into its intent's
 optional `PlayerIntent.SourceRay`, which `WorldWireCodec` carries behind one
 flag byte on every intent path, so an absent ray costs one byte; the tape's
-`ShapeToken` is 4, the checkpoint's `SupportedVersion` 14 and the handshake's
+`ShapeToken`, the checkpoint's `SupportedVersion` and the handshake's
 `WorldProtocol.WireProtocolKey` `PUCKWRL4` and the federation's `WorldFederationCodec.WireKey` `PUCKFED5`, each strict. The server keeps each
 body's tick ray and maps it in the tick through `WorldScreenMappings.Normalized`,
 the row's mapping against a one-by-one source, for the rule operand
@@ -1313,10 +1313,11 @@ instances the scheduler renders by demand at their footprint's extent and the
 `world.view-refresh` divisor. A view that would see itself reads its own
 previous frame, and a chain of different views lags one frame per hop.
 
-`Surface` distinguishes CPU pixels, a shared handle, and a same-device image; CPU
-pixels and a shared handle carry the two 8-bit RGBA formats, and a same-device
-image also the float working format every SDF view and the root graph render
-into (`R16G16B16A16Float`). Both swapchains choose a display output through
+`Surface` distinguishes CPU pixels, a shared handle, and a same-device image; a
+shared handle carries the two 8-bit RGBA formats, and CPU pixels and a
+same-device image also the float formats: the working format every SDF view and
+the root graph render into (`R16G16B16A16Float`), which a capture of an HDR
+display hands its CPU pixels over in. Both swapchains choose a display output through
 `DisplayOutput.TrySelect` and take an HDR one only when the host section's
 `colorSpace` requests it and the display reports it, and both write the root's
 frame through the display encode in the output they took. The tonemap is each
@@ -1376,8 +1377,9 @@ An uploaded source's pixels travel as one region, `ImageSourceUploadLayout`'s
 header and planes. The shipped kernels in `src/Puck.Shaders/Assets/Shaders/Sources`
 convert a region into the image a consumer samples. `source-palette` and
 `source-nv12` use a stated matrix and range with co-sited chroma. `source-rgba`
-carries a BGRA swizzle, and `source-transfer` decodes sRGB, linear or PQ into
-linear light. `ImageSourceConversion` is their CPU reference, and the
+carries a BGRA swizzle, and `source-transfer` decodes sRGB, scRGB's linear
+scale or PQ, in BT.709 or BT.2020, into working values relative to the paper
+white. `ImageSourceConversion` is their CPU reference, and the
 `source-conversion` canary holds all four kernels to it on both backends. The
 test pattern and the QR code convert through graph regions: each writes a
 region that an uploaded source instance's one-pass graph converts in the
@@ -3831,7 +3833,7 @@ Each commit is marked with what it waits on.
      keep the sixteen lanes and add one flag byte, followed by the ray's six
      fixed-point values only when it is present.
    - The format moved with it, strictly and with no reader for the old shape:
-     the tape's `ShapeToken` is 4, the checkpoint's `SupportedVersion` 14,
+     the tape's `ShapeToken`, the checkpoint's `SupportedVersion`,
      `WorldProtocol.WireProtocolKey` `PUCKWRL4`, and the federation's
      `WorldFederationCodec.WireKey` `PUCKFED5`. No tape is checked in.
    - `PlayerCommandModule` registers `source.pointer.origin` and
@@ -5052,8 +5054,40 @@ setting, named once, requests HDR10 or scRGB, which the selection above takes
 when the display reports it. The HUD and overlays show at the paper-white
 level through the encode's `DisplayOutput.WhiteScale`, and one HDR source,
 desktop capture on an HDR display, converts through P12. SDR stays the default
-and the fallback. Everything but the HDR source landed with P14-10; the HDR
-desktop capture remains.
+and the fallback. Everything but the HDR source landed with P14-10, and the HDR
+source has landed too:
+
+- A desktop capture selects its format and encoding at open: the output
+  driving its monitor reports HDR10 (`IDXGIOutput6::GetDesc1`) or not, and
+  `Win32GraphicsCaptureFeed.CaptureOutputOf` turns that into the frames'
+  `DisplayOutput`, B8G8R8A8 sRGB for an SDR display and half-float scRGB for an
+  HDR one in either color space (`INativeImageCaptureFeed.Output`). An SDR
+  capture is unchanged: its frames, its Direct3D 12 GPU route and its
+  `source-rgba` copy are what they were.
+  Frame callbacks and background checks queued by consumer liveness polls check
+  the display at a bounded cadence, off the render thread, including when no
+  frames arrive. The feed holds one DXGI factory and the output it found, re-reading
+  that output's description while the factory is current; a stale factory, which
+  is how DXGI reports a display change, is replaced and the output found again.
+  An HDR toggle, a move to a display that differs in it, or failed discovery ends
+  the feed when a check detects the change; the consumer reopens it with fresh
+  metadata. Unknown display discovery refuses an open instead of guessing SDR.
+- An HDR capture hands its CPU frames over as `R16G16B16A16Float` CPU pixels,
+  downscaled in linear light, and converts on its CPU tier, never the GPU
+  route, whose shared targets are B8G8R8A8. The binder names the encoding
+  `ImageColorEncoding.Of` gives its color space, so the one-pass graph runs
+  `source-transfer`, which writes working values relative to the host's paper
+  white: a sample of N cd/m² shows at N cd/m² on an HDR output, nothing above
+  SDR white is clipped before the display encode, and nothing is encoded twice.
+  The room glow averages the same frames in linear light.
+- The laws are `ImageSourceWorkingSpaceLawTests` (HDR10 and scRGB samples at 80,
+  203, 1000 and 10,000 cd/m², at two paper whites, through the display
+  encode's own decode, with clipped, linear, doubly encoded and fixed-white red
+  legs, and an SDR capture bit for bit), `Win32GraphicsCaptureOutputTests` (the
+  capture's format and color space) and
+  `RenderGraphRuntimeLawTests.ASourcesConversionReadsTheHostsPaperWhiteFromItsPassBlock`;
+  the `source-conversion` canary converts a half-float scRGB region at two
+  paper whites on both backends.
 Calibration UI, per-display metadata, and HDR on the Steam Deck OLED under
 Linux are later work and stay listed in open items until scheduled.
 **Check:** on an SDR display the same graph produces the previous image within
@@ -5759,6 +5793,36 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      the pass block keeps its 1,120 bytes, and the written pass-block bytes per
      pass fall from 1,048 to 1,024 (`world-counters`).
 3. **P18-3, keys on clocks, for every presentation value.**
+   - Landed: the keys substrate. Every colour, scalar, angle, direction and
+     vector a document binds may be keyed on a `timeline` clock
+     (`{ clock, keys [ { at, value, ease } ] }`, a block in `.puck` whose clock
+     is a declared name written bare, with `at` a time that takes `s`, `min`
+     and `h`); the light and sky fields became
+     `BindableScalar`, `BindableAngle`, `BindableDirection`,
+     `BindableVector2` (cloud drift and shear) and `BindableVector3` (point and
+     occluder positions). `render.lighting` and `render.sky` key whole through
+     `clock` and `keys`, each key's partial record written as its kind under
+     the name it addresses (`layers { haze: fog(density: 0) }`), the kind
+     checked against the named layer's, so the record stays typed;
+     `WorldRenderKeys.Expand` turns a section key into the value keys of the
+     fields it states, one key track per field. `WorldKeyResolver` in
+     `Puck.World.Schema` is the one resolver; the validator calls it with no
+     source, and the state mirror, which registers each state clock's row,
+     with its own. Cloud rates and the twinkle's rate integrate in closed form
+     on the host, so the environment rows carry offsets and a phase. The
+     environment and the theme re-resolve only when a clock a key reads or a
+     slot they bind moves; `world.timeline` echoes the mirror's keyed
+     resolutions. The courtyard, the parity world, the sky-cycle canary and
+     the counted sky-cycle workload key on a `skyMode` state clock. The
+     softboxes' own numbers stay literal, since P18-9 deletes them, and a
+     clock keyed on another clock is not built. Values that must hold an order
+     (a gradient's stop elevations, an ink band's ends) are judged over every
+     phase of their one clock: the union of their key times partitions it,
+     every ease moves a value monotonically between two key times, and a pair
+     is refused (`JudgeAscending`) where its values may meet between keys as
+     well as at them; an ordered value binds no state row. A presentation-tier
+     projection carries the timeline's tick clocks, which a recipient
+     evaluates at the tick it presents.
    - Delivers: the keyed form of every bindable value (`keys(clock: …)`), the
      angle and direction bindables, section keys whose values are partial
      records addressed by name, blends by field type with per-key ease, the
@@ -5796,7 +5860,12 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      load-validated authored initial value (or clamps a closed range), so
      early and late views may hold different values while invalid.
    - Projection proof is a separate unimplemented slice after the keys
-     substrate. Authority and recipient must call the same prediction function
+     substrate. Until it lands, a projection carries no state clock, and a
+     projection whose values key on one (the courtyard's and the parity
+     world's `skyMode`) refuses to hydrate by name
+     (`WorldProjection.TryToDefinition`), so a presentation-tier recipient of
+     such a world receives a refusal rather than every keyed value at its
+     fallback. The slice replaces that refusal with the anchors below. Authority and recipient must call the same prediction function
      from a shared package, bit-exact on the u64 phase. A mixed affine,
      staircase, quantized, nonlinear and seek trace must match the host phase
      at every tick and produce zero spurious anchors. A steady state sends
@@ -6278,8 +6347,9 @@ bound through the group-1 set P17's texture draw added for the bake atlases, one
 per upload ring slot, the float working targets (P14-10), staged shading (P14-11)
 and the final sweep (P14-13): every P14 step has landed, and its counted-cost
 ceilings land as P15-1. P15 and P16 both follow P14: P15 also needs P4, and
-P16's display output landed with P14-10's float working targets; only its HDR
-desktop capture and the HDR-display checks remain.
+P16's display output landed with P14-10's float working targets and its HDR
+desktop capture after it; only the HDR-display checks remain, deferred to the
+end.
 P17's CPU half, the bakes and their texture codecs, has landed, and so have
 their block-compressed upload and sampling check on both backends and the one
 pixel-format vocabulary, `GpuPixelFormat`. A ready bake's mesh draws in place
@@ -6296,9 +6366,8 @@ and a bound member and an overridden member compose by the rule
 
 The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13, P14-2 and P14-5 have
 landed, and so has every other P14 step, so the longest remaining chain is
-P15's, P15-1 to P15-8.
-P16's HDR desktop capture follows P14-10, and a
-bake's textures and impostor (P17) come before P6's choice between a bake and the field.
+P15's, P15-1 to P15-8. A bake's textures and impostor (P17) come before P6's
+choice between a bake and the field.
 
 **The sky.** P18 follows P14. Its baseline (P18-1) needs P15-1's counted march
 steps and ceilings; its clocks, keys, sky block, passes and cadence (P18-2 to
@@ -6339,7 +6408,9 @@ blockers. Each is still required before the programme is done.
   upscaling and dynamic resolution on, render scale responding to its signal.
 - **Hardware: P16's HDR-display checks.** On an HDR display the swapchain
   reports an HDR color space, a test ramp exceeds SDR white, an HDR desktop
-  capture displays without clipping, and the HUD renders at paper white.
+  capture displays without clipping, toggling HDR during a desktop capture ends
+  and reopens the feed in the new encoding, on a still desktop as well as a
+  changing one, and the HUD renders at paper white.
 - **Review: cross-backend agreement.** A change's own GPU checks run on the
   backends at hand as it lands; whether Vulkan and Direct3D 12 agree across
   those checks is judged in one final review pass.

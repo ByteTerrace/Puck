@@ -74,6 +74,7 @@ public sealed class MeshTextureDeviceLawTests {
         emit(obj: builder);
 
         return SdfBaker.Bake(
+            cancellationToken: TestContext.Current.CancellationToken,
             center: Vector3.Zero,
             materials: Materials,
             program: builder.Build(buildInstanceGrid: false),

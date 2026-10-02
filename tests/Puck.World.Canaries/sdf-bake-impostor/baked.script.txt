@@ -2,15 +2,24 @@
 world.cadence off
 # The wait releases on the engine's readiness, a cold driver cache included; the leg's own timeout bounds it.
 world.wait ready 600
-# The block draws through its field until its bake lands, then through its bake: its mesh up close, its impostor's card
-# at this distance, where the block spans a handful of pixels.
+# The prototype draws through its field until its bake lands, then through its bake: its mesh up close, its impostor's
+# card at this distance, where the bake spans about ten pixels and the card reads a coarse level of its chains.
 world.bakes on
-# The wait releases once the presentation has baked the block (or held it from an earlier run); the static scene
+# The wait releases once the presentation has baked the prototype (or held it from an earlier run); the static scene
 # rebuilds on the next frame.
 world.wait bakes 600
 world.debug-view visibility
 world.wait 30
-world.screenshot {run}/block.png
+world.screenshot {run}/kind.png
 world.counters sdf.mesh.lod
 world.counters sdf.bakes
+# The same card, colored by the material it names: each box of the prototype has its own.
+world.debug-view material-id
+world.wait 30
+world.screenshot {run}/card.png
+# The field names the true material of every pixel; the card must name the same ones.
+world.bakes off
+world.wait bakes 600
+world.wait 30
+world.screenshot {run}/field.png
 world.wait 10

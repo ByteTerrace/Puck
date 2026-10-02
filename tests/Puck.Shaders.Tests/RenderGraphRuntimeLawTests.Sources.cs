@@ -210,6 +210,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             (ImagePixelFormat.Indexed8, ImageSourceConversion.PalettePass),
             (ImagePixelFormat.Nv12, ImageSourceConversion.Nv12Pass),
             (ImagePixelFormat.R10G10B10A2Unorm, ImageSourceConversion.TransferPass),
+            (ImagePixelFormat.R16G16B16A16Float, ImageSourceConversion.TransferPass),
         ])) {
             var recorders = new Recorders();
 
@@ -253,6 +254,69 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 Assert.Equal(expected: (1U, 2U), actual: (bindings[RenderGraphPackageCatalog.SourceRegion], bindings[RenderGraphPackageCatalog.SourceImage]));
             }
         }
+    }
+    /// <summary>A source's conversion reads the paper white its packages were registered with from its pass block, written
+    /// by the recorder on every frame it converts: the level an HDR source's luminance is converted relative to. The red
+    /// leg is the default SDR white, which a host asking for 203 cd/m² must not read.</summary>
+    [Fact]
+    public void ASourcesConversionReadsTheHostsPaperWhiteFromItsPassBlock() {
+        const double PaperWhite = 203.0;
+
+        var gpu = new FakePipelineGpu {
+            Recording = true,
+        };
+        var recorders = new Recorders();
+
+        SourceConversionPackage.RegisterAll(
+            packages: recorders.Registry,
+            paperWhiteNits: PaperWhite
+        );
+        recorders.Registry.RegisterSource(
+            factory: _ => new FakeUpload(format: ImagePixelFormat.R16G16B16A16Float),
+            package: Upload
+        );
+
+        using var runtime = Runtime(gpu, recorders, Set(RenderGraphInstance.Source(name: "pattern", producer: "test")), "pattern", new RenderGraphRuntimeGraph[1]);
+
+        var tick = 0L;
+
+        TestLiveness.Until(
+            reason: () => "The source never converted.",
+            step: () => {
+                tick++;
+
+                var frame = new RenderGraphFrame(
+                    DisplayHeight: Display,
+                    DisplayHertz: 60,
+                    DisplayWidth: Display,
+                    Footprints: [],
+                    Index: tick,
+                    Roots: [new RenderGraphRoot(Height: 1.0, Instance: "pattern", Width: 1.0)],
+                    Tick: tick
+                );
+
+                _ = runtime.ProduceFrame(
+                    context: default,
+                    frame: in frame
+                );
+
+                return (runtime.Node(instance: 0).FrameCounter > 0UL);
+            }
+        );
+
+        var layout = ShaderPipelineParameterLayout.ForPackage(
+            config: null,
+            members: RenderGraphPackageCatalog.SourceMembers(format: RenderGraphPackageCatalog.SourceFormatOf(package: ImageSourceConversion.TransferPass)),
+            package: ImageSourceConversion.TransferPass
+        );
+        var block = gpu.ConstantBlock(
+            set: gpu.BoundSets.Last(predicate: static set => (set.Group == ((uint)ShaderInterfaceGroup.Pass))).Set,
+            sizeBytes: ((int)layout.SizeBytes)
+        );
+        var read = System.Buffers.Binary.BinaryPrimitives.ReadSingleLittleEndian(source: block.AsSpan(start: ((int)layout.BlockOffsetOf(member: RenderGraphPackageCatalog.SourcePaperWhite))));
+
+        Assert.Equal(actual: read, expected: ((float)PaperWhite));
+        Assert.NotEqual(actual: read, expected: ((float)DisplayOutput.SdrWhiteNits));
     }
     /// <summary>On a device whose memory stages the source's region, the source's node leases the region-copy pipeline,
     /// records the region's copy ahead of the conversion, and the device-local buffer the conversion reads holds exactly
