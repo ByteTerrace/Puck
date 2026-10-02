@@ -35,15 +35,15 @@ internal sealed class FaultingPeerCall : IWorldPeerCall {
         transferId: transferId
     );
     /// <inheritdoc/>
-    public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out bool accepted, out string reason) {
+    public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out WorldTransferStatus status, out string reason) {
         if (Interlocked.Increment(location: ref m_commitCalls) == 1) {
-            accepted = false;
+            status = WorldTransferStatus.Missing;
             reason = string.Empty;
 
             return WorldTransferStep.Unreachable;
         }
 
-        accepted = m_destination.CommitTransfer(
+        status = m_destination.CommitTransfer(
             members: members,
             reason: out reason,
             sourceAuthority: sourceAuthority,

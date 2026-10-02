@@ -141,12 +141,12 @@ public sealed partial class FederationTransferLawTests {
             userMessage: reservation.Reason
         );
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: request.SourceAuthority,
                 transferId: request.TransferId,
                 members: [member],
                 reason: out var reason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
         var bodyIndex = Assert.Single(collection: reservation.BodyIndices);
@@ -239,12 +239,12 @@ public sealed partial class FederationTransferLawTests {
         );
 
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: SourceAuthority,
                 transferId: later.TransferId,
                 members: [member],
                 reason: out var reason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
 
@@ -284,12 +284,12 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.True(condition: reservation.Accepted);
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: request.SourceAuthority,
                 transferId: request.TransferId,
                 members: [member],
                 reason: out var firstReason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: firstReason
         );
         Assert.Equal(
@@ -300,23 +300,23 @@ public sealed partial class FederationTransferLawTests {
             )
         );
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: request.SourceAuthority,
                 transferId: request.TransferId,
                 members: [member],
                 reason: out var replayReason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: replayReason
         );
 
         var altered = member with { HasMappedArrival = true };
 
-        Assert.False(condition: fixture.Server.CommitTransfer(
+        Assert.True(condition: (fixture.Server.CommitTransfer(
             sourceAuthority: request.SourceAuthority,
             transferId: request.TransferId,
             members: [altered],
             reason: out var alteredReason
-        ));
+        ) == WorldTransferStatus.Missing));
         Assert.Contains(
             actualString: alteredReason,
             comparisonType: StringComparison.Ordinal,
@@ -530,12 +530,12 @@ public sealed partial class FederationTransferLawTests {
             condition: reservation.Accepted,
             userMessage: reservation.Reason
         );
-        Assert.False(condition: fixture.Server.CommitTransfer(
+        Assert.True(condition: (fixture.Server.CommitTransfer(
             sourceAuthority: request.SourceAuthority,
             transferId: request.TransferId,
             members: [member],
             reason: out var reason
-        ));
+        ) == WorldTransferStatus.Missing));
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
@@ -594,12 +594,12 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.True(condition: fixture.Server.ReserveTransfer(request: request).Accepted);
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 request.SourceAuthority,
                 request.TransferId,
                 [member],
                 out var first
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: first
         );
         var equal = member with {
@@ -610,12 +610,12 @@ public sealed partial class FederationTransferLawTests {
         };
 
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 request.SourceAuthority,
                 request.TransferId,
                 [equal],
                 out var replay
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: replay
         );
         var alternatives = new WorldTransferActionContinuity?[] {
@@ -631,12 +631,12 @@ public sealed partial class FederationTransferLawTests {
         };
 
         foreach (var alternative in alternatives) {
-            Assert.False(condition: fixture.Server.CommitTransfer(
+            Assert.True(condition: (fixture.Server.CommitTransfer(
                 request.SourceAuthority,
                 request.TransferId,
                 [member with { ActionContinuity = alternative }],
                 out var reason
-            ));
+            ) == WorldTransferStatus.Missing));
             Assert.Contains(
                 actualString: reason,
                 expectedSubstring: "different commit"
@@ -644,19 +644,19 @@ public sealed partial class FederationTransferLawTests {
         }
         // Mutating the same collections originally submitted must not mutate the retained receipt.
         channels[0] = channels[0] with { PreviousBit = false }; registers[1] = registers[1] with { TimerTicks = 1 };
-        Assert.False(condition: fixture.Server.CommitTransfer(
+        Assert.True(condition: (fixture.Server.CommitTransfer(
             request.SourceAuthority,
             request.TransferId,
             [member],
             out _
-        ));
+        ) == WorldTransferStatus.Missing));
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 request.SourceAuthority,
                 request.TransferId,
                 [equal],
                 out replay
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: replay
         );
     }
@@ -695,12 +695,12 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.True(condition: escrow.Reserve(request: request).Accepted);
         Assert.True(
-            condition: escrow.Commit(
+            condition: (escrow.Commit(
                 request.SourceAuthority,
                 request.TransferId,
                 [member],
                 out var first
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: first
         );
         var checkpoint = escrow.Capture();
@@ -727,20 +727,20 @@ public sealed partial class FederationTransferLawTests {
         );
         foreach (var target in new[] { escrow, restored }) {
             Assert.True(
-                condition: target.Commit(
+                condition: (target.Commit(
                     request.SourceAuthority,
                     request.TransferId,
                     [member],
                     out var reason
-                ),
+                ) == WorldTransferStatus.Committed),
                 userMessage: reason
             );
-            Assert.False(condition: target.Commit(
+            Assert.True(condition: (target.Commit(
                 request.SourceAuthority,
                 request.TransferId,
                 [member with { ActionContinuity = carried }],
                 out reason
-            ));
+            ) == WorldTransferStatus.Missing));
             Assert.Contains(
                 actualString: reason,
                 expectedSubstring: "different commit"
@@ -782,12 +782,12 @@ public sealed partial class FederationTransferLawTests {
             userMessage: reservation.Reason
         );
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: request.SourceAuthority,
                 transferId: request.TransferId,
                 members: [member],
                 reason: out var reason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
         Assert.True(condition: fixture.Server.TryTransferredPrincipal(
@@ -877,12 +877,12 @@ public sealed partial class FederationTransferLawTests {
             userMessage: reservation.Reason
         );
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: SourceAuthority,
                 transferId: request.TransferId,
                 members: [member],
                 reason: out var reason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
 
@@ -1033,12 +1033,12 @@ public sealed partial class FederationTransferLawTests {
             userMessage: reservation.Reason
         );
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: request.SourceAuthority,
                 transferId: request.TransferId,
                 members: [member],
                 reason: out var reason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
         Assert.True(condition: fixture.Server.TryTransferredPrincipal(
@@ -1548,12 +1548,12 @@ public sealed partial class FederationTransferLawTests {
 
             Assert.True(condition: fixture.Server.ReserveTransfer(request: request).Accepted);
             Assert.True(
-                condition: fixture.Server.CommitTransfer(
+                condition: (fixture.Server.CommitTransfer(
                     members: [commit],
                     reason: out var reason,
                     sourceAuthority: SourceAuthority,
                     transferId: crossing
-                ),
+                ) == WorldTransferStatus.Committed),
                 userMessage: reason
             );
             Assert.Equal(
@@ -1622,12 +1622,12 @@ public sealed partial class FederationTransferLawTests {
             condition: reservation.Accepted,
             userMessage: reservation.Reason
         );
-        Assert.False(condition: fixture.Server.CommitTransfer(
+        Assert.True(condition: (fixture.Server.CommitTransfer(
             sourceAuthority: request.SourceAuthority,
             transferId: request.TransferId,
             members: [member],
             reason: out var reason
-        ));
+        ) == WorldTransferStatus.Missing));
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
@@ -1674,12 +1674,12 @@ public sealed partial class FederationTransferLawTests {
             );
 
             Assert.True(
-                condition: fixture.Server.CommitTransfer(
+                condition: (fixture.Server.CommitTransfer(
                     members: [commit],
                     reason: out var reason,
                     sourceAuthority: SourceAuthority,
                     transferId: crossing
-                ),
+                ) == WorldTransferStatus.Committed),
                 userMessage: reason
             );
 
@@ -1800,12 +1800,12 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.True(condition: fixture.Server.ReserveTransfer(request: first).Accepted);
         Assert.True(
-            condition: fixture.Server.CommitTransfer(
+            condition: (fixture.Server.CommitTransfer(
                 sourceAuthority: SourceAuthority,
                 transferId: first.TransferId,
                 members: [member],
                 reason: out var reason
-            ),
+            ) == WorldTransferStatus.Committed),
             userMessage: reason
         );
         fixture.Server.AcknowledgeTransfer(

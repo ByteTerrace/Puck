@@ -801,7 +801,7 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
 
-        var accepted = m_server.CommitTransfer(
+        var status = m_server.CommitTransfer(
             members: members,
             reason: out var commitReason,
             sourceAuthority: sourceAuthority,
@@ -812,10 +812,8 @@ public sealed class WorldPeerHost : IDisposable {
             stream: stream,
             kind: WorldFederationResponse.Commit,
             body: WorldFederationCodec.EncodeCommitReply(
-                accepted: accepted,
-                reason: (accepted
-            ? string.Empty
-            : commitReason)
+                reason: commitReason,
+                status: status
             ),
             ct: ct
         ).ConfigureAwait(continueOnCapturedContext: false);

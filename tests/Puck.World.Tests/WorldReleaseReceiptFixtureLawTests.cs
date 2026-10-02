@@ -357,7 +357,7 @@ public sealed class WorldReleaseReceiptFixtureLawTests {
             null
         );
 
-        public WorldMutationJournalEntry Entry { get; private set; }
+        public WorldAuthorityJournalEntry Entry { get; private set; }
         public WorldAuthorityBlobStore Fixture { get; }
         public WorldAuthorityBlobStore Source { get; }
         public DirectoryObjectStorageTarget Target { get; }
