@@ -211,7 +211,8 @@ dense per-authority sequence (`WorldTransferEscrow.CrossingSequence`), captured
 by every checkpoint as its watermark. Recovery is
 `WorldInstanceHost.RecoverCrossings(row, entries)` after `Admit` and
 `RestoreRow`: each record past the watermark is redone in order — an arrival
-lands again through `WorldTransferEscrow.TryReland` (preferring its recorded
+lands again through `WorldTransferEscrow.TryReland` (under the lease a restored
+checkpoint still holds, or the one the record bound, restored at its recorded
 body indices, without writing the record twice), a departure detaches its
 cohort by incarnation and puts the transfer back in doubt, a settlement
 publishes the routes or restores the cohort — and the next drain reconciles
@@ -404,13 +405,23 @@ that row's delivered neighbour snapshot tick advanced. It is what makes the
 `linkEstablished`/`linkDropped` event family and the `$link:<adjacencyName>`
 rule channel replay-faithful.
 
+- Both halves of a transfer replay, as this process taped them. The departure
+  replays through `WorldReplayEntry.Transfer`'s `DepartedSlots`. The arrival
+  replays through `WorldReplayEntry.Arrival`: `WorldServer.ArrivalTap` reports
+  each commit that landed a traveler, with its `WorldArrivalOutcome` (each
+  landed generation, and whether it rolled back), and the re-drive calls
+  `WorldTransferEscrow.TryReland` with that outcome. Admission is part of the
+  landing and is never taped beside it. The tape refuses at read an arrival no
+  commit could have decided, and the re-drive refuses by name one its escrow
+  does not reproduce.
+
 Still absent, and outside what a MATCH proves:
 
 - The delivered CONTENT — neighbour poses, definition revisions, and geometry.
   Cross-authority contact against remote dynamic bodies is therefore still
   outside a MATCH (see the paragraph above).
 - Reserve/commit/abort/acknowledge traffic as protocol: the tapes record the
-  decided departure and the landed arrival, not the handshake.
+  decided departure and the arrival with its outcome, not the handshake.
 - A crossing between processes: each process tapes its own half, and nothing
   pairs tapes recorded by separate processes.
 

@@ -1157,9 +1157,9 @@ off the source picks nothing. The pipeline pane's pointer
 P13b-2 has landed: the simulation destination runs end to end. A seat folds the
 `source.pointer.origin` and `source.pointer.direction` verbs into its intent's
 optional `PlayerIntent.SourceRay`, which `WorldWireCodec` carries behind one
-flag byte on every intent path, so an absent ray costs one byte; the tape's
-`ShapeToken`, the checkpoint's `SupportedVersion` and the handshake's
-`WorldProtocol.WireProtocolKey` `PUCKWRL4` and the federation's `WorldFederationCodec.WireKey` `PUCKFED5`, each strict. The server keeps each
+flag byte on every intent path, so an absent ray costs one byte. The tape's
+shape token, the checkpoint version, the handshake key and the federation key
+each name the format that carries it, and each is strict. The server keeps each
 body's tick ray and maps it in the tick through `WorldScreenMappings.Normalized`,
 the row's mapping against a one-by-one source, for the rule operand
 `$pointer:<seat>:<screenIndex>:x|y|on`; `body.channels` echoes the ray and its
@@ -3814,10 +3814,11 @@ Each commit is marked with what it waits on.
      (submission, held channels, authority checkpoints, federation, the tape),
      keep the sixteen lanes and add one flag byte, followed by the ray's six
      fixed-point values only when it is present.
-   - The format moved with it, strictly and with no reader for the old shape:
-     the tape's `ShapeToken`, the checkpoint's `SupportedVersion`,
-     `WorldProtocol.WireProtocolKey` `PUCKWRL4`, and the federation's
-     `WorldFederationCodec.WireKey` `PUCKFED5`. No tape is checked in.
+   - Every format that carries an intent is strict and has no reader for an
+     earlier shape: the tape's shape token, the checkpoint version
+     (`WorldAuthorityCheckpointCodec.SupportedVersion`), the handshake key
+     (`WorldProtocol.WireProtocolKey`) and the federation key
+     (`WorldFederationCodec.WireKey`). No tape is checked in.
    - `PlayerCommandModule` registers `source.pointer.origin` and
      `source.pointer.direction` as Axis3D seat verbs, the seat keeps them for
      the tick, and `SeatController.HeldIntent` folds them into the intent. A

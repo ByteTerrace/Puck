@@ -392,7 +392,12 @@ and continuous terrain without adding a separate crossing transform.
 That isometry is a rotation about world up — the validator refuses a pair whose map is anything else
 — and the turn it applies is `counterpartYaw - thisYaw - 180` degrees. Two faces pointing at each
 other are 180 degrees apart and map as the identity, so a body arrives at the same world point,
-keeping its heading and its velocity, and any other authored pair turns it by the remainder. A
+keeping its heading and its velocity, and any other authored pair turns it by the remainder. A local
+seat following the body turns its view by the same turn, its eased chase boom included, so it looks
+along what the door's window showed. Every traveler carries its accumulated arrival turn, the sum of
+those turns reduced to `[-pi, pi)`, through each transfer. When an authority in another process hands
+the traveler on through doors of its own, the route it describes carries that turn, and the following
+seat turns by the change since it last turned. A
 boundary's rectangle takes its right axis from its yaw whatever its pitch, so the formula holds
 unchanged for a boundary lying flat: there the yaw no longer contributes to the outward direction
 and becomes the rectangle's roll about the vertical, which means an untwisted floor seam authors its
@@ -721,11 +726,37 @@ world, or the window one level up, mapped through its own door. So two portals f
 end at the depth, each level looking through its own glass. A session screen at the depth shows its
 session's `fallback` colour, black when the session authors none, through the `color` producer. That
 is the one rule for every face past the depth: a flat colour the author chose costs nothing to show
-and reads as the end of the recursion. A world shown through a screen shows only what any viewer may
-be shown on its behalf: its sessions, and producers whose content is a pure function of their
-settings (a test pattern, a QR code, a colour). A machine, a probe, a camera view, text, and a
-producer of the local device's content (a camera, a desktop capture) show nothing there, so being
-shown through a portal never opens the local user's camera or desktop.
+and reads as the end of the recursion.
+
+Every other screen of a world shown through a screen, or of a world a seat is presented in, shows
+what it would show in the boot world, from that world's own sources, never the boot world's:
+
+- A producer whose content is a pure function of its settings (a test pattern, a QR code, a colour)
+  shows the one shared instance of that content.
+- A machine shows its own world's machine. A machine source instance names the world instance whose
+  host runs it, so two worlds' cabinets of one name are two images. That world's server prepares and
+  steps its machines on its own ticks, whether or not any seat stands in it. A session whose delivery
+  withholds the machine declaration opens no reader for it, even when a disclosed screen names it;
+  that screen shows nothing and casts no machine light.
+- A camera view shows a view of that world through its own camera row, posed by its own mirror (a
+  placement anchor, or an active body's interpolated pose; any other anchor reads the world origin).
+  Each level films its world's cameras under its own name (`session$24$camera$<camera>`,
+  `routed$<digest>$camera$<camera>`) into the residency that level's world renders through, after
+  that residency's own views. A camera view reads its world's other camera views at their previous
+  frame, so cameras filming each other's screens never wait on each other within a frame.
+- Text draws through that world's own font catalog, resolved beside that world's own document.
+  An unresolved delivery clears the drawn text and atlas, including a catalog that previously drew,
+  and reports its text fault until a valid delivery arrives.
+- A probe shows nothing: only the boot world runs a probe host, so a probe of another world opens
+  with a fault naming that world.
+- A producer of the local device's content (a camera, a desktop capture) shows nothing, so being
+  shown through a portal never opens the local user's camera or desktop.
+
+A world delivered from another authority carries no document directory and runs its machines there,
+so its text and its machines show nothing here, and `world.nesting` says why. Its session screens
+show nothing too: the authority holds a screen's session only for the worlds this process runs, and
+no message carries a remote world's screen session to the presenting process. A remote world's
+camera views and producers show.
 
 The authority opens the sessions a world's screens show while that world is fewer screens deep than
 the nesting depth. The boot world and every world a human stands in are at depth zero, and a world a
@@ -735,8 +766,9 @@ therefore follows the documents and the sessions already open, never what a fram
 presentation renders a level only while something sees it: each view that reads a session tests the
 glass it shows on against the camera it last rendered with (`WorldPortalVisibility`), and a glass
 behind that camera or outside its frustum schedules nothing beneath it. `world.nesting` echoes every
-level: its depth, its destination, the residency it renders through, and what each of its world's
-screens shows.
+level: its depth, its destination, the residency it renders through, what each of its world's
+screens shows (a session or camera view, a source instance with the fault that leaves it dark,
+`text`, or `none`), and why that world's text does not draw when its fonts do not resolve.
 
 A portal's face can show its destination as a window (`projection: window`): the face's portal facet
 maps a counterpart, and the destination renders each frame through an off-axis camera fitted, from
@@ -889,14 +921,33 @@ issue from a counter in the target resolver's ordered domain, recorded before th
 pure function of event order. Wall time, UUIDs and discovery order never decide identity. A
 remote-issued id enters the source as a verified foreign value at a named tape boundary.
 
-An arrival is taped by its destination. The destination's tape records the reservation, body indices
-and commit as one entry and lands it again through the shadow's own escrow at the tick it landed. It
-also records the federated device images that forwarded and federated travelers drive the authority
-with, because that input reaches the authority through no loopback. `replay.record` tapes every row
-of the process beside the boot row in one file. Verification replays the tape and every companion a
-crossing involves, and pairs every crossing's departure with its arrival by handoff token. A
-crossing whose other half is on a remote authority, or on a row nothing taped, is reported as not
-verified, and `replay.verify` fails.
+An arrival is taped by its destination, one entry for each commit that landed at least one
+traveler. The entry carries the reservation, the body indices and the commit, encoded with the same
+leaf the destination's crossing log writes, and the commit's outcome: the generation each traveler
+landed at, and whether the commit rolled its landings back. A commit rolls back when a member is
+refused, or when its arrival record cannot be made durable; the rollback is taped because a landing
+advances its index's generation even when it is undone. Each traveler's profile travels with its
+stable identity id, rates, appearance, owned records and any backing document carrying identity
+facts. A traveler's admission is part of its landing: a local seat joins its session, and a
+transferred peer or entity is admitted inline, even inside an ordered submission's completion, so
+no queued admission outlives a rollback; neither is taped beside the arrival.
+
+The re-drive lands the arrival again through the shadow's own escrow, at the commit's position among
+the tick's authority entries, under the lease the arrival bound: it restores that lease rather than
+deciding the reservation again, because the commit stood under the reservation's own decision. Each
+traveler must land at its recorded body index and generation, and a recorded rollback stops at the
+same traveler and undoes the landings ahead of it through the same undo a live commit uses. A tape
+whose arrival no commit could have decided (a malformed cohort, an outcome that does not fit it, or a
+handoff token arriving again after its commit stood) is refused when it is read, and an arrival the
+shadow cannot reproduce is refused by name. A server step and its tape close hold the same authority
+gate, so an arrival after a step belongs to the following tick.
+
+The destination's tape also records the federated device images that forwarded and federated
+travelers drive the authority with, because that input reaches the authority through no loopback.
+`replay.record` tapes every row of the process beside the boot row in one file. Verification replays
+the tape and every companion a crossing involves, and pairs every crossing's departure with the
+arrival whose commit stood, by handoff token. A crossing whose other half is on a remote authority,
+or on a row nothing taped, is reported as not verified, and `replay.verify` fails.
 
 Each authority tape records the initial authored rate and every ordered rate write, pause and resume
 that changes which steps occur. Replay drives from the tape's recorded rate history and refuses a

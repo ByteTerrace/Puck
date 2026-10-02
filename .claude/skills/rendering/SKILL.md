@@ -1595,8 +1595,11 @@ the destination's own frame source on its own clock, released in
 `ReconcileViewResidencies` once the session is gone. A camera view reads every
 source within the frame and every view a screen of its world shows, itself
 included, at its previous frame; a session reads, within the frame, what its own
-world's screens show one level deeper (`WorldView.Reads`: sessions, and source
-instances only nested worlds show, `WorldViewInstances.NestedSources`); the
+world's screens show one level deeper (`WorldView.Reads`: sessions, camera views of
+that world, and source instances only nested worlds show,
+`WorldViewInstances.NestedSources`); a camera of a presented world reads the same
+but its world's camera views, which it reads at their previous frame
+(`WorldView.PreviousReads`); the
 world's instance reads every view a screen of a world the display shows directly
 shows (`WorldViewInstances.IsShownDirectly`) within the frame, so the reads grow
 with the views shown, never with the square of every view. `WorldViewGraphHost.TryCompose` puts the views
@@ -1677,12 +1680,33 @@ depth 0 (`routed$<digest>`, a digest of its authority, `WorldViewNames.Routed`) 
 whose session screens open session feeds of their own while the world is
 shallower than the nesting depth, named `WorldViewNames.Nested`
 (`session$<screen>$<screen>…`). A screen at the depth shows its session's
-`fallback` colour through the `color` producer (`WorldPortalFallback`); a world
-shown through a screen shows only sessions and producers whose content is
-deterministic. Views of one residency render one world at different levels, so
+`fallback` colour through the `color` producer (`WorldPortalFallback`). Every
+other screen of a presented world shows that world's own source, through the
+one mechanism the boot world's screens use (`WorldScreenMappingSet`, one per
+world, named by its world instance): a machine or a probe source instance carries
+a `world` setting (`WorldSourceInstances.WorldOf`), so the binder's
+`MachineSource` reads that world's host (`WorldScreenBinder.MachinesOf`, null for
+a world another authority runs). A session's level opens no machine source, reads
+no framebuffer extent and casts no machine light while its delivered definition
+withholds that machine's declaration. `ProbeSource` opens a fault for any world but
+the boot world, which alone runs a probe host; a camera view is a view of that
+world filmed under the level (`WorldViewNames.NestedCamera`,
+`WorldNestedScreens.Cameras`) into the residency the level renders through, after
+its own views, by the dresser's `Film` hook (`WorldSessionSceneEmitter.Film`,
+`WorldRoutedScene.Film`; `WorldScreenBinder.NestedCameras.cs` records each
+index in a `WorldFilmedViews`, which drops a view its residency's dress no
+longer films and, on a nesting move, every view no live level shows), reading the level's sessions and sources within the frame and its camera
+views at their previous frame (`WorldView.PreviousReads`); text draws through
+the world's own font catalog (`WorldTextCatalog` resolved beside the delivered
+definition's `DocumentDirectory`), whose decals the dresser hands the residency
+(`ISdfFrameDresser.GlyphAtlas`/`ScreenDecals`, forwarded by
+`SdfCompositionFrameSource`; `WorldScreenDecals` serves the boot presenter and
+every session emitter alike). Only a producer of the local device's content shows
+nothing. Views of one residency render one world at different levels, so
 `ISdfScreenSources.ReadOf` takes the view: a routed scene's seat views read the
-routed world's level, each window view its feed's (`RoutedScreenSources`), and
-the residency's bound flag holds while any view of its frame reads the screen.
+routed world's level, each window view its feed's, each camera view the level
+that films it (`RoutedScreenSources`), and the residency's bound flag holds
+while any view of its frame reads the screen.
 A window fits to the eye of the view one level up and starts its rays past the
 counterpart's own glass (`WorldPrototypeFacets.GlassSpan`). A session's
 footprint holds only while its consumer's last camera sees its glass

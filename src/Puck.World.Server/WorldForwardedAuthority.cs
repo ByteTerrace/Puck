@@ -258,6 +258,7 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
             Kit: server.Population.KitIndex(index: bodyIndex),
             Look: server.Population.LookIndex(index: bodyIndex),
             CatalogRig: server.Population.CatalogRig(index: bodyIndex),
+            TravelTurn: server.Population.TravelTurn(index: bodyIndex),
             PlacementId: server.Population.InhabitantPlacementId(index: bodyIndex),
             Definition: server.Definition,
             Version: server.DocumentVersion

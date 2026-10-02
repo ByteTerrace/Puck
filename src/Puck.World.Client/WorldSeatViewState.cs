@@ -200,6 +200,29 @@ public sealed class WorldSeatViewState {
             );
         }
     }
+    /// <summary>Returns the rotation of the world a mapped arrival turns its traveler by: the boundary pair's yaw delta
+    /// (<see cref="WorldFrameIsometry.YawDelta"/>, the arrival yaw less the departure yaw) as a turn about world up.</summary>
+    /// <param name="yawDelta">The arrival's yaw delta, fixed-point radians.</param>
+    /// <returns>The turn.</returns>
+    public static Quaternion ArrivalTurn(Puck.Maths.FixedQ4816 yawDelta) => Quaternion.CreateFromAxisAngle(
+        angle: ((float)((double)yawDelta)),
+        axis: Vector3.UnitY
+    );
+    /// <summary>Carries the seat's view through a mapped arrival that turns its traveler by
+    /// <paramref name="turn"/>, so the seat looks through the door it walked through as a window onto the same door
+    /// showed it. A world-referenced live yaw turns with the traveler; a body-referenced one already rides the
+    /// traveler's turned heading. The eased chase boom turns either way.</summary>
+    /// <param name="turn">The arrival's turn (<see cref="ArrivalTurn"/>).</param>
+    /// <param name="yawReference">The yaw reference of the world the seat arrives in.</param>
+    public void Cross(Quaternion turn, WorldSeatYawReference yawReference) {
+        lock (m_gate) {
+            if (yawReference == WorldSeatYawReference.World) {
+                m_yaw = Wrap(radians: (m_yaw + (WorldSeatCameraResolver.BodyYaw(orientation: turn) - WorldSeatCameraResolver.BodyYaw(orientation: Quaternion.Identity))));
+            }
+
+            m_boom.Rotate(rotation: turn);
+        }
+    }
     public void Recenter() {
         lock (m_gate) {
             m_yaw = 0f;

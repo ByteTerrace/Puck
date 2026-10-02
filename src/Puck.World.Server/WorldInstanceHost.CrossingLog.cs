@@ -195,7 +195,8 @@ public sealed partial class WorldInstanceHost {
         var reason = string.Empty;
         var landed = row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.TryReland(
             arrival: arrival,
-            reason: out reason
+            reason: out reason,
+            recorded: null
         ));
 
         if (!landed) {

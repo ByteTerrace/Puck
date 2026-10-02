@@ -184,6 +184,9 @@ public static class WorldReplayEntryDescriber {
             ? $"arrival #{arrival.TransferId} from '{arrival.SourceAuthority}' body:[{string.Join(
                 separator: ",",
                 values: decoded!.Slots
-            )}]"
-            : $"arrival #{arrival.TransferId} from '{arrival.SourceAuthority}'");
+            )}]{Outcome(arrival: arrival)}"
+            : $"arrival #{arrival.TransferId} from '{arrival.SourceAuthority}'{Outcome(arrival: arrival)}");
+    private static string Outcome(WorldReplayEntry.Arrival arrival) => (arrival.Outcome.RolledBack
+        ? $" rolled back after {arrival.Outcome.Generations.Count} landing(s)"
+        : string.Empty);
 }

@@ -42,6 +42,7 @@ public sealed class DocumentVersionWireLawTests {
         PlacementId: null,
         Position: FixedVector3.Zero,
         Tick: 1UL,
+        TravelTurn: FixedQ4816.Zero,
         Version: version
     );
     private static bool RouteDecodes(WorldDocumentVersion version) => WorldFederationCodec.TryDecodeRoute(

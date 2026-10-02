@@ -43,6 +43,7 @@ public sealed class RulePushTurnLawTests(ITestOutputHelper output) {
         foreach (var world in compilation.Worlds) {
             Assert.True(
                 condition: Puck.World.Transpiler.Composition.WorldStaging.TryWrite(
+                    catalog: TestHookInstaller.CreateMachineCatalog(),
                     directory: directory,
                     name: world.Name,
                     path: out _,

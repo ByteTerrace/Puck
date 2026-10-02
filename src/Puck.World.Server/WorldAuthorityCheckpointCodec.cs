@@ -32,8 +32,9 @@ public static partial class WorldAuthorityCheckpointCodec {
 
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader.</summary>
-    // Version 16 carries the escrow's crossing sequence, the watermark crossing-log recovery redoes from.
-    public const ushort SupportedVersion = 16;
+    // Version 17 carries the escrow's crossing sequence, the watermark crossing-log recovery redoes from, and each
+    // occupant's, each committed traveler's and each peer event entry's accumulated arrival turn.
+    public const ushort SupportedVersion = 17;
 
     /// <summary>Encodes a full checkpoint.</summary>
     /// <param name="checkpoint">The checkpoint to encode.</param>

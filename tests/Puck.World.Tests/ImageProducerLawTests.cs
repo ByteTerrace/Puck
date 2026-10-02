@@ -266,7 +266,7 @@ public sealed class ImageProducerLawTests {
             Id: ThirdId,
             Settings: new Dictionary<string, JsonElement>(comparer: StringComparer.Ordinal) { ["level"] = JsonSerializer.SerializeToElement(value: 3) }
         );
-        var sources = WorldSourceInstances.Of(shown: [source]);
+        var sources = WorldSourceInstances.Of(shown: [source], world: WorldDefinitionLoader.BootInstanceName);
         var instance = Assert.Single(collection: sources.Instances);
 
         Assert.Equal(expected: $"source.{ThirdId}", actual: instance.ExternalPackage);

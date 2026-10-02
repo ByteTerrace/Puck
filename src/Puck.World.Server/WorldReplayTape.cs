@@ -750,8 +750,9 @@ public sealed partial class WorldReplayTape {
             ContentHash: contentHash,
             Value: op
         ));
-        m_liveServer.ArrivalTap = arrival => m_currentAuthority.Add(item: new WorldReplayEntry.Arrival(
+        m_liveServer.ArrivalTap = (arrival, outcome) => m_currentAuthority.Add(item: new WorldReplayEntry.Arrival(
             Encoded: WorldAuthorityCheckpointCodec.EncodeCrossingArrival(arrival: arrival),
+            Outcome: outcome,
             SourceAuthority: arrival.Request.SourceAuthority,
             TransferId: arrival.Request.TransferId
         ));

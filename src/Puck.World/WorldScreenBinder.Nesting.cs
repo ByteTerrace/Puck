@@ -12,7 +12,9 @@ namespace Puck.World;
 // The screens of every world the presentation shows other than the boot world: a world seats are presented in, at depth
 // 0, and every session's destination, one level deeper than the screen showing it. Each is a WorldNestedScreens whose
 // session screens are session feeds of their own, to the boot world's views.nestingDepth, so a portal seen through a
-// portal renders its own destination, recursively. Every feed renders as any session does: its destination's endpoint
+// portal renders its own destination, recursively. Every other screen shows that world's own sources: a machine or a
+// probe its own host's (MachinesOf), a camera its own camera (WorldScreenBinder.NestedCameras), and text its own font
+// catalog's (WorldSessionSceneEmitter). Every feed renders as any session does: its destination's endpoint
 // scene while its session discloses everything, which every seat presented there and every other such feed at any depth
 // shares, or a residency of its own. Each view of a residency binds the screens of the level it renders
 // (ISdfScreenSources.ReadOf takes the view), so one world seen at two depths shows each level's own images.
@@ -94,7 +96,8 @@ internal sealed partial class WorldScreenBinder {
                         definition: () => scene.Endpoint.Definition,
                         depth: 0,
                         head: WorldViewNames.Routed(authority: scene.Endpoint.Identity),
-                        shares: SharesProducer
+                        shares: SharesProducer,
+                        world: scene.Endpoint.Identity
                     );
 
                     m_routedScreens.Add(
@@ -153,6 +156,7 @@ internal sealed partial class WorldScreenBinder {
 
         RebuildFeeds();
         PublishNesting();
+        PruneNestedFilms();
         ReconcileViews();
     }
     // Follows one level's screens and every feed they show.
@@ -181,7 +185,8 @@ internal sealed partial class WorldScreenBinder {
                 definition: () => feed.Mirror.Definition,
                 depth: feed.Depth,
                 head: feed.RegistrationName,
-                shares: SharesProducer
+                shares: SharesProducer,
+                world: feed.InstanceName
             );
             feed.Nested = screens;
             m_nestedOwners[screens] = new NestedOwner(
@@ -312,13 +317,17 @@ internal sealed partial class WorldScreenBinder {
 
         return null;
     }
-    // The screens a view of a scene shows: a seat's, the routed world's own; a window's, its feed's destination's.
+    // The screens a view of a scene shows: a seat's, the routed world's own; a window's, its feed's destination's; a
+    // camera's, the level that films it.
     private WorldNestedScreens<SessionFeed>? ScreensOf(WorldRoutedScene scene, int view) => ((view < scene.SeatViewCount)
         ? m_routedScreens.GetValueOrDefault(key: scene)
-        : WindowFeedOf(
+        : (WindowFeedOf(
             scene: scene,
             view: view
-        )?.Nested);
+        )?.Nested ?? FilmedLevelOf(
+            scene: scene,
+            view: view
+        )));
     // The screens a world view instance shows when its seat is presented in another world, or null for the boot world's.
     private WorldNestedScreens<SessionFeed>? RoutedScreensOf(string instance) {
         if (
@@ -359,7 +368,9 @@ internal sealed partial class WorldScreenBinder {
     /// depth, by name — its
     /// depth, destination, the residency it renders through (<c>endpoint:&lt;authority&gt;</c>, shared with every seat
     /// and window presenting that world, or <c>own</c>), and what each of its world's screens shows: a session view one
-    /// level deeper, a shared source instance, a fallback colour's source past the depth, or <c>none</c>.</summary>
+    /// level deeper, a camera view of that world, a source instance (a machine's or a probe's of that world's own host,
+    /// with the fault that leaves it dark in parentheses), a fallback colour's source past the depth, <c>text</c>, or
+    /// <c>none</c>; then <c>text-fault</c> and why, when the world's font catalog does not resolve.</summary>
     /// <returns>The description.</returns>
     public string DescribeNesting() {
         EnsureFeeds();
@@ -378,7 +389,8 @@ internal sealed partial class WorldScreenBinder {
             );
             AppendScreens(
                 builder: builder,
-                screens: screens
+                screens: screens,
+                textFault: m_nestedOwners[screens].Scene?.TextFault
             );
         }
 
@@ -397,7 +409,8 @@ internal sealed partial class WorldScreenBinder {
             if (feed.Nested is { } screens) {
                 AppendScreens(
                     builder: builder,
-                    screens: screens
+                    screens: screens,
+                    textFault: (RoutedWindowOf(feed: feed)?.Scene.TextFault ?? feed.Emitter?.TextFault)
                 );
             }
         }
@@ -405,7 +418,7 @@ internal sealed partial class WorldScreenBinder {
         return builder.ToString();
     }
 
-    private static void AppendScreens(System.Text.StringBuilder builder, WorldNestedScreens<SessionFeed> screens) {
+    private void AppendScreens(System.Text.StringBuilder builder, WorldNestedScreens<SessionFeed> screens, string? textFault) {
         _ = builder.Append(value: " screens");
 
         if (screens.Rows.Count == 0) {
@@ -413,16 +426,38 @@ internal sealed partial class WorldScreenBinder {
         }
 
         foreach (var row in screens.Rows) {
+            var instance = screens.InstanceOf(screen: row.Index);
+            var shown = (instance ?? ((row.Source is WorldScreenSource.Text)
+                ? "text"
+                : "none"));
+
             _ = builder.Append(
                 provider: System.Globalization.CultureInfo.InvariantCulture,
-                handler: $" {row.Index}:{(screens.InstanceOf(screen: row.Index) ?? "none")}"
+                handler: $" {row.Index}:{shown}"
+            );
+
+            if (
+                (instance is not null) &&
+                (SourceFault(instance: instance) is { } fault)
+            ) {
+                _ = builder.Append(
+                    provider: System.Globalization.CultureInfo.InvariantCulture,
+                    handler: $" ({fault})"
+                );
+            }
+        }
+
+        if (textFault is not null) {
+            _ = builder.Append(
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                handler: $" text-fault {textFault}"
             );
         }
     }
 
     /// <inheritdoc/>
     /// <remarks>A session reports its destination's screens as it shows them; a world view whose seat is presented in
-    /// another world, that world's.</remarks>
+    /// another world, that world's; a camera view of another world, the screens of the level that films it.</remarks>
     public bool TryPlacements(string view, out IReadOnlyList<SourceMapping> placements) {
         ArgumentNullException.ThrowIfNull(argument: view);
 
@@ -442,13 +477,20 @@ internal sealed partial class WorldScreenBinder {
             return true;
         }
 
+        if (NestedCameraLevel(name: view) is { } filmed) {
+            placements = filmed.Mappings.Mappings;
+
+            return true;
+        }
+
         placements = [];
 
         return false;
     }
     /// <inheritdoc/>
-    /// <remarks>A session's screen stands in its parent's destination, a routed world's in that world, and the boot
-    /// world's in the world every other world view and every camera view renders.</remarks>
+    /// <remarks>A session's screen stands in its parent's destination, a routed world's in that world, one a camera view
+    /// of another world films in the world of the level that films it, and the boot world's in the world every other
+    /// world view and every boot camera view renders.</remarks>
     public WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass) {
         glass = null;
 
@@ -466,6 +508,8 @@ internal sealed partial class WorldScreenBinder {
             value: out var parent
         )) {
             world = parent.Nested;
+        } else if (NestedCameraLevel(name: consumer) is { } filmed) {
+            world = filmed;
         } else if (IsRouted(instance: consumer)) {
             world = RoutedScreensOf(instance: consumer);
         } else if (
@@ -519,13 +563,21 @@ internal sealed partial class WorldScreenBinder {
         // The extents of the source instances the level's screens show, which its mappings publish at.
         public NestedImages? Images { get; set; }
     }
-    // The extent of the image a level's screen shows: its source instance's running image.
+    // The extent of the image a level's screen shows: its machine output's framebuffer, from the level's world's own
+    // host, or its source instance's running image.
     private sealed class NestedImages(WorldScreenBinder binder, WorldNestedScreens<SessionFeed> screens) : IWorldScreenImages {
         /// <inheritdoc/>
         public bool TryExtent(int screen, out int width, out int height) {
             (width, height) = (0, 0);
 
-            if (
+            if (screens.RowOf(screen: screen) is { Source: WorldScreenSource.Machine machine }) {
+                if (binder.MachinesOf(world: screens.World)?.VideoOutput(
+                    instance: machine.Instance,
+                    output: machine.Output
+                ) is { } output) {
+                    (width, height) = (output.Width, output.Height);
+                }
+            } else if (
                 (screens.Mappings.InstanceOf(screen: screen) is { } instance) &&
                 (binder.FeedOf(instance: instance) is { } source)
             ) {
@@ -536,6 +588,24 @@ internal sealed partial class WorldScreenBinder {
         }
     }
 
+    // The light a screen of a level casts into the room: its machine output's, from the level's world's own host, or its
+    // source instance's, resolved through the capture gate; none for a view, a session or text.
+    private Vector3 LightOf(WorldNestedScreens<SessionFeed>? screens, int screen) {
+        if (screens is null) {
+            return Vector3.Zero;
+        }
+
+        if (screens.RowOf(screen: screen) is { Source: WorldScreenSource.Machine machine }) {
+            return (MachinesOf(world: screens.World)?.VideoOutput(
+                instance: machine.Instance,
+                output: machine.Output
+            )?.EmittedLight ?? Vector3.Zero);
+        }
+
+        return (((screens.Mappings.InstanceOf(screen: screen) is { } instance) && (FeedOf(instance: instance) is { } source))
+            ? ResolveLight(feed: source)
+            : Vector3.Zero);
+    }
     // Publishes every level's mappings for this frame at the extents their images now have.
     private void PublishNestedMappings() {
         foreach (var (screens, owner) in m_nestedOwners) {
@@ -624,13 +694,17 @@ internal sealed partial class WorldScreenBinder {
             );
         }
     }
-    // What each screen of a session feed's own residency shows: its destination's screens as the feed shows them.
-    private sealed class FeedScreenSources(SessionFeed feed) : ISdfScreenSources {
+    // What each screen of a session feed's own residency shows, in every view of it, the session's and its destination's
+    // cameras' alike: its destination's screens as the feed shows them.
+    private sealed class FeedScreenSources(WorldScreenBinder binder, SessionFeed feed) : ISdfScreenSources {
         /// <inheritdoc/>
         public IReadOnlyList<int> Screens => AllScreens;
 
         /// <inheritdoc/>
-        public Vector3 Light(int screen) => Vector3.Zero;
+        public Vector3 Light(int screen) => binder.LightOf(
+            screen: screen,
+            screens: feed.Nested
+        );
         /// <inheritdoc/>
         public SourceMapping? MappingOf(int screen) => (((feed.Nested is { } screens) && screens.Mappings.TryGet(
             mapping: out var mapping,
@@ -642,14 +716,18 @@ internal sealed partial class WorldScreenBinder {
         public string? ReadOf(int view, int screen) => feed.Nested?.InstanceOf(screen: screen);
     }
     // What each screen of a routed scene's residency shows in each of its views: a seat's view shows the world's own
-    // screens, a window's its feed's level. A screen draws from the first mapping a level publishes for it, which every
-    // level publishes alike for one row.
+    // screens, a window's its feed's level, a camera's the level that films it. A screen draws from the first mapping a
+    // level publishes for it, which every level publishes alike for one row, and lights the room from the routed world's
+    // own level, every level's being the same world.
     private sealed class RoutedScreenSources(WorldScreenBinder binder, WorldRoutedScene scene) : ISdfScreenSources {
         /// <inheritdoc/>
         public IReadOnlyList<int> Screens => AllScreens;
 
         /// <inheritdoc/>
-        public Vector3 Light(int screen) => Vector3.Zero;
+        public Vector3 Light(int screen) => binder.LightOf(
+            screen: screen,
+            screens: binder.m_routedScreens.GetValueOrDefault(key: scene)
+        );
         /// <inheritdoc/>
         public SourceMapping? MappingOf(int screen) {
             if (

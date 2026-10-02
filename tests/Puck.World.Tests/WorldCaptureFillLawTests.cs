@@ -235,7 +235,7 @@ public sealed class WorldCaptureFillLawTests {
                 packages: packages
             );
             Assert.True(condition: RenderGraphInstanceSet.TryCreate(
-                instances: WorldSourceInstances.Of(shown: [shown]).Instances,
+                instances: WorldSourceInstances.Of(shown: [shown], world: WorldDefinitionLoader.BootInstanceName).Instances,
                 refusal: out var setRefusal,
                 set: out var set
             ), userMessage: setRefusal?.Message);

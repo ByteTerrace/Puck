@@ -143,7 +143,7 @@ public static partial class WorldFederationCodec {
     /// both dialects off the first eight bytes. A dialer opens every federation connection by writing it through
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames.</summary>
-    public const ulong WireKey = 0x354445464B435550UL; // "PUCKFED5", mutation payloads carry their expected activation.
+    public const ulong WireKey = 0x364445464B435550UL; // "PUCKFED6", commits and routes carry the traveler's arrival turn.
     /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
     /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
     public const int DocumentHeaderBytes = 25;
@@ -187,6 +187,10 @@ public static partial class WorldFederationCodec {
         var yaw = reader.ReadFixed();
         var planar = reader.ReadFixedVector();
         var vertical = reader.ReadFixed();
+        var travelTurn = WorldWireLeaves.ReadTravelTurn(
+            field: $"commit traveler {(ordinal + 1)} travel turn",
+            reader: ref reader
+        );
         var channelCount = reader.ReadCount(
             field: "commit channel count",
             maximum: ChannelLimits.MaxChannels,
@@ -250,7 +254,8 @@ public static partial class WorldFederationCodec {
                 Channels: channels,
                 Registers: registers
             ),
-            continuum
+            continuum,
+            travelTurn
         );
     }
     private static WorldContinuumTrajectory ReadContinuum(ref WireReader reader) {
@@ -439,6 +444,7 @@ public static partial class WorldFederationCodec {
         writer.WriteFixed(value: member.YawRadians);
         writer.WriteFixedVector(value: member.PlanarVelocity);
         writer.WriteFixed(value: member.VerticalVelocity);
+        writer.WriteFixed(value: member.TravelTurn);
 
         var continuity = (member.ActionContinuity ?? new WorldTransferActionContinuity(
             Channels: [],
@@ -765,6 +771,7 @@ public static partial class WorldFederationCodec {
         writer.WriteByte(value: route.Kit);
         writer.WriteByte(value: route.Look);
         writer.WriteByte(value: route.CatalogRig);
+        writer.WriteFixed(value: route.TravelTurn);
         writer.WriteNullableString(value: route.PlacementId);
         writer.WriteBlock(value: EncodeDocument(
             definition: route.Definition,
@@ -1361,6 +1368,10 @@ public static partial class WorldFederationCodec {
         var kit = reader.ReadByte();
         var look = reader.ReadByte();
         var catalogRig = reader.ReadByte();
+        var travelTurn = WorldWireLeaves.ReadTravelTurn(
+            field: "route travel turn",
+            reader: ref reader
+        );
         var placementId = reader.ReadNullableString(field: "route placement id");
         var definitionBytes = reader.ReadBlock(
             field: "route document",
@@ -1430,6 +1441,7 @@ public static partial class WorldFederationCodec {
             PlacementId: placementId,
             Position: position,
             Tick: tick,
+            TravelTurn: travelTurn,
             Version: version
         );
 

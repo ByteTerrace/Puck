@@ -14,7 +14,7 @@ public sealed partial class WorldReplaySnapshot {
     /// <exception cref="InvalidDataException">The stream is not a <c>.puckreplay</c> tape, or is an older shape this
     /// build does not read (refused outright — greenfield keeps no read-side tolerance for a foreign shape); is
     /// truncated, corrupt, or carries bytes after the tape; carries a value no wire table names; pins one addon name
-    /// twice; or pins a seat slot out of range or twice.</exception>
+    /// twice; pins a seat slot out of range or twice; or carries an arrival no commit could have decided.</exception>
     public static WorldReplaySnapshot Read(Stream stream) {
         ArgumentNullException.ThrowIfNull(argument: stream);
 
@@ -194,6 +194,19 @@ public sealed partial class WorldReplaySnapshot {
                 slot: slot
             ) is not null) {
                 throw new InvalidDataException(message: $"Corrupt .puckreplay recording: seat slot {slot} is pinned twice in the seat set — a slot identifies exactly one seat.");
+            }
+        }
+
+        // A commit that stood answers every later commit of its handoff token as already committed and lands nothing,
+        // so no recording holds a landed arrival's token again.
+        var landed = new HashSet<(string Source, ulong TransferId)>();
+
+        foreach (var arrival in ticks.SelectMany(selector: static tick => tick.Authority).OfType<WorldReplayEntry.Arrival>()) {
+            if (landed.Contains(item: (arrival.SourceAuthority, arrival.TransferId))) {
+                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: transfer {arrival.TransferId} from '{arrival.SourceAuthority}' arrives again after its commit stood.");
+            }
+            if (!arrival.Outcome.RolledBack) {
+                _ = landed.Add(item: (arrival.SourceAuthority, arrival.TransferId));
             }
         }
 

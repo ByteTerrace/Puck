@@ -772,7 +772,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         writer.WriteOptional(
             value: state.PendingContinuum,
-            writeValue: WriteContinuum
+            writeValue: WorldWireLeaves.WriteContinuum
         );
     }
     private static WorldBodyTransferState ReadTransferState(ref WireReader reader) {
@@ -900,7 +900,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader
         );
         var pendingContinuum = reader.ReadOptional(
-            readValue: static (ref WireReader r) => ReadContinuum(reader: ref r)
+            readValue: static (ref WireReader r) => WorldWireLeaves.ReadContinuum(reader: ref r)
         );
 
         return new WorldBodyTransferState(

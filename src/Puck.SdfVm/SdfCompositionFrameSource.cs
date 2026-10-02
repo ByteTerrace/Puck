@@ -30,6 +30,13 @@ public interface ISdfFrameDresser {
     /// <see cref="SdfFrame.MeshDrawsRevision"/>.</param>
     /// <returns>The frame to render.</returns>
     SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha);
+
+    /// <summary>Gets the font atlas the dressed world's text samples, which the composed frame source hands its host as
+    /// its <see cref="ISdfFrameSource.GlyphAtlas"/>; <see langword="null"/>, the default, for a world with no text.</summary>
+    SdfGlyphAtlas? GlyphAtlas => null;
+    /// <summary>Gets the glyph decals the dressed world's text screens draw, which the composed frame source hands its
+    /// host as its <see cref="ISdfFrameSource.ScreenDecals"/>; <see langword="null"/>, the default, for none.</summary>
+    IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => null;
 }
 /// <summary>Composes a fixed list of <see cref="ISdfSceneEmitter"/>s into one <see cref="ISdfFrameSource"/> — the
 /// generalization of the hand-written <c>BuildProgram</c> method every prior frame source wrote for itself: rather
@@ -117,6 +124,13 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private Vector3 m_packedParkPosition;
     private SdfProgram? m_program;
     private float m_time;
+
+    /// <inheritdoc/>
+    /// <remarks>The dresser's (<see cref="ISdfFrameDresser.GlyphAtlas"/>).</remarks>
+    public SdfGlyphAtlas? GlyphAtlas => m_dresser.GlyphAtlas;
+    /// <inheritdoc/>
+    /// <remarks>The dresser's (<see cref="ISdfFrameDresser.ScreenDecals"/>).</remarks>
+    public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => m_dresser.ScreenDecals;
 
     /// <summary>Composes <paramref name="emitters"/> into one frame source, dressed each frame by
     /// <paramref name="dresser"/>.</summary>

@@ -7,6 +7,11 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const byte CrossingDepartureTag = 1;
     private const byte CrossingSettlementTag = 2;
 
+    // Each traveler lands on its commit member's profile, or its reservation member's identity when the commit carries
+    // none. A projection carries the identity, rates, appearance and owned records; the backing document beside it
+    // carries the identity's facts, so a re-landed traveler keeps them.
+    private static WorldIdentity? LandedProfile(WorldCrossingArrival arrival, int index) =>
+        (arrival.Members[index].Profile ?? arrival.Request.Members[index].Identity);
     private static void WriteCrossingArrival(WireWriter writer, WorldCrossingArrival arrival) {
         WriteReservationRequest(
             request: arrival.Request,
@@ -19,6 +24,18 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteArray(
             items: arrival.Members,
             writeItem: WriteCommitMember
+        );
+        writer.WriteArray(
+            items: [.. Enumerable.Range(
+                count: arrival.Members.Count,
+                start: 0
+            ).Select(selector: index => ((LandedProfile(
+                arrival: arrival,
+                index: index
+            )?.Document is { } document)
+                ? WorldDefinitionSerialization.Serialize(definition: document)
+                : []))],
+            writeItem: static (w, document) => w.WriteBlock(value: document)
         );
     }
     private static WorldCrossingArrival ReadCrossingArrival(ref WireReader reader, WorldPlayerDefaults defaults) {
@@ -39,22 +56,94 @@ public static partial class WorldAuthorityCheckpointCodec {
             ),
             maximum: WorldBodiesLimits.CapacityCeiling
         );
-
-        if (
-            !reader.Failed &&
-            ((slots.Length != request.Members.Count) || (members.Length != request.Members.Count))
-        ) {
-            reader.Fail(
-                detail: $"arrival binds {request.Members.Count} traveler(s) but carries {slots.Length} slot(s) and {members.Length} member(s)",
-                refusal: WireRefusal.PayloadMalformed
-            );
-        }
-
-        return new WorldCrossingArrival(
+        var documents = reader.ReadArray(
+            field: "arrival profile documents",
+            readItem: static (ref WireReader r) => r.ReadBlock(
+                field: "arrival profile document",
+                maxBytes: WireLimits.MaxDocumentBytes
+            ),
+            maximum: WorldBodiesLimits.CapacityCeiling
+        );
+        var arrival = new WorldCrossingArrival(
             Members: members,
             Request: request,
             Slots: slots
         );
+
+        if (!reader.Failed && (ArrivalFault(
+            arrival: arrival,
+            documents: documents
+        ) is { } fault)) {
+            reader.Fail(
+                detail: fault,
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return arrival;
+    }
+    // Refuses an arrival no commit could have landed: a cohort whose body indices, members and documents do not pair
+    // with its travelers, an index outside every world's capacity or named twice, a traveler with no mobility
+    // identity, a member whose carried motion has no sound shape, or a backing document that does not name the
+    // identity it backs. Attaches each sound document to the profile it backs.
+    private static string? ArrivalFault(WorldCrossingArrival arrival, byte[][] documents) {
+        var count = arrival.Request.Members.Count;
+
+        if (count == 0) {
+            return "arrival binds no traveler";
+        }
+        if (
+            (arrival.Slots.Count != count) ||
+            (arrival.Members.Count != count) ||
+            (documents.Length != count)
+        ) {
+            return $"arrival binds {count} traveler(s) but carries {arrival.Slots.Count} slot(s), {arrival.Members.Count} member(s) and {documents.Length} profile document(s)";
+        }
+        for (var index = 0; (index < count); index++) {
+            var slot = arrival.Slots[index];
+
+            if (((uint)slot) >= WorldBodiesLimits.CapacityCeiling) {
+                return $"arrival traveler {(index + 1)} lands at body:{slot}, outside 0..{(WorldBodiesLimits.CapacityCeiling - 1)}";
+            }
+            for (var earlier = 0; (earlier < index); earlier++) {
+                if (arrival.Slots[earlier] == slot) {
+                    return $"arrival lands two travelers at body:{slot}";
+                }
+            }
+            if (arrival.Request.Members[index].Mobility is null) {
+                return $"arrival traveler {(index + 1)} carries no mobility identity";
+            }
+            if (WorldTransferEscrow.CommitMemberFault(member: arrival.Members[index]) is { } fault) {
+                return $"arrival traveler {(index + 1)} {fault}";
+            }
+            if (documents[index].Length == 0) {
+                continue;
+            }
+
+            WorldDefinition document;
+
+            try {
+                document = WorldDefinitionSerialization.Deserialize(utf8Json: documents[index]);
+            } catch (Exception exception) when ((exception is System.Text.Json.JsonException or InvalidOperationException or ArgumentException)) {
+                return $"arrival traveler {(index + 1)} profile document is malformed — {exception.Message}";
+            }
+            if (
+                (LandedProfile(
+                    arrival: arrival,
+                    index: index
+                ) is not { } profile) ||
+                (document.Identity is not { } identity) ||
+                !string.Equals(
+                    a: identity.Id.ToString(),
+                    b: profile.Id,
+                    comparisonType: StringComparison.Ordinal
+                )
+            ) {
+                return $"arrival traveler {(index + 1)} profile document names no matching identity";
+            }
+            profile.ReplaceDocument(document: document);
+        }
+        return null;
     }
 
     /// <summary>Encodes one destination arrival — the leaf a destination tape and a crossing-log arrival record

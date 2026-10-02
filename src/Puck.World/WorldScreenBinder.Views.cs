@@ -53,9 +53,9 @@ internal sealed partial class WorldScreenBinder {
         ReconcileRoutedResidencies();
         CrossingCapture?.Present();
     }
-    /// <summary>Returns the view a view instance renders: a camera registration's view of the world's frame, or a session
-    /// screen's residency, created the first time the render graph's package asks for it once the views are
-    /// configured.</summary>
+    /// <summary>Returns the view a view instance renders: a camera registration's view of the world's frame, a session
+    /// screen's residency, created the first time the render graph's package asks for it once the views are configured,
+    /// or a camera of another world's view of the residency that world renders through.</summary>
     /// <param name="name">The instance's name.</param>
     /// <param name="view">The view, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the instance is a view this binder registered and the views are
@@ -88,8 +88,11 @@ internal sealed partial class WorldScreenBinder {
             return true;
         }
 
-        if (SessionFeedOf(name: name) is not { FrameSource: { } source } feed) {
-            return false;
+        if (SessionFeedOf(name: name) is not { } feed) {
+            return TryResolveNestedCameraView(
+                name: name,
+                view: out view
+            );
         }
 
         // A window joined to its destination's endpoint scene renders its view there, from the one residency that scene's
@@ -103,6 +106,27 @@ internal sealed partial class WorldScreenBinder {
         ) {
             return true;
         }
+
+        if (SessionResidencyOf(feed: feed) is not { } residency) {
+            return false;
+        }
+
+        view = new SdfWorldView(
+            Residency: residency,
+            View: 0
+        );
+
+        return true;
+    }
+
+    // A session's own residency, rendering its frame source, created the first time a view resolves to it and made again
+    // when its frame source is another; null before the views are configured.
+    private SdfWorldResidency? SessionResidencyOf(SessionFeed feed) {
+        if (feed.FrameSource is not { } source) {
+            return null;
+        }
+
+        var name = feed.RegistrationName;
 
         if (
             !m_viewResidencies.TryGetValue(
@@ -124,20 +148,17 @@ internal sealed partial class WorldScreenBinder {
             m_viewResidencies[name] = session;
         }
 
-        view = new SdfWorldView(
-            Residency: session.Residency,
-            View: 0
-        );
-
-        return true;
+        return session.Residency;
     }
-
     // A session screen's residency, rendering the session feed's frame source on its own clock, its destination's screens
     // showing what the feed's level shows.
     private ViewResidency CreateSessionResidency(SessionFeed feed, string name, SdfCompositionFrameSource source, WorldScreenResolution resolution) {
         var residency = new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,
-            screenSources: new FeedScreenSources(feed: feed),
+            screenSources: new FeedScreenSources(
+                binder: this,
+                feed: feed
+            ),
             dynamicTransformCapacity: source.WorstCaseDynamicTransformCapacity,
             frameSource: new WorldSessionFrameSource(
                 captureHostFirst: CaptureHostFirst,
@@ -280,6 +301,7 @@ internal sealed partial class WorldScreenBinder {
             });
         }
 
+        SetNestedCameraViews(refresh: refresh);
         m_views.SetNestedSources(sources: m_nestedSources);
 
         if (m_views.TryPublish(instances: out var views)) {

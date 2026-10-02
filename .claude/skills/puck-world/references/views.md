@@ -142,7 +142,12 @@ facing snap turns the body, so binding it needs those three channels declared an
 `seatControl.yawReference: World` (the validator refuses otherwise).
 
 `seatControl.yawReference` is `World` for standard camera-relative movement or
-`Body` for an explicitly body-relative camera. Pitch values are radians,
+`Body` for an explicitly body-relative camera. A mapped arrival turns a followed seat's
+view by the door's turn (`WorldSeatViewState.Cross`): a `World` yaw turns, a
+`Body` yaw already rides the turned heading, and the chase boom turns either way.
+A traveler handed on by another process's authority turns the seat by the change
+in its accumulated arrival turn (`WorldFrameIsometry.AccumulateTurn`), which
+commits and routes carry and `WorldRoutedSeatTurns` holds per seat. Pitch values are radians,
 finite, ordered, and within `[-pi/2, pi/2]`.
 
 `seatLook` carries pointer radians-per-pixel, right-stick radians-per-second,
@@ -416,16 +421,27 @@ Free Cam do not alter the logical movement basis.
   destination, `via endpoint:<authority>` (the residency every seat and fully
   disclosed window presenting that world shares) or `via own`, and
   `screens <index>:<instance>…`: what each of its world's screens shows, a
-  session one level deeper, a shared source instance, `source$color$<digest>`
-  past the depth, or `none`.
+  session one level deeper, a camera view of that world
+  (`<level>$camera$<camera>`), a source instance (a machine's or probe's of that
+  world's own host, followed by the fault that leaves it dark in parentheses),
+  `source$color$<digest>` past the depth, `text`, or `none`; then
+  `text-fault <why>` when that world's fonts do not resolve.
 - `views.nestingDepth` (document) — how many screens deep a portal seen through
   a portal renders: 3 unauthored, 0 through 8, refused by name past either end.
   The boot world's governs the presentation and which worlds its authority
   opens screen sessions for. A session screen at the depth shows its session's
-  `fallback` colour (`#RRGGBB`, black unauthored). A world shown through a
-  screen shows only sessions and producers whose content is a function of their
-  settings (`testPattern`, `qr`, `color`); its machines, probes, camera views,
-  text and local-device producers show nothing.
+  `fallback` colour (`#RRGGBB`, black unauthored). Every other screen of a
+  world shown through a screen, or of a world a seat is presented in, shows
+  that world's own source: its machines from its own host (stepped on its own
+  ticks, and read only while the delivery declares them), its cameras as views
+  of it filmed under the level, its text through
+  its own fonts, and producers whose content is a function of their settings
+  (`testPattern`, `qr`, `color`) through the shared instance. A probe shows
+  nothing (only the boot world runs a probe host), nor does a local-device
+  producer. A world another authority runs shows neither its machines nor its
+  text (its definition carries no document directory) nor its session screens
+  (no message carries a remote screen session); its cameras and producers
+  show.
 - `view.override camera|layout <name|auto>` — live composition override;
   `layout toggle` and `layout next` cycle the authored layouts. It is
   bindable: a bound dispatch (wheel sector / chord row, no tokens) selects the

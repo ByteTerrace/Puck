@@ -155,6 +155,7 @@ internal static class WorldDocumentCorpus {
             // Every declared world is staged before any boots, since each proves its borders against the others.
             foreach (var world in compilation.Worlds) {
                 if (!WorldStaging.TryWrite(
+                    catalog: TestHookInstaller.CreateMachineCatalog(),
                     directory: stagingDirectory,
                     name: world.Name,
                     path: out var staged,

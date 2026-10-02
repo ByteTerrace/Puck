@@ -15,14 +15,16 @@ namespace Puck.World.Client;
 /// source and never gives a name to other content. A producer source carries its settings object as the document spelled
 /// it; a machine source is the <see cref="WorldImageProducerSettings.MachineId"/> source with <c>instance</c> and
 /// <c>output</c> settings, and a probe source the <see cref="WorldImageProducerSettings.ProbeId"/> source with an
-/// <c>id</c> setting. Every other arm (none, view, session, text) is no source instance: a view and a session are
-/// rendered instances of their own. An instance's <see cref="RenderGraphInstance.Handle"/> is its identity as a
-/// displayed source.
+/// <c>id</c> setting, each with a <c>world</c> setting naming the world instance whose own host runs it: a machine or a
+/// probe belongs to its world, so two worlds' equal rows are two instances. Every other arm (none, view, session, text)
+/// is no source instance: a view and a session are rendered instances of their own. An instance's
+/// <see cref="RenderGraphInstance.Handle"/> is its identity as a displayed source.
 /// </summary>
 public sealed class WorldSourceInstances {
     private const string IdSetting = "id";
     private const string InstanceSetting = "instance";
     private const string OutputSetting = "output";
+    private const string WorldSetting = "world";
 
     private readonly string?[] m_byScreen;
 
@@ -52,34 +54,43 @@ public sealed class WorldSourceInstances {
         ? value.GetString()
         : null
     );
-    // The producer id and settings a source is read through, or null for an arm no source instance reads.
-    private static (string Producer, IReadOnlyDictionary<string, JsonElement>? Settings)? ReadThrough(WorldScreenSource? source) => source switch {
+    // The producer id and settings a source of a world is read through, or null for an arm no source instance reads.
+    private static (string Producer, IReadOnlyDictionary<string, JsonElement>? Settings)? ReadThrough(WorldScreenSource? source, string world) => source switch {
         WorldScreenSource.Producer producer => (producer.Id, producer.Settings),
         WorldScreenSource.Machine machine => (WorldImageProducerSettings.MachineId, new Dictionary<string, JsonElement>(comparer: StringComparer.Ordinal) {
             [InstanceSetting] = Text(value: machine.Instance),
             [OutputSetting] = Text(value: machine.Output),
+            [WorldSetting] = Text(value: world),
         }),
         WorldScreenSource.Probe probe => (WorldImageProducerSettings.ProbeId, new Dictionary<string, JsonElement>(comparer: StringComparer.Ordinal) {
             [IdSetting] = Text(value: probe.Id),
+            [WorldSetting] = Text(value: world),
         }),
         _ => null,
     };
 
-    /// <summary>Derives the source instances the screens read.</summary>
+    /// <summary>Derives the source instances one world's screens read.</summary>
     /// <param name="shown">The source each screen shows, by 0-based screen index, or <see langword="null"/> for a screen
     /// showing none.</param>
+    /// <param name="world">The name of the world instance the screens stand in, whose own hosts run their machines and
+    /// probes.</param>
     /// <returns>The source instances and which one each screen reads.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="shown"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="world"/> is empty.</exception>
     /// <exception cref="InvalidOperationException">Two different sources digest to one instance name.</exception>
-    public static WorldSourceInstances Of(IReadOnlyList<WorldScreenSource?> shown) {
+    public static WorldSourceInstances Of(IReadOnlyList<WorldScreenSource?> shown, string world) {
         ArgumentNullException.ThrowIfNull(argument: shown);
+        ArgumentException.ThrowIfNullOrEmpty(argument: world);
 
         var instances = new List<RenderGraphInstance>();
         var byName = new Dictionary<string, RenderGraphInstance>(comparer: StringComparer.Ordinal);
         var byScreen = new string?[shown.Count];
 
         for (var screen = 0; (screen < shown.Count); screen++) {
-            if (ReadThrough(source: shown[screen]) is not { } source) {
+            if (ReadThrough(
+                source: shown[screen],
+                world: world
+            ) is not { } source) {
                 continue;
             }
 
@@ -199,6 +210,21 @@ public sealed class WorldSourceInstances {
                 Settings: instance.Settings
             ),
         };
+    }
+    /// <summary>Returns the world instance whose own host runs a machine or probe source instance.</summary>
+    /// <param name="instance">A source instance.</param>
+    /// <returns>The world instance's name, or <see langword="null"/> when <paramref name="instance"/> is no machine or
+    /// probe source.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="instance"/> is <see langword="null"/>.</exception>
+    public static string? WorldOf(RenderGraphInstance instance) {
+        ArgumentNullException.ThrowIfNull(argument: instance);
+
+        return ((instance.SourceProducer is WorldImageProducerSettings.MachineId or WorldImageProducerSettings.ProbeId)
+            ? TextOf(
+                name: WorldSetting,
+                settings: instance.Settings
+            )
+            : null);
     }
     /// <summary>Returns the handle of the source instance a screen reads.</summary>
     /// <param name="screen">The 0-based screen index.</param>

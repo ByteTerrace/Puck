@@ -351,7 +351,7 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
             )
         );
         // A screen facing the first view's camera from 5 units ahead, 2.4 units wide and 1.8 tall.
-        var screens = new WorldScreenMappingSet();
+        var screens = new WorldScreenMappingSet(world: WorldDefinitionLoader.BootInstanceName);
 
         screens.Reconcile(
             cameras: [],
@@ -388,7 +388,7 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
         );
         Assert.Equal(
             actual: walk.Steps[1].Mapping.Source,
-            expected: WorldSourceInstances.Of(shown: [pattern]).HandleOf(screen: 0)
+            expected: WorldSourceInstances.Of(shown: [pattern], world: WorldDefinitionLoader.BootInstanceName).HandleOf(screen: 0)
         );
 
         // The pane's point is the view image's (20.5 / 32, 40.5 / 64); its pinhole ray from (0, 1, 5) meets the face 5
