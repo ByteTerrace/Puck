@@ -1283,7 +1283,7 @@ the verdict the destination's tick applied, which the peer host awaits before it
 writes the completion back. On the traveler's side, `WorldFederatedServerLink`
 submits a mutation that carries a completion without waiting: the call returns at
 once, and the verdict, or the routed deadline's refusal
-(`world.transport.completion_unavailable`, naming the deadline), reaches the
+(`world.transport.completion-unavailable`, naming the deadline), reaches the
 completion when the lane answers (`WorldRemoteAuthority.AnswerAsync`). Other
 submissions still wait for their answer, bounded by the same deadline.
 

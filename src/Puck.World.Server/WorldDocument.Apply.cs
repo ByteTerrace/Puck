@@ -261,7 +261,7 @@ public sealed partial class WorldDocument {
             case WorldSubmissionPayload.Mutation mutation:
                 if (!WorldMutationBindingFactory.TryCreate(binding: out var binding, detail: out var bindingDetail, envelope: in envelope)) {
                     return new WorldSubmissionResult.Refusal(
-                        Code: "world.mutation.ingress_refused",
+                        Code: "world.mutation.ingress-refused",
                         Detail: bindingDetail
                     );
                 }

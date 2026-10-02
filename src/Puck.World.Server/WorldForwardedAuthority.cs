@@ -351,7 +351,7 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
                 (mutation.Value.Principal != principal)
             ) {
                 return (Live: true, Immediate: ((WorldSubmissionResult?)new WorldSubmissionResult.Refusal(
-                    Code: "world.mutation.actor_mismatch",
+                    Code: "world.mutation.actor-mismatch",
                     Detail: "mutation actor does not match the authenticated transferred principal"
                 )));
             }

@@ -193,7 +193,7 @@ public sealed class ReloadDrawnReferenceLawTests {
             var answer = Assert.Single(collection: answers);
 
             Assert.True(condition: answer.IsError);
-            Assert.StartsWith(actualString: answer.Output, expectedStartString: $"[{Verb}: world.transport.codec_refused ");
+            Assert.StartsWith(actualString: answer.Output, expectedStartString: $"[{Verb}: world.transport.codec-refused ");
             Assert.Contains(actualString: answer.Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "'state.strideCadence' names a cell that holds no value");
             Assert.Equal(actual: registry.Submit(line: "wire.errors").Output, expected: "[wire.errors: 1 rejected]");
         } finally {

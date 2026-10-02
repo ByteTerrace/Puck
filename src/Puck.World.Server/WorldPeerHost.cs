@@ -269,7 +269,7 @@ public sealed class WorldPeerHost : IDisposable {
             ) {
                 await WorldPeerWireFormat.WriteRefusalAsync(
                     stream: connection.Stream,
-                    reason: "world.mutation.actor_mismatch: mutation actor does not match authenticated connection",
+                    reason: "world.mutation.actor-mismatch: mutation actor does not match authenticated connection",
                     ct: ct
                 ).ConfigureAwait(continueOnCapturedContext: false);
                 continue;
@@ -1226,7 +1226,7 @@ public sealed class WorldPeerHost : IDisposable {
         ) {
             await WriteFederationRefusal(
                 ct: ct,
-                detail: "world.mutation.actor_mismatch: mutation actor does not match authenticated credential",
+                detail: "world.mutation.actor-mismatch: mutation actor does not match authenticated credential",
                 refusal: WorldFederationRefusal.SubmissionRefused,
                 stream: stream
             ).ConfigureAwait(continueOnCapturedContext: false);

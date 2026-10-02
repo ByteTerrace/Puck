@@ -548,7 +548,7 @@ pending, from any submitter, with `world.authority.stopped`, so an edit in
 flight there rolls back by name. The queue keeps nothing once its last endpoint
 is gone. Every edit carries the activation of the world whose document its base
 came from, and a world refuses one composed on another's
-(`world.mutation.activation_mismatch`), so an edit sent while a traveler's link
+(`world.mutation.activation-mismatch`), so an edit sent while a traveler's link
 has already moved on to the next world rolls back instead of landing there. The
 row doors that read a row before writing it (`world.row.add`, `.remove`, the
 literal `.set`, `.step`) and `creation.sculpt` carry it too.

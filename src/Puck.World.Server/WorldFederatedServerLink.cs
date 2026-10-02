@@ -38,7 +38,7 @@ public interface IWorldRoutedRequests {
 /// <param name="authority">The routed-request door.</param>
 public sealed class WorldFederatedServerLink(IWorldRoutedRequests authority) : IServerLink {
     /// <summary>The refusal code a mutation's completion carries when no verdict came back.</summary>
-    public const string CompletionUnavailableCode = "world.transport.completion_unavailable";
+    public const string CompletionUnavailableCode = "world.transport.completion-unavailable";
 
     private readonly IWorldRoutedRequests m_authority = authority;
     private readonly Lock m_unavailableGate = new();
