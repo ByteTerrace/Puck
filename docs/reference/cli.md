@@ -924,9 +924,14 @@ no test, skips a selected test, aborts or executes different tests between legs
 is refused. Both legs execute the same tests, and every selected test must
 finish with a passed or failed outcome. Caller Git hooks are disabled, and
 projects outside the proof tree and links in it are refused. Cancellation kills
-and waits for the active child process before cleanup. Cleanup removes the
-proof's worktree, its own registration and its temporary directory, and reports
-any removal failure; it never prunes another worktree's registration.
+and waits for the active child process before cleanup. Cleanup attempts to remove
+the proof's worktree, its own registration and its temporary directory. Git
+commands that write or remove the proof tree enable long-path support for that
+command alone, since a built tree's paths pass the Windows 260-character limit.
+Cleanup never prunes another worktree's registration. A cleanup failure is
+reported on standard error with the failed operation and scratch directory;
+files or the proof's registration may remain. Cleanup never changes the exit
+code, which reports the proof, even if standard error cannot receive the warning.
 
 ```text
 Law: BackgroundBuildLawTests (tests/Puck.Hosting.Tests/Puck.Hosting.Tests.csproj)
