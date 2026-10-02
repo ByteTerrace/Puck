@@ -11,7 +11,7 @@
         "null"
       ],
       "items": {
-        "description": "One named presentation clock: a tick clock, whose phase advances with the simulation\u0027s engine tick through a period, or a state clock, whose phase is the fractional part of a state row\u0027s presented value (an advancing row wraps once per unit).",
+        "description": "One named presentation clock: a tick clock advances with the simulation\u0027s engine tick through a period; a state clock reads the fractional part of a presented state value; a phase clock reads keys on another clock. WorldValueResolver resolves all three sources for presentation consumers.",
         "type": [
           "object",
           "null"
@@ -30,7 +30,7 @@
             "default": null
           },
           "spanSeconds": {
-            "description": "What one period reads as, in the units a key\u0027s time is authored in: a day that passes in twenty minutes and reads as twenty-four hours has a span of 24h. Absent reads as the period for a tick clock and as one for a state clock.",
+            "description": "What one period reads as, in the units a key\u0027s time is authored in: a day that passes in twenty minutes and reads as twenty-four hours has a span of 24h. Absent reads as the period for a tick clock and as one for a state or phase clock.",
             "type": [
               "number",
               "null"
@@ -51,6 +51,11 @@
               "string",
               "null"
             ],
+            "default": null
+          },
+          "phase": {
+            "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+            "description": "A phase curve keyed on another clock. Refused beside a period or state source.",
             "default": null
           }
         },

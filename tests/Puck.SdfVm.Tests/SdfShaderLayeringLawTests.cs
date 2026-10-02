@@ -6,7 +6,7 @@ namespace Puck.SdfVm.Tests;
 /// <summary>
 /// The SDF kernels' module tree (<c>src/Puck.SdfVm/Assets/Shaders/Sdf</c>) is layered, lowest first: the generated
 /// declarations (<c>isa</c>), the field interpreter (<c>field</c>), the frame's data (<c>frame</c>), the march
-/// (<c>march</c>), the surface resolve (<c>surface</c>), shading (<c>shade</c>), the debug views (<c>debug</c>), and the
+/// (<c>march</c>), the surface resolve (<c>surface</c>), shading (<c>shade</c> and <c>sky</c>), the debug views (<c>debug</c>), and the
 /// pass entry points and bodies (<c>passes</c>). A module depends only on modules of its own layer or a lower one: it
 /// includes none above it, and it uses no symbol that only a module above it declares, because an aggregator that
 /// includes a higher module first would otherwise hide the dependency. Every source lives in a layer's directory, and
@@ -47,6 +47,9 @@ public sealed partial class SdfShaderLayeringLawTests {
             ["frame/d.hlsli"] = "  #  include \"../march/e.hlsli\"\n",
             ["march/e.hlsli"] = "#include \"../passes/missing.hlsli\"\n",
             ["loose.hlsli"] = string.Empty,
+            ["sky/kinds/f.hlsli"] = "#include \"../../field/a.hlsli\"\n#include \"../../shade/g.hlsli\"\n#include \"../../debug/h.hlsli\"\n",
+            ["shade/g.hlsli"] = string.Empty,
+            ["debug/h.hlsli"] = string.Empty,
         };
 
         Assert.Equal(
@@ -55,6 +58,7 @@ public sealed partial class SdfShaderLayeringLawTests {
                 "frame/d.hlsli includes march/e.hlsli, a higher layer",
                 "loose.hlsli is in no layer",
                 "march/e.hlsli includes passes/missing.hlsli, which is not in the tree",
+                "sky/kinds/f.hlsli includes debug/h.hlsli, a higher layer",
             ]
         );
     }
@@ -179,7 +183,7 @@ public sealed partial class SdfShaderLayeringLawTests {
 
         return ((slash < 0)
             ? -1
-            : Array.IndexOf(array: Layers, value: path[..slash]));
+            : Array.IndexOf(array: Layers, value: ((path[..slash] == "sky") ? "shade" : path[..slash])));
     }
     // An include's target relative to the tree's root: DXC resolves a quoted include against the including file's
     // directory, and the build passes no include directory.

@@ -223,12 +223,13 @@ public static partial class PuckParser {
     }
     /// <summary>Parses an expression string into an <see cref="ExpressionNode"/>.</summary>
     /// <param name="source">The expression source text.</param>
+    /// <param name="vocabulary">The vocabulary declaring call arguments and trailing bodies, or null.</param>
     /// <returns>The parsed expression AST.</returns>
-    public static ExpressionNode ParseExpression(string source) {
+    public static ExpressionNode ParseExpression(string source, IDocumentVocabulary? vocabulary = null) {
         ArgumentNullException.ThrowIfNull(source);
         SourceLexemes.Validate(source: source);
 
-        var context = CreateContext(source: source);
+        var context = CreateContext(source: source, vocabulary: vocabulary);
 
         SkipWhiteSpace(context: context);
         var expr = ParseExpression(context: context);
@@ -1557,6 +1558,11 @@ public static partial class PuckParser {
         return new ObjectExpressionNode(Properties: properties, Offset: startOffset, Length: (cursor.Offset - startOffset), Line: line, Column: col);
     }
     private static CallExpressionNode ParseCallExpression(ParseContext context, string functionName, int startOffset, int line, int col) {
+        var bodyName = ((context as PuckParseContext)?.Vocabulary?.NameCallBody(callName: functionName));
+
+        try { return ParseCallWithBody(bodyName: bodyName, col: col, context: context, functionName: functionName, line: line, startOffset: startOffset); } catch (PuckParseException error) when ((bodyName is not null)) { error.Committed = true; throw; }
+    }
+    private static CallExpressionNode ParseCallWithBody(ParseContext context, string functionName, int startOffset, int line, int col, string? bodyName) {
         var cursor = context.Scanner.Cursor;
 
         if (!TryConsume(c: '(', context: context)) {
@@ -1602,6 +1608,23 @@ public static partial class PuckParser {
 
         if (!TryConsume(c: ')', context: context)) {
             throw CreateException(context: context, message: $"Expected ')' closing call to '{functionName}'");
+        }
+
+        if (bodyName is not null) {
+            if ((context as PuckParseContext)?.Vocabulary?.RequiresCallBody(arguments: arguments, callName: functionName) == false) {
+                return new CallExpressionNode(Arguments: arguments, Column: col, Length: (cursor.Offset - startOffset), Line: line, Name: functionName, Offset: startOffset);
+            }
+            SkipWhiteSpace(context: context);
+            if (arguments.Any(predicate: argument => (argument.Name == bodyName))) {
+                throw CreateException(context: context, message: $"'{functionName}' writes '{bodyName}' as the array after ')', not as a header argument");
+            }
+            SkipWhiteSpace(context: context);
+            if (cursor.Current != '[') {
+                throw CreateException(context: context, message: $"Expected '[' opening the '{bodyName}' body of '{functionName}'");
+            }
+            var body = ParseArrayExpression(context: context);
+
+            arguments.Add(item: new ArgumentNode(Name: bodyName, Value: body, Offset: body.Offset, Length: body.Length, Line: body.Line, Column: body.Column) { TrailingBody = true });
         }
 
         var totalLen = (cursor.Offset - startOffset);
@@ -1774,7 +1797,7 @@ public static partial class PuckParser {
             if (BrokeLine(buffer: context.Scanner.Buffer, offset: cursor.Offset) || EndsMemberValue(buffer: context.Scanner.Buffer, offset: cursor.Offset)) {
                 return parsed;
             }
-        } catch (PuckParseException error) {
+        } catch (PuckParseException error) when (!error.Committed) {
             refusal = error;
         }
 

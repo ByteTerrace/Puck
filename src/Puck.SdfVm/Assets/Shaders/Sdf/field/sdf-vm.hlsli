@@ -8,8 +8,21 @@
 
 #include "../isa/sdf-isa.hlsli"
 #include "sdf-hash.hlsli"
-// Every resource and world value the world kernels read, generated from SdfWorldInterfaces.World.
+// Generated resources for the common traversal, hit shading, shadow or sky interface selected by this pass.
+#if defined(SDF_VIEWS_PASS)
+#define SDF_LIGHTING_TABLES
+#define SDF_SKY_TABLES
+#include "../isa/sdf-views.interface.hlsli"
+#elif defined(SDF_SHADOW_PASS)
+#define SDF_LIGHTING_TABLES
+#include "../isa/sdf-shadow.interface.hlsli"
+#elif defined(SDF_SKY_PASS)
+#define SDF_LIGHTING_TABLES
+#define SDF_SKY_TABLES
+#include "../isa/sdf-sky.interface.hlsli"
+#else
 #include "../isa/sdf-world.interface.hlsli"
+#endif
 
 // The field modules, in the order the interpreter declares them: each reads only what the modules before it declare.
 #include "sdf-program.hlsli"

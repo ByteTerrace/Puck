@@ -19,12 +19,12 @@ namespace Puck.World;
 /// sanctioned entry point for (de)serializing a <see cref="WorldDefinition"/>. Source-gen (not runtime reflection) keeps
 /// the load/save boundary trimming/AOT-clean; every row type in the document graph rejects an unmapped member by
 /// default (<c>UnmappedMemberHandling = Disallow</c> below) — an authoring typo or a stale field fails loud, by name
-/// and by row type, rather than vanishing silently. The one carve-out is <see cref="WorldDefinition"/>'s own root:
+/// and by row type, rather than vanishing silently. <see cref="WorldDefinition"/>'s own root is one carve-out:
 /// its <see cref="WorldDefinition.Extensions"/> property carries <c>[JsonExtensionData]</c>, which STJ always prefers
 /// over the ambient Disallow default — an unmapped top-level member still round-trips into that bag and is judged by
 /// <see cref="DocumentExtensionsPolicy"/> instead (a reserved '$'/'_' prefix passes; any
-/// other key is a validator rejection). Nothing else in the graph carries that attribute, so every nested row is
-/// unconditionally strict. Every enum the document graph carries declares its own strict by-name
+/// other key is a validator rejection). <see cref="WorldSectionKey.Values"/> is the other: the preparation pass
+/// checks its partial record against the owning section's model before admitting it. Every enum declares strict by-name
 /// conversion (writes the exact declared member name, refuses a numeric token on read) at the enum's OWN
 /// declaration via <c>[JsonConverter(typeof(StrictEnumConverter&lt;TEnum&gt;))]</c> (<see cref="Puck.Physics.Motion.BodyMotionOp"/>,
 /// <see cref="IntentSource"/>, <see cref="WorldContactRequirement"/>, <see cref="Puck.Physics.Motion.ActionFact"/>,
@@ -46,6 +46,12 @@ namespace Puck.World;
 /// document-authored grant reads the same compact <c>world.grant</c> tokens rather than a raw field object.
 /// </summary>
 [JsonSerializable(typeof(WorldDefinition))]
+[JsonSerializable(typeof(WorldKeys<BindableColor>))]
+[JsonSerializable(typeof(WorldKeys<BindableScalar>))]
+[JsonSerializable(typeof(WorldKeys<BindableVector2>))]
+[JsonSerializable(typeof(WorldKeys<BindableVector3>))]
+[JsonSerializable(typeof(WorldKeys<BindableDirection>))]
+[JsonSerializable(typeof(BindableAngle))]
 [JsonSerializable(typeof(CellValueJsonConverter.IntShape))]
 [JsonSerializable(typeof(CellValueJsonConverter.FixedShape))]
 [JsonSerializable(typeof(CellValueJsonConverter.BoolShape))]
@@ -162,6 +168,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldRenderSkyLayer.SunDisc), TypeInfoPropertyName = "WorldRenderSkyLayerSunDisc")]
 [JsonSerializable(typeof(WorldRenderSkyLayer.Stars), TypeInfoPropertyName = "WorldRenderSkyLayerStars")]
 [JsonSerializable(typeof(WorldRenderSkyLayer.Clouds), TypeInfoPropertyName = "WorldRenderSkyLayerClouds")]
+[JsonSerializable(typeof(WorldRenderSkyLayer.Noise), TypeInfoPropertyName = "WorldRenderSkyLayerNoise")]
 [JsonSerializable(typeof(WorldCameraAnchorCandidate))]
 [JsonSerializable(typeof(WorldLookCue))]
 [JsonSerializable(typeof(WorldHudFrameCandidate))]
@@ -347,8 +354,7 @@ namespace Puck.World;
     // document. There is no third state any more, which is the point.
     RespectRequiredConstructorParameters = true,
     // The context-wide default: an unmapped member on ANY row in the graph is a hard parse failure, not a silent
-    // drop. WorldDefinition's [JsonExtensionData] root carve-out (see the type doc above) is the only exception —
-    // STJ routes a root-level unmapped member there regardless of this setting.
+    // drop. Extension bags on the root and section keys instead go through their own model-aware admission gates.
     UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
     WriteIndented = true
 )]

@@ -103,7 +103,7 @@ bool worldUseFastAmbientOcclusion() {
 // beyond the four the normal already takes, and the enrichment carries a divide, so both hang off this one predicate
 // rather than an arithmetic *0 that DXC's DXIL backend does not fold away.
 bool worldCurvatureShadingEnabled() {
-    return (max(worldCurvatureCavity(), max(worldCurvatureRim(), worldCurvatureInk())) > 0.0);
+    return passGroup.curvatureEnabled != 0u;
 }
 // The soft-shadow grid-cull A/B lever (the sdf.shadowcull verb): 0 (the default) = on, the grid-gathered shadow-ray march;
 // 1 = off, the flat all-instances march, the ground-truth reference the cull matches.

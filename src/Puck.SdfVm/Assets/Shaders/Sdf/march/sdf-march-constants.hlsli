@@ -60,15 +60,13 @@ static const int PrimaryRefineSteps = 8;
 // WorldTileSize / TileEmpty / worldTileIndex live in sdf-tile.hlsli.
 
 // Shading weights of the world's one directional-sun-plus-hemisphere model. The ambient base, its hemisphere
-// gradient, the sun weight and the fog density are environment lanes (SdfEnvironment) so a world can author them;
-// their pinned values live on as SdfEnvironment.Default. The fog density's pinned value lives on as
-// SdfEnvironment.DefaultFogDensity.
+// gradient, the sun weight and the fog density are resolved lighting values (SdfLighting) so a world can author them;
+// their pinned values live on as SdfLighting.Default. The fog density's pinned value lives on as
+// SdfLighting.DefaultFogDensity.
 // An unbound screen's face: dark glass with nothing behind it, tinted faintly by the sun.
 static const float3 ScreenGlassColor = float3(0.02, 0.025, 0.03);
 static const float ScreenGlassBase = 0.85;
 static const float ScreenGlassSunTint = 0.15;
-// Keeps a screen light's inverse-square attenuation finite for a surface point on the emitter's own face.
-static const float ScreenLightMinDistanceSquared = 1.0e-4;
 // One 8-bit display code: a silhouette's sky blend weighing less than it changes no displayed pixel.
 static const float DisplayCode = (1.0 / 255.0);
 // world.debug-view evals calibration: the ramp saturates at this many tallied field evaluations. Worst case for a single
@@ -104,8 +102,10 @@ static const float FastShadowMaxDistance = 5.0;
 // The shadow-cull gather's cone (see sdfShadowGather): the half-slope of the cone whose occluders the gather must
 // contain for the shadow march to be sound. The march's samples read the field within the penumbra band about the
 // ray, so every occluder that can lower the estimate lies inside three penumbra half-slopes with margin; a wider cone
-// is always a superset, only less selective. SdfEnvironment.MaxPenumbraSlope keeps the chord below one.
+// is always a superset, only less selective. SdfLighting.MaxPenumbraSlope keeps the chord below one.
+#ifdef SDF_SHADOW_PASS
 float worldShadowPenumbraChord() { return (3.0 * worldShadowPenumbraSlope()); }
+#endif
 
 // Per-pixel query tally for world.debug-view evals, including primary local-part marches and shading probes.
 // Call sites in the march, the normals and the occlusion count their queries; the interpreter does not. This per-thread

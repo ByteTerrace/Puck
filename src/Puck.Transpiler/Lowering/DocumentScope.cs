@@ -27,6 +27,15 @@ public interface IDocumentVocabulary {
     /// <param name="positionalIndex">The argument's 0-based position.</param>
     /// <returns>The key, or <see langword="null"/> to fall back to the positional <c>arg&lt;n&gt;</c> spelling.</returns>
     string? NameCallArgument(string callName, int positionalIndex);
+    /// <summary>Names the trailing array argument of a call whose body is written after its closing parenthesis.</summary>
+    /// <param name="callName">The call's name.</param>
+    /// <returns>The body argument's name, or null for a call without a trailing array.</returns>
+    string? NameCallBody(string callName) => null;
+    /// <summary>Whether a header selects a described trailing-body call even when its body is missing.</summary>
+    /// <param name="callName">The call's name.</param>
+    /// <param name="arguments">The parsed header arguments.</param>
+    /// <returns>Whether the missing body is a syntax error; false allows an ordinary call with another header.</returns>
+    bool RequiresCallBody(string callName, IReadOnlyList<ArgumentNode> arguments) => true;
     /// <summary>Returns whether the given identifier introduces an embedded language block (e.g. <c>sql { ... }</c>) for this vocabulary.</summary>
     /// <param name="identifier">The block identifier.</param>
     /// <returns><c>true</c> if the block should be parsed as raw embedded source rather than standard DSL statements.</returns>

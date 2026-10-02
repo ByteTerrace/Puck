@@ -161,6 +161,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // The registration name each camera renders under per seat, resolved once, so a probe polling a seat-relative
     // camera's view every frame allocates no name.
     private readonly WorldViewRegistrationNames m_registrationNames = new();
+
+    private readonly WorldRenderSettings m_renderSettings;
+
     private readonly HashSet<string> m_parkedViews = new(comparer: StringComparer.Ordinal);
     // Reused scratch for ReconcileCameras (the registered names snapshot walked while m_cameraViews mutates).
     private readonly List<string> m_cameraReconcileScratch = new();
@@ -192,6 +195,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// <param name="instanceHost">The process's running world instances — a session-sourced face's resolved
     /// destination instance is found or started here.</param>
     /// <param name="roster">The player roster — resolves a seat to its bound camera device.</param>
+    /// <param name="settings">The host's live presentation levers, shared by every session view.</param>
     /// <param name="renderProbe">The render probe each offscreen view's GPU work is registered with while the view
     /// is registered, so <c>world.counters gpu</c> reports it; <see langword="null"/> when nothing reads it (a headless
     /// boot).</param>
@@ -200,7 +204,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// <param name="producers">The image producers the host registers beside the four the engine ships, or
     /// <see langword="null"/> for none; each must match a shape in <see cref="WorldImageProducerVocabulary"/>.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<WorldOverlayFacts> facts, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null) {
+    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<WorldOverlayFacts> facts, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldRenderSettings settings, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null) {
         ArgumentNullException.ThrowIfNull(argument: screens);
         m_renderProbe = renderProbe;
         ArgumentNullException.ThrowIfNull(argument: machines);
@@ -214,6 +218,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         ArgumentNullException.ThrowIfNull(argument: facts);
         ArgumentNullException.ThrowIfNull(argument: instanceHost);
         ArgumentNullException.ThrowIfNull(argument: roster);
+        ArgumentNullException.ThrowIfNull(argument: settings);
 
         m_machines = machines;
         m_cameraCapture = cameraCapture;
@@ -231,6 +236,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         m_hostsOnDirectX = hostsOnDirectX;
         m_instanceHost = instanceHost;
         m_roster = roster;
+        m_renderSettings = settings;
         // Windows-10240 guarded because DirectXGpuSurfaceExportFactory is platform-attributed; hostsOnDirectX already
         // implies that floor (Program.cs rejects the D3D12 backend below it), so the check only satisfies the analyzer.
         m_exportsSurfaces = (hostsOnDirectX && OperatingSystem.IsWindowsVersionAtLeast(

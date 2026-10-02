@@ -120,7 +120,8 @@ internal sealed partial class WorldScreenBinder {
     private void RegisterSessionView(SessionFeed feed) {
         var emitter = new WorldSessionSceneEmitter(
             mirror: feed.Mirror,
-            effectiveCameraName: feed.EffectiveCamera
+            effectiveCameraName: feed.EffectiveCamera,
+            settings: m_renderSettings
         );
         var frameSource = new SdfCompositionFrameSource(
             dresser: emitter,

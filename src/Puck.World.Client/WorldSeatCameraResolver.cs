@@ -3,11 +3,12 @@ using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
 
-/// <summary>Pure camera math shared by the seat-owned local and traveling view paths.</summary>
+/// <summary>Pure orientation math shared by seat-owned camera paths and the sky frame.</summary>
 internal static class WorldSeatCameraResolver {
     /// <summary>The shortest arc carrying world up to <paramref name="up"/>, or identity when they already agree.</summary>
     /// <remarks>Both the seat camera's boom and the movement composition ride this, so what the player pushes and
-    /// what the player sees are laid onto the surface by the SAME rotation and cannot disagree.</remarks>
+    /// what the player sees are laid onto the surface by the SAME rotation and cannot disagree. The authored sky
+    /// frame uses this same shortest-arc and antipodal-axis convention.</remarks>
     /// <param name="up">A unit up axis.</param>
     /// <returns>The aligning rotation.</returns>
     public static Quaternion AlignUp(Vector3 up) {

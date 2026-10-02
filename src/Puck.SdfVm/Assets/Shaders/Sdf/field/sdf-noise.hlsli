@@ -1,6 +1,11 @@
 // The deterministic hashes' noise and dither: the R2 dither, value, lattice and cellular noise.
 #ifndef FIELD_SDF_NOISE_HLSLI
 #define FIELD_SDF_NOISE_HLSLI
+// The R2 low-discrepancy lattice: alpha_i = round(2^32 / phi2^i) for the plastic number
+// phi2 = 1.32471795724474602596 (the real root of x^3 = x + 1). The uint multiply wraps mod 2^32, which IS the
+// fractional part of the additive recurrence — so the lattice is exact in fixed point.
+#define SDF_R2_ALPHA1 3242174889u
+#define SDF_R2_ALPHA2 2447445414u
 // One R2 dither sample in [0, 1] from integer pixel coordinates: a "blue-ish" low-discrepancy pattern the volumes jitter
 // their samples with, the same sequence the display encode dithers its quantization with (display-encode.frag.hlsl in
 // Puck.Shaders). Fixed-point, so both backends compute the IDENTICAL pattern (a float frac(x/phi2 + y/phi2^2) would
@@ -63,6 +68,23 @@ float sdfLatticeNoise3(float3 q, uint seed) {
 float sdfPeriodicNoise3(float3 q, uint seed) {
     return sdfValueNoise3Cells(q, sdfLatticeSeeds(seed), (SDF_NOISE_PERIOD_CELLS - 1u));
 }
+// The same normalized sum for the signed 3D periodic lattice. Preserve its [-1, 1] range; callers own shaping.
+// Each octave executes the existing eight-corner sample once and counts those eight integer hashes.
+// Reduce finite coordinates before integer conversion and each octave; signed remainders preserve local rounding.
+float sdfPeriodicFbm3(float3 p, uint seed, uint octaves, inout uint hashes) {
+    p = fmod(p, (float)SDF_NOISE_PERIOD_CELLS);
+    float value = 0.0;
+    float amplitude = 0.5;
+    float normalization = 0.0;
+    [loop] for (uint octave = 0u; octave < octaves; octave++) {
+        value += amplitude * sdfPeriodicNoise3(p, seed + octave);
+        hashes += 8u;
+        normalization += amplitude;
+        p = fmod(p * 2.0 + 17.0, (float)SDF_NOISE_PERIOD_CELLS);
+        amplitude *= 0.5;
+    }
+    return normalization > 0.0 ? value / normalization : 0.0;
+}
 // The two-dimensional periodic lattice the sky's cloud layer reads: one sdfPcg3d per corner, the seed in its third
 // stream, quintic-smoothed bilinear blend, output in [0, 1].
 float sdfPeriodicNoise2(float2 p, uint seed) {
@@ -77,6 +99,22 @@ float sdfPeriodicNoise2(float2 p, uint seed) {
     float d = ((float)sdfPcg3d(uint3(next.x, next.y, seed)).x * SDF_INV_2POW32);
 
     return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+}
+// Periodic 2D fractal sum shared by sky and media. Integer lacunarity preserves the base lattice's period.
+// The caller chooses its bounded octave count; every lattice sample executes exactly four integer hashes.
+float sdfPeriodicFbm2(float2 p, uint seed, uint octaves, inout uint hashes) {
+    p = fmod(p, (float)SDF_NOISE_PERIOD_CELLS);
+    float value = 0.0;
+    float amplitude = 0.5;
+    float normalization = 0.0;
+    [loop] for (uint octave = 0u; octave < octaves; octave++) {
+        value += amplitude * sdfPeriodicNoise2(p, seed + octave);
+        hashes += 4u;
+        normalization += amplitude;
+        p = fmod(p * 2.0 + 17.0, (float)SDF_NOISE_PERIOD_CELLS);
+        amplitude *= 0.5;
+    }
+    return normalization > 0.0 ? value / normalization : 0.0;
 }
 // Exact 27-cell Worley field within SdfCellDisplacement's mode-specific randomness bounds.
 // KEEP IN SYNC with SdfFieldEvaluator.Cells.cs: PCG streams, top 16 bits, and z/y/x visit order.

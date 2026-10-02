@@ -162,6 +162,7 @@ internal sealed partial class WorldScreenBinder {
             ),
             name: name,
             transforms: source.MovedTransforms,
+            timeline: scene.TimelineWork,
             work: residency.Work
         );
         Console.Error.WriteLine(value: $"[world.view: '{scene.Endpoint.Identity}' is shown here; its seats and windows render that world's scene]");

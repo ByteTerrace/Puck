@@ -94,6 +94,7 @@ internal static class GenerateCommand {
             new GeneratedInclude(Generate: SdfIsaHlsl.Generate, Path: $"src/Puck.SdfVm/Assets/Shaders/Sdf/isa/{SdfIsaHlsl.FileName}"),
             new GeneratedInclude(Generate: () => SdfIsaHlsl.GenerateFingerprintSource(fingerprint: fingerprint), Path: SdfIsaHlsl.FingerprintSourcePath),
             new GeneratedInclude(Generate: ShaderCompiler.GenerateBuildRecipe, Path: ShaderCompiler.BuildRecipePath),
+            .. SkyGenerate.Outputs(),
             .. owned.Values,
         ];
     }

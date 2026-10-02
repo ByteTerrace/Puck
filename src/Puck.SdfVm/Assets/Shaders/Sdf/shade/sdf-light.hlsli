@@ -4,10 +4,14 @@
 // terms after the shade, and the attenuations into one factor on the reflected light.
 #ifndef SHADE_SDF_LIGHT_HLSLI
 #define SHADE_SDF_LIGHT_HLSLI
-#ifdef SDF_VIEWS_PASS
+#include "sdf-material-response.hlsli"
+#if defined(SDF_VIEWS_PASS) || defined(SDF_SKY_PASS)
 
 // A bound screen's area light, outside the generated SDF_LIGHT_* kinds, which name the environment's.
 static const uint SdfLightScreen = 0x100u;
+// The room glow's inverse-square softening and finite receiver/emitter coincidence bound.
+static const float ScreenLightFalloff = 0.28;
+static const float ScreenLightMinDistanceSquared = 1.0e-4;
 
 struct SdfLight {
     uint kind;
@@ -25,7 +29,7 @@ struct SdfLight {
 };
 
 // The surface a light answers at: its point, lit normal and camera ray, its material, its ambient occlusion (a wrapped
-// material's already relaxed toward 1), the key light's shadow visibility, and the environment's scales.
+// material's already relaxed toward 1), and the key light's shadow visibility.
 struct SdfShadeSurface {
     float3 position;
     float3 normal;
@@ -33,8 +37,6 @@ struct SdfShadeSurface {
     SdfMaterialData material;
     float ambientOcclusion;
     float keyVisibility;
-    float sunScale;
-    float ambientScale;
 };
 
 // What one light adds at a surface: its diffuse term, its specular lobe and its rim brighten, and the factor it scales
@@ -44,12 +46,19 @@ struct SdfLightResponse {
     float3 specular;
     float3 rim;
     float attenuation;
+    // Direction and radiance before the receiver's Lambert term, in the surface's world frame.
+    float3 towardLight;
+    float3 weightedColor;
+    // A hemisphere contributes ambient once. A nonzero directed light may add cloud self-shadow and lining.
+    bool ambient;
+    bool directed;
 };
 
+#ifdef SDF_LIGHTING_TABLES
 // The lights the stage walks: the environment's, then one slot per screen up to the highest bound one while screen
 // lights are on.
 uint sdfLightCount() {
-    uint count = worldLightCount();
+    uint count = (lightFrame[0].Count);
 #ifdef SDF_SCREEN_SOURCES
     if (!worldScreenLightsDisabled()) {
         count += screenLightLoopBound();
@@ -61,19 +70,19 @@ uint sdfLightCount() {
 bool sdfLightAt(uint index, out SdfLight light) {
     light = (SdfLight)0;
 
-    uint environmentCount = worldLightCount();
+    uint environmentCount = (lightFrame[0].Count);
 
     if (index < environmentCount) {
-        SdfEnvLight environment = worldLight(index);
+        SdfLightData environment = lights[index];
 
-        light.kind = environment.kind;
-        light.color = environment.color;
-        light.weight = environment.weight;
-        light.position = (((environment.kind == SDF_LIGHT_POINT) || (environment.kind == SDF_LIGHT_OCCLUDER))
+        light.kind = environment.Kind;
+        light.color = environment.Color;
+        light.weight = environment.Weight;
+        light.position = (((environment.Kind == SDF_LIGHT_POINT) || (environment.Kind == SDF_LIGHT_OCCLUDER))
             ? worldPointLightPosition(environment)
-            : environment.direction);
-        light.param = environment.param;
-        light.key = ((int)index == worldShadowLightIndex());
+            : environment.Direction);
+        light.param = environment.Parameter;
+        light.key = ((int)index == (lightFrame[0].ShadowIndex));
 
         return true;
     }
@@ -99,6 +108,8 @@ bool sdfLightAt(uint index, out SdfLight light) {
     return false;
 #endif
 }
+#endif
+
 // What `light` adds at `surface`:
 // - a directional its wrapped Lambert term under the key light's visibility when it is the shadow light and under ambient
 //   occlusion otherwise, scaled by the sun scale;
@@ -116,6 +127,10 @@ SdfLightResponse sdfLightResponse(SdfLight light, SdfShadeSurface surface) {
     response.specular = float3(0.0, 0.0, 0.0);
     response.rim = float3(0.0, 0.0, 0.0);
     response.attenuation = 1.0;
+    response.towardLight = 0.0;
+    response.weightedColor = 0.0;
+    response.ambient = false;
+    response.directed = false;
 
     float3 normal = surface.normal;
 
@@ -123,11 +138,15 @@ SdfLightResponse sdfLightResponse(SdfLight light, SdfShadeSurface surface) {
         float lambert = sdfWrapDiffuse(dot(normal, light.position), surface.material.wrap);
         float occlusion = (light.key ? surface.keyVisibility : surface.ambientOcclusion);
 
-        response.diffuse = (light.color * (((light.weight * lambert) * occlusion) * surface.sunScale));
+        response.diffuse = (light.color * ((light.weight * lambert) * occlusion));
+        response.towardLight = light.position;
+        response.weightedColor = (light.color * (light.weight * occlusion));
+        response.directed = any(response.weightedColor != 0.0);
     } else if (light.kind == SDF_LIGHT_HEMISPHERE) {
         float ambient = (light.weight + (light.param * normal.y));
 
-        response.diffuse = (light.color * ((ambient * surface.ambientScale) * surface.ambientOcclusion));
+        response.diffuse = (light.color * (ambient * surface.ambientOcclusion));
+        response.ambient = true;
     } else if (light.kind == SDF_LIGHT_POINT) {
         float3 toLight = (light.position - surface.position);
         float pointDistance = length(toLight);
@@ -137,6 +156,9 @@ SdfLightResponse sdfLightResponse(SdfLight light, SdfShadeSurface surface) {
         float pointLambert = sdfWrapDiffuse(dot(normal, pointDirection), surface.material.wrap);
 
         response.diffuse = (light.color * ((pointFalloff * pointLambert) * surface.ambientOcclusion));
+        response.towardLight = pointDirection;
+        response.weightedColor = (light.color * (pointFalloff * surface.ambientOcclusion));
+        response.directed = any(response.weightedColor != 0.0);
         response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, pointDirection, (pointFalloff * surface.ambientOcclusion)));
     } else if (light.kind == SDF_LIGHT_RIM) {
         response.rim = ((light.weight * light.color) * pow((1.0 - saturate(dot(normal, -surface.rayDirection))), light.param));
@@ -157,6 +179,9 @@ SdfLightResponse sdfLightResponse(SdfLight light, SdfShadeSurface surface) {
         float attenuation = (1.0 / (1.0 + (ScreenLightFalloff * distanceSquared)));
 
         response.diffuse = (light.color * ((light.weight * facing) * attenuation));
+        response.towardLight = lightDirection;
+        response.weightedColor = (light.color * ((light.weight * saturate(dot(light.facing, -lightDirection))) * attenuation));
+        response.directed = any(response.weightedColor != 0.0);
     }
 
     return response;

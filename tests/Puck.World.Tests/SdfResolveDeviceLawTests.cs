@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.Shaders;
 using Puck.Testing;
@@ -69,7 +70,7 @@ public sealed class SdfResolveDeviceLawTests {
     }
     private static (Half[] Color, uint[] Surface) Run(GpuDeviceServices services, string extension, float sharpness, uint width, uint height) {
         var parameters = SdfWorldInterfaces.ResolveParameters;
-        var block = new byte[parameters.SizeBytes];
+        var block = new byte[checked((int)((ulong)parameters.SizeBytes).AlignUp(alignment: IGpuBindings.ConstantBufferAlignment))];
 
         parameters.WriteExtent(block: block, height: height, width: width);
         void Word(string member, uint value, int lane = 0) => BinaryPrimitives.WriteUInt32LittleEndian(
@@ -104,7 +105,7 @@ public sealed class SdfResolveDeviceLawTests {
         using var module = services.ShaderModuleFactory.Create(stage: GpuShaderStage.Compute,
             bytecode: File.ReadAllBytes(path: Path.Combine(path1: SdfKernelSet.DefaultDirectory, path2: ("sdf-resolve.comp" + extension))));
         using var pipeline = services.PipelineFactory.Create(computeShaderModule: module, description: description, name: default);
-        using var frame = services.BufferFactory.CreateHostVisible(data: new byte[256], name: default, usage: GpuBufferUsage.Uniform);
+        using var frame = services.BufferFactory.CreateHostVisible(data: new byte[checked((int)IGpuBindings.ConstantBufferAlignment)], name: default, usage: GpuBufferUsage.Uniform);
         using var constants = services.BufferFactory.CreateHostVisible(data: block, name: default, usage: GpuBufferUsage.Uniform);
         using var visibility = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: records.AsSpan()), usage: GpuBufferUsage.Storage, name: default);
         using var bounds = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: new uint[] { 0, 0, 2, 6 }.AsSpan()), usage: GpuBufferUsage.Storage, name: default);

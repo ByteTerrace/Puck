@@ -257,6 +257,8 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
             routing: CommandRouting.Immediate
         );
 
+        foreach (var verb in SkyVerbs()) { yield return verb; }
+
         foreach (var verb in PlacementVerbs()) {
             yield return verb;
         }

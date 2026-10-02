@@ -403,7 +403,10 @@ public sealed record ArgumentNode(
     Length,
     Line,
     Column
-);
+) {
+    /// <summary>Whether this argument is the vocabulary-declared array body written after the call's closing parenthesis.</summary>
+    public bool TrailingBody { get; init; }
+}
 /// <summary>A binary operator expression: <c>left op right</c>.</summary>
 /// <param name="Left">The left-hand expression.</param>
 /// <param name="Operator">The operator token ('+', '-', '*', '/', '==', '!=', '&gt;=', etc.).</param>

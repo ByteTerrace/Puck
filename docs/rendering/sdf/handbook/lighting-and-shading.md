@@ -140,7 +140,7 @@ occluders just beside the ray. A wider cone is always safe (a superset can't
 drop a needed occluder); too narrow leaks light. The chord is three penumbra
 half-slopes, `worldShadowPenumbraChord()` (`march/sdf-march-constants.hlsli`) `= 3 * worldShadowPenumbraSlope()`
 (`frame/sdf-lights.hlsli`): every occluder that can lower the estimate lies inside that
-cone with margin. `SdfEnvironment.MaxPenumbraSlope` keeps the chord below one.
+cone with margin. `SdfLighting.MaxPenumbraSlope` keeps the chord below one.
 
 **When the gather wins and when it doesn't** is a clean story about density:
 
@@ -189,7 +189,11 @@ specular lobe (a point light's own), a rim brighten, and a factor on reflected
 light (an occluder's dimming). The stage sums each kind of term over the walk
 and adds each total once, so the order the terms combine in is the walk's. No other kernel source branches on a light's
 kind, which `SdfLightInterfaceLawTests` holds, so a new kind is one branch of
-that function.
+that function. The response also exposes its direction and radiance before the
+receiver's Lambert term, plus whether it supplies ambient illumination. Cloud
+lighting can use those terms without reimplementing light kinds. Material response
+math lives in the resource-free `shade/sdf-material-response.hlsli`; reading an
+authored material from the program remains in `shade/sdf-material.hlsli`.
 
 ## Screen lights and the CRT treatment
 
@@ -211,9 +215,8 @@ room, one of the lights the views pass walks. Its position and orientation come 
 color is the per-frame average of what it's displaying—so a screen showing a
 green field spills green onto the wall beside it. A `dot(screenNormal, −L)` gate
 enforces "light through the glass": a screen only lights what sits in front of
-its face, never behind it. `SdfFrame.AmbientScale` and `SunScale` can dim the
-ambient and sun terms so the diegetic glow dominates; no `Puck.World` host sets
-them, so both stay at 1.
+its face, never behind it. Author the other lights' intensities to let the
+diegetic glow dominate.
 
 ## The shadow-proxy switch uses the union hull
 

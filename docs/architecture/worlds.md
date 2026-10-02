@@ -705,7 +705,7 @@ drive ends, each one no observer holds ends, so nothing its recorded viewer pres
 A joined-world projection renders the destination from the destination's own delivered snapshots and
 its own measured clock, never through the host's presentation clock—independently scheduled or
 remote worlds do not share a presentation coordinate. It lights the destination under the
-destination's own sky and lighting, along its `render.cycle` when it authors one, and its sky clock
+destination's own sky and lighting, including typed clock keys, and its sky clock
 (star twinkle, cloud drift) is the destination's delivered engine tick. Its view renders at a
 session screen's reduced quality (`WorldSessionSceneEmitter.ReducedQuality`: no soft shadows, no
 ambient occlusion, no far bound). A nested screen inside a projected destination binds dark: the

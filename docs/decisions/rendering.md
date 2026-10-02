@@ -531,10 +531,11 @@ N seats cost N instances' passes rather than one dispatch whose Z dimension is
 N, and the counted work shows that cost. Layered views return only if the
 counts call for them.
 
-**`SdfEnvironment` folds into the generated frame block.** A separate
-environment packing is a second hand-kept layout beside the frame data, and
-generating the frame block removed the three hand-written copies of each field
-(P14-7).
+**Sky and lighting layouts are generated from native records.** Resolved
+values retain their integer and floating-point types. Their changed-word
+regions bind only to consuming passes; camera and traversal controls stay in
+the generated pass block. C# records generate both the shader fields and their
+layout identity, so there is no separate hand-written row decoder.
 
 **Temporal reconstruction is Puck's own complete implementation.** The Steam
 Deck floor needs render scale to be cheap without looking cheap, and SDF

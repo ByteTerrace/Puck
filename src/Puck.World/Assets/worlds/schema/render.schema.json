@@ -51,66 +51,1171 @@
       "default": null
     },
     "lighting": {
-      "$ref": "./common.schema.json#/$defs/WorldRenderLighting",
       "description": "The scene\u0027s directional sun and ambient term. Optional, and every field within it is optional individually \u2014 an absent section, or an absent field within it, resolves to SdfFrame\u0027s pinned default for that field, so a world renders unchanged until it authors one.",
-      "default": null
-    },
-    "sky": {
-      "$ref": "./common.schema.json#/$defs/WorldRenderSky",
-      "description": "The procedural sky \u2014 a gradient, sun disc, star field, and distance fog. Optional; an absent section renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed.",
-      "default": null
-    },
-    "cycle": {
-      "description": "Lighting and sky keyed over a state row\u0027s value (a day/night cycle when that row advances). Optional; absent leaves Lighting/Sky static.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "state": {
-          "description": "The state row read (its slot cell; Fixed or Int).",
-          "type": "string"
-        },
-        "keys": {
-          "description": "At least two keys, strictly ascending At in [0, 1).",
-          "type": "array",
+        "lights": {
+          "description": "The lights, at most SdfLighting.MaxLights, in slot order. Section keys address an existing row by its authored name. At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
-            "description": "One point on a WorldRenderCycle.",
+            "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its resolved values in SdfLighting.",
             "type": [
               "object",
               "null"
             ],
-            "properties": {
-              "at": {
-                "description": "The row-value fraction this key sits at, in [0, 1).",
-                "type": "number"
-              },
-              "lighting": {
-                "$ref": "./common.schema.json#/$defs/WorldRenderLighting",
-                "description": "The lighting fields this key moves, or null.",
-                "default": null
-              },
-              "sky": {
-                "$ref": "./common.schema.json#/$defs/WorldRenderSky",
-                "description": "The sky fields this key moves, or null.",
-                "default": null
-              }
-            },
             "required": [
-              "at"
+              "$type"
             ],
-            "additionalProperties": false,
-            "title": "WorldRenderCycleKey"
-          }
+            "anyOf": [
+              {
+                "description": "A Lambert directional light.",
+                "properties": {
+                  "$type": {
+                    "const": "directional"
+                  },
+                  "direction": {
+                    "$ref": "./common.schema.json#/$defs/BindableDirectionNonNullable",
+                    "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload). Absent is the pinned sun direction.",
+                    "default": null
+                  },
+                  "color": {
+                    "$ref": "./common.schema.json#/$defs/BindableColorNonNullable",
+                    "description": "The light\u0027s linear colour.",
+                    "default": null
+                  },
+                  "weight": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The diffuse weight. Absent is the pinned sun weight.",
+                    "default": null
+                  },
+                  "angularRadius": {
+                    "description": "The light\u0027s angular radius in radians, in [0, atan 0.3]: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.",
+                    "default": null,
+                    "title": "BindableAngle",
+                    "allOf": [
+                      {
+                        "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable"
+                      }
+                    ]
+                  },
+                  "shadows": {
+                    "description": "Whether this light drives the soft-shadow march (at most one light per world). Absent is false. An unshadowed directional is scaled by ambient occlusion instead.",
+                    "type": [
+                      "boolean",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "name": {
+                    "description": "The authored row identity used by section keys and source-preserving edits.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false,
+                "title": "WorldRenderLightDirectional"
+              },
+              {
+                "description": "A hemisphere ambient: a floor plus a gradient on the surface normal\u0027s Y (sky above, darker below), scaled by ambient occlusion.",
+                "properties": {
+                  "$type": {
+                    "const": "hemisphere"
+                  },
+                  "color": {
+                    "$ref": "./common.schema.json#/$defs/BindableColorNonNullable",
+                    "description": "The ambient\u0027s linear colour.",
+                    "default": null
+                  },
+                  "base": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The floor. Absent is the pinned ambient floor.",
+                    "default": null
+                  },
+                  "gradient": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The hemisphere gradient. Absent is the pinned gradient.",
+                    "default": null
+                  },
+                  "name": {
+                    "description": "The authored row identity used by section keys and source-preserving edits.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false,
+                "title": "WorldRenderLightHemisphere"
+              },
+              {
+                "description": "A view-dependent silhouette brighten: weight \u00B7 color \u00B7 pow(1 \u2212 saturate(dot(normal, \u2212rayDirection)), power), added after the material shade.",
+                "properties": {
+                  "$type": {
+                    "const": "rim"
+                  },
+                  "color": {
+                    "$ref": "./common.schema.json#/$defs/BindableColorNonNullable",
+                    "description": "The rim\u0027s linear colour.",
+                    "default": null
+                  },
+                  "weight": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The strength. Absent is zero, which adds nothing.",
+                    "default": null
+                  },
+                  "power": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The falloff exponent \u2014 larger confines the highlight nearer the silhouette. Absent is the engine default.",
+                    "default": null
+                  },
+                  "name": {
+                    "description": "The authored row identity used by section keys and source-preserving edits.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false,
+                "title": "WorldRenderLightRim"
+              },
+              {
+                "description": "A point light with inverse-square falloff and a soft core: intensity = weight / (1 \u002B (distance / radius)^2). No shadow march in v1 \u2014 a point light never occludes and is never occluded.",
+                "properties": {
+                  "$type": {
+                    "const": "point"
+                  },
+                  "position": {
+                    "$ref": "./common.schema.json#/$defs/BindableVector3NonNullable",
+                    "description": "The world-space position for a static (unanchored) light. Absent is the world origin. An offset in the anchor frame when an anchor is authored.",
+                    "default": null
+                  },
+                  "radius": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The falloff radius. Absent is the engine default.",
+                    "default": null
+                  },
+                  "anchor": {
+                    "$ref": "./common.schema.json#/$defs/WorldAnchor",
+                    "description": "An entity, entity part, or placement frame. A missing live target disables the light.",
+                    "default": null
+                  },
+                  "color": {
+                    "$ref": "./common.schema.json#/$defs/BindableColorNonNullable",
+                    "description": "The light\u0027s linear colour.",
+                    "default": null
+                  },
+                  "weight": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The strength. Absent is the engine default.",
+                    "default": null
+                  },
+                  "name": {
+                    "description": "The authored row identity used by section keys and source-preserving edits.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false,
+                "title": "WorldRenderLightPoint"
+              },
+              {
+                "description": "A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.",
+                "properties": {
+                  "$type": {
+                    "const": "occluder"
+                  },
+                  "position": {
+                    "$ref": "./common.schema.json#/$defs/BindableVector3NonNullable",
+                    "default": null
+                  },
+                  "radius": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "default": null
+                  },
+                  "anchor": {
+                    "$ref": "./common.schema.json#/$defs/WorldAnchor",
+                    "default": null
+                  },
+                  "weight": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "default": null
+                  },
+                  "name": {
+                    "description": "The authored row identity used by section keys and source-preserving edits.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false,
+                "title": "WorldRenderLightOccluder"
+              }
+            ],
+            "title": "WorldRenderLight"
+          },
+          "default": null
+        },
+        "curvature": {
+          "description": "The stylized curvature enrichment \u2014 cavity darkening, curvature rim light, and an ink outline. Optional; absent (and all-zero) shades exactly as a world that declares none.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "cavity": {
+              "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+              "description": "How far a concave crease darkens, in [0, 1] at a cavity whose curvature reaches InkLow. Zero darkens none.",
+              "default": null
+            },
+            "rim": {
+              "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+              "description": "How far a convex ridge brightens, in [0, 1] at a ridge whose curvature reaches InkLow. Zero brightens none.",
+              "default": null
+            },
+            "ink": {
+              "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+              "description": "The ink outline\u0027s strength where the curvature magnitude spikes. Zero draws none.",
+              "default": null
+            },
+            "inkLow": {
+              "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+              "description": "The curvature magnitude (1 / fillet radius, in world units) at which the outline starts and the ridge and cavity terms saturate.",
+              "default": null
+            },
+            "inkHigh": {
+              "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+              "description": "The curvature magnitude at which the outline saturates.",
+              "default": null
+            },
+            "inkColor": {
+              "$ref": "./common.schema.json#/$defs/BindableColorNonNullable",
+              "description": "BindableColor\u0027s grammar: the outline colour.",
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderCurvature"
+        },
+        "keys": {
+          "$ref": "./common.schema.json#/$defs/WorldSectionKeys",
+          "description": "Named partial-record keys for this lighting section."
         }
       },
-      "required": [
-        "state",
-        "keys"
-      ],
       "additionalProperties": false,
       "default": null,
-      "title": "WorldRenderCycle"
+      "title": "WorldRenderLighting"
+    },
+    "sky": {
+      "description": "The procedural sky \u2014 a gradient, sun disc, star field, and distance fog. Optional; an absent section renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "layers": {
+          "description": "The layers.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "One sky layer. The $type string is the JSON discriminator.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "$type"
+            ],
+            "anyOf": [
+              {
+                "description": "The colour gradient over elevation: piecewise-linear between stops, clamped to the end stops.",
+                "properties": {
+                  "$type": {
+                    "const": "gradient"
+                  },
+                  "stops": {
+                    "description": "Two to SdfLighting.MaxSkyStops stops, strictly ascending in elevation. A section key moves a stop by its authored name and may not add or remove one.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "description": "One gradient stop.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "elevation": {
+                          "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                          "description": "The direction\u0027s Y component this stop sits at, in [\u22121, 1].",
+                          "default": null
+                        },
+                        "color": {
+                          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable",
+                          "description": "BindableColor\u0027s grammar: the colour at this elevation. A gradient\u0027s authored stops require a color; omitted partial-record key leaves carry through the wrap.",
+                          "default": null
+                        },
+                        "name": {
+                          "description": "The authored stop identity used by section keys.",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false,
+                      "title": "WorldRenderSkyStop"
+                    },
+                    "default": null
+                  },
+                  "name": {
+                    "description": "The authored row identity used by section keys and source-preserving edits.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "blend": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyBlend",
+                    "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers."
+                  },
+                  "mask": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyMask",
+                    "description": "The optional directional mask, evaluated before any kind-specific work."
+                  },
+                  "transform": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyTransform",
+                    "description": "The layer\u0027s orientation inside the sky frame."
+                  },
+                  "clock": {
+                    "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "opacity": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample."
+                  },
+                  "visibility": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyVisibility",
+                    "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed."
+                  },
+                  "tier": {
+                    "$ref": "./common.schema.json#/$defs/QualityTier",
+                    "description": "The lowest quality tier at which the layer draws. Structural, never keyed."
+                  }
+                },
+                "additionalProperties": false,
+                "title": "WorldRenderSkyLayerGradient"
+              },
+              {
+                "description": "The exponential distance fog fading toward the sky gradient.",
+                "properties": {
+                  "$type": {
+                    "const": "fog"
+                  },
+                  "density": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The density per world unit. Absent is the pinned density.",
+                    "default": null
+                  },
+                  "name": {
+                    "description": "The authored row identity used by section keys and source-preserving edits.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "blend": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyBlend",
+                    "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers."
+                  },
+                  "mask": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyMask",
+                    "description": "The optional directional mask, evaluated before any kind-specific work."
+                  },
+                  "transform": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyTransform",
+                    "description": "The layer\u0027s orientation inside the sky frame."
+                  },
+                  "clock": {
+                    "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "opacity": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample."
+                  },
+                  "visibility": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyVisibility",
+                    "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed."
+                  },
+                  "tier": {
+                    "$ref": "./common.schema.json#/$defs/QualityTier",
+                    "description": "The lowest quality tier at which the layer draws. Structural, never keyed."
+                  }
+                },
+                "additionalProperties": false,
+                "title": "WorldRenderSkyLayerFog"
+              },
+              {
+                "description": "The visible sun disc \u2014 an additive highlight about one directional light\u0027s direction.",
+                "properties": {
+                  "$type": {
+                    "const": "sunDisc"
+                  },
+                  "light": {
+                    "description": "The Lights slot of a directional light. Absent is the shadow light, or the first directional when none shadows.",
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "radius": {
+                    "description": "The disc\u0027s angular half-radius in radians, in (0, \u03C0/2]. Absent is the engine default.",
+                    "default": null,
+                    "title": "BindableAngle",
+                    "allOf": [
+                      {
+                        "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable"
+                      }
+                    ]
+                  },
+                  "intensity": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The peak additive brightness. Absent is zero, which draws nothing.",
+                    "default": null
+                  },
+                  "name": {
+                    "description": "The authored row identity used by section keys and source-preserving edits.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "blend": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyBlend",
+                    "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers."
+                  },
+                  "mask": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyMask",
+                    "description": "The optional directional mask, evaluated before any kind-specific work."
+                  },
+                  "transform": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyTransform",
+                    "description": "The layer\u0027s orientation inside the sky frame."
+                  },
+                  "clock": {
+                    "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "opacity": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample."
+                  },
+                  "visibility": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyVisibility",
+                    "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed."
+                  },
+                  "tier": {
+                    "$ref": "./common.schema.json#/$defs/QualityTier",
+                    "description": "The lowest quality tier at which the layer draws. Structural, never keyed."
+                  }
+                },
+                "additionalProperties": false,
+                "title": "WorldRenderSkyLayerSunDisc"
+              },
+              {
+                "description": "The procedural star field: a deterministic per-cell hash over an octahedral sky projection.",
+                "properties": {
+                  "$type": {
+                    "const": "stars"
+                  },
+                  "density": {
+                    "description": "The star grid\u0027s cell count per octahedral axis. Absent is the engine default.",
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "brightness": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The peak per-star brightness. Absent is zero, which draws nothing.",
+                    "default": null
+                  },
+                  "seed": {
+                    "description": "The hash seed folded into every cell.",
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "twinkle": {
+                    "description": "Scintillation for a share of the stars. Optional; absent twinkles none.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "share": {
+                        "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                        "description": "The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.",
+                        "default": null
+                      },
+                      "depth": {
+                        "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                        "description": "How far a twinkling star dips below its steady brightness, in [0, 1].",
+                        "default": null
+                      },
+                      "rate": {
+                        "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                        "description": "The fundamental scintillation rate in hertz.",
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false,
+                    "default": null,
+                    "title": "WorldRenderSkyTwinkle"
+                  },
+                  "sparsity": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The fraction of lattice cells containing a star, in [0, 1]. Absent is 0.08."
+                  },
+                  "inset": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The star center\u0027s minimum distance from a cell wall, in [0, 0.5] cells. Absent is 0.3."
+                  },
+                  "radiusFraction": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The peak angular radius as a fraction of the cell\u0027s angular pitch. Absent is 0.12."
+                  },
+                  "luminosityFloor": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The faintest luminosity as a fraction of the peak, in (0, 1]. Absent is 0.125."
+                  },
+                  "radiusFloor": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The faintest radius as a fraction of the peak radius, in [0, 1]. Absent is 0.6."
+                  },
+                  "spectrum": {
+                    "description": "Seven linear RGB spectrum colors, from warm to cool. Absent retains the established seven-color star palette; the spectrum\u0027s colors may bind or key, but its count is structural.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
+                    }
+                  },
+                  "name": {
+                    "description": "The authored row identity used by section keys and source-preserving edits.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "blend": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyBlend",
+                    "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers."
+                  },
+                  "mask": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyMask",
+                    "description": "The optional directional mask, evaluated before any kind-specific work."
+                  },
+                  "transform": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyTransform",
+                    "description": "The layer\u0027s orientation inside the sky frame."
+                  },
+                  "clock": {
+                    "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "opacity": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample."
+                  },
+                  "visibility": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyVisibility",
+                    "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed."
+                  },
+                  "tier": {
+                    "$ref": "./common.schema.json#/$defs/QualityTier",
+                    "description": "The lowest quality tier at which the layer draws. Structural, never keyed."
+                  }
+                },
+                "additionalProperties": false,
+                "title": "WorldRenderSkyLayerStars"
+              },
+              {
+                "description": "The procedural cloud layer: a deterministic hashed-lattice noise on a plane above the camera, thresholded by coverage, drawn over the gradient, stars and sun disc and fading into the horizon.",
+                "properties": {
+                  "$type": {
+                    "const": "clouds"
+                  },
+                  "coverage": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The fraction of the sky the layer covers, in [0, 1]. Absent is zero.",
+                    "default": null
+                  },
+                  "softness": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The width of a cloud\u0027s edge, in (0, 1]. Absent is the engine default.",
+                    "default": null
+                  },
+                  "scale": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The size of one cloud cell in layer units (the layer sits at unit height). Absent is the engine default.",
+                    "default": null
+                  },
+                  "seed": {
+                    "description": "The hash seed folded into the lattice.",
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "color": {
+                    "$ref": "./common.schema.json#/$defs/BindableColorNonNullable",
+                    "description": "BindableColor\u0027s grammar: the cloud colour. Absent is white.",
+                    "default": null
+                  },
+                  "drift": {
+                    "$ref": "./common.schema.json#/$defs/BindableVector2NonNullable",
+                    "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Absent holds still.",
+                    "default": null
+                  },
+                  "spin": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The layer\u0027s rotation about the zenith in radians per second; positive is counter-clockwise seen from below. Absent is none.",
+                    "default": null
+                  },
+                  "curl": {
+                    "description": "The Coriolis twist in radians at 45\u00B0 elevation, falling off toward the horizon and the zenith. Positive winds counter-clockwise. Absent is none.",
+                    "default": null,
+                    "title": "BindableAngle",
+                    "allOf": [
+                      {
+                        "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable"
+                      }
+                    ]
+                  },
+                  "shear": {
+                    "$ref": "./common.schema.json#/$defs/BindableVector2NonNullable",
+                    "description": "The wind of the shaping field relative to the cloud field, in layer units per second. Absent holds the shapes.",
+                    "default": null
+                  },
+                  "domeRadius": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The dome center\u0027s depth below the viewer, in layer units with unit height overhead. Absent is 6."
+                  },
+                  "warp": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The shaping field\u0027s displacement of the density field, in cells. Absent is 0.6."
+                  },
+                  "height": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The heightfield rise per unit thickness, in cells. Absent is 0.7."
+                  },
+                  "normalTap": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The positive normal and self-shadow sample spacing, in cells. Absent is 0.18."
+                  },
+                  "selfShadow": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The darkening from a taller light-facing neighbor, in [0, 1]. Absent is 0.6."
+                  },
+                  "silverLining": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The strength of each light\u0027s thin-edge highlight. Absent is 0.5."
+                  },
+                  "extinction": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The extinction per unit thickness. Zero is transparent; absent is 3.5."
+                  },
+                  "horizonFade": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The positive local Y-direction interval over which coverage fades at the horizon, at most one. Absent is 0.05."
+                  },
+                  "ambientFloor": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The fraction of color lit by the supplied ambient field, in [0, 1]. Absent is 0.45."
+                  },
+                  "silverExponent": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The forward highlight exponent. Absent is 8."
+                  },
+                  "name": {
+                    "description": "The authored row identity used by section keys and source-preserving edits.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "blend": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyBlend",
+                    "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers."
+                  },
+                  "mask": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyMask",
+                    "description": "The optional directional mask, evaluated before any kind-specific work."
+                  },
+                  "transform": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyTransform",
+                    "description": "The layer\u0027s orientation inside the sky frame."
+                  },
+                  "clock": {
+                    "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "opacity": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample."
+                  },
+                  "visibility": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyVisibility",
+                    "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed."
+                  },
+                  "tier": {
+                    "$ref": "./common.schema.json#/$defs/QualityTier",
+                    "description": "The lowest quality tier at which the layer draws. Structural, never keyed."
+                  }
+                },
+                "additionalProperties": false,
+                "title": "WorldRenderSkyLayerClouds"
+              },
+              {
+                "description": "A seamless directional noise field colored between two endpoints. Its shared periodic lattice returns a signed fractal sum; contrast and bias map that sum into the saturated color interval once.",
+                "properties": {
+                  "$type": {
+                    "const": "noise"
+                  },
+                  "colorLow": {
+                    "$ref": "./common.schema.json#/$defs/BindableColorNonNullable",
+                    "description": "The low endpoint. Absent is black.",
+                    "default": null
+                  },
+                  "colorHigh": {
+                    "$ref": "./common.schema.json#/$defs/BindableColorNonNullable",
+                    "description": "The high endpoint. Absent is white.",
+                    "default": null
+                  },
+                  "intensity": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The nonnegative emission gain. Absent is one; zero performs no noise work.",
+                    "default": null
+                  },
+                  "scale": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The positive size of a lattice cell in direction space. Absent is one.",
+                    "default": null
+                  },
+                  "offset": {
+                    "$ref": "./common.schema.json#/$defs/BindableVector3NonNullable",
+                    "description": "The finite lattice offset, in cells. Absent is zero.",
+                    "default": null
+                  },
+                  "seed": {
+                    "description": "The exact 32-bit lattice seed. Absent is zero.",
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "octaves": {
+                    "description": "One to eight authored octaves. Absent is four; low quality admits at most three.",
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "contrast": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The finite signed-noise multiplier. Absent is one half.",
+                    "default": null
+                  },
+                  "bias": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The finite color-interval offset. Absent is one half.",
+                    "default": null
+                  },
+                  "name": {
+                    "description": "The authored row identity used by section keys and source-preserving edits.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "blend": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyBlend",
+                    "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers."
+                  },
+                  "mask": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyMask",
+                    "description": "The optional directional mask, evaluated before any kind-specific work."
+                  },
+                  "transform": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyTransform",
+                    "description": "The layer\u0027s orientation inside the sky frame."
+                  },
+                  "clock": {
+                    "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "opacity": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample."
+                  },
+                  "visibility": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyVisibility",
+                    "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed."
+                  },
+                  "tier": {
+                    "$ref": "./common.schema.json#/$defs/QualityTier",
+                    "description": "The lowest quality tier at which the layer draws. Structural, never keyed."
+                  }
+                },
+                "additionalProperties": false,
+                "title": "WorldRenderSkyLayerNoise"
+              },
+              {
+                "description": "A painted checker field on the shared octahedral direction projection. The common layer transform rotates the pattern; this kind adds no private orientation or noise source.",
+                "properties": {
+                  "$type": {
+                    "const": "pattern"
+                  },
+                  "checker": {
+                    "description": "The checker grid. Absent uses 24 cells per projected axis.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "cells": {
+                        "description": "The positive number of cells on each octahedral projection axis. Absent is 24.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false,
+                    "default": null,
+                    "title": "WorldSkyChecker"
+                  },
+                  "colors": {
+                    "description": "Exactly two colors. Absent is black and white.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "default": null,
+                    "items": {
+                      "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
+                    }
+                  },
+                  "intensity": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The nonnegative emission gain. Absent is one.",
+                    "default": null
+                  },
+                  "offset": {
+                    "$ref": "./common.schema.json#/$defs/BindableVector2NonNullable",
+                    "description": "The finite checker offset, in cells. Absent is zero.",
+                    "default": null
+                  },
+                  "name": {
+                    "description": "The authored row identity used by section keys and source-preserving edits.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "blend": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyBlend",
+                    "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers."
+                  },
+                  "mask": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyMask",
+                    "description": "The optional directional mask, evaluated before any kind-specific work."
+                  },
+                  "transform": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyTransform",
+                    "description": "The layer\u0027s orientation inside the sky frame."
+                  },
+                  "clock": {
+                    "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "opacity": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample."
+                  },
+                  "visibility": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyVisibility",
+                    "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed."
+                  },
+                  "tier": {
+                    "$ref": "./common.schema.json#/$defs/QualityTier",
+                    "description": "The lowest quality tier at which the layer draws. Structural, never keyed."
+                  }
+                },
+                "additionalProperties": false,
+                "title": "WorldRenderSkyLayerPattern"
+              },
+              {
+                "description": "Emissive curtains formed by narrow ridges of the shared directional noise. The height scale stretches those ridges vertically; the common mask chooses the visible elevation band.",
+                "properties": {
+                  "$type": {
+                    "const": "aurora"
+                  },
+                  "color": {
+                    "$ref": "./common.schema.json#/$defs/BindableColorNonNullable",
+                    "description": "The curtain color. Absent is white.",
+                    "default": null
+                  },
+                  "intensity": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The nonnegative emission gain. Absent is one; zero performs no noise work.",
+                    "default": null
+                  },
+                  "offset": {
+                    "$ref": "./common.schema.json#/$defs/BindableVector3NonNullable",
+                    "description": "The finite noise offset in cells. Absent is zero.",
+                    "default": null
+                  },
+                  "scale": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The positive noise-cell size in direction space. Absent is 0.15.",
+                    "default": null
+                  },
+                  "width": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The positive signed-noise distance from the ridge center to its edge. Absent is 0.18.",
+                    "default": null
+                  },
+                  "sharpness": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The positive ridge exponent. Absent is two.",
+                    "default": null
+                  },
+                  "heightScale": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The nonnegative vertical noise scale. Absent is 0.15.",
+                    "default": null
+                  },
+                  "bias": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The ridge center in the signed noise interval [-1, 1]. Absent is zero.",
+                    "default": null
+                  },
+                  "seed": {
+                    "description": "The exact 32-bit lattice seed. Absent is zero.",
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "octaves": {
+                    "description": "One to eight authored octaves. Absent is four; low quality admits one.",
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "name": {
+                    "description": "The authored row identity used by section keys and source-preserving edits.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "blend": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyBlend",
+                    "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers."
+                  },
+                  "mask": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyMask",
+                    "description": "The optional directional mask, evaluated before any kind-specific work."
+                  },
+                  "transform": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyTransform",
+                    "description": "The layer\u0027s orientation inside the sky frame."
+                  },
+                  "clock": {
+                    "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "opacity": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample."
+                  },
+                  "visibility": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyVisibility",
+                    "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed."
+                  },
+                  "tier": {
+                    "$ref": "./common.schema.json#/$defs/QualityTier",
+                    "description": "The lowest quality tier at which the layer draws. Structural, never keyed."
+                  }
+                },
+                "additionalProperties": false,
+                "title": "WorldRenderSkyLayerAurora"
+              },
+              {
+                "description": "An equirectangular frame sampled by direction. It uses the same producer, camera and probe sources as other world frame consumers, with longitude wrapping and latitude clamping at the poles.",
+                "properties": {
+                  "$type": {
+                    "const": "panorama"
+                  },
+                  "source": {
+                    "$ref": "./common.schema.json#/$defs/WorldFrameSource",
+                    "description": "The existing frame source; its output remains owned and leased by the ordinary source instance."
+                  },
+                  "tint": {
+                    "$ref": "./common.schema.json#/$defs/BindableColorNonNullable",
+                    "description": "The linear RGB multiplier. Absent is white.",
+                    "default": null
+                  },
+                  "intensity": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The nonnegative emission gain. Absent is one; zero performs no texture loads.",
+                    "default": null
+                  },
+                  "filter": {
+                    "description": "Nearest or linear filtering. Absent is linear.",
+                    "enum": [
+                      "Nearest",
+                      "Linear",
+                      null
+                    ],
+                    "default": null,
+                    "title": "GpuSamplerFilter"
+                  },
+                  "name": {
+                    "description": "The authored row identity used by section keys and source-preserving edits.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "blend": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyBlend",
+                    "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers."
+                  },
+                  "mask": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyMask",
+                    "description": "The optional directional mask, evaluated before any kind-specific work."
+                  },
+                  "transform": {
+                    "$ref": "./common.schema.json#/$defs/WorldSkyTransform",
+                    "description": "The layer\u0027s orientation inside the sky frame."
+                  },
+                  "clock": {
+                    "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "opacity": {
+                    "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                    "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample."
+                  },
+                  "visibility": {
+                    "$ref": "./common.schema.json#/$defs/SdfSkyVisibility",
+                    "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed."
+                  },
+                  "tier": {
+                    "$ref": "./common.schema.json#/$defs/QualityTier",
+                    "description": "The lowest quality tier at which the layer draws. Structural, never keyed."
+                  }
+                },
+                "required": [
+                  "source"
+                ],
+                "additionalProperties": false,
+                "title": "WorldRenderSkyLayerPanorama"
+              }
+            ],
+            "title": "WorldRenderSkyLayer"
+          },
+          "default": null
+        },
+        "frame": {
+          "description": "The shared sky orientation. Absent aligns the sky\u0027s up axis with world \u002BY.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "up": {
+              "$ref": "./common.schema.json#/$defs/BindableDirectionNonNullable",
+              "description": "The finite nonzero up direction. Absent uses world \u002BY.",
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "title": "WorldSkyFrame"
+        },
+        "quality": {
+          "$ref": "./common.schema.json#/$defs/QualityTier",
+          "description": "The authored sky tier before a session override. An absent value retains full evaluation fidelity."
+        },
+        "keys": {
+          "$ref": "./common.schema.json#/$defs/WorldSectionKeys",
+          "description": "Named partial-record keys for this sky section."
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldRenderSky"
     },
     "environment": {
       "description": "The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.",
@@ -120,7 +1225,7 @@
       ],
       "properties": {
         "softboxes": {
-          "description": "The reflection softboxes, at most SdfEnvironment.MaxSoftboxes. Absent or empty contributes nothing.",
+          "description": "The reflection softboxes, at most SdfLighting.MaxSoftboxes. Absent or empty contributes nothing.",
           "type": [
             "array",
             "null"
@@ -133,37 +1238,34 @@
             ],
             "properties": {
               "direction": {
-                "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                "$ref": "./common.schema.json#/$defs/BindableDirectionNonNullable",
                 "description": "From a reflecting surface toward the softbox, any nonzero length (normalized before upload)."
               },
               "size": {
-                "$ref": "./common.schema.json#/$defs/DocumentVector2",
+                "$ref": "./common.schema.json#/$defs/BindableVector2NonNullable",
                 "description": "The angular half-extent (width, height) the falloff widens by, both strictly positive."
               },
               "color": {
+                "$ref": "./common.schema.json#/$defs/BindableColorNonNullable",
                 "description": "BindableColor\u0027s grammar: the softbox\u0027s linear colour. Absent is white.",
-                "default": null,
-                "title": "BindableColor",
+                "default": null
+              },
+              "weight": {
+                "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                "description": "The strength. Absent is 1.",
+                "default": null
+              },
+              "blur": {
+                "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2",
+                "description": "Additional falloff softening, in the same units as Size. Absent is 0.",
+                "default": null
+              },
+              "name": {
+                "description": "The authored softbox identity used by section keys.",
                 "type": [
                   "string",
                   "null"
                 ]
-              },
-              "weight": {
-                "description": "The strength. Absent is 1.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
-              },
-              "blur": {
-                "description": "Additional falloff softening, in the same units as Size. Absent is 0.",
-                "type": [
-                  "number",
-                  "null"
-                ],
-                "default": null
               }
             },
             "required": [
@@ -183,27 +1285,23 @@
           ],
           "properties": {
             "low": {
+              "$ref": "./common.schema.json#/$defs/BindableColorNonNullable",
               "description": "The ground-ward (direction.y = \u22121) colour. Absent is black.",
-              "default": null,
-              "title": "BindableColor",
-              "type": [
-                "string",
-                "null"
-              ]
+              "default": null
             },
             "high": {
+              "$ref": "./common.schema.json#/$defs/BindableColorNonNullable",
               "description": "The sky-ward (direction.y = 1) colour. Absent is black.",
-              "default": null,
-              "title": "BindableColor",
-              "type": [
-                "string",
-                "null"
-              ]
+              "default": null
             }
           },
           "additionalProperties": false,
           "default": null,
           "title": "WorldRenderHorizon"
+        },
+        "keys": {
+          "$ref": "./common.schema.json#/$defs/WorldSectionKeys",
+          "description": "Named partial-record keys for this reflection environment."
         }
       },
       "additionalProperties": false,
@@ -227,6 +1325,10 @@
         "null"
       ],
       "default": null
+    },
+    "keys": {
+      "$ref": "./common.schema.json#/$defs/WorldSectionKeys",
+      "description": "Named partial-record keys, compiled to ordinary typed values when the definition is prepared."
     }
   },
   "additionalProperties": false,

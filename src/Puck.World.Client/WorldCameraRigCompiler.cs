@@ -44,8 +44,8 @@ public static class WorldCameraRigCompiler {
             // A bound angle has no authored position to narrate; its literal (or the rest angle) stands in.
             return ((orbit.PivotOffset?.Value ?? Vector3.Zero) + OrbitRig.Offset(
                 distance: orbit.Distance,
-                pitch: (orbit.Pitch.Literal ?? 0f),
-                yaw: (orbit.Yaw.Literal ?? 0f)
+                pitch: (orbit.Pitch.Value.Literal ?? 0f),
+                yaw: (orbit.Yaw.Value.Literal ?? 0f)
             ));
         }
 
@@ -169,9 +169,9 @@ public static class WorldCameraRigCompiler {
         }
     }
 
-    // One per-frame scalar slot's source: the authored binding whose mirror slot it reads (null for none), or the
-    // group-spread widening an offset op's pullback applies. Exactly one arm is live per slot.
-    private readonly record struct ScalarSource(StateBinding? Binding, float Fallback, float SpreadPullback);
+    // One evaluator slot's source: a scalar or angle resolved by the shared value resolver, or the group-spread
+    // widening an offset op's pullback applies. Exactly one arm is live per slot; literals need no live slot.
+    private readonly record struct ScalarSource(BindableScalar? Scalar, BindableAngle? Angle, float Fallback, float SpreadPullback);
     // One per-frame subject slot's source — an authored subject other than the program's own reference pose.
     private readonly record struct SubjectSource(WorldCameraSubject Subject);
     // The authored-to-IR walk. Programs are keyed by authored name so a blend that reaches the same program twice
@@ -227,24 +227,27 @@ public static class WorldCameraRigCompiler {
             return null;
         }
         private SdfCameraScalar Scalar(BindableScalar scalar, float fallback) {
-            if (scalar.State is not { } binding) {
-                return SdfCameraScalar.FromLiteral(value: (((scalar.Literal is { } literal) && float.IsFinite(f: literal))
-                    ? literal
-                    : fallback));
+            if ((scalar.Keys is null) && (scalar.State is null)) {
+                return SdfCameraScalar.FromLiteral(value: (((scalar.Literal is { } literal) && float.IsFinite(f: literal)) ? literal : fallback));
             }
-
             var slot = ScalarSources.Count;
 
             ScalarSources.Add(item: new ScalarSource(
-                Binding: binding,
+                Angle: null,
                 Fallback: fallback,
+                Scalar: scalar,
                 SpreadPullback: 0f
             ));
+            return SdfCameraScalar.FromSlot(fallback: fallback, slot: slot);
+        }
+        private SdfCameraScalar Angle(BindableAngle angle, float fallback) {
+            if ((angle.Value.Keys is null) && (angle.Value.State is null)) {
+                return SdfCameraScalar.FromLiteral(value: (((angle.Value.Literal is { } literal) && float.IsFinite(f: literal)) ? literal : fallback));
+            }
+            var slot = ScalarSources.Count;
 
-            return SdfCameraScalar.FromSlot(
-                fallback: fallback,
-                slot: slot
-            );
+            ScalarSources.Add(item: new ScalarSource(Angle: angle, Fallback: fallback, Scalar: null, SpreadPullback: 0f));
+            return SdfCameraScalar.FromSlot(fallback: fallback, slot: slot);
         }
         private SdfCameraScalar SpreadScale(float pullback) {
             if (pullback == 0f) {
@@ -254,8 +257,9 @@ public static class WorldCameraRigCompiler {
             var slot = ScalarSources.Count;
 
             ScalarSources.Add(item: new ScalarSource(
-                Binding: null,
+                Angle: null,
                 Fallback: 1f,
+                Scalar: null,
                 SpreadPullback: pullback
             ));
 
@@ -308,14 +312,14 @@ public static class WorldCameraRigCompiler {
                         operations.Add(item: new SdfCameraOp.Orbit(
                             AppliesLook: interactive,
                             Distance: SdfCameraScalar.FromLiteral(value: orbit.Distance),
-                            Pitch: Scalar(
+                            Pitch: Angle(
                                 fallback: 0f,
-                                scalar: orbit.Pitch
+                                angle: orbit.Pitch
                             ),
                             PivotOffset: (orbit.PivotOffset?.Value ?? Vector3.Zero),
-                            Yaw: Scalar(
+                            Yaw: Angle(
                                 fallback: 0f,
-                                scalar: orbit.Yaw
+                                angle: orbit.Yaw
                             )
                         ));
 
@@ -364,9 +368,9 @@ public static class WorldCameraRigCompiler {
 
                         break;
                     case WorldCameraProgramOp.FieldOfView fov:
-                        operations.Add(item: new SdfCameraOp.Fov(FieldOfViewRadians: Scalar(
+                        operations.Add(item: new SdfCameraOp.Fov(FieldOfViewRadians: Angle(
                             fallback: OrbitRig.DefaultFieldOfViewRadians,
-                            scalar: fov.FieldOfViewRadians
+                            angle: fov.FieldOfViewRadians
                         )));
 
                         break;
@@ -496,21 +500,9 @@ public static class WorldCameraRigCompiler {
             for (var index = 0; (index < m_scalarSources.Count); index++) {
                 var source = m_scalarSources[index];
 
-                scalars[index] = ((source.Binding is { } binding)
-                    ? (m_mirror.TryNumber(
-                        slot: m_mirror.SlotOf(
-                            binding: in binding,
-                            conversion: WorldStateConversion.Number
-                        ),
-                        value: out var bound
-                    )
-                        ? bound
-                        : source.Fallback)
-                    : (1f + (source.SpreadPullback * MathF.Max(
-                        x: Spread,
-                        y: 0f
-                    )))
-                );
+                scalars[index] = ((source.Scalar is { } scalar) ? (float)m_mirror.Values.Scalar(scalar, source.Fallback)
+                    : ((source.Angle is { } angle) ? (float)m_mirror.Values.Angle(angle, source.Fallback)
+                    : (1f + (source.SpreadPullback * MathF.Max(x: Spread, y: 0f)))));
             }
 
             var subjects = m_rig.Subjects;

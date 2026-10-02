@@ -11,6 +11,11 @@ certification status. Incomplete calibration never turns work units into cycles.
 
 ## Command modules
 
+`world.timeline` reports each named clock's source and span. Tick clocks include
+their exact period and start in engine ticks; phase clocks name the clock their
+keys read. Both use the shared presentation resolver for the phase and reading
+at the authority's completed tick. State clocks identify their source row.
+
 This project owns `IWorldConsoleAuthority` (resolves the `WorldInstance` a
 console invocation addresses) and the server-only command modules
 [`Puck.World`](../Puck.World/README.md) composes: `world.grant`/`.revoke`/`.grants`/

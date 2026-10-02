@@ -134,6 +134,8 @@ public static partial class WorldSessionLevers {
             }
         );
 
+        RegisterSky(settings: settings, sink: sink);
+
         return sink;
     }
 }

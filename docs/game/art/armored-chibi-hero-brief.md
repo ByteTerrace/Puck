@@ -114,7 +114,7 @@ These are implementation entry points inspected while preparing this brief, not 
 | Existing humanoid content example; inspect and validate before reuse | [adventurer.creation.json](../../examples/creations/adventurer.creation.json) |
 | Existing studio district for staging | [studio.world.json](../../../src/Puck.World/Assets/worlds/modules/studio.world.json) |
 | Production world integration | [puck.world.json](../../../src/Puck.World/Assets/worlds/puck.world.json) |
-| Shared material and lighting implementation | [SdfMaterial](../../../src/Puck.SignedDistance/SdfMaterial.cs), [sdf-material.hlsli](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-material.hlsli), [sdf-lighting.hlsli](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-lighting.hlsli) |
+| Shared material and lighting implementation | [SdfMaterial](../../../src/Puck.SignedDistance/SdfMaterial.cs), [sdf-material-response.hlsli](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-material-response.hlsli), [sdf-lighting.hlsli](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-lighting.hlsli) |
 
 Use the existing creation-look, prototype, and body appearance routes. Resolve which rows actually control the local character and mirrored appearances before changing them. Use compiler-backed references when tracing C# usage. A static statue in the studio does not prove the body-worn route works.
 

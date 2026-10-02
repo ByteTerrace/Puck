@@ -6,58 +6,39 @@ namespace Puck.World.Client;
 /// <summary>
 /// Resolves the document's authored <c>theme</c> section (<see cref="WorldDefinition.Theme"/>) against live state
 /// into the mechanism-side <see cref="OverlayThemeValues"/> Puck.Overlays reads — the theme's counterpart to
-/// <see cref="WorldRenderCycleTrack"/>: recomputed only when the definition revision moves or a
+/// <see cref="WorldEnvironmentResolve"/>: recomputed only when the definition revision moves or a
 /// <see cref="WorldStateMirror"/> slot one of its own <c>state.&lt;row&gt;</c> tokens reads changes, never for a slot
 /// some other consumer binds.
-/// <see cref="WorldThemeCapacity.ScrimMinAlpha"/> clamps every resolved scrim alpha here, unconditionally — a no-op
-/// for an already-validated literal, the actual floor enforcement for a state binding the validator could not check
-/// at boot.
+/// Constrained alphas share the presentation domain guard: admission validates their initial state and subsequent
+/// closed-bound violations clamp, including the <see cref="WorldThemeCapacity.ScrimMinAlpha"/> scrim floor.
 /// </summary>
-public sealed class WorldThemeResolve {
+public sealed partial class WorldThemeResolve {
     private ThemeReads? m_reads;
-    private int m_generation;
     private OverlayThemeValues m_resolved;
-    private int m_resolvedAt;
     private int m_resolutions;
+
     private int m_revision = -1;
+
+    /// <summary>Gets the shared domain checks and validity transitions for constrained theme fields.</summary>
+    public WorldValueDomainGuard Domains { get; } = new();
+
+    /// <summary>Creates a theme resolver whose validity transitions use the presentation diagnostic stream.</summary>
+    public WorldThemeResolve() => Domains.Transition += WorldPresentationDiagnostic.Report;
 
     // The mirror reads one resolve makes, noting every slot a bound token reads so the next frame can ask whether any
     // of them moved.
-    private sealed class ThemeReads(WorldStateMirror mirror) {
-        public List<int> Bound { get; } = [];
+    private sealed class ThemeReads(WorldStateMirror mirror, WorldDefinition definition, WorldValueDomainGuard guard) {
+        private readonly bool m_authored = (definition.ThemeRaw is not null);
+
+        public WorldValueDomainGroup Domains { get; } = new(guard, WorldPresentationValues.Of(definition: definition).Definition, "theme");
+        public WorldValueReadSet Reads { get; } = new(Mirror: mirror);
         public WorldStateMirror Mirror { get; } = mirror;
 
         public Vector4 Color(in BindableColor color, Vector4 fallback) {
-            Note(
-                binding: color.State,
-                conversion: WorldStateConversion.Color
-            );
-
-            return Mirror.Color(
-                color: in color,
-                fallback: fallback
-            );
+            return Reads.Values.Color(fallback: fallback, value: color);
         }
-        public float Scalar(in BindableScalar scalar, float fallback) {
-            Note(
-                binding: scalar.State,
-                conversion: WorldStateConversion.Number
-            );
-
-            return Mirror.Scalar(
-                fallback: fallback,
-                scalar: in scalar
-            );
-        }
-
-        private void Note(StateBinding? binding, WorldStateConversion conversion) {
-            if (binding is { } bound) {
-                Bound.Add(item: Mirror.SlotOf(
-                    binding: in bound,
-                    conversion: conversion
-                ));
-            }
-        }
+        public float Scalar(string path, in BindableScalar scalar, float fallback, WorldValueDomain domain) =>
+            (m_authored ? Domains.Scalar(path, scalar, Reads.Values, fallback, domain) : fallback);
     }
 
     private static CubicBezier ResolveBezier(WorldThemeCubicBezier bezier) => new(
@@ -168,14 +149,17 @@ public sealed class WorldThemeResolve {
             mirror: mirror
         ),
         ScrimChip: ResolveScrim(
+            path: "color.scrimChip.alpha",
             scrim: color.ScrimChip,
             mirror: mirror
         ),
         ScrimPanel: ResolveScrim(
+            path: "color.scrimPanel.alpha",
             scrim: color.ScrimPanel,
             mirror: mirror
         ),
         ScrimStrip: ResolveScrim(
+            path: "color.scrimStrip.alpha",
             scrim: color.ScrimStrip,
             mirror: mirror
         ),
@@ -213,7 +197,7 @@ public sealed class WorldThemeResolve {
         )
     );
     private static OverlayThemeValues ResolveCore(WorldDefinition definition, ThemeReads mirror) {
-        var theme = definition.Theme;
+        var theme = WorldPresentationValues.Of(definition: definition).Definition.Theme;
 
         return new OverlayThemeValues(
             Chrome: ResolveChrome(chrome: theme.Chrome),
@@ -303,12 +287,14 @@ public sealed class WorldThemeResolve {
             mirror: mirror
         ),
         BloomHaloAlpha: ResolveScalar(
+            path: "elevation.bloomHaloAlpha",
             scalar: elevation.BloomHaloAlpha,
             mirror: mirror
         ),
         BloomHaloBlur: elevation.BloomHaloBlur,
         BloomHaloSpread: elevation.BloomHaloSpread,
         BloomHeldInsetAlpha: ResolveScalar(
+            path: "elevation.bloomHeldInsetAlpha",
             scalar: elevation.BloomHeldInsetAlpha,
             mirror: mirror
         ),
@@ -319,10 +305,12 @@ public sealed class WorldThemeResolve {
             mirror: mirror
         ),
         BloomNeutralHaloAlpha: ResolveScalar(
+            path: "elevation.bloomNeutralHaloAlpha",
             scalar: elevation.BloomNeutralHaloAlpha,
             mirror: mirror
         ),
         BloomNeutralRingAlpha: ResolveScalar(
+            path: "elevation.bloomNeutralRingAlpha",
             scalar: elevation.BloomNeutralRingAlpha,
             mirror: mirror
         ),
@@ -331,6 +319,7 @@ public sealed class WorldThemeResolve {
             mirror: mirror
         ),
         BloomRingAlpha: ResolveScalar(
+            path: "elevation.bloomRingAlpha",
             scalar: elevation.BloomRingAlpha,
             mirror: mirror
         ),
@@ -388,27 +377,11 @@ public sealed class WorldThemeResolve {
         Radius2: radius.Radius2,
         Radius3: radius.Radius3
     );
-    private static float ResolveScalar(BindableScalar scalar, ThemeReads mirror) => mirror.Scalar(
-        fallback: 0f,
-        scalar: scalar
-    );
-    private static OverlayThemeValues.Scrim ResolveScrim(WorldThemeScrim scrim, ThemeReads mirror) {
-        var alpha = mirror.Scalar(
-            fallback: 0f,
-            scalar: scrim.Alpha
-        );
-
-        return new OverlayThemeValues.Scrim(
-            Alpha: MathF.Max(
-                x: alpha,
-                y: WorldThemeCapacity.ScrimMinAlpha
-            ),
-            Color: ResolveColor(
-                color: scrim.Color,
-                mirror: mirror
-            )
-        );
-    }
+    private static float ResolveScalar(string path, BindableScalar scalar, ThemeReads mirror) =>
+        mirror.Scalar(path, scalar, 0f, WorldValueDomain.Unit);
+    private static OverlayThemeValues.Scrim ResolveScrim(string path, WorldThemeScrim scrim, ThemeReads mirror) => new(
+        Alpha: mirror.Scalar(path, scrim.Alpha, WorldThemeCapacity.ScrimMinAlpha, new(WorldThemeCapacity.ScrimMinAlpha, 1d)),
+        Color: ResolveColor(color: scrim.Color, mirror: mirror));
     private static OverlayThemeValues.SpaceSet ResolveSpace(WorldThemeSpace space) => new(
         HeightBadge: space.HeightBadge,
         HeightBindBar: space.HeightBindBar,
@@ -464,43 +437,34 @@ public sealed class WorldThemeResolve {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
+        var replaced = (revision != m_revision);
+
+        if (replaced) { Domains.Reset(); }
         if (
-            (revision != m_revision) ||
+            replaced ||
             !ReferenceEquals(
             objA: m_reads?.Mirror,
             objB: mirror
         ) ||
-            (mirror.Generation != m_generation) ||
-            BoundSlotMoved()
+            m_reads!.Reads.Changed
         ) {
-            if (!ReferenceEquals(
+            if (replaced || !ReferenceEquals(
                 objA: m_reads?.Mirror,
                 objB: mirror
             )) {
-                m_reads = new ThemeReads(mirror: mirror);
+                m_reads = new ThemeReads(mirror, definition, Domains);
             }
 
-            m_reads!.Bound.Clear();
+            m_reads!.Reads.Reset();
             m_revision = revision;
             m_resolved = ResolveCore(
                 definition: definition,
                 mirror: m_reads
             );
-            m_resolvedAt = mirror.Revision;
-            m_generation = mirror.Generation;
             m_resolutions++;
         }
 
         return m_resolved;
     }
 
-    private bool BoundSlotMoved() {
-        foreach (var slot in m_reads!.Bound) {
-            if (m_reads.Mirror.Changed(slot: slot) > m_resolvedAt) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }

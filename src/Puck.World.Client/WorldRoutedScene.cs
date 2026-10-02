@@ -11,7 +11,7 @@ namespace Puck.World.Client;
 /// The scene of one endpoint's world as this presentation renders it: the endpoint's own static scene, stamp pool and
 /// population, drawn from its delivered definition and state mirror by a <see cref="WorldSessionSceneEmitter"/> over
 /// <see cref="WorldAuthorityEndpoint.Mirror"/>, the same emitter a session screen draws a destination with, which lights it
-/// under the destination's own sky and lighting (its <c>render.cycle</c> or static lanes) on the destination's own sky
+/// under the destination's own sky and lighting, including typed keys, on the destination's own sky
 /// clock. Every view of the world is a view of
 /// the scene's one frame, so they share one program and one residency, each with its own camera and quality
 /// (<see cref="SdfViewSnapshot.Quality"/>):
@@ -25,6 +25,7 @@ namespace Puck.World.Client;
 /// </summary>
 public sealed class WorldRoutedScene : ISdfFrameDresser {
     private readonly WorldSessionSceneEmitter m_emitter;
+    private readonly WorldEditorSeats? m_editor;
     private readonly Func<SdfFrame?> m_hostFrame;
     private readonly List<SdfViewSnapshot> m_views = [];
     private readonly List<WorldRoutedWindow> m_windows = [];
@@ -41,18 +42,22 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
     /// scene's frame takes; <see langword="null"/> before the first.</param>
     /// <param name="bodyColor">The color each avatar is painted with by body index: a local seat keeps the color the
     /// boot presentation paints it with.</param>
-    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor) {
+    /// <param name="settings">The host's live presentation levers, or <see langword="null"/> for authored sky quality.</param>
+    /// <param name="editor">The host's seat and world inspection state, or null for authored behavior.</param>
+    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldRenderSettings? settings = null, WorldEditorSeats? editor = null) {
         ArgumentNullException.ThrowIfNull(argument: endpoint);
         ArgumentNullException.ThrowIfNull(argument: hostFrame);
         ArgumentNullException.ThrowIfNull(argument: bodyColor);
 
         Endpoint = endpoint;
+        m_editor = editor;
         m_hostFrame = hostFrame;
         m_emitter = new WorldSessionSceneEmitter(
             bodyColor: bodyColor,
             castsAvatarShadows: true,
             effectiveCameraName: null,
-            mirror: endpoint.Mirror
+            mirror: endpoint.Mirror,
+            settings: settings
         );
         FrameSource = new SdfCompositionFrameSource(
             dresser: this,
@@ -64,6 +69,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
     public WorldAuthorityEndpoint Endpoint { get; }
     /// <summary>Gets the frame source a residency renders the scene through.</summary>
     public SdfCompositionFrameSource FrameSource { get; }
+    /// <summary>The destination's environment work, shared by all its routed views.</summary>
+    public WorldEnvironmentResolve TimelineWork => m_emitter.TimelineWork;
     /// <summary>Gets how many seat views the presenter latched into the scene this frame.</summary>
     public int ViewCount => m_views.Count;
     /// <summary>Gets how many windows are attached to the scene.</summary>
@@ -112,10 +119,20 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
 
             // The emitter's own view frames the world's default projection at a session screen's quality.
             foreach (var window in m_latchedWindows) {
-                m_dressedViews.Add(item: (window.View ?? frame.Views[0]));
+                m_dressedViews.Add(item: (window.View ?? frame.Views[0]) with { SeatSlot = window.SeatSlot });
             }
         } else if (m_dressedViews.Count == 0) {
             m_dressedViews.AddRange(collection: frame.Views);
+        }
+
+        // Session quality is live even when the last camera is retained without a current seat or window.
+        for (var index = 0; (index < m_dressedViews.Count); index++) {
+            var view = m_dressedViews[index];
+
+            m_dressedViews[index] = view with {
+                SkyQuality = frame.Views[0].SkyQuality,
+                SkyInspection = ((view.SeatSlot is { } slot) ? m_editor?.SkyOf(slot, Endpoint.Identity, Endpoint.Definition) : null),
+            };
         }
 
         if (m_hostFrame() is not { } host) {
@@ -187,8 +204,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
     }
 
     // Attaches a window after every window already attached.
-    internal WorldRoutedWindow Attach() {
-        var window = new WorldRoutedWindow(scene: this);
+    internal WorldRoutedWindow Attach(int slot) {
+        var window = new WorldRoutedWindow(scene: this, slot: slot);
 
         m_windows.Add(item: window);
 
@@ -215,8 +232,10 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
 public sealed class WorldRoutedWindow : IDisposable {
     private WorldRoutedScene? m_scene;
 
-    internal WorldRoutedWindow(WorldRoutedScene scene) => m_scene = scene;
+    internal WorldRoutedWindow(WorldRoutedScene scene, int slot) { m_scene = scene; SeatSlot = slot; }
 
+    /// <summary>The zero-based seat that owns this window's presentation inspection.</summary>
+    public int SeatSlot { get; }
     /// <summary>Gets the scene the window is a view of.</summary>
     /// <exception cref="ObjectDisposedException">The window is disposed.</exception>
     public WorldRoutedScene Scene => (m_scene ?? throw new ObjectDisposedException(objectName: nameof(WorldRoutedWindow)));

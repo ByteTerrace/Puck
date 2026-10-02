@@ -96,6 +96,21 @@ kernel ships in three compiled variants
 CoreOps also strips the remaining exotic cases. The program selects the smallest
 variant that supports its operations, reducing shader size and register pressure.
 
+Lighting's fixed native pack contains the light frame, lights, sky frame,
+gradient stops and softboxes; those CPU pack arrays hold 864 bytes. Prepared
+sky stacks add common layer rows and one typed region for each present kind,
+growing through the same upload pool when structure changes. Per-view admission
+rows retain quality and inspection choices independently of shared parameters.
+An unchanged choice rewrites no rows, and a changed view's admission affects
+only that view's cadence signature. `SdfWorldTables.LightingMemory` reports the
+actual region buffers, their common unused-record filler, CPU shadows, pack
+arrays, admission words and upload-header scratch; the residency
+exposes the same value to `world.budget`. Its GPU bytes are a subset already
+included in `TableBytes`. As with the graph's region accounting, CPU figures
+count payloads and exclude managed headers and backend allocation alignment.
+The prepared tables and admission rows do not yet replace the fixed sky shader;
+the common evaluator and ordered-run composite remain unfinished integration.
+
 The visibility record buffer (the fragment's `visibility` scratch) reserves one
 record per pixel of the view, `SdfVisibilityWords` words (`sdf-visibility.hlsli`,
 `SdfWorldPackage.VisibilityRecordByteLength`, 64 bytes). Primary traversal preserves
@@ -453,7 +468,7 @@ bytecode stale against its source or its sidecar. The recipe is
 
 The host-side law suites, `tests/Puck.SignedDistance.Tests` (ISA packing,
 Lipschitz analysis, parts, rigid leaves, the instance grid) and
-`tests/Puck.SdfVm.Tests` (kernel variants, camera programs, environment
+`tests/Puck.SdfVm.Tests` (kernel variants, camera programs, native lighting
 packing), run with `dotnet test`. `puck parity` boots the authored parity
 world offscreen on both backends and checks scheduled captures for content,
 exact state hashes, and per-tile pixel differences. The path-profile fixture

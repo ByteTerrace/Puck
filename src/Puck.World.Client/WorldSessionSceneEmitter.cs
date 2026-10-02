@@ -57,6 +57,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private readonly string? m_effectiveCameraName;
     private readonly float m_fieldOfViewRadians;
     private readonly WorldSessionMirror m_mirror;
+    private readonly WorldRenderSettings? m_settings;
     // The color each avatar is painted with: the mirror's, unless the host paints some bodies its own way.
     private readonly Func<int, Vector3> m_bodyColor;
 
@@ -120,7 +121,11 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     // The mirrored world's environment, resolved each dressed frame. The track double-buffers its output, so the frame
     // the residency holds keeps its environment through the next dress, as the boot presentation's does.
-    private readonly WorldRenderCycleTrack m_cycle = new();
+    private readonly WorldEnvironmentResolve m_environment = new();
+
+    /// <summary>The destination environment's counted timeline work.</summary>
+    public WorldEnvironmentResolve TimelineWork => m_environment;
+
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
     // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
     // interpolated (not host-supplied) positions.
@@ -142,10 +147,12 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <param name="bodyColor">The color each avatar is painted with by body index, or <see langword="null"/> for the
     /// mirror's own (<see cref="WorldSessionMirror.BodyColor"/>).</param>
     /// <param name="castsAvatarShadows">Whether avatar transforms participate in soft shadows when the host enables them.</param>
-    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false) {
+    /// <param name="settings">The host's live presentation levers, or <see langword="null"/> for authored sky quality.</param>
+    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false, WorldRenderSettings? settings = null) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
         m_mirror = mirror;
+        m_settings = settings;
         m_bodyColor = (bodyColor ?? mirror.BodyColor);
         m_bodyColors = ((bodyColor is null) ? null : new Vector3[WorldBodiesLimits.CapacityCeiling]);
         m_castsAvatarShadows = castsAvatarShadows;
@@ -365,6 +372,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
         ) {
             Quality = ReducedQuality,
+            SkyQuality = m_settings?.SkyQuality,
         };
 
         return new SdfFrame(
@@ -380,8 +388,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
             FarDistance = m_dressedFarDistance,
-            // The mirrored world's own sky and lighting, along its render.cycle when it authors one.
-            Environment = m_cycle.Resolve(
+            // The mirrored world's sky and lighting resolve on its own clocks and state.
+            Environment = m_environment.Resolve(
                 definition: m_mirror.Definition,
                 mirror: m_mirror.FollowState(),
                 revision: m_mirror.DefinitionRevision

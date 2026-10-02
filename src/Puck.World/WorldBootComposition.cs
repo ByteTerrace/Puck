@@ -58,6 +58,8 @@ public static class WorldBootComposition {
     // so world.counters can register it, and read it, before the presenter exists.
     private static WorldFramePresenter AttachTo(this WorldFramePresenter presenter, WorldRenderProbe probe) {
         probe.Transforms.Retarget(target: presenter.MovedTransforms);
+        probe.Timeline.Retarget(target: presenter.TimelineWork);
+        probe.PrimaryEnvironment = presenter.TimelineWork;
 
         return presenter;
     }
@@ -429,6 +431,7 @@ public static class WorldBootComposition {
                 // A camera is an input device seated like a pad — the binder resolves a seat to its bound device
                 // through the SAME roster every other device-aware seam reads.
                 roster: sp.GetRequiredService<PlayerRoster>(),
+                settings: sp.GetRequiredService<WorldRenderSettings>(),
                 // An offscreen host serves captures and puck parity, so every frame it produces fills external images.
                 alwaysFillsCaptures: sp.GetRequiredService<WorldHostSettings>().Offscreen,
                 // Image producers the host registers beside the four the engine ships.
@@ -1157,6 +1160,7 @@ public static class WorldBootComposition {
         // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
         services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Timeline);
         services.AddSingleton<WorldSeatViewports>();
         services.AddSingleton(implementationFactory: static sp => new WorldEditorPointer(client: sp.GetRequiredService<WorldClient>(), continuum: sp.GetRequiredService<WorldContinuum>(), presenter: sp.GetRequiredService<WorldFramePresenter>, viewports: sp.GetRequiredService<WorldSeatViewports>()));
         services.AddSingleton<MarkerStore>();
@@ -1349,6 +1353,7 @@ public static class WorldBootComposition {
         services.AddSingleton<BindingBarStore>();
         services.AddSingleton<MarkerStore>();
         services.AddSingleton<WorldThemeResolve>();
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldThemeResolve>());
         services.AddSingleton<OverlayToastStore>();
         services.AddSingleton(implementationFactory: static sp => new ConsoleInputSink(
             sessions: sp.GetRequiredService<ConsoleSessionBank>(),
@@ -1503,6 +1508,7 @@ public static class WorldBootComposition {
         // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
         services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Timeline);
 
         // The first-party puck.sdf.v1 geometry-document emitter (world.sdf.load) — a singleton so the command
         // module and the render-root factory below share the SAME instance regardless of resolution order.

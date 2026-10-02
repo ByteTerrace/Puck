@@ -1,9 +1,6 @@
 // Generic shading layers. Coordinates arrive in the winning instance frame.
 #ifndef SDF_SHADE_LAYERS_HLSLI
 #define SDF_SHADE_LAYERS_HLSLI
-float sdfWrapDiffuse(float ndotl, float wrap) {
-    return max(((ndotl + wrap) / (1.0 + wrap)), 0.0);
-}
 
 // A wide-stencil (SdfSoftenProbeEpsilon) tetrahedron field-gradient probe — the same 4-tap technique
 // calculateNormal uses, at a much larger epsilon, so fine surface detail (pores, panel seams, wear noise) is

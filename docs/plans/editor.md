@@ -465,6 +465,17 @@ instances, headroom), and the GPU pass times while
 with no argument prints the same text; the panel and the verb share one
 formatter, so the read-back and the drawing cannot disagree.
 
+The rendering plan's P18-12 extends this panel with sky inspection. Solo and
+mute selections use the existing editor addressed-world resolution and are
+keyed by seat plus stable world identity, surviving reload while the named
+layers exist. A removed name is dropped with a report. The dotted bindable
+`world.sky.solo` and `world.sky.mute` commands echo the seat's selections across
+worlds. Solo wins while retaining mutes underneath. A window into the selected
+world follows the same selection; other worlds and other seats are unchanged.
+An infinity layer is controlled as one outer layer, with the inner world's
+layers following only their own entry. Save and replay exclude these overrides.
+The panel display and complete rendering consumers remain P18-12 work.
+
 **Touches:** `Puck.Overlays` (an inspector writer), `Puck.World.Client`, the
 editor command module.
 

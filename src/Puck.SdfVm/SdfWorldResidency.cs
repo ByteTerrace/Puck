@@ -187,6 +187,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets the bytes the tables' regions hold, by the memory they live in (<see cref="SdfWorldTables.TableBytes"/>),
     /// or none before the tables are built.</summary>
     public GpuMemoryBytes TableBytes => (m_tables?.TableBytes ?? default);
+    /// <summary>Gets the native lighting tables' GPU, CPU shadow and writer payloads, or zero before tables exist.
+    /// The GPU bytes are already included in <see cref="TableBytes"/>.</summary>
+    public RenderGraphRegionMemory LightingMemory => (m_tables?.LightingMemory ?? default);
     /// <summary>Gets the mesh draws of the last captured frame, the ones the mesh region holds once the frame
     /// renders.</summary>
     public int MeshDrawCount => Volatile.Read(location: ref m_meshDrawCount);

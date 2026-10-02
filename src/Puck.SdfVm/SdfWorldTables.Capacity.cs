@@ -59,10 +59,12 @@ public sealed partial class SdfWorldTables {
     /// <returns>The pool's sizes.</returns>
     public static GpuDescriptorPoolSizes DescriptorPoolSizes(bool brickPool) {
         var sizes = default(GpuDescriptorPoolSizes);
-        var world = GpuDescriptorPoolSizes.ForGroups(groups: PipelineLayouts.World.Groups.Where(predicate: static group => (group.Ordinal == WorldGroup)).ToArray());
 
-        for (var slot = 0; (slot < FrameRingSize); slot++) {
-            sizes += world;
+        foreach (var layout in WorldGroups.Layouts) {
+            var world = GpuDescriptorPoolSizes.ForGroups(groups: layout.PipelineLayout(stages: GpuShaderStage.Compute)
+                .Groups.Where(predicate: static group => (group.Ordinal == WorldGroup)).ToArray());
+
+            for (var slot = 0; (slot < FrameRingSize); slot++) { sizes += world; }
         }
 
         if (!brickPool) {

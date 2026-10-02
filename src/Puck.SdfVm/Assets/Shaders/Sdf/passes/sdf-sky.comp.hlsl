@@ -6,13 +6,10 @@
 // later proves every tile live still runs this pass — the redundant write on a live tile's pixel is thrown away the
 // moment Stage 1 overwrites it moments later; a conditional dispatch would save nothing worth the branch.
 //
-// SHARES Stage 1's interface: SdfWorldTables builds this kernel's pipeline from sdf-world, as it builds every per-view
-// kernel's, so it binds the SAME frame and views sets Stage 1 does — no descriptor set of its own. Reads the view and the
-// environment from the pass block, bounded volumes, and the dynamic transforms their frames and optional intensity lanes
-// use. SDF_SCREEN_SOURCES is required even though this kernel never samples a screen source: the sky and screen shading
-// in shade/sdf-environment.hlsli is declared only under it. SDF_DYNAMIC_TRANSFORMS is required too: surface/sdf-shadow-gather.hlsli's
-// shadow-gather body (unconditionally compiled, unreached from this kernel's CSMain) references
-// sdfInstanceShadowSuppressed, whose declaration in field/sdf-instance-flags.hlsli is itself gated on this macro.
+// The sky interface shares the traversal resources and adds native sky and light tables. The camera remains in the pass
+// block; sky colors, stops and motion come from their typed records. Bounded volumes read their dynamic transforms and
+// optional intensity lanes. SDF_SCREEN_SOURCES exposes the shared environment shading declarations.
+#define SDF_SKY_PASS
 #define SDF_DYNAMIC_TRANSFORMS
 #define SDF_SCREEN_SOURCES
 #include "sdf-world.hlsli"

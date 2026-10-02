@@ -12,20 +12,22 @@ namespace Puck.Shaders;
 /// <param name="Kind">What the member is.</param>
 /// <param name="Type">The value type of a <see cref="ShaderInterfaceMemberKind.Value"/>, the element type of an
 /// <see cref="ShaderInterfaceMemberKind.Array"/>, the texel type an image reads as, or the element type of a structured
-/// buffer; <see langword="null"/> for a raw buffer or a <see cref="ShaderInterfaceMemberKind.Sampler"/>.</param>
+/// buffer; <see langword="null"/> for a native record buffer, a raw buffer or a <see cref="ShaderInterfaceMemberKind.Sampler"/>.</param>
 /// <param name="Length">The element count of an <see cref="ShaderInterfaceMemberKind.Array"/> or of a block array (a
 /// <see cref="ShaderInterfaceMemberKind.Value"/> of four-component vectors), at least one, or the descriptor count of an
 /// arrayed <see cref="ShaderInterfaceMemberKind.SampledImage"/> or <see cref="ShaderInterfaceMemberKind.Sampler"/>, which
 /// a pass indexes; <see langword="null"/> for a single value, image or sampler and for every other kind.</param>
 /// <param name="Format">The texel format of a <see cref="ShaderInterfaceMemberKind.StorageImage"/>;
 /// <see langword="null"/> for every other kind.</param>
+/// <param name="Structure">A structured buffer's native record description, instead of a primitive element type.</param>
 public sealed record ShaderInterfaceMember(
     string Name,
     ShaderInterfaceGroup Group,
     ShaderInterfaceMemberKind Kind,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShaderValueType? Type = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] uint? Length = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] GpuPixelFormat? Format = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] GpuPixelFormat? Format = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShaderInterfaceStructure? Structure = null
 ) {
     /// <summary>Creates a scalar or vector member of its group's constant block, or a fixed-length array of
     /// four-component vectors there, whose element <c>i</c> lies <c>16 i</c> bytes past its first on both
@@ -116,6 +118,13 @@ public sealed record ShaderInterfaceMember(
             Name: name,
             Type: element
         );
+    /// <summary>Creates a read-only buffer of native records described by the existing interface generator.</summary>
+    /// <param name="name">The shader member name.</param>
+    /// <param name="group">The member's frequency group.</param>
+    /// <param name="structure">The native element layout.</param>
+    /// <returns>The buffer member.</returns>
+    public static ShaderInterfaceMember ReadOnlyBuffer(string name, ShaderInterfaceGroup group, ShaderInterfaceStructure structure) =>
+        new(Name: name, Group: group, Kind: ShaderInterfaceMemberKind.ReadOnlyBuffer, Structure: structure);
     /// <summary>Creates a buffer member a pass reads and writes: a structured buffer of <paramref name="element"/>, or a
     /// raw buffer read and written by byte address when there is no element.</summary>
     /// <param name="name">The member's name.</param>
@@ -141,4 +150,7 @@ public sealed record ShaderInterfaceMember(
     /// other kind, an array included, is a binding of its own.</summary>
     [JsonIgnore]
     public bool IsBlockMember => (Kind == ShaderInterfaceMemberKind.Value);
+    /// <summary>Gets the reflected resource name, including a record-layout identity for structured records.</summary>
+    [JsonIgnore]
+    public string ResourceName => ((Structure is { } structure) ? $"{Name}Layout{structure.Hash.Hex}" : Name);
 }

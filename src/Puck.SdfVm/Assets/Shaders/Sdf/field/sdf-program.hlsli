@@ -1,6 +1,7 @@
 // The program word stream, its instance directory and frame instance grid, the group masks, and the variant strip tiers every tape interpreter reads.
 #ifndef FIELD_SDF_PROGRAM_HLSLI
 #define FIELD_SDF_PROGRAM_HLSLI
+#include "sdf-numeric.hlsli"
 // Program word stream (sdfWords, each element one uint4 = 16 bytes), read-only: the program is never written. Layout:
 //   words[0]              = (instructionCount, materialCount, dataOffset, materialOffset)
 //   words[1 .. 1+N)       = instruction headers (op, shapeType, blendOp, materialId)
@@ -344,17 +345,6 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // SDF_OP_REPEAT_POLAR's Shape lane (instructionHeader.y) is an SDF_AXIS_* rotation axis: the angular fold acts in
 // the plane PERPENDICULAR to it (the axial coordinate is untouched).
 // SDF_OP_WALLPAPER_FOLD's group is an SDF_WPG_* wallpaper group in IUC order, and its plane an SDF_PLANE_* pair.
-
-// === Shared numeric constants ========================================================================================
-// Written at full double precision: each rounds to the SAME float32 the shorter literal did, so naming them is
-// bytecode-identical while the digits document the exact quantity.
-#define SDF_SQRT3     1.7320508075688772   // sqrt(3)
-#define SDF_SQRT_HALF 0.7071067811865476   // sqrt(1/2) — the 45-degree chamfer bevel plane's normalization
-#define SDF_PI        3.141592653589793
-#define SDF_TAU       6.283185307179586    // 2*pi
-// 2^-32, exact. Maps a full-range uint hash to a float in [0, 1] — NOTE the CLOSED upper end: (float)0xFFFFFFFFu
-// rounds UP to 2^32, so the product can be exactly 1.0. Every consumer below is written to tolerate that.
-#define SDF_INV_2POW32 (1.0 / 4294967296.0)
 
 // The "nothing nearer yet" sentinel every accumulator and every unknown shape id starts at. It is deliberately far
 // beyond any authored far distance (render.farDistance is capped at 8192 world units by the world validator) so it

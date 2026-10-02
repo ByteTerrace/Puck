@@ -21,6 +21,8 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// <summary>The controller's already-quantized render scale, bounded by <see cref="RenderScale"/>'s quantized
     /// ceiling. Zero uses the ceiling; a positive value enables changing the sample grid without reallocating scratch.</summary>
     public float ResolvedRenderScale { get; init; }
+    /// <summary>Whether this view retains and reprojects its own temporal color and surface history.</summary>
+    public bool Temporal { get; init; }
     /// <summary>The spatial reconstruction sharpness, from zero for bilinear to one for clamped Catmull-Rom.</summary>
     public float UpscaleSharpness { get; init; }
 
@@ -31,6 +33,14 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// <summary>The quality the view renders at. Each view's pass block carries its own, so views of one frame, and of
     /// one residency, render the same scene at different cost. The default is full quality.</summary>
     public SdfViewQuality Quality { get; init; }
+    /// <summary>The owning seat's immutable sky inspection selection, or null for authored behavior. The host
+    /// routes it to the eligible view; it never changes another seat or the shared world sky.</summary>
+    public SdfSkyInspection? SkyInspection { get; init; }
+    /// <summary>The zero-based seat that owns this view, or null for an unowned view. A host uses it to resolve
+    /// presentation inspection again when a view is routed into another world.</summary>
+    public int? SeatSlot { get; init; }
+    /// <summary>The live sky quality override for this view, or null to use its world's authored quality.</summary>
+    public QualityTier? SkyQuality { get; init; }
 }
 /// <summary>The quality levers one view renders with: each trades a shading term's cost against its fidelity. The
 /// default is full quality, every term on at full reach with its exact path. The pass block carries each under its own
@@ -128,15 +138,9 @@ public sealed record SdfFrame(
     /// whenever it does; 0 for a producer that supplies a new list instead.</summary>
     public long MeshDrawsRevision { get; init; }
 
-    /// <summary>A per-frame scale on the world path's ambient term (default 1 = unchanged). Below 1 dims the room so
-    /// the diegetic screen glow dominates — the overworld sets it low for mood; other scenes leave the default.</summary>
-    public float AmbientScale { get; init; } = 1f;
-    /// <summary>A per-frame scale on the world path's sun (directional) term (default 1 = unchanged). Pairs with
-    /// <see cref="AmbientScale"/> to darken the room for the overworld mood.</summary>
-    public float SunScale { get; init; } = 1f;
-    /// <summary>The lit path's lights, stylization gains, and sky as one lane table. The default is the pinned sun
+    /// <summary>The lit path's lights, stylization gains, and sky as typed resolved values. The default is the pinned sun
     /// and hemisphere ambient an unauthored world renders.</summary>
-    public SdfEnvironment Environment { get; init; } = SdfEnvironment.Default();
+    public SdfLighting Environment { get; init; } = SdfLighting.Default();
     /// <summary>The far distance, in world units: the depth at which every camera march ends — the fine march's far
     /// exit, the beam's cone proofs (tile entry, the four-bound gap search, the F1 far bound) and every "nothing
     /// proven" tile-plane sentinel, and the depth/overshoot debug ramps. Authored as world data
@@ -190,7 +194,7 @@ public sealed record SdfFrame(
     public bool EnableShadowProxy { get; init; }
     /// <summary>Gets the presented engine tick the sky and the bounded media animate on: the star-twinkle phase, the
     /// cloud layer's drift, shear and spin, and each medium's advection and pulse, all reduced on the host
-    /// (<see cref="SdfFrameBlock.BakeEnvironment"/>, the volume table), so no pass reads a raw tick. It comes from the
+    /// (the volume table), so no pass reads a raw tick. It comes from the
     /// state mirror of the world the frame draws, never from <see cref="Time"/>, which advances by wall-clock
     /// deltas, so a frame at a given tick and fraction draws the same sky and media on every run.</summary>
     public PresentedTick Clock { get; init; }

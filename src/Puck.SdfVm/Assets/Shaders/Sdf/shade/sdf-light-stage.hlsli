@@ -46,11 +46,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
         float3 keyDirection = worldSunDirection();
         float sunDiffuse = max(dot(normal, keyDirection), 0.0);
         float keyVisibility = 1.0;
-        // The environment scales dim the room so the diegetic screen glow dominates; the overworld sets them low per frame.
-        float ambientScale = passGroup.ambientScale;
-        float sunScale = passGroup.sunScale;
 
-        if ((sunDiffuse > 0.0) && (worldShadowLightIndex() >= 0) && !worldSoftShadowsDisabled() && !s.mesh) {
+        if ((sunDiffuse > 0.0) && ((lightFrame[0].ShadowIndex) >= 0) && !worldSoftShadowsDisabled() && !s.mesh) {
             keyVisibility = s.keyVisibility;
             sunDiffuse *= keyVisibility;
         }
@@ -145,8 +142,6 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
             shadeSurface.material = shadeMaterial;
             shadeSurface.ambientOcclusion = ambientOcclusion;
             shadeSurface.keyVisibility = keyVisibility;
-            shadeSurface.sunScale = sunScale;
-            shadeSurface.ambientScale = ambientScale;
 
             float3 radiance = float3(0.0, 0.0, 0.0);
             float3 rim = float3(0.0, 0.0, 0.0);
@@ -170,7 +165,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
                 attenuation *= response.attenuation;
             }
 
-            color = (sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection, worldSunDirection(), sunScale) + meshEmission);
+            color = (sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection, worldSunDirection()) + meshEmission);
 
             // The warm or cool bounce (SdfMaterial.Bounce): a restrained fill on the side of the surface the key light does
             // not reach. Black, the default, adds nothing.
@@ -209,8 +204,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
         // geometric normal, which the soften above never widens.
         color = sdfApplyGrid(color, surfacePoint, s.normal, p.rayDirection, (p.pixelFootprint * s.t));
 
-        float fog = (1.0 - exp(-worldSkyFogDensity() * s.t));
-        color = lerp(color, skyGradient(p.rayDirection), fog);
+        float fog = (1.0 - exp(-(skyFrame[0].FogDensity) * s.t));
+        color = lerp(color, sdfSkyGradientColor(p.rayDirection), fog);
 
         // The silhouette's sky coverage, from this frame's primary records. The residual ratio stays in the clamped units
         // of hit acceptance, and the normal gates grazing hits. A geometry-to-geometry edge takes no sky blend, and a mesh
@@ -238,7 +233,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s) {
             }
         }
         if (adjacentSky) {
-            color = lerp(color, skyGradient(p.rayDirection), edgeWeight);
+            color = lerp(color, sdfSkyGradientColor(p.rayDirection), edgeWeight);
         }
     }
 

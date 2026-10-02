@@ -7,8 +7,9 @@ namespace Puck.World;
 
 /// <summary>
 /// The <c>timeline</c> read-back: <c>world.timeline</c> reports every named clock with its source (the tick, with its
-/// period and start in exact engine ticks, or a state row), its span, and, for a tick clock, its phase and reading at
-/// the authority's completed engine tick. The section is authored through <c>world.row.set timeline</c>.
+/// period and start in exact engine ticks, a state row, or another clock), its span, and the resolved phase and
+/// reading of tick and phase clocks at the authority's completed engine tick. The section is authored through
+/// <c>world.row.set timeline</c>.
 /// </summary>
 public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
     private static string Number(double value) => value.ToString(
@@ -25,6 +26,7 @@ public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority)
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         var clocks = (definition.Timeline.Clocks ?? []);
+        var values = new WorldValueResolver(definition, new PresentedTick(Fraction: 0d, Whole: engineTick));
         var echo = CommandEcho.Open(verb: "world.timeline")
             .Field(
             key: "clocks",
@@ -53,23 +55,23 @@ public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority)
                 continue;
             }
 
-            var phase = WorldClocks.Phase(
-                clock: clock,
-                tick: new PresentedTick(
-                    Fraction: 0d,
-                    Whole: engineTick
+            if (clock.Phase?.Keys is { } keys) {
+                echo = echo.Field(key: "clock", value: keys.Clock);
+            } else {
+                echo = echo
+                    .Field(
+                    key: "periodTicks",
+                    value: WorldClocks.PeriodTicks(clock: clock).ToString(provider: CultureInfo.InvariantCulture)
                 )
-            );
+                    .Field(
+                    key: "startTicks",
+                    value: WorldClocks.StartTicks(clock: clock).ToString(provider: CultureInfo.InvariantCulture)
+                );
+            }
+
+            var phase = values.Phase(clock: clock);
 
             echo = echo
-                .Field(
-                key: "periodTicks",
-                value: WorldClocks.PeriodTicks(clock: clock).ToString(provider: CultureInfo.InvariantCulture)
-            )
-                .Field(
-                key: "startTicks",
-                value: WorldClocks.StartTicks(clock: clock).ToString(provider: CultureInfo.InvariantCulture)
-            )
                 .Field(
                 key: "phase",
                 value: Number(value: phase)
@@ -85,7 +87,7 @@ public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority)
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return authority.CreateServerQueryCommand(
-            description: "Reports the timeline section's clocks (Immediate; the stdin barrier makes it read the settled state after any pending mutation): each clock's span and source, a tick clock's period and start in engine ticks with its phase and reading at the authority's completed engine tick, or a state clock's row.",
+            description: "Reports the timeline section's clocks (Immediate; the stdin barrier makes it read the settled state after any pending mutation): each clock's span and source, a tick clock's period and start in engine ticks, a phase clock's parent, and the resolved phase and reading of tick and phase clocks at the authority's completed engine tick, or a state clock's row.",
             describe: server => Describe(
                 definition: server.Definition,
                 engineTick: server.CompletedEngineTicks

@@ -5000,7 +5000,8 @@ clocks and its duplicates.
 
 - **One packed table.** `SdfEnvironment` (`src/Puck.SignedDistance`) packs the
   lights, the curvature gains, the sky, the softboxes and the studio horizon
-  into 53 hand-numbered `float4` rows, 848 of the pass block's 1,120 bytes.
+  into 53 hand-numbered `float4` rows, 848 of the current pass block's 1,280 bytes
+  after the camera, grid and previous-view additions.
   `SdfFrameBlock.BakeEnvironment` writes those rows into every pass block, so
   all ten `sdf.world` passes (sky, mask, beam, cull-args, mesh, primary,
   surface, ambient, shadow, views) carry them, though only sky, shadow and
@@ -5458,6 +5459,41 @@ target; each step settles its own vocabulary rows in
   or one keyed on a tick clock); keying it on a state-row clock is refused,
   because its integral would depend on the row's history. A rate may not bind a
   state row directly, for the same reason.
+  A smooth rate may follow at most three nested smooth phase clocks. A refusal
+  names the rate, the full root-to-leaf clock chain and its depth, for example
+  `wind.speed (day → gust → flutter → ripple → flicker): 4 smooth phase clocks
+  deep; limit 3 for a smooth rate`. Ordinary keyed values have no such depth
+  limit. The independent internal guards are rate degree 81 (antiderivative
+  degree 82), 1,024 pieces and 65,536 retained double coefficients per rate;
+  each refusal names the rate and clock chain. Compilation happens only when
+  a definition is prepared on load or reload. Each frame binary-searches the
+  active piece and evaluates only that antiderivative, with counted searches,
+  coefficient blends and reduced whole-period doublings.
+
+  Every polynomial piece uses local `[0, 1]` coordinates and double-precision
+  Bernstein coefficients evaluated by de Casteljau. The degree-81 law uses an
+  independent exact rational power-polynomial oracle: an eight-second root
+  clock starting at 2.25 seconds, three nested smooth phase clocks with peak
+  phase 0.25, and a smooth rate with peak 1 layer unit per second, reduced modulo
+  4,096 layer units. Its two pieces retain 166 coefficients (1,328 bytes), and
+  a frame reads one piece with one search comparison and 3,403 coefficient
+  blends. The tested absolute error bounds are `1e-11` layer units within the
+  first period, `1e-10` at tick `2^40`, and `2e-4` at `ulong.MaxValue` plus a
+  quarter tick, including unsigned start-offset overflow. With the rate scaled
+  to `1 / 1,048,576` layer units per second, the last bound is `2e-10` layer
+  units. Every piece boundary has a continuity check. These are measured bounds
+  for those inputs and horizons, including accumulated period-total rounding,
+  rather than a claim that double arithmetic is exact.
+
+  The per-world retained coefficient budget is 4,096 doubles, or 32 KiB of
+  coefficient payload. The counted census covers 18 full shipped/sample worlds,
+  24 fragments and no libraries. Only `sky-clock-keys` retains compiled rates:
+  12 pieces, 104 doubles (832 bytes), and maximum rate degree 9. One world's
+  budget therefore also admits 24 independent maximum-degree fixtures of the
+  form above: 3,984 doubles (31,872 bytes). Shared coefficient backing counts
+  once per prepared world, regardless of how many fields or views consume it.
+  A refusal names the proposed world total, the limit and the three largest
+  named contributors. The independent per-rate guards still apply.
 - **Units an artist uses.** Angles in degrees (sizes, elevations, azimuths,
   tilts, penumbras), time in seconds, minutes and hours (the `.puck` units gain
   `min` and `h`), rates in hertz, colours as `#RRGGBB` with a separate linear
@@ -5505,7 +5541,7 @@ target; each step settles its own vocabulary rows in
 - **Every costed layer has an off switch.** Each layer states the lowest tier
   it draws at, and each kind states its reduced form below `high` (clouds: one
   thickness tap and three octaves at `low`, shaded flat; stars: no twinkle at
-  `low`; views and far layers: half their `scale`). `world.sky-quality` and
+  `low`; views and far layers: half their `scale`). `world.sky.quality` and
   `world.shadow-lights` are session levers, and `quality.puck` gains a `sky`
   and a `shadowLights` row per tier.
 - **History holds no sky.** With P15's reconstruction on, the sky and the air
@@ -5604,6 +5640,30 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `WindIntegralLawTests` hold a keyed cloud rate's offset continuous across a
      key (red leg: `rate × time` at each key's rate jumps); `sky-cycle` holds the
      courtyard's toggle.
+   - Remote presentation decision: use the existing tier-governed
+     `WorldProjectionDocument`, with no side metadata or held-value history.
+     Tick-only clock closures evaluate locally. For a disclosed state clock,
+     send an anchor whenever the client's prediction at an authoritative tick
+     differs from the authority's phase. The anchor carries its tick, phase
+     and the current rate for a proven affine span, or rate zero otherwise.
+     Rate changes, quantized advances, staircases, nonlinear rows and seeks
+     all follow this one rule. Other resolved presentation values travel as
+     per-recipient deltas only when changed. Every used dependency must pass
+     the existing disclosure boundary; a hidden source refuses before any
+     derived value is emitted. A late view seeds invalid fields from the
+     load-validated authored initial value (or clamps a closed range), so
+     early and late views may hold different values while invalid.
+   - Projection proof is a separate unimplemented slice after the keys
+     substrate. Authority and recipient must call the same prediction function
+     from a shared package, bit-exact on the u64 phase. A mixed affine,
+     staircase, quantized, nonlinear and seek trace must match the host phase
+     at every tick and produce zero spurious anchors. A steady state sends
+     nothing; a late join hydrates the exact current phase; a hidden
+     dependency sends no derived value. Count the last anchor per recipient
+     per clock as a memory row, and release it when that recipient leaves or
+     loses disclosure. Before merge, count bytes per recipient per second for
+     a steady sky, a busy sky and a nonlinear clock that re-anchors every
+     tick, plus full late-join hydration. Each law needs an actual red leg.
    - Counted-cost gate: the environment re-resolves only when a clock a key
      reads moves or a bound slot moves, counted as resolutions in
      `world.timeline`.
@@ -5614,7 +5674,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      environment coefficients), both written as regions that owe only changed
      words and bound only to the passes that read them; their HLSL declarations
      generated by `puck shaders generate` from the C# records, as the pass
-     interfaces are.
+     interfaces are. Star and cloud seeds retain all 32 authored bits through
+     native `uint` fields; large seeds previously rounded through the float
+     carrier produce their correctly seeded pattern. The shipped small-seed
+     parity stations retain their pixels.
    - Deletes: `SdfEnvironment` and its row constants, the 22 sky accessors and
      the light decoder in `frame/sdf-lights.hlsli`, the `environment` pass
      value, `SdfFrame.SunScale` and `AmbientScale` with their pass values
@@ -5630,13 +5693,17 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      byte; `puck shaders generate --check` passes.
    - Counted-cost gate: the win is block size and binding, not upload bytes.
      Every region already writes only the words that changed, so the new
-     tables upload what changed, as the rest do. The generated pass block
-     shrinks from 1,120 bytes to about 272, so the constant data the host writes
-     into the ten pass blocks of a view each frame falls from 11,200 bytes to
-     about 2,720, and each dispatch binds a block a quarter of the size. The sky
-     group is bound by 3 of the 10 passes (`views`, `sky`, `composite`) and the
-     lights table by 2 (`shadow`, `views`). A law holds the block size and each
-     pass's bound groups to the generated interface.
+     tables upload what changed, as the rest do. The generated common pass
+     block shrinks from 1,280 bytes to 432, removing exactly 848 bytes per
+     block. The five native table regions contain 864 bytes of record payload;
+     their residency upload ring has two slots, separately from a graph's
+     frame slots. Count actual pass-block storage and uploads across the
+     installed groups and frame slots, the regions' GPU buffers, and their CPU
+     shadow, writer scratch and retained 864-byte pack arrays. Report the
+     lighting GPU subset as already included in table totals. Step 4 binds sky
+     tables in `sky` and `views`, and lights in `shadow` and `views`; step 5
+     adds the composite consumer. A law holds the block size and each pass's
+     bound groups to the generated interface.
 5. **P18-5, the sky once, and a composite last.**
    - Delivers: `views` shading hits only into `lit`, premultiplied, with
      coverage in its alpha; `sky` evaluating the sky's field runs where
@@ -5743,12 +5810,27 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      steps only while a fade runs, and required zeros past K + F; at `low`
      every shadow row is zero, as today.
 8. **P18-8, the open layer stack.**
+   - Image bindings use the existing fixed source-array capacity (currently
+     32), never an authored layer limit. A field run with more distinct image
+     sources is partitioned at load into ordered binding chunks. Each extra
+     chunk adds one dispatch and an ordered storage dependency, reading and
+     writing the run's existing forwarded summary: one image for the bottom
+     run, two for an upper run. It adds no summary image. Exactly 32 sources
+     remains one dispatch. Laws compare chunked and unchunked composition at
+     33, 64 and 65 sources and state the measured error; if the extra half-float
+     rounding visibly shifts prior layers at the first boundary, only chunked
+     runs use wider summaries, increasing their storage bytes while retaining
+     the same image count. Chunk count is counted and visible in the
+     inspector. Replacing chunking with a layer cap or runtime shader
+     specialization is not part of this design.
    - Delivers: the layer record (kind, blend, mask, transform, clock, opacity,
      visibility, tier), the generated kind table and one module per kind for
      `gradient`, `stars`, `clouds`, `aurora`, `noise`, `pattern` and
      `panorama`, the `texture` body shape (a panorama's image source on a
      body's disc), the sky frame, each kind's reduced forms, the
-     `world.sky-quality` lever, and the `skies.puck` presets.
+     `world.sky.quality low|medium|high|auto` session lever, and the
+     `skies.puck` presets. `auto` clears the session override and restores
+     the authored sky tier.
    - Deletes: the fixed composite order, the one-per-kind rule and the old
      layer arms, the sky file's 2D lattice noise and fractal sum (moved into
      `field/sdf-noise.hlsli`, which the media read too), and the pinned cloud
@@ -5840,6 +5922,18 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       to its `.puck` rows ([E11](editor.md#e11--save-edits-back-to-source));
       the sky's rows in `world.cost`
       ([E9](editor.md#e9--cost-per-object-and-gpu-pass-timing)).
+    - Settled layer controls: `world.sky.solo <layer>|off` and
+      `world.sky.mute <layer> on|off` belong to the invoking seat and apply
+      across that seat's eligible views, including windows and cameras,
+      without changing another player's sky. The bare verbs echo their
+      state; an unknown layer refuses with the world's available layer names.
+      Both verbs are bindable, presentation-only and excluded from save and
+      replay. Solo takes precedence while retaining the mute set underneath,
+      so clearing solo restores those mutes. The shared inspector formatter
+      shows both states. Excluded layers perform no evaluation, verified by
+      counted laws. The identity rule when one seat views multiple worlds is
+      still awaiting the owner's decision; no global world mask substitutes
+      for the per-seat controls.
     - Touches: `WorldLightingCommandModule`, `WorldRenderLeverCommandModule`,
       `WorldSessionLevers`, `DebugViewModes`, the editor's formatter.
     - Done when: `WorldTimelineLeverLawTests` hold a scrubbed clock's
@@ -5912,13 +6006,13 @@ fraction in live tiles, at least h.
 - **Bounded media.** Today a single volume re-renders every view every frame.
   After P18-2 and P18-6, `composite` alone, and only on frames whose presented
   tick moves.
-- **Pass-block size and binding.** Today the pass block is 1,120 bytes, 848 of
-  them the environment, written into each of 10 blocks: 11,200 bytes of
-  constant data per view per frame, every dispatch binding the whole block.
-  After P18-4 the block is about 272 bytes (about 2,720 per view per frame), and
-  the sky group and lights table are bound only by the passes that read them.
-  This is not an upload win: every region already uploads only the words that
-  changed, and the new tables do the same.
+- **Pass-block size and binding.** The current pass block is 1,280 bytes, 848 of
+  them the environment. P18-4 reduces it to 432 bytes and binds the native sky
+  and light tables only in their reading passes. The new tables contain 864
+  bytes of record payload. The counted comparison includes the actual pass
+  groups, graph frame slots, residency upload slots and CPU region payloads;
+  a smaller block alone does not establish a total memory or upload saving.
+  Every region already uploads only changed words, and the new tables do too.
 - **Clouds.** Today 128 hash evaluations per covered pixel (four thickness taps,
   two fractal sums of four octaves, four lattice corners) and 32 per clear one.
   At `low`, 24 per covered pixel, a fall of 81%.

@@ -113,6 +113,12 @@ internal sealed class UploadModelGpu :
         part: part,
         sizeBytes: sizeBytes
     ).Memory;
+    /// <summary>Gets live buffers carrying one region's object-name part, with their memory placement.</summary>
+    /// <param name="part">The region's object-name part.</param>
+    /// <returns>The buffer bytes and placement flags, in allocation order.</returns>
+    public (byte[] Bytes, bool HostVisible, bool Aperture)[] BuffersOf(string part) => [.. m_buffers.Values
+        .Where(predicate: buffer => string.Equals(a: buffer.Part, b: part, comparisonType: StringComparison.Ordinal))
+        .Select(selector: static buffer => (buffer.Memory, buffer.HostVisible, buffer.Aperture))];
 
     /// <summary>Gets the host-visible buffers created in the device-local aperture
     /// (<see cref="IGpuBufferFactory.CreateHostVisibleDeviceLocal"/>) and still live.</summary>
@@ -208,8 +214,8 @@ internal sealed class UploadModelGpu :
 
         return module;
     }
-    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
-    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(aperture: true, hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform), part: name.Part);
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(aperture: true, hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform), part: name.Part);
     IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: false, sizeBytes: sizeBytes, part: name.Part);
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) => throw new NotSupportedException();
     IGpuReadbackBuffer IGpuBufferFactory.CreateReadback(ulong sizeBytes, in GpuObjectName name) => Buffer(hostVisible: true, sizeBytes: sizeBytes);

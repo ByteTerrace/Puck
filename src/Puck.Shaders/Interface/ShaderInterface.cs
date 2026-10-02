@@ -81,6 +81,26 @@ public sealed partial class ShaderInterface {
                 member: member
             );
         }
+        var structures = new Dictionary<string, ShaderInterfaceStructure>(comparer: StringComparer.Ordinal);
+
+        foreach (var member in members) {
+            if (member.Structure is not { } structure) {
+                continue;
+            }
+            if (structures.TryGetValue(key: structure.Name, value: out var previous)) {
+                if (!previous.Equals(other: structure)) {
+                    throw new InvalidDataException(message: $"Shader interface '{name}' declares different layouts for structure '{structure.Name}'.");
+                }
+            } else {
+                if (!identifiers.Add(item: structure.Name)) {
+                    throw new InvalidDataException(message: $"Shader interface '{name}' structure '{structure.Name}' collides with another declaration.");
+                }
+                structures.Add(key: structure.Name, value: structure);
+            }
+            if (!identifiers.Add(item: member.ResourceName)) {
+                throw new InvalidDataException(message: $"Shader interface '{name}' resource '{member.ResourceName}' collides with another declaration.");
+            }
+        }
         foreach (var group in members.Where(predicate: static member => member.IsBlockMember).Select(selector: static member => member.Group).Distinct()) {
             foreach (var generated in ((ReadOnlySpan<string>)[BlockVariableNameOf(group: group), BlockTypeName(
                 group: group,
@@ -96,6 +116,20 @@ public sealed partial class ShaderInterface {
             foreach (var generated in ((ReadOnlySpan<string>)[PushedIndexVariableName, PushedIndexTypeName(interfaceName: name)])) {
                 if (!identifiers.Add(item: generated)) {
                     throw new InvalidDataException(message: $"Shader interface '{name}' declares '{generated}', which its generated pushed index declares.");
+                }
+            }
+        }
+
+        var aliases = members.Where(predicate: static member => (member.Structure is not null))
+            .Select(selector: static member => member.Name).ToHashSet(comparer: StringComparer.Ordinal);
+
+        if (stamp is not null) {
+            aliases.Add(item: BlockVariableName(group: ShaderInterfaceGroup.Pass));
+        }
+        foreach (var structure in structures.Values) {
+            foreach (var field in structure.Members) {
+                if (aliases.Contains(item: field.Name)) {
+                    throw new InvalidDataException(message: $"Shader interface '{name}' structure '{structure.Name}' field '{field.Name}' collides with a generated alias; shader preprocessing would rename the field access.");
                 }
             }
         }
@@ -173,6 +207,10 @@ public sealed partial class ShaderInterface {
         // A buffer's element type is optional: with one it is a structured buffer, without one a raw buffer.
         var isBuffer = (member.Kind is ShaderInterfaceMemberKind.ReadOnlyBuffer or ShaderInterfaceMemberKind.ReadWriteBuffer);
 
+        if ((member.Structure is not null) && (!isBuffer || member.Type.HasValue)) {
+            throw new InvalidDataException(message: $"{where}: a structure belongs to a buffer and replaces its primitive element type.");
+        }
+
         if (
             !isBuffer &&
             ((member.Kind != ShaderInterfaceMemberKind.Sampler) != member.Type.HasValue)
@@ -234,7 +272,7 @@ public sealed partial class ShaderInterface {
             member.Format.HasValue &&
             (StorageFormatSpelling(format: member.Format.Value) is null)
         ) {
-            throw new InvalidDataException(message: $"{where}: a storage image cannot be {member.Format.Value}; it is R8G8B8A8Unorm, R16G16B16A16Float or R32G32B32A32Float.");
+            throw new InvalidDataException(message: $"{where}: a storage image cannot be {member.Format.Value}; it is R8G8B8A8Unorm, R16G16B16A16Float, R32G32B32A32Float or R32Float.");
         }
     }
 
@@ -311,6 +349,7 @@ public sealed partial class ShaderInterface {
     /// <returns>The <c>vk::image_format</c> spelling, or <see langword="null"/>.</returns>
     public static string? StorageFormatSpelling(GpuPixelFormat format) =>
         format switch {
+            GpuPixelFormat.R32Float => "r32f",
             GpuPixelFormat.R8G8B8A8Unorm => "rgba8",
             GpuPixelFormat.R16G16B16A16Float => "rgba16f",
             GpuPixelFormat.R32G32B32A32Float => "rgba32f",

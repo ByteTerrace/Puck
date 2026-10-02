@@ -178,6 +178,20 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
+            },
+            "sky": {
+              "description": "The optional sky tier selected with this preset. An absent value restores the authored sky quality.",
+              "title": "QualityTier",
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                null
+              ]
             }
           },
           "additionalProperties": false,
@@ -215,6 +229,20 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
+            },
+            "sky": {
+              "description": "The optional sky tier selected with this preset. An absent value restores the authored sky quality.",
+              "title": "QualityTier",
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                null
+              ]
             }
           },
           "additionalProperties": false,
@@ -252,6 +280,20 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
+            },
+            "sky": {
+              "description": "The optional sky tier selected with this preset. An absent value restores the authored sky quality.",
+              "title": "QualityTier",
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                null
+              ]
             }
           },
           "additionalProperties": false,
@@ -266,13 +308,13 @@
           ],
           "properties": {
             "lights": {
-              "description": "The lights, at most SdfEnvironment.MaxLights, in slot order (a render.cycle key moves a light by its slot). At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
+              "description": "The lights, at most SdfLighting.MaxLights, in slot order. Section keys address an existing row by its authored name. At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
               "type": [
                 "array",
                 "null"
               ],
               "items": {
-                "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its lane semantics in SdfEnvironment.",
+                "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its resolved values in SdfLighting.",
                 "type": [
                   "object",
                   "null"
@@ -290,20 +332,18 @@
                       "direction": {
                         "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload). Absent is the pinned sun direction.",
                         "default": null,
-                        "title": "DocumentVector3",
+                        "title": "BindableDirection",
                         "anyOf": [
                           {
                             "type": "array",
-                            "items": {
-                              "type": "number"
-                            },
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "items": {
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                            }
                           },
                           {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone/properties/toward/anyOf/1"
                           }
                         ]
                       },
@@ -311,26 +351,40 @@
                         "description": "The light\u0027s linear colour.",
                         "default": null,
                         "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                          }
                         ]
                       },
                       "weight": {
                         "description": "The diffuse weight. Absent is the pinned sun weight.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
                       },
                       "angularRadius": {
                         "description": "The light\u0027s angular radius in radians, in [0, atan 0.3]: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableAngle",
+                        "allOf": [
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                          }
+                        ]
                       },
                       "shadows": {
                         "description": "Whether this light drives the soft-shadow march (at most one light per world). Absent is false. An unshadowed directional is scaled by ambient occlusion instead.",
@@ -339,6 +393,13 @@
                           "null"
                         ],
                         "default": null
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -354,26 +415,53 @@
                         "description": "The ambient\u0027s linear colour.",
                         "default": null,
                         "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                          }
                         ]
                       },
                       "base": {
                         "description": "The floor. Absent is the pinned ambient floor.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
                       },
                       "gradient": {
                         "description": "The hemisphere gradient. Absent is the pinned gradient.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -389,26 +477,53 @@
                         "description": "The rim\u0027s linear colour.",
                         "default": null,
                         "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                          }
                         ]
                       },
                       "weight": {
                         "description": "The strength. Absent is zero, which adds nothing.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
                       },
                       "power": {
                         "description": "The falloff exponent \u2014 larger confines the highlight nearer the silhouette. Absent is the engine default.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -423,30 +538,87 @@
                       "position": {
                         "description": "The world-space position for a static (unanchored) light. Absent is the world origin. An offset in the anchor frame when an anchor is authored.",
                         "default": null,
-                        "title": "DocumentVector3",
+                        "title": "BindableVector3",
                         "anyOf": [
                           {
                             "type": "array",
-                            "items": {
-                              "type": "number"
-                            },
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "items": {
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                            }
                           },
                           {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "title": "BindableVector3",
+                                      "anyOf": [
+                                        {
+                                          "type": "array",
+                                          "minItems": 3,
+                                          "maxItems": 3,
+                                          "items": {
+                                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                                          }
+                                        },
+                                        {
+                                          "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/3/properties/position/anyOf/1"
+                                        }
+                                      ]
+                                    },
+                                    "ease": {
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ],
+                                      "default": "Linear",
+                                      "title": "WorldKeyEase"
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
                           }
                         ]
                       },
                       "radius": {
                         "description": "The falloff radius. Absent is the engine default.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
                       },
                       "anchor": {
                         "description": "An entity, entity part, or placement frame. A missing live target disables the light.",
@@ -599,18 +771,37 @@
                         "description": "The light\u0027s linear colour.",
                         "default": null,
                         "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                          }
                         ]
                       },
                       "weight": {
                         "description": "The strength. Absent is the engine default.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -624,29 +815,35 @@
                       },
                       "position": {
                         "default": null,
-                        "title": "DocumentVector3",
+                        "title": "BindableVector3",
                         "anyOf": [
                           {
                             "type": "array",
-                            "items": {
-                              "type": "number"
-                            },
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "items": {
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                            }
                           },
                           {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/3/properties/position/anyOf/1"
                           }
                         ]
                       },
                       "radius": {
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
                       },
                       "anchor": {
                         "type": [
@@ -788,11 +985,26 @@
                         "title": "WorldAnchor"
                       },
                       "weight": {
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -812,57 +1024,152 @@
               "properties": {
                 "cavity": {
                   "description": "How far a concave crease darkens, in [0, 1] at a cavity whose curvature reaches InkLow. Zero darkens none.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                    }
+                  ]
                 },
                 "rim": {
                   "description": "How far a convex ridge brightens, in [0, 1] at a ridge whose curvature reaches InkLow. Zero brightens none.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                    }
+                  ]
                 },
                 "ink": {
                   "description": "The ink outline\u0027s strength where the curvature magnitude spikes. Zero draws none.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                    }
+                  ]
                 },
                 "inkLow": {
                   "description": "The curvature magnitude (1 / fillet radius, in world units) at which the outline starts and the ridge and cavity terms saturate.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                    }
+                  ]
                 },
                 "inkHigh": {
                   "description": "The curvature magnitude at which the outline saturates.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                    }
+                  ]
                 },
                 "inkColor": {
                   "description": "BindableColor\u0027s grammar: the outline colour.",
                   "default": null,
                   "title": "BindableColor",
-                  "type": [
-                    "string",
-                    "null"
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                    }
                   ]
                 }
               },
               "additionalProperties": false,
               "default": null,
               "title": "WorldRenderCurvature"
+            },
+            "keys": {
+              "description": "Named partial-record keys for this lighting section.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "clock": {
+                  "description": "The named presentation clock.",
+                  "type": "string"
+                },
+                "keys": {
+                  "description": "Ordered partial records; omitted leaves carry from their last stated key around the wrap.",
+                  "type": "array",
+                  "items": {
+                    "description": "One partial presentation record. The preparation pass checks every field against the section\u0027s actual model shape and admits only bindable leaves; extension data is retained here for source-preserving saves.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "at": {
+                        "description": "The position in the clock\u0027s authored span.",
+                        "type": "number"
+                      },
+                      "ease": {
+                        "description": "The easing toward the next key.",
+                        "enum": [
+                          "Linear",
+                          "Smooth",
+                          "Step"
+                        ],
+                        "default": "Linear",
+                        "title": "WorldKeyEase"
+                      }
+                    },
+                    "required": [
+                      "at"
+                    ],
+                    "additionalProperties": false,
+                    "title": "WorldSectionKey"
+                  }
+                }
+              },
+              "required": [
+                "clock",
+                "keys"
+              ],
+              "additionalProperties": false,
+              "title": "WorldSectionKeys"
             }
           },
           "additionalProperties": false,
@@ -899,7 +1206,7 @@
                         "const": "gradient"
                       },
                       "stops": {
-                        "description": "Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation. A render.cycle key moves a stop by its index and may not add or remove one.",
+                        "description": "Two to SdfLighting.MaxSkyStops stops, strictly ascending in elevation. A section key moves a stop by its authored name and may not add or remove one.",
                         "type": [
                           "array",
                           "null"
@@ -913,16 +1220,35 @@
                           "properties": {
                             "elevation": {
                               "description": "The direction\u0027s Y component this stop sits at, in [\u22121, 1].",
-                              "type": [
-                                "number",
-                                "null"
-                              ],
-                              "default": null
+                              "default": null,
+                              "title": "BindableScalar",
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                                }
+                              ]
                             },
                             "color": {
-                              "description": "BindableColor\u0027s grammar: the colour at this elevation. Absent (in a cycle key) keeps the previous key\u0027s colour.",
+                              "description": "BindableColor\u0027s grammar: the colour at this elevation. A gradient\u0027s authored stops require a color; omitted partial-record key leaves carry through the wrap.",
                               "default": null,
                               "title": "BindableColor",
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                                }
+                              ]
+                            },
+                            "name": {
+                              "description": "The authored stop identity used by section keys.",
                               "type": [
                                 "string",
                                 "null"
@@ -933,6 +1259,307 @@
                           "title": "WorldRenderSkyStop"
                         },
                         "default": null
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "blend": {
+                        "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers.",
+                        "enum": [
+                          "Over",
+                          "Add",
+                          "Multiply",
+                          "Screen",
+                          null
+                        ],
+                        "title": "SdfSkyBlend"
+                      },
+                      "mask": {
+                        "description": "The optional directional mask, evaluated before any kind-specific work.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "elevation": {
+                            "description": "The lower and upper elevation angles, in radians, as exactly two values.",
+                            "type": [
+                              "array",
+                              "null"
+                            ],
+                            "default": null,
+                            "items": {
+                              "title": "BindableAngle",
+                              "allOf": [
+                                {
+                                  "description": "A scalar authored as a finite number literal, a state.\u003Crow\u003E[.\u003Ckey\u003E][.$target] binding naming a Fixed or Int cell, or clock keys of those values \u2014 the numeric twin of BindableColor, sharing its binding grammar (StateBinding) and its one read path, the client\u0027s state mirror. Parses as a JSON number (literal), string (binding), or object (clock keys).",
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "clock": {
+                                          "type": "string"
+                                        },
+                                        "keys": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "at": {
+                                                "type": "number"
+                                              },
+                                              "value": {
+                                                "title": "BindableScalar",
+                                                "anyOf": [
+                                                  {
+                                                    "type": "number"
+                                                  },
+                                                  {
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                                                  }
+                                                ]
+                                              },
+                                              "ease": {
+                                                "enum": [
+                                                  "Linear",
+                                                  "Smooth",
+                                                  "Step"
+                                                ],
+                                                "default": "Linear",
+                                                "title": "WorldKeyEase"
+                                              }
+                                            },
+                                            "required": [
+                                              "at",
+                                              "value"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "clock",
+                                        "keys"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "cone": {
+                            "description": "The alternative directional cone.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "toward": {
+                                "description": "The cone\u0027s central direction in the layer\u0027s local frame, shared with its kind evaluation.",
+                                "title": "BindableDirection",
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "minItems": 3,
+                                    "maxItems": 3,
+                                    "items": {
+                                      "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                                    }
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "clock": {
+                                        "type": "string"
+                                      },
+                                      "keys": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "at": {
+                                              "type": "number"
+                                            },
+                                            "value": {
+                                              "title": "BindableDirection",
+                                              "anyOf": [
+                                                {
+                                                  "type": "array",
+                                                  "minItems": 3,
+                                                  "maxItems": 3,
+                                                  "items": {
+                                                    "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                                                  }
+                                                },
+                                                {
+                                                  "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone/properties/toward/anyOf/1"
+                                                }
+                                              ]
+                                            },
+                                            "ease": {
+                                              "enum": [
+                                                "Linear",
+                                                "Smooth",
+                                                "Step"
+                                              ],
+                                              "default": "Linear",
+                                              "title": "WorldKeyEase"
+                                            }
+                                          },
+                                          "required": [
+                                            "at",
+                                            "value"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "clock",
+                                      "keys"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
+                              "radius": {
+                                "description": "Its angular half-width in radians, in (0, \u03C0].",
+                                "title": "BindableAngle",
+                                "allOf": [
+                                  {
+                                    "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "toward",
+                              "radius"
+                            ],
+                            "additionalProperties": false,
+                            "default": null,
+                            "title": "WorldSkyCone"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyMask"
+                      },
+                      "transform": {
+                        "description": "The layer\u0027s orientation inside the sky frame.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "yaw": {
+                            "description": "Rotation about the frame\u0027s up axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "pitch": {
+                            "description": "Rotation about the yawed right axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "roll": {
+                            "description": "Rotation about the yawed and pitched forward axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "rate": {
+                            "description": "The additional yaw rate in radians per second.",
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyTransform"
+                      },
+                      "clock": {
+                        "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "opacity": {
+                        "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "visibility": {
+                        "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed.",
+                        "enum": [
+                          "Camera",
+                          "Lighting",
+                          "Both",
+                          null
+                        ],
+                        "title": "SdfSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "The lowest quality tier at which the layer draws. Structural, never keyed.",
+                        "title": "QualityTier",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -946,11 +1573,159 @@
                       },
                       "density": {
                         "description": "The density per world unit. Absent is the pinned density.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
                         "type": [
-                          "number",
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "blend": {
+                        "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers.",
+                        "enum": [
+                          "Over",
+                          "Add",
+                          "Multiply",
+                          "Screen",
+                          null
+                        ],
+                        "title": "SdfSkyBlend"
+                      },
+                      "mask": {
+                        "description": "The optional directional mask, evaluated before any kind-specific work.",
+                        "type": [
+                          "object",
                           "null"
                         ],
-                        "default": null
+                        "properties": {
+                          "elevation": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyMask"
+                      },
+                      "transform": {
+                        "description": "The layer\u0027s orientation inside the sky frame.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "yaw": {
+                            "description": "Rotation about the frame\u0027s up axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "pitch": {
+                            "description": "Rotation about the yawed right axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "roll": {
+                            "description": "Rotation about the yawed and pitched forward axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "rate": {
+                            "description": "The additional yaw rate in radians per second.",
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyTransform"
+                      },
+                      "clock": {
+                        "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "opacity": {
+                        "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "visibility": {
+                        "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed.",
+                        "enum": [
+                          "Camera",
+                          "Lighting",
+                          "Both",
+                          null
+                        ],
+                        "title": "SdfSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "The lowest quality tier at which the layer draws. Structural, never keyed.",
+                        "title": "QualityTier",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -972,19 +1747,169 @@
                       },
                       "radius": {
                         "description": "The disc\u0027s angular half-radius in radians, in (0, \u03C0/2]. Absent is the engine default.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableAngle",
+                        "allOf": [
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                          }
+                        ]
                       },
                       "intensity": {
                         "description": "The peak additive brightness. Absent is zero, which draws nothing.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
                         "type": [
-                          "number",
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "blend": {
+                        "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers.",
+                        "enum": [
+                          "Over",
+                          "Add",
+                          "Multiply",
+                          "Screen",
+                          null
+                        ],
+                        "title": "SdfSkyBlend"
+                      },
+                      "mask": {
+                        "description": "The optional directional mask, evaluated before any kind-specific work.",
+                        "type": [
+                          "object",
                           "null"
                         ],
-                        "default": null
+                        "properties": {
+                          "elevation": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyMask"
+                      },
+                      "transform": {
+                        "description": "The layer\u0027s orientation inside the sky frame.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "yaw": {
+                            "description": "Rotation about the frame\u0027s up axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "pitch": {
+                            "description": "Rotation about the yawed right axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "roll": {
+                            "description": "Rotation about the yawed and pitched forward axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "rate": {
+                            "description": "The additional yaw rate in radians per second.",
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyTransform"
+                      },
+                      "clock": {
+                        "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "opacity": {
+                        "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "visibility": {
+                        "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed.",
+                        "enum": [
+                          "Camera",
+                          "Lighting",
+                          "Both",
+                          null
+                        ],
+                        "title": "SdfSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "The lowest quality tier at which the layer draws. Structural, never keyed.",
+                        "title": "QualityTier",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -1006,11 +1931,19 @@
                       },
                       "brightness": {
                         "description": "The peak per-star brightness. Absent is zero, which draws nothing.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
                       },
                       "seed": {
                         "description": "The hash seed folded into every cell.",
@@ -1029,32 +1962,335 @@
                         "properties": {
                           "share": {
                             "description": "The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.",
-                            "type": [
-                              "number",
-                              "null"
-                            ],
-                            "default": null
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                              }
+                            ]
                           },
                           "depth": {
                             "description": "How far a twinkling star dips below its steady brightness, in [0, 1].",
-                            "type": [
-                              "number",
-                              "null"
-                            ],
-                            "default": null
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                              }
+                            ]
                           },
                           "rate": {
                             "description": "The fundamental scintillation rate in hertz.",
-                            "type": [
-                              "number",
-                              "null"
-                            ],
-                            "default": null
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                              }
+                            ]
                           }
                         },
                         "additionalProperties": false,
                         "default": null,
                         "title": "WorldRenderSkyTwinkle"
+                      },
+                      "sparsity": {
+                        "description": "The fraction of lattice cells containing a star, in [0, 1]. Absent is 0.08.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "inset": {
+                        "description": "The star center\u0027s minimum distance from a cell wall, in [0, 0.5] cells. Absent is 0.3.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "radiusFraction": {
+                        "description": "The peak angular radius as a fraction of the cell\u0027s angular pitch. Absent is 0.12.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "luminosityFloor": {
+                        "description": "The faintest luminosity as a fraction of the peak, in (0, 1]. Absent is 0.125.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "radiusFloor": {
+                        "description": "The faintest radius as a fraction of the peak radius, in [0, 1]. Absent is 0.6.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "spectrum": {
+                        "description": "Seven linear RGB spectrum colors, from warm to cool. Absent retains the established seven-color star palette; the spectrum\u0027s colors may bind or key, but its count is structural.",
+                        "type": [
+                          "array",
+                          "null"
+                        ],
+                        "items": {
+                          "title": "BindableColor",
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "clock": {
+                                  "type": "string"
+                                },
+                                "keys": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "at": {
+                                        "type": "number"
+                                      },
+                                      "value": {
+                                        "title": "BindableColor",
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                                          }
+                                        ]
+                                      },
+                                      "ease": {
+                                        "enum": [
+                                          "Linear",
+                                          "Smooth",
+                                          "Step"
+                                        ],
+                                        "default": "Linear",
+                                        "title": "WorldKeyEase"
+                                      }
+                                    },
+                                    "required": [
+                                      "at",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "clock",
+                                "keys"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "blend": {
+                        "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers.",
+                        "enum": [
+                          "Over",
+                          "Add",
+                          "Multiply",
+                          "Screen",
+                          null
+                        ],
+                        "title": "SdfSkyBlend"
+                      },
+                      "mask": {
+                        "description": "The optional directional mask, evaluated before any kind-specific work.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "elevation": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyMask"
+                      },
+                      "transform": {
+                        "description": "The layer\u0027s orientation inside the sky frame.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "yaw": {
+                            "description": "Rotation about the frame\u0027s up axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "pitch": {
+                            "description": "Rotation about the yawed right axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "roll": {
+                            "description": "Rotation about the yawed and pitched forward axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "rate": {
+                            "description": "The additional yaw rate in radians per second.",
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyTransform"
+                      },
+                      "clock": {
+                        "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "opacity": {
+                        "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "visibility": {
+                        "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed.",
+                        "enum": [
+                          "Camera",
+                          "Lighting",
+                          "Both",
+                          null
+                        ],
+                        "title": "SdfSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "The lowest quality tier at which the layer draws. Structural, never keyed.",
+                        "title": "QualityTier",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -1068,27 +2304,51 @@
                       },
                       "coverage": {
                         "description": "The fraction of the sky the layer covers, in [0, 1]. Absent is zero.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
                       },
                       "softness": {
                         "description": "The width of a cloud\u0027s edge, in (0, 1]. Absent is the engine default.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
                       },
                       "scale": {
                         "description": "The size of one cloud cell in layer units (the layer sits at unit height). Absent is the engine default.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
                       },
                       "seed": {
                         "description": "The hash seed folded into the lattice.",
@@ -1102,158 +2362,1499 @@
                         "description": "BindableColor\u0027s grammar: the cloud colour. Absent is white.",
                         "default": null,
                         "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                          }
                         ]
                       },
                       "drift": {
                         "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Absent holds still.",
                         "default": null,
-                        "title": "DocumentVector2",
+                        "title": "BindableVector2",
                         "anyOf": [
                           {
                             "type": "array",
-                            "items": {
-                              "type": "number"
-                            },
                             "minItems": 2,
-                            "maxItems": 2
+                            "maxItems": 2,
+                            "items": {
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                            }
                           },
                           {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/size/anyOf/1"
                           }
                         ]
                       },
                       "spin": {
                         "description": "The layer\u0027s rotation about the zenith in radians per second; positive is counter-clockwise seen from below. Absent is none.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
                       },
                       "curl": {
                         "description": "The Coriolis twist in radians at 45\u00B0 elevation, falling off toward the horizon and the zenith. Positive winds counter-clockwise. Absent is none.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableAngle",
+                        "allOf": [
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                          }
+                        ]
                       },
                       "shear": {
                         "description": "The wind of the shaping field relative to the cloud field, in layer units per second. Absent holds the shapes.",
                         "default": null,
-                        "title": "DocumentVector2",
+                        "title": "BindableVector2",
                         "anyOf": [
                           {
                             "type": "array",
-                            "items": {
-                              "type": "number"
-                            },
                             "minItems": 2,
-                            "maxItems": 2
+                            "maxItems": 2,
+                            "items": {
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                            }
                           },
                           {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/size/anyOf/1"
                           }
+                        ]
+                      },
+                      "domeRadius": {
+                        "description": "The dome center\u0027s depth below the viewer, in layer units with unit height overhead. Absent is 6.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "warp": {
+                        "description": "The shaping field\u0027s displacement of the density field, in cells. Absent is 0.6.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "height": {
+                        "description": "The heightfield rise per unit thickness, in cells. Absent is 0.7.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "normalTap": {
+                        "description": "The positive normal and self-shadow sample spacing, in cells. Absent is 0.18.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "selfShadow": {
+                        "description": "The darkening from a taller light-facing neighbor, in [0, 1]. Absent is 0.6.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "silverLining": {
+                        "description": "The strength of each light\u0027s thin-edge highlight. Absent is 0.5.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "extinction": {
+                        "description": "The extinction per unit thickness. Zero is transparent; absent is 3.5.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "horizonFade": {
+                        "description": "The positive local Y-direction interval over which coverage fades at the horizon, at most one. Absent is 0.05.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "ambientFloor": {
+                        "description": "The fraction of color lit by the supplied ambient field, in [0, 1]. Absent is 0.45.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "silverExponent": {
+                        "description": "The forward highlight exponent. Absent is 8.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "blend": {
+                        "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers.",
+                        "enum": [
+                          "Over",
+                          "Add",
+                          "Multiply",
+                          "Screen",
+                          null
+                        ],
+                        "title": "SdfSkyBlend"
+                      },
+                      "mask": {
+                        "description": "The optional directional mask, evaluated before any kind-specific work.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "elevation": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyMask"
+                      },
+                      "transform": {
+                        "description": "The layer\u0027s orientation inside the sky frame.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "yaw": {
+                            "description": "Rotation about the frame\u0027s up axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "pitch": {
+                            "description": "Rotation about the yawed right axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "roll": {
+                            "description": "Rotation about the yawed and pitched forward axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "rate": {
+                            "description": "The additional yaw rate in radians per second.",
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyTransform"
+                      },
+                      "clock": {
+                        "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "opacity": {
+                        "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "visibility": {
+                        "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed.",
+                        "enum": [
+                          "Camera",
+                          "Lighting",
+                          "Both",
+                          null
+                        ],
+                        "title": "SdfSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "The lowest quality tier at which the layer draws. Structural, never keyed.",
+                        "title": "QualityTier",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
                         ]
                       }
                     },
                     "additionalProperties": false,
                     "title": "WorldRenderSkyLayerClouds"
+                  },
+                  {
+                    "description": "A seamless directional noise field colored between two endpoints. Its shared periodic lattice returns a signed fractal sum; contrast and bias map that sum into the saturated color interval once.",
+                    "properties": {
+                      "$type": {
+                        "const": "noise"
+                      },
+                      "colorLow": {
+                        "description": "The low endpoint. Absent is black.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                          }
+                        ]
+                      },
+                      "colorHigh": {
+                        "description": "The high endpoint. Absent is white.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                          }
+                        ]
+                      },
+                      "intensity": {
+                        "description": "The nonnegative emission gain. Absent is one; zero performs no noise work.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "scale": {
+                        "description": "The positive size of a lattice cell in direction space. Absent is one.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "offset": {
+                        "description": "The finite lattice offset, in cells. Absent is zero.",
+                        "default": null,
+                        "title": "BindableVector3",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "minItems": 3,
+                            "maxItems": 3,
+                            "items": {
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                            }
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/3/properties/position/anyOf/1"
+                          }
+                        ]
+                      },
+                      "seed": {
+                        "description": "The exact 32-bit lattice seed. Absent is zero.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "octaves": {
+                        "description": "One to eight authored octaves. Absent is four; low quality admits at most three.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "contrast": {
+                        "description": "The finite signed-noise multiplier. Absent is one half.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "bias": {
+                        "description": "The finite color-interval offset. Absent is one half.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "blend": {
+                        "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers.",
+                        "enum": [
+                          "Over",
+                          "Add",
+                          "Multiply",
+                          "Screen",
+                          null
+                        ],
+                        "title": "SdfSkyBlend"
+                      },
+                      "mask": {
+                        "description": "The optional directional mask, evaluated before any kind-specific work.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "elevation": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyMask"
+                      },
+                      "transform": {
+                        "description": "The layer\u0027s orientation inside the sky frame.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "yaw": {
+                            "description": "Rotation about the frame\u0027s up axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "pitch": {
+                            "description": "Rotation about the yawed right axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "roll": {
+                            "description": "Rotation about the yawed and pitched forward axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "rate": {
+                            "description": "The additional yaw rate in radians per second.",
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyTransform"
+                      },
+                      "clock": {
+                        "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "opacity": {
+                        "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "visibility": {
+                        "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed.",
+                        "enum": [
+                          "Camera",
+                          "Lighting",
+                          "Both",
+                          null
+                        ],
+                        "title": "SdfSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "The lowest quality tier at which the layer draws. Structural, never keyed.",
+                        "title": "QualityTier",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerNoise"
+                  },
+                  {
+                    "description": "A painted checker field on the shared octahedral direction projection. The common layer transform rotates the pattern; this kind adds no private orientation or noise source.",
+                    "properties": {
+                      "$type": {
+                        "const": "pattern"
+                      },
+                      "checker": {
+                        "description": "The checker grid. Absent uses 24 cells per projected axis.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "cells": {
+                            "description": "The positive number of cells on each octahedral projection axis. Absent is 24.",
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "default": null,
+                        "title": "WorldSkyChecker"
+                      },
+                      "colors": {
+                        "description": "Exactly two colors. Absent is black and white.",
+                        "type": [
+                          "array",
+                          "null"
+                        ],
+                        "default": null,
+                        "items": {
+                          "title": "BindableColor",
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                            }
+                          ]
+                        }
+                      },
+                      "intensity": {
+                        "description": "The nonnegative emission gain. Absent is one.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "offset": {
+                        "description": "The finite checker offset, in cells. Absent is zero.",
+                        "default": null,
+                        "title": "BindableVector2",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "items": {
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                            }
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/size/anyOf/1"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "blend": {
+                        "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers.",
+                        "enum": [
+                          "Over",
+                          "Add",
+                          "Multiply",
+                          "Screen",
+                          null
+                        ],
+                        "title": "SdfSkyBlend"
+                      },
+                      "mask": {
+                        "description": "The optional directional mask, evaluated before any kind-specific work.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "elevation": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyMask"
+                      },
+                      "transform": {
+                        "description": "The layer\u0027s orientation inside the sky frame.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "yaw": {
+                            "description": "Rotation about the frame\u0027s up axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "pitch": {
+                            "description": "Rotation about the yawed right axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "roll": {
+                            "description": "Rotation about the yawed and pitched forward axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "rate": {
+                            "description": "The additional yaw rate in radians per second.",
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyTransform"
+                      },
+                      "clock": {
+                        "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "opacity": {
+                        "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "visibility": {
+                        "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed.",
+                        "enum": [
+                          "Camera",
+                          "Lighting",
+                          "Both",
+                          null
+                        ],
+                        "title": "SdfSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "The lowest quality tier at which the layer draws. Structural, never keyed.",
+                        "title": "QualityTier",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerPattern"
+                  },
+                  {
+                    "description": "Emissive curtains formed by narrow ridges of the shared directional noise. The height scale stretches those ridges vertically; the common mask chooses the visible elevation band.",
+                    "properties": {
+                      "$type": {
+                        "const": "aurora"
+                      },
+                      "color": {
+                        "description": "The curtain color. Absent is white.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                          }
+                        ]
+                      },
+                      "intensity": {
+                        "description": "The nonnegative emission gain. Absent is one; zero performs no noise work.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "offset": {
+                        "description": "The finite noise offset in cells. Absent is zero.",
+                        "default": null,
+                        "title": "BindableVector3",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "minItems": 3,
+                            "maxItems": 3,
+                            "items": {
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                            }
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/3/properties/position/anyOf/1"
+                          }
+                        ]
+                      },
+                      "scale": {
+                        "description": "The positive noise-cell size in direction space. Absent is 0.15.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "width": {
+                        "description": "The positive signed-noise distance from the ridge center to its edge. Absent is 0.18.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "sharpness": {
+                        "description": "The positive ridge exponent. Absent is two.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "heightScale": {
+                        "description": "The nonnegative vertical noise scale. Absent is 0.15.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "bias": {
+                        "description": "The ridge center in the signed noise interval [-1, 1]. Absent is zero.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "seed": {
+                        "description": "The exact 32-bit lattice seed. Absent is zero.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "octaves": {
+                        "description": "One to eight authored octaves. Absent is four; low quality admits one.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "blend": {
+                        "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers.",
+                        "enum": [
+                          "Over",
+                          "Add",
+                          "Multiply",
+                          "Screen",
+                          null
+                        ],
+                        "title": "SdfSkyBlend"
+                      },
+                      "mask": {
+                        "description": "The optional directional mask, evaluated before any kind-specific work.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "elevation": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyMask"
+                      },
+                      "transform": {
+                        "description": "The layer\u0027s orientation inside the sky frame.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "yaw": {
+                            "description": "Rotation about the frame\u0027s up axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "pitch": {
+                            "description": "Rotation about the yawed right axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "roll": {
+                            "description": "Rotation about the yawed and pitched forward axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "rate": {
+                            "description": "The additional yaw rate in radians per second.",
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyTransform"
+                      },
+                      "clock": {
+                        "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "opacity": {
+                        "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "visibility": {
+                        "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed.",
+                        "enum": [
+                          "Camera",
+                          "Lighting",
+                          "Both",
+                          null
+                        ],
+                        "title": "SdfSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "The lowest quality tier at which the layer draws. Structural, never keyed.",
+                        "title": "QualityTier",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerAurora"
+                  },
+                  {
+                    "description": "An equirectangular frame sampled by direction. It uses the same producer, camera and probe sources as other world frame consumers, with longitude wrapping and latitude clamping at the poles.",
+                    "properties": {
+                      "$type": {
+                        "const": "panorama"
+                      },
+                      "source": {
+                        "description": "The existing frame source; its output remains owned and leased by the ordinary source instance.",
+                        "type": "object",
+                        "required": [
+                          "$type"
+                        ],
+                        "anyOf": [
+                          {
+                            "description": "An image a registered producer makes, such as the test pattern, a QR code, a camera or a desktop capture, named by the producer\u0027s id rather than by a document kind, so a new producer needs no change here. The producer binds Settings through its own settings shape and refuses a member it does not declare, by name; WorldImageProducerSettings holds the shapes of the producers the engine ships, and WorldImageProducerVocabulary holds every registered producer\u0027s shape. Two producer sources are equal when their ids and settings are, member for member.",
+                            "properties": {
+                              "$type": {
+                                "const": "producer"
+                              },
+                              "id": {
+                                "description": "The registered producer\u0027s id.",
+                                "type": "string"
+                              },
+                              "settings": {
+                                "description": "The producer\u0027s settings object, or null for its defaults. Omitted from the wire when null.",
+                                "type": [
+                                  "object",
+                                  "null"
+                                ],
+                                "default": null,
+                                "additionalProperties": {
+                                  "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+                                }
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldScreenSourceProducer"
+                          },
+                          {
+                            "description": "A named view from the presentation view stack, such as a monitor showing another camera\u0027s output.",
+                            "properties": {
+                              "$type": {
+                                "const": "view"
+                              },
+                              "cameraName": {
+                                "description": "The registered view name this slot samples.",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "cameraName"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldScreenSourceView"
+                          },
+                          {
+                            "description": "A declared probe\u0027s texture output \u2014 the frame a kind that declares an output writes each cycle (a relit camera frame, a mask), published like a camera feed. The probe must be a probes row of this document; whether its kind writes a texture is checked at boot against the kind\u0027s manifest.",
+                            "properties": {
+                              "$type": {
+                                "const": "probe"
+                              },
+                              "id": {
+                                "description": "The probes[].id whose output this slot shows.",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldScreenSourceProbe"
+                          }
+                        ],
+                        "title": "WorldFrameSource"
+                      },
+                      "tint": {
+                        "description": "The linear RGB multiplier. Absent is white.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                          }
+                        ]
+                      },
+                      "intensity": {
+                        "description": "The nonnegative emission gain. Absent is one; zero performs no texture loads.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "filter": {
+                        "description": "Nearest or linear filtering. Absent is linear.",
+                        "enum": [
+                          "Nearest",
+                          "Linear",
+                          null
+                        ],
+                        "default": null,
+                        "title": "GpuSamplerFilter"
+                      },
+                      "name": {
+                        "description": "The authored row identity used by section keys and source-preserving edits.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "blend": {
+                        "description": "The affine blend operation applied at this layer\u0027s authored position. An absent value uses the kind\u0027s ordinary composition: additive emission for stars, coverage-over for field layers.",
+                        "enum": [
+                          "Over",
+                          "Add",
+                          "Multiply",
+                          "Screen",
+                          null
+                        ],
+                        "title": "SdfSkyBlend"
+                      },
+                      "mask": {
+                        "description": "The optional directional mask, evaluated before any kind-specific work.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "elevation": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyMask"
+                      },
+                      "transform": {
+                        "description": "The layer\u0027s orientation inside the sky frame.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "yaw": {
+                            "description": "Rotation about the frame\u0027s up axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "pitch": {
+                            "description": "Rotation about the yawed right axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "roll": {
+                            "description": "Rotation about the yawed and pitched forward axis, in radians.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "allOf": [
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                              }
+                            ]
+                          },
+                          "rate": {
+                            "description": "The additional yaw rate in radians per second.",
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldSkyTransform"
+                      },
+                      "clock": {
+                        "description": "The optional named clock used by the layer\u0027s motion and reported by presentation inspection.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "opacity": {
+                        "description": "The layer opacity in [0, 1]. Zero skips its kind before any hash or texture sample.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                          }
+                        ]
+                      },
+                      "visibility": {
+                        "description": "The camera and lighting consumers that may draw the layer. Structural, never keyed.",
+                        "enum": [
+                          "Camera",
+                          "Lighting",
+                          "Both",
+                          null
+                        ],
+                        "title": "SdfSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "The lowest quality tier at which the layer draws. Structural, never keyed.",
+                        "title": "QualityTier",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ]
+                      }
+                    },
+                    "required": [
+                      "source"
+                    ],
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerPanorama"
                   }
                 ],
                 "title": "WorldRenderSkyLayer"
               },
               "default": null
+            },
+            "frame": {
+              "description": "The shared sky orientation. Absent aligns the sky\u0027s up axis with world \u002BY.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "up": {
+                  "description": "The finite nonzero up direction. Absent uses world \u002BY.",
+                  "default": null,
+                  "title": "BindableDirection",
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "minItems": 3,
+                      "maxItems": 3,
+                      "items": {
+                        "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                      }
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone/properties/toward/anyOf/1"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "title": "WorldSkyFrame"
+            },
+            "quality": {
+              "description": "The authored sky tier before a session override. An absent value retains full evaluation fidelity.",
+              "title": "QualityTier",
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                null
+              ]
+            },
+            "keys": {
+              "description": "Named partial-record keys for this sky section.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "clock": {
+                  "description": "The named presentation clock.",
+                  "type": "string"
+                },
+                "keys": {
+                  "$ref": "#/properties/render/properties/lighting/properties/keys/properties/keys"
+                }
+              },
+              "required": [
+                "clock",
+                "keys"
+              ],
+              "additionalProperties": false,
+              "title": "WorldSectionKeys"
             }
           },
           "additionalProperties": false,
           "default": null,
           "title": "WorldRenderSky"
-        },
-        "cycle": {
-          "description": "Lighting and sky keyed over a state row\u0027s value (a day/night cycle when that row advances). Optional; absent leaves Lighting/Sky static.",
-          "type": [
-            "object",
-            "null"
-          ],
-          "properties": {
-            "state": {
-              "description": "The state row read (its slot cell; Fixed or Int).",
-              "type": "string"
-            },
-            "keys": {
-              "description": "At least two keys, strictly ascending At in [0, 1).",
-              "type": "array",
-              "items": {
-                "description": "One point on a WorldRenderCycle.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "at": {
-                    "description": "The row-value fraction this key sits at, in [0, 1).",
-                    "type": "number"
-                  },
-                  "lighting": {
-                    "description": "The lighting fields this key moves, or null.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "lights": {
-                        "$ref": "#/properties/render/properties/lighting/properties/lights",
-                        "default": null
-                      },
-                      "curvature": {
-                        "$ref": "#/properties/render/properties/lighting/properties/curvature",
-                        "default": null
-                      }
-                    },
-                    "additionalProperties": false,
-                    "default": null,
-                    "title": "WorldRenderLighting"
-                  },
-                  "sky": {
-                    "description": "The sky fields this key moves, or null.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "layers": {
-                        "$ref": "#/properties/render/properties/sky/properties/layers",
-                        "default": null
-                      }
-                    },
-                    "additionalProperties": false,
-                    "default": null,
-                    "title": "WorldRenderSky"
-                  }
-                },
-                "required": [
-                  "at"
-                ],
-                "additionalProperties": false,
-                "title": "WorldRenderCycleKey"
-              }
-            }
-          },
-          "required": [
-            "state",
-            "keys"
-          ],
-          "additionalProperties": false,
-          "default": null,
-          "title": "WorldRenderCycle"
         },
         "environment": {
           "description": "The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.",
@@ -1263,7 +3864,7 @@
           ],
           "properties": {
             "softboxes": {
-              "description": "The reflection softboxes, at most SdfEnvironment.MaxSoftboxes. Absent or empty contributes nothing.",
+              "description": "The reflection softboxes, at most SdfLighting.MaxSoftboxes. Absent or empty contributes nothing.",
               "type": [
                 "array",
                 "null"
@@ -1277,39 +3878,86 @@
                 "properties": {
                   "direction": {
                     "description": "From a reflecting surface toward the softbox, any nonzero length (normalized before upload).",
-                    "title": "DocumentVector3",
+                    "title": "BindableDirection",
                     "anyOf": [
                       {
                         "type": "array",
-                        "items": {
-                          "type": "number"
-                        },
                         "minItems": 3,
-                        "maxItems": 3
+                        "maxItems": 3,
+                        "items": {
+                          "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                        }
                       },
                       {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                        "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone/properties/toward/anyOf/1"
                       }
                     ]
                   },
                   "size": {
                     "description": "The angular half-extent (width, height) the falloff widens by, both strictly positive.",
-                    "title": "DocumentVector2",
+                    "title": "BindableVector2",
                     "anyOf": [
                       {
                         "type": "array",
-                        "items": {
-                          "type": "number"
-                        },
                         "minItems": 2,
-                        "maxItems": 2
+                        "maxItems": 2,
+                        "items": {
+                          "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                        }
                       },
                       {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                        "type": "object",
+                        "properties": {
+                          "clock": {
+                            "type": "string"
+                          },
+                          "keys": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "type": "number"
+                                },
+                                "value": {
+                                  "title": "BindableVector2",
+                                  "anyOf": [
+                                    {
+                                      "type": "array",
+                                      "minItems": 2,
+                                      "maxItems": 2,
+                                      "items": {
+                                        "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                                      }
+                                    },
+                                    {
+                                      "$ref": "#/properties/render/properties/environment/properties/softboxes/items/properties/size/anyOf/1"
+                                    }
+                                  ]
+                                },
+                                "ease": {
+                                  "enum": [
+                                    "Linear",
+                                    "Smooth",
+                                    "Step"
+                                  ],
+                                  "default": "Linear",
+                                  "title": "WorldKeyEase"
+                                }
+                              },
+                              "required": [
+                                "at",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "clock",
+                          "keys"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -1317,26 +3965,53 @@
                     "description": "BindableColor\u0027s grammar: the softbox\u0027s linear colour. Absent is white.",
                     "default": null,
                     "title": "BindableColor",
-                    "type": [
-                      "string",
-                      "null"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                      }
                     ]
                   },
                   "weight": {
                     "description": "The strength. Absent is 1.",
-                    "type": [
-                      "number",
-                      "null"
-                    ],
-                    "default": null
+                    "default": null,
+                    "title": "BindableScalar",
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                      }
+                    ]
                   },
                   "blur": {
                     "description": "Additional falloff softening, in the same units as Size. Absent is 0.",
+                    "default": null,
+                    "title": "BindableScalar",
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                      }
+                    ]
+                  },
+                  "name": {
+                    "description": "The authored softbox identity used by section keys.",
                     "type": [
-                      "number",
+                      "string",
                       "null"
-                    ],
-                    "default": null
+                    ]
                   }
                 },
                 "required": [
@@ -1359,24 +4034,54 @@
                   "description": "The ground-ward (direction.y = \u22121) colour. Absent is black.",
                   "default": null,
                   "title": "BindableColor",
-                  "type": [
-                    "string",
-                    "null"
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                    }
                   ]
                 },
                 "high": {
                   "description": "The sky-ward (direction.y = 1) colour. Absent is black.",
                   "default": null,
                   "title": "BindableColor",
-                  "type": [
-                    "string",
-                    "null"
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/3/properties/spectrum/items/anyOf/1"
+                    }
                   ]
                 }
               },
               "additionalProperties": false,
               "default": null,
               "title": "WorldRenderHorizon"
+            },
+            "keys": {
+              "description": "Named partial-record keys for this reflection environment.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "clock": {
+                  "description": "The named presentation clock.",
+                  "type": "string"
+                },
+                "keys": {
+                  "$ref": "#/properties/render/properties/lighting/properties/keys/properties/keys"
+                }
+              },
+              "required": [
+                "clock",
+                "keys"
+              ],
+              "additionalProperties": false,
+              "title": "WorldSectionKeys"
             }
           },
           "additionalProperties": false,
@@ -1400,6 +4105,28 @@
             "null"
           ],
           "default": null
+        },
+        "keys": {
+          "description": "Named partial-record keys, compiled to ordinary typed values when the definition is prepared.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "clock": {
+              "description": "The named presentation clock.",
+              "type": "string"
+            },
+            "keys": {
+              "$ref": "#/properties/render/properties/lighting/properties/keys/properties/keys"
+            }
+          },
+          "required": [
+            "clock",
+            "keys"
+          ],
+          "additionalProperties": false,
+          "title": "WorldSectionKeys"
         }
       },
       "additionalProperties": false,
@@ -1542,15 +4269,8 @@
                     "type": "string"
                   },
                   "settings": {
-                    "description": "The producer\u0027s settings object, or null for its defaults. Omitted from the wire when null.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "default": null,
-                    "additionalProperties": {
-                      "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
-                    }
+                    "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/8/properties/source/anyOf/0/properties/settings",
+                    "default": null
                   }
                 },
                 "required": [
@@ -1844,7 +4564,7 @@
                           "type": "string"
                         },
                         "settings": {
-                          "$ref": "#/properties/screens/items/properties/source/anyOf/2/properties/settings",
+                          "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/8/properties/source/anyOf/0/properties/settings",
                           "default": null
                         }
                       },
@@ -2410,19 +5130,21 @@
                           "type": "number"
                         },
                         "yaw": {
-                          "description": "The orbit heading in radians, as a literal or numeric state binding.",
-                          "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "description": "The orbit heading in radians, as a literal, numeric state binding or short-arc clock keys.",
+                          "title": "BindableAngle",
+                          "allOf": [
+                            {
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                            }
                           ]
                         },
                         "pitch": {
-                          "description": "The orbit tilt in radians, as a literal or numeric state binding.",
-                          "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "description": "The orbit tilt in radians, as a literal, numeric state binding or short-arc clock keys.",
+                          "title": "BindableAngle",
+                          "allOf": [
+                            {
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                            }
                           ]
                         },
                         "pivotOffset": {
@@ -2474,9 +5196,16 @@
                         "fraction": {
                           "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding.",
                           "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                            }
                           ]
                         },
                         "opcode": {
@@ -2555,10 +5284,11 @@
                         },
                         "fieldOfViewRadians": {
                           "description": "The field of view.",
-                          "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "title": "BindableAngle",
+                          "allOf": [
+                            {
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                            }
                           ]
                         },
                         "opcode": {
@@ -2592,9 +5322,16 @@
                         "weight": {
                           "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding.",
                           "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                            }
                           ]
                         },
                         "opcode": {
@@ -2622,9 +5359,16 @@
                         "key": {
                           "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases.",
                           "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                            }
                           ]
                         },
                         "cases": {
@@ -2720,9 +5464,16 @@
                   "weight": {
                     "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding.",
                     "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                      }
                     ]
                   },
                   "opcode": {
@@ -2805,10 +5556,11 @@
                 "properties": {
                   "fieldOfViewRadians": {
                     "description": "The field of view.",
-                    "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "title": "BindableAngle",
+                    "allOf": [
+                      {
+                        "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                      }
                     ]
                   },
                   "opcode": {
@@ -2941,19 +5693,21 @@
                     "type": "number"
                   },
                   "yaw": {
-                    "description": "The orbit heading in radians, as a literal or numeric state binding.",
-                    "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "description": "The orbit heading in radians, as a literal, numeric state binding or short-arc clock keys.",
+                    "title": "BindableAngle",
+                    "allOf": [
+                      {
+                        "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                      }
                     ]
                   },
                   "pitch": {
-                    "description": "The orbit tilt in radians, as a literal or numeric state binding.",
-                    "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "description": "The orbit tilt in radians, as a literal, numeric state binding or short-arc clock keys.",
+                    "title": "BindableAngle",
+                    "allOf": [
+                      {
+                        "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0"
+                      }
                     ]
                   },
                   "pivotOffset": {
@@ -3006,9 +5760,16 @@
                   "fraction": {
                     "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding.",
                     "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                      }
                     ]
                   },
                   "opcode": {
@@ -3036,9 +5797,16 @@
                   "key": {
                     "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases.",
                     "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                      }
                     ]
                   },
                   "cases": {
@@ -17708,7 +20476,7 @@
                           "type": "string"
                         },
                         "settings": {
-                          "$ref": "#/properties/screens/items/properties/source/anyOf/2/properties/settings",
+                          "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/8/properties/source/anyOf/0/properties/settings",
                           "default": null
                         }
                       },
@@ -19685,9 +22453,16 @@
                   ],
                   "additionalProperties": {
                     "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/elevation/items/allOf/0/anyOf/2"
+                      }
                     ]
                   }
                 },
@@ -21870,7 +24645,7 @@
                               "type": "string"
                             },
                             "settings": {
-                              "$ref": "#/properties/screens/items/properties/source/anyOf/2/properties/settings",
+                              "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/8/properties/source/anyOf/0/properties/settings",
                               "default": null
                             }
                           },
@@ -21974,7 +24749,7 @@
                                     "type": "string"
                                   },
                                   "settings": {
-                                    "$ref": "#/properties/screens/items/properties/source/anyOf/2/properties/settings",
+                                    "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/8/properties/source/anyOf/0/properties/settings",
                                     "default": null
                                   }
                                 },

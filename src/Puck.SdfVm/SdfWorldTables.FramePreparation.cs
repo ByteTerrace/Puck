@@ -181,17 +181,12 @@ public sealed partial class SdfWorldTables {
         }
     }
 
-    // The latest packed frame's environment rows, SdfEnvironment's lanes with the host bakes.
-    private readonly float[] m_environment = new float[SdfEnvironment.LaneCount];
-
     /// <summary>Gets or sets the SDF debug view mode every pass block carries; 0 renders the final lit image.</summary>
     public int DebugMode { get; set; }
     /// <summary>Gets what every pass block of the latest packed frame takes from the tables: the bound screens, the
-    /// instance-mask width, the mesh draws, the debug view mode, and the environment rows with the host bakes applied
-    /// (<see cref="SdfFrameBlock.BakeEnvironment"/>).</summary>
+    /// instance-mask width, the mesh draws, and the debug view mode.</summary>
     public SdfPassValues PassValues => new(
         DebugMode: DebugMode,
-        Environment: m_environment,
         InstanceMaskWordCount: InstanceMaskWordCount,
         MeshDraws: MeshDrawCount,
         ScreenCount: BoundScreenCount()
@@ -200,9 +195,10 @@ public sealed partial class SdfWorldTables {
     public uint InstanceMaskWordCount => ((uint)m_liveInstanceMaskWordCount);
 
     /// <summary>Packs a frame into the tables host-side: validates it, writes the dynamic transforms it moved, rebuilds the
-    /// frame instance grid when a binnable instance moved, and packs the screen lights, volumes and mesh draws. Each region
-    /// owes only the words that changed; the frame's first pass sends them (<see cref="SubmitUpload"/>). The frame's values
-    /// reach the passes through each pass block (<see cref="SdfFrameBlock"/>), not the tables.</summary>
+    /// frame instance grid when a binnable instance moved, and packs native lighting, screen lights, volumes and mesh
+    /// draws. Each region owes only the words that changed; the frame's first pass sends them (<see cref="SubmitUpload"/>).
+    /// Camera and traversal values reach each pass through <see cref="SdfFrameBlock"/>; the native lighting regions bind
+    /// only to the passes that consume them.</summary>
     /// <param name="frame">The frame.</param>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     /// <exception cref="ObjectDisposedException">The tables are disposed.</exception>
@@ -265,10 +261,7 @@ public sealed partial class SdfWorldTables {
         // The screen-light and volume tables are packed every frame; UploadProgram seeds the screen-surface table and
         // SetScreenSurface patches it, and SetScreenDecal/ClearScreenDecal patch the decal table.
         PackScreenLights();
-        SdfFrameBlock.BakeEnvironment(
-            frame: frame,
-            rows: m_environment
-        );
+        PackLighting(frame: frame);
         _ = m_screenLightRegion.Write(
             bytes: m_screenLightScratch,
             offset: 0

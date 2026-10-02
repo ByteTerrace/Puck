@@ -134,7 +134,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // This frame's bounded volumes: the static placements' baked ones, then the stamp pool's slot-riding ones, in
     // that order up to the engine's ceiling (SdfProgramBuilder.MaxVolumes) — reused across frames.
     private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);
-    private readonly WorldRenderCycleTrack m_cycle = new();
+    private readonly WorldEnvironmentResolve m_environment = new();
+
+    /// <summary>The environment's counted timeline work, shared by the primary views of this frame.</summary>
+    public WorldEnvironmentResolve TimelineWork => m_environment;
+
     // Per-frame scratch for the listener policy: each joined seat's resolved view-camera pose, slot-indexed.
     private readonly WorldSeatCameraPose[] m_seatCameraPoses = new WorldSeatCameraPose[PlayerRoster.MaxSlots];
     private readonly Vector3[] m_lastSeatAnchorPosition = new Vector3[PlayerRoster.MaxSlots];
@@ -1446,6 +1450,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     ) {
                         CutRevision = ViewCut(index: m_views.Count, source: m_namedCameraRigCache[cameraName], revision: m_namedCameraRigCache[cameraName].Revision),
                         Quality = quality,
+                        SeatSlot = 0,
+                        SkyInspection = Editor.SkyOf(0, WorldDefinitionLoader.BootInstanceName, m_client.Definition),
+                        SkyQuality = m_settings.SkyQuality,
                         RenderScale = (m_settings.RenderScale * transitionScale),
                         UpscaleSharpness = m_settings.UpscaleSharpness,
                     });
@@ -1508,7 +1515,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             ) {
                 CutRevision = ViewCut(index: m_views.Count, source: m_seatCameraRigs[slot]!, revision: m_roster.Seat(slot: slot)!.View.CutRevision),
                 Grid = SeatGrid(slot: slot),
+                SeatSlot = slot,
+                SkyInspection = Editor.SkyOf(slot, WorldDefinitionLoader.BootInstanceName, m_client.Definition),
                 Quality = quality,
+                SkyQuality = m_settings.SkyQuality,
                 RenderScale = (m_settings.RenderScale * transitionScale),
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
@@ -1601,6 +1611,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             ) {
                 CutRevision = ViewCut(index: m_views.Count, source: this, revision: 0),
                 Quality = quality,
+                SkyQuality = m_settings.SkyQuality,
                 RenderScale = m_settings.RenderScale,
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
@@ -1632,7 +1643,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             transforms: transforms
         );
 
-        var lighting = m_cycle.Resolve(
+        var lighting = m_environment.Resolve(
             definition: m_client.Definition,
             revision: m_client.DefinitionRevision,
             mirror: m_client.StateMirror,
@@ -1672,7 +1683,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
             // The environment: the static render.lighting/render.sky lanes, or this frame's point along
-            // render.cycle when the world authors one (a world.row.set render lands on the next frame).
+            // its typed clock keys (a world.row.set render lands on the next frame).
             Environment = lighting,
             // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state at,
             // never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.

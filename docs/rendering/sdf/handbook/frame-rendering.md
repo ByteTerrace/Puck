@@ -21,7 +21,7 @@ surface evaluation, AO, the key light's shadow and lighting have separate dispat
 that view's own output image:
 
 ```text
-   upload → sky → mask → beam → cull-args → mesh → primary → surface → ambient → views
+   upload → sky → mask → beam → cull-args → mesh → primary → surface → ambient → shadow → views
 ```
 
 The render graph plans the view's passes like any other graph: the package
@@ -34,6 +34,15 @@ rendering passes do; [the engine README](../../../../src/Puck.SdfVm/README.md)
 describes the visibility records the four per-pixel passes share: one per pixel
 of each view's render grid, 64 bytes. Reduced or variable views append the
 full-output `resolve` pass described under [render scale](#render-scale-tiers-trade-resolution-for-frame-time).
+
+Sky and light values are native records in changed-word regions. They are shared
+by every view of the residency: the sky pass reads sky records, shadow reads
+light records, and Views reads both. The common pass block holds camera,
+traversal, grid and temporal controls, plus the flag that asks surface to
+calculate curvature. Its 432 bytes exclude the 848-byte former environment
+array. Seeds retain all 32 authored bits through the host and shader; large
+seeds therefore select their own procedural pattern rather than a rounded
+neighboring seed.
 
 **mask** (`sdf-instance-cull.comp.hlsl`) computes, for every 16×16 screen tile, the
 set of instances that could possibly matter to that tile—a bitmask, one bit per

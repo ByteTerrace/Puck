@@ -29,7 +29,7 @@
           "null"
         ],
         "additionalProperties": {
-          "$ref": "./common.schema.json#/$defs/WorldFrameSource"
+          "$ref": "./common.schema.json#/$defs/WorldFrameSourceNullable"
         },
         "default": null
       },

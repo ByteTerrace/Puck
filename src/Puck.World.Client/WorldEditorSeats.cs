@@ -16,7 +16,7 @@ public readonly record struct WorldEditorRay(Vector3 Origin, Vector3 Direction);
 /// moved. A value no verb has moved reads through to the document's <c>editor</c> section, so a reload that changes the
 /// section reaches every seat that never overrode it, and a seat's own overrides survive the reload. Presentation state:
 /// nothing here reaches the simulation.</summary>
-public sealed class WorldEditorSeats {
+public sealed partial class WorldEditorSeats {
     private readonly Seat[] m_seats;
 
     /// <summary>Initializes a new instance of the <see cref="WorldEditorSeats"/> class with no seat's value moved.</summary>
@@ -269,7 +269,7 @@ public sealed class WorldEditorSeats {
         });
     }
 
-    private sealed class Seat {
+    private sealed partial class Seat {
         public bool Inspector;
 
         public float? AngleStepDegrees { get; set; }

@@ -95,7 +95,7 @@ public sealed partial class SdfWorldPassesLawTests {
         );
         // Soft shadows on, but no light casts them.
         Assert.Equal(
-            actual: StagesOf(frame: (frame with { Environment = new SdfEnvironment() })),
+            actual: StagesOf(frame: (frame with { Environment = new SdfLighting() })),
             expected: (true, false)
         );
     }

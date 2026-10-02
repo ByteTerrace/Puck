@@ -90,6 +90,10 @@ internal static class ConstructProbes {
 
     /// <summary>Gets the probes for each described construct, keyed by its keyword.</summary>
     public static IReadOnlyDictionary<string, IReadOnlyList<ConstructProbe>> Sources { get; } = new Dictionary<string, IReadOnlyList<ConstructProbe>>(comparer: StringComparer.Ordinal) {
+        ["render"] = [new(Pointer: "/render", Source: Doc(body: "render {\n}"))],
+        ["timeline"] = [new(Pointer: "/timeline", Source: Doc(body: "timeline {\n}"))],
+        ["clock"] = [new(Pointer: "/timeline/clocks/0", Source: Doc(body: "timeline {\n    clock day {\n    }\n}"))],
+        ["keys"] = [new(Pointer: "/render/keys", Source: Doc(body: "render {\n    keys(clock: day) [ { at: 0, value: 0 } { at: 1, value: 1 } ]\n}"))],
         ["host"] = [new(
             Pointer: "/host",
             Source: Doc(body: "host {\n}")

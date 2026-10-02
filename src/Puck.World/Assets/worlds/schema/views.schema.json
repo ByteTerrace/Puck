@@ -231,29 +231,15 @@
                 "null"
               ],
               "additionalProperties": {
-                "title": "BindableScalar",
-                "type": [
-                  "number",
-                  "string"
-                ]
+                "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2"
               }
             },
             "default": null
           },
           "tier": {
+            "$ref": "./common.schema.json#/$defs/QualityTier",
             "description": "The quality tier the instance renders at, from the authored quality vocabulary: the variant of its source\u0027s package it loads, or the tier its source compiles for where no package holds it. A tier selects how the passes compute and never what they read, so two documents differing only in a row\u0027s tier present the same state. null loads the variant no tier names.",
-            "default": null,
-            "title": "QualityTier",
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "low",
-              "medium",
-              "high",
-              null
-            ]
+            "default": null
           }
         },
         "required": [

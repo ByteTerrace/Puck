@@ -86,6 +86,9 @@ internal sealed class WorldInspector(WorldEditorSeats seats, WorldCursorFeed cur
         var text = m_text[slot];
 
         text.Format(snapshot: in snapshot);
+        if (probe.DomainsOf(residency: residency) is { } domains) {
+            text.Diagnostics(diagnostics: domains.Diagnostics);
+        }
         if (timing.Enabled && (probe.Root?.Runtime is { } runtime)) {
             var observed = fps.Summarize();
 

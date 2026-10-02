@@ -1,3 +1,5 @@
+using Puck.Abstractions.Presentation;
+
 namespace Puck.World;
 
 /// <summary>The soft-shadow candidate-mask policy. <see cref="Auto"/> keeps exact gathers for small sessions and uses
@@ -38,6 +40,7 @@ public sealed class WorldRenderSettings {
     private ShadowMarchMode m_shadowMarch;
     private ShadowMaskMode m_shadowMask;
     private float m_shadowReach;
+    private QualityTier? m_skyQuality;
     private float m_upscaleSharpness;
 
     /// <summary>Initializes a new instance of the <see cref="WorldRenderSettings"/> class from the world definition's
@@ -108,6 +111,18 @@ public sealed class WorldRenderSettings {
     /// <summary>A monotonic counter advanced by every lever write — the cheap watch the editor HUD keys its
     /// live-session-act tag and drift refresh on (no per-frame drift recompute).</summary>
     public int Revision => m_revision;
+    /// <summary>The session sky-quality override. Null reads each world's authored quality; this inspection
+    /// override is excluded from save and replay.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a declared quality tier.</exception>
+    public QualityTier? SkyQuality {
+        get => m_skyQuality;
+        set {
+            if ((value is { } tier) && !Enum.IsDefined(value: tier)) { throw new ArgumentOutOfRangeException(paramName: nameof(value)); }
+            if (m_skyQuality == value) { return; }
+            m_skyQuality = value;
+            m_revision++;
+        }
+    }
     /// <summary>The soft-shadow crowd radius (world units): an avatar within this distance of any joined local seat casts
     /// soft shadows; beyond it, it is suppressed from the soft-shadow march only (still rendered, still self-lit). Boots
     /// at the definition's default; the <c>world.shadows</c> verb's optional second arg moves it live (it rides the

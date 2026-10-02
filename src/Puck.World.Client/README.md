@@ -51,6 +51,14 @@ the live composed program and its immutable `WorldPickMapBuilder` lookup. It
 attributes exclusively owned packed words to placements and leaves shared tables
 as an explicit remainder; it does not re-emit prototypes or change state.
 
+`WorldEnvironmentResolve` prepares native sky tables from `WorldSkyKinds` on a
+structural revision. Repeated kinds keep separate rows and gradient ranges in
+authored order. Common opacity gates kind reads and compiled motion; admitted
+layers use the shared value resolver and domain guard. Per-seat inspection and
+quality admission belong to views, so they do not alter this shared snapshot.
+The generated writer selection and shader kind dispatcher share the schema's
+kind inventory. Ordered GPU sky consumption is still being integrated.
+
 ## Seats and input
 
 - `PlayerRoster.cs`—seat metadata: which devices sit at which of the four
@@ -189,6 +197,11 @@ separate constraint on dense populations; reusable appearances do not remove it.
   without their prefix) and the composition-time registration binding each to
   render settings, present pacing, the audio mix gain (`IWorldAudioLever`), or
   the binding-bar visibility.
+  `WorldSessionLevers.Sky.cs` admits the shared quality tiers for
+  `world.sky.quality`; `auto` clears the override. The sky inspection override
+  stays outside the save fold, so authored quality remains the saved value.
+  The same live setting reaches main, camera, routed and session views; clearing
+  it lets each destination use its own authored sky quality.
 - `WorldBindingBarVisibility.cs`—the live per-seat binding-bar visibility
   override the `binding-bar` lever writes and the root's bar-policy resolver
   reads.
@@ -229,7 +242,7 @@ separate constraint on dense populations; reusable appearances do not remove it.
   each seat's own reads (`WorldPresentationManifest.SeatBindings`, which
   `WorldSeatBindings` registers on the seat's routed mirror), and an install
   retires what only the previous document registered. The HUD resolver, camera
-  rigs, markers, render and theme colors, the render cycle, the binding bar,
+  rigs, markers, render and theme values, presentation clocks, the binding bar,
   the radial wheel and overlay predicates only look slots up
   (`WorldStateMirror.SlotOf`), which registers and reads nothing, and look them
   up again when `WorldStateMirror.Generation` moves. `WorldClient.DeliverState` refreshes the slots the delivery's
@@ -266,6 +279,16 @@ separate constraint on dense populations; reusable appearances do not remove it.
   use to repack only what moved (see `SdfMovedTransforms` in `Puck.SdfVm`).
 
 ## Camera programs
+
+`WorldEnvironmentResolve` and `WorldThemeResolve` cache only their used state
+slots and clocks through `WorldValueReadSet`. Their numeric field guards retain
+the admitted definition's initial values and report invalid/recovered transitions
+through the shared presentation diagnostic formatter. The inspector reads active
+environment diagnostics from the resolver registered with the actual followed
+residency, including a routed window. A retired or unknown residency never borrows
+the boot world's diagnostics. The span formatter shares the console's invariant
+text and fits the existing editor reservation; repeated unchanged inputs add no
+domain work.
 
 - `WorldCameraRigCompiler.cs` translates an authored `WorldCameraProgram` into
   the document-blind IR in `Puck.SdfVm.Views` and returns an
@@ -304,7 +327,10 @@ separate constraint on dense populations; reusable appearances do not remove it.
   build bar a building seat shows when its own bar has no bank for the build
   page. `WorldEditorSeats.cs` holds each seat's grid and snapping over the
   document's `editor` section, its captured reference and current placement,
-  and folds seat 1's moved values back for `world.save`;
+  and folds seat 1's moved values back for `world.save`. Its sky inspection
+  selection is separate presentation state keyed by seat and stable world
+  identity, survives reload, and is excluded from that fold. Removed layer
+  names are dropped with a named report when the new definition is read;
   `WorldEditorGeometry.cs` turns them into the `GridOverlayState` a building
   seat's view carries and the `SnapReference` the placement verbs snap to.
 - `WorldAffordances.cs`—the process command vocabulary check every binding

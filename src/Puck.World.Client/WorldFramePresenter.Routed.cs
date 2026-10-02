@@ -73,14 +73,17 @@ public sealed partial class WorldFramePresenter {
     /// is created if no seat is presented there, and stays while a seat is presented there or a window is
     /// attached.</summary>
     /// <param name="endpoint">The authority whose world the window shows.</param>
+    /// <param name="slot">The zero-based seat whose view the window belongs to.</param>
     /// <returns>The window, which its holder frames each frame (<see cref="WorldRoutedWindow.View"/>) and disposes when it
     /// closes.</returns>
     /// <remarks>Call it on the frame thread. It enters the next presenter latch; until then its index is -1.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="endpoint"/> is <see langword="null"/>.</exception>
-    public WorldRoutedWindow AttachWindow(WorldAuthorityEndpoint endpoint) {
+    public WorldRoutedWindow AttachWindow(WorldAuthorityEndpoint endpoint, int slot = 0) {
         ArgumentNullException.ThrowIfNull(argument: endpoint);
 
-        return SceneOf(endpoint: endpoint).Attach();
+        ArgumentOutOfRangeException.ThrowIfNegative(slot);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(slot, PlayerRoster.MaxSlots);
+        return SceneOf(endpoint: endpoint).Attach(slot: slot);
     }
     /// <summary>Returns whether a routed scene is still the scene of a world a seat is presented in or a window is
     /// attached to, as the last Dress latched it.</summary>
@@ -172,6 +175,8 @@ public sealed partial class WorldFramePresenter {
             index: index
         ),
         endpoint: endpoint,
-        hostFrame: () => m_dressedFrame
+        hostFrame: () => m_dressedFrame,
+        settings: m_settings,
+        editor: Editor
     );
 }

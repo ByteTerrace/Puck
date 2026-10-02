@@ -12,6 +12,16 @@ live instance. Its count includes instructions and their data/bounds, owned segm
 and rigid-leaf rows, shape side tables and part bindings. Shared tables stay in the
 program-level remainder; inspection never re-emits a prototype.
 
+`SdfSkyRuns` partitions the authored layer structure into consecutive
+field, point and screen runs without reordering it. `SdfSkyAffine` composes the
+per-channel scale and offset of a field run. `SdfSkySnapshot` keeps these ranges
+when opacity or quality admission changes, and copies exact native common,
+gradient-stop and kind records into reusable frame storage. `NativeBytes`
+reports each copy's array payload separately. GPU upload and ordered pass
+integration remain in P18-8.
+Their image and texel counts are structural gauges for one run refresh, not
+cumulative work counters.
+
 ## Documentation
 
 - [SDF renderer and field reference](https://github.com/ByteTerrace/Puck/blob/main/docs/rendering/sdf/README.md) — program model, solid primitives, field evaluator, and Lipschitz analysis.

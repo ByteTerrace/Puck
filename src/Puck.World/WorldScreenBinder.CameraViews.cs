@@ -614,7 +614,11 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
                 Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
             ) {
                 CutRevision = registration.CutRevision,
+                SeatSlot = PlayerRoster.SlotFromDisplay(number: registration.Seat),
+                SkyInspection = ((m_anchors is WorldClient client) ? Presenter?.Editor.SkyOf(
+                    PlayerRoster.SlotFromDisplay(number: registration.Seat), WorldDefinitionLoader.BootInstanceName, client.Definition) : null),
                 Quality = quality,
+                SkyQuality = m_renderSettings.SkyQuality,
             });
 
             if (Runtime?.NodeOf(instance: name) is { } node) {

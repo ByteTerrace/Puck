@@ -39,16 +39,41 @@ checks that reciprocal documents cannot disagree about that deadband.
 `WorldInspectorLawTests` checks the shared panel/command formatter, captured placement
 and material identities, explicit text-cap refusal, and allocation-free steady formatting.
 `WorldCostLawTests` reads scoped and per-shape ownership from a live composed program.
+`WorldSkyInspectionLawTests` checks captured solo/mute isolation and retained mutes,
+allocation-free unchanged selections, and the registered dotted sky-quality command.
+It exercises exact tier admission, `auto`, and exclusion from the save fold through
+the same session sink the command uses. Its view laws and
+`WorldRoutedPresentationLawTests` follow quality changes and clearing through
+main, named-camera, routed, explicit-window, default-window and standalone session
+views, including a routed scene's retained camera. The scope laws exercise
+stable world and seat isolation, the dotted solo/mute commands through real
+reload, named removal reports, and addressed-world routing into windows owned
+by different seats. These CPU facts do not establish a live sky-layer renderer.
 `OverlayReservationRefusalLawTests` runs the actual composer with an oversized writer:
 the whole run is refused, later content fits, and the narration names the writer once
 per episode. `OverlayLeaseTableFitsBackstopsLawTests` holds the shared text backing to
 the power-of-two sum of all declared reservations. `OverlayPackageLawTests` counts its
 installed host/device regions and CPU scratch/shadow payloads.
 
+`SdfLightingInterfaceDeviceLawTests` compiles the existing generated echo for
+the five native lighting records and reads every field of two elements on
+Vulkan and Direct3D 12. Corrupting one field in each table changes exactly five
+verdict pixels, checking both field offsets and the native element stride.
+The same device law compiles the shared light response with only an output image:
+nine independent numeric cases check diffuse, GGX, direction, radiance, ambient
+classification and zero-weight behavior without binding material resources.
+
 `WorldComposedPickMapLawTests` carries material names through the real SDF frame
 composition: two emitters, global SDF ordinals, rebased mesh draws, and a replaced
 identity map that cannot rename an earlier captured answer.
 
+`WorldInspectorDomainLawTests` compares span and console diagnostics, checks
+steady formatting with active scalar, direction and coupled-tuple fields, removes
+a recovered field, and refuses an oversized record through the editor's existing
+reservation. Residency identity controls the readout across replacement and
+retirement; the routed composition law registers the actual scene's existing guard
+without a device. The real inspector command and Tick path preserve that ownership
+with no steady allocation.
 ## Keep the feedback loop short
 
 Use the smallest fixture that exercises the behavior under test:
