@@ -2591,7 +2591,7 @@ export type StatePoolSnapshot = {
  */
 export type StatePoolValue = {
   field: CellName;
-  clock?: StateCellClock;
+  clock?: StateCellClock | null;
   /**
    * Gets an immutable snapshot of the field value.
    */

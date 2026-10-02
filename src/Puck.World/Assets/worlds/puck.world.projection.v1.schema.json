@@ -40415,7 +40415,10 @@
                   "description": "The clock the cell\u0027s trait reads, or null for a trait that has never settled anywhere but tick zero (a follower at rest on its target).",
                   "default": null,
                   "title": "StateCellClock",
-                  "type": "object",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
                   "properties": {
                     "epochTick": {
                       "description": "The simulation tick this clock\u0027s rotation is measured from \u2014 the tick the cell\u0027s base value was last explicitly set, or its own behavior last changed. Read by StateCycle. A negative value is refused; in practice this can only be violated by an authored boot document, since every live settle rebases to the applying tick before validation sees it.",

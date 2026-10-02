@@ -8400,7 +8400,10 @@
     "StateCellClock": {
       "description": "A cell\u0027s own value-over-time timing state \u2014 the epoch(s), the second-order follower\u0027s sampled position and velocity, and a rotation\u0027s carried substep remainder \u2014 moved off the trait records (StateAdvance/StateDynamics/StateCycle, which keep only their authored parameters) onto the cell they time, so a key a write mints later starts its own clock from the tick it was created rather than sharing one baked into a trait every cell of the row would otherwise repeat.",
       "title": "StateCellClock",
-      "type": "object",
+      "type": [
+        "object",
+        "null"
+      ],
       "properties": {
         "epochTick": {
           "description": "The simulation tick this clock\u0027s rotation is measured from \u2014 the tick the cell\u0027s base value was last explicitly set, or its own behavior last changed. Read by StateCycle. A negative value is refused; in practice this can only be violated by an authored boot document, since every live settle rebases to the applying tick before validation sees it.",

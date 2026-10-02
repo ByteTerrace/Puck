@@ -101,7 +101,14 @@ public sealed class StateCellClockJsonConverter : JsonConverter<StateCellClock>,
         writer.WriteEndObject();
     }
     /// <inheritdoc/>
-    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => Schema();
+    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) {
+        var schema = Schema();
+        // The serializer handles a null clock before invoking this reference-type converter; a pool value can
+        // carry that absence explicitly. Row clocks use Schema directly and require an object when present.
+        schema["type"] = new JsonArray("object", "null");
+
+        return schema;
+    }
     /// <inheritdoc/>
     public override StateCellClock Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         using var document = JsonDocument.ParseValue(reader: ref reader);

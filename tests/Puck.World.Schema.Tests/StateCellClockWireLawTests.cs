@@ -19,6 +19,21 @@ public sealed class StateCellClockWireLawTests {
     private static JsonNode? ClockOf(JsonNode? node) => node?["clock"];
 
     [Fact]
+    public void A_pool_value_without_a_clock_validates_against_the_generated_schema() {
+        var value = new StatePoolValue(Field: CellName.Parse(candidate: "health"), Value: CellValue.Int(value: 40L));
+        var node = JsonSerializer.SerializeToNode(options: WorldJsonContext.Default.Options, value: value)!;
+        var bundle = WorldSchema.Bundle(split: WorldSchema.Export(postProcessPackages: []));
+        var schema = SchemaVerdicts.Build(schema: new JsonObject {
+            ["$defs"] = bundle["$defs"]!.DeepClone(),
+            ["$ref"] = "#/$defs/StatePoolValue",
+        });
+
+        Assert.True(condition: node.AsObject().ContainsKey(propertyName: "clock"));
+        Assert.Null(@object: node["clock"]);
+        Assert.Null(@object: JsonSerializer.Deserialize<StatePoolValue>(json: node.ToJsonString(), options: WorldJsonContext.Untrusted.Options)!.Clock);
+        Assert.True(condition: schema.Admits(instance: node), userMessage: schema.Explain(instance: node));
+    }
+    [Fact]
     public void A_row_cell_a_pool_value_and_an_observation_spell_a_clock_alike() {
         var row = new WorldStateRow(
             Cells: [new StateCell(Clock: Clock, Dynamics: new StateDynamics(Row: "chase"), Key: CellName.Parse(candidate: "0"), Value: CellValue.Fixed(rawBits: 0L))],
