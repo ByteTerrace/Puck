@@ -32,6 +32,9 @@ documentation, and this skill with them when guidance disagrees.
    only to the build output and never changes the checkout.
 8. Prove the new law bites by applying a plausible mutation, observing the
    intended failure, restoring the implementation, and observing the pass.
+   A law that lands with a fix is proven against that fix with
+   `puck laws prove <law> --fix <commit>`, or `--file-list` for an
+   uncommitted fix; it never hand-reverts files in a shared tree.
 
 ## Run a tier
 

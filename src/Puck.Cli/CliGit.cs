@@ -55,6 +55,25 @@ internal static class CliGit {
             arguments: ["merge-base", "--is-ancestor", candidate, descendant],
             repository: repository
         ).ExitCode == 0);
+    /// <summary>Resolves the best common ancestor of two revisions in <paramref name="repository"/>.</summary>
+    /// <param name="repository">The directory git runs against.</param>
+    /// <param name="first">One revision, such as <c>HEAD</c>.</param>
+    /// <param name="second">The other revision, such as the branch a change lands on.</param>
+    /// <param name="mergeBase">The merge base's full object name, or empty when the revisions share none or either does
+    /// not resolve.</param>
+    /// <returns><see langword="true"/> when git names a merge base.</returns>
+    public static bool TryMergeBase(string repository, string first, string second, out string mergeBase) {
+        var result = Run(
+            arguments: ["merge-base", first, second],
+            repository: repository
+        );
+
+        mergeBase = ((result.ExitCode == 0)
+            ? result.Stdout.Trim()
+            : string.Empty);
+
+        return (mergeBase.Length != 0);
+    }
     /// <summary>Resolves a revision to the full name of the commit it names in <paramref name="repository"/>.</summary>
     /// <param name="repository">The directory git runs against.</param>
     /// <param name="revision">The revision to resolve.</param>

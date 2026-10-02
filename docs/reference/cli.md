@@ -63,7 +63,7 @@ whose command no longer breaks its rule, until the row is deleted.
 
 | Verb | What it is |
 |---|---|
-| [`puck affected`](#puck-affectedthe-checks-a-change-needs) | names the test suites, canaries and parity run a change needs, from the project graph and recorded canary coverage; `--run` runs exactly those. |
+| [`puck affected`](#puck-affectedthe-checks-a-change-needs) | names the test suites, canaries and parity run a change needs, from the project graph and recorded canary coverage; `--run` runs the suites, worlds and catalog check, and `--run --gpu` the canaries and parity too. |
 | [`puck architecture`](../project-map.md) | the project-layering report: explains the build-time layering gate, `--map` prints the generated layering block of `docs/project-map.md`, and `--check` fails when the checked-in block drifts from the projects' declarations. |
 | [`puck artifacts`](#automation-commands) | capture, restore, and test the compiled-solution archive CI passes between jobs. |
 | [`puck azure`](../development/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
@@ -84,7 +84,9 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
+| [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: builds the solution, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds the affected canaries and parity. |
 | [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
+| [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in a worktree of its own, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
 | [`puck lengths`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) | regenerates `FileLengths.json`, the ratchet ledger the file-length build error (LEN001–LEN004) reads, or checks it with `--check`; a recorded length only falls. |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
@@ -638,7 +640,11 @@ owns the source-language, resource and toolchain contracts.
 
 `puck affected` reads the working tree's changes against a base (`--since`,
 `HEAD` by default, so only uncommitted work) and names what those changes can
-break, and nothing wider:
+break, and nothing wider. `--merge-base <revision>` takes the base as the merge
+base of `HEAD` and that revision instead, so the commits a target branch gained
+after the branch left it are never read as the branch's change; diffing against
+the target's tip would count them. `--since` and `--merge-base` each name the
+base, so passing both is refused.
 
 - **Suites** follow the project graph. A changed project chooses its own suite
   and the suite of every project that references it, transitively, counting a
@@ -720,8 +726,12 @@ names the game's Release catalog, the compiled worlds the build writes, which
 holds no test worlds: `--run` checks it with the compile the line names.
 
 `--run` builds and runs the chosen suites, then `puck test` on the chosen
-worlds, then the catalog check, then the chosen canaries, then parity, and
-exits 1 when any of them fails.
+worlds, then the catalog check, and exits 1 when any of them fails. `--gpu`,
+which needs `--run`, then runs the chosen canaries and then parity, one after
+the other: they boot real Worlds and hold both GPU backends, so they run only
+when asked for, on a machine with no competing build or GPU work.
+[`puck gate`](#puck-gatethe-change-scoped-gate) runs this step on the
+candidate's own CLI.
 
 `--record` refreshes the coverage index. It builds a `Puck.World` that records
 every method the runtime compiles (`-p:PuckRecordMethods=true`; no other build
@@ -729,6 +739,99 @@ carries the recorder), runs the full canary set on it, and maps each leg's
 methods to their source files through the build's portable PDBs. It is a full
 run, so it happens when the owner asks for one; between recordings a new or
 moved source shows up as `unmapped`.
+
+## `puck gate`—the change-scoped gate
+
+`puck gate` verifies a branch's change before it merges. It reads the change
+against the merge base of `HEAD` and the branch it lands on, `--merge-base`
+(default `origin/features/gfx-pipeline`), and runs these steps in order:
+
+1. `dotnet build Puck.slnx -c Release`. A failed build prints its error lines
+   and stops the gate, so no later step runs against output an earlier build
+   left behind.
+2. Copy the CLI that build wrote into the run's own temporary directory. Every
+   later step runs that copy, so it runs the candidate's code, and no other
+   run's build or copy can replace it mid-gate.
+3. `puck affected --merge-base <merge base> --run`: the suites, `.puck` test
+   worlds and catalog check the change reaches. `--gpu` adds `--gpu`, which
+   runs the chosen canaries and then parity.
+4. The repository checks, each in its check form only: `puck format --check`
+   over the changed C# and `.puck` sources, `puck lengths --check`,
+   `puck comment-smells --check`, `puck docs links` and `puck schema --check`.
+   Nothing in the checkout is rewritten.
+
+A failed step fails the gate, and the later steps still run. Each step's full
+output goes to `gate.log` in the run's directory, which the summary names and
+the run keeps; the console carries one verdict line a step and the tail of a
+failed one. The CLI copy and the format file list are removed when the run
+ends.
+
+```text
+gate: 12 changed file(s) against <merge base>, the merge base of HEAD and origin/features/gfx-pipeline; full output in ../../Temp/puck-gate-x1y2/gate.log.
+gate: build passed
+gate: affected passed
+gate: format passed
+gate: lengths passed
+gate: comment-smells passed
+gate: docs links passed
+gate: schema passed
+gate: passed; full output in ../../Temp/puck-gate-x1y2/gate.log
+```
+
+Run the gate from a CLI outside the checkout, such as a copy of
+`src/Puck.Cli/bin/Release/net10.0` in a directory of its own: the build
+rewrites that output, so a CLI running from it is refused. `--gpu` boots real
+Worlds on both GPU backends; run it with no competing build or GPU work on the
+machine.
+
+Exit codes: 0 every step passed, 1 the build or a step failed, 2 refused (no
+merge base, or a CLI running from the checkout it would rebuild).
+
+## `puck laws prove`—a law against its fix
+
+`puck laws prove <law>` shows that a law fails without its fix and passes
+with it, and prints the evidence for the commit that lands them. The law is a
+test name of dotted identifiers, `Class` or `Class.Method`, selected as
+`FullyQualifiedName~<law>`; its project is the test project whose sources
+declare that class, or `--project`.
+
+The fix is one of:
+
+- `--fix <revision>`: the commit's first-parent change, reversed three-way
+  over `HEAD` on every path it changes outside `tests/`, so a law the commit
+  adds stays in place. The commit must be in `HEAD`'s history. `--file-list`
+  narrows the reversal to the listed paths, which the commit must change.
+- `--file-list <json>` alone: the working tree's uncommitted change to the
+  listed paths, each put back to `HEAD` (a path `HEAD` lacks is removed).
+
+The proof never touches the working tree. It adds a detached git worktree of
+`HEAD` under a temporary directory and copies the working tree's uncommitted
+and untracked files into it. There it withholds the fix, builds the law's
+project in Release and runs the law, which must fail. It then restores the fix,
+builds and runs again, and the law must pass. Outcomes come from the test run's
+TRX report, never its console text, and a run that selects no test is refused
+rather than read as a pass. The worktree, its registration and the temporary
+directory are removed whatever the outcome, so concurrent proofs never share a
+file.
+
+```text
+Law: BackgroundBuildLawTests (tests/Puck.Hosting.Tests/Puck.Hosting.Tests.csproj)
+Withheld: <commit> hosting: keep a canceled build's source alive until its callbacks finish
+  docs/reference/hosting.md
+  src/Puck.Hosting/BackgroundBuild.cs
+Without the fix: 1 of 3 failed
+  Puck.Hosting.Tests.BackgroundBuildLawTests.CancelKeepsACompletedBuildUntilItsCallbacksFinish: Assert.True() Failure
+With the fix: 3 of 3 passed
+```
+
+A law that passes with the fix withheld cannot fail and exits 1, as does one
+that fails with the fix in place. A build that fails in either phase is
+refused with its errors, never read as the law failing: when the law itself
+calls what the fix added, narrow the withheld paths with `--file-list` to the
+change the law judges.
+
+Exit codes: 0 proven, 1 cannot fail or fails with the fix, 2 refused (a build
+failed, the law selects no test, or the fix cannot be withheld).
 
 ## `puck canary`—real-World behavioral proofs
 

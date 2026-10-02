@@ -110,6 +110,32 @@ fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
 
 ## Verification
 
+### Verify a change
+
+`puck gate` is how a change is verified, by agents and people alike. Run it
+from a copy of the candidate's own CLI outside the checkout. It builds the
+solution and stops on a failed build; copies the CLI that build wrote into a
+directory of its own; runs the suites, test worlds and catalog check the change
+reaches, read against the merge base with the target branch so the target's
+newer commits are not counted; and runs `format`, `lengths`, `comment-smells`,
+`docs links` and `schema` in their check forms only. `puck gate --gpu` adds the
+affected canaries and parity, one after the other, on a machine with no
+competing build or GPU work. The suites and canaries come from
+[`puck affected`](../reference/cli.md#puck-affectedthe-checks-a-change-needs),
+chosen from the project graph and recorded canary coverage, and nothing wider.
+The full sets run only when the owner asks for them. See
+[`puck gate`](../reference/cli.md#puck-gatethe-change-scoped-gate) for the
+steps and the log the run keeps.
+
+A new law proves its own fix: `puck laws prove <law> --fix <commit>`, or
+`--file-list` naming the files of an uncommitted fix, withholds the fix in a
+worktree of its own, requires the law to fail there and pass once the fix is
+restored, and prints the evidence block for the commit body. A law that passes
+with its fix withheld cannot fail and is reported so; a build that fails in
+either phase is refused rather than counted. Never prove a law by hand-reverting
+files in a shared tree. See
+[`puck laws prove`](../reference/cli.md#puck-laws-provea-law-against-its-fix).
+
 ### Engine changes and verification coverage
 
 `Puck.Post` remains quarantined under `experimental/Puck.Post` and outside the
@@ -137,11 +163,6 @@ baseline. It requires both GPU backends but does not take over a display. Use it
 for render-path, shader, presenter, or capture changes. Its authored stations
 exercise specific contracts; passing them does not establish correctness for
 every possible scene. See `puck parity --help` for the current command surface.
-
-`puck affected --run` is how a change is verified: it runs the suites, canaries
-and parity the change can reach, chosen from the project graph and recorded
-canary coverage (see [`puck affected`](../reference/cli.md#puck-affectedthe-checks-a-change-needs)),
-and nothing wider. The full sets run only when the owner asks for them.
 
 `puck canary --merge` runs the full canary set. It runs every
 [real-World canary](../reference/cli.md#puck-canaryreal-world-behavioral-proofs)
