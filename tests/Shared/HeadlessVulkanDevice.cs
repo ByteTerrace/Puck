@@ -23,7 +23,7 @@ namespace Puck.Testing;
 internal sealed partial class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuDeviceContext, IDisposable {
     private const string ValidationPrefix = "[vulkan-debug] validation ";
 
-    private readonly StringWriter m_debugOutput;
+    private readonly ValidationOutput m_debugOutput;
     private readonly ServiceProvider m_provider;
 
     private bool m_disposed;
@@ -32,7 +32,7 @@ internal sealed partial class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuD
     /// switch every Vulkan device law follows.</summary>
     public const bool Validation = true;
 
-    private HeadlessVulkanDevice(ServiceProvider provider, VulkanInstance instance, VulkanLogicalDevice device, string name, long adapterLuid, StringWriter debugOutput) {
+    private HeadlessVulkanDevice(ServiceProvider provider, VulkanInstance instance, VulkanLogicalDevice device, string name, long adapterLuid, ValidationOutput debugOutput) {
         m_debugOutput = debugOutput;
         m_provider = provider;
         AdapterLuid = adapterLuid;
@@ -57,19 +57,15 @@ internal sealed partial class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuD
     /// writer, as the instance reports it.</summary>
     public bool IsValidated => Instance.ReportsValidation;
     /// <summary>Gets the validation messages the layer has reported for the device so far, one line each.</summary>
-    public IReadOnlyList<string> ValidationMessages => m_debugOutput.ToString()
-        .Split(separator: '\n')
-        .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
-        .Where(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: ValidationPrefix))
-        .ToArray();
+    public IReadOnlyList<string> ValidationMessages => m_debugOutput.Messages;
 
     /// <summary>Brings the device up; skips the calling law by name when the host has no Vulkan loader, driver or device
-    /// with a graphics queue family, or no validation layer when the device asks for one.</summary>
+    /// with a graphics queue family, or no validation layer when the device asks for one. An instance created under
+    /// validation without a reporting messenger, or a validation message during creation or teardown, fails.</summary>
     /// <param name="applicationName">The application name the instance is created with.</param>
     /// <param name="validation">Whether the instance runs under the validation layer.</param>
     /// <returns>The device, owned by the caller.</returns>
     public static HeadlessVulkanDevice Create(string applicationName, bool validation = Validation) {
-        var debugOutput = new StringWriter();
         var provider = new ServiceCollection()
             .AddPuckAllocator()
             .AddVulkanNativeApis()
@@ -77,13 +73,21 @@ internal sealed partial class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuD
             .AddSingleton(implementationInstance: new VulkanRendererOptions { ApplicationName = applicationName, EnableValidation = validation })
             .AddSingleton(implementationInstance: new VulkanQueueSubmitter())
             .BuildServiceProvider();
+
+        return Create(applicationName: applicationName, provider: provider, validation: validation);
+    }
+
+    // The provider is owned even when creation fails; laws supply recording APIs through the same registrations.
+    internal static HeadlessVulkanDevice Create(string applicationName, bool validation, ServiceProvider provider) {
+        var debugOutput = new ValidationOutput(writer: new StringWriter());
         VulkanInstance? instance = null;
+        VulkanLogicalDevice? device = null;
 
         try {
             try {
                 instance = provider.GetRequiredService<IVulkanInstanceFactory>().Create(
                     applicationName: applicationName,
-                    debugOutput: debugOutput,
+                    debugOutput: debugOutput.Writer,
                     displayKind: NativeDisplayKind.Win32,
                     enableValidation: validation
                 );
@@ -91,6 +95,10 @@ internal sealed partial class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuD
                 Assert.Skip(reason: (validation
                     ? $"no Vulkan loader, driver or validation layer: {exception.Message}"
                     : $"no Vulkan loader or driver: {exception.Message}"));
+            }
+
+            if (validation) {
+                Assert.True(condition: instance.ReportsValidation, userMessage: VulkanInstance.ValidationNotLiveLine);
             }
 
             var physicalDeviceApi = provider.GetRequiredService<IVulkanPhysicalDeviceApi>();
@@ -118,7 +126,6 @@ internal sealed partial class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuD
                     presentFamilyIndex: chosen.Graphics.Index
                 )
             );
-            VulkanLogicalDevice device;
 
             try {
                 device = provider.GetRequiredService<IVulkanLogicalDeviceFactory>().Create(
@@ -140,12 +147,12 @@ internal sealed partial class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuD
                 provider: provider
             );
         } catch {
-            instance?.Dispose();
-            provider.Dispose();
+            TearDown(debugOutput: debugOutput, device: device, instance: instance, provider: provider);
 
             throw;
         }
     }
+
     /// <summary>Destroys the device and its instance, then fails the owning law when the validation layer reported any
     /// message for them, naming the first message's identifier and the message. Safe to call more than once; only the
     /// first call checks.</summary>
@@ -155,21 +162,64 @@ internal sealed partial class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuD
         }
 
         m_disposed = true;
-        LogicalDevice.Dispose();
-        Instance.Dispose();
-        m_provider.Dispose();
+        TearDown(device: LogicalDevice, instance: Instance, provider: m_provider, debugOutput: m_debugOutput);
+    }
 
-        var messages = ValidationMessages;
-
-        if (messages.Count != 0) {
-            var identifier = MessageIdentifier().Match(input: messages[0]);
-
-            Assert.Fail(message: $"the Vulkan validation layer reported {messages.Count} message(s) for the device, the first {(identifier.Success ? identifier.Value : "unidentified")}: {messages[0]}");
+    private static void TearDown(VulkanLogicalDevice? device, VulkanInstance? instance, ServiceProvider provider, ValidationOutput debugOutput) {
+        try {
+            device?.Dispose();
+        } finally {
+            try {
+                instance?.Dispose();
+            } finally {
+                try {
+                    provider.Dispose();
+                } finally {
+                    debugOutput.AssertClean();
+                }
+            }
         }
     }
+
     public void WaitIdle() => LogicalDevice.WaitIdle();
 
     // A validation message's identifier: a valid-usage ID, a synchronization hazard, or an unassigned check.
     [GeneratedRegex(pattern: "(VUID-[A-Za-z0-9_-]+|SYNC-[A-Za-z0-9_-]+|UNASSIGNED-[A-Za-z0-9_.-]+)")]
     private static partial Regex MessageIdentifier();
+
+    internal sealed class ValidationOutput {
+        private readonly StringWriter m_writer;
+
+        public ValidationOutput(StringWriter writer) {
+            m_writer = writer;
+            Writer = TextWriter.Synchronized(writer: writer);
+        }
+
+        public IReadOnlyList<string> Messages {
+            get {
+                string snapshot;
+
+                // SyncTextWriter locks itself, so snapshots share the callback's write lock.
+                lock (Writer) {
+                    snapshot = m_writer.ToString();
+                }
+
+                return snapshot.Split(separator: '\n')
+                    .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
+                    .Where(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: ValidationPrefix))
+                    .ToArray();
+            }
+        }
+        public TextWriter Writer { get; }
+
+        public void AssertClean() {
+            var messages = Messages;
+
+            if (messages.Count != 0) {
+                var identifier = MessageIdentifier().Match(input: messages[0]);
+
+                Assert.Fail(message: $"the Vulkan validation layer reported {messages.Count} message(s) for the device, the first {(identifier.Success ? identifier.Value : "unidentified")}: {messages[0]}");
+            }
+        }
+    }
 }
