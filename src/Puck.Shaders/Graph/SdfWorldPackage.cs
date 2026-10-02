@@ -130,13 +130,6 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value set to one to march past the beam's per-tile far bound to the far distance
     /// (<c>uint</c>).</summary>
     public const string DisableFarBound = "disableFarBound";
-    /// <summary>The pass-group value set to one when a temporal view seeds its primary march from the history surface:
-    /// primary then starts each ray at its reprojected ray distance wherever a ball test proves the skipped segment
-    /// empty (<c>uint</c>).</summary>
-    public const string MarchSeed = "marchSeed";
-    /// <summary>The pass-group value holding the extent of the history the temporal resolve keeps, the view's output
-    /// extent, which primary indexes the history surface by when it seeds its march (<c>uint2</c>).</summary>
-    public const string HistoryExtent = "historyExtent";
     /// <summary>The pass-group block array holding the frame's environment, <c>SdfEnvironment</c>'s lane table row for row
     /// with its host bakes, <see cref="EnvironmentRows"/> <c>float4</c> rows.</summary>
     public const string Environment = "environment";
@@ -280,7 +273,6 @@ public static partial class SdfWorldPackage {
         Value(name: FrustumOffset, type: ShaderValueType.Float2),
         Value(name: Jitter, type: ShaderValueType.Float2),
         Value(name: HistoryFrames, type: ShaderValueType.Uint),
-        Value(name: HistoryExtent, type: ShaderValueType.Uint2),
         Value(name: Temporal, type: ShaderValueType.Uint),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: 6, name: PreviousView, type: ShaderValueType.Float4),
         Value(name: NearDistance, type: ShaderValueType.Float),
@@ -311,7 +303,6 @@ public static partial class SdfWorldPackage {
         Value(name: FastSoftShadowMarch, type: ShaderValueType.Uint),
         Value(name: FastAmbientOcclusion, type: ShaderValueType.Uint),
         Value(name: DisableFarBound, type: ShaderValueType.Uint),
-        Value(name: MarchSeed, type: ShaderValueType.Uint),
         ShaderWorkCounters.RowMember,
         ShaderInterfaceMember.Value(
             group: ShaderInterfaceGroup.Pass,
@@ -349,8 +340,8 @@ public static partial class SdfWorldPackage {
         WorldImage(name: MeshEmission),
     ];
     /// <summary>Gets what every compute pass of the fragment reads: from its pass group, beside the extent, the values
-    /// (<see cref="Values"/>), the view's scratch, the preceding history surface primary seeds its march from, its output,
-    /// the screens it shows, the mesh target and the work counters; and the World
+    /// (<see cref="Values"/>), the view's scratch, its output, the screens it shows, the mesh target and the work counters;
+    /// and the World
     /// group's members (<see cref="Tables"/>).</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Members { get; } = [
         .. Values,
@@ -364,7 +355,6 @@ public static partial class SdfWorldPackage {
         Read(element: ShaderValueType.Uint, name: VisibilityRecords),
         Written(element: ShaderValueType.Uint, name: VisibilityRecordsWritten),
         Written(element: ShaderValueType.Float, name: ReactivityWritten),
-        Read(element: ShaderValueType.Uint, name: HistorySurface),
         ShaderInterfaceMember.StorageImage(
             format: RenderGraphPackageCatalog.WorkingFormat,
             group: ShaderInterfaceGroup.Pass,

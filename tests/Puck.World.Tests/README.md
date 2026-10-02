@@ -49,11 +49,6 @@ installed host/device regions and CPU scratch/shadow payloads.
 composition: two emitters, global SDF ordinals, rebased mesh draws, and a replaced
 identity map that cannot rename an earlier captured answer.
 
-`SdfMarchSeedDeviceLawTests` runs the shared march-seed proposal and strict empty-ball
-proof on both hardware backends. Hand-derived intervals and the fixed field evaluator
-cover backoff, endpoint acceptance bands, tiny occluders, chamfer bounds, invalid values
-and adjacent-float equality. This proves the isolated helper; history sampling and
-renderer wiring remain separate work.
 
 ## Keep the feedback loop short
 

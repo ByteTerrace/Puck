@@ -32,7 +32,6 @@ public sealed class WorldRenderSettings {
     private volatile int m_bakes;
     private bool m_cadenceGate;
     private bool m_farBound;
-    private bool m_marchSeed;
     private float m_renderScale;
     private int m_revision;
     private float m_shadowCrowdRadius;
@@ -59,7 +58,6 @@ public sealed class WorldRenderSettings {
         RenderScale = WorldRenderScaleTiers.Scale(tier: defaults.RenderScale);
         UpscaleSharpness = defaults.UpscaleSharpness;
         Temporal = defaults.Temporal;
-        MarchSeed = defaults.MarchSeed;
         FarBound = true;
         CadenceGate = true;
 
@@ -135,12 +133,6 @@ public sealed class WorldRenderSettings {
     /// <see cref="Puck.SdfVm.SdfViewQuality.Temporal"/> lane. A change rebuilds each view's graph beside the installed
     /// one. Camera and session views never ask for it.</summary>
     public bool Temporal { get => m_temporal; set { m_temporal = value; m_revision++; } }
-    /// <summary>Whether the world's own temporal views seed their primary march from their history surface
-    /// (<c>world.march-seed</c>): each ray starts at the ray distance its surface lay at last frame, reprojected through
-    /// the camera's motion, wherever one field evaluation proves the skipped segment empty. Rides each view's
-    /// <see cref="Puck.SdfVm.SdfViewQuality.MarchSeed"/> lane, so no rebuild; a view that is not
-    /// <see cref="Temporal"/> keeps no history and never seeds. Camera and session views never seed.</summary>
-    public bool MarchSeed { get => m_marchSeed; set { m_marchSeed = value; m_revision++; } }
     /// <summary>The continuous reconstruction sharpness: the spatial resolve's blend from bilinear (0) to clamped
     /// Catmull-Rom (1), and the strength of the contrast-adaptive sharpen <c>place</c> applies to a temporally resolved
     /// view at its rect's own extent. A native view that does not reconstruct ignores it.</summary>

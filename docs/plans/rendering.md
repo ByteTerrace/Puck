@@ -4586,7 +4586,7 @@ resolution, and stay there.
   the `motion` debug view, the previous view and previous poses, so that view
   renders until its motion settles.
 - **Parity boots with reconstruction off.** The parity world's render levers
-  pin reconstruction, dynamic resolution and march seeding off, so every
+  pin reconstruction and dynamic resolution off, so every
   existing station keeps its pixel contract. Reconstruction gets stations of its
   own: a `captures` row may state `converge: N`, which resets the captured
   instance's history on the armed tick and serves the Nth frame composed at that
@@ -4600,10 +4600,10 @@ resolution, and stay there.
   presentation, jitter indices 0 to N-1, on both backends and at any speed, and
   the tick verdict still reads the armed tick.
 - **Every costed stage has an off-switch at the floor tier.** Reconstruction
-  (`world.temporal`), dynamic resolution (`world.dynamic-resolution`), march
-  seeding (`world.march-seed`) and sharpening (`world.upscale-sharpness 0`) are
-  session levers (`WorldSessionLevers`), and the quality presets in
-  `quality.puck` gain a row for each of the first three. Which of them `low`
+  (`world.temporal`), dynamic resolution (`world.dynamic-resolution`) and
+  sharpening (`world.upscale-sharpness 0`) are session levers
+  (`WorldSessionLevers`), and the quality presets in `quality.puck` gain a row
+  for each of the first two. Which of them `low`
   turns on is the lead's decision from the counted rows, below.
 - **Camera and session views reconstruct only when asked.** A camera view or
   a session view, which screens show at their declared extent, reconstructs
@@ -4894,72 +4894,36 @@ counted rows recorded in the same change.
      forced extent's capture within tolerance of its reference.
    - Counted-cost gate: zero created objects across the sweep; per-frame counts
      scale with the render extent the frame chose.
-7. **P15-7, march seeding.** Built. The previous frame's depth starts the march
-   where it is safe to.
-   - Built: in the temporal fragment, primary reads the history surface the
-     previous frame's resolve wrote (`ResourceReference.PreviousFrame`). A pixel's
-     candidate start is the ray distance the surface holds where the ray looked
-     last frame, carried through the camera's motion: the ray's direction,
-     projected into the previous view, gives a first distance, and the point that
-     far along the ray, projected again, gives the surface whose distance along
-     the ray is the candidate (`sdfMarchSeedCandidate`, `march/sdf-primary.hlsli`).
-     A history texel naming no surface gives none. Primary backs the candidate
-     off by two acceptance bands and starts there only when one evaluation of the
-     tile-masked field at the midpoint of the segment from the tile's start to
-     the candidate, limited by the fold-safe step bound and the world-space gap
-     to a wallpaper LOD transition, exceeds half the segment
-     plus the band the march accepts a hit within (`sdfPrepareMarchSeed` and
-     `sdfMarchSeedClears`, `march/sdf-march-seed.hlsli`); otherwise it starts at
-     the tile's start, as before. The field `map` returns is already divided by
-     the program's Lipschitz bound (`SdfProgram.StepScale`, packed in the program
-     words rather than the pass block, so it is never applied twice); a stream
-     whose packed step scale is not a finite bound's reciprocal never seeds
-     (`sdfProgramHasFiniteBound`), and every program `SdfProgram` builds has one,
-     since the analysis refuses a bound that overflows.
-     The evaluation counts as a march step. A seed at or past the march's bound
-     marches nothing. `world.march-seed` and the render section's `marchSeed`
-     turn it on for the world's own temporal views, the pass block carrying it as
-     `marchSeed` and the history's extent as `historyExtent`; the quality presets
-     carry it, off at every tier until P15-8 decides. A view that does not
-     reconstruct over time keeps no history surface and never seeds, nor does a
-     debug view, a camera view or a session view. `SdfMarchSeedLawTests` holds
-     the ball test over `SdfFieldEvaluator` against small spheres and a
-     triple-chamfered slab placed at a sweep of depths inside the segment, and
-     against spheres just outside the midpoint ball, which it must admit; its red
-     legs, a ball test dividing by a bound smaller than the program's and one
-     asking the midpoint to cover the full segment, fail it. The `march-seed`
-     canary moves a red slab in front of a seeded backdrop and holds the crossing
-     frame's slab pixels, in the seeded view and in an unseeded camera view of the
-     same eye, to the slab's color, and the seeded pixels within 4 codes of the
-     unseeded ones; its discriminating leg moves the slab a tick late.
-     `tests/Puck.Counters` gains the panning leg `counters-pan.world.json`, whose
-     camera orbits by a state the workload advances every tick, and the
-     `march-seed-off` and `march-seed-on` scripts, which run either workload at
-     the floor tier with reconstruction on.
-   - Open: the GPU checks. The `march-seed` canary's tolerance and color bounds
-     are calibrated on a device, and the fall of primary's `gpu.march.steps` on
-     the still and panning legs is read with `puck counters compare` between the
-     two scripts' reports; the seeded legs' ceilings
-     (`march-seed-still.ceilings.json` and `march-seed-pan.ceilings.json`) are
-     recorded on the RTX 2060.
-   - Touches: `march/sdf-primary.hlsli`, `march/sdf-march-seed.hlsli`,
-     `frame/sdf-reprojection.hlsli` (the history surface's layout),
-     `SdfWorldPackage.Values`, `SdfWorldPackage.TemporalFragment`,
-     `SdfFrameBlock`, `SdfViewQuality`, `WorldRenderSettings`,
-     `WorldSessionLevers`, `WorldRenderLeverCommandModule`, `quality.puck`,
-     `tests/Puck.Counters` (a panning leg).
-   - Done when: a CPU law over `SdfFieldEvaluator` holds the ball test's claim
-     against adversarial occluders placed inside the segment; a `march-seed`
-     canary's occluder moving in front of a seeded surface shows the same
-     identity census as seeding off and pixels within the stated tolerance.
-   - Counted-cost gate: primary's `gpu.march.steps` falls on the still and
-     panning legs, and its ceiling is re-recorded lower in this change; the ball
-     test's evaluation counts as a step.
+7. **P15-7, march seeding.** Investigated and not pursued; the engine has no
+   march seeding ([rendering decisions](../decisions/rendering.md)).
+   - What was measured: primary took a candidate start from the history
+     surface's ray distance, reprojected by the camera's motion, and started there
+     only when one field evaluation at the midpoint of the segment from the beam's
+     tile start proved the segment empty (a ball test, its evaluation counted as a
+     march step). On the RTX 2060's floor tier at 1920x1080 with reconstruction
+     on, primary's `gpu.march.steps` rose with seeding on: 476,615 to 514,550 on
+     the still leg and 607,186 to 652,765 on the panning leg (Vulkan; Direct3D 12
+     within three steps), surface steps flat.
+   - Outcomes on the still leg: 78,080 pixels sought a seed; 15,251 had no
+     candidate, 32,080 failed the ball test and 30,749 started at their candidate.
+     The panning leg: 97,024, 26,324, 35,214 and 35,486. Each accepted seed saved
+     0.81 steps on the still leg and 0.71 on the panning leg against the one
+     evaluation every tested seed costs, so even a gate that tested only the
+     seeds it would accept loses.
+   - A gate that tests the ball only when the segment exceeds β times the
+     march's own first step at the tile start (an evaluation the march makes
+     anyway) only approaches break-even: primary steps rise 1.23% and 1.42% at
+     β = 2, 0.22% and 0.05% at β = 4, and 0 and 2 steps at β = 8.
+   - Research note, open: a seed pays only if one accepted proof saves more than
+     one evaluation, which the midpoint ball cannot, since the beam already
+     starts primary near the surface and the march still converges from the
+     candidate. A proof that also covers the convergence after the candidate,
+     so an accepted seed lands within the acceptance band, is the formulation
+     worth studying before seeding returns.
 8. **P15-8, the floor tier's defaults.** The lead's call from the counted rows.
    - Delivers: the counters workload recorded with each lever off and on at the
      floor tier, in the configurations the first open decision below lists, and `quality.puck`'s `low`, `medium` and `high`
-     rows for the three levers as the lead decides: `temporal`, dynamic
-     resolution's, and `marchSeed`, which every tier carries off until then.
+     rows for the two levers as the lead decides.
    - Touches: `quality.puck`, `tests/Puck.Counters`, the ceilings file.
    - Done when: the chosen defaults' ceilings are recorded and `puck counters
      --check` passes on the RTX 2060.
@@ -4971,12 +4935,7 @@ counted rows recorded in the same change.
   written, bytes uploaded and device-local bytes for: reconstruction off at
   half scale (today's shape after P15-4); reconstruction on at half scale;
   reconstruction on at the quarter tier, which the upscaler may make acceptable
-  where the spatial path is not; each reconstructing configuration with seeding
-  off and on (`world.march-seed`, the `march-seed-off` and `march-seed-on`
-  scripts), over the still and panning legs (`counters.world.json`,
-  `counters-pan.world.json`). Seeding reads the history surface the temporal
-  resolve keeps, so with reconstruction off it does nothing and that
-  configuration's seeding-on row equals its seeding-off row. The memory to expect at that extent: the history color and
+  where the spatial path is not; each over the still and panning legs. The memory to expect at that extent: the history color and
   the history surface at eight bytes a pixel each, in two frame slots, about
   66 MB a view, and the output at the output extent, about 33 MB, against the
   render-extent color's 18.7 MB at half scale.

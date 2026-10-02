@@ -170,15 +170,6 @@ float sdfStepScale() {
 
     return ((stepScale > 0.0) ? stepScale : 1.0);
 }
-// Whether the packed step scale is the reciprocal of a finite Lipschitz bound, in (0, 1], as SdfProgram packs for every
-// program it builds (its analysis refuses one whose bound overflows). A stream without one never seeds a march.
-// This bounds continuous branches only: the seed also respects the field's fold and wallpaper LOD boundary gaps
-// (march/sdf-primary.hlsli).
-bool sdfProgramHasFiniteBound() {
-    float stepScale = asfloat(SDF_SEGMENT_STEP_SCALE(sdfWords[sdfSegmentDirectoryOffset()]));
-
-    return (isfinite(stepScale) && (stepScale > 0.0) && (stepScale <= 1.0));
-}
 // The element offset of instance `index`'s directory entry (i0 = bound, i1 = meta at +1) within the directory at
 // `instanceOffset` — the ONE statement of the 2-uint4-per-instance entry stride.
 uint sdfInstanceEntryOffset(uint instanceOffset, uint index) {

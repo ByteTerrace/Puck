@@ -69,7 +69,6 @@ public sealed class ShippedWorldQualityLawTests(ShippedWorldQualityLawTests.Stag
             actual: table.Preset(tier: QualityTier.Low),
             expected: new WorldQualityPreset(
                 AmbientOcclusion: false,
-                MarchSeed: false,
                 RenderScale: WorldRenderScaleTier.Half,
                 Shadows: ShadowTier.Off,
                 Temporal: false
@@ -77,8 +76,6 @@ public sealed class ShippedWorldQualityLawTests(ShippedWorldQualityLawTests.Stag
         );
         Assert.True(condition: (table.Preset(tier: QualityTier.Medium)?.Temporal ?? false));
         Assert.True(condition: (table.Preset(tier: QualityTier.High)?.Temporal ?? false));
-        // March seeding stays off at every tier until the floor tier's defaults are decided (P15-8).
-        Assert.All(collection: QualityTiers.All, action: tier => Assert.False(condition: (table.Preset(tier: tier)?.MarchSeed ?? true)));
         Assert.Equal(
             actual: (table with { LowRaw = null, MediumRaw = null, HighRaw = null }),
             expected: WorldRenderDefaults.Absent

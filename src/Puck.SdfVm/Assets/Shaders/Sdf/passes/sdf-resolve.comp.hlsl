@@ -21,6 +21,8 @@
 #include "../frame/sdf-reprojection.hlsli"
 #include "../frame/sdf-work.hlsli"
 
+// KEEP IN SYNC with SdfWorldPackage.HistorySurfaceWords.
+static const uint SdfHistorySurfaceWords = 2u;
 // The relative ray-distance disagreement a reprojected history sample may carry and still describe the same surface.
 static const float SdfHistoryDepthTolerance = 0.05;
 // The accumulated weight history saturates at: one jitter period of full-weight samples. KEEP IN SYNC with
@@ -187,7 +189,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             historyPosition = (((float2(id.xy) + 0.5) + (motion * float2(extent))) - 0.5);
             if (all(historyPosition >= -0.5) && all(historyPosition <= (float2(extent) - 0.5))) {
                 uint2 texel = sdfResolveClamp(int2(floor(historyPosition + 0.5)), extent);
-                uint word = sdfHistorySurfaceWord(texel, extent);
+                uint word = (SdfHistorySurfaceWords * ((texel.y * extent.x) + texel.x));
                 float historyT = asfloat(historySurface[word]);
                 uint historyIdentity = historySurface[word + 1u];
 
@@ -214,7 +216,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float3 accumulated = (((history * historyWeight) + sum) / max(total, 1.0e-6));
     float3 resolved = (accepted ? lerp(spatial.rgb, accumulated, saturate(total)) : spatial.rgb);
 
-    uint word = sdfHistorySurfaceWord(id.xy, extent);
+    uint word = (SdfHistorySurfaceWords * ((id.y * extent.x) + id.x));
 
     output[id.xy] = float4(resolved, spatial.a);
     sdfWorkTexels = 1u;

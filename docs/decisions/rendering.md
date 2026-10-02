@@ -544,6 +544,23 @@ surfaces, nested sources, or screens showing live content, which all need their
 own motion and reactive masks. The package produces the inputs vendor upscalers
 expect, so one could still be added later as an alternative pass.
 
+**March seeding is not pursued.** Seeding primary's march from the previous
+frame's depth, behind a one-evaluation ball test that proves the skipped segment
+empty, measured as a loss on the floor tier: primary's march steps rose about 8%
+on the still and panning legs. An accepted seed saved under one step on average,
+0.81 on the still leg, because the beam already starts primary near the surface
+and the march still converges from the candidate, while every tested seed costs
+its evaluation. Gating the test on the march's own first step only approached
+break-even. Performance is a feature and the engine keeps no mechanism that
+costs more than it saves, so there is no off-by-default seeding to maintain.
+Seeding returns only with a proof that also covers the convergence after the
+candidate (rendering plan P15-7). One backend difference appeared only on the
+seeded path: at the strictest gate, Direct3D 12 read 2,595 more primary steps
+than Vulkan on the still leg and 5,428 fewer on the panning leg, with surface
+steps moving slightly, while every other configuration agreed within three
+steps. It is unexplained and goes with the seeded path unless it appears
+elsewhere.
+
 **HDR output starts as a minimal forcing function.** One display-transform
 node, one HDR swapchain path on Windows, paper white for UI, and one HDR source
 are enough to force a scene-linear working space and color-space declarations

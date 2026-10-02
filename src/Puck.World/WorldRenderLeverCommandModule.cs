@@ -11,7 +11,7 @@ namespace Puck.World;
 /// <summary>
 /// The render levers: engine-wide render options any presentation shape honors — shadows and their crowd radius,
 /// ambient occlusion and its quality, the far field, the unchanged-frame cadence gate, the shadow mask and march, render
-/// scale, temporal reconstruction, march seeding, upscale sharpness, and the quality preset — each a live console verb that echoes its current value when
+/// scale, temporal reconstruction, upscale sharpness, and the quality preset — each a live console verb that echoes its current value when
 /// called with no argument. Every write is a session lever submitted through the server's grant check and lands in
 /// <see cref="WorldRenderSettings"/>, which the frame source reads each captured frame, except the SDF debug view,
 /// which sets the render node's mode through <see cref="WorldRenderProbe"/>. Nothing here needs a window or a
@@ -44,8 +44,6 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
             ? "on"
             : "off")} temporal={(settings.Temporal
             ? "on"
-            : "off")} march-seed={(settings.MarchSeed
-            ? "on"
             : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]";
     }
     private string DescribeShadowMarch() =>
@@ -68,9 +66,6 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
     // The world.temporal echo.
     private static string TemporalEcho(WorldRenderSettings settings) =>
         $"[world.temporal: {(settings.Temporal ? "on" : "off")}]";
-    // The world.march-seed echo.
-    private static string MarchSeedEcho(WorldRenderSettings settings) =>
-        $"[world.march-seed: {(settings.MarchSeed ? "on" : "off")}]";
     // The world.bakes echo.
     private static string BakesEcho(WorldRenderSettings settings) =>
         $"[world.bakes: {settings.Bakes switch {
@@ -737,37 +732,15 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
-            name: "world.march-seed",
-            description: "Turns march seeding of the world's own temporal views on or off, live: world.march-seed [on|off] — no argument echoes the current state. On, primary starts each ray at the ray distance its history surface held for it, reprojected through the camera's motion, wherever one field evaluation at the skipped segment's midpoint proves the segment empty, and at its tile's start otherwise; the evaluation counts as a march step. A view that is not temporal (world.temporal) keeps no history and never seeds; camera and session views never seed.",
-            handler: (context, args) => {
-                if (args.Count == 0) {
-                    return new CommandResult(Output: MarchSeedEcho(settings: settings));
-                }
-
-                if (ParseOnOff(token: args[0]) is not { } on) {
-                    return CommandResult.Error(output: $"[world.march-seed: unknown state '{args[0]}' — on|off]");
-                }
-
-                return SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.MarchSeed,
-                    a: (on ? 1.0 : 0.0),
-                    formatEcho: () => new CommandResult(Output: MarchSeedEcho(settings: settings))
-                );
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
             name: "world.quality",
-            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, temporal-reconstruction, march-seeding and render-scale levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.temporal/.march-seed/.render-scale still override afterward).",
+            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, temporal-reconstruction and render-scale levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.temporal/.render-scale still override afterward).",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeQuality());
                 }
 
                 // The preset table is world data (WorldDefinition.Render), read off the LIVE definition so a mutated
-                // preset table applies immediately: look the named tier up and write its five levers into the live
+                // preset table applies immediately: look the named tier up and write its four levers into the live
                 // settings.
                 if (QualityTiers.Parse(name: args[0].ToString()) is not { } tier) {
                     return CommandResult.Error(output: $"[world.quality: unknown preset '{args[0]}' — {string.Join(separator: "|", values: QualityTiers.Names)}]");
@@ -800,16 +773,8 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                     ? 1.0
                     : 0.0)
                 );
-                SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.MarchSeed,
-                    a: (preset.MarchSeed
-                    ? 1.0
-                    : 0.0)
-                );
 
-                // The echo formats INSIDE the LAST lever's completion — all five have applied (or the last was
+                // The echo formats INSIDE the LAST lever's completion — all four have applied (or the last was
                 // refused) by the time formatEcho runs, since loopback drains each inline before its Submit* returns.
                 return SubmitLever(
                     link: link,

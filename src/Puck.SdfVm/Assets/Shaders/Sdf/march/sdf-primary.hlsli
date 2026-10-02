@@ -3,8 +3,6 @@
 
 // Full-scene and independent whole-part queries share this marcher, and the primary stage runs it.
 #include "sdf-pixel.hlsli"
-#include "sdf-march-seed.hlsli"
-#include "../frame/sdf-reprojection.hlsli"
 // One ray's primary march: what the primary pass stores into its pixel's visibility record's V, C and L rows.
 struct SdfPrimaryMarch {
     float traveled;
@@ -385,75 +383,6 @@ SdfPrimaryMarch sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float mar
 }
 
 #ifdef SDF_PRIMARY_PASS
-// The ray distance the history surface holds where a point, given relative to the preceding view's eye, lay in that
-// view's output; false where it lay behind the preceding camera or outside its image, or the resolve saw no surface there.
-// The history is indexed as the resolve indexes it: by the point's unjittered position in the preceding view, scaled to
-// the history's extent.
-bool sdfHistoryRayDistance(float3 relative, out float t) {
-    t = 0.0;
-    float2 pixel;
-    if (!sdfProjectView(passGroup.previousView, relative, pixel)) {
-        return false;
-    }
-    float2 position = (pixel / passGroup.previousView[4].xy);
-    if (!all(isfinite(position)) || any(position < 0.0) || any(position >= 1.0)) {
-        return false;
-    }
-    uint2 extent = passGroup.historyExtent;
-    uint word = sdfHistorySurfaceWord(min((uint2)(position * float2(extent)), (extent - 1u)), extent);
-    if (sdfVisibilityKind(historySurface[word + 1u]) == SDF_VISIBILITY_KIND_BACKGROUND) {
-        return false;
-    }
-    t = asfloat(historySurface[word]);
-    return (isfinite(t) && (t > 0.0));
-}
-// Where the preceding frame says this pixel's ray meets a surface: the history surface's ray distance, carried through the
-// camera's motion. The ray's direction alone finds where it looked in the preceding view; the point that distance along
-// this ray, projected into that view, finds the surface the preceding frame saw there, and the candidate is that
-// surface's distance along this ray. Only a temporal view seeding its march with a history of this epoch, and no debug
-// view, over a program with a finite Lipschitz bound, has a candidate. A candidate proves nothing: the ball test decides
-// whether the march may start there.
-bool sdfMarchSeedCandidate(SdfPixel p, out float candidate) {
-    candidate = 0.0;
-    if ((passGroup.marchSeed == 0u) || (passGroup.temporal == 0u) || (passGroup.debugMode != 0u) ||
-        (passGroup.historyFrames == 0u) || (passGroup.previousView[0].w == 0.0) || !sdfProgramHasFiniteBound()) {
-        return false;
-    }
-    // The direction scaled to the far distance, as the resolve carries the sky, so the preceding camera's near plane
-    // never refuses it.
-    float looked;
-    if (!sdfHistoryRayDistance((p.rayDirection * p.farDistance), looked)) {
-        return false;
-    }
-    float3 relative = ((p.rayOrigin + (p.rayDirection * looked)) - passGroup.previousView[0].xyz);
-    float previousT;
-    if (!sdfHistoryRayDistance(relative, previousT)) {
-        return false;
-    }
-    float3 previousPoint = (passGroup.previousView[0].xyz + (normalize(relative) * previousT));
-    candidate = dot((previousPoint - p.rayOrigin), p.rayDirection);
-    return isfinite(candidate);
-}
-// Where primary starts the pixel's march: at its candidate when one evaluation of the field the march reads, at the
-// midpoint of the segment from the tile's start to the candidate, proves the segment and the band the march accepts a
-// hit within empty (sdfMarchSeedClears: the Lipschitz-clamped distance there exceeds half the segment); otherwise at the
-// tile's start. The field is already divided by the program's Lipschitz bound; its fold-safe step bound and the
-// world-space gap to a wallpaper LOD transition both limit the proof, so
-// no surface nearer than the candidate can be skipped, including one that moved in front since the preceding frame. The
-// evaluation counts as a march step whether or not it admits the seed.
-float sdfSeededMarchStart(SdfPixel p) {
-    float candidate;
-    SdfMarchSeed seed;
-    if (!sdfMarchSeedCandidate(p, candidate) || !sdfPrepareMarchSeed(p.marchStart, candidate, p.pixelFootprint, seed)) {
-        return p.marchStart;
-    }
-    SdfHit ball = mapMasked((p.rayOrigin + (p.rayDirection * seed.midpoint)), p.instanceMaskBase);
-
-    sdfEvalCount += 1.0;
-    sdfWorkSteps += 1u;
-    float clearance = min(min(ball.distance, sdfMapStepBound), sdfMapSeedBound);
-    return (sdfMarchSeedClears(seed, clearance) ? seed.candidate : p.marchStart);
-}
 // The primary stage: marches the pixel's camera ray against the field, bounded by the nearest of the far distance, the
 // tile's far bound and the mesh the mesh pass drew there, and stores the record's V, C and L rows for every active pixel,
 // misses included. The slice, mask and overshoot debug views march nothing here: the slice evaluates the field on a plane,
@@ -461,8 +390,7 @@ float sdfSeededMarchStart(SdfPixel p) {
 void sdfPrimaryStage(SdfPixel p) {
     sdfEvalCount = 0.0;
 
-    float marchStart = p.marchStart;
-    float traveled = max(marchStart, 0.0);
+    float traveled = max(p.marchStart, 0.0);
     bool hitSurface = false;
     int material = 0;
     float4 hitLanes = float4(0.0, 0.0, 0.0, 0.0);
@@ -485,17 +413,8 @@ void sdfPrimaryStage(SdfPixel p) {
     // it: nothing it could accept there would win.
     float marchBound = min(p.farDistance, (meshHit.covered ? min(p.farBound, meshHit.t) : p.farBound));
 
-    bool marches = ((marchStart >= 0.0) && (marchStart < marchBound) && (p.viewMode != DebugViewModeSlice) && (p.viewMode != DebugViewModeMask) && (p.viewMode != DebugViewModeOvershoot));
-
-    // A seed past the march's bound proves nothing lies before the bound, so the ray marches nothing.
-    if (marches) {
-        marchStart = sdfSeededMarchStart(p);
-        traveled = marchStart;
-        marches = (marchStart < marchBound);
-    }
-
-    if (marches) {
-        SdfPrimaryMarch primary = sdfTracePrimary(p.rayOrigin, p.rayDirection, marchStart, p.firstExit, p.secondEntry,
+    if ((p.marchStart >= 0.0) && (p.marchStart < marchBound) && (p.viewMode != DebugViewModeSlice) && (p.viewMode != DebugViewModeMask) && (p.viewMode != DebugViewModeOvershoot)) {
+        SdfPrimaryMarch primary = sdfTracePrimary(p.rayOrigin, p.rayDirection, p.marchStart, p.firstExit, p.secondEntry,
             marchBound, p.farDistance, p.instanceMaskBase, p.pixelFootprint);
         traveled = primary.traveled;
         terminalRadius = primary.radius;

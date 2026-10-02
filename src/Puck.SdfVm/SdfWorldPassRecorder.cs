@@ -28,7 +28,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.ReactivityWritten,
-        SdfWorldPackage.HistorySurface,
     ];
     private static readonly uint OutputBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.Output);
     private static readonly uint MeshVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshVisibility);
@@ -270,7 +269,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, temporal: m_temporal, renderWidth: width, renderHeight: height
         );
 
-        SdfFrameBlock.WriteTemporal(block: recording.PassBlock, historyHeight: recording.FrameHeight, historyFrames: temporal.Frames, historyWidth: recording.FrameWidth, jitter: temporal.Jitter, temporal: m_temporal);
+        SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
         SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
 
         SdfFrameBlock.WriteWorkCounterRow(
@@ -640,7 +639,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.Parts.Tiles => SdfWorldPackage.Tiles,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBounds,
         SdfWorldPackage.Parts.Visibility or SdfWorldPackage.Parts.SurfaceVisibility or SdfWorldPackage.Parts.AmbientVisibility or SdfWorldPackage.Parts.ShadowVisibility => SdfWorldPackage.VisibilityRecords,
-        SdfWorldPackage.Parts.HistorySurface => SdfWorldPackage.HistorySurface,
         _ => null,
     };
     // The member a pass writes a fragment buffer through, or null for one it writes through no member.

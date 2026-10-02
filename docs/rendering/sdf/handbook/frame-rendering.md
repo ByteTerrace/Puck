@@ -266,40 +266,6 @@ pass and no texel written; at sharpness 0 the copy stays exact. A lone
 whole-display view that sharpens is placed by the root for that pass, as a
 tonemapped one is.
 
-### March seeding
-
-A temporal view whose quality also asks for it (`SdfViewQuality.MarchSeed`)
-seeds its primary march from its history. In the temporal fragment, primary
-reads the history surface the previous frame's resolve wrote. For each pixel it
-finds a candidate start: the ray's direction, projected into the previous view,
-finds where the ray looked last frame; the point that far along this ray,
-projected again, finds the surface the previous frame saw there; and that
-surface's distance along this ray is the candidate. A pixel whose history names
-no surface has no candidate.
-
-A candidate proves nothing. Primary backs it off by two acceptance bands and
-evaluates the field it marches, masked by the tile, once at the midpoint of the
-segment from the tile's start to the candidate (`march/sdf-march-seed.hlsli`).
-That field is already multiplied by the program's step scale, the reciprocal of
-its Lipschitz bound. The fold-safe step bound and the world-space distance to any
-wallpaper LOD transition (`sdfMapSeedBound`) limit the proof, so the march starts at the candidate only
-when the distance there exceeds half the segment plus the band the march accepts
-a hit within: no point of the segment can then hold a surface the march would
-accept, including one that moved in front since the previous frame. Otherwise the
-march starts at the tile's start, as it does without seeding. A stream whose packed
-step scale is not finite and in (0, 1] never seeds
-(`sdfProgramHasFiniteBound`); every program `SdfProgram` builds has one, since
-the Lipschitz analysis refuses a bound that overflows. The ball test's evaluation counts as a march step whether or not it admits the seed.
-A seed at or past the march's bound proves the ray meets nothing before it, so
-the ray marches nothing.
-
-In `Puck.World`, `world.march-seed` turns it on for the world's own views, and
-the quality presets carry it, off at every tier. It needs the history surface, so
-a view that does not reconstruct over time never seeds, and neither does a debug
-view, a camera view or a session view. The CPU law `SdfMarchSeedLawTests` holds
-the ball test against occluders placed inside the segment, and the `march-seed`
-canary moves an occluder in front of a seeded surface.
-
 ## Frames in flight
 
 The host keeps producing frames while the GPU finishes earlier ones. Each

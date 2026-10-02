@@ -8699,10 +8699,6 @@ export type WorldQualityPreset = {
    * Whether the preset reconstructs the world's views over time (world.temporal).
    */
   temporal?: boolean;
-  /**
-   * Whether the preset seeds each temporal view's primary march from its history (world.march-seed).
-   */
-  marchSeed?: boolean;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -8899,10 +8895,6 @@ export type WorldRenderDefaults = {
    * Whether the world's own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.
    */
   temporal?: boolean;
-  /**
-   * Whether the world's own temporal views boot seeding their primary march from their history (world.march-seed): each ray starts where its surface lay last frame wherever a ball test proves the skipped segment empty. A view that is not temporal never seeds.
-   */
-  marchSeed?: boolean;
   /**
    * The world.quality low preset.
    */

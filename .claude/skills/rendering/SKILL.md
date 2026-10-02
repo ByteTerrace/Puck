@@ -1928,33 +1928,6 @@ backends with `--debug-layers` after changing the resolve, the fragment or the
 reprojection; `SdfPassPlanLawTests.Temporal` and `SdfWorldPassesLawTests.Temporal`
 hold the plan and the convergence rule without a device.
 
-**March seeding.** A temporal view whose quality asks
-(`SdfViewQuality.MarchSeed`, `world.march-seed`, the presets off at every tier)
-starts primary's march at the history surface's ray distance, carried through
-the camera's motion, where one ball test proves the skipped segment empty
-(`sdfSeededMarchStart` in `march/sdf-primary.hlsli` over the helpers in
-`march/sdf-march-seed.hlsli`). The temporal fragment's primary reads the previous
-frame's history surface; every other fragment binds the dummy there, and the
-`marchSeed`, `temporal`, `historyFrames` and debug-mode gates keep it unread. The
-ball test reads the same tile-masked field the march does, with parts included,
-`min(min(distance, sdfMapStepBound), sdfMapSeedBound)`: that field is already
-multiplied by the program's step scale, so never scale it again or read `abs` of
-it. The seed bound is the world-space gap to a wallpaper LOD transition; a finite
-branch Lipschitz factor cannot prove an empty ball across that discontinuity.
-Never seed past a fold without the step bound. The ball test assumes the field at
-the midpoint bounds the distance to every surface the march could accept within
-the ball, so a branch of `mapCore` chosen by the sample's position (as the
-wallpaper LOD is) must tighten `sdfMapSeedBound` by the world-space gap to its
-switch. Choices fixed for the whole pass or tile (instance masks, part readiness,
-detail and secondary flags, kernel tiers), exact skips (bound culls,
-`sdfPartCannotImprove`), scope clamps and mesh substitution (the march's bound)
-need none. The evaluation adds to `sdfWorkSteps` and
-`sdfEvalCount`. A change to the candidate, the ball test or the accepted band
-reruns `SdfMarchSeedLawTests` (whose red legs must still fail), the `march-seed`
-canary on both backends with `--debug-layers`, and `puck counters compare` over
-the `march-seed-off` and `march-seed-on` scripts on `counters.world.json` and
-`counters-pan.world.json`.
-
 ## Route adjacent work
 
 | Skill | Route there for |

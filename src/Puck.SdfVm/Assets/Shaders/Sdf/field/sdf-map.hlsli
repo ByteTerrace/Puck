@@ -72,7 +72,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // Every call publishes a fresh fold-safe step bound (stale bounds from a previous sample would be unsound); the
     // fold cases below tighten walkStepBound and the single return publishes it in clamped units.
     sdfMapStepBound = SDF_STEP_BOUND_NONE;
-    sdfMapSeedBound = SDF_STEP_BOUND_NONE;
     // The material blend channel starts CLEARED every call (a previous sample's seam must never leak — the same
     // soundness discipline sdfMapStepBound follows); the shared blend tail rebuilds it as smooth composes execute.
     if (trackMaterial) {
@@ -826,14 +825,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     int axisB = ((plane == SDF_PLANE_XY) ? 1 : 2);
                     // The symmetry LOD is PER SAMPLE (not per ray): every map() consumer — beam cone-march, pixel march,
                     // the normal probe, the shadow marches — samples the identical field, so cull and march can never disagree.
-                    bool lodSimplify = false;
-                    if (data1.z > 0.0) {
-                        float lodDistance = distance(worldPosition, sdfLodOrigin);
-                        lodSimplify = (lodDistance > data1.z);
-                        // The field jumps when the in-cell folds switch. A finite branch Lipschitz factor cannot
-                        // prove an empty ball across that jump, even when both branches preserve distances.
-                        sdfMapSeedBound = min(sdfMapSeedBound, abs(lodDistance - data1.z));
-                    }
+                    bool lodSimplify = ((data1.z > 0.0) && (distance(worldPosition, sdfLodOrigin) > data1.z));
                     float2 cellIndex;
                     float2 folded = sdfWallpaperFoldCell(float2(localPosition[axisA], localPosition[axisB]), group, data0.xy, data0.zw, data1.xy, lodSimplify, cellIndex);
 

@@ -41,11 +41,6 @@ static float3 sdfLodOrigin = float3(0.0, 0.0, 0.0);
 #define SDF_STEP_BOUND_NONE 1.0e30
 static float sdfMapStepBound = SDF_STEP_BOUND_NONE;
 
-// A seed's empty-ball proof must stay within the sample's wallpaper LOD region: crossing the camera-distance
-// threshold can restore a mirrored/rotated copy absent at the midpoint. This gap is in world units, independently
-// of the program's field scale. mapCore resets it on every query; ordinary forward marching does not consume it.
-static float sdfMapSeedBound = SDF_STEP_BOUND_NONE;
-
 // The MATERIAL BLEND CHANNEL (material-blend-at-seams). A smooth blend blends the two operands' DISTANCE smoothly, but
 // result.material is an integer that can only carry ONE winner — so the material snaps as a HARD cut at the geometric
 // seam even though the surface eased across it. The continuous material weight rides HERE instead, a separate per-thread
