@@ -1,9 +1,10 @@
 using System.CommandLine;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
-using Puck.Transpiler.Diagnostics;
+using Puck.GamingBricks.Forge;
 using Puck.GamingBricks.Transpiler;
 using Puck.Transpiler.Ast;
+using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Modules;
 using Puck.Transpiler.Parsing;
@@ -224,7 +225,7 @@ internal static partial class CompileCommand {
             a: (PuckParser.TryReadDocumentSchema(schema: out var schema, source: sourceText)
                 ? schema
                 : null),
-            b: CartridgeVocabulary.Schema,
+            b: CartridgeDocument.SchemaId,
             comparisonType: StringComparison.Ordinal
         )) {
             var compilation = WorldCompiler.Compile(

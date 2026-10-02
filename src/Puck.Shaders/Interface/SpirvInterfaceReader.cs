@@ -29,7 +29,6 @@ public static class SpirvInterfaceReader {
     private const uint DecorationOffset = 35;
     private const uint DimBuffer = 5;
     private const int HeaderWords = 5;
-    private const uint MagicNumber = 0x07230203;
     private const uint OpConstant = 43;
     private const uint OpDecorate = 71;
     private const uint OpMemberDecorate = 72;
@@ -76,7 +75,7 @@ public static class SpirvInterfaceReader {
         if (
             ((module.Length % 4) != 0) ||
             (module.Length < (HeaderWords * 4)) ||
-            (BinaryPrimitives.ReadUInt32LittleEndian(source: module) != MagicNumber)
+            !ShaderBytecode.IsSpirV(bytecode: module)
         ) {
             throw new InvalidDataException(message: "The bytes are not a little-endian SPIR-V module.");
         }

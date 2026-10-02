@@ -175,7 +175,7 @@ public static class WorldProjection {
     /// <summary>Gets the definition an observer holds when nothing of a world is disclosed to it — the
     /// <see cref="WorldDisclosureTier.Frames"/> tier, or an observation withheld before its first delivery: a document
     /// authoring no section at all.</summary>
-    public static WorldDefinition Undisclosed { get; } = WorldDefinitionSerialization.Deserialize(utf8Json: """{"schema":"puck.world.definition.v1"}"""u8.ToArray());
+    public static WorldDefinition Undisclosed { get; } = WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: $$"""{"schema":"{{WorldDefinition.SchemaVersion}}"}"""));
 
     // A projection discloses no `state` section, so a retained `state.<row>[.<key>]` reference would reach the peer
     // as a pointer into a table it was never handed — read as one, it faults; resolved as one, it refuses. The egress

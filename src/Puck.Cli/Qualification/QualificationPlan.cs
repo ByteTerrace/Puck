@@ -1,8 +1,9 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json;
+using System.Text;
+using Puck.World;
 
 namespace Puck.Cli.Qualification;
 
@@ -104,7 +105,7 @@ internal static class QualificationPlan {
         var world = cell.Workload.World;
         var basis = Path.GetFileName(path: world)[..^WorldSuffix.Length];
         var overlay = new JsonObject {
-            ["schema"] = "puck.world.definition.v1",
+            ["schema"] = WorldDefinition.SchemaVersion,
             ["basis"] = basis,
             ["host"] = new JsonObject {
                 ["presentation"] = "offscreen",

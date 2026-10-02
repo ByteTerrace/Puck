@@ -824,7 +824,7 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: body.ScaledColliderVolumes());
+            var radius = body.BroadphaseRadius;
 
             contacts[count++] = new WorldSweepBody(
                 Index: index,
