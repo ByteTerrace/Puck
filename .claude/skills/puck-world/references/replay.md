@@ -347,6 +347,10 @@ and fed the recorded ticks, with local seat input masked at the loopback.
   failed `Select` can still move its selector; authority denials return
   before dispatch and do not latch it. Guest and machine accumulated state
   and pre-arm screen operations are not in the record-start image. The
+  screen-operation latch also covers successful `screens[].memory` access to
+  named machines. A world with named machines must arm before its first world
+  tick, because paused machines still synchronize bindings and replay starts
+  with fresh hardware and an empty binding memo. The
   grant/revoke leaf carries the whole `WorldGrant` row on tape, `KindMask`
   and `WriteMask` included.
 - `replay.stop` — persists FIRST (the tape is evidence of the capture),
@@ -501,8 +505,9 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   `RateMismatch`/zero ticks/target out of range; refuse when the live joined
   player set differs from the tape's seat set (a seat cannot be respawned
   through the session door — `player.join`/`player.leave` to match first),
-  when the tape's world declares screens and a machine has stepped or a
-  screen op applied, when the tape pins addons and a guest has pumped (the
+  when a screen or machine operation has applied (including successful screen
+  memory access), when the tape's world declares screens and a machine has
+  stepped, when the tape pins addons and a guest has pumped (the
   rebuild door reuses an unchanged row's guest with its state), or when an
   engagement is in flight. Transfer transactions or mobility credentials,
   remote occupants, and
@@ -624,7 +629,8 @@ The contracts a change must keep:
   did not scan to get there; a seek scans only from where it starts.
 - **Refuse uncaptured state.** Seek checks under the authority gate for pending
   input and provider contributions, live sessions, addon guests, screen
-  operations, unsupported machines and external obligations. Recorded spans
+  operations (including successful screen memory access to named machines),
+  unsupported machines and external obligations. Recorded spans
   refuse external authority events, changed rebuild content, and a hosted
   world's reload, which is replayed from its store and no history holds one. Seek retires
   providers from the abandoned timeline and suppresses save effects while

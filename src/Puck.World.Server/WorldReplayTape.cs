@@ -598,8 +598,8 @@ public sealed partial class WorldReplayTape {
     /// boot-declared cartridge's boot image (and CAS-verify a later <c>screen.insert</c>/<c>.select</c>'s content),
     /// but never a machine's accumulated core state (WRAM, CPU registers) once real ticks have run it, and the pose
     /// hash covers no machine state at all to catch the divergence after the fact — see this file's own remarks on
-    /// hash-coverage scope. A world with a boot-declared cartridge means recording must arm before its first step,
-    /// exactly like a world that mounts an addon must arm before its first tick.
+    /// hash-coverage scope. A world with named machines must arm before the world's first tick: even a paused
+    /// machine synchronizes memory bindings, whose memo and prior hardware writes are absent from the tape's boot image.
     /// <see cref="Server.WorldServer.AnyScreenOpEverApplied"/> refuses for a related but distinct reason: screen ops
     /// apply synchronously, between fixed steps — a <c>screen.insert</c> immediately
     /// followed by <c>replay.record</c>, with no step run in between, still arms clean under the first two checks
@@ -638,6 +638,11 @@ public sealed partial class WorldReplayTape {
 
         if (m_liveServer.AnyMachineEverPumped) {
             refusal = "a screen machine has already stepped this session — offline replay reconstructs a FRESH WorldMachineHost from the tape's embedded definition, so a booted cartridge's accumulated core state (WRAM, CPU registers) from before recording began can never be re-established, and the population hash covers no machine state to catch the divergence; record from a fresh boot, before any machine's first step";
+            return false;
+        }
+
+        if ((m_liveServer.Definition.Machines.Count != 0) && (m_liveServer.NextInputTick > 1UL)) {
+            refusal = "a world with named machines has already stepped — even a paused machine synchronizes memory bindings, while replay starts with fresh hardware and an empty binding memo; record before the world's first tick";
             return false;
         }
 

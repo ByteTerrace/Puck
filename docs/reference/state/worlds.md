@@ -501,7 +501,9 @@ captures the timeline or `replay.drive` holds it, while input typed since the
 cursor's tick has not run, across a crossing, an arrival or a remote peer in the
 window, and while a remote occupant, a transfer obligation or an engagement
 depends on the timeline. A keyframe cannot be captured while an addon guest has
-run or a screen operation has applied. A live neighbour linked through an
+run or a screen operation has applied. Successful `screens[].memory` access
+also refuses capture and seek, even when the screen displays a named machine:
+its screen-owned observations are outside the checkpoint. A live neighbour linked through an
 adjacency is re-read as it stands now, so seam contact with a neighbour that has
 moved since shows up as a reported divergence. The history covers the boot world
 only. A world's HUD can show it: the `history.cursor` binding reads the cursor

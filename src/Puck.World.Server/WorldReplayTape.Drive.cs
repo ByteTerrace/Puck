@@ -440,10 +440,10 @@ public sealed partial class WorldReplayTape {
         }
 
         if (
-            (definition.Screens.Count > 0) &&
-            (m_liveServer.AnyMachineEverPumped || m_liveServer.AnyScreenOpEverApplied)
+            m_liveServer.AnyScreenOpEverApplied ||
+            ((definition.Screens.Count > 0) && m_liveServer.AnyMachineEverPumped)
         ) {
-            refusal = "the tape's world declares screens and a live screen machine has already stepped or a screen op has already applied — the rebuild door reconciles screens but never resets a booted cartridge's core state, so the boot image cannot be reached in this session";
+            refusal = "a screen or machine operation has applied, or the tape declares screens and a live machine has stepped — screen-owned state and memory observations are outside the checkpoint inventory, so the boot image cannot be reached in this session";
             return false;
         }
 

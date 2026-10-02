@@ -266,6 +266,8 @@ handheld machine cores, held input, exact pacing, instance generations, and each
 named binding's on-change memo after draining accepted work. Restore requires the same firmware, cartridge, and core
 format identity. Pumped addon guests, applied screen operations, live coupled
 machine links, and enabled machine rewind history still refuse capture by name.
+Successful `screens[].memory` access also closes this gate, including access to
+a named machine: its screen-owned observations are outside the checkpoint.
 Worlds exercising those unsupported states cannot pass qualification yet.
 
 The coordinator's real-host tests cover two-row deployment, subsequent gameplay,
@@ -1871,13 +1873,16 @@ before anything (re-)establishes), so a re-shape that moves a screen from
 one declared link to another within the SAME reconcile always succeeds
 rather than silently failing while the old link still owns the screen.
 Every op rides the replay tape (`WorldReplayEntry.ScreenOp`), and
-`replay.record`'s arm gate refuses on THREE latches, none sufficient alone:
+`replay.record`'s arm gate refuses on three latches, none sufficient alone:
 `WorldServer.AnyAddonEverPumped`, `AnyMachineEverPumped` (once any machine
 has stepped), and `AnyScreenOpEverApplied` (once any screen op has applied
 AT ALL, independent of stepping—screen ops apply synchronously, between
 fixed steps, so an insert/eject/select/options/link/unlink can change live
 host state before a single tick has run, which the other two latches would
-miss)—offline replay reconstructs a FRESH host from the tape's embedded
+miss). Successful screen memory access sets the screen-operation latch too.
+A world with named machines also refuses recording after its first world tick:
+paused machines still synchronize bindings, and neither their prior writes nor
+their memo belongs to the tape's boot image. Offline replay reconstructs a fresh host from the tape's embedded
 definition, so a machine's accumulated core state (or a screen op's effect)
 from before recording began can never be re-established, and the population
 hash covers no machine state to catch the divergence. `Puck.World.WorldScreenBinder`
