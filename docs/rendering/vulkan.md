@@ -568,7 +568,14 @@ layer's `VK_EXT_validation_features`, ahead of the debug-utils messenger
 (`VulkanNativeInstanceApi.LinkCreateChain`). A missing barrier, or one whose
 stages or accesses do not cover a read-after-write, write-after-read or
 write-after-write, then prints a `[vulkan-debug] validation` line naming the
-`SYNC-HAZARD-*` it found. `VulkanInstanceCreateChainLawTests` holds the chain
+`SYNC-HAZARD-*` it found. An instance created with validation prints
+`[vulkan] validation layer live` once its debug messenger exists, or
+`[vulkan] validation layer requested but not live` when it has none, so a run
+with no message can be told from one the layer never watched. Both messengers
+(the one chained into `vkCreateInstance` and the standalone one) carry the
+instance's writer as their `pUserData` (`VulkanDebugOutput`): the
+`debugOutput` the instance factory is given, or the process's standard error
+when it is given none, as the Direct3D 12 context's `DebugOutput` does. `VulkanInstanceCreateChainLawTests` holds the chain
 and the extension without a loader.
 
 ## Debug names

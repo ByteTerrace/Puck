@@ -10,10 +10,13 @@ namespace Puck.Vulkan.Messages;
 /// <param name="EnableValidation">Whether the Vulkan validation layers are enabled.</param>
 /// <param name="ExtensionNames">The names of the instance extensions to enable.</param>
 /// <param name="LayerNames">The names of the instance layers to enable.</param>
+/// <param name="DebugUserData">The <c>pUserData</c> the messenger chained into creation hands its callback: a handle to
+/// the writer its messages go to, or zero for the process's standard error.</param>
 public readonly record struct VulkanInstanceCreateRequest(
     string ApplicationName,
     NativeDisplayKind DisplayKind,
     bool EnableValidation,
     IReadOnlyList<string> ExtensionNames,
-    IReadOnlyList<string> LayerNames
+    IReadOnlyList<string> LayerNames,
+    nint DebugUserData
 );
