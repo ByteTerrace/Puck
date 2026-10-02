@@ -11,11 +11,11 @@ public sealed class WorldTemporalCaptureLawTests {
     [Fact]
     public void ConvergingPresentationHoldsEveryFrameValueAcrossDifferentHostIntervals() {
         using var state = new TemporaryDirectory(prefix: "puck-temporal-capture-");
-        using var host = WorldBootHarness.Compose(
+        var host = state.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,
             world: "tests/Puck.Counters/counters.world.json"
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
 
         _ = presenter.CaptureFrame(deltaSeconds: 0.2f, height: 64, interpolationAlpha: 1f, width: 64);
