@@ -877,10 +877,10 @@ internal static partial class Subjects {
     }
 
     // T3 — the rapidity ladder. Hand-derived from the real hyperbolic cosine and sine of the value each RAPIDITY RAW
-    // denotes. The per-row tolerance is derived: s = φ·log₂e is formed exactly from a Q62 log₂e and rounded once to
-    // Q56 (relative error ≤ ln2·2⁻⁵⁷ per exponential term), Exp2's mantissa adds < 2⁻⁴⁴ relative and its narrowing
+    // denotes. The per-row tolerance is derived: s = φ·log₂e is formed exactly from a Q62 log₂e and floored once to
+    // Q56 (relative error ≤ ln2·2⁻⁵⁶ per exponential term), Exp2's mantissa adds < 2⁻⁴⁴ relative and its narrowing
     // half a ULP, and the halving is folded into the exponent so the sum is exact: each component is within
-    // |U|·(ln2·2⁻⁵⁷ + 2⁻⁴⁴) + 1 raw of the truth, plus half a raw for the expectation's rounding — under 2 at every
+    // |U|·(ln2·2⁻⁵⁶ + 2⁻⁴⁴) + 1 raw of the truth, plus half a raw for the expectation's rounding — under 2 at every
     // row. The ln 2 row is the anchor: cosh(ln 2) is exactly 5/4 and sinh(ln 2) exactly 3/4, both on the Q16 grid.
     private static readonly (long RapidityRaw, long ExpectedU, long ExpectedV, long Tolerance)[] SplitRapidityLadder = [
         (0L, 65536L, 0L, 0L),
@@ -898,7 +898,7 @@ internal static partial class Subjects {
     ];
     // T3b — the saturation ladder. The rapidity-33 row is hand-derived at 200-bit precision (cosh and sinh both
     // round to the same raw: the backward exponential is far below half an ULP at this magnitude) with the T3
-    // tolerance derivation evaluated at φ = 33 — 7.03·10¹⁸·(ln2·2⁻⁵⁷ + 2⁻⁴⁴) + 1.5, about 4.0·10⁵ — rounded up to
+    // tolerance derivation evaluated at φ = 33 — 7.03·10¹⁸·(ln2·2⁻⁵⁶ + 2⁻⁴⁴) + 1.5, about 4.0·10⁵ — rounded up to
     // 2¹⁹. The remaining rows are EXACT: past a scaled exponent of 48 the pre-halved terms are pinned to MaxValue
     // and Zero with no rounding left anywhere — including at 6393185575658021189, the first raw where an un-widened
     // wrapping scale once flipped the sine's sign, and at both carrier extremes.

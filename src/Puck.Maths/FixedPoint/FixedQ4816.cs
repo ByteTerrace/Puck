@@ -561,9 +561,9 @@ public readonly partial record struct FixedQ4816(long Value)
         new(Value: value);
     /// <summary>Returns two raised to the power <paramref name="value"/>.</summary>
     /// <param name="value">The exponent.</param>
-    /// <returns><c>2^value</c>, rounded to nearest with ties to even: exact at whole-number exponents, saturating to <see cref="MaxValue"/> at exponents of 47 and above, and <see cref="Zero"/> at every exponent of −17 and below — the true <c>2⁻¹⁷</c> is exactly half a ULP, and that tie goes to the even neighbour, zero.</returns>
+    /// <returns><c>2^value</c>, rounded to nearest: exact at whole-number exponents, saturating to <see cref="MaxValue"/> at exponents of 47 and above, and <see cref="Zero"/> at every exponent of −17 and below — the true <c>2⁻¹⁷</c> is exactly half a ULP, and that tie goes to the even neighbour, zero. No other result is a true tie: <c>2^x</c> at a non-whole exponent is irrational, so the closing narrowing rounds an approximation's own tie half up.</returns>
     /// <remarks>Pure integer arithmetic (a 128-interval mantissa table plus a quartic residual polynomial);
-    /// bit-identical across machines. The error is half a ULP from the closing ties-to-even narrowing plus the
+    /// bit-identical across machines. The error is half a ULP from the closing narrowing plus the
     /// mantissa's own relative error, which stays under 2⁻⁴⁴ — the quartic's truncation of the exponential series
     /// dominates it. That reads as 0.51 ULP for results below 2²⁰, rising to 0.82 ULP just under 2²⁷ as the relative
     /// term catches up; above that, absolute ULP correctness is not representable and the relative error stays below
@@ -586,9 +586,15 @@ public readonly partial record struct FixedQ4816(long Value)
 
         var f = value.Value & ((long)FractionBitMask);
 
-        return Exp2Mantissa(
-            index: ((int)(f >> 9)),
-            residualQ62: ((f & 0x1FFL) << 46),
+        if (f == 0L) {
+            return Exp2Whole(k: k);
+        }
+
+        return Exp2Narrow(
+            mantissa: Exp2MantissaQ62(
+                index: ((int)(f >> 9)),
+                residualQ62: ((f & 0x1FFL) << 46)
+            ),
             shift: shift
         );
     }
@@ -616,16 +622,39 @@ public readonly partial record struct FixedQ4816(long Value)
 
         var f = exponentQ56 & ((1L << ExponentFractionBitCount) - 1L);
 
-        return Exp2Mantissa(
-            index: ((int)(f >> ResidualBitCount)),
-            residualQ62: ((f & ((1L << ResidualBitCount) - 1L)) << (62 - ExponentFractionBitCount)),
+        if (f == 0L) {
+            return Exp2Whole(k: k);
+        }
+
+        return Exp2Narrow(
+            mantissa: Exp2MantissaQ62(
+                index: ((int)(f >> ResidualBitCount)),
+                residualQ62: ((f & ((1L << ResidualBitCount) - 1L)) << (62 - ExponentFractionBitCount))
+            ),
             shift: shift
         );
     }
 
-    // The shared tail of Exp2 and Exp2Q56: the interval mantissa times the quartic of the Q62 residual, then the
-    // ties-to-even narrowing by shift (46 − k), already known to be below 64.
-    private static FixedQ4816 Exp2Mantissa(int index, long residualQ62, long shift) {
+    // 2^k for a whole k in [−17, 46], exactly: the one place 2^x meets a true tie is 2⁻¹⁷, half of Epsilon, and that
+    // tie goes to the even neighbour, zero.
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    private static FixedQ4816 Exp2Whole(long k) =>
+        new(Value: ((k >= -FractionBitCount)
+            ? (1L << ((int)(k + FractionBitCount)))
+            : 0L
+        ));
+    // Narrows a Q62 mantissa of 2^f by shift (46 − k), already known to be below 64, half up. Only a whole exponent
+    // has a true tie, and Exp2Whole answers those exactly; any other 2^x is irrational, so a tie here is an artifact
+    // of the approximation and the cheaper rule takes it. The round-shift runs unsigned: the mantissa sits just below
+    // 2^63, so adding the rounding half would overflow a signed sum for large shifts.
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    private static FixedQ4816 Exp2Narrow(long mantissa, long shift) =>
+        new(Value: ((shift <= 0L)
+            ? mantissa
+            : ((long)((((ulong)mantissa) + (1UL << (((int)shift) - 1))) >> ((int)shift)))));
+    // The shared core of Exp2, Exp2Q56 and Pow's whole-exponent estimate: the interval mantissa times the quartic of
+    // the Q62 residual, 2^(i/128 + r) at Q62, unrounded.
+    private static long Exp2MantissaQ62(int index, long residualQ62) {
         var r = residualQ62;
         var acc = Exp2PolyC4Q62;
 
@@ -642,24 +671,13 @@ public readonly partial record struct FixedQ4816(long Value)
             y: acc
         ));
 
-        var mantissa = BigMulShift62(
+        return BigMulShift62(
             x: ((long)Exp2TableQ62[index]),
             y: ((1L << 62) + BigMulShift62(
                 x: r,
                 y: acc
             ))
         );
-
-        // The round-shift runs unsigned: the mantissa sits just below 2^63, so adding the rounding half would
-        // overflow a signed sum for large shifts. Half less one plus the kept low bit is ties to even, branchless.
-        if (shift <= 0L) {
-            return new(Value: mantissa);
-        }
-
-        var bits = ((int)shift);
-        var magnitude = ((ulong)mantissa);
-
-        return new(Value: ((long)((magnitude + (((1UL << (bits - 1)) - 1UL) + ((magnitude >> bits) & 1UL))) >> bits)));
     }
 
     /// <summary>Returns the hyperbolic cosine and sine of <paramref name="argument"/>.</summary>
@@ -671,37 +689,41 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <c>cosh φ = 2^(s−1) + 2^(−s−1)</c> and <c>sinh φ = 2^(s−1) − 2^(−s−1)</c>. Halving after the sum would cap the
     /// pair at <c>2⁴⁶</c>, discarding the representable band up to <see cref="MaxValue"/> and answering half the
     /// saturated value beyond it. The scaled exponent is the exact <see cref="Int128"/> product of the argument with
-    /// <see cref="Log2EQ62"/>, clamped to ±48 and rounded once to the Q56 exponent <see cref="Exp2Q56"/> consumes,
+    /// <see cref="Log2EQ62"/>, taken on the argument's magnitude, clamped to 48 and floored once to the Q56 exponent
+    /// <see cref="Exp2Q56"/> consumes,
     /// so a large argument cannot wrap the product's sign; the clamp is beyond the point where both terms are already
     /// constant, so it changes no answer. One rounding per term, and the sum is exact — a term can only approach
     /// <see cref="MaxValue"/> once the other has rounded to <see cref="Zero"/>. Each term is within half a ULP plus a
-    /// relative error below <c>2⁻⁴⁴</c> — the exponential's mantissa; the Q56 exponent's rounding adds only
-    /// <c>ln 2·2⁻⁵⁷</c> — so the pair stays within about one ULP while the result is below <c>2²⁰</c>, and that
+    /// relative error below <c>2⁻⁴⁴</c> — the exponential's mantissa; the Q56 exponent's floor adds only
+    /// <c>ln 2·2⁻⁵⁶</c> — so the pair stays within about one ULP while the result is below <c>2²⁰</c>, and that
     /// relative term dominates above it. Deterministic and bit-identical across machines.
     /// </remarks>
     internal static (FixedQ4816 Cosh, FixedQ4816 Sinh) CoshSinh(FixedQ4816 argument) {
-        // The Q16 raw times log2(e) at Q62 is the exponent at Q78 exactly (below 2¹²⁶, so Int128 cannot wrap). It is
-        // clamped, then rounded once to the Q56 exponent Exp2Q56 consumes, with the −1 of the halving applied on that
-        // grid. Rounding ties to even on the magnitude keeps cosh exactly even and sinh exactly odd.
-        const int ProductFractionBitCount = (FractionBitCount + 62);
+        // |φ|'s raw times log2(e) at Q62 is the exponent's magnitude at Q78 exactly, one unsigned 64-by-64 product.
+        // It is clamped, then floored once to the Q56 exponent Exp2Q56 consumes, with the −1 of the halving applied
+        // on that grid. Working on the magnitude keeps cosh exactly even and sinh exactly odd.
         const int ExponentFractionBitCount = 56;
+        const int DiscardedBitCount = ((FractionBitCount + 62) - ExponentFractionBitCount);
         const long OneQ56 = (1L << ExponentFractionBitCount);
-        var product = (((Int128)argument.Value) * Log2EQ62);
-        var limit = (((Int128)RawCoshSinhExponentLimit) << (ProductFractionBitCount - FractionBitCount));
-        var scaled = RoundProduct(
-            fractionBitCount: (ProductFractionBitCount - ExponentFractionBitCount),
-            product: Int128.Clamp(
-                max: limit,
-                min: -limit,
-                value: product
-            )
+        const ulong LimitHigh = (((ulong)RawCoshSinhExponentLimit) >> (64 - 62)); // the Q78 limit's high word; its low word is zero
+        var high = Math.BigMul(
+            a: FusedArithmetic.RawMagnitude(value: argument.Value),
+            b: ((ulong)Log2EQ62),
+            low: out var low
+        );
+        var scaled = ((high >= LimitHigh)
+            ? (RawCoshSinhExponentLimit << (ExponentFractionBitCount - FractionBitCount))
+            : ((long)((high << (64 - DiscardedBitCount)) | (low >> DiscardedBitCount)))
         );
         var forward = Exp2Q56(exponentQ56: (scaled - OneQ56));
         var backward = Exp2Q56(exponentQ56: (-scaled - OneQ56));
 
         return (
             Cosh: (forward + backward),
-            Sinh: (forward - backward)
+            Sinh: ((argument.Value < 0L)
+                ? (backward - forward)
+                : (forward - backward)
+            )
         );
     }
 
@@ -719,8 +741,9 @@ public readonly partial record struct FixedQ4816(long Value)
         var integerPart = BitOperations.Log2(value: raw);
         var fraction = Log2FractionQ61(mantissaQ62: (raw << (62 - integerPart)));
 
-        // Ties to even on the fraction: the integer part's multiple of 2^16 shares its parity with the whole.
-        return new(Value: ((((long)(integerPart - FractionBitCount)) << FractionBitCount) + ((fraction + (((1L << 44) - 1L) + ((fraction >> 45) & 1L))) >> 45)));
+        // Half up: the logarithm of a raw that is not a power of two is irrational, so a tie here is an artifact of
+        // the approximation and either neighbour is as good — the cheaper rule takes it.
+        return new(Value: ((((long)(integerPart - FractionBitCount)) << FractionBitCount) + ((fraction + (1L << 44)) >> 45)));
     }
 
     // The base-2 logarithm of a positive raw for Pow's exponential path, as an integer part and a fraction at Q123
@@ -800,10 +823,13 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <see cref="MinValue"/> rather than <see cref="MaxValue"/> when the mathematical value is negative.</returns>
     /// <remarks>Whole-number exponents of zero and ±1 answer exactly: <see cref="One"/>, the base itself, and the
     /// single correctly-rounded inverse. Every other whole exponent within ±32 answers the single correct rounding
-    /// of the true power, to nearest with ties to even: the exact integer power of the base's raw is formed in a
-    /// stack limb buffer and shifted (a positive exponent) or divided into a power of two (a negative one) once.
-    /// Overflow and underflow are decided on that exact value, so a power saturates exactly when its correct
-    /// rounding leaves the carrier and answers <see cref="Zero"/> exactly when it rounds there. Other exponents —
+    /// of the true power, to nearest with ties to even. The exact integer power of the base's raw is formed in one
+    /// <see cref="UInt128"/> while it fits and shifted (a positive exponent) or divided into a power of two (a negative
+    /// one) once. Past that width the exponential path answers first whenever its error bound proves the rounding —
+    /// every power not within a relative 2⁻⁴⁰ of a rounding midpoint — and the exact power continues in a stack limb
+    /// buffer only for the rest, true ties included. Overflow is decided on the exact value, and underflow on it or
+    /// on a proven bound, so a power saturates exactly when its correct rounding leaves the carrier and answers
+    /// <see cref="Zero"/> exactly when it rounds there. Other exponents —
     /// fractional ones and whole ones beyond ±32 — compute as <c>Exp2(y·log₂|x|)</c> with a logarithm of RELATIVE
     /// accuracy near 2⁻⁵² (so a large exponent does not magnify it) and the product carried to a Q56 exponent, which
     /// leaves the exponential's own envelope in charge: within about half a ULP while the result is below
@@ -906,24 +932,12 @@ public readonly partial record struct FixedQ4816(long Value)
             );
         }
 
-        // Form y·log₂(x) at Q56: the integer part exactly, the fraction through its top 63 significant bits (a
-        // relative cut of 2⁻⁶³, below the logarithm's own error) and one floor to Q56, far below the exponential's
-        // mantissa error. Exp2's saturation gates apply to that Int128 exponent before it narrows, so an exponent
-        // outside the Q48.16 range can neither wrap nor reach the kernel.
-        var (integerPart, fraction) = Log2Wide(raw: ((ulong)x.Value));
-        var fractionNegative = (fraction < Int128.Zero);
-        var fractionMagnitude = ((UInt128)(fractionNegative
-            ? -fraction
-            : fraction));
-        var cut = Math.Max(
-            val1: 0,
-            val2: ((128 - ((int)UInt128.LeadingZeroCount(value: fractionMagnitude))) - 63)
+        // Exp2's saturation gates apply to the Int128 exponent before it narrows, so an exponent outside the Q48.16
+        // range can neither wrap nor reach the kernel.
+        var exponentQ56 = PowExponentQ56(
+            raw: ((ulong)x.Value),
+            y: y.Value
         );
-        var fractionTop = ((long)(fractionMagnitude >> cut));
-        var fractionProduct = (((Int128)y.Value) * (fractionNegative
-            ? -fractionTop
-            : fractionTop));
-        var exponentQ56 = (((((Int128)y.Value) * integerPart) << 40) + (fractionProduct >> (83 - cut)));
 
         if (exponentQ56 >= (((Int128)47L) << 56)) {
             return (negativeResult
@@ -943,11 +957,85 @@ public readonly partial record struct FixedQ4816(long Value)
             : scaled
         );
     }
+    // y·log₂(x) at Q56 for a positive raw x and a raw y: the integer part exactly, the fraction through its top 63
+    // significant bits (a relative cut of 2⁻⁶³, below the logarithm's own error) and one floor to Q56, far below the
+    // exponential's mantissa error.
+    private static Int128 PowExponentQ56(ulong raw, long y) {
+        var (integerPart, fraction) = Log2Wide(raw: raw);
+        var fractionNegative = (fraction < Int128.Zero);
+        var fractionMagnitude = ((UInt128)(fractionNegative
+            ? -fraction
+            : fraction));
+        var cut = Math.Max(
+            val1: 0,
+            val2: ((128 - ((int)UInt128.LeadingZeroCount(value: fractionMagnitude))) - 63)
+        );
+        var fractionTop = ((long)(fractionMagnitude >> cut));
+        var fractionProduct = (((Int128)y) * (fractionNegative
+            ? -fractionTop
+            : fractionTop));
+
+        return (((((Int128)y) * integerPart) << 40) + (fractionProduct >> (83 - cut)));
+    }
+    // The correctly-rounded raw of x^n from the exponential path when that path can prove it, else −1. The exponent
+    // n·log₂(x) is good to n·2⁻⁵² of the logarithm's balanced fraction, at most 2⁻⁴⁷, and the Q62 mantissa of its
+    // exponential to a relative 2⁻⁴⁴; together a relative error under 2⁻⁴³·⁵. The estimate is trusted only when it
+    // sits more than a relative 2⁻⁴⁰ — plus a few units for the floors — away from the nearest rounding midpoint, so
+    // the exact power rounds the same way. A true tie is exactly at a midpoint and always falls through to the exact
+    // path. Past 2²² the result's half unit is below that margin, so the estimate cannot decide and is not formed.
+    private static long PowWholeEstimate(ulong magnitude, long exponent) {
+        const int ExponentFractionBitCount = 56;
+        const int ResidualBitCount = (ExponentFractionBitCount - 7);
+        var exponentQ56 = PowExponentQ56(
+            raw: magnitude,
+            y: (exponent << FractionBitCount)
+        );
+
+        if (exponentQ56 >= (((Int128)23L) << ExponentFractionBitCount)) {
+            return -1L;
+        }
+
+        // Below 2⁻¹⁷ by more than the error, the power is under half of Epsilon; the band just under 2⁻¹⁷ is left
+        // to the exact path, which owns the tie there.
+        if (exponentQ56 < (-(((Int128)17L) << ExponentFractionBitCount) - (Int128.One << 16))) {
+            return 0L;
+        }
+
+        var e = ((long)exponentQ56);
+        var k = (e >> ExponentFractionBitCount);
+
+        if (k < -17L) {
+            return -1L;
+        }
+
+        var f = e & ((1L << ExponentFractionBitCount) - 1L);
+        var mantissa = ((ulong)Exp2MantissaQ62(
+            index: ((int)(f >> ResidualBitCount)),
+            residualQ62: ((f & ((1L << ResidualBitCount) - 1L)) << (62 - ExponentFractionBitCount))
+        ));
+        var shift = ((int)(46L - k));
+        var discarded = mantissa & ((1UL << shift) - 1UL);
+        var half = (1UL << (shift - 1));
+        var error = ((mantissa >> 40) + 64UL);
+        var above = (discarded > half);
+        var distance = (above
+            ? (discarded - half)
+            : (half - discarded));
+
+        if (distance <= error) {
+            return -1L;
+        }
+
+        return ((long)((mantissa >> shift) + (above
+            ? 1UL
+            : 0UL)));
+    }
     // x^n for a whole exponent 2 ≤ |n| ≤ 32, as the ONE correct rounding of the exact power. For x = X/2¹⁶ the raw
     // answer is X^n/2^(16(n−1)) at a positive exponent and 2^(16(m+1))/X^m at a negative one (m = −n), so the exact
     // integer X^|n| is shifted or divided once, to nearest with ties to even. The power is built by multiplications by
-    // the raw in one UInt128 while it stays below 2¹²⁷ — every small power of a base near one, the common case —
-    // and continues in a stack limb buffer only past that. Overflow and underflow are decided on the exact value: a
+    // the raw in one UInt128 while it stays below 2¹²⁷ — every small power of a base near one, the common case.
+    // Past that, PowWholeEstimate answers whenever it can prove the rounding, and the exact power continues in a
+    // stack limb buffer only for the rest. Overflow and underflow are decided on the exact value: a
     // power that reaches the decided bit length is already past the carrier (positive) or below half a raw
     // (negative), and integer powers only grow. A rounded magnitude of exactly 2^63 saturates too: it is
     // representable only as MinValue, which is the negative caller's saturation.
@@ -970,12 +1058,37 @@ public readonly partial record struct FixedQ4816(long Value)
         var wide = ((UInt128)magnitude);
         var built = 1;
 
+        // X^n has at least n·(bits(X) − 1) + 1 bits; when that already passes the one-word lane, building toward
+        // it is wasted work, so the estimate answers first and the limbs start from the base.
+        var laneTarget = (((((power * (baseBitLength - 1)) + 1) <= 127))
+            ? power
+            : 1);
+
         while (
-            (built < power) &&
+            (built < laneTarget) &&
             (((128 - ((int)UInt128.LeadingZeroCount(value: wide))) + baseBitLength) <= 127)
         ) {
             wide *= magnitude;
             ++built;
+        }
+
+        // Past the one-word lane the exact power needs limbs; the exponential path answers first whenever its error
+        // bound proves the rounding, which is every power that does not land within 2⁻⁴⁰ of a rounding midpoint.
+        if (
+            (built < power) ||
+            ((exponent < 0L) && (shift > 126))
+        ) {
+            var estimate = PowWholeEstimate(
+                exponent: exponent,
+                magnitude: magnitude
+            );
+
+            if (estimate >= 0L) {
+                return (negativeResult
+                    ? new(Value: -estimate)
+                    : new(Value: estimate)
+                );
+            }
         }
 
         ulong rounded;
@@ -1551,7 +1664,7 @@ public readonly partial record struct FixedQ4816(long Value)
             angle = (PiQ61 - angle);
         }
 
-        var raw = ((angle + (((1L << 44) - 1L) + ((angle >> 45) & 1L))) >> 45);
+        var raw = ((angle + (1L << 44)) >> 45);
 
         return new(Value: ((signY != 0L)
             ? -raw
